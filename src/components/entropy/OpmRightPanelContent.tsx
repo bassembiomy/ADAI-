@@ -533,62 +533,256 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
       )}
 
       {/* ─── SECTION B: SELECTED EDGE INSPECTOR ─── */}
-      {selectedEdge && !selectedNode && (
-        <div
-          className={`${
-            isWideLayout ? 'w-1/2 shrink-0' : 'w-full shrink-0'
-          } bg-[#16161a]/95 backdrop-blur-md border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5`}
-        >
-          <div className="flex items-center justify-between border-b border-white/10 pb-2">
-            <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
-              Link Inspector
-            </span>
-            <button
-              onClick={onCloseInspector}
-              aria-label="Close Link Inspector"
-              data-testid="opm-close-edge-inspector"
-              className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
-              title="Close Link Inspector"
-            >
-              <X size={13} />
-            </button>
-          </div>
+      {selectedEdge && !selectedNode && (() => {
+        const linkExec: OpmLinkExecution = selectedEdge.data?.execution || {
+          enabled: true,
+          guard: '',
+          assignments: [],
+          priority: 1,
+          delayMs: 0,
+        };
 
-          <div className="space-y-2">
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Link ID</label>
-              <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
-            </div>
+        const handleUpdateLinkExecution = (patch: Partial<OpmLinkExecution>) => {
+          const updated = { ...linkExec, ...patch };
+          if (onUpdateSelectionExecution) {
+            onUpdateSelectionExecution(updated);
+          }
+        };
 
-            <div className="flex flex-col gap-1 pt-1">
-              <label htmlFor="opm-convert-edge-type" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                Link Role
-              </label>
-              <select
-                id="opm-convert-edge-type"
-                aria-label="Link Role"
-                value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
-                onChange={(e) => onConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
-                className="bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 text-white font-medium"
-                data-testid="opm-convert-edge-type"
+        const handleAddAssignment = () => {
+          const newAsgn: OpmAssignment = {
+            id: nextStableId('asgn'),
+            targetAttributeId: '',
+            operator: '=',
+            expression: '0',
+            enabled: true,
+          };
+          handleUpdateLinkExecution({
+            assignments: [...(linkExec.assignments || []), newAsgn],
+          });
+        };
+
+        return (
+          <div
+            data-testid="link-execution-inspector"
+            className={`${
+              isWideLayout ? 'w-1/2 shrink-0' : 'w-full shrink-0'
+            } bg-[#16161a]/95 backdrop-blur-md border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5`}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
+                Link Inspector
+              </span>
+              <button
+                onClick={onCloseInspector}
+                aria-label="Close Link Inspector"
+                data-testid="opm-close-edge-inspector"
+                className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
+                title="Close Link Inspector"
               >
-                <option value="consumption">Consumption</option>
-                <option value="result">Result</option>
-                <option value="effect">Effect</option>
-                <option value="agent">Agent</option>
-                <option value="instrument">Instrument</option>
-                <option value="trigger">Trigger</option>
-                <option value="condition">Condition</option>
-                <option value="aggregation">Aggregation</option>
-                <option value="generalization">Generalization</option>
-                <option value="exhibition">Exhibition</option>
-                <option value="satisfies">Satisfies</option>
-                <option value="verifies">Verifies</option>
-              </select>
+                <X size={13} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Link ID</label>
+                <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
+              </div>
+
+              <div className="flex flex-col gap-1 pt-1">
+                <label htmlFor="opm-convert-edge-type" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                  Link Role
+                </label>
+                <select
+                  id="opm-convert-edge-type"
+                  aria-label="Link Role"
+                  value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
+                  onChange={(e) => onConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
+                  className="bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 text-white font-medium"
+                  data-testid="opm-convert-edge-type"
+                >
+                  <option value="consumption">Consumption</option>
+                  <option value="result">Result</option>
+                  <option value="effect">Effect</option>
+                  <option value="agent">Agent</option>
+                  <option value="instrument">Instrument</option>
+                  <option value="trigger">Trigger</option>
+                  <option value="condition">Condition</option>
+                  <option value="aggregation">Aggregation</option>
+                  <option value="generalization">Generalization</option>
+                  <option value="exhibition">Exhibition</option>
+                  <option value="satisfies">Satisfies</option>
+                  <option value="verifies">Verifies</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-event">
+                  Event Trigger
+                </label>
+                <select
+                  id="link-event"
+                  data-testid="link-event-select"
+                  data-opm-path="linkExecution.eventId"
+                  value={linkExec.eventId || ''}
+                  onChange={(e) => handleUpdateLinkExecution({ eventId: e.target.value || undefined })}
+                  className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="">-- none --</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-guard">
+                  Guard Expression
+                </label>
+                <input
+                  id="link-guard"
+                  data-testid="guard-expr-input"
+                  data-opm-path="linkExecution.guard"
+                  value={linkExec.guard || ''}
+                  onChange={(e) => handleUpdateLinkExecution({ guard: e.target.value })}
+                  placeholder="e.g. ready == true"
+                  className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-prio">
+                    Priority
+                  </label>
+                  <input
+                    id="link-prio"
+                    data-testid="link-priority-input"
+                    data-opm-path="linkExecution.priority"
+                    type="number"
+                    value={linkExec.priority ?? 1}
+                    onChange={(e) => handleUpdateLinkExecution({ priority: Number(e.target.value) })}
+                    className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-delay">
+                    Delay (ms)
+                  </label>
+                  <input
+                    id="link-delay"
+                    data-testid="link-delay-input"
+                    data-opm-path="linkExecution.delayMs"
+                    type="number"
+                    value={linkExec.delayMs ?? 0}
+                    onChange={(e) => handleUpdateLinkExecution({ delayMs: Number(e.target.value) })}
+                    className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10 space-y-2">
+                <span className="text-[10px] font-bold uppercase text-orange-400 tracking-wider">
+                  State Transition Target
+                </span>
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-owner">
+                    Owner Object ID
+                  </label>
+                  <input
+                    id="link-trans-owner"
+                    data-testid="link-transition-owner-input"
+                    data-opm-path="linkExecution.transition.ownerObjectId"
+                    value={linkExec.transition?.ownerObjectId || ''}
+                    onChange={(e) =>
+                      handleUpdateLinkExecution({
+                        transition: {
+                          ownerObjectId: e.target.value,
+                          targetStateId: linkExec.transition?.targetStateId || '',
+                          sourceStateId: linkExec.transition?.sourceStateId,
+                        },
+                      })
+                    }
+                    placeholder="e.g. obj_boiler"
+                    className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-src">
+                      Source State ID
+                    </label>
+                    <input
+                      id="link-trans-src"
+                      data-testid="link-transition-source-input"
+                      data-opm-path="linkExecution.transition.sourceStateId"
+                      value={linkExec.transition?.sourceStateId || ''}
+                      onChange={(e) =>
+                        handleUpdateLinkExecution({
+                          transition: {
+                            ownerObjectId: linkExec.transition?.ownerObjectId || '',
+                            targetStateId: linkExec.transition?.targetStateId || '',
+                            sourceStateId: e.target.value || undefined,
+                          },
+                        })
+                      }
+                      placeholder="optional"
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-tgt">
+                      Target State ID
+                    </label>
+                    <input
+                      id="link-trans-tgt"
+                      data-testid="link-transition-target-input"
+                      data-opm-path="linkExecution.transition.targetStateId"
+                      value={linkExec.transition?.targetStateId || ''}
+                      onChange={(e) =>
+                        handleUpdateLinkExecution({
+                          transition: {
+                            ownerObjectId: linkExec.transition?.ownerObjectId || '',
+                            targetStateId: e.target.value,
+                            sourceStateId: linkExec.transition?.sourceStateId,
+                          },
+                        })
+                      }
+                      placeholder="e.g. st_active"
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold uppercase text-gray-400">
+                    Action Assignments
+                  </span>
+                  <button
+                    data-testid="add-assignment-btn"
+                    aria-label="Add assignment"
+                    onClick={handleAddAssignment}
+                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-sky-950 text-sky-400 border border-sky-800 rounded hover:bg-sky-900"
+                  >
+                    <Plus size={10} /> Add Assignment
+                  </button>
+                </div>
+                <AssignmentRows
+                  value={linkExec.assignments || []}
+                  writableAttributes={writableAttributes}
+                  basePath="linkExecution.assignments"
+                  onChange={(next) => handleUpdateLinkExecution({ assignments: next })}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── SECTION C: STUDIO TABS DASHBOARD ─── */}
       <div

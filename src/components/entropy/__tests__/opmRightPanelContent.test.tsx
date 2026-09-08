@@ -159,5 +159,86 @@ describe('OpmRightPanelContent', () => {
     );
     expect(html).toContain('Power Unit');
   });
+
+  it('renders Link Execution Inspector with guard expression, event trigger, delay, and transition fields', () => {
+    const mockEdge = {
+      id: 'edge-1',
+      source: 'st-1',
+      target: 'proc-1',
+      type: 'opmEdge',
+      data: {
+        type: 'condition',
+        linkType: 'condition',
+        execution: {
+          enabled: true,
+          guard: 'temperature > 100',
+          eventId: 'ev-1',
+          delayMs: 250,
+          priority: 2,
+          transition: {
+            ownerObjectId: 'obj-1',
+            sourceStateId: 'st-1',
+            targetStateId: 'st-2',
+          },
+          assignments: [
+            { id: 'asgn-1', targetAttributeId: 'attr-1', operator: '=', expression: '1', enabled: true },
+          ],
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <OpmRightPanelContent
+        selectedNode={null}
+        selectedEdge={mockEdge as any}
+        onCloseInspector={() => {}}
+        onUpdateNodeProp={() => {}}
+        onConvertNodeType={() => {}}
+        onAddStateToObject={() => {}}
+        onManualActivateState={() => {}}
+        onDeleteState={() => {}}
+        onAddAttribute={() => {}}
+        onAddPort={() => {}}
+        onRemovePort={() => {}}
+        onZoomInNode={() => {}}
+        onDeleteSelectedNode={() => {}}
+        onConvertEdgeType={() => {}}
+        rightTab="simControl"
+        onRightTabChange={() => {}}
+        simRunning={false}
+        simTick={0}
+        tickMs={50}
+        onToggleSimulation={() => {}}
+        onRunSimTick={() => {}}
+        onResetSimulation={() => {}}
+        activeOpmConfig={{ tickMs: 50, executionMode: 'discrete', traceLevel: 'full' }}
+        onOpmConfigChange={() => {}}
+        scopeTabContent={<div>Scope Tab</div>}
+        oplTabContent={<div>OPL Tab</div>}
+        smartShowTabContent={<div>Smart Show Tab</div>}
+        codegenTabContent={<div>Codegen Tab</div>}
+        executionConfig={{
+          version: 1,
+          events: [{ id: 'ev-1', displayName: 'tick_event', cIdentifier: 'tick_event' }],
+          enums: [],
+          settings: {} as any,
+        }}
+        onUpdateSelectionExecution={() => {}}
+        writableAttributes={[{ id: 'attr-1', displayName: 'temperature' }]}
+        diagnostics={[]}
+      />
+    );
+
+    expect(html).toContain('data-testid="link-execution-inspector"');
+    expect(html).toContain('data-testid="guard-expr-input"');
+    expect(html).toContain('temperature &gt; 100');
+    expect(html).toContain('data-testid="link-delay-input"');
+    expect(html).toContain('250');
+    expect(html).toContain('data-testid="link-priority-input"');
+    expect(html).toContain('2');
+    expect(html).toContain('data-testid="link-transition-target-input"');
+    expect(html).toContain('st-2');
+  });
 });
+
 
