@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { AppNode, AppEdge, OpmModelSnapshot, OPMPort } from '../EntropyTypes';
+import type { AppNode, AppEdge, OpmModelSnapshot, OPMPort, OpmLifecycleDiagnostic } from '../EntropyTypes';
 import {
   getCanonicalParentId,
   hasContainmentConflict,
@@ -95,11 +95,11 @@ describe('OpmModelLifecycle', () => {
       };
 
       const normalized = normalizeContainment(snapshot);
-      const normalizedState = normalized.nodes.find(n => n.id === 's1')!;
+      const normalizedState = normalized.nodes.find((n: AppNode) => n.id === 's1')!;
       expect(normalizedState.parentId).toBe('obj1');
       expect(normalizedState.data.parentId).toBe('obj1');
 
-      const normalizedObj = normalized.nodes.find(n => n.id === 'obj1')!;
+      const normalizedObj = normalized.nodes.find((n: AppNode) => n.id === 'obj1')!;
       expect(normalizedObj.data.states).toBeDefined();
       expect(normalizedObj.data.states).toHaveLength(1);
       expect(normalizedObj.data.states![0]).toMatchObject({
@@ -120,7 +120,7 @@ describe('OpmModelLifecycle', () => {
       };
 
       const normalized = normalizeContainment(snapshot);
-      const normalizedState = normalized.nodes.find(n => n.id === 's1')!;
+      const normalizedState = normalized.nodes.find((n: AppNode) => n.id === 's1')!;
       expect(normalizedState.parentId).toBe('obj1');
       expect(normalizedState.data.parentId).toBe('obj2');
     });
@@ -148,7 +148,7 @@ describe('OpmModelLifecycle', () => {
       };
 
       const normalized = normalizeContainment(snapshot);
-      const normalizedObj = normalized.nodes.find(n => n.id === 'obj1')!;
+      const normalizedObj = normalized.nodes.find((n: AppNode) => n.id === 'obj1')!;
       expect(normalizedObj.data.states).toHaveLength(1);
       expect(normalizedObj.data.states![0].id).toBe('s1');
     });
@@ -187,7 +187,7 @@ describe('OpmModelLifecycle', () => {
       });
 
       expect(report.valid).toBe(false);
-      expect(report.diagnostics.some(d => d.code === 'OPM_DUPLICATE_NODE_ID' && d.elementId === 'dup1')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_DUPLICATE_NODE_ID' && d.elementId === 'dup1')).toBe(true);
     });
 
     it('rejects duplicate edge IDs', () => {
@@ -202,7 +202,7 @@ describe('OpmModelLifecycle', () => {
       });
 
       expect(report.valid).toBe(false);
-      expect(report.diagnostics.some(d => d.code === 'OPM_DUPLICATE_EDGE_ID' && d.elementId === 'e_dup')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_DUPLICATE_EDGE_ID' && d.elementId === 'e_dup')).toBe(true);
     });
 
     it('rejects conflicting containment parentId vs data.parentId', () => {
@@ -220,7 +220,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.conflictingContainmentIds).toContain('s1');
-      expect(report.diagnostics.some(d => d.code === 'OPM_CONTAINMENT_CONFLICT' && d.elementId === 's1')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_CONTAINMENT_CONFLICT' && d.elementId === 's1')).toBe(true);
     });
 
     it('rejects missing parent node', () => {
@@ -236,7 +236,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.orphanNodeIds).toContain('s1');
-      expect(report.diagnostics.some(d => d.code === 'OPM_CONTAINMENT_MISSING_PARENT' && d.elementId === 's1')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_CONTAINMENT_MISSING_PARENT' && d.elementId === 's1')).toBe(true);
     });
 
     it('rejects state without an owner object', () => {
@@ -249,7 +249,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.orphanNodeIds).toContain('s1');
-      expect(report.diagnostics.some(d => d.code === 'OPM_STATE_MISSING_OWNER' && d.elementId === 's1')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_STATE_MISSING_OWNER' && d.elementId === 's1')).toBe(true);
     });
 
     it('rejects state whose parent is not an Object', () => {
@@ -266,7 +266,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.conflictingContainmentIds).toContain('s1');
-      expect(report.diagnostics.some(d => d.code === 'OPM_STATE_INVALID_OWNER' && d.elementId === 's1')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_STATE_INVALID_OWNER' && d.elementId === 's1')).toBe(true);
     });
 
     it('rejects orphan edge whose endpoints do not exist', () => {
@@ -280,7 +280,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.orphanEdgeIds).toContain('e1');
-      expect(report.diagnostics.some(d => d.code === 'OPM_ORPHAN_EDGE' && d.elementId === 'e1')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_ORPHAN_EDGE' && d.elementId === 'e1')).toBe(true);
     });
 
     it('detects structural cycles in aggregation / generalization edges', () => {
@@ -300,7 +300,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.structuralCycleIds.length).toBeGreaterThan(0);
-      expect(report.diagnostics.some(d => d.code === 'OPM_STRUCTURAL_CYCLE')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_STRUCTURAL_CYCLE')).toBe(true);
     });
 
     it('detects containment cycles', () => {
@@ -320,7 +320,7 @@ describe('OpmModelLifecycle', () => {
 
       expect(report.valid).toBe(false);
       expect(report.structuralCycleIds.length).toBeGreaterThan(0);
-      expect(report.diagnostics.some(d => d.code === 'OPM_STRUCTURAL_CYCLE')).toBe(true);
+      expect(report.diagnostics.some((d: OpmLifecycleDiagnostic) => d.code === 'OPM_STRUCTURAL_CYCLE')).toBe(true);
     });
   });
 
