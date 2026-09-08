@@ -162,6 +162,19 @@ describe('reportModelConsistency - Deletion Closure', () => {
     expect(next.relationships).toEqual([]);
   });
 
+  it('preserves part usages typed by a deleted definition when they belong to another IBD context', () => {
+    const model = fixture({
+      blocks: [block('owner'), block('type')],
+      parts: [part('typed-usage', 'owner', null, null, 'type')],
+    });
+
+    const next = cascadeDeleteReportElement(model, { kind: 'block', id: 'type' });
+
+    expect(next.blocks.map(b => b.id)).toEqual(['owner']);
+    expect(next.parts.map(p => p.id)).toEqual(['typed-usage']);
+    expect(next.parts[0].typeBlockId).toBe('type');
+  });
+
   it('removes port and dependent connectors and relationships', () => {
     const model = fixture({
       blocks: [
