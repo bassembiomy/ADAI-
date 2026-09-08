@@ -106,6 +106,8 @@ import {
   renderStateMachineDiagrams,
 } from './features/reporting';
 import { cascadeDeleteReportElement } from './services/reportModelConsistency';
+import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
+import { loadRepository } from './engine/sysml/persistence';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -826,7 +828,7 @@ const FloatingWindow = ({
 
 
 
-const TraceabilityMatrix = ({
+const LegacyTraceabilityMatrix = ({
   blocks,
   relationships,
   parts,
@@ -6155,6 +6157,12 @@ const ADIA = () => {
   const [relationships, setRelationships] = useState<RelationshipData[]>([]);
   const [parts, setParts] = useState<PartData[]>([]);
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
+  const canonicalSysmlRepository = useMemo(() => loadRepository({
+    blocks,
+    parts,
+    connectors,
+    relationships,
+  }).repository, [blocks, parts, connectors, relationships]);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
   const [uiZoom, setUiZoom] = useState(1.0);
@@ -17609,7 +17617,15 @@ const ADIA = () => {
             onClose={() => toggleWindow('rtm')}
             onUpdate={updateManagedWindow}
           >
-            <TraceabilityMatrix blocks={blocks} relationships={relationships} parts={parts} onClose={() => toggleWindow('rtm')} />
+            <CanonicalTraceabilityMatrix
+              repository={canonicalSysmlRepository}
+              onNavigate={(elementId) => {
+                setSelectedIds([elementId]);
+                if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');
+                else if (blocks.some(block => block.id === elementId)) setDiagramMode('bdd');
+                else if (parts.some(part => part.id === elementId) || connectors.some(connector => connector.id === elementId)) setDiagramMode('ibd');
+              }}
+            />
           </FloatingWindow>
         )}
 
