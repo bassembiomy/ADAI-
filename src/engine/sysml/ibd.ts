@@ -1,0 +1,163 @@
+import type {
+  BlockDefinition,
+  ConnectorUsage,
+  PartUsage,
+  PortDefinition,
+  PortUsage,
+  SysmlRepository,
+} from './model';
+import type { SysmlDiagnostic } from './validation';
+
+export interface ResolvedPortUsage {
+  usage: PortUsage;
+  definition: PortDefinition;
+  ownerTypeId: string;
+  effectiveDirection: PortDefinition['direction'];
+}
+
+export interface IbdView {
+  ownerId: string;
+  parts: PartUsage[];
+  ports: ResolvedPortUsage[];
+  connectors: ConnectorUsage[];
+  diagnostics: SysmlDiagnostic[];
+}
+
+export function resolvePortUsage(repo: SysmlRepository, portUsageId: string): ResolvedPortUsage | undefined {
+  const usage = repo.usages[portUsageId];
+  if (!usage || usage.kind !== 'port') return undefined;
+  const owner = repo.usages[usage.ownerId];
+  const ownerTypeId = owner?.kind === 'part' ? owner.typeId : usage.ownerId;
+  const definition = findPortDefinition(repo, ownerTypeId, usage.definitionId);
+  if (!definition) return undefined;
+  return {
+    usage,
+    definition,
+    ownerTypeId,
+    effectiveDirection: definition.isConjugated ? conjugate(definition.direction) : definition.direction,
+  };
+}
+
+export function validateConnector(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {
+  const connector = repo.connectors[connectorId];
+  if (!connector) return [diag('CONNECTOR_NOT_FOUND', connectorId, undefined, `Connector ${connectorId} does not exist`)];
+  const diagnostics: SysmlDiagnostic[] = [];
+  const source = resolvePortUsage(repo, connector.sourcePortId);
+  const target = resolvePortUsage(repo, connector.targetPortId);
+  if (!source) diagnostics.push(diag('MISSING_CONNECTOR_ENDPOINT', connector.id, 'sourcePortId', `Source port ${connector.sourcePortId} cannot be resolved`));
+  if (!target) diagnostics.push(diag('MISSING_CONNECTOR_ENDPOINT', connector.id, 'targetPortId', `Target port ${connector.targetPortId} cannot be resolved`));
+  if (!source || !target) return diagnostics;
+  if (source.usage.id === target.usage.id) diagnostics.push(diag('SELF_CONNECTOR', connector.id, 'targetPortId', 'A connector cannot connect a port to itself'));
+
+  if (connector.kind === 'assembly') {
+    const sourcePart = directPartInContext(repo, source.usage.ownerId, connector.ownerId);
+    const targetPart = directPartInContext(repo, target.usage.ownerId, connector.ownerId);
+    if (!sourcePart || !targetPart) diagnostics.push(diag('INVALID_CONNECTOR_CONTEXT', connector.id, 'ownerId', 'Assembly endpoints must be roles in the connector owning context'));
+  } else if (connector.kind === 'delegation') {
+    const sourceBoundary = source.usage.ownerId === connector.ownerId;
+    const targetBoundary = target.usage.ownerId === connector.ownerId;
+    const sourceInternal = Boolean(directPartInContext(repo, source.usage.ownerId, connector.ownerId));
+    const targetInternal = Boolean(directPartInContext(repo, target.usage.ownerId, connector.ownerId));
+    if (!((sourceBoundary && targetInternal) || (targetBoundary && sourceInternal))) {
+      diagnostics.push(diag('INVALID_DELEGATION_ENDPOINTS', connector.id, 'kind', 'Delegation requires one boundary port and one internal role port'));
+    }
+  }
+
+  if (!directionsCompatible(source.effectiveDirection, target.effectiveDirection)) {
+    diagnostics.push(diag('INCOMPATIBLE_PORT_DIRECTION', connector.id, 'targetPortId', `${source.effectiveDirection} cannot connect to ${target.effectiveDirection}`));
+  }
+  if (source.definition.typeId !== target.definition.typeId) {
+    diagnostics.push(diag('INCOMPATIBLE_INTERFACE', connector.id, 'targetPortId', `Port interfaces ${source.definition.typeId} and ${target.definition.typeId} differ`));
+  }
+  const duplicate = Object.values(repo.connectors).find(other => other.id !== connector.id && other.ownerId === connector.ownerId && (
+    (other.sourcePortId === connector.sourcePortId && other.targetPortId === connector.targetPortId) ||
+    (other.sourcePortId === connector.targetPortId && other.targetPortId === connector.sourcePortId)
+  ));
+  if (duplicate) diagnostics.push(diag('DUPLICATE_CONNECTOR', connector.id, undefined, `Connector duplicates ${duplicate.id}`));
+  diagnostics.push(...validateItemFlow(repo, connectorId));
+  return uniqueDiagnostics(diagnostics);
+}
+
+export function validateItemFlow(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {
+  const connector = repo.connectors[connectorId];
+  if (!connector?.itemFlowId) return [];
+  const conveyed = repo.definitions[connector.itemFlowId];
+  if (!conveyed || (conveyed.kind !== 'valueType' && conveyed.kind !== 'interface')) {
+    return [diag('MISSING_ITEM_FLOW_TYPE', connector.id, 'itemFlowId', `Conveyed type ${connector.itemFlowId} does not exist`)];
+  }
+  const source = resolvePortUsage(repo, connector.sourcePortId);
+  const target = resolvePortUsage(repo, connector.targetPortId);
+  if (!source || !target) return [];
+  if (!directionsCompatible(source.effectiveDirection, target.effectiveDirection)) {
+    return [diag('INVALID_ITEM_FLOW_DIRECTION', connector.id, 'itemFlowId', 'Item flow contradicts effective port direction')];
+  }
+  return [];
+}
+
+export function deriveIbdView(repo: SysmlRepository, ownerId: string): IbdView {
+  const partIds = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const usage of Object.values(repo.usages)) {
+      if (usage.kind !== 'part') continue;
+      if ((usage.ownerId === ownerId || partIds.has(usage.ownerId)) && !partIds.has(usage.id)) {
+        partIds.add(usage.id);
+        changed = true;
+      }
+    }
+  }
+  const parts = Object.values(repo.usages).filter((usage): usage is PartUsage => usage.kind === 'part' && partIds.has(usage.id)).sort(byId);
+  const portOwnerIds = new Set([ownerId, ...partIds]);
+  const ports = Object.values(repo.usages)
+    .filter((usage): usage is PortUsage => usage.kind === 'port' && portOwnerIds.has(usage.ownerId))
+    .map(usage => resolvePortUsage(repo, usage.id))
+    .filter((port): port is ResolvedPortUsage => Boolean(port))
+    .sort((a, b) => a.usage.id.localeCompare(b.usage.id));
+  const connectors = Object.values(repo.connectors).filter(connector => connector.ownerId === ownerId).sort(byId);
+  const diagnostics = connectors.flatMap(connector => validateConnector(repo, connector.id));
+  return { ownerId, parts, ports, connectors, diagnostics };
+}
+
+function findPortDefinition(repo: SysmlRepository, blockId: string, portId: string, visited = new Set<string>()): PortDefinition | undefined {
+  if (visited.has(blockId)) return undefined;
+  visited.add(blockId);
+  const block = repo.definitions[blockId];
+  if (!block || block.kind !== 'block') return undefined;
+  const direct = block.ports.find(port => port.id === portId);
+  if (direct) return direct;
+  for (const supertypeId of block.supertypeIds ?? []) {
+    const inherited = findPortDefinition(repo, supertypeId, portId, visited);
+    if (inherited) return inherited;
+  }
+  return undefined;
+}
+
+function directPartInContext(repo: SysmlRepository, ownerId: string, contextId: string): PartUsage | undefined {
+  const owner = repo.usages[ownerId];
+  return owner?.kind === 'part' && owner.ownerId === contextId ? owner : undefined;
+}
+
+function conjugate(direction: PortDefinition['direction']): PortDefinition['direction'] {
+  return direction === 'in' ? 'out' : direction === 'out' ? 'in' : 'inout';
+}
+
+function directionsCompatible(source: PortDefinition['direction'], target: PortDefinition['direction']): boolean {
+  return source === 'inout' || target === 'inout' || source !== target;
+}
+
+function byId<T extends { id: string }>(a: T, b: T): number { return a.id.localeCompare(b.id); }
+
+function diag(code: string, elementId: string, propertyPath: string | undefined, message: string): SysmlDiagnostic {
+  return { code, severity: 'error', elementId, propertyPath, message };
+}
+
+function uniqueDiagnostics(diagnostics: SysmlDiagnostic[]): SysmlDiagnostic[] {
+  const seen = new Set<string>();
+  return diagnostics.filter(diagnostic => {
+    const key = `${diagnostic.code}:${diagnostic.elementId}:${diagnostic.propertyPath ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
