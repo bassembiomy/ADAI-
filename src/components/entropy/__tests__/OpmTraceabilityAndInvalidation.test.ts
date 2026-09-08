@@ -153,8 +153,8 @@ describe('OPM Traceability & Invalidation Engine (Task 6)', () => {
       'obj-st-deleted': 'st-dead',
     };
     simState.pendingEvents = [
-      { id: 'ev-1', objectId: 'obj-surviving', stateId: 'st-surviving', tick: 1 },
-      { id: 'ev-2', objectId: 'obj-deleted', stateId: 'st-dead', tick: 2 },
+      { objectId: 'obj-surviving', stateId: 'st-surviving', tick: 1 },
+      { objectId: 'obj-deleted', stateId: 'st-dead', tick: 2 },
     ];
     simState.lastChangeTick = {
       'proc-surviving': 5,
@@ -165,8 +165,20 @@ describe('OPM Traceability & Invalidation Engine (Task 6)', () => {
       'proc-deleted': 'Blocked',
     };
     simState.trace = [
-      { tick: 1, processId: 'proc-surviving', objectId: 'obj-surviving', toStateId: 'st-surviving' },
-      { tick: 2, processId: 'proc-deleted', objectId: 'obj-deleted', toStateId: 'st-dead' },
+      {
+        tick: 1,
+        processId: 'proc-surviving',
+        processName: 'Proc Surviving',
+        kind: 'fired',
+        stateChanges: [{ objectId: 'obj-surviving', fromStateId: null, toStateId: 'st-surviving' }],
+      },
+      {
+        tick: 2,
+        processId: 'proc-deleted',
+        processName: 'Proc Deleted',
+        kind: 'fired',
+        stateChanges: [{ objectId: 'obj-deleted', fromStateId: null, toStateId: 'st-dead' }],
+      },
     ];
 
     const survivingNodeIds = new Set(['obj-surviving', 'st-surviving', 'proc-surviving', 'obj-st-deleted']);
@@ -183,7 +195,7 @@ describe('OPM Traceability & Invalidation Engine (Task 6)', () => {
 
     // pendingEvents purged
     expect(reconciled.pendingEvents).toHaveLength(1);
-    expect(reconciled.pendingEvents[0].id).toBe('ev-1');
+    expect(reconciled.pendingEvents[0].objectId).toBe('obj-surviving');
 
     // lastChangeTick & lastLoggedBlock purged
     expect(reconciled.lastChangeTick['proc-deleted']).toBeUndefined();
@@ -201,7 +213,7 @@ describe('OPM Traceability & Invalidation Engine (Task 6)', () => {
       currentFingerprint: 'fp-123',
       generatedFingerprint: 'fp-123',
       verifiedFingerprint: 'fp-123',
-      files: [{ path: 'model.c', content: '...', kind: 'source' }],
+      files: [{ name: 'model.c', content: '...' }],
       manifest: null,
       diagnostics: [],
       evidence: { hostCompile: 'pass', hostRuntime: 'pass' },

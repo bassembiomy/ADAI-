@@ -117,14 +117,16 @@ export function importSysmlToOpm(state: SysMLDiagramState): SysmlImportResult {
 
   if ((state.connectors?.length ?? 0) > 0) {
     state.connectors!.forEach(c => {
-      const msg = `IBD connector "${c.id}" (${c.name || 'unnamed'}) was not auto-mapped. In OPM, model the exchanged items as processes with consumption/result links.`;
+      const connAny = c as any;
+      const connName = connAny.label || connAny.name || 'unnamed';
+      const msg = `IBD connector "${c.id}" (${connName}) was not auto-mapped. In OPM, model the exchanged items as processes with consumption/result links.`;
       warnings.push(msg);
       connectorMappings.push({
         sourceConnectorId: c.id,
-        sourceBlockId: c.sourceBlockId,
-        targetBlockId: c.targetBlockId,
-        sourcePortId: c.sourcePortId,
-        targetPortId: c.targetPortId,
+        sourceBlockId: connAny.sourceBlockId || connAny.sourcePartId,
+        targetBlockId: connAny.targetBlockId || connAny.targetPartId,
+        sourcePortId: connAny.sourcePortId,
+        targetPortId: connAny.targetPortId,
         status: 'unresolved',
         diagnostic: msg,
       });

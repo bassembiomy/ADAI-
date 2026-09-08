@@ -31,6 +31,7 @@ export interface OpmDeletionImpactSummary {
   deletedPortCount: number;
   descendantsCascadedCount: number;
   affectedRequirementCount: number;
+  affectedRequirementsCount?: number;
   isHighImpact: boolean;
 }
 
@@ -176,6 +177,7 @@ export function analyzeOpmDeletion(
     deletedPortCount: deletedPortRefs.length,
     descendantsCascadedCount: cascadedDescendants,
     affectedRequirementCount: affectedRequirementIds.size,
+    affectedRequirementsCount: affectedRequirementIds.size,
     isHighImpact,
   };
 

@@ -179,11 +179,12 @@ export function deriveRequirementsView(nodes: AppNode[], edges: AppEdge[]): OpmR
   return nodes
     .filter(n => n.data.type === 'requirement')
     .map(r => {
-      const satisfiesEdges = edges.filter(e => e.source === r.id && e.data?.type === 'satisfies');
-      const verifiesEdges = edges.filter(e => e.source === r.id && e.data?.type === 'verifies');
+      const satisfiesEdges = edges.filter(e => (e.source === r.id || e.target === r.id) && (e.data?.type === 'satisfies' || e.data?.linkType === 'satisfies'));
+      const verifiesEdges = edges.filter(e => (e.source === r.id || e.target === r.id) && (e.data?.type === 'verifies' || e.data?.linkType === 'verifies'));
 
       const toSatisfied = (e: AppEdge) => {
-        const t = nodes.find(n => n.id === e.target);
+        const otherId = e.source === r.id ? e.target : e.source;
+        const t = nodes.find(n => n.id === otherId);
         return t ? { id: t.id, name: t.data.name, kind: t.data.type } : null;
       };
 
@@ -215,6 +216,7 @@ export function deriveRequirementsView(nodes: AppNode[], edges: AppEdge[]): OpmR
       }
 
       return {
+        id: r.id,
         requirementId: r.id,
         requirementName: r.data.name,
         requirementText: String((r.data as any).requirementText || ''),

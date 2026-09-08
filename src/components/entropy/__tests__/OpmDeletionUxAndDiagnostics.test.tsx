@@ -30,8 +30,8 @@ describe('OPM Lifecycle Impact Review & Diagnostics UX (Task 7)', () => {
       type: 'object',
       physical: true,
       states: [
-        { id: 'st-idle', name: 'Idle' },
-        { id: 'st-spin', name: 'Spinning' },
+        { id: 'st-idle', name: 'Idle', isActive: false },
+        { id: 'st-spin', name: 'Spinning', isActive: false },
       ],
       attributes: [],
     },
@@ -141,13 +141,13 @@ describe('OPM Lifecycle Impact Review & Diagnostics UX (Task 7)', () => {
       id: 'obj-a',
       type: 'opmObject',
       position: { x: 0, y: 0 },
-      data: { name: 'Alpha', type: 'object', states: [], attributes: [] },
+      data: { name: 'Alpha', type: 'object', physical: false, states: [], attributes: [] },
     };
     const cyc2: AppNode = {
       id: 'obj-b',
       type: 'opmObject',
       position: { x: 100, y: 0 },
-      data: { name: 'Beta', type: 'object', states: [], attributes: [] },
+      data: { name: 'Beta', type: 'object', physical: false, states: [], attributes: [] },
     };
     const e1: AppEdge = {
       id: 'e1',

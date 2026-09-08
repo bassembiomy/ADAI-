@@ -519,7 +519,17 @@ describe('OpmModelLifecycle', () => {
           name: 'P1',
           type: 'process',
           physical: false,
-          processExecution: { maxDurationTicks: 10, assignments: [] },
+          processExecution: {
+            enabled: true,
+            activation: 'cyclic',
+            inputAttributeIds: [],
+            outputAttributeIds: [],
+            guard: '',
+            assignments: [],
+            priority: 1,
+            debounceMs: 0,
+            reentrancy: 'reject',
+          },
         },
       });
       const obj = createNode('obj1', 'object'); // conceptual-only!

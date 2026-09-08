@@ -996,8 +996,8 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   {deleteImpact.summary.deletedEdgeCount > 0 && (
                     <li>{deleteImpact.summary.deletedEdgeCount} connected link(s)</li>
                   )}
-                  {deleteImpact.summary.affectedRequirementsCount > 0 && (
-                    <li>{deleteImpact.summary.affectedRequirementsCount} requirement relation(s)</li>
+                  {deleteImpact.summary.affectedRequirementCount > 0 && (
+                    <li>{deleteImpact.summary.affectedRequirementCount} requirement relation(s)</li>
                   )}
                   {deleteImpact.affectedSimulationIds.length > 0 && (
                     <li>{deleteImpact.affectedSimulationIds.length} simulation entity reference(s)</li>

@@ -56,7 +56,7 @@ describe('SysmlToOpmImporter', () => {
     const withConnectors: SysMLDiagramState = {
       ...sample,
       connectors: [
-        { id: 'c1', name: 'pipe', sourcePortId: 'p1', targetPortId: 'p2', sourceBlockId: 'b1', targetBlockId: 'b2' },
+        { id: 'c1', label: 'pipe', sourcePortId: 'p1', targetPortId: 'p2', sourcePartId: 'b1', targetPartId: 'b2' },
       ],
       relations: [
         { id: 'rel_alloc', sourceId: 'b1', targetId: 'b2', type: 'allocation', label: '' },

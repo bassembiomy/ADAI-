@@ -198,8 +198,12 @@ export function reconcileSimulationState(
   const trace = (state.trace || []).filter(
     tr =>
       survivingNodeIds.has(tr.processId) &&
-      survivingNodeIds.has(tr.objectId) &&
-      (!tr.toStateId || survivingNodeIds.has(tr.toStateId))
+      (tr.stateChanges || []).every(
+        sc =>
+          survivingNodeIds.has(sc.objectId) &&
+          (!sc.fromStateId || survivingNodeIds.has(sc.fromStateId)) &&
+          (!sc.toStateId || survivingNodeIds.has(sc.toStateId))
+      )
   );
 
   return {
