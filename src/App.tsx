@@ -105,9 +105,9 @@ import {
   renderInteractiveDiagramHierarchy,
   renderStateMachineDiagrams,
 } from './features/reporting';
-import { cascadeDeleteReportElement } from './services/reportModelConsistency';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { loadRepository } from './engine/sysml/persistence';
+import { applyLegacySysmlDeletion } from './services/sysmlTransactionAdapter';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -8991,13 +8991,15 @@ const ADIA = () => {
       junctionIds: l.junctionIds.filter(jid => !idSet.has(jid)),
       transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
     })));
-    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
-    setRelationships(prev => prev.filter(r => !idSet.has(r.id) && !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
-    setParts(prev => prev.filter(p => !idSet.has(p.id)));
-    setConnectors(prev => prev.filter(c => !idSet.has(c.id) && !idSet.has(c.sourcePartId) && !idSet.has(c.targetPartId)));
-    setInterfaceRealizations(prev => prev.filter(ir => !idSet.has(ir.id) && !idSet.has(ir.partId) && !idSet.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
-  }, [addToHistory]);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setBlocks(transaction.model.blocks);
+    setRelationships(transaction.model.relationships);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
+  }, [addToHistory, blocks, relationships, parts, connectors]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9320,15 +9322,14 @@ const ADIA = () => {
     if (!block) return;
     addToHistory();
     const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
-    const nextModel = cascadeDeleteReportElement(
-      { blocks, relationships, parts, connectors },
-      { kind, id }
-    );
-    setBlocks(nextModel.blocks as BlockData[]);
-    setRelationships(nextModel.relationships as RelationshipData[]);
-    setParts(nextModel.parts as PartData[]);
-    setConnectors(nextModel.connectors as ConnectorData[]);
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setBlocks(transaction.model.blocks);
+    setRelationships(transaction.model.relationships);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted ${kind}: ${block.name}`);
   }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
@@ -9391,14 +9392,13 @@ const ADIA = () => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
     addToHistory();
-    const nextModel = cascadeDeleteReportElement(
-      { blocks, relationships, parts, connectors },
-      { kind: 'part', id }
-    );
-    setParts(nextModel.parts as PartData[]);
-    setConnectors(nextModel.connectors as ConnectorData[]);
-    setRelationships(nextModel.relationships as RelationshipData[]);
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setRelationships(transaction.model.relationships);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted part: ${part.name}`);
   }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
