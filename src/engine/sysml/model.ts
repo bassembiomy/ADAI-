@@ -20,8 +20,9 @@ export interface ConnectorUsage { id: string; kind: 'assembly' | 'delegation' | 
 export interface RequirementDefinition extends NamedElement { kind: 'requirement'; requirementId: string; text: string; status: 'draft' | 'approved' | 'implemented' | 'verified' | 'failed' | 'stale' | 'retired'; version: string; baselineId?: string; source?: string; rationale?: string; owner?: string; risk?: 'low' | 'medium' | 'high' | 'critical'; priority?: 'low' | 'medium' | 'high' | 'critical'; copiedFromId?: string; }
 export interface VerificationCase extends NamedElement { kind: 'verificationCase'; method: string; verifiesRequirementIds: string[]; }
 export interface VerificationEvidence { id: string; verificationCaseId: string; requirementId: string; revision: number; result: 'passed' | 'failed'; executedAt: string; artifactUri?: string; }
-export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; }
+export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; contentHash?: string; elementHashes?: Record<string, string>; }
 export interface TraceArtifact { id: string; name: string; kind: 'behavior' | 'simulation' | 'generatedArtifact' | 'source'; ownerId?: string; revision: number; uri?: string; }
+export interface ModelChangeRecord { id: string; revision: number; timestamp: string; command: string; elementIds: string[]; actor?: string; }
 export interface SysmlRelationship { id: string; kind: 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation' | 'binding' | 'itemFlow' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'copy'; sourceId: string; targetId: string; sourceMultiplicity?: Multiplicity; targetMultiplicity?: Multiplicity; suspect?: boolean; lastValidatedRevision?: number; }
 
 export interface SysmlRepository {
@@ -37,10 +38,11 @@ export interface SysmlRepository {
   evidence: Record<string, VerificationEvidence>;
   baselines: Record<string, ModelBaseline>;
   artifacts: Record<string, TraceArtifact>;
+  auditTrail: ModelChangeRecord[];
 }
 
 export function createEmptyRepository(): SysmlRepository {
-  return { schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0, definitions: {}, usages: {}, connectors: {}, relationships: {}, requirements: {}, verificationCases: {}, evidence: {}, baselines: {}, artifacts: {} };
+  return { schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0, definitions: {}, usages: {}, connectors: {}, relationships: {}, requirements: {}, verificationCases: {}, evidence: {}, baselines: {}, artifacts: {}, auditTrail: [] };
 }
 
 export function qualifiedName(namespace: readonly string[], name: string): string {
