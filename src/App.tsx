@@ -107,7 +107,7 @@ import {
 } from './features/reporting';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { loadRepository } from './engine/sysml/persistence';
-import { applyLegacySysmlDeletion } from './services/sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
@@ -8984,6 +8984,8 @@ const ADIA = () => {
     const idSet = new Set(ids);
     if (idSet.size === 0) return;
 
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
     setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
@@ -8992,7 +8994,6 @@ const ADIA = () => {
       junctionIds: l.junctionIds.filter(jid => !idSet.has(jid)),
       transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
     })));
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
     const deletedIds = new Set(transaction.impact.deletedElementIds);
     setBlocks(transaction.model.blocks);
     setRelationships(transaction.model.relationships);
@@ -9326,9 +9327,10 @@ const ADIA = () => {
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
     if (!block) return;
-    addToHistory();
     const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
+    addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
     setBlocks(transaction.model.blocks);
     setRelationships(transaction.model.relationships);
@@ -9409,8 +9411,9 @@ const ADIA = () => {
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
-    addToHistory();
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
+    addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
     setParts(transaction.model.parts);
     setConnectors(transaction.model.connectors);

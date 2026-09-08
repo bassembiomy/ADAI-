@@ -16,6 +16,33 @@ export interface LegacySysmlDeletionResult {
   impact: MutationImpact;
 }
 
+export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
+  const requested = new Set(impact.requestedElementIds);
+  return impact.deletedElementIds.some(id => !requested.has(id))
+    || impact.unresolvedUsageIds.length > 0
+    || impact.invalidatedEvidenceIds.length > 0
+    || impact.affectedRequirementIds.length > 0
+    || impact.affectedBaselineIds.length > 0;
+}
+
+export function formatLegacyDeletionImpact(impact: MutationImpact): string {
+  const requested = new Set(impact.requestedElementIds);
+  const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+  const lines = [
+    'SysML deletion impact',
+    `Requested: ${impact.requestedElementIds.join(', ') || 'none'}`,
+    `Cascade deleted: ${cascade.join(', ') || 'none'}`,
+    `Affected diagrams: ${impact.affectedDiagramKinds.join(', ') || 'none'}`,
+    `Affected requirements: ${impact.affectedRequirementIds.join(', ') || 'none'}`,
+    `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
+    `Invalidated evidence: ${impact.invalidatedEvidenceIds.join(', ') || 'none'}`,
+    `Protected baselines retained: ${impact.affectedBaselineIds.join(', ') || 'none'}`,
+    '',
+    'Continue with this atomic deletion?',
+  ];
+  return lines.join('\n');
+}
+
 export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: readonly string[]): LegacySysmlDeletionResult {
   const repository = loadRepository({
     blocks: model.blocks,
