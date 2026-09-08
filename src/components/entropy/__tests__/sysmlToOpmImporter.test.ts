@@ -34,12 +34,17 @@ describe('SysmlToOpmImporter', () => {
     expect(errors).toHaveLength(0);
   });
 
-  test('maps composition → aggregation, satisfy → satisfies, generalization → generalization', () => {
-    const { edges } = importSysmlToOpm(sample);
+  test('projects composition as explicitly lossy aggregation while preserving its SysML identity', () => {
+    const { edges, diagnostics } = importSysmlToOpm(sample);
     const types = edges.map((e: any) => [e.data?.type, e.source, e.target]);
     expect(types).toContainEqual(['aggregation', 'b1', 'b2']);
     expect(types).toContainEqual(['satisfies', 'r1', 'b2']);
     expect(types).toContainEqual(['generalization', 'b1', 'b2']);
+    expect(edges.find(edge => edge.data?.sysmlRelationId === 'rel1')?.data).toMatchObject({
+      sysmlMappingStatus: 'conceptual-only',
+      sysmlSourceKind: 'composition',
+    });
+    expect(diagnostics.map(diagnostic => diagnostic.code)).toContain('OPM_COMPOSITION_OWNERSHIP_LOSS');
   });
 
   test('warns about unmapped relationship types instead of dropping them silently', () => {
