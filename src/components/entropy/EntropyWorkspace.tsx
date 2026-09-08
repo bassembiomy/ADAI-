@@ -1178,6 +1178,47 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   };
 
+  const handleUpdateSelectionExecution = useCallback((updatedExecution: any) => {
+    if (selectedNode) {
+      saveHistory(nodes, edges);
+      const nextNode = {
+        ...selectedNode,
+        data: {
+          ...selectedNode.data,
+          execution: updatedExecution,
+        },
+      };
+      setNodes(prev => prev.map(n => n.id === selectedNode.id ? nextNode : n));
+      setSelectedNode(nextNode);
+    } else if (selectedEdge) {
+      saveHistory(nodes, edges);
+      const nextEdge = {
+        ...selectedEdge,
+        data: {
+          ...selectedEdge.data,
+          execution: updatedExecution,
+        },
+      };
+      setEdges(prev => prev.map(e => e.id === selectedEdge.id ? nextEdge : e));
+      setSelectedEdge(nextEdge);
+    }
+  }, [selectedNode, selectedEdge, nodes, edges, saveHistory]);
+
+  const writableAttributes = useMemo(() => {
+    const list: { id: string; displayName: string }[] = [];
+    nodes.filter(n => n.data?.type === 'object').forEach(obj => {
+      const objName = obj.data?.name || obj.id;
+      const attrs = obj.data?.execution?.attributes || [];
+      attrs.forEach((attr: any) => {
+        list.push({
+          id: attr.id,
+          displayName: `${objName}.${attr.displayName || attr.id}`,
+        });
+      });
+    });
+    return list;
+  }, [nodes]);
+
   const handleEdgeTypeChange = useCallback((edgeId: string, newType: OPMLinkType) => {
     setEdges(eds => eds.map(edge => edge.id === edgeId ? { ...edge, data: { ...edge.data, type: newType } } : edge));
   }, [setEdges]);
@@ -1676,6 +1717,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           handleConfigFieldChange('tickMs', updater.tickMs);
         }
       }}
+      executionConfig={opmExecutionConfig}
+      onUpdateSelectionExecution={handleUpdateSelectionExecution}
+      writableAttributes={writableAttributes}
+      diagnostics={[]}
       simControlExtraContent={
         <div className="flex flex-col gap-3.5 pt-1">
           {/* Quick Initialize Button */}
