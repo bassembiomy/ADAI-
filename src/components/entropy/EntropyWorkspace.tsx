@@ -176,6 +176,7 @@ interface EntropyWorkspaceProps {
   onSave?: (nodes: AppNode[], edges: AppEdge[]) => void;
   onAddError?: (type: 'error' | 'warning' | 'info', message: string, source?: string) => void;
   sysmlState?: SysMLDiagramState;
+  onOpenHelp?: (topic?: string) => void;
 }
 
 export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
@@ -191,6 +192,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   onSave,
   onAddError,
   sysmlState,
+  onOpenHelp,
 }) => {
   // --- States ---
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
@@ -2354,7 +2356,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 className="bg-[#141414] border border-[#2d2d2d] rounded-md"
               />
             </ReactFlow>
-            <OpmLegend />
+            <OpmLegend onOpenHelp={onOpenHelp ? () => onOpenHelp('entropy-opm') : undefined} />
             <OpmDiagnosticsBadge
               diagnostics={opmArtifactState.diagnostics}
               onNavigateToDiagnostic={handleNavigateToDiagnostic}

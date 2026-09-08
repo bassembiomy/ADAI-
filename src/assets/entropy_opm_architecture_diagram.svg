@@ -1,0 +1,233 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="1000" height="620">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0d14"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#07090e"/>
+    </linearGradient>
+
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <linearGradient id="glowOrange" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+
+    <linearGradient id="blueCardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#0369a1" stop-opacity="0.08"/>
+    </linearGradient>
+
+    <linearGradient id="greenCardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#059669" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#047857" stop-opacity="0.08"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+
+    <filter id="pulseGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 2 L 8 5 L 1 8 z" fill="#f97316"/>
+    </marker>
+    <marker id="arrowCyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 2 L 8 5 L 1 8 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 2 L 8 5 L 1 8 z" fill="#34d399"/>
+    </marker>
+  </defs>
+
+  <style>
+    .title { font-family: system-ui, -apple-system, sans-serif; font-weight: 900; fill: #ffffff; }
+    .subtitle { font-family: system-ui, -apple-system, sans-serif; font-weight: 500; fill: #94a3b8; font-size: 11px; letter-spacing: 0.05em; }
+    .header-tag { font-family: monospace; font-size: 10px; font-weight: 700; fill: #f97316; letter-spacing: 0.15em; }
+    .box-title { font-family: system-ui, -apple-system, sans-serif; font-weight: 700; font-size: 13px; fill: #f8fafc; }
+    .box-sub { font-family: system-ui, -apple-system, sans-serif; font-weight: 400; font-size: 10.5px; fill: #94a3b8; }
+    .pill-txt { font-family: monospace; font-size: 9px; font-weight: 600; }
+    .code-txt { font-family: monospace; font-size: 9.5px; fill: #fdba74; }
+  </style>
+
+  <!-- Background -->
+  <rect width="1000" height="620" rx="16" fill="url(#bgGrad)"/>
+  <rect width="1000" height="620" rx="16" fill="none" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Top Title Banner -->
+  <g transform="translate(40, 24)">
+    <text class="header-tag" y="10">ADIA SUITE • ISO 19450 SINGLE-MODEL SYSTEMS ARCHITECTURE</text>
+    <text class="title" y="32" font-size="20">ENTROPY: Object-Process Methodology (OPM) Engine</text>
+    <text class="subtitle" y="48">Dual-Layer Architecture: Permissive Conceptual Modeling ──► Strict Deterministic C99 &amp; HIL Execution</text>
+  </g>
+
+  <!-- ================= LAYER 1: CONCEPTUAL CANVAS ================= -->
+  <g transform="translate(40, 85)">
+    <!-- Container Card -->
+    <rect width="920" height="150" rx="12" fill="url(#cardGrad)" stroke="#334155" stroke-width="1" filter="url(#shadow)"/>
+    <rect x="1" y="1" width="918" height="26" rx="11" fill="#0f172a" fill-opacity="0.8"/>
+    <circle cx="16" cy="14" r="4" fill="#f87171"/>
+    <circle cx="28" cy="14" r="4" fill="#fbbf24"/>
+    <circle cx="40" cy="14" r="4" fill="#34d399"/>
+    <text x="56" y="17" class="box-title" font-size="11" fill="#cbd5e1">LAYER 1: Conceptual OPM Editor Canvas (React Flow • Permissive ISO 19450 Modeling)</text>
+    <rect x="780" y="5" width="125" height="18" rx="4" fill="#f97316" fill-opacity="0.15" stroke="#f97316" stroke-width="0.8"/>
+    <text x="786" y="17" class="pill-txt" fill="#fdba74">OPD ⇄ OPL SYNC</text>
+
+    <!-- Block 1: Object with State -->
+    <g transform="translate(25, 42)">
+      <rect width="170" height="90" rx="8" fill="#064e3b" fill-opacity="0.6" stroke="#10b981" stroke-width="2.5"/>
+      <text x="14" y="24" class="box-title" font-size="12" fill="#6ee7b7">«Object» Heater</text>
+      <text x="14" y="38" class="box-sub" font-size="9" fill="#a7f3d0">physical=true (thick border)</text>
+
+      <!-- Nested States -->
+      <rect x="14" y="48" width="65" height="24" rx="12" fill="#022c22" stroke="#34d399" stroke-width="1.2"/>
+      <circle cx="24" cy="60" r="3.5" fill="#34d399"/>
+      <text x="32" y="63" class="pill-txt" fill="#ecfdf5">Off (init)</text>
+
+      <rect x="88" y="48" width="65" height="24" rx="12" fill="#022c22" stroke="#6ee7b7" stroke-width="1.2"/>
+      <text x="108" y="63" class="pill-txt" fill="#ecfdf5">Heating</text>
+    </g>
+
+    <!-- Edge: Trigger / Condition -->
+    <path d="M 195 95 C 235 95, 235 95, 265 95" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+    <text x="210" y="88" class="pill-txt" fill="#fbbf24">Trigger</text>
+
+    <!-- Block 2: Process -->
+    <g transform="translate(270, 42)">
+      <ellipse cx="85" cy="45" rx="80" ry="40" fill="#0c4a6e" fill-opacity="0.7" stroke="#0284c7" stroke-width="2" filter="url(#pulseGlow)"/>
+      <text x="85" y="40" text-anchor="middle" class="box-title" font-size="13" fill="#38bdf8">Toggle_Heating</text>
+      <text x="85" y="55" text-anchor="middle" class="box-sub" font-size="9.5" fill="#7dd3fc">«Process» transformation</text>
+    </g>
+
+    <!-- Edge: Effect -->
+    <path d="M 435 85 C 475 85, 475 85, 505 85" fill="none" stroke="#ec4899" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M 505 89 C 475 89, 475 89, 435 89" fill="none" stroke="#ec4899" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="450" y="78" class="pill-txt" fill="#f472b6">Effect ↔</text>
+
+    <!-- Block 3: Target Object (Sensor/Temp) -->
+    <g transform="translate(515, 42)">
+      <rect width="170" height="90" rx="8" fill="#0f172a" fill-opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="14" y="24" class="box-title" font-size="12" fill="#7dd3fc">«Object» Temperature</text>
+      <text x="14" y="38" class="box-sub" font-size="9">informational (standard border)</text>
+      <rect x="14" y="50" width="142" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.8"/>
+      <text x="20" y="64" class="pill-txt" fill="#93c5fd">val: float32 = 24.5 °C</text>
+    </g>
+
+    <!-- Edge: Verifies/Satisfies -->
+    <path d="M 725 95 C 705 95, 705 95, 685 95" fill="none" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <text x="692" y="88" class="pill-txt" fill="#c084fc">satisfies</text>
+
+    <!-- Block 4: Requirement Node -->
+    <g transform="translate(730, 42)">
+      <rect width="165" height="90" rx="8" fill="#3b0764" fill-opacity="0.5" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="12" y="24" class="box-title" font-size="11" fill="#d8b4fe">«Requirement» REQ-01</text>
+      <text x="12" y="42" class="box-sub" font-size="9" fill="#e9d5ff">Rapid Heating Cycle:</text>
+      <text x="12" y="56" class="box-sub" font-size="8.5" fill="#c084fc">Temp rises ≥ 5°C/min</text>
+      <text x="12" y="72" class="pill-txt" fill="#a855f7">Traceability Node</text>
+    </g>
+  </g>
+
+  <!-- Downward Flow Connectors -->
+  <g transform="translate(500, 240)">
+    <path d="M 0 0 L 0 35" fill="none" stroke="#f97316" stroke-width="2" stroke-dasharray="3 2" marker-end="url(#arrow)"/>
+    <rect x="-80" y="8" width="160" height="18" rx="4" fill="#0f172a" stroke="#f97316" stroke-width="0.8"/>
+    <text x="0" y="20" text-anchor="middle" class="pill-txt" fill="#fdba74">compileExecutableOpm()</text>
+  </g>
+
+  <!-- ================= MIDDLE PIPELINE: COMPILATION & VALIDATION ================= -->
+  <g transform="translate(40, 285)">
+    <!-- 3 Pipeline Stages in a row -->
+    <!-- Stage 1: Deterministic Normalization -->
+    <g transform="translate(0, 0)">
+      <rect width="285" height="72" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1.2"/>
+      <circle cx="20" cy="22" r="10" fill="#f97316" fill-opacity="0.2"/>
+      <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="900" fill="#f97316">1</text>
+      <text x="38" y="22" class="box-title" font-size="11.5">Deterministic Normalization</text>
+      <text x="38" y="38" class="box-sub" font-size="9.5">Stable ordinal IDs &amp; C-safe identifiers</text>
+      <text x="12" y="58" class="code-txt">normalizeOpmModel() • canonical sorts</text>
+    </g>
+
+    <path d="M 292 36 L 310 36" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+    <!-- Stage 2: Expression Parser -->
+    <g transform="translate(315, 0)">
+      <rect width="285" height="72" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1.2"/>
+      <circle cx="20" cy="22" r="10" fill="#38bdf8" fill-opacity="0.2"/>
+      <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="900" fill="#38bdf8">2</text>
+      <text x="38" y="22" class="box-title" font-size="11.5">Restricted Expression Parser</text>
+      <text x="38" y="38" class="box-sub" font-size="9.5">Safe AST: +,-,*,/,%,&amp;&amp;,||,min,max,clamp</text>
+      <text x="12" y="58" class="code-txt">No recursion • no arbitrary code exec</text>
+    </g>
+
+    <path d="M 607 36 L 625 36" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+    <!-- Stage 3: Semantic Validator -->
+    <g transform="translate(630, 0)">
+      <rect width="290" height="72" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.2"/>
+      <circle cx="20" cy="22" r="10" fill="#10b981" fill-opacity="0.2"/>
+      <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="900" fill="#10b981">3</text>
+      <text x="38" y="22" class="box-title" font-size="11.5" fill="#a7f3d0">Semantic Validator (Fail-Closed)</text>
+      <text x="38" y="38" class="box-sub" font-size="9.5">Initial states, reachability, conflict check</text>
+      <text x="12" y="58" class="code-txt" fill="#34d399">Diagnostics Badge • Gated execution</text>
+    </g>
+  </g>
+
+  <!-- Downward split connectors -->
+  <g transform="translate(500, 365)">
+    <path d="M -230 0 L -230 25" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowCyan)"/>
+    <path d="M 230 0 L 230 25" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  </g>
+
+  <!-- ================= LAYER 2: EXECUTABLE ENGINES ================= -->
+  <g transform="translate(40, 395)">
+    <!-- Engine 1: TypeScript Runtime & Simulation -->
+    <g transform="translate(0, 0)">
+      <rect width="445" height="195" rx="10" fill="url(#blueCardGrad)" stroke="#0284c7" stroke-width="1.5" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="445" height="28" rx="9" fill="#0369a1" fill-opacity="0.4"/>
+      <text x="16" y="19" class="box-title" font-size="12" fill="#bae6fd">⚡ TypeScript Runtime (In-App Simulation)</text>
+      <rect x="330" y="5" width="102" height="18" rx="4" fill="#0284c7" fill-opacity="0.3"/>
+      <text x="338" y="17" class="pill-txt" fill="#38bdf8">10-PHASE TICK</text>
+
+      <g transform="translate(16, 38)">
+        <text x="0" y="12" class="box-title" font-size="11" fill="#f1f5f9">10-Phase Deterministic Execution Cycle:</text>
+        <text x="0" y="28" class="box-sub" font-size="9.5">1. Sample Inputs ──► 2. Timers ──► 3. Activation</text>
+        <text x="0" y="44" class="box-sub" font-size="9.5">4. Frozen Snapshot Eval ──► 5. Stage Writes</text>
+        <text x="0" y="60" class="box-sub" font-size="9.5">6. Priority Conflict Resolution ──► 7. Commit</text>
+        <text x="0" y="76" class="box-sub" font-size="9.5">8. Entry/Exit Actions ──► 9. Publish ──► 10. Clock</text>
+
+        <rect x="0" y="90" width="413" height="52" rx="6" fill="#082f49" stroke="#0ea5e9" stroke-width="0.8"/>
+        <text x="10" y="106" class="pill-txt" fill="#38bdf8">LIVE SIMULATION SCOPE &amp; HUD</text>
+        <text x="10" y="122" class="box-sub" font-size="9" fill="#bae6fd">Tick-by-tick visual state animation, live variables, waveform probe</text>
+        <text x="10" y="134" class="box-sub" font-size="9" fill="#7dd3fc">Interactive manual firing triggers &amp; condition indicators</text>
+      </g>
+    </g>
+
+    <!-- Engine 2: C99 Code Generator (Firmware) -->
+    <g transform="translate(475, 0)">
+      <rect width="445" height="195" rx="10" fill="url(#greenCardGrad)" stroke="#059669" stroke-width="1.5" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="445" height="28" rx="9" fill="#047857" fill-opacity="0.4"/>
+      <text x="16" y="19" class="box-title" font-size="12" fill="#a7f3d0">🛡️ C99 Safety-Critical Code Generator</text>
+      <rect x="330" y="5" width="102" height="18" rx="4" fill="#059669" fill-opacity="0.3"/>
+      <text x="340" y="17" class="pill-txt" fill="#34d399">MISRA-C:2012</text>
+
+      <g transform="translate(16, 38)">
+        <text x="0" y="12" class="box-title" font-size="11" fill="#f1f5f9">12 Static C Files (Zero Dynamic Allocation):</text>
+        <text x="0" y="28" class="box-sub" font-size="9.5">• opm_runtime.c/h  • opm_model.c/h  • opm_io.c/h</text>
+        <text x="0" y="44" class="box-sub" font-size="9.5">• opm_trace.c/h    • main_example.c • manifest.json</text>
+        <text x="0" y="60" class="box-sub" font-size="9.5">• Zero malloc • No recursion • No function pointers</text>
+        <text x="0" y="76" class="box-sub" font-size="9.5">• Strict Isolation from Stateflow/SysML generators</text>
+
+        <rect x="0" y="90" width="413" height="52" rx="6" fill="#022c22" stroke="#10b981" stroke-width="0.8"/>
+        <text x="10" y="106" class="pill-txt" fill="#34d399">HARDWARE TARGET PACKS &amp; GATED EXPORT</text>
+        <text x="10" y="122" class="box-sub" font-size="9" fill="#d1fae5">STM32F103/F407, ATmega328P/2560, ESP32 RTOS / Bare-Metal</text>
+        <text x="10" y="134" class="box-sub" font-size="9" fill="#6ee7b7">Fingerprint-verified artifact gating: only verified code downloads</text>
+      </g>
+    </g>
+  </g>
+</svg>

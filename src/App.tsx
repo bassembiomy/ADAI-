@@ -4905,13 +4905,20 @@ const DynamicIcon = ({ name, size, className }: { name?: string; size: number; c
   }
 };
 
-const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
-  const [activeTopic, setActiveTopic] = useState<string>("getting-started");
+const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose: () => void; initialTopic?: string }) => {
+  const [activeTopic, setActiveTopic] = useState<string>(initialTopic || "getting-started");
   const [searchQuery, setSearchQuery] = useState("");
   const [showBlockRef, setShowBlockRef] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
+
+  useEffect(() => {
+    if (initialTopic && isOpen) {
+      setActiveTopic(initialTopic);
+      setShowBlockRef(false);
+    }
+  }, [initialTopic, isOpen]);
   
   if (!isOpen) return null;
 
@@ -6118,6 +6125,13 @@ const ADIA = () => {
     });
     syncTabRef.current(mode);
   }, []);
+  const [helpInitialTopic, setHelpInitialTopic] = useState<string>("getting-started");
+
+  const handleOpenHelp = useCallback((topic?: string) => {
+    setHelpInitialTopic(topic || (diagramMode === 'entropy' ? 'entropy-opm' : 'getting-started'));
+    setShowHelpModal(true);
+  }, [diagramMode]);
+
   const [activePropTab, setActivePropTab] = useState<'general' | 'assign'>('general');
 
   // HIL (Hardware-in-the-Loop) state
@@ -14582,7 +14596,7 @@ const ADIA = () => {
       {showStandby && (
         <IntroStandbyOverlay mode="standby" onClose={() => setShowStandby(false)} />
       )}
-      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} />
       <FactoryIOGateway 
         isOpen={showFactoryIOGateway} 
         onClose={() => setShowFactoryIOGateway(false)}
@@ -15002,7 +15016,7 @@ const ADIA = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowHelpModal(true)}
+              onClick={() => handleOpenHelp()}
               className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Help & Documentation"
             >
@@ -15367,6 +15381,7 @@ const ADIA = () => {
                     setEntropyEdges(edges);
                   }}
                   onAddError={addError}
+                  onOpenHelp={(topic) => handleOpenHelp(topic || 'entropy-opm')}
                   sysmlState={{
                     blocks: blocks.filter(b => b.stereotype !== 'requirement'),
                     requirements: blocks.filter(b => b.stereotype === 'requirement'),

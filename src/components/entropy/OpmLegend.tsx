@@ -68,18 +68,29 @@ const SECTIONS: { title: string; rows: LegendRow[] }[] = [
   },
 ];
 
-export const OpmLegend: React.FC = () => {
+export const OpmLegend: React.FC<{ onOpenHelp?: () => void }> = ({ onOpenHelp }) => {
   const [open, setOpen] = useState(false);
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 bg-[#161616]/90 border border-[#2d2d2d] rounded-md px-2 py-1 text-[10px] text-[#999] hover:text-white shadow-lg"
-        title="ISO 19450 OPD notation legend"
-      >
-        <BookOpen size={11} /> ISO 19450 Notation
-      </button>
+      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 bg-[#161616]/90 border border-[#2d2d2d] rounded-md px-2 py-1 text-[10px] text-[#999] hover:text-white shadow-lg"
+          title="ISO 19450 OPD notation legend"
+        >
+          <BookOpen size={11} /> ISO 19450 Notation
+        </button>
+        {onOpenHelp && (
+          <button
+            onClick={onOpenHelp}
+            className="flex items-center gap-1.5 bg-[#161616]/90 border border-orange-500/40 text-orange-400 hover:text-orange-300 hover:border-orange-500/80 rounded-md px-2 py-1 text-[10px] font-semibold shadow-lg transition-colors"
+            title="Open OPM & ENTROPY Embedded C Guide"
+          >
+            📖 OPM Guide
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -135,6 +146,14 @@ export const OpmLegend: React.FC = () => {
           ))}
         </div>
       ))}
+      {onOpenHelp && (
+        <button
+          onClick={onOpenHelp}
+          className="w-full mt-2 pt-1.5 border-t border-[#2d2d2d] flex items-center justify-center gap-1.5 text-[9px] font-bold text-orange-400 hover:text-orange-300 transition-colors"
+        >
+          <BookOpen size={11} /> Open Full OPM &amp; C Guide
+        </button>
+      )}
     </div>
   );
 };
