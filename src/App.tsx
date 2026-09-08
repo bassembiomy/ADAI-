@@ -108,6 +108,7 @@ import {
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { loadRepository } from './engine/sysml/persistence';
 import { applyLegacySysmlDeletion } from './services/sysmlTransactionAdapter';
+import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate } from './services/sysmlCreationRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -9338,8 +9339,6 @@ const ADIA = () => {
   }, [createBlock]);
 
   const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
-    addToHistory();
-    if (sourceId === targetId) return;
     const newRel: RelationshipData = {
       id: uuidv4(),
       sourceId,
@@ -9349,14 +9348,28 @@ const ADIA = () => {
       sourceMultiplicity: '1',
       targetMultiplicity: '1'
     };
+    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, newRel);
+    if (!validation.valid) {
+      addError('error', `Invalid ${type}: ${validation.reason}`);
+      return;
+    }
+    addToHistory();
     setRelationships(prev => [...prev, newRel]);
     setSelectedIds([newRel.id]);
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory]);
+  }, [addError, addToHistory, blocks, parts, relationships]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
-    setRelationships(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  }, []);
+    const current = relationships.find(relationship => relationship.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, candidate);
+    if (!validation.valid) {
+      addError('error', `Invalid relationship update: ${validation.reason}`);
+      return;
+    }
+    setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
+  }, [relationships, blocks, parts, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
     addToHistory();
@@ -9590,7 +9603,6 @@ const ADIA = () => {
             return;
           }
 
-          addToHistory();
           const newConnector: ConnectorData = {
             id: uuidv4(),
             sourcePartId: connectorSource.partId,
@@ -9598,6 +9610,12 @@ const ADIA = () => {
             targetPartId: partId,
             targetPortId: portId
           };
+          const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, newConnector, currentLayerId);
+          if (!validation.valid) {
+            addError('error', `Invalid connector: ${validation.reason}`);
+            return;
+          }
+          addToHistory();
           setConnectors(prev => [...prev, newConnector]);
           addError('info', 'Created connection');
         }
@@ -9607,7 +9625,7 @@ const ADIA = () => {
         setConnectorSource({ partId, portId });
       }
     }
-  }, [isCreatingConnector, connectorSource, parts, blocks, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
+  }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
 
   const deleteConnector = useCallback((id: string) => {
     addToHistory();
@@ -9617,8 +9635,16 @@ const ADIA = () => {
   }, [addError, addToHistory]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    setConnectors(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-  }, []);
+    const current = connectors.find(connector => connector.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, candidate, currentLayerId);
+    if (!validation.valid) {
+      addError('error', `Invalid connector update: ${validation.reason}`);
+      return;
+    }
+    setConnectors(prev => prev.map(c => c.id === id ? candidate : c));
+  }, [connectors, blocks, parts, currentLayerId, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();

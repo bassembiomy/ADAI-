@@ -40,7 +40,7 @@
     "test:opm:codegen": "vitest run src/engine/opm/__tests__/hostCompilation.test.ts src/engine/opm/__tests__/goldenExecution.test.ts src/engine/opm/__tests__/mutationResistance.test.ts --reporter=verbose",
     "test:opm:qualification": "vitest run src/engine/opm/__tests__/runtimeConformance.test.ts src/engine/opm/__tests__/generatorBoundary.test.ts src/engine/opm/__tests__/cGenerator.test.ts --reporter=verbose",
     "test:opm:release": "npm run test:opm && npm run test:opm:codegen && node src/security/opmCodeVerifier.test.cjs && tsc --noEmit",
-    "test:sysml": "vitest run src/engine/sysml src/components/sysml src/services/sysmlTransactionAdapter.test.ts src/services/sysmlIntegrityService.test.ts src/services/reportModelConsistency.test.ts",
+    "test:sysml": "vitest run src/engine/sysml src/components/sysml src/services/sysmlTransactionAdapter.test.ts src/services/sysmlCreationRules.test.ts src/services/sysmlIntegrityService.test.ts src/services/reportModelConsistency.test.ts",
     "test:sysml:release": "npm run test:sysml && vitest run src/features/reporting --reporter=verbose && tsc --noEmit",
     "test:sm:verification": "vitest run src/utils/stateMachine/smTestManifest.test.ts src/utils/stateMachine/smTestPlanBuilder.test.ts src/utils/stateMachine/smCTestRuntimeRenderer.test.ts src/utils/stateMachine/smCTestSuiteRenderer.test.ts src/utils/stateMachine/smCHarness.test.ts src/utils/stateMachine/smCoverageRunner.test.ts src/utils/stateMachine/smDifferential.test.ts src/utils/stateMachine/smAnalysisRunner.test.ts src/utils/stateMachine/smTargetCompileRunner.test.ts src/utils/stateMachine/smPipelineOrchestrator.test.ts src/utils/stateMachine/smReports.test.ts",
     "verify:sm:codegen": "tsx scripts/verify_sm_codegen.ts",
