@@ -9,12 +9,12 @@ SysML v2 semantic equivalence: unsupported; requires a separate versioned adapte
 | ID | Capability | Status | Implementation evidence | Automated evidence | Remaining limitation |
 |---|---|---|---|---|---|
 | SYSML-001 | BDD BlockDefinition | partial | `model.ts`, `bdd.ts`, native editor | `bdd.test.ts`, `sysmlConformance.test.ts` | Canonical repository is not yet the sole project-save source of truth. |
-| SYSML-002 | BDD ValueType/unit/dimension | partial | `model.ts`, `bdd.ts` | `model.test.ts`, `bdd.test.ts` | Native property editor needs typed ValueType selection. |
-| SYSML-003 | BDD part property | partial | `model.ts`, `bdd.ts` | `bdd.test.ts` | Native BDD still stores legacy property records. |
-| SYSML-004 | BDD reference property | partial | `model.ts`, `bdd.ts` | `bdd.test.ts` | Full editor controls and rendering qualification remain. |
-| SYSML-005 | BDD flow property | partial | `model.ts`, `bdd.ts` | `bdd.test.ts` | Conveyed-type UI is available for connectors, not all flow-property forms. |
+| SYSML-002 | BDD ValueType/unit/dimension | partial | `model.ts`, `bdd.ts`, `BlockPropertiesEditor.tsx` | `model.test.ts`, `bdd.test.ts`, `BlockPropertiesEditor.test.tsx` | Canonical repository is not yet the sole editor mutation source. |
+| SYSML-003 | BDD part property | partial | `model.ts`, `bdd.ts`, `BlockPropertiesEditor.tsx` | `bdd.test.ts`, `sysmlPropertyRules.test.ts` | Native BDD still projects through legacy property records. |
+| SYSML-004 | BDD reference property | partial | `model.ts`, `bdd.ts`, `BlockPropertiesEditor.tsx`, report renderer | `bdd.test.ts`, `BlockPropertiesEditor.test.tsx`, `reportDiagrams.sysml.test.ts` | Real-browser create/edit/save/load qualification remains. |
+| SYSML-005 | BDD flow property | partial | `model.ts`, `bdd.ts`, `BlockPropertiesEditor.tsx` | `bdd.test.ts`, `sysmlPropertyRules.test.ts` | Flow-property direction and conjugation UI remain incomplete. |
 | SYSML-006 | BDD ports | partial | `model.ts`, `bdd.ts`, native port editor | `bdd.test.ts`, `ibd.test.ts` | Full/proxy terminology migration in legacy projects remains. |
-| SYSML-007 | BDD composition | partial | `bdd.ts`, `mutations.ts`, `sysmlTransactionAdapter.ts` | `mutations.test.ts`, `sysmlTransactionAdapter.test.ts` | Impact-confirmation dialog is not yet exposed. |
+| SYSML-007 | BDD composition | partial | `bdd.ts`, `mutations.ts`, `sysmlTransactionAdapter.ts`, native impact confirmation | `mutations.test.ts`, `sysmlTransactionAdapter.test.ts` | Real-browser cascade/cancel/undo qualification remains. |
 | SYSML-008 | BDD shared aggregation | partial | `bdd.ts`, `mutations.ts` | `bdd.test.ts`, `mutations.test.ts` | Native usage ownership editor remains incomplete. |
 | SYSML-009 | BDD association | partial | `bdd.ts`, native relationship editor | `bdd.test.ts`, `sysmlCreationRules.test.ts` | Association-end property editor remains limited. |
 | SYSML-010 | BDD generalization | partial | `bdd.ts`, `validation.ts` | `bdd.test.ts`, `validation.test.ts` | Inherited-feature compartments are not yet rendered from canonical projection. |
@@ -40,8 +40,8 @@ SysML v2 semantic equivalence: unsupported; requires a separate versioned adapte
 
 ## Current automated qualification
 
-- `npm run test:sysml`: 127 tests passed on 2026-09-08.
-- `npm run test:sysml:release`: SysML and reporting suites plus TypeScript pass; rerun before merge.
+- `npm run test:sysml`: 130 tests passed on 2026-09-08.
+- `npm run test:sysml:release`: 130 SysML tests and 73 reporting tests plus TypeScript passed on 2026-09-08; rerun before merge.
 - Production `npm run build`: passed; dependency-audit and bundle-size warnings remain separate concerns.
 - OPM compiled-C qualification remains blocked until the pinned GCC toolchain is restored at `toolchains/w64devkit/w64devkit/bin/gcc.exe`.
 
