@@ -15,7 +15,9 @@ import '@xyflow/react/dist/style.css';
 
 import { OPMObjectNode, OPMProcessNode, OPMStateNode } from './OPMNodeComponents';
 import { OPMEdge } from './OPMEdgeComponents';
-import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort, type AppNode, type AppEdge } from './EntropyTypes';
+import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort, type AppNode, type AppEdge, type OpmModelSnapshot, type OpmLifecycleDiagnostic } from './EntropyTypes';
+import { normalizeContainment, validateOpmModelLifecycle, getCanonicalParentId } from './OpmModelLifecycle';
+import { analyzeOpmDeletion, applyOpmDeletion, type OpmDeletionTarget } from './OpmDeletionImpact';
 import { OpmCodeGenerationWorkspace, createInitialArtifactState, type OpmArtifactState } from './OpmCodeGenerationWorkspace';
 import { OpmSimulationScope } from './OpmSimulationScope';
 import { generateOpl, parseOpl, OplSyntaxError } from './OplParser';
@@ -226,8 +228,41 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   // Simulation Runner
   const [simRunning, setSimRunning] = useState<boolean>(false);
   const [simLogs, setSimLogs] = useState<SimulationLog[]>([]);
+  const logSim = useCallback((type: 'info' | 'success' | 'warning' | 'error', message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setSimLogs(prev => [...prev.slice(-20), { timestamp, type, message }]);
+  }, []);
   const [firingProcesses, setFiringProcesses] = useState<Set<string>>(new Set());
   const simStateRef = useRef<OpmSimulationState>(createSimulationState());
+  const [modelRevision, setModelRevision] = useState<number>(1);
+  const bumpModelRevision = useCallback(() => {
+    setModelRevision(r => r + 1);
+  }, []);
+
+  const invalidateSimState = useCallback((snapshot: OpmModelSnapshot) => {
+    const survivingNodeIds = new Set(snapshot.nodes.map(n => n.id));
+    const survivingEdgeIds = new Set(snapshot.edges.map(e => e.id));
+    const activeStates = { ...(simStateRef.current?.objectActiveState || {}) };
+    for (const [objId, stId] of Object.entries(activeStates)) {
+      if (!survivingNodeIds.has(objId) || (stId && !survivingNodeIds.has(stId))) {
+        delete activeStates[objId];
+      }
+    }
+    simStateRef.current = {
+      ...(simStateRef.current || createSimulationState()),
+      objectActiveState: activeStates,
+      pendingEvents: (simStateRef.current?.pendingEvents || []).filter(
+        ev => survivingNodeIds.has(ev.objectId) && survivingNodeIds.has(ev.stateId),
+      ),
+      activeProcessIds: (simStateRef.current?.activeProcessIds || []).filter(
+        id => survivingNodeIds.has(id),
+      ),
+      traversedLinkIds: (simStateRef.current?.traversedLinkIds || []).filter(
+        id => survivingEdgeIds.has(id),
+      ),
+    };
+    setNodes(prev => applySimResultToNodes(prev, simStateRef.current, []));
+  }, [setNodes]);
 
   // Isolated OPM Simulation Configuration
   const activeOpmConfig: OpmSimulationConfig = useMemo(() => {
@@ -436,25 +471,112 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     setRedoStack([]); // Clear redo
   }, []);
 
-  const triggerUndo = () => {
+  const triggerUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     const previous = undoStack[undoStack.length - 1];
     setUndoStack(prev => prev.slice(0, -1));
     setRedoStack(prev => [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) }]);
     setNodes(previous.nodes);
     setEdges(previous.edges);
+    invalidateSimState({ nodes: previous.nodes, edges: previous.edges });
+    bumpModelRevision();
     if (onSave) onSave(previous.nodes, previous.edges);
-  };
+  }, [undoStack, nodes, edges, invalidateSimState, bumpModelRevision, onSave, setNodes, setEdges]);
 
-  const triggerRedo = () => {
+  const triggerRedo = useCallback(() => {
     if (redoStack.length === 0) return;
     const nextState = redoStack[redoStack.length - 1];
     setRedoStack(prev => prev.slice(0, -1));
     setUndoStack(prev => [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) }]);
     setNodes(nextState.nodes);
     setEdges(nextState.edges);
+    invalidateSimState({ nodes: nextState.nodes, edges: nextState.edges });
+    bumpModelRevision();
     if (onSave) onSave(nextState.nodes, nextState.edges);
-  };
+  }, [redoStack, nodes, edges, invalidateSimState, bumpModelRevision, onSave, setNodes, setEdges]);
+
+  // --- Central Canonical Lifecycle Mutation & Transaction Gateway ---
+  const commitModelMutation = useCallback((
+    mutator: (currentSnapshot: OpmModelSnapshot) => {
+      snapshot: OpmModelSnapshot;
+      diagnostics?: OpmLifecycleDiagnostic[];
+      invalidatesSimulation?: boolean;
+      invalidatesEvidence?: boolean;
+      impactSummary?: string;
+    } | null,
+    options?: { saveUndo?: boolean }
+  ): boolean => {
+    const currentSnapshot: OpmModelSnapshot = { nodes, edges };
+    const result = mutator(currentSnapshot);
+    if (!result) return false;
+
+    // Validate the resulting snapshot against canonical OPM lifecycle integrity rules
+    const validation = validateOpmModelLifecycle(result.snapshot);
+    if (!validation.valid) {
+      const firstErr = validation.diagnostics.find(d => d.severity === 'error');
+      const msg = firstErr?.message || 'Model mutation failed lifecycle integrity validation.';
+      logSim('error', msg);
+      if (onAddError) onAddError('error', msg, 'OPM');
+      setDiagnosticNavMessage(msg);
+      return false;
+    }
+
+    if (options?.saveUndo !== false) {
+      saveHistory(nodes, edges);
+    }
+
+    setNodes(result.snapshot.nodes);
+    setEdges(result.snapshot.edges);
+
+    // Deselect elements if they were removed
+    setSelectedNode(prev => {
+      if (prev && !result.snapshot.nodes.some(n => n.id === prev.id)) {
+        return null;
+      }
+      return prev;
+    });
+
+    setSelectedEdge(prev => {
+      if (prev && !result.snapshot.edges.some(e => e.id === prev.id)) {
+        return null;
+      }
+      return prev;
+    });
+
+    if (result.invalidatesSimulation) {
+      invalidateSimState(result.snapshot);
+    }
+
+    if (result.invalidatesEvidence) {
+      bumpModelRevision();
+    }
+
+    if (result.impactSummary) {
+      logSim('warning', result.impactSummary);
+    }
+
+    if (onSave) {
+      onSave(result.snapshot.nodes, result.snapshot.edges);
+    }
+
+    return true;
+  }, [nodes, edges, saveHistory, setNodes, setEdges, logSim, onAddError, onSave, invalidateSimState, bumpModelRevision]);
+
+  // --- Centralized Deletion Pipeline ---
+  const executeDeletion = useCallback((target: OpmDeletionTarget) => {
+    return commitModelMutation((currentSnapshot) => {
+      const impact = analyzeOpmDeletion(currentSnapshot, target);
+      const mutation = applyOpmDeletion(currentSnapshot, impact);
+      const summaryMsg = `Deleted ${impact.summary.deletedNodeCount} element(s), ${impact.summary.descendantsCascadedCount} child(ren), and ${impact.summary.deletedEdgeCount} link(s).`;
+      return {
+        snapshot: mutation.snapshot,
+        diagnostics: mutation.diagnostics,
+        invalidatesSimulation: mutation.invalidatesSimulation,
+        invalidatesEvidence: mutation.invalidatesEvidence,
+        impactSummary: summaryMsg,
+      };
+    });
+  }, [commitModelMutation]);
 
   // --- Smart link composer: valid targets for the in-progress connection ---
   const validTargets = useMemo(() => connectSourceId ? getValidTargetNodeIds(nodes, edges, connectSourceId, activeLinkType) : [], [connectSourceId, nodes, edges, activeLinkType]);
@@ -542,8 +664,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       { id: stateId, name: stateName, isInitial, isActive: isInitial }
     ];
 
-    setNodes(prev => {
-      const updated = prev.map(n => {
+    const ok = commitModelMutation((currentSnapshot) => {
+      const updatedNodes = currentSnapshot.nodes.map(n => {
         if (n.id === objectId) {
           return {
             ...n,
@@ -555,73 +677,47 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         }
         return n;
       });
-      return [...updated, newStateNode];
+
+      return {
+        snapshot: normalizeContainment({
+          nodes: [...updatedNodes, newStateNode],
+          edges: currentSnapshot.edges,
+        }),
+        invalidatesSimulation: true,
+        invalidatesEvidence: true,
+        impactSummary: `Added state [${stateName}] inside Object [${targetObject.data.name}].`,
+      };
     });
 
-    if (isInitial) {
-      simStateRef.current = {
-        ...simStateRef.current,
-        objectActiveState: {
-          ...simStateRef.current.objectActiveState,
-          [objectId]: stateId,
-        }
-      };
-    }
-
-    // Refresh selectedNode if it's the target object
-    setSelectedNode(prev => {
-      if (prev && prev.id === objectId) {
-        return {
-          ...prev,
-          data: {
-            ...prev.data,
-            states: newStatesList,
+    if (ok) {
+      if (isInitial) {
+        simStateRef.current = {
+          ...simStateRef.current,
+          objectActiveState: {
+            ...simStateRef.current.objectActiveState,
+            [objectId]: stateId,
           }
         };
       }
-      return prev;
-    });
 
-    logSim('success', `Added state [${stateName}] inside Object [${targetObject.data.name}].`);
-  }, [nodes, edges, saveHistory]);
-
-  const handleDeleteState = useCallback((stateId: string, parentObjectId: string) => {
-    saveHistory(nodes, edges);
-    setNodes(prev => {
-      const filtered = prev.filter(n => n.id !== stateId);
-      return filtered.map(n => {
-        if (n.id === parentObjectId) {
-          const remainingStates = (n.data.states || []).filter(s => s.id !== stateId);
+      setSelectedNode(prev => {
+        if (prev && prev.id === objectId) {
           return {
-            ...n,
+            ...prev,
             data: {
-              ...n.data,
-              states: remainingStates,
+              ...prev.data,
+              states: newStatesList,
             }
           };
         }
-        return n;
+        return prev;
       });
-    });
+    }
+  }, [nodes, edges, commitModelMutation]);
 
-    setEdges(prev => prev.filter(e => e.source !== stateId && e.target !== stateId));
-
-    setSelectedNode(prev => {
-      if (prev && prev.id === parentObjectId) {
-        const remainingStates = (prev.data.states || []).filter(s => s.id !== stateId);
-        return {
-          ...prev,
-          data: {
-            ...prev.data,
-            states: remainingStates,
-          }
-        };
-      }
-      return prev;
-    });
-
-    logSim('info', `Removed state from Object.`);
-  }, [nodes, edges, saveHistory]);
+  const handleDeleteState = useCallback((stateId: string, _parentObjectId?: string) => {
+    executeDeletion({ nodeIds: [stateId] });
+  }, [executeDeletion]);
 
   // --- Add Elements visually via Canvas Pane Click ---
   const handlePaneClick = useCallback((event: React.MouseEvent) => {
@@ -680,28 +776,44 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       );
     }
 
+    const assignedParentId = isReq ? null : activeParentId;
+    if (isReq && activeParentId) {
+      logSim('warning', 'Requirement nodes must be root-scoped and cannot be nested.');
+    }
+
     const newNode: AppNode = {
       id,
       type: isProc ? 'opmProcess' : 'opmObject',
       position: { x: Math.round(flowPos.x), y: Math.round(flowPos.y) },
+      parentId: assignedParentId ?? undefined,
       data: {
         name: nodeName,
         type: isReq ? 'requirement' : (activeTool as any),
         physical: false,
         states: [],
         attributes: [],
-        parentId: activeParentId,
+        parentId: assignedParentId,
         requirementText: isReq ? `The system shall perform function [${nodeName}].` : undefined,
         inputs: defaultInputs,
         outputs: defaultOutputs,
       },
     };
 
-    setNodes(prev => [...prev, newNode]);
+    commitModelMutation((currentSnapshot) => {
+      return {
+        snapshot: normalizeContainment({
+          nodes: [...currentSnapshot.nodes, newNode],
+          edges: currentSnapshot.edges,
+        }),
+        invalidatesSimulation: true,
+        invalidatesEvidence: true,
+        impactSummary: `Created ${isReq ? 'Requirement' : activeTool.toUpperCase()} [${nodeName}] at (${Math.round(flowPos.x)}, ${Math.round(flowPos.y)}).`,
+      };
+    });
+
     setSelectedNode(newNode);
     setActiveTool('select');
-    logSim('success', `Created ${isReq ? 'Requirement' : activeTool.toUpperCase()} [${nodeName}] at (${Math.round(flowPos.x)}, ${Math.round(flowPos.y)}).`);
-  }, [activeTool, activeParentId, nodes, edges, saveHistory]);
+  }, [activeTool, activeParentId, nodes, edges, commitModelMutation]);
 
   // --- Shared Port Connection Validator (Canvas preview and onConnect gate) ---
   const isValidConnection = useCallback((connection: Connection | { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) => {
@@ -725,8 +837,6 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       return;
     }
 
-    saveHistory(nodes, edges);
-
     const src = nodes.find(n => n.id === connection.source);
     const tgt = nodes.find(n => n.id === connection.target);
 
@@ -743,84 +853,56 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       },
     };
 
-    setEdges(prev => addEdge(newEdge, prev));
-    logSim('info', `Link [${activeLinkType}] connected: ${src?.data?.name || connection.source} → ${tgt?.data?.name || connection.target}`);
-  }, [activeLinkType, nodes, edges, saveHistory, onAddError]);
+    commitModelMutation((currentSnapshot) => ({
+      snapshot: {
+        nodes: currentSnapshot.nodes,
+        edges: addEdge(newEdge, currentSnapshot.edges) as AppEdge[],
+      },
+      invalidatesSimulation: true,
+      invalidatesEvidence: true,
+      impactSummary: `Link [${activeLinkType}] connected: ${src?.data?.name || connection.source} → ${tgt?.data?.name || connection.target}`,
+    }));
+  }, [activeLinkType, nodes, edges, commitModelMutation, onAddError, logSim]);
 
   // --- Dynamic Port Handlers ---
   const handleAddPort = (name: string, direction: 'input' | 'output', position: 'left' | 'right' | 'top' | 'bottom', type: any) => {
     if (!selectedNode) return;
-    saveHistory(nodes, edges);
 
     const portId = `${direction === 'input' ? 'in' : 'out'}-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString().slice(-4)}`;
     const newPort: OPMPort = { id: portId, name, type, direction, position };
 
-    setNodes(prev => prev.map(n => {
-      if (n.id === selectedNode.id) {
-        const inputs = n.data.inputs || [];
-        const outputs = n.data.outputs || [];
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            inputs: direction === 'input' ? [...inputs, newPort] : inputs,
-            outputs: direction === 'output' ? [...outputs, newPort] : outputs
-          }
-        };
+    const inputs = selectedNode.data.inputs || [];
+    const outputs = selectedNode.data.outputs || [];
+    const updatedInputs = direction === 'input' ? [...inputs, newPort] : inputs;
+    const updatedOutputs = direction === 'output' ? [...outputs, newPort] : outputs;
+
+    const nextNode: AppNode = {
+      ...selectedNode,
+      data: {
+        ...selectedNode.data,
+        inputs: updatedInputs,
+        outputs: updatedOutputs,
       }
-      return n;
+    };
+
+    const ok = commitModelMutation((currentSnapshot) => ({
+      snapshot: {
+        nodes: currentSnapshot.nodes.map(n => n.id === selectedNode.id ? nextNode : n),
+        edges: currentSnapshot.edges,
+      },
+      invalidatesSimulation: true,
+      invalidatesEvidence: true,
+      impactSummary: `Added ${direction} port [${name}] to [${selectedNode.data.name}].`,
     }));
 
-    setSelectedNode(prev => {
-      if (!prev) return null;
-      const inputs = prev.data.inputs || [];
-      const outputs = prev.data.outputs || [];
-      return {
-        ...prev,
-        data: {
-          ...prev.data,
-          inputs: direction === 'input' ? [...inputs, newPort] : inputs,
-          outputs: direction === 'output' ? [...outputs, newPort] : outputs
-        }
-      };
-    });
+    if (ok) {
+      setSelectedNode(nextNode);
+    }
   };
 
   const handleRemovePort = (portId: string, direction: 'input' | 'output') => {
     if (!selectedNode) return;
-    saveHistory(nodes, edges);
-
-    setNodes(prev => prev.map(n => {
-      if (n.id === selectedNode.id) {
-        const inputs = n.data.inputs || [];
-        const outputs = n.data.outputs || [];
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            inputs: direction === 'input' ? inputs.filter(p => p.id !== portId) : inputs,
-            outputs: direction === 'output' ? outputs.filter(p => p.id !== portId) : outputs
-          }
-        };
-      }
-      return n;
-    }));
-
-    setEdges(prev => prev.filter(e => e.sourceHandle !== portId && e.targetHandle !== portId));
-
-    setSelectedNode(prev => {
-      if (!prev) return null;
-      const inputs = prev.data.inputs || [];
-      const outputs = prev.data.outputs || [];
-      return {
-        ...prev,
-        data: {
-          ...prev.data,
-          inputs: direction === 'input' ? inputs.filter(p => p.id !== portId) : inputs,
-          outputs: direction === 'output' ? outputs.filter(p => p.id !== portId) : outputs
-        }
-      };
-    });
+    executeDeletion({ portRefs: [{ nodeId: selectedNode.id, portId, direction }] });
   };
 
   // --- Manual Simulation Activation & Initializations ---
@@ -949,12 +1031,26 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       return;
     }
 
-    saveHistory(nodes, edges);
-    setNodes(parsedNodes);
-    setEdges(parsedEdges);
-    setIsEditingText(false);
-    logSim('success', 'OPL changes synchronized successfully to canvas.');
-    if (onSave) onSave(parsedNodes, parsedEdges);
+    const candidateSnapshot: OpmModelSnapshot = normalizeContainment({ nodes: parsedNodes, edges: parsedEdges });
+    const validation = validateOpmModelLifecycle(candidateSnapshot);
+    if (!validation.valid) {
+      const firstErr = validation.diagnostics.find(d => d.severity === 'error');
+      const msg = firstErr?.message || 'OPL model violates lifecycle integrity rules.';
+      if (onAddError) onAddError('error', msg, 'ENTROPY');
+      logSim('error', msg);
+      return;
+    }
+
+    const ok = commitModelMutation(() => ({
+      snapshot: candidateSnapshot,
+      invalidatesSimulation: true,
+      invalidatesEvidence: true,
+      impactSummary: 'OPL changes synchronized successfully to canvas.',
+    }));
+
+    if (ok) {
+      setIsEditingText(false);
+    }
   };
 
   // --- Auto-Layout Algorithms ---
@@ -1053,11 +1149,6 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     logSim('info', 'Single-step tick executed.');
   };
 
-  const logSim = (type: 'info' | 'success' | 'warning' | 'error', message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setSimLogs(prev => [...prev.slice(-20), { timestamp, type, message }]);
-  };
-
   // --- Properties Panel Interactions ---
   const handleNodeClick = useCallback((_: any, node: AppNode) => {
     // If state creation tool is active and user clicks an Object
@@ -1105,12 +1196,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   const handleDeleteSelectedNode = () => {
     if (!selectedNode) return;
-    saveHistory(nodes, edges);
-
-    setNodes(prev => prev.filter(n => n.id !== selectedNode.id && n.parentId !== selectedNode.id));
-    setEdges(prev => prev.filter(e => e.source !== selectedNode.id && e.target !== selectedNode.id));
-    setSelectedNode(null);
-    logSim('warning', `Element ${selectedNode.data.name} deleted.`);
+    executeDeletion({ nodeIds: [selectedNode.id] });
   };
 
   const handleConvertNodeType = useCallback((targetType: OpmNodeKind) => {
@@ -1122,11 +1208,35 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         logSim('warning', `[${w.code}] ${w.message}`);
       });
     }
-    saveHistory(nodes, edges);
-    setNodes(prev => prev.map(n => n.id === selectedNode.id ? conversion.node : n));
-    setSelectedNode(conversion.node);
-    logSim('info', `Converted "${selectedNode.data.name || selectedNode.id}" to ${targetType}.`);
-  }, [selectedNode, nodes, edges, saveHistory, onAddError]);
+
+    const candidateSnapshot: OpmModelSnapshot = {
+      nodes: nodes.map(n => n.id === selectedNode.id ? conversion.node : n),
+      edges,
+    };
+    const validation = validateOpmModelLifecycle(candidateSnapshot);
+    if (!validation.valid) {
+      const firstErr = validation.diagnostics.find(d => d.severity === 'error');
+      const msg = firstErr?.message || `Converting node to ${targetType} violates lifecycle rules.`;
+      onAddError?.('error', msg, 'OPM');
+      logSim('error', msg);
+      return;
+    }
+
+    const ok = commitModelMutation((currentSnapshot) => {
+      return {
+        snapshot: {
+          nodes: currentSnapshot.nodes.map(n => n.id === selectedNode.id ? conversion.node : n),
+          edges: currentSnapshot.edges,
+        },
+        invalidatesSimulation: true,
+        invalidatesEvidence: true,
+        impactSummary: `Converted "${selectedNode.data.name || selectedNode.id}" to ${targetType}.`,
+      };
+    });
+    if (ok) {
+      setSelectedNode(conversion.node);
+    }
+  }, [selectedNode, nodes, edges, commitModelMutation, onAddError, logSim]);
 
   const handleConvertEdgeType = useCallback((edgeId: string, nextType: OPMLinkType) => {
     const edge = edges.find(e => e.id === edgeId);
@@ -1138,49 +1248,86 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         logSim('warning', `[${w.code}] ${w.message}`);
       });
     }
-    saveHistory(nodes, edges);
-    setEdges(prev => prev.map(e => e.id === edgeId ? conversion.edge : e));
-    if (selectedEdge && selectedEdge.id === edgeId) {
+
+    const srcNode = nodes.find(n => n.id === edge.source);
+    const tgtNode = nodes.find(n => n.id === edge.target);
+    if (srcNode && tgtNode) {
+      const portConnVerdict = validateOpmPortConnection(
+        nodes,
+        edges,
+        {
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        } as any,
+        nextType
+      );
+      if (!portConnVerdict.valid) {
+        onAddError?.('error', `[${portConnVerdict.code}] ${portConnVerdict.reason}`, 'OPM');
+        logSim('error', `[${portConnVerdict.code}] ${portConnVerdict.reason}`);
+        return;
+      }
+    }
+
+    const candidateSnapshot: OpmModelSnapshot = {
+      nodes,
+      edges: edges.map(e => e.id === edgeId ? conversion.edge : e),
+    };
+    const validation = validateOpmModelLifecycle(candidateSnapshot);
+    if (!validation.valid) {
+      const firstErr = validation.diagnostics.find(d => d.severity === 'error');
+      const msg = firstErr?.message || `Converting link to ${nextType} violates lifecycle rules.`;
+      onAddError?.('error', msg, 'OPM');
+      logSim('error', msg);
+      return;
+    }
+
+    const ok = commitModelMutation((currentSnapshot) => {
+      return {
+        snapshot: {
+          nodes: currentSnapshot.nodes,
+          edges: currentSnapshot.edges.map(e => e.id === edgeId ? conversion.edge : e),
+        },
+        invalidatesSimulation: true,
+        invalidatesEvidence: true,
+        impactSummary: `Converted link "${edgeId}" to ${nextType}.`,
+      };
+    });
+    if (ok && selectedEdge && selectedEdge.id === edgeId) {
       setSelectedEdge(conversion.edge);
     }
-    logSim('info', `Converted link "${edgeId}" to ${nextType}.`);
-  }, [edges, selectedEdge, saveHistory, onAddError]);
+  }, [edges, nodes, selectedEdge, commitModelMutation, onAddError, logSim]);
 
   const handleAddAttribute = (key: string, val: string) => {
     if (!selectedNode || selectedNode.data.type !== 'object') return;
-    saveHistory(nodes, edges);
 
     const attrs = selectedNode.data.attributes || [];
     const updatedAttrs = [...attrs, { key, value: val }];
+    const nextNode: AppNode = {
+      ...selectedNode,
+      data: {
+        ...selectedNode.data,
+        attributes: updatedAttrs,
+      },
+    };
 
-    setNodes(prev => prev.map(n => {
-      if (n.id === selectedNode.id) {
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            attributes: updatedAttrs
-          }
-        };
-      }
-      return n;
+    const ok = commitModelMutation((currentSnapshot) => ({
+      snapshot: {
+        nodes: currentSnapshot.nodes.map(n => n.id === selectedNode.id ? nextNode : n),
+        edges: currentSnapshot.edges,
+      },
+      invalidatesSimulation: true,
+      invalidatesEvidence: true,
     }));
 
-    setSelectedNode(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        data: {
-          ...prev.data,
-          attributes: updatedAttrs
-        }
-      };
-    });
+    if (ok) {
+      setSelectedNode(nextNode);
+    }
   };
 
   const handleUpdateSelectionExecution = useCallback((updatedExecution: any) => {
     if (selectedNode) {
-      saveHistory(nodes, edges);
       const executionKey =
         selectedNode.data?.type === 'object'
           ? 'objectExecution'
@@ -1197,10 +1344,18 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           [executionKey]: updatedExecution,
         },
       };
-      setNodes(prev => prev.map(n => n.id === selectedNode.id ? nextNode : n));
-      setSelectedNode(nextNode);
+      const ok = commitModelMutation((currentSnapshot) => ({
+        snapshot: {
+          nodes: currentSnapshot.nodes.map(n => n.id === selectedNode.id ? nextNode : n),
+          edges: currentSnapshot.edges,
+        },
+        invalidatesSimulation: true,
+        invalidatesEvidence: true,
+      }));
+      if (ok) {
+        setSelectedNode(nextNode);
+      }
     } else if (selectedEdge) {
-      saveHistory(nodes, edges);
       const nextEdge = {
         ...selectedEdge,
         data: {
@@ -1209,10 +1364,19 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           linkExecution: updatedExecution,
         },
       };
-      setEdges(prev => prev.map(e => e.id === selectedEdge.id ? nextEdge : e));
-      setSelectedEdge(nextEdge);
+      const ok = commitModelMutation((currentSnapshot) => ({
+        snapshot: {
+          nodes: currentSnapshot.nodes,
+          edges: currentSnapshot.edges.map(e => e.id === selectedEdge.id ? nextEdge : e),
+        },
+        invalidatesSimulation: true,
+        invalidatesEvidence: true,
+      }));
+      if (ok) {
+        setSelectedEdge(nextEdge);
+      }
     }
-  }, [selectedNode, selectedEdge, nodes, edges, saveHistory]);
+  }, [selectedNode, selectedEdge, commitModelMutation]);
 
   const writableAttributes = useMemo(() => {
     const list: { id: string; displayName: string }[] = [];
@@ -1231,12 +1395,12 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   }, [nodes]);
 
   const handleEdgeTypeChange = useCallback((edgeId: string, newType: OPMLinkType) => {
-    setEdges(eds => eds.map(edge => edge.id === edgeId ? { ...edge, data: { ...edge.data, type: newType } } : edge));
-  }, [setEdges]);
+    handleConvertEdgeType(edgeId, newType);
+  }, [handleConvertEdgeType]);
 
   const handleEdgeDelete = useCallback((edgeId: string) => {
-    setEdges(eds => eds.filter(edge => edge.id !== edgeId));
-  }, [setEdges]);
+    executeDeletion({ edgeIds: [edgeId] });
+  }, [executeDeletion]);
 
   const handleNodeDragStop = useCallback((_: unknown, node: AppNode) => {
     if (node.parentId) return;
@@ -1585,32 +1749,13 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         const activeSelectedNodes = nodes.filter(n => n.selected || (selectedNode && n.id === selectedNode.id));
         const activeSelectedEdges = edges.filter(ed => ed.selected || (selectedEdge && ed.id === selectedEdge.id));
 
-        if (selectedNode && activeSelectedNodes.length <= 1 && activeSelectedEdges.length === 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleDeleteSelectedNode();
-          return;
-        }
-
         if (activeSelectedNodes.length > 0 || activeSelectedEdges.length > 0) {
           e.preventDefault();
           e.stopPropagation();
-          saveHistory(nodes, edges);
-          const selectedObjIds = new Set(activeSelectedNodes.map(n => n.id));
-          const allNodeIdsToDelete = new Set<string>();
-          nodes.forEach(n => {
-            if (selectedObjIds.has(n.id) || (n.parentId && selectedObjIds.has(n.parentId))) {
-              allNodeIdsToDelete.add(n.id);
-            }
+          executeDeletion({
+            nodeIds: activeSelectedNodes.map(n => n.id),
+            edgeIds: activeSelectedEdges.map(ed => ed.id),
           });
-          const edgeIdsToDelete = new Set(activeSelectedEdges.map(ed => ed.id));
-
-          setNodes(prev => prev.filter(n => !allNodeIdsToDelete.has(n.id)));
-          setEdges(prev => prev.filter(ed => !edgeIdsToDelete.has(ed.id) && !allNodeIdsToDelete.has(ed.source) && !allNodeIdsToDelete.has(ed.target)));
-
-          setSelectedNode(null);
-          setSelectedEdge(null);
-          logSim('warning', `Deleted ${allNodeIdsToDelete.size} element(s).`);
           return;
         }
       }
@@ -2216,13 +2361,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               <button
                 onClick={() => {
                   const { nodes: impNodes, edges: impEdges, warnings } = importSysmlToOpm(sysmlState);
-                  saveHistory(nodes, edges);
-                  setNodes(impNodes);
-                  setEdges(impEdges);
+                  const candidateSnapshot: OpmModelSnapshot = normalizeContainment({ nodes: impNodes, edges: impEdges });
+                  const validation = validateOpmModelLifecycle(candidateSnapshot);
+                  if (!validation.valid) {
+                    const firstErr = validation.diagnostics.find(d => d.severity === 'error');
+                    const msg = firstErr?.message || 'SysML import violates lifecycle integrity rules.';
+                    if (onAddError) onAddError('error', msg, 'OPM');
+                    logSim('error', msg);
+                    return;
+                  }
+
+                  commitModelMutation(() => ({
+                    snapshot: candidateSnapshot,
+                    invalidatesSimulation: true,
+                    invalidatesEvidence: true,
+                    impactSummary: `Imported ${impNodes.length} OPM elements from the SysML model.`,
+                  }));
                   setOplText('');
                   warnings.forEach(w => logSim('warning', w));
-                  logSim('success', `Imported ${impNodes.length} OPM elements from the SysML model.`);
-                  if (onSave) onSave(impNodes, impEdges);
                 }}
                 className="px-2 py-0.5 text-[10px] border border-purple-600/80 bg-purple-950/30 text-purple-300 rounded hover:bg-purple-900/50 transition-colors font-semibold"
                 title="Migrate the SysML BDD/IBD/Requirements model into this OPM workspace"
@@ -2378,19 +2534,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onPaneClick={handlePaneClick}
               onNodeClick={handleNodeClick}
               onNodesDelete={(deleted) => {
-                saveHistory(nodes, edges);
-                const deletedIds = new Set(deleted.map(n => n.id));
-                setNodes(prev => prev.filter(n => !deletedIds.has(n.id) && !deletedIds.has(n.parentId || '')));
-                setEdges(prev => prev.filter(e => !deletedIds.has(e.source) && !deletedIds.has(e.target)));
-                if (selectedNode && deletedIds.has(selectedNode.id)) setSelectedNode(null);
-                logSim('warning', `Deleted ${deleted.length} element(s).`);
+                executeDeletion({ nodeIds: deleted.map(n => n.id) });
               }}
               onEdgesDelete={(deleted) => {
-                saveHistory(nodes, edges);
-                const deletedIds = new Set(deleted.map(e => e.id));
-                setEdges(prev => prev.filter(e => !deletedIds.has(e.id)));
-                if (selectedEdge && deletedIds.has(selectedEdge.id)) setSelectedEdge(null);
-                logSim('warning', `Deleted ${deleted.length} link(s).`);
+                executeDeletion({ edgeIds: deleted.map(e => e.id) });
               }}
               deleteKeyCode={['Backspace', 'Delete']}
               connectionLineComponent={OPMConnectionLine}
