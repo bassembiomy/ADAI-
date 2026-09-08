@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BlockData, PartData, RelationshipData } from '../../types/sysml_types';
 import { renderBddDiagram, renderRequirementsDiagram } from './reportDiagrams';
+import { createReportSnapshot, toHierarchySource } from './reportSnapshot';
 
 function block(partial: Partial<BlockData> & { id: string }): BlockData {
   return {
@@ -61,7 +62,7 @@ describe('renderRequirementsDiagram — cross-diagram relationships', () => {
     expect(html).toContain('edge-sr1');
     expect(html).toContain('edge-vr1');
     expect(html).toContain('edge-dr1');
-    expect(html).toContain('3 requirements');
+    expect(html).toContain('2 requirements, 1 supporting blocks');
   });
 });
 
@@ -138,6 +139,27 @@ describe('renderBddDiagram — interactive drilldown affordance', () => {
     expect(html).toContain('cursor: pointer');
     expect(html).toContain('ondblclick="window.ADIA_DIAGRAM_NAV.drillDown(\'diag-main\', \'ibd-b1\', \'IBD · Engine\')"');
     expect(html).toContain('⤓ [IBD]');
+  });
+});
+
+describe('renderDiagrams — snapshot consistency', () => {
+  it('does not render a reconciled-away relationship in BDD or Requirements', () => {
+    const model = {
+      blocks: [
+        block({ id: 'b1', name: 'Engine' }),
+        block({ id: 'r1', name: 'Req', stereotype: 'requirement' }),
+      ],
+      parts: [],
+      connectors: [],
+      relationships: [
+        rel({ id: 'deleted-rel', sourceId: 'b1', targetId: 'missing-req', type: 'satisfy' }),
+      ],
+    };
+    const snapshot = createReportSnapshot(model);
+    const source = toHierarchySource(snapshot);
+
+    expect(renderBddDiagram({ blocks: source.blocks, relationships: source.relationships })).not.toContain('edge-deleted-rel');
+    expect(renderRequirementsDiagram({ blocks: source.blocks, relationships: source.relationships })).not.toContain('edge-deleted-rel');
   });
 });
 

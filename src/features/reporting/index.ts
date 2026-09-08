@@ -7,3 +7,5 @@ export * from './exportReportToDocx';
 export * from './generators/createStateMachineVerificationReport';
 export * from './generators/createMotorDriveTestReport';
 export * from './reportHierarchyEngine';
+export * from './reportSnapshot';
+export * from './generateArchitectureReport';

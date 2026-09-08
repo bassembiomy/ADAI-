@@ -91,6 +91,20 @@ export function exportReportToPdf(doc: ReportDocument): jsPDF {
   y += 6;
   pdf.text(`Safety classification: ${doc.header.safetyClassification}`, margin, y);
 
+  if (doc.consistency) {
+    y += 6;
+    pdf.text(`Model revision: ${doc.consistency.revision}`, margin, y);
+    y += 6;
+    const removedRels = doc.consistency.removedRelationshipIds?.length > 0 ? doc.consistency.removedRelationshipIds.join(', ') : 'none';
+    const removedConns = doc.consistency.removedConnectorIds?.length > 0 ? doc.consistency.removedConnectorIds.join(', ') : 'none';
+    const totalRemoved = (doc.consistency.removedRelationshipIds?.length || 0) + (doc.consistency.removedConnectorIds?.length || 0);
+    pdf.text(`Removed connections: ${totalRemoved} (relationships: ${removedRels}, connectors: ${removedConns})`, margin, y);
+    if (doc.consistency.errors && doc.consistency.errors.length > 0) {
+      y += 6;
+      pdf.text(`Consistency errors: ${doc.consistency.errors.length}`, margin, y);
+    }
+  }
+
   // --- PAGE 2: SAFETY GATE & EQUIPMENT ---
   pdf.addPage();
   y = margin;

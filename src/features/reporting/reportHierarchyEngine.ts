@@ -55,10 +55,12 @@ export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarc
   for (const block of model.blocks) {
     if (block.stereotype === 'requirement') continue;
     const blockParts = model.parts.filter(p => p.blockId === block.id);
+    const blockPartIds = new Set(blockParts.map(p => p.id));
+    const blockEnvPortIds = new Set((block.ports ?? []).map(p => p.id));
     const blockConnectors = model.connectors.filter(c => {
-      const s = model.parts.find(p => p.id === c.sourcePartId);
-      const t = model.parts.find(p => p.id === c.targetPartId);
-      return (s && s.blockId === block.id) || (t && t.blockId === block.id);
+      const sValid = blockPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === block.id) && blockEnvPortIds.has(c.sourcePortId));
+      const tValid = blockPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === block.id) && blockEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
     });
 
     if (blockParts.length > 0) {
@@ -76,14 +78,17 @@ export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarc
   for (const part of model.parts) {
     if (!part.typeId) continue;
     const typeBlock = model.blocks.find(b => b.id === part.typeId);
+    if (!typeBlock) continue;
     const subParts = model.parts.filter(p => p.blockId === part.typeId);
+    const subPartIds = new Set(subParts.map(p => p.id));
+    const subEnvPortIds = new Set((typeBlock.ports ?? []).map(p => p.id));
     const subConnectors = model.connectors.filter(c => {
-      const s = model.parts.find(p => p.id === c.sourcePartId);
-      const t = model.parts.find(p => p.id === c.targetPartId);
-      return (s && s.blockId === part.typeId) || (t && t.blockId === part.typeId);
+      const sValid = subPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === typeBlock.id) && subEnvPortIds.has(c.sourcePortId));
+      const tValid = subPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === typeBlock.id) && subEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
     });
 
-    if (subParts.length > 0 && typeBlock) {
+    if (subParts.length > 0) {
       registry.registerChildLayer(part.id, {
         layerId: `ibd-${typeBlock.id}`,
         type: 'ibd',
@@ -119,6 +124,7 @@ export function generateDiagramScript(registry: ReportHierarchyRegistry): string
   return `
     <script>
       (function() {
+        if (window.ADIA_DIAGRAM_NAV) return;
         window.ADIA_DIAGRAM_NAV = {
           registry: {},
           state: {},
@@ -289,15 +295,19 @@ export function renderInteractiveDiagramHierarchy(
   const layerViews: string[] = [];
 
   // 2. Render each IBD layer for blocks with parts
+  const renderedIbdLayers = new Set<string>();
+
   for (const block of model.blocks) {
     if (block.stereotype === 'requirement') continue;
     const blockParts = model.parts.filter(p => p.blockId === block.id);
     if (blockParts.length === 0) continue;
 
+    const blockPartIds = new Set(blockParts.map(p => p.id));
+    const blockEnvPortIds = new Set((block.ports ?? []).map(p => p.id));
     const blockConnectors = model.connectors.filter(c => {
-      const s = model.parts.find(p => p.id === c.sourcePartId);
-      const t = model.parts.find(p => p.id === c.targetPartId);
-      return (s && s.blockId === block.id) || (t && t.blockId === block.id);
+      const sValid = blockPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === block.id) && blockEnvPortIds.has(c.sourcePortId));
+      const tValid = blockPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === block.id) && blockEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
     });
 
     const ibdSvg = renderIbdDiagram({
@@ -309,26 +319,51 @@ export function renderInteractiveDiagramHierarchy(
       containerId,
     });
 
-    layerViews.push(`<div id="layer-ibd-${escapeHtml(block.id)}" class="diagram-layer-view" style="display:none">\n${ibdSvg}\n</div>`);
+    renderedIbdLayers.add(block.id);
+    layerViews.push(`<div id="layer-ibd-${escapeHtml(block.id)}" class="diagram-layer-view"><h3>Internal structure · ${escapeHtml(block.name)}</h3>\n${ibdSvg}\n</div>`);
+  }
+
+  // Also ensure nested sub-part layers are rendered if not already rendered
+  for (const part of model.parts) {
+    if (!part.typeId || renderedIbdLayers.has(part.typeId)) continue;
+    const typeBlock = model.blocks.find(b => b.id === part.typeId);
+    if (!typeBlock) continue;
+    const subParts = model.parts.filter(p => p.blockId === part.typeId);
+    if (subParts.length === 0) continue;
+
+    const subPartIds = new Set(subParts.map(p => p.id));
+    const subEnvPortIds = new Set((typeBlock.ports ?? []).map(p => p.id));
+    const subConnectors = model.connectors.filter(c => {
+      const sValid = subPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === typeBlock.id) && subEnvPortIds.has(c.sourcePortId));
+      const tValid = subPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === typeBlock.id) && subEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
+    });
+
+    const ibdSvg = renderIbdDiagram({
+      contextBlock: typeBlock,
+      parts: subParts,
+      connectors: subConnectors,
+      blocks: model.blocks,
+      allParts: model.parts,
+      containerId,
+    });
+
+    renderedIbdLayers.add(typeBlock.id);
+    layerViews.push(`<div id="layer-ibd-${escapeHtml(typeBlock.id)}" class="diagram-layer-view"><h3>Internal structure · ${escapeHtml(typeBlock.name)}</h3>\n${ibdSvg}\n</div>`);
   }
 
   // 3. Render State Machine layers if available
   if (model.layers.length > 0 && model.states.length > 0) {
-    const smFigures = renderStateMachineDiagrams({
-      layers: model.layers,
-      states: model.states,
-      junctions: model.junctions,
-      transitions: model.transitions,
-    });
-    model.layers.forEach((layer, idx) => {
-      const fig = smFigures[idx] ?? '';
+    model.layers.forEach(layer => {
+      const fig = renderStateMachineDiagrams({ ...model, layers: [layer] }).join('\n');
       if (fig) {
-        layerViews.push(`<div id="layer-sm-${escapeHtml(layer.id)}" class="diagram-layer-view" style="display:none">\n${fig}\n</div>`);
+        layerViews.push(`<div id="layer-sm-${escapeHtml(layer.id)}" class="diagram-layer-view">\n${fig}\n</div>`);
       }
     });
   }
 
   return `
+<style>.report-figure { margin:20px 0; padding:12px; border:1px solid #dce3ea; background:white; break-inside:avoid; } .report-figure-caption { margin-top:10px; color:#475569; font-size:11px; } @media print { .diagram-layer-view { display:block !important; opacity:1 !important; } .diagram-controls,.diagram-breadcrumbs { display:none !important; } .diagram-card { overflow:visible !important; break-inside:auto !important; } .diagram-body { overflow:visible !important; } svg { transform:none !important; } }</style>
 <div class="diagram-card" id="${escapeHtml(containerId)}">
   <div class="diagram-header" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; border-radius: 8px 8px 0 0;">
     <div id="bc-${escapeHtml(containerId)}" class="diagram-breadcrumbs" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: #1e293b;"></div>

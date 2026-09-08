@@ -352,5 +352,12 @@ export function createMotorDriveTestReport(options: MotorDriveReportOptions = {}
       ],
       releaseCondition: 'Do not authorize higher current, higher DC-bus voltage, overspeed, or field weakening until electrical scaling, voltage utilization, electrical angle, continuous thermal capability, and blade mechanical integrity are formally verified.',
     },
+    consistency: {
+      revision: 'rev_motordrive_verified',
+      removedRelationshipIds: [],
+      removedConnectorIds: [],
+      errors: [],
+    },
   };
 }
+

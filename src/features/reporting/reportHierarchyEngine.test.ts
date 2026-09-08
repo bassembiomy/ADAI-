@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildReportHierarchy, generateDiagramScript, renderInteractiveDiagramHierarchy } from './reportHierarchyEngine';
 import type { BlockData, PartData, ConnectorData, RelationshipData } from '../../types/sysml_types';
 import type { StateData, Layer, TransitionData, JunctionData } from '../../types/sm_types';
+import { cascadeDeleteReportElement } from '../../services/reportModelConsistency';
+import { createReportSnapshot, toHierarchySource } from './reportSnapshot';
 
 describe('reportHierarchyEngine', () => {
   const blocks: BlockData[] = [
@@ -113,6 +115,25 @@ describe('reportHierarchyEngine', () => {
     expect(html).toContain('ADIA_DIAGRAM_NAV.initContainer');
     expect(html).toContain('ThermalSystem');
     expect(html).toContain('ctrl');
+  });
+
+  it('omits nested IBD layer and connectors when parent block is cascade deleted', () => {
+    const model = {
+      blocks,
+      parts,
+      connectors,
+      relationships,
+      states,
+      layers,
+      transitions,
+      junctions,
+    };
+    const updated = cascadeDeleteReportElement(model, { kind: 'block', id: 'b-sys' });
+    const source = toHierarchySource(createReportSnapshot(updated));
+    const html = renderInteractiveDiagramHierarchy(source, { containerId: 'test-diag-del' });
+
+    expect(html).not.toContain('id="layer-ibd-b-sys"');
+    expect(html).not.toContain('edge-c1');
   });
 });
 

@@ -88,6 +88,26 @@ NTC_Sensor in state Cooking_Temp triggers Control_Actuators.
 NTC_Sensor in state Overheat_Temp triggers Safety_Shutdown.
 Safety_Shutdown changes Operation_Status from Cooking to Idle.
 Safety_Shutdown changes Power_Button from On to Off.`
+  },
+  switchLed: {
+    name: "Switch & LED Circuit",
+    description: "ISO 19450 standard model: User toggles a physical switch between Off and On, which triggers reactive processes to Light or Extinguish the LED.",
+    oplText: `Object Switch_Circuit consists of Switch and LED.
+Object Switch_Circuit is physical.
+Object Switch is physical.
+Object LED is physical.
+Object User is physical.
+Object Switch has states Off, On.
+Object LED has states Off, On.
+Process Toggle_Switch.
+Process Light_LED.
+Process Extinguish_LED.
+User executes Toggle_Switch.
+Toggle_Switch changes Switch from Off to On.
+Switch in state On triggers Light_LED.
+Light_LED changes LED from Off to On.
+Toggle_Switch changes Switch from On to Off.
+Switch in state Off triggers Extinguish_LED.
+Extinguish_LED changes LED from On to Off.`
   }
 };
-

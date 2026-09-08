@@ -24,6 +24,7 @@ adia_secrets.*
 audit.log
 adia_vault.bin
 scratch/
+artifacts/
 .worktrees/
 *.exe
 *.o

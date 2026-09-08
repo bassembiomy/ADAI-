@@ -108,20 +108,43 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
 
   if (isBlock) {
     const blockPortIds = new Set(state.ports.filter(p => p.blockId === elementId).map(p => p.id));
-    state.parts.forEach(pt => {
-      if (pt.parentBlockId === elementId || pt.typeBlockId === elementId) {
-        affectedParts.add(pt.id);
-      }
-    });
+    let changed = true;
+    while (changed) {
+      changed = false;
+      state.parts.forEach(pt => {
+        if (!affectedParts.has(pt.id)) {
+          if (
+            pt.parentBlockId === elementId ||
+            pt.typeBlockId === elementId ||
+            (pt as any).blockId === elementId ||
+            (pt as any).typeId === elementId ||
+            (pt.parentPartId && affectedParts.has(pt.parentPartId))
+          ) {
+            affectedParts.add(pt.id);
+            changed = true;
+          }
+        }
+      });
+    }
     state.connectors.forEach(c => {
-      if ((c.sourcePortId && blockPortIds.has(c.sourcePortId)) || (c.targetPortId && blockPortIds.has(c.targetPortId))) {
+      if (
+        (c.sourcePortId && blockPortIds.has(c.sourcePortId)) ||
+        (c.targetPortId && blockPortIds.has(c.targetPortId)) ||
+        (c.sourcePartId && affectedParts.has(c.sourcePartId)) ||
+        (c.targetPartId && affectedParts.has(c.targetPartId))
+      ) {
         affectedConnectors.add(c.id);
       }
     });
     (state.relations ?? []).forEach(r => {
-      if (r.sourceId === elementId || r.targetId === elementId ||
-          blockPortIds.has(r.sourceId) || blockPortIds.has(r.targetId) ||
-          affectedParts.has(r.sourceId) || affectedParts.has(r.targetId)) {
+      if (
+        r.sourceId === elementId ||
+        r.targetId === elementId ||
+        blockPortIds.has(r.sourceId) ||
+        blockPortIds.has(r.targetId) ||
+        affectedParts.has(r.sourceId) ||
+        affectedParts.has(r.targetId)
+      ) {
         affectedRelations.add(r.id);
       }
     });
@@ -137,13 +160,32 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
       }
     });
   } else if (isPart) {
-    state.parts.forEach(pt => {
-      if (pt.parentPartId === elementId) {
-        affectedParts.add(pt.id);
+    affectedParts.add(elementId);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      state.parts.forEach(pt => {
+        if (!affectedParts.has(pt.id) && pt.parentPartId && affectedParts.has(pt.parentPartId)) {
+          affectedParts.add(pt.id);
+          changed = true;
+        }
+      });
+    }
+    state.connectors.forEach(c => {
+      if (
+        (c.sourcePartId && affectedParts.has(c.sourcePartId)) ||
+        (c.targetPartId && affectedParts.has(c.targetPartId))
+      ) {
+        affectedConnectors.add(c.id);
       }
     });
     (state.relations ?? []).forEach(r => {
-      if (r.sourceId === elementId || r.targetId === elementId) {
+      if (
+        r.sourceId === elementId ||
+        r.targetId === elementId ||
+        affectedParts.has(r.sourceId) ||
+        affectedParts.has(r.targetId)
+      ) {
         affectedRelations.add(r.id);
       }
     });
@@ -172,6 +214,7 @@ export function cascadeDeleteBlock(blockId: string, state: SysMLDiagramState): S
   const affectedRelations = new Set(impact.affectedRelations);
 
   return {
+    ...state,
     blocks: state.blocks.filter(b => b.id !== blockId),
     ports: state.ports.filter(p => !blockPorts.has(p.id)),
     parts: state.parts.filter(pt => !affectedParts.has(pt.id)),
@@ -187,6 +230,7 @@ export function cascadeDeletePort(portId: string, state: SysMLDiagramState): Sys
   const affectedRelations = new Set(impact.affectedRelations);
 
   return {
+    ...state,
     blocks: state.blocks.map(b => ({
       ...b,
       ports: (b.ports ?? []).filter(p => (typeof p === 'string' ? p : p.id) !== portId),
@@ -196,6 +240,34 @@ export function cascadeDeletePort(portId: string, state: SysMLDiagramState): Sys
     connectors: state.connectors.filter(c => !affectedConnectors.has(c.id)),
     requirements: state.requirements ?? [],
     relations: (state.relations ?? []).filter(r => !affectedRelations.has(r.id)),
+  };
+}
+
+export function cascadeDeletePart(partId: string, state: SysMLDiagramState): SysMLDiagramState {
+  const impact = previewDeletionImpact(partId, state);
+  const affectedParts = new Set([partId, ...(impact.affectedParts ?? [])]);
+  const affectedConnectors = new Set(impact.affectedConnectors);
+  const affectedRelations = new Set(impact.affectedRelations);
+
+  return {
+    ...state,
+    parts: state.parts.filter(pt => !affectedParts.has(pt.id)),
+    connectors: state.connectors.filter(c => !affectedConnectors.has(c.id)),
+    relations: (state.relations ?? []).filter(r => !affectedRelations.has(r.id)),
+  };
+}
+
+export function cascadeDeleteRequirement(requirementId: string, state: SysMLDiagramState): SysMLDiagramState {
+  const impact = previewDeletionImpact(requirementId, state);
+  const affectedRelations = new Set(impact.affectedRelations);
+
+  return {
+    ...state,
+    requirements: (state.requirements ?? []).filter(r => r.id !== requirementId),
+    blocks: state.blocks.filter(b => b.id !== requirementId),
+    relations: (state.relations ?? []).filter(
+      r => !affectedRelations.has(r.id) && r.sourceId !== requirementId && r.targetId !== requirementId
+    ),
   };
 }
 

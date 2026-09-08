@@ -4,6 +4,8 @@ import {
   previewDeletionImpact,
   cascadeDeleteBlock,
   cascadeDeletePort,
+  cascadeDeletePart,
+  cascadeDeleteRequirement,
   validateConnectorConnection,
   validateTraceabilityRelation,
   validateUniqueRequirementIds,
@@ -58,7 +60,7 @@ describe('sysmlIntegrityService - Schema Hydration', () => {
 describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
   const sampleState: SysMLDiagramState = {
     blocks: [
-      { id: 'b1', name: 'EngineBlock', ports: ['p1'], parts: ['pt1'] },
+      { id: 'b1', name: 'EngineBlock', ports: ['p1'], parts: ['pt1', 'part-b1'] },
       { id: 'b2', name: 'SensorBlock', ports: ['p2'], parts: [] },
     ],
     ports: [
@@ -67,15 +69,19 @@ describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
     ],
     parts: [
       { id: 'pt1', name: 'SubPart', typeBlockId: 'b2', parentBlockId: 'b1', parentPartId: null },
+      { id: 'part-b1', name: 'PartB1', typeBlockId: 'b2', parentBlockId: 'b1', parentPartId: null },
     ],
     connectors: [
       { id: 'c1', sourcePortId: 'p1', targetPortId: 'p2' },
+      { id: 'c2', sourcePartId: 'part-b1', targetPartId: 'pt1' } as any,
     ],
     requirements: [
       { id: 'req1', reqId: 'REQ-01', text: 'Must work' },
+      { id: 'req-1', reqId: 'REQ-02', text: 'Must also work' },
     ],
     relations: [
       { id: 'r1', sourceId: 'b1', targetId: 'req1', type: 'satisfy' },
+      { id: 'r2', sourceId: 'b1', targetId: 'req-1', type: 'satisfy' },
     ],
   };
 
@@ -105,6 +111,23 @@ describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
     expect(updatedState.ports.find((p: SysMLPort) => p.id === 'p1')).toBeUndefined();
     expect(updatedState.connectors.find((c: SysMLConnector) => c.id === 'c1')).toBeUndefined();
     expect(updatedState.blocks.find((b: SysMLBlock) => b.id === 'b1')?.ports).not.toContain('p1');
+  });
+
+  it('removes all relations touching a deleted requirement', () => {
+    const updated = cascadeDeleteRequirement('req-1', sampleState);
+    expect(updated.requirements.some(r => r.id === 'req-1')).toBe(false);
+    expect(updated.relations.some(r => r.sourceId === 'req-1' || r.targetId === 'req-1')).toBe(false);
+  });
+
+  it('removes connectors touching parts removed by block cascade deletion', () => {
+    const updated = cascadeDeleteBlock('b1', sampleState);
+    expect(updated.connectors.every(c => c.sourcePartId !== 'part-b1' && c.targetPartId !== 'part-b1')).toBe(true);
+  });
+
+  it('cascade deletes a part and dependent child parts, connectors, and relations', () => {
+    const updated = cascadeDeletePart('pt1', sampleState);
+    expect(updated.parts.some(p => p.id === 'pt1')).toBe(false);
+    expect(updated.connectors.every(c => c.sourcePartId !== 'pt1' && c.targetPartId !== 'pt1')).toBe(true);
   });
 });
 
