@@ -144,6 +144,7 @@ export function generateArchitectureReport(
       blocks: source.blocks,
       relationships: source.relationships,
       parts: source.parts,
+      containerId: 'adia-diagram-hierarchy',
     });
     html += `<div class="tree">`;
     bddBlocks.forEach(b => {

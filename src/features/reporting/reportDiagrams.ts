@@ -2,7 +2,7 @@ import type { BlockData, ConnectorData, HmiComponent, PartData, RelationshipData
 import type { JunctionData, Layer, StateData, TransitionData } from '../../types/sm_types';
 import {
   DiagramEdgeInput, DiagramRect, MAX_NODES_PER_FIGURE, SizedNode,
-  boundsOf, chunkItems, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
+  boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
 } from './reportDiagramModel';
 import { PositionedNode, layoutGrid, layoutLayered, nodeById, routeEdgePath, routeManhattan } from './reportDiagramLayout';
 
@@ -104,9 +104,9 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
   const allNodes = source.blocks.filter(b => reqIds.has(b.id) || connectedBlockIds.has(b.id));
   const nodeIds = new Set(allNodes.map(n => n.id));
   const edges: DiagramEdgeInput[] = source.relationships
-    .filter(r => nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
+    .filter(r => (reqIds.has(r.sourceId) || reqIds.has(r.targetId)) && nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
     .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: `«${r.type}»`, kind: r.type }));
-  const pages = chunkItems(allNodes, MAX_NODES_PER_FIGURE);
+  const pages = connectionPages(allNodes, edges);
   return pages.map((page, pageIndex) => {
     const sized = new Map(page.map(r => [r.id, measureNode(r.id,
       r.stereotype === 'requirement'
@@ -123,7 +123,12 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
       }),
     ].join('');
     const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
-    return wrapFigure(inner, `Requirements diagram${viewNote} (${page.length} requirements, ${pageEdges.length} relationships)`, boundsOf(placed, 24));
+    const requirementCount = page.filter(n => n.stereotype === 'requirement').length;
+    const supportingCount = page.length - requirementCount;
+    const countNote = supportingCount > 0
+      ? `${requirementCount} requirements, ${supportingCount} supporting blocks`
+      : `${requirementCount} requirements`;
+    return wrapFigure(inner, `Requirements diagram${viewNote} (${countNote}, ${pageEdges.length} relationships)`, boundsOf(placed, 24));
   }).join('\n');
 }
 
@@ -137,12 +142,12 @@ export function renderBddDiagram(source: ReportBlockSource): string {
   const allNodes = source.blocks.filter(b => bddBlockIds.has(b.id) || connectedReqIds.has(b.id));
   const nodeIds = new Set(allNodes.map(n => n.id));
   const edges: DiagramEdgeInput[] = source.relationships
-    .filter(r => nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
+    .filter(r => (bddBlockIds.has(r.sourceId) || bddBlockIds.has(r.targetId)) && nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
     .map(r => ({
       id: r.id, sourceId: r.sourceId, targetId: r.targetId,
       label: DASHED_REL_TYPES.has(r.type) ? `«${r.type}»` : (r.label ?? ''), kind: r.type,
     }));
-  const pages = chunkItems(allNodes, MAX_NODES_PER_FIGURE);
+  const pages = connectionPages(allNodes, edges);
   return pages.map((page, pageIndex) => {
     const sized = new Map(page.map(b => {
       const isReq = b.stereotype === 'requirement';

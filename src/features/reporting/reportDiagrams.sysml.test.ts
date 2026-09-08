@@ -62,7 +62,7 @@ describe('renderRequirementsDiagram — cross-diagram relationships', () => {
     expect(html).toContain('edge-sr1');
     expect(html).toContain('edge-vr1');
     expect(html).toContain('edge-dr1');
-    expect(html).toContain('3 requirements');
+    expect(html).toContain('2 requirements, 1 supporting blocks');
   });
 });
 

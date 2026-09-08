@@ -124,6 +124,7 @@ export function generateDiagramScript(registry: ReportHierarchyRegistry): string
   return `
     <script>
       (function() {
+        if (window.ADIA_DIAGRAM_NAV) return;
         window.ADIA_DIAGRAM_NAV = {
           registry: {},
           state: {},
@@ -319,7 +320,7 @@ export function renderInteractiveDiagramHierarchy(
     });
 
     renderedIbdLayers.add(block.id);
-    layerViews.push(`<div id="layer-ibd-${escapeHtml(block.id)}" class="diagram-layer-view" style="display:none">\n${ibdSvg}\n</div>`);
+    layerViews.push(`<div id="layer-ibd-${escapeHtml(block.id)}" class="diagram-layer-view"><h3>Internal structure · ${escapeHtml(block.name)}</h3>\n${ibdSvg}\n</div>`);
   }
 
   // Also ensure nested sub-part layers are rendered if not already rendered
@@ -348,26 +349,21 @@ export function renderInteractiveDiagramHierarchy(
     });
 
     renderedIbdLayers.add(typeBlock.id);
-    layerViews.push(`<div id="layer-ibd-${escapeHtml(typeBlock.id)}" class="diagram-layer-view" style="display:none">\n${ibdSvg}\n</div>`);
+    layerViews.push(`<div id="layer-ibd-${escapeHtml(typeBlock.id)}" class="diagram-layer-view"><h3>Internal structure · ${escapeHtml(typeBlock.name)}</h3>\n${ibdSvg}\n</div>`);
   }
 
   // 3. Render State Machine layers if available
   if (model.layers.length > 0 && model.states.length > 0) {
-    const smFigures = renderStateMachineDiagrams({
-      layers: model.layers,
-      states: model.states,
-      junctions: model.junctions,
-      transitions: model.transitions,
-    });
-    model.layers.forEach((layer, idx) => {
-      const fig = smFigures[idx] ?? '';
+    model.layers.forEach(layer => {
+      const fig = renderStateMachineDiagrams({ ...model, layers: [layer] }).join('\n');
       if (fig) {
-        layerViews.push(`<div id="layer-sm-${escapeHtml(layer.id)}" class="diagram-layer-view" style="display:none">\n${fig}\n</div>`);
+        layerViews.push(`<div id="layer-sm-${escapeHtml(layer.id)}" class="diagram-layer-view">\n${fig}\n</div>`);
       }
     });
   }
 
   return `
+<style>.report-figure { margin:20px 0; padding:12px; border:1px solid #dce3ea; background:white; break-inside:avoid; } .report-figure-caption { margin-top:10px; color:#475569; font-size:11px; } @media print { .diagram-layer-view { display:block !important; opacity:1 !important; } .diagram-controls,.diagram-breadcrumbs { display:none !important; } .diagram-card { overflow:visible !important; break-inside:auto !important; } .diagram-body { overflow:visible !important; } svg { transform:none !important; } }</style>
 <div class="diagram-card" id="${escapeHtml(containerId)}">
   <div class="diagram-header" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; border-radius: 8px 8px 0 0;">
     <div id="bc-${escapeHtml(containerId)}" class="diagram-breadcrumbs" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: #1e293b;"></div>

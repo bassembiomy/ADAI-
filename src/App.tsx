@@ -5645,6 +5645,12 @@ const GlobalReportPreviewModal = ({
       const parser = new DOMParser();
       const doc = parser.parseFromString(reportData.html, 'text/html');
       const bodyContent = doc.body;
+      // Word cannot execute drill-down navigation: expand the complete hierarchy.
+      bodyContent.querySelectorAll<HTMLElement>('.diagram-layer-view').forEach(el => {
+        el.style.display = 'block';
+        el.style.opacity = '1';
+      });
+      bodyContent.querySelectorAll('script,.diagram-controls,.diagram-breadcrumbs,.diagram-link-btn,.diagram-hint').forEach(el => el.remove());
       const svgs = Array.from(bodyContent.querySelectorAll('svg'));
       const images: { id: string, data: string }[] = [];
 
@@ -5658,7 +5664,10 @@ const GlobalReportPreviewModal = ({
           const canvas = document.createElement("canvas");
           const scale = 2;
           const width = parseInt(svg.getAttribute("width") || "800");
-          const height = parseInt(svg.getAttribute("height") || "600");
+          const box = (svg.getAttribute('viewBox') || '').split(/[ ,]+/).map(Number);
+          const height = parseInt(svg.getAttribute("height") || String(box[2] > 0 ? Math.ceil(width * box[3] / box[2]) : 600));
+          svg.setAttribute('width', String(width));
+          svg.setAttribute('height', String(height));
           canvas.width = width * scale;
           canvas.height = height * scale;
           const ctx = canvas.getContext("2d");
@@ -5696,7 +5705,7 @@ const GlobalReportPreviewModal = ({
 
       const htmlContent = `
         <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
-        <head><meta charset='utf-8'><title>${reportData.projectName} Report</title></head>
+        <head><meta charset='utf-8'><title>${escapeHtml(reportData.projectName)} Report</title>${Array.from(doc.querySelectorAll('style')).map(el => el.outerHTML).join('')}</head>
         <body style="font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; line-height: 1.5; background-color: #ffffff; color: #333333; margin: 0 auto; max-width: 800px;">
           ${bodyContent.innerHTML}
         </body>
@@ -6101,6 +6110,7 @@ const ADIA = () => {
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
+    setSelectedIds([]);
     setDiagramModeState(mode);
     setOpenTabs(prev => {
       if (prev.includes(mode)) return prev;
@@ -6187,7 +6197,7 @@ const ADIA = () => {
       case 'requirements': {
         const reqRelEndpoints = new Set(
           relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine')
+            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'composition' || r.type === 'trace')
             .flatMap(r => [r.sourceId, r.targetId])
         );
         return {
@@ -6260,11 +6270,15 @@ const ADIA = () => {
           break;
         case 'bdd':
           setBlocks(prev => prev.filter(b => b.stereotype === 'requirement'));
-          setRelationships([]);
+          setRelationships(prev => prev.filter(r => 
+            r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace'
+          ));
           break;
         case 'requirements':
           setBlocks(prev => prev.filter(b => b.stereotype !== 'requirement'));
-          setRelationships([]);
+          setRelationships(prev => prev.filter(r => 
+            r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace'
+          ));
           break;
         case 'ibd':
           setParts([]); setConnectors([]); setInterfaceRealizations([]);
@@ -6310,7 +6324,18 @@ const ADIA = () => {
           ...prev.filter(b => b.stereotype === 'requirement'),
           ...(d.blocks || [])
         ]);
-        if (d.relationships) setRelationships(d.relationships);
+        if (d.relationships) {
+          setRelationships(prev => {
+            const relMap = new Map<string, RelationshipData>();
+            prev.forEach(r => {
+              if (r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace') {
+                relMap.set(r.id, r);
+              }
+            });
+            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
+            return Array.from(relMap.values());
+          });
+        }
         if (d.customStereotypes) setCustomStereotypes(d.customStereotypes);
         break;
       case 'requirements':
@@ -6318,7 +6343,18 @@ const ADIA = () => {
           ...prev.filter(b => b.stereotype !== 'requirement'),
           ...(d.blocks || [])
         ]);
-        if (d.relationships) setRelationships(d.relationships);
+        if (d.relationships) {
+          setRelationships(prev => {
+            const relMap = new Map<string, RelationshipData>();
+            prev.forEach(r => {
+              if (r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace') {
+                relMap.set(r.id, r);
+              }
+            });
+            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
+            return Array.from(relMap.values());
+          });
+        }
         break;
       case 'ibd':
         if (d.parts) setParts(d.parts);
@@ -6373,6 +6409,7 @@ const ADIA = () => {
 
   // Switch active file function
   const switchActiveFile = useCallback((newFileId: string) => {
+    setSelectedIds([]);
     setWorkspaceFiles(prevFiles => {
       let updatedFiles = prevFiles;
       if (activeFileId) {
@@ -6444,6 +6481,7 @@ const ADIA = () => {
 
   // Open file in tab function
   const openFileInTab = useCallback((fileId: string) => {
+    setSelectedIds([]);
     setOpenTabIds(prev => {
       if (prev.includes(fileId)) return prev;
       return [...prev, fileId];
@@ -11491,6 +11529,7 @@ const ADIA = () => {
         blocks: hierarchySource.blocks,
         relationships: hierarchySource.relationships,
         parts: hierarchySource.parts,
+        containerId: 'adia-diagram-hierarchy',
       });
       html += `<div class="tree">`;
       bddBlocks.forEach(b => {
@@ -16840,6 +16879,7 @@ const ADIA = () => {
                       <option value="aggregation">Aggregation</option>
                       <option value="allocation">Allocation</option>
                       <option value="derive">Derive</option>
+                      <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
                       <option value="refine">Refine</option>
                       <option value="satisfy">Satisfy</option>
                       <option value="verify">Verify</option>

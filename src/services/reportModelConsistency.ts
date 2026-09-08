@@ -274,8 +274,15 @@ export function reconcileReportModel(
   // Endpoints validation for connectors: sourcePartId and targetPartId must be in parts
   const survivingConnectors: ConnectorData[] = [];
   for (const conn of model.connectors) {
-    const sourcePartValid = partIdSet.has(conn.sourcePartId);
-    const targetPartValid = partIdSet.has(conn.targetPartId);
+    const validEndpoint = (owner: string, portId: string, otherOwner: string): boolean => {
+      if (partIdSet.has(owner)) return true;
+      const otherPart = model.parts.find(p => p.id === otherOwner);
+      const contextId = owner || otherPart?.blockId;
+      const context = model.blocks.find(b => b.id === contextId);
+      return !!context && (!otherPart || otherPart.blockId === context.id) && context.ports.some(p => p.id === portId);
+    };
+    const sourcePartValid = validEndpoint(conn.sourcePartId, conn.sourcePortId, conn.targetPartId);
+    const targetPartValid = validEndpoint(conn.targetPartId, conn.targetPortId, conn.sourcePartId);
 
     if (!sourcePartValid || !targetPartValid) {
       removedConnectorIds.push(conn.id);
