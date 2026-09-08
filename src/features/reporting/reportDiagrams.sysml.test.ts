@@ -85,6 +85,24 @@ describe('renderBddDiagram', () => {
     expect(html).toContain('2 blocks');
   });
 
+  it('renders complete SysML property notation', () => {
+    const html = renderBddDiagram({
+      blocks: [block({ id: 'typed', properties: [{
+        id: 'flow', name: 'speed', type: 'Velocity', typeId: 'velocity', kind: 'flow',
+        multiplicity: '0..*', ordered: true, unique: false, isDerived: true,
+        unit: 'm/s', dimension: 'velocity', redefinesId: 'base-speed', subsetsId: 'available-speed',
+      }] })],
+      relationships: [],
+    });
+    expect(html).toContain('/speed: velocity [0..*]');
+    expect(html).toContain('{ordered,');
+    expect(html).toContain('nonunique}');
+    expect(html).toContain('«flow»');
+    expect(html).toContain('{unit=m/s}');
+    expect(html).toContain('{dimension=velocity} redefines');
+    expect(html).toContain('base-speed subsets available-speed');
+  });
+
   it('renders generalization with a hollow triangle', () => {
     const html = renderBddDiagram({
       blocks: bddBlocks,

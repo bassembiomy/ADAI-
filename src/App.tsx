@@ -106,11 +106,13 @@ import {
   renderStateMachineDiagrams,
 } from './features/reporting';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
+import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -14013,7 +14015,7 @@ const ADIA = () => {
             <g transform="translate(5, 45)">
               {block.properties.slice(0, 3).map((prop, i) => (
                 <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
-                  {prop.name}: {prop.type}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
+                  {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                 </text>
               ))}
               {block.classes && block.classes.length > 0 && (
@@ -16933,24 +16935,17 @@ const ADIA = () => {
                     />
                   </div>
                   <div>
-                    <Label>Properties (comma sep)</Label>
-                    <textarea
-                      value={selectedBlock.properties.map(p => `${p.name}:${p.type}${p.defaultValue ? '=' + p.defaultValue : ''}`).join(',\n')}
-                      onChange={(e) => {
-                        const newProperties: ValuePropertyData[] = e.target.value.split(/[,;\n]/).map(s => s.trim()).filter(s => s).map(pStr => {
-                          const [name, rest] = pStr.split(':');
-                          const [type, defaultValue] = rest ? rest.split('=') : ['any', undefined];
-                          return {
-                            id: uuidv4(),
-                            name: name?.trim() || 'prop',
-                            type: type?.trim() || 'any',
-                            defaultValue: defaultValue?.trim(),
-                          };
-                        });
-                        updateBlock(selectedBlock.id, { properties: newProperties });
-                      }}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
+                    <Label>Properties</Label>
+                    <BlockPropertiesEditor
+                      properties={selectedBlock.properties}
+                      typeOptions={blocks.filter(block => block.stereotype !== 'requirement')}
+                      inheritedProperties={inheritedProperties(blocks, relationships, selectedBlock.id)}
+                      onChange={(properties) => updateBlock(selectedBlock.id, { properties })}
                     />
+                    {(() => {
+                      const result = validateLegacyBlockProperties(blocks, relationships, selectedBlock.id);
+                      return !result.valid && <div role="alert" className="mt-2 text-xs text-red-400">{result.messages.join('; ')}</div>;
+                    })()}
                   </div>
                   <div>
                     <Label>Satisfied Requirements</Label>

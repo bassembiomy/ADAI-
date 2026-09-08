@@ -1,5 +1,6 @@
 import type { BlockData, ConnectorData, HmiComponent, PartData, RelationshipData } from '../../types/sysml_types';
 import type { JunctionData, Layer, StateData, TransitionData } from '../../types/sm_types';
+import { formatLegacyProperty } from '../../services/sysmlPropertyRules';
 import {
   DiagramEdgeInput, DiagramRect, MAX_NODES_PER_FIGURE, SizedNode,
   boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
@@ -160,7 +161,7 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       return [b.id, measureNode(b.id, [
         stereotypeLabel,
         b.name ?? '',
-        ...(b.properties ?? []).slice(0, 3).map(p => `${p.name}: ${p.type}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
+        ...(b.properties ?? []).slice(0, 3).map(p => `${formatLegacyProperty(p)}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
       ], isReq ? 'req' : 'bdd', 96)];
     }));
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
