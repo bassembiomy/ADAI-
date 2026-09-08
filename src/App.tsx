@@ -108,6 +108,7 @@ import {
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository } from './engine/sysml/model';
+import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 
@@ -8683,6 +8684,11 @@ const ADIA = () => {
   ]);
 
   const startSimulation = useCallback(async () => {
+    const sysmlGate = evaluateSysmlOperationGate(canonicalSysmlRepository, 'simulate');
+    if (!sysmlGate.allowed) {
+      sysmlGate.diagnostics.filter(item => item.severity === 'error').forEach(item => addError('error', `${item.code}: ${item.message}`, 'SysML'));
+      return;
+    }
     if (!validateModel()) return;
 
     const lifecycle = simulationLifecycleRef.current;
@@ -8711,7 +8717,7 @@ const ADIA = () => {
     }
   }, [
     addError, applySimulationFrameToReact, createSimulationSession,
-    validateModel
+    validateModel, canonicalSysmlRepository
   ]);
 
   const pauseSimulation = useCallback(() => {
@@ -10485,6 +10491,11 @@ const ADIA = () => {
   }, [handleOpenProjectDialog]);
 
   const handleGenerateReport = useCallback((projectName: string = 'My Project', author: string = 'Engineer') => {
+    const sysmlGate = evaluateSysmlOperationGate(canonicalSysmlRepository, 'report');
+    if (!sysmlGate.allowed) {
+      sysmlGate.diagnostics.filter(item => item.severity === 'error').forEach(item => addError('error', `${item.code}: ${item.message}`, 'SysML'));
+      return;
+    }
     const snapshot = createReportSnapshot({
       blocks,
       relationships,
@@ -13104,7 +13115,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
