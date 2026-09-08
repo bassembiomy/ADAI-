@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, requiresDeletionConfirmation } from './sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './sysmlTransactionAdapter';
+import { createEmptyRepository } from '../engine/sysml/model';
 
 const block = (id: string, stereotype = 'block'): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] });
 const part = (id: string, owner: string, type: string, parentPartId: string | null = null): PartData => ({ id, name: id, blockId: owner, typeId: type, parentPartId, x: 0, y: 0, width: 80, height: 60 });
@@ -51,5 +52,18 @@ describe('legacy UI to canonical SysML mutation adapter', () => {
     const input = { blocks: [block('a'), block('b')], parts: [], relationships: [relation('r', 'a', 'b', 'association')], connectors: [] };
     const result = applyLegacySysmlDeletion(input, ['r']);
     expect(requiresDeletionConfirmation(result.impact)).toBe(false);
+  });
+
+  it('merges legacy editor changes into the canonical source while preserving evidence, baselines, and layout-insensitive revision', () => {
+    const canonical = createEmptyRepository();
+    canonical.evidence.e = { id: 'e', verificationCaseId: 'v', requirementId: 'req', revision: 0, result: 'passed', executedAt: '2026-09-08' };
+    canonical.baselines.bl = { id: 'bl', name: 'Baseline', revision: 0, createdAt: '2026-09-08', protected: true };
+    const legacy = { blocks: [block('a')], parts: [], relationships: [], connectors: [] };
+    const merged = mergeLegacyDiagramIntoRepository(canonical, legacy);
+    expect(merged.definitions.a).toBeDefined();
+    expect(merged.evidence.e).toBeDefined();
+    expect(merged.baselines.bl).toBeDefined();
+    const moved = { ...legacy, blocks: [{ ...legacy.blocks[0], x: 900, y: 700 }] };
+    expect(mergeLegacyDiagramIntoRepository(merged, moved)).toBe(merged);
   });
 });

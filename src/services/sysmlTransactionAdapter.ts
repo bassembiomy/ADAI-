@@ -1,6 +1,7 @@
 import { applyCommand, type MutationImpact } from '../engine/sysml/mutations';
 import { loadRepository } from '../engine/sysml/persistence';
 import type { SysmlRepository } from '../engine/sysml/model';
+import { synchronizeEvidenceCurrency } from '../engine/sysml/evidence';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
 
 export interface LegacySysmlModel {
@@ -14,6 +15,39 @@ export interface LegacySysmlDeletionResult {
   model: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] };
   repository: SysmlRepository;
   impact: MutationImpact;
+}
+
+export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, model: LegacySysmlModel): SysmlRepository {
+  const projected = loadRepository({ blocks: model.blocks, relationships: model.relationships, parts: model.parts, connectors: model.connectors }).repository;
+  const mergeRecords = <T extends { id: string }>(current: Record<string, T>, incoming: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(incoming).map(([id, value]) => [id, { ...current[id], ...value }]));
+  const retainedCanonicalRelationships = Object.fromEntries(Object.entries(repository.relationships).filter(([, relationship]) =>
+    (repository.artifacts[relationship.sourceId] || repository.artifacts[relationship.targetId])
+    && !projected.relationships[relationship.id]
+  ));
+  const semantic = {
+    definitions: mergeRecords(repository.definitions, projected.definitions),
+    usages: mergeRecords(repository.usages, projected.usages),
+    connectors: projected.connectors,
+    relationships: { ...retainedCanonicalRelationships, ...mergeRecords(repository.relationships, projected.relationships) },
+    requirements: mergeRecords(repository.requirements, projected.requirements),
+    verificationCases: mergeRecords(repository.verificationCases, projected.verificationCases),
+  };
+  const currentSemantic = {
+    definitions: repository.definitions,
+    usages: repository.usages,
+    connectors: repository.connectors,
+    relationships: repository.relationships,
+    requirements: repository.requirements,
+    verificationCases: repository.verificationCases,
+  };
+  if (JSON.stringify(semantic) === JSON.stringify(currentSemantic)) return repository;
+  const next: SysmlRepository = { ...structuredClone(repository), ...semantic, revision: repository.revision + 1 };
+  next.auditTrail.push({
+    id: `change-${next.revision}-legacy-editor-sync`, revision: next.revision, timestamp: new Date().toISOString(),
+    command: 'synchronizeNativeSysmlEditor', elementIds: [...Object.keys(projected.definitions), ...Object.keys(projected.usages), ...Object.keys(projected.relationships), ...Object.keys(projected.connectors), ...Object.keys(projected.requirements)],
+  });
+  return synchronizeEvidenceCurrency(next);
 }
 
 export function requiresDeletionConfirmation(impact: MutationImpact): boolean {

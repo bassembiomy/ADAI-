@@ -106,8 +106,9 @@ import {
   renderStateMachineDiagrams,
 } from './features/reporting';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
-import { loadRepository } from './engine/sysml/persistence';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { loadRepository, serializeRepository } from './engine/sysml/persistence';
+import { createEmptyRepository } from './engine/sysml/model';
+import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
@@ -6158,12 +6159,10 @@ const ADIA = () => {
   const [relationships, setRelationships] = useState<RelationshipData[]>([]);
   const [parts, setParts] = useState<PartData[]>([]);
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
-  const canonicalSysmlRepository = useMemo(() => loadRepository({
-    blocks,
-    parts,
-    connectors,
-    relationships,
-  }).repository, [blocks, parts, connectors, relationships]);
+  const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
+  useEffect(() => {
+    setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
+  }, [blocks, parts, connectors, relationships]);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
   const [uiZoom, setUiZoom] = useState(1.0);
@@ -7260,6 +7259,11 @@ const ADIA = () => {
 
   const hydrateProject = useCallback((importedData: any) => {
     try {
+      if (importedData.sysmlRepository) {
+        const canonical = loadRepository(importedData.sysmlRepository);
+        if (!canonical.valid) throw new Error(`Canonical SysML repository failed validation: ${canonical.diagnostics.map(item => item.code).join(', ')}`);
+        setCanonicalSysmlRepository(canonical.repository);
+      }
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
@@ -7542,6 +7546,7 @@ const ADIA = () => {
       relationships,
       parts,
       connectors,
+      sysmlRepository: serializeRepository(canonicalSysmlRepository),
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7578,6 +7583,7 @@ const ADIA = () => {
     relationships,
     parts,
     connectors,
+    canonicalSysmlRepository,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
