@@ -11,8 +11,28 @@
  *   ports + connectors                   → NOT auto-mapped; reported as a warning
  *   association / allocation / others    → warning (author decides the OPM equivalent)
  */
-import type { AppNode, AppEdge, OPMLinkType } from './EntropyTypes';
+import type { AppNode, AppEdge, OPMLinkType, OpmLifecycleDiagnostic } from './EntropyTypes';
 import type { SysMLDiagramState } from '../../types/sysml_types';
+
+export type SysmlMappingStatus = 'mapped' | 'conceptual-only' | 'unsupported' | 'unresolved';
+
+export interface SysmlConnectorMapping {
+  sourceConnectorId: string;
+  sourceBlockId?: string;
+  targetBlockId?: string;
+  sourcePortId?: string;
+  targetPortId?: string;
+  status: SysmlMappingStatus;
+  diagnostic?: string;
+}
+
+export interface SysmlImportResult {
+  nodes: AppNode[];
+  edges: AppEdge[];
+  warnings: string[];
+  connectorMappings: SysmlConnectorMapping[];
+  diagnostics: OpmLifecycleDiagnostic[];
+}
 
 const RELATION_MAP: Record<string, { link: OPMLinkType; flip?: boolean } | undefined> = {
   composition: { link: 'aggregation' },
@@ -22,14 +42,12 @@ const RELATION_MAP: Record<string, { link: OPMLinkType; flip?: boolean } | undef
   verify: { link: 'verifies' },
 };
 
-export function importSysmlToOpm(state: SysMLDiagramState): {
-  nodes: AppNode[];
-  edges: AppEdge[];
-  warnings: string[];
-} {
+export function importSysmlToOpm(state: SysMLDiagramState): SysmlImportResult {
   const nodes: AppNode[] = [];
   const edges: AppEdge[] = [];
   const warnings: string[] = [];
+  const connectorMappings: SysmlConnectorMapping[] = [];
+  const diagnostics: OpmLifecycleDiagnostic[] = [];
   const requirementIds = new Set((state.requirements || []).map(r => r.id));
 
   const makeNode = (
@@ -66,9 +84,21 @@ export function importSysmlToOpm(state: SysMLDiagramState): {
   relationSource.forEach(rel => {
     const mapped = RELATION_MAP[rel.type];
     if (!mapped) {
-      warnings.push(
-        `Relationship [${rel.type}] from ${rel.sourceId} to ${rel.targetId} has no automatic OPM equivalent — model it manually (e.g. as an instrument or effect link).`
-      );
+      const msg = `Relationship [${rel.type}] from ${rel.sourceId} to ${rel.targetId} has no automatic OPM equivalent — model it manually (e.g. as an instrument or effect link).`;
+      warnings.push(msg);
+      connectorMappings.push({
+        sourceConnectorId: rel.id,
+        sourceBlockId: rel.sourceId,
+        targetBlockId: rel.targetId,
+        status: 'unsupported',
+        diagnostic: msg,
+      });
+      diagnostics.push({
+        code: 'SYSML_RELATION_UNSUPPORTED',
+        severity: 'warning',
+        message: msg,
+        elementId: rel.id,
+      });
       return;
     }
     const source = mapped.flip ? rel.targetId : rel.sourceId;
@@ -77,15 +107,35 @@ export function importSysmlToOpm(state: SysMLDiagramState): {
       id: `imp-${rel.id}`,
       source,
       target,
-      data: { type: mapped.link },
+      data: {
+        type: mapped.link,
+        sysmlMappingStatus: 'mapped',
+        sysmlRelationId: rel.id,
+      },
     } as AppEdge);
   });
 
   if ((state.connectors?.length ?? 0) > 0) {
-    warnings.push(
-      `${state.connectors.length} IBD connector(s) were not auto-mapped: in OPM, model the exchanged items as processes with consumption/result links between the owning objects.`
-    );
+    state.connectors!.forEach(c => {
+      const msg = `IBD connector "${c.id}" (${c.name || 'unnamed'}) was not auto-mapped. In OPM, model the exchanged items as processes with consumption/result links.`;
+      warnings.push(msg);
+      connectorMappings.push({
+        sourceConnectorId: c.id,
+        sourceBlockId: c.sourceBlockId,
+        targetBlockId: c.targetBlockId,
+        sourcePortId: c.sourcePortId,
+        targetPortId: c.targetPortId,
+        status: 'unresolved',
+        diagnostic: msg,
+      });
+      diagnostics.push({
+        code: 'SYSML_CONNECTOR_UNRESOLVED',
+        severity: 'warning',
+        message: msg,
+        elementId: c.id,
+      });
+    });
   }
 
-  return { nodes, edges, warnings };
+  return { nodes, edges, warnings, connectorMappings, diagnostics };
 }

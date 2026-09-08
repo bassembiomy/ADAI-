@@ -82,7 +82,9 @@ export function validateOpmPortConnection(
   if (!roleVerdict.valid) {
     return {
       valid: false,
-      code: roleVerdict.code || 'OPM_PORT_DIRECTION_INVALID',
+      code: roleVerdict.code === 'OPM_REQUIREMENT_STRUCTURAL_LINK_INVALID'
+        ? 'OPM_REQUIREMENT_STRUCTURAL_LINK_INVALID'
+        : 'OPM_PORT_DIRECTION_INVALID',
       reason: roleVerdict.reason || `Cannot connect ${sourceType} to ${targetType} with "${linkType}" link.`,
     };
   }
