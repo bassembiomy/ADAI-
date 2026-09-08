@@ -239,6 +239,82 @@ describe('OpmRightPanelContent', () => {
     expect(html).toContain('data-testid="link-transition-target-input"');
     expect(html).toContain('st-2');
   });
+
+  it('renders State Execution Inspector with initial, terminal, timeout, and entry/exit actions', () => {
+    const mockStateNode = {
+      id: 'st-1',
+      type: 'opmState',
+      position: { x: 50, y: 50 },
+      data: {
+        name: 'Heating',
+        type: 'state',
+        execution: {
+          enabled: true,
+          initial: true,
+          terminal: false,
+          timeoutMs: 3000,
+          timeoutEventId: 'ev-1',
+          entryAssignments: [
+            { id: 'asgn-entry-1', targetAttributeId: 'attr-1', operator: '=', expression: '1', enabled: true },
+          ],
+          exitAssignments: [
+            { id: 'asgn-exit-1', targetAttributeId: 'attr-1', operator: '=', expression: '0', enabled: true },
+          ],
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <OpmRightPanelContent
+        selectedNode={mockStateNode as any}
+        selectedEdge={null}
+        onCloseInspector={() => {}}
+        onUpdateNodeProp={() => {}}
+        onConvertNodeType={() => {}}
+        onAddStateToObject={() => {}}
+        onManualActivateState={() => {}}
+        onDeleteState={() => {}}
+        onAddAttribute={() => {}}
+        onAddPort={() => {}}
+        onRemovePort={() => {}}
+        onZoomInNode={() => {}}
+        onDeleteSelectedNode={() => {}}
+        onConvertEdgeType={() => {}}
+        rightTab="simControl"
+        onRightTabChange={() => {}}
+        simRunning={false}
+        simTick={0}
+        tickMs={50}
+        onToggleSimulation={() => {}}
+        onRunSimTick={() => {}}
+        onResetSimulation={() => {}}
+        activeOpmConfig={{ tickMs: 50, executionMode: 'discrete', traceLevel: 'full' }}
+        onOpmConfigChange={() => {}}
+        scopeTabContent={<div>Scope Tab</div>}
+        oplTabContent={<div>OPL Tab</div>}
+        smartShowTabContent={<div>Smart Show Tab</div>}
+        codegenTabContent={<div>Codegen Tab</div>}
+        executionConfig={{
+          version: 1,
+          events: [{ id: 'ev-1', displayName: 'tick_event', cIdentifier: 'tick_event' }],
+          enums: [],
+          settings: {} as any,
+        }}
+        onUpdateSelectionExecution={() => {}}
+        writableAttributes={[{ id: 'attr-1', displayName: 'temperature' }]}
+        diagnostics={[]}
+      />
+    );
+
+    expect(html).toContain('data-testid="state-initial-checkbox"');
+    expect(html).toContain('data-testid="state-terminal-checkbox"');
+    expect(html).toContain('data-testid="state-timeout-input"');
+    expect(html).toContain('3000');
+    expect(html).toContain('data-testid="state-timeout-event-select"');
+    expect(html).toContain('data-testid="add-entry-assignment-btn"');
+    expect(html).toContain('data-testid="add-exit-assignment-btn"');
+  });
 });
+
 
 

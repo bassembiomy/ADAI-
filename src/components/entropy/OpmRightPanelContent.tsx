@@ -210,6 +210,167 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 className="rounded border-white/20 bg-[#0e0e11] text-orange-500 w-4 h-4 accent-orange-500"
               />
             </div>
+
+            {/* State Execution & Behaviors (for State nodes) */}
+            {selectedNode.data.type === 'state' && (() => {
+              const exec: OpmStateExecution = selectedNode.data?.execution || {
+                enabled: true,
+                initial: false,
+                terminal: false,
+                entryAssignments: [],
+                exitAssignments: [],
+              };
+
+              const handleUpdateStateExecution = (patch: Partial<OpmStateExecution>) => {
+                const updated = { ...exec, ...patch };
+                if (onUpdateSelectionExecution) {
+                  onUpdateSelectionExecution(updated);
+                }
+              };
+
+              const handleAddEntry = () => {
+                const newAsgn: OpmAssignment = {
+                  id: nextStableId('asgn'),
+                  targetAttributeId: '',
+                  operator: '=',
+                  expression: '0',
+                  enabled: true,
+                };
+                handleUpdateStateExecution({
+                  entryAssignments: [...(exec.entryAssignments || []), newAsgn],
+                });
+              };
+
+              const handleAddExit = () => {
+                const newAsgn: OpmAssignment = {
+                  id: nextStableId('asgn'),
+                  targetAttributeId: '',
+                  operator: '=',
+                  expression: '0',
+                  enabled: true,
+                };
+                handleUpdateStateExecution({
+                  exitAssignments: [...(exec.exitAssignments || []), newAsgn],
+                });
+              };
+
+              return (
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-200">
+                      <input
+                        data-testid="state-initial-checkbox"
+                        aria-label="Initial state"
+                        data-opm-path="stateExecution.initial"
+                        type="checkbox"
+                        checked={Boolean(exec.initial)}
+                        onChange={(e) => handleUpdateStateExecution({ initial: e.target.checked })}
+                        className="rounded border-white/20 bg-[#0e0e11] text-amber-500 w-4 h-4 accent-amber-500"
+                      />
+                      <span className="font-semibold">Initial State</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-200">
+                      <input
+                        data-testid="state-terminal-checkbox"
+                        aria-label="Terminal state"
+                        data-opm-path="stateExecution.terminal"
+                        type="checkbox"
+                        checked={Boolean(exec.terminal)}
+                        onChange={(e) => handleUpdateStateExecution({ terminal: e.target.checked })}
+                        className="rounded border-white/20 bg-[#0e0e11] text-amber-500 w-4 h-4 accent-amber-500"
+                      />
+                      <span className="font-semibold">Terminal State</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout">
+                        Timeout (ms)
+                      </label>
+                      <input
+                        id="state-timeout"
+                        data-testid="state-timeout-input"
+                        data-opm-path="stateExecution.timeoutMs"
+                        type="number"
+                        value={exec.timeoutMs ?? ''}
+                        onChange={(e) =>
+                          handleUpdateStateExecution({
+                            timeoutMs: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                        placeholder="e.g. 5000"
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout-ev">
+                        Timeout Event
+                      </label>
+                      <select
+                        id="state-timeout-ev"
+                        data-testid="state-timeout-event-select"
+                        data-opm-path="stateExecution.timeoutEventId"
+                        value={exec.timeoutEventId || ''}
+                        onChange={(e) =>
+                          handleUpdateStateExecution({ timeoutEventId: e.target.value || undefined })
+                        }
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                      >
+                        <option value="">-- none --</option>
+                        {events.map((ev) => (
+                          <option key={ev.id} value={ev.id}>
+                            {ev.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase text-amber-400">Entry Actions</span>
+                      <button
+                        data-testid="add-entry-assignment-btn"
+                        aria-label="Add entry assignment"
+                        onClick={handleAddEntry}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded hover:bg-amber-900 font-bold"
+                      >
+                        <Plus size={10} /> Add Entry
+                      </button>
+                    </div>
+                    <AssignmentRows
+                      value={exec.entryAssignments || []}
+                      writableAttributes={writableAttributes}
+                      basePath="stateExecution.entryAssignments"
+                      testIdPrefix="entry-assignment"
+                      onChange={(next) => handleUpdateStateExecution({ entryAssignments: next })}
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase text-amber-400">Exit Actions</span>
+                      <button
+                        data-testid="add-exit-assignment-btn"
+                        aria-label="Add exit assignment"
+                        onClick={handleAddExit}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded hover:bg-amber-900 font-bold"
+                      >
+                        <Plus size={10} /> Add Exit
+                      </button>
+                    </div>
+                    <AssignmentRows
+                      value={exec.exitAssignments || []}
+                      writableAttributes={writableAttributes}
+                      basePath="stateExecution.exitAssignments"
+                      testIdPrefix="exit-assignment"
+                      onChange={(next) => handleUpdateStateExecution({ exitAssignments: next })}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Collapsible States Section (for Objects) */}
