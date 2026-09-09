@@ -53,6 +53,8 @@ export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, mo
 export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
   const requested = new Set(impact.requestedElementIds);
   return impact.deletedElementIds.some(id => !requested.has(id))
+    || impact.nestedRequirementIds.length > 0
+    || impact.removedRelationshipIds.some(id => !requested.has(id))
     || impact.unresolvedUsageIds.length > 0
     || impact.invalidatedEvidenceIds.length > 0
     || impact.affectedRequirementIds.length > 0
@@ -66,6 +68,8 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
     'SysML deletion impact',
     `Requested: ${impact.requestedElementIds.join(', ') || 'none'}`,
     `Cascade deleted: ${cascade.join(', ') || 'none'}`,
+    `Nested requirements: ${impact.nestedRequirementIds.join(', ') || 'none'}`,
+    `Removed relationships: ${impact.removedRelationshipIds.join(', ') || 'none'}`,
     `Affected diagrams: ${impact.affectedDiagramKinds.join(', ') || 'none'}`,
     `Affected requirements: ${impact.affectedRequirementIds.join(', ') || 'none'}`,
     `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
@@ -116,6 +120,10 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
   const impact: MutationImpact = {
     ...transaction.impact,
     deletedElementIds: [...deleted].sort(),
+    removedRelationshipIds: [...new Set([
+      ...transaction.impact.removedRelationshipIds,
+      ...model.relationships.filter(r => deleted.has(r.id) || deleted.has(r.sourceId) || deleted.has(r.targetId)).map(r => r.id),
+    ])].sort(),
     affectedDiagramKinds: [...new Set([
       ...transaction.impact.affectedDiagramKinds,
       ...(model.connectors.some(connector => deleted.has(connector.id)) ? ['ibd' as const] : []),

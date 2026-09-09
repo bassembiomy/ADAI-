@@ -66,4 +66,32 @@ describe('legacy UI to canonical SysML mutation adapter', () => {
     const moved = { ...legacy, blocks: [{ ...legacy.blocks[0], x: 900, y: 700 }] };
     expect(mergeLegacyDiagramIntoRepository(merged, moved)).toBe(merged);
   });
+
+  it('requires confirmation and lists nested requirements when deleting a requirement container', () => {
+    const parentReq = { ...block('p', 'requirement'), reqId: 'REQ-P' };
+    const childReq = { ...block('c', 'requirement'), reqId: 'REQ-C' };
+    const gcReq = { ...block('gc', 'requirement'), reqId: 'REQ-GC' };
+    const unrelatedReq = { ...block('u', 'requirement'), reqId: 'REQ-U' };
+
+    const input = {
+      blocks: [parentReq, childReq, gcReq, unrelatedReq],
+      parts: [],
+      relationships: [
+        relation('rc1', 'p', 'c', 'requirementContainment'),
+        relation('rc2', 'c', 'gc', 'requirementContainment'),
+      ],
+      connectors: [],
+    };
+
+    const result = applyLegacySysmlDeletion(input, ['p']);
+    expect(requiresDeletionConfirmation(result.impact)).toBe(true);
+    expect(result.impact.nestedRequirementIds).toEqual(['c', 'gc']);
+    expect(result.impact.removedRelationshipIds).toEqual(expect.arrayContaining(['rc1', 'rc2']));
+    expect(result.model.blocks.map(b => b.id)).toEqual(['u']);
+    expect(result.model.relationships).toEqual([]);
+
+    const formatted = formatLegacyDeletionImpact(result.impact);
+    expect(formatted).toContain('Nested requirements: c, gc');
+  });
 });
+

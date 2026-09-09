@@ -1,4 +1,5 @@
 import type { SysmlRepository } from './model';
+import { getNestedRequirementIds } from './requirements';
 import { validateSysmlRepository, type SysmlValidationReport } from './validation';
 
 export type SysmlCommand = { kind: 'deleteElements'; elementIds: string[] };
@@ -6,6 +7,8 @@ export type SysmlCommand = { kind: 'deleteElements'; elementIds: string[] };
 export interface MutationImpact {
   requestedElementIds: string[];
   deletedElementIds: string[];
+  nestedRequirementIds: string[];
+  removedRelationshipIds: string[];
   unresolvedUsageIds: string[];
   invalidatedEvidenceIds: string[];
   affectedRequirementIds: string[];
@@ -30,6 +33,17 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   const requested = new Set(command.elementIds);
   const deleted = new Set(command.elementIds);
 
+  const nestedRequirementIdsSet = new Set<string>();
+  for (const id of command.elementIds) {
+    if (repo.requirements[id]) {
+      const descendants = getNestedRequirementIds(repo, id);
+      for (const descId of descendants) {
+        nestedRequirementIdsSet.add(descId);
+        deleted.add(descId);
+      }
+    }
+  }
+
   // A composite usage is lifetime-owned by its owner. Shared and reference usages
   // intentionally do not join this closure.
   let changed = true;
@@ -50,10 +64,12 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   for (const connector of Object.values(repo.connectors)) {
     if (deleted.has(connector.ownerId) || deleted.has(connector.sourcePortId) || deleted.has(connector.targetPortId)) deleted.add(connector.id);
   }
+  const removedRelationshipIdsSet = new Set<string>();
   const affectedRequirements = new Set<string>();
   for (const relationship of Object.values(repo.relationships)) {
-    if (deleted.has(relationship.sourceId) || deleted.has(relationship.targetId)) {
+    if (deleted.has(relationship.id) || deleted.has(relationship.sourceId) || deleted.has(relationship.targetId)) {
       deleted.add(relationship.id);
+      removedRelationshipIdsSet.add(relationship.id);
       if (repo.requirements[relationship.sourceId]) affectedRequirements.add(relationship.sourceId);
       if (repo.requirements[relationship.targetId]) affectedRequirements.add(relationship.targetId);
     }
@@ -79,6 +95,8 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   return {
     requestedElementIds: [...requested].sort(),
     deletedElementIds: [...deleted].sort(),
+    nestedRequirementIds: [...nestedRequirementIdsSet].sort(),
+    removedRelationshipIds: [...removedRelationshipIdsSet].sort(),
     unresolvedUsageIds,
     invalidatedEvidenceIds: invalidatedEvidence.sort(),
     affectedRequirementIds: [...affectedRequirements].sort(),

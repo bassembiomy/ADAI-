@@ -272,4 +272,68 @@ describe('sysmlCommandGateway', () => {
     expect(loadResult.valid).toBe(false);
     expect(loadResult.diagnostics.some((d: any) => d.code === 'PERSISTENCE_CHECKSUM_MISMATCH')).toBe(true);
   });
+
+  it('previews container deletion impact, cancels without mutation or revision change, confirms with single revision/audit record, and undoes completely', () => {
+    let state = createSysmlGatewayState();
+    const parentReq: RequirementDefinition = {
+      id: 'req-parent', name: 'ParentReq', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-P', text: 'Parent', status: 'draft', version: '1.0',
+    };
+    const childReq: RequirementDefinition = {
+      id: 'req-child', name: 'ChildReq', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-C', text: 'Child', status: 'draft', version: '1.0',
+    };
+    const containmentRel: SysmlRelationship = {
+      id: 'rel-rc', kind: 'requirementContainment', sourceId: 'req-parent', targetId: 'req-child',
+    };
+
+    // Add elements to state
+    let r = executeSysmlCommand(state, { type: 'createElement', element: parentReq, presentation: { x: 10, y: 10, width: 100, height: 60 } });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, history: r.history };
+    r = executeSysmlCommand(state, { type: 'createElement', element: childReq, presentation: { x: 10, y: 100, width: 100, height: 60 } });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, history: r.history };
+    r = executeSysmlCommand(state, { type: 'createElement', element: containmentRel });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, history: r.history };
+
+    const initialRevision = state.repository.revision;
+    const initialAuditLength = state.repository.auditTrail.length;
+
+    // 1. Preview without confirmation hash -> uncommitted, preview lists complete subtree
+    const unconfirmed = executeSysmlCommand(state, { type: 'deleteElements', elementIds: ['req-parent'] });
+    expect(unconfirmed.committed).toBe(false);
+    expect(unconfirmed.impact).toBeDefined();
+    expect(unconfirmed.impact!.nestedRequirementIds).toEqual(['req-child']);
+    expect(unconfirmed.impact!.deletedElementIds).toEqual(expect.arrayContaining(['req-parent', 'req-child', 'rel-rc']));
+    expect(unconfirmed.repository.revision).toBe(initialRevision);
+    expect(unconfirmed.repository.auditTrail).toHaveLength(initialAuditLength);
+    expect(unconfirmed.repository.requirements['req-parent']).toBeDefined();
+    expect(unconfirmed.repository.requirements['req-child']).toBeDefined();
+
+    // 2. Confirmed deletion with computed impact hash
+    const impactHash = computeImpactHash(unconfirmed.impact!);
+    const confirmed = executeSysmlCommand(state, {
+      type: 'deleteElements',
+      elementIds: ['req-parent'],
+      confirmedImpactHash: impactHash,
+    });
+    expect(confirmed.committed).toBe(true);
+    expect(confirmed.repository.revision).toBe(initialRevision + 1);
+    expect(confirmed.repository.auditTrail).toHaveLength(initialAuditLength + 1);
+    expect(confirmed.repository.auditTrail[confirmed.repository.auditTrail.length - 1].command).toBe('deleteElements');
+    expect(confirmed.repository.requirements['req-parent']).toBeUndefined();
+    expect(confirmed.repository.requirements['req-child']).toBeUndefined();
+    expect(confirmed.repository.relationships['rel-rc']).toBeUndefined();
+
+    // 3. One undo restores exact repository prior to deletion
+    const undone = executeSysmlCommand(
+      { ...state, repository: confirmed.repository, coordinates: confirmed.coordinates, history: confirmed.history },
+      { type: 'undo' },
+    );
+    expect(undone.committed).toBe(true);
+    expect(undone.repository.requirements['req-parent']).toBeDefined();
+    expect(undone.repository.requirements['req-child']).toBeDefined();
+    expect(undone.repository.relationships['rel-rc']).toBeDefined();
+    expect(undone.repository.revision).toBe(initialRevision);
+  });
 });
+

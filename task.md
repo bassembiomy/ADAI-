@@ -16,12 +16,12 @@
 - [x] Step 6: Run GREEN and commit `feat(sysml): enforce requirement containment semantics`.
 
 ## Task 3: Add correct deletion, impact-preview, and undo behavior
-- [ ] Step 1: Write failing lifecycle tests (`src/engine/sysml/mutations.test.ts`, `src/services/sysmlTransactionAdapter.test.ts`, `src/services/sysmlCommandGateway.test.ts`).
-- [ ] Step 2: Add non-cascade tests.
-- [ ] Step 3: Add confirmation and transaction tests.
-- [ ] Step 4: Run RED.
-- [ ] Step 5: Extend the deletion closure.
-- [ ] Step 6: Run GREEN and commit `fix(sysml): enforce requirement containment deletion lifecycle`.
+- [x] Step 1: Write failing lifecycle tests (`src/engine/sysml/mutations.test.ts`, `src/services/sysmlTransactionAdapter.test.ts`, `src/services/sysmlCommandGateway.test.ts`).
+- [x] Step 2: Add non-cascade tests.
+- [x] Step 3: Add confirmation and transaction tests.
+- [x] Step 4: Run RED.
+- [x] Step 5: Extend the deletion closure.
+- [x] Step 6: Run GREEN and commit `fix(sysml): enforce requirement containment deletion lifecycle`.
 
 ## Task 4: Add contextual Requirement Diagram creation and notation
 - [ ] Step 1: Write failing component/report tests (`src/components/sysml/RelationshipEndEditor.test.tsx`, `src/features/reporting/reportDiagrams.sysml.test.ts`).

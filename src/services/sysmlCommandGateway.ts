@@ -290,7 +290,8 @@ export function projectLegacyDiagram(
       rel.kind === 'verify' ||
       rel.kind === 'refine' ||
       rel.kind === 'trace' ||
-      rel.kind === 'copy'
+      rel.kind === 'copy' ||
+      rel.kind === 'requirementContainment'
     ) {
       legacyType = rel.kind;
     }
