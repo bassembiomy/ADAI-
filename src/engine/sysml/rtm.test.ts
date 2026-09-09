@@ -129,4 +129,44 @@ describe('canonical requirements traceability matrix', () => {
     expect(csv).toContain('added');
     expect(csv).toContain('modified');
   });
+
+  it('confirms containment creates requirement hierarchy but not satisfaction/verification coverage; nested requirements remain independent RTM rows', () => {
+    const repo = createEmptyRepository();
+    repo.revision = 1;
+    repo.requirements.rRoot = requirement('rRoot');
+    repo.requirements.rMid = requirement('rMid');
+    repo.requirements.rLeaf = requirement('rLeaf');
+
+    // 3-level containment tree: rRoot -> rMid -> rLeaf
+    repo.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'rRoot', targetId: 'rMid' };
+    repo.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'rMid', targetId: 'rLeaf' };
+
+    const matrix = buildTraceabilityMatrix(repo);
+
+    // Each requirement remains an independent RTM row
+    expect(matrix.rows).toHaveLength(3);
+    const rowRoot = matrix.rows.find(r => r.requirement.id === 'rRoot')!;
+    const rowMid = matrix.rows.find(r => r.requirement.id === 'rMid')!;
+    const rowLeaf = matrix.rows.find(r => r.requirement.id === 'rLeaf')!;
+
+    expect(rowRoot).toBeDefined();
+    expect(rowMid).toBeDefined();
+    expect(rowLeaf).toBeDefined();
+
+    // Containment does NOT grant satisfaction (covered) or verification (verified)
+    expect(rowRoot.status).not.toBe('covered');
+    expect(rowRoot.status).not.toBe('verified');
+    expect(rowMid.status).not.toBe('covered');
+    expect(rowMid.status).not.toBe('verified');
+    expect(rowLeaf.status).not.toBe('covered');
+    expect(rowLeaf.status).not.toBe('verified');
+
+    // Neither has verification cases or evidence from containment
+    expect(rowRoot.verificationCases).toHaveLength(0);
+    expect(rowRoot.evidence).toHaveLength(0);
+    expect(rowMid.verificationCases).toHaveLength(0);
+    expect(rowMid.evidence).toHaveLength(0);
+    expect(rowLeaf.verificationCases).toHaveLength(0);
+    expect(rowLeaf.evidence).toHaveLength(0);
+  });
 });

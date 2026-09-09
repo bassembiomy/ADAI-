@@ -33,6 +33,13 @@ capabilities.push({
   limitation: 'No semantic-equivalence claim is made for SysML v2.',
 });
 
+capabilities.push({
+  id: 'req.containment',
+  status: 'supported',
+  normativeReference: 'OMG SysML 1.6 Clause 16.3.2.1 / UML Namespace Containment',
+  testId: 'SYSML-030',
+});
+
 export const SYSML_PROFILE = Object.freeze({
   id: 'OMG-SysML-1.6-ADIA' as const,
   sysmlVersion: '1.6' as const,

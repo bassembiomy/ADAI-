@@ -256,6 +256,29 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       automatedEvidence: ['src/engine/sysml/profile.test.ts'],
       remainingLimitation: 'No semantic-equivalence claim is made for SysML v2.',
     },
+    {
+      id: 'SYSML-030',
+      capability: 'Requirement containment',
+      status: 'supported',
+      normativeReference: 'OMG SysML 1.6 Clause 16.3.2.1 / UML Namespace Containment',
+      implementationEvidence: [
+        'src/engine/sysml/model.ts',
+        'src/engine/sysml/requirements.ts',
+        'src/engine/sysml/mutations.ts',
+        'src/services/sysmlCommandGateway.ts',
+        'src/components/sysml/RelationshipEndEditor.tsx',
+        'src/features/reporting/reportDiagrams.ts',
+      ],
+      automatedEvidence: [
+        'src/engine/sysml/requirements.test.ts',
+        'src/engine/sysml/validation.test.ts',
+        'src/engine/sysml/mutations.test.ts',
+        'src/services/sysmlCommandGateway.test.ts',
+        'src/components/sysml/RelationshipEndEditor.test.tsx',
+        'src/features/reporting/reportDiagrams.sysml.test.ts',
+        'tests/e2e/sysml-deletion-lifecycle.spec.ts',
+      ],
+    },
   ],
 };
 

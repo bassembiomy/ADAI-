@@ -27,4 +27,11 @@ describe('ADIA SysML profile', () => {
   it('keeps SysML v2 outside the semantic-equivalence claim', () => {
     expect(getCapability('interop.sysmlV2')?.status).toBe('unsupported');
   });
+
+  it('registers req.containment capability with conformance evidence', () => {
+    const capability = getCapability('req.containment');
+    expect(capability?.id).toBe('req.containment');
+    expect(capability?.status).toBe('supported');
+    expect(capability?.testId).toBe('SYSML-030');
+  });
 });

@@ -41,10 +41,11 @@
 - [x] Step 6: Run GREEN and commit `feat(sysml): separate diagram removal from model deletion`.
 
 ## Task 6: Integrate RTM, reports, fixture, conformance evidence, and browser qualification
-- [ ] Step 1: Add failing RTM and fixture tests (`src/engine/sysml/rtm.test.ts`, `src/engine/sysml/profileFixture.test.ts`).
-- [ ] Step 2: Add failing browser creation test.
-- [ ] Step 3: Add failing browser lifecycle test.
-- [ ] Step 4: Implement fixture/profile evidence (`req.containment` in `src/engine/sysml/profile.ts` & `src/engine/sysml/conformanceManifest.ts`).
-- [ ] Step 5: Run the full qualification gate (`npm run test:sysml:full-release`).
-- [ ] Step 6: Audit and promote in `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md`.
-- [ ] Step 7: Commit `test(sysml): qualify requirement containment lifecycle`.
+- [x] Step 1: Add failing RTM and fixture tests (`src/engine/sysml/rtm.test.ts`, `src/engine/sysml/profileFixture.test.ts`).
+- [x] Step 2: Add failing browser creation test.
+- [x] Step 3: Add failing browser lifecycle test.
+- [x] Step 4: Implement fixture/profile evidence (`req.containment` in `src/engine/sysml/profile.ts` & `src/engine/sysml/conformanceManifest.ts`).
+- [x] Step 5: Run the full qualification gate (`npm run test:sysml:full-release`).
+- [x] Step 6: Audit and promote in `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md`.
+- [x] Step 7: Commit `test(sysml): qualify requirement containment lifecycle`.
+
