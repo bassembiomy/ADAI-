@@ -15,6 +15,7 @@ import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
 import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
+import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -7361,6 +7362,9 @@ const ADIA = () => {
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
 
+      const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
+      if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
+
       // DOE Modeling Suite
       if (importedData.doe) {
         if (importedData.doe.headers) setHeaders(importedData.doe.headers);
@@ -7626,6 +7630,7 @@ const ADIA = () => {
       workspaceFiles,
       openTabIds,
       activeFileId,
+      plantUml: { version: 1, diagrams: [plantUmlDiagram] },
     });
   }, [
     currentProjectName,
@@ -7662,6 +7667,7 @@ const ADIA = () => {
     workspaceFiles,
     openTabIds,
     activeFileId,
+    plantUmlDiagram,
   ]);
 
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
