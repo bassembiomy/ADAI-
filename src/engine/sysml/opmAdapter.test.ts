@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from './model';
 import { assessOpmRoundTripLoss, projectSysmlToOpm } from './opmAdapter';
+import { loadRepository } from './persistence';
+import representativeFixture from './fixtures/representative-profile.json';
 
 const model = (): SysmlRepository => {
   const repo = createEmptyRepository();
@@ -46,5 +48,25 @@ describe('loss-aware SysML to OPM adapter', () => {
     expect(loss.lossless).toBe(false);
     expect(loss.lossySourceIds).toContain('comp');
     expect(repo).toEqual(before);
+  });
+
+  it('qualifies loss diagnostics comprehensively across normative fixture constructs', () => {
+    const { repository: repo } = loadRepository(representativeFixture);
+    const projection = projectSysmlToOpm(repo);
+
+    const diagnosticCodes = new Set(projection.diagnostics.map(d => d.code));
+    expect(diagnosticCodes.has('OPM_COMPOSITION_OWNERSHIP_LOSS')).toBe(true);
+    expect(diagnosticCodes.has('OPM_SHARED_AGGREGATION_LOSS')).toBe(true);
+    expect(diagnosticCodes.has('OPM_IBD_CONNECTOR_UNSUPPORTED')).toBe(true);
+    expect(diagnosticCodes.has('OPM_USAGE_UNSUPPORTED')).toBe(true);
+    expect(diagnosticCodes.has('OPM_RELATIONSHIP_UNSUPPORTED')).toBe(true);
+
+    const generalizationEdge = projection.edges.find(e => e.type === 'generalization');
+    expect(generalizationEdge).toBeDefined();
+    expect(generalizationEdge?.mappingStatus).toBe('mapped');
+
+    const loss = assessOpmRoundTripLoss(repo, projection);
+    expect(loss.lossless).toBe(false);
+    expect(loss.lossySourceIds.length).toBeGreaterThan(0);
   });
 });

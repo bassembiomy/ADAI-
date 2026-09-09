@@ -50,12 +50,12 @@
 - [x] Step 6: Verify and commit `test(sysml): add browser conformance qualification`.
 
 ## Task 7: Add normative model fixtures and interchange diagnostics
-- [ ] Step 1: Build fixture test first (`src/engine/sysml/profileFixture.test.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Add the fixture `src/engine/sysml/fixtures/representative-profile.json`.
-- [ ] Step 4: Qualify loss diagnostics in `src/engine/sysml/opmAdapter.test.ts`.
-- [ ] Step 5: Document interoperability boundaries in `docs/SYSML_INTERCHANGE_LIMITATIONS.md`.
-- [ ] Step 6: Verify and commit `test(sysml): add normative representative model fixture`.
+- [x] Step 1: Build fixture test first (`src/engine/sysml/profileFixture.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Add the fixture `src/engine/sysml/fixtures/representative-profile.json`.
+- [x] Step 4: Qualify loss diagnostics in `src/engine/sysml/opmAdapter.test.ts`.
+- [x] Step 5: Document interoperability boundaries in `docs/SYSML_INTERCHANGE_LIMITATIONS.md`.
+- [x] Step 6: Verify and commit `test(sysml): add normative representative model fixture`.
 
 ## Task 8: Turn the conformance matrix into an executable release manifest
 - [ ] Step 1: Write failing completeness test (`src/engine/sysml/conformanceManifest.test.ts`).
