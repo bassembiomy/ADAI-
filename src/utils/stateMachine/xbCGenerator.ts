@@ -3313,7 +3313,11 @@ const renderDiscreteStateUpdates = (
       state, operation, layout, member,
     ),
   ];
-  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') || operation.inputSignalIds[0] === undefined
+  const firstInput = operation.inputSignalIds[0];
+  const firstInputIsVector = operation.type === 'RATE_LIMITER'
+    && firstInput !== undefined
+    && state.xBridges!.signals[firstInput]?.shape.kind !== 'scalar';
+  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER' || firstInputIsVector) || operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
   if (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') {
@@ -3758,6 +3762,24 @@ const renderDiscreteStateUpdates = (
         const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
         const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
         const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        const inputId = operation.inputSignalIds[0];
+        const inputSignal = inputId === undefined ? undefined : requireSignal(state, inputId);
+        if (inputSignal?.shape.kind !== 'scalar' || slot.shape.kind !== 'scalar') {
+          if (inputId === undefined || slot.shape.kind !== 'vector') return [];
+          const count = slot.shape.length;
+          return Array.from({ length: count }, (_, index) => {
+            const indexText = `${index}U`;
+            const current = signalElementRealExpression(state, inputId, layout, member, indexText);
+            const previous = stateSlotElementRealExpression(slot, layout, member, indexText);
+            const expr = `(${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
+            return renderStateSlotElementAssignment(
+              state, slot, indexText, expr, layout,
+              member,
+              `${operation.id}_${slotIndex}_update_${index}`,
+              layout.errorFields.get(operation.id), operation,
+            );
+          }).flat();
+        }
         const prev_y = stateSlotRealExpression(slot, layout, member);
 
         const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
