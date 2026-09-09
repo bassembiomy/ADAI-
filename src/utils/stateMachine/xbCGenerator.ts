@@ -980,8 +980,8 @@ const emitClock: OperationEmitter = (state, operation, operationIndex, layout, m
   if (outputSignalId === undefined) return [];
   const dt = cNumber(state.xBridges!.solver.stepSeconds);
   return [
-    `    instance->${member}.sim_time += (${dt});`,
     ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
+    `    instance->${member}.sim_time += (${dt});`,
   ];
 };
 
@@ -995,7 +995,7 @@ const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, lay
   const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
   const prefix = `wave_${operationIndex}`;
   const lines = [
-    `    double ${prefix}_t = instance->${member}.sim_time;`,
+    `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
     `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
     `    double ${prefix}_val = (${bias});`,
   ];
@@ -2474,8 +2474,8 @@ const renderStateOutputs = (
     if (outputSignalId !== undefined) {
       const dt = cNumber(state.xBridges!.solver.stepSeconds);
       return [
-        `    instance->${member}.sim_time += (${dt});`,
         ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
+        `    instance->${member}.sim_time += (${dt});`,
       ];
     }
   }
@@ -2489,7 +2489,10 @@ const renderStateOutputs = (
       const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
       const prefix = `wave_${operationIndex}`;
       const lines = [
-        `    double ${prefix}_t = instance->${member}.sim_time;`,
+        // Clock advances the shared simulation time before later direct
+        // operations run. The interpreter evaluates WaveformGen at the
+        // beginning of the substep, so compensate for that advance here.
+        `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
         `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
         `    double ${prefix}_val = (${bias});`,
       ];
@@ -2603,7 +2606,10 @@ const renderStateOutputs = (
     const xHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'x_hat');
     const yHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_hat');
     const innovationId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'innovation');
-    const kId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'K');
+    const kId = operation.outputSignalIds.find((id) => {
+      const portId = state.xBridges!.signals[id]?.portId;
+      return portId === 'K' || portId === 'kg';
+    });
     if (xSlot !== undefined && pSlot !== undefined) {
       const uId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'u');
       const yMeasId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_meas');
