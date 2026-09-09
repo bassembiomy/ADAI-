@@ -303,6 +303,18 @@ const recordOperationFault = (
   }
 };
 
+const shouldRecordFault = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+  fault: XBNumericFault,
+): boolean => {
+  if (fault !== 'non-finite') return true;
+  if (['SATURATION', 'Saturation', 'DEADZONE', 'Deadzone', 'RateLimiter', 'RATE_LIMITER', 'POW', 'POWER', 'VectorPow', 'VECTOR_POW'].includes(operation.type)) return false;
+  if (['GAIN', 'Gain'].includes(operation.type)) return true;
+  return operationFaultContract(runtime, operation).errorSignalId !== null
+    || runtime.ir.policy.numericFault === 'escalate';
+};
+
 const hasSolvePivotFailure = (
   matrix: readonly XBScalar[],
   dimension: number,
@@ -2081,7 +2093,7 @@ const executeDirectOperations = (
     const intrinsicFault = intrinsicOperationFault(runtime, operation);
     if (intrinsicFault !== null && faults[faultStart] === undefined) faults.push(intrinsicFault);
     const fault = intrinsicFault ?? faults[faultStart];
-    if (fault !== undefined) {
+    if (fault !== undefined && shouldRecordFault(runtime, operation, fault)) {
       recordOperationFault(runtime, operation, fault, snapshot);
     }
   }
@@ -2237,7 +2249,7 @@ const executeSolverSubstep = (
       || operation.type === 'Integrator') {
       writeStateOutputs(runtime, operation, faults);
       const fault = faults[faultStart];
-      if (fault !== undefined) {
+      if (fault !== undefined && shouldRecordFault(runtime, operation, fault)) {
         recordOperationFault(runtime, operation, fault, outputSnapshot);
       }
     }
@@ -2256,7 +2268,7 @@ const executeSolverSubstep = (
     const faultStart = faults.length;
     const updates = statefulUpdate(runtime, operation, faults);
     const fault = faults[faultStart];
-    if (fault !== undefined) {
+    if (fault !== undefined && shouldRecordFault(runtime, operation, fault)) {
       recordOperationFault(runtime, operation, fault, snapshot);
       continue;
     }

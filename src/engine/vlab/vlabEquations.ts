@@ -1844,12 +1844,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       }
     }
 
-    let y = 0;
+    let y = NaN;
     if (deployment && deployment.schemaVersion === 1) {
       const res = evaluateDOEModelDetailed(deployment, across);
       if (!res.success) {
+        if (params) params._runtimeDiagnostic = res.diagnostic;
         if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
-        y = 0;
+        y = NaN;
       } else {
         if (params) params._runtimeDiagnostic = null;
         y = res.value;
@@ -1860,8 +1861,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
         const factorNames = across.map((_, i) => `X${i + 1}`);
         const res = evaluateLegacyDOEEquationDetailed(eq, factorNames, across);
         if (!res.success) {
-        if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
-        y = 0;
+          if (params) params._runtimeDiagnostic = res.diagnostic;
+          if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
+          y = NaN;
         } else {
           if (params) params._runtimeDiagnostic = null;
           y = res.value;
@@ -1872,8 +1874,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
           severity: 'error' as const,
           message: 'doe_custom block has no deployment model or equation configured.'
         };
+        if (params) params._runtimeDiagnostic = diag;
         if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = diag;
-        y = 0;
+        y = NaN;
       }
     }
     return [branch[0] - y];

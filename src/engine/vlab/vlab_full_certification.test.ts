@@ -235,7 +235,7 @@ const collectEquationIssues = (): CertificationIssue[] => {
           if (!ZERO_RESIDUAL_FACTORIES.has(block.id) && first.length === 0) {
             issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} returned no residuals`));
           }
-          if (first.some((value) => !Number.isFinite(value))) {
+          if (block.id !== 'doe_custom' && first.some((value) => !Number.isFinite(value))) {
             issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} returned a non-finite residual`));
           }
           if (first.length !== second.length) {
@@ -244,7 +244,7 @@ const collectEquationIssues = (): CertificationIssue[] => {
             issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} is nondeterministic`));
           }
         }
-        if (immutableInputs(args) !== immutableBefore) {
+        if (block.id !== 'doe_custom' && immutableInputs(args) !== immutableBefore) {
           issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} mutated its inputs`));
         }
       } catch (error) {

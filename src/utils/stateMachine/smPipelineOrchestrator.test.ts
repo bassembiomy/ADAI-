@@ -3,6 +3,16 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { flatOrFixture } from './smFixtures';
 import { buildSemanticModel } from './smSemanticBuilder';
+
+const cleanupTestDirectory = (directory: string): void => {
+  if (!fs.existsSync(directory)) return;
+  try {
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  } catch {
+    // Windows may briefly retain compiler-created files; cleanup must not
+    // convert an otherwise successful gate test into a failure.
+  }
+};
 import {
   runVerificationPipeline,
   type SMVerificationAdapters,
@@ -107,7 +117,7 @@ describe('smPipelineOrchestrator gate-order and status truth-table', () => {
       expect(parsed.schemaVersion).toBe(1);
       expect(parsed.acceptance).toBe(true);
     } finally {
-      if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
+      cleanupTestDirectory(outDir);
     }
   });
 
@@ -150,7 +160,7 @@ describe('smPipelineOrchestrator gate-order and status truth-table', () => {
       expect(bundle.activities['branch-coverage'].status).toBe('NOT_RUN');
       expect(bundle.activities['differential'].status).toBe('NOT_RUN');
     } finally {
-      if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
+      cleanupTestDirectory(outDir);
     }
   });
 
@@ -179,7 +189,7 @@ describe('smPipelineOrchestrator gate-order and status truth-table', () => {
       expect(bundle.activities['test-generation'].status).toBe('NOT_RUN');
       expect(bundle.activities['host-compilation'].status).toBe('NOT_RUN');
     } finally {
-      if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
+      cleanupTestDirectory(outDir);
     }
   });
 });
