@@ -923,7 +923,9 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
     const initialFmt = `${initialValue.toFixed(1)}`;
     const finalFmt = `${finalValue.toFixed(1)}`;
     const timerIndexSymbol = timerSource.stateIndexSymbol;
-    const expr = `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
+    const expr = threshold.milliseconds <= 0
+      ? finalFmt
+      : `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
     return renderSignalWrite(
       state,
       operation,
@@ -2254,8 +2256,8 @@ const renderPIDComputation = (
         `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d}) / (1.0 + (${n}) * (${dt}));`,
         `            ${d} = (${d} + (${n}) * ${e} * (${dt})) / (1.0 + (${n}) * (${dt}));`,
       ] : [
-        `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + (${n}) * (${dt}));`,
-        `            ${d} = (${d} * (2.0 - (${n}) * (${dt})) + 2.0 * (${n}) * ${e} * (${dt})) / (2.0 + (${n}) * (${dt}));`,
+      `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + (${n}) * (${dt}));`,
+      `            ${d} = ${e};`,
       ];
   return [
     `        const double ${e} = ${signalRealExpression(state, errorId, layout, member)};`,
