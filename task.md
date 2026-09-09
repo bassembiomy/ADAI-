@@ -12,12 +12,12 @@
   - [x] Step 3: Implement column with parent, child, covering blocks, and connection type pills in `TraceabilityMatrix.tsx`
   - [x] Step 4: Run test to verify GREEN
   - [x] Step 5: Commit `feat(sysml): display hierarchy and covering blocks in standard rtm table`
-- [ ] Task 3: Add Hierarchy & Covering Blocks to Virtualized Traceability Grid
-  - [ ] Step 1: Write failing test in `src/components/sysml/VirtualizedTraceabilityGrid.test.tsx`
-  - [ ] Step 2: Run test to verify RED
-  - [ ] Step 3: Implement column in `VirtualizedTraceabilityGrid.tsx`
-  - [ ] Step 4: Run test to verify GREEN
-  - [ ] Step 5: Commit `feat(sysml): display hierarchy and covering blocks in virtualized rtm grid`
+- [x] Task 3: Add Hierarchy & Covering Blocks to Virtualized Traceability Grid
+  - [x] Step 1: Write failing test in `src/components/sysml/VirtualizedTraceabilityGrid.test.tsx`
+  - [x] Step 2: Run test to verify RED
+  - [x] Step 3: Implement column in `VirtualizedTraceabilityGrid.tsx`
+  - [x] Step 4: Run test to verify GREEN
+  - [x] Step 5: Commit `feat(sysml): display hierarchy and covering blocks in virtualized rtm grid`
 - [ ] Task 4: Full Suite Qualification & End-to-End Verification
   - [ ] Step 1: Run `npm run test:sysml` (27 test files, 187+ tests)
   - [ ] Step 2: Run `npm run build`
