@@ -64,6 +64,51 @@ describe('VLab Port Connection Validation', () => {
     expect(result.error).toBeUndefined();
   });
 
+  it('rejects a PS Constant connected directly to an electrical conserving port', () => {
+    const psConstant = {
+      data: {
+        type: 'ps_constant',
+        ports: [{ id: 'y', domain: 'Physical' }],
+        label: 'DC Command'
+      }
+    };
+    const resistor = {
+      data: {
+        type: 'resistor',
+        ports: [{ id: 'p', domain: 'Electrical' }, { id: 'n', domain: 'Electrical' }],
+        label: 'Load'
+      }
+    };
+
+    const result = validateConnection(psConstant, resistor, 'y_s', 'p_t');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('Cannot connect physical port (DC Command) to electrical port (Load)');
+  });
+
+  it('allows a PS Constant to drive the physical-signal control port of a controlled voltage source', () => {
+    const psConstant = {
+      data: {
+        type: 'ps_constant',
+        ports: [{ id: 'y', domain: 'Physical' }],
+        label: 'Voltage Command'
+      }
+    };
+    const controlledVoltage = {
+      data: {
+        type: 'controlled_voltage',
+        ports: [
+          { id: 'p', domain: 'Electrical' },
+          { id: 'n', domain: 'Electrical' },
+          { id: 's', domain: 'Physical' }
+        ],
+        label: 'Controlled Source'
+      }
+    };
+
+    const result = validateConnection(psConstant, controlledVoltage, 'y_s', 's_t');
+    expect(result.valid).toBe(true);
+  });
+
   it('allows universal measurement connections to scope or probe across domains', () => {
     const thermalSensor = {
       data: { type: 'temp_sensor', domain: 'Thermal', label: 'Temp Sensor' }
