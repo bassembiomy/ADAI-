@@ -5,6 +5,7 @@ export const air_fryer_sysml = new URL('./assets/air_fryer_sysml_diagram_1778581
 export const state_machine_guide_diagram = new URL('./assets/state_machine_guide_diagram.png', import.meta.url).href;
 export const state_machine_simulation_diagram = new URL('./assets/state_machine_simulation_diagram.png', import.meta.url).href;
 export const hil_architecture_diagram = new URL('./assets/hil_architecture_diagram.png', import.meta.url).href;
+export const entropy_opm_architecture_diagram = new URL('./assets/entropy_opm_architecture_diagram.svg', import.meta.url).href;
 
 export const HELP_DATA: Record<string, {
   title: string;
@@ -53,7 +54,7 @@ export const HELP_DATA: Record<string, {
         ]
       }
     ],
-    related: ["architecture-guide", "state-machine-fundamentals", "vlab-fundamentals", "xbridges-ref", "hil-fundamentals"]
+    related: ["architecture-guide", "entropy-opm", "state-machine-fundamentals", "vlab-fundamentals", "xbridges-ref", "hil-fundamentals"]
   },
 
   "architecture-guide": {
@@ -120,7 +121,115 @@ export const HELP_DATA: Record<string, {
         body: "OPM provides a dual conceptual modeling approach using Object-Process Diagrams (OPD) and Object-Process Language (OPL) text:\n\n1. Click **+ Add Object** (rectangular node) to represent physical or informatical entities.\n2. Click **+ Add Process** (oval node) to represent transformations that create, consume, or change the state of objects.\n3. Connect objects and processes using procedural links (consumption, effect, instrument, agent) or structural links.\n4. Click **View OPL** to inspect automatically generated formal English specifications matching ISO 19450 standards."
       }
     ],
-    related: ["getting-started", "air-fryer-sysml", "state-machine-fundamentals"]
+    related: ["getting-started", "entropy-opm", "air-fryer-sysml", "state-machine-fundamentals"]
+  },
+
+  "entropy-opm": {
+    title: "OPM (ISO 19450) & ENTROPY Embedded C Engine",
+    category: "Architecture",
+    description: "Master Object-Process Methodology (ISO 19450) single-model systems engineering, dual conceptual/executable layers, 10-phase deterministic simulation, and MISRA-compliant safety-critical C99 code generation.",
+    content: "Entropy is the name of ADIA's diagramming module that implements Object-Process Methodology (ISO 19450) — a single-model systems-engineering notation where structure (objects), behavior (processes/states), and requirements all live on one diagram instead of separate SysML views. It is exposed as the 'OPM (ISO 19450)' tab in the top navigation bar.",
+    image: entropy_opm_architecture_diagram,
+    sections: [
+      {
+        title: "1. What 'OPM Entropy' Actually Is (Dual-Layer Architecture)",
+        body: "Entropy is built as two stacked layers with clear separation of responsibilities:\n\n• **Conceptual OPM**: Free-form ISO 19450 diagramming: Objects, Processes, States, Requirements, structural/procedural/event/traceability links. Always valid, never blocks editing.\n• **Executable OPM**: An optional, strict superset: typed attributes, guards, priorities, timeouts, and hardware I/O mapping. Only active once you explicitly enable execution on a block.\n\nThe core design principle is: **'conceptual is permissive, executable is strict, and the boundary between them is explicit and reversible.'** Editing never forces you into the strict model; only Simulate and Generate-Code do.",
+        list: [
+          "**Conceptual Layer Files**: `EntropyWorkspace.tsx`, `OPMNodeComponents.tsx`, `OPMEdgeComponents.tsx`, `OplParser.ts` (OPD ⇄ OPL text bidirectional synchronization).",
+          "**Executable Layer Engine**: `src/engine/opm/*` (`compileExecutableOpm`, deterministic runtime, `semanticValidator`, C99 code generator).",
+          "**Permissive vs Strict Boundary**: Canvas editing is completely permissive and never blocks rapid sketching; semantic validation and strict execution gates only engage during simulation and firmware generation."
+        ]
+      },
+      {
+        title: "2. The Core Design Concept & Execution Pipeline",
+        body: "The end-to-end pipeline routes canvas elements through deterministic normalization and semantic validation before executing in the TypeScript runtime or emitting MISRA-compliant C99 firmware:",
+        code: `OPM Editor Canvas (React Flow)
+        │  Objects / Processes / States / Requirements + typed Links
+        ▼
+Deterministic Normalization  (stable ordinal IDs, C-safe identifiers)
+        ▼
+Restricted Expression Parser (safe guard/assignment language: +,-,*,/,%,&&,||,abs/min/max/clamp)
+        ▼
+Semantic Validator  (one initial state per object, reachability, write-conflict detection)
+        ▼
+   ┌─────────────────────┐        ┌────────────────────────────┐
+   │ TypeScript Runtime   │        │  C99 Code Generator         │
+   │ 10-phase tick cycle  │        │  12 static files, no malloc │
+   └─────────────────────┘        └────────────────────────────┘`,
+        list: [
+          "**ISO 19450 Fidelity First**: Node and edge visuals follow the standard's notation exactly: filled vs hollow arrowheads (agent vs instrument), double arrowheads for 'effect', dashed lines for event links (trigger/condition), and triangle/circle glyphs for structural links (aggregation/generalization/exhibition). The live legend (`OpmLegend.tsx`) provides continuous visual guidance.",
+          "**Single Canonical Model**: Whether sketching or generating firmware, everything funnels through one `compileExecutableOpm()` pipeline — no separate 'diagram' vs 'code' model to keep in sync.",
+          "**Deterministic, MISRA-Friendly Execution**: The runtime and generated C share the exact same 10-phase tick (sample inputs ──► advance timers ──► activate ──► evaluate on frozen snapshot ──► stage writes ──► resolve conflicts by priority ──► commit ──► run entry/exit actions ──► publish outputs ──► advance clock). Zero heap allocation, no recursion, no function pointers, bounded arrays.",
+          "**Strict Isolation**: OPM's engine and generator are deliberately walled off from other engines (Stateflow, X-Bridges) with enforced architectural boundary tests.",
+          "**Fail-Closed UX**: Invalid connections are rejected before being added to the canvas; invalid models cannot be simulated or exported; editing a model invalidates previously verified C artifacts via cryptographic fingerprinting."
+        ]
+      },
+      {
+        title: "3. Block Types & Port Catalogues (ISO 19450)",
+        body: "Four primary block types represent structure, behavior, and traceability in ISO 19450:\n\n• **Object**: Rounded rectangle, green, thick border if `physical`. Represents an entity that exists and can hold nested States.\n• **Process**: Ellipse, blue, orange pulse when firing. Represents a transformation or action.\n• **State**: Small capsule nested inside an Object. Represents one value/mode of that object; a filled dot marks the ISO initial state.\n• **Requirement**: Purple dashed card. Non-executable traceability node (`satisfies`/`verifies` only).\n\nEach block gets an automatic default port catalogue upon creation, and custom ports can be added from the right-side inspector.",
+        list: [
+          "**Object Default Ports**: Outputs: `Agent`, `Instrument`, generic `Out`; Inputs: `Result`, `Effect`.",
+          "**Process Default Ports**: Inputs: `Consume`, `Agent`, `Instrument`, `Trigger`, `Condition`; Outputs: `Result`, `Effect`.",
+          "**Physicality Toggle**: Marks real-world hardware objects and processes with a thicker border, unlocking physical MCU pin and register mappings in C code generation.",
+          "**Custom Port Inspector**: Add custom ports with Name, Direction (`In`/`Out`), Side (`Left`/`Right`/`Top`/`Bottom`), and Role (`Standard`, `Agent`, `Instrument`, `Trigger`, `Condition`, `Consume`, `Result`, `Effect`)."
+        ]
+      },
+      {
+        title: "4. Link Types & Legal Connection Rulebook",
+        body: "Links are validated by `OpmLinkRules.ts` (`validateOpmConnection`) on every drag. Self-connections and duplicate same-type links are rejected with on-canvas error alerts and Diagnostics Badge entries.",
+        list: [
+          "**Agent (Object ──► Process)**: An object or human executes the process (solid line, filled arrowhead).",
+          "**Instrument (Object ──► Process)**: An object enables the process without being consumed (solid line, hollow arrowhead).",
+          "**Consumption (Object/State ──► Process)**: The process consumes and destroys the source entity (solid line, filled arrowhead).",
+          "**Result (Process ──► Object/State)**: The process creates the target object or enters the target state (solid line, filled arrowhead).",
+          "**Effect (Process ◄──► Object/State)**: The process changes the target's state (bidirectional allowed, double filled arrowheads).",
+          "**Trigger (State ──► State or Object/State ──► Process)**: Event-based: entering a state triggers a process or transition (dashed line, filled arrowhead).",
+          "**Condition (Object/State ──► Process)**: Process fires only while this state holds without consumption (dashed line, hollow arrowhead).",
+          "**Aggregation / Generalization / Exhibition (Object ──► Object)**: Structural links representing 'consists-of', 'is-a', and 'exhibits' hierarchies.",
+          "**Satisfies / Verifies (Requirement ──► Object/Process)**: Non-executable traceability connecting requirements to architectural implementations."
+        ]
+      },
+      {
+        title: "5. How to Design a System with OPM Entropy (Step-by-Step)",
+        body: "Follow this 11-step engineering workflow to construct, verify, simulate, and export firmware from an OPM model:",
+        list: [
+          "**1. Open ENTROPY OPM**: Navigate to the 'OPM (ISO 19450)' tab from the top workspace switcher.",
+          "**2. Place Blocks**: Pick a tool (Object / Process / State / Requirement) in the left toolbar and click the canvas. Add States by selecting the State tool and clicking inside an existing Object.",
+          "**3. Mark Physicality**: Toggle 'Physical' on Objects/Processes representing real hardware to get a thicker border and unlock C hardware-mapping options.",
+          "**4. Wire the Behavior**: Select the Link Mode dropdown before dragging (Agent, Instrument, Trigger, Condition, Result, Effect).",
+          "**5. Add Structure (Optional)**: Use Aggregation to model composition ('System consists of Sensor and Actuator') and Generalization for inheritance hierarchies.",
+          "**6. Attach Requirements (Optional)**: Place Requirement nodes and connect them with Satisfies/Verifies links to fulfilling Objects/Processes.",
+          "**7. Check OPL Text**: Inspect the synchronized natural-language Object-Process Language sentences (`OplParser.ts`). Full worked templates (Smart Home, Cruise Control, Steam Air Fryer) can be loaded from `EntropyExamples.ts`.",
+          "**8. Make It Executable (Optional)**: Select an element and open the 'C Exec' inspector tab to add typed attributes (bool/int32/uint32/float32/enum), hardware mappings, guards, assignments, timeouts, and execution priorities.",
+          "**9. Simulate**: Open the in-canvas Live Trace HUD to observe active states, firing processes, and variable scopes tick-by-tick using the OPM-owned tick configuration.",
+          "**10. Fix Diagnostics**: Click any warning or error in the Diagnostics Badge (bottom-left) to navigate directly to the offending block or property.",
+          "**11. Generate Embedded C**: Open Target Settings, choose an MCU target pack (STM32F103/F407, ATmega328P/2560, ESP32), and export the verified 12-file MISRA-C package (`opm_runtime.c/h`, `opm_model.c/h`, `opm_io.c/h`, `opm_trace.c/h`, `main_example.c`)."
+        ]
+      },
+      {
+        title: "6. How to Connect Ports (The Actual Mechanics & Wiring Patterns)",
+        body: "Port connection mechanics in ADIA Entropy provide real-time visual feedback, magnetic snapping, and fail-closed validation:",
+        list: [
+          "**1. Pick Link Type First**: Select the link mode in the left toolbar before dragging to highlight only valid target ports.",
+          "**2. Hover Source Port**: Ports appear as colored circular handles (Agent: sky blue, Instrument: dark sky, Trigger: amber, Condition: purple, Effect: pink, Result: emerald, Consumption: slate) with text pill labels.",
+          "**3. Drag with Visual Feedback**: The connection line glows amber and magnetically snaps to compatible ports within ~30px while non-compatible targets remain unhighlighted.",
+          "**4. Drop & Validation**: `isValidConnection` and `onConnect` run `validateOpmPortConnection` to verify endpoints exist, prevent self-loops, prevent duplicates, and ensure role/direction legality.",
+          "**5. Add Custom Ports**: Open the inspector for any block, click 'Add Custom Port', and specify name, direction, side, and role.",
+          "**6. Inline Edge Switcher**: Select an edge to display a floating pill badge with an icon, link name, delete button, and inline type-switcher dropdown.",
+          "**7. Cascade Deletion**: Deleting a port automatically removes all connected edges to prevent dangling references.",
+          "**'X does Y'**: `Agent` (Object ──► Process).",
+          "**'Y uses X'**: `Instrument` (Object ──► Process).",
+          "**'Y consumes X'**: `Consumption` (Object/State ──► Process).",
+          "**'Y creates X'**: `Result` (Process ──► Object/State).",
+          "**'Y changes X'**: `Effect` (Process ◄──► Object/State).",
+          "**'When X, do Y'**: `Trigger` (State ──► Process or State ──► State).",
+          "**'While X, allow Y'**: `Condition` (Object/State ──► Process).",
+          "**'X is part of Y'**: `Aggregation` (Object ──► Object).",
+          "**'Requirement R is met by X'**: `Satisfies` / `Verifies` (Requirement ──► Object/Process)."
+        ]
+      }
+    ],
+    related: ["architecture-guide", "getting-started", "code-generation"]
   },
 
   "air-fryer-sysml": {

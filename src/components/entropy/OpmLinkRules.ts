@@ -49,7 +49,7 @@ export function validateOpmConnection(
     case 'aggregation':
     case 'generalization':
     case 'exhibition':
-      if (srcIsObjectish && tgtIsObjectish) return { allowed: true };
+      if (sourceType === 'object' && targetType === 'object') return { allowed: true };
       return { allowed: false, reason: `Structural ${linkType} links connect two Objects.` };
     case 'satisfies':
     case 'verifies':
@@ -66,7 +66,19 @@ export function validateOpmConnectionContract(
   linkType: string,
 ): { valid: boolean; code?: string; reason?: string } {
   if (['aggregation', 'generalization', 'exhibition'].includes(linkType)) {
-    return { valid: sourceType === 'object' && targetType === 'object' };
+    if (sourceType === 'requirement' || targetType === 'requirement') {
+      return {
+        valid: false,
+        code: 'OPM_REQUIREMENT_STRUCTURAL_LINK_INVALID',
+        reason: `Structural ${linkType} links are not permitted on Requirements. Use satisfies or verifies links.`,
+      };
+    }
+    const valid = sourceType === 'object' && targetType === 'object';
+    return valid ? { valid } : {
+      valid: false,
+      code: 'OPM_INVALID_LINK_DIRECTION',
+      reason: `Structural ${linkType} links connect two Objects.`,
+    };
   }
   if (['satisfies', 'verifies'].includes(linkType)) {
     const valid = sourceType === 'requirement' && ['object', 'process'].includes(targetType);

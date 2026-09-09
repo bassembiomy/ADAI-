@@ -105,7 +105,22 @@ import {
   renderInteractiveDiagramHierarchy,
   renderStateMachineDiagrams,
 } from './features/reporting';
-import { cascadeDeleteReportElement } from './services/reportModelConsistency';
+import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
+import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
+import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
+import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
+import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
+import { validateAssociationEnds } from './engine/sysml/bdd';
+import { validateConnector } from './engine/sysml/ibd';
+import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
+import { loadRepository, serializeRepository } from './engine/sysml/persistence';
+import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
+import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
+import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { loadCanonicalSysmlProject } from './services/sysmlCommandGateway';
+import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -117,6 +132,15 @@ const escapeHtml = (str: unknown): string => {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
     .replace(/\x60/g, '&#96;');
+};
+
+const safeParseMultiplicity = (str?: string) => {
+  if (!str) return undefined;
+  try {
+    return parseMultiplicity(str);
+  } catch {
+    return undefined;
+  }
 };
 
 // Security Helper: Safe React renderer for Help Center bold text without dangerouslySetInnerHTML
@@ -826,7 +850,7 @@ const FloatingWindow = ({
 
 
 
-const TraceabilityMatrix = ({
+const LegacyTraceabilityMatrix = ({
   blocks,
   relationships,
   parts,
@@ -4905,13 +4929,20 @@ const DynamicIcon = ({ name, size, className }: { name?: string; size: number; c
   }
 };
 
-const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
-  const [activeTopic, setActiveTopic] = useState<string>("getting-started");
+const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose: () => void; initialTopic?: string }) => {
+  const [activeTopic, setActiveTopic] = useState<string>(initialTopic || "getting-started");
   const [searchQuery, setSearchQuery] = useState("");
   const [showBlockRef, setShowBlockRef] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
+
+  useEffect(() => {
+    if (initialTopic && isOpen) {
+      setActiveTopic(initialTopic);
+      setShowBlockRef(false);
+    }
+  }, [initialTopic, isOpen]);
   
   if (!isOpen) return null;
 
@@ -6118,7 +6149,14 @@ const ADIA = () => {
     });
     syncTabRef.current(mode);
   }, []);
-  const [activePropTab, setActivePropTab] = useState<'general' | 'assign'>('general');
+  const [helpInitialTopic, setHelpInitialTopic] = useState<string>("getting-started");
+
+  const handleOpenHelp = useCallback((topic?: string) => {
+    setHelpInitialTopic(topic || (diagramMode === 'entropy' ? 'entropy-opm' : 'getting-started'));
+    setShowHelpModal(true);
+  }, [diagramMode]);
+
+  const [activePropTab, setActivePropTab] = useState<'general' | 'assign' | 'governance'>('general');
 
   // HIL (Hardware-in-the-Loop) state
   const [hilConfig, setHilConfig] = useState<HILConfig>({
@@ -6141,6 +6179,10 @@ const ADIA = () => {
   const [relationships, setRelationships] = useState<RelationshipData[]>([]);
   const [parts, setParts] = useState<PartData[]>([]);
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
+  const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
+  useEffect(() => {
+    setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
+  }, [blocks, parts, connectors, relationships]);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
   const [uiZoom, setUiZoom] = useState(1.0);
@@ -7237,6 +7279,15 @@ const ADIA = () => {
 
   const hydrateProject = useCallback((importedData: any) => {
     try {
+      let sysmlLoadedView: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] } | null = null;
+      if (importedData.sysmlRepository) {
+        const loaded = loadCanonicalSysmlProject(importedData);
+        if (!loaded.valid) {
+          throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
+        }
+        setCanonicalSysmlRepository(loaded.repository);
+        sysmlLoadedView = loaded.view;
+      }
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
@@ -7254,11 +7305,18 @@ const ADIA = () => {
       }
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
-      // SysML & Requirements — always migrate to ensure layerId is set
-      if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
-      if (importedData.relationships) setRelationships(importedData.relationships);
-      if (importedData.parts) setParts(importedData.parts);
-      if (importedData.connectors) setConnectors(importedData.connectors);
+      // SysML & Requirements — derive from canonical repository if present, else migrate legacy
+      if (sysmlLoadedView) {
+        setBlocks(migrateBlocks(sysmlLoadedView.blocks));
+        setRelationships(sysmlLoadedView.relationships);
+        setParts(sysmlLoadedView.parts);
+        setConnectors(sysmlLoadedView.connectors);
+      } else {
+        if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
+        if (importedData.relationships) setRelationships(importedData.relationships);
+        if (importedData.parts) setParts(importedData.parts);
+        if (importedData.connectors) setConnectors(importedData.connectors);
+      }
       if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
       if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
 
@@ -7519,6 +7577,11 @@ const ADIA = () => {
       relationships,
       parts,
       connectors,
+      sysmlRepository: serializeRepository(canonicalSysmlRepository),
+      sysmlCoordinates: Object.fromEntries([
+        ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
+        ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
+      ]),
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7555,6 +7618,7 @@ const ADIA = () => {
     relationships,
     parts,
     connectors,
+    canonicalSysmlRepository,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
@@ -8654,6 +8718,11 @@ const ADIA = () => {
   ]);
 
   const startSimulation = useCallback(async () => {
+    const sysmlGate = evaluateSysmlOperationGate(canonicalSysmlRepository, 'simulate');
+    if (!sysmlGate.allowed) {
+      sysmlGate.diagnostics.filter(item => item.severity === 'error').forEach(item => addError('error', `${item.code}: ${item.message}`, 'SysML'));
+      return;
+    }
     if (!validateModel()) return;
 
     const lifecycle = simulationLifecycleRef.current;
@@ -8682,7 +8751,7 @@ const ADIA = () => {
     }
   }, [
     addError, applySimulationFrameToReact, createSimulationSession,
-    validateModel
+    validateModel, canonicalSysmlRepository
   ]);
 
   const pauseSimulation = useCallback(() => {
@@ -8961,6 +9030,8 @@ const ADIA = () => {
     const idSet = new Set(ids);
     if (idSet.size === 0) return;
 
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
     setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
@@ -8969,13 +9040,14 @@ const ADIA = () => {
       junctionIds: l.junctionIds.filter(jid => !idSet.has(jid)),
       transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
     })));
-    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
-    setRelationships(prev => prev.filter(r => !idSet.has(r.id) && !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
-    setParts(prev => prev.filter(p => !idSet.has(p.id)));
-    setConnectors(prev => prev.filter(c => !idSet.has(c.id) && !idSet.has(c.sourcePartId) && !idSet.has(c.targetPartId)));
-    setInterfaceRealizations(prev => prev.filter(ir => !idSet.has(ir.id) && !idSet.has(ir.partId) && !idSet.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
-  }, [addToHistory]);
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setBlocks(transaction.model.blocks);
+    setRelationships(transaction.model.relationships);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
+  }, [addToHistory, blocks, relationships, parts, connectors]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9281,6 +9353,11 @@ const ADIA = () => {
       risk: stereotype === 'requirement' ? 'Medium' : undefined,
       verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
       source: stereotype === 'requirement' ? '' : undefined,
+      version: stereotype === 'requirement' ? '1.0' : undefined,
+      rationale: stereotype === 'requirement' ? '' : undefined,
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
       layerId: blockLayerId,
     };
     setBlocks(prev => [...prev, newBlock]);
@@ -9296,17 +9373,17 @@ const ADIA = () => {
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
     if (!block) return;
-    addToHistory();
     const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
-    const nextModel = cascadeDeleteReportElement(
-      { blocks, relationships, parts, connectors },
-      { kind, id }
-    );
-    setBlocks(nextModel.blocks as BlockData[]);
-    setRelationships(nextModel.relationships as RelationshipData[]);
-    setParts(nextModel.parts as PartData[]);
-    setConnectors(nextModel.connectors as ConnectorData[]);
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
+    addToHistory();
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setBlocks(transaction.model.blocks);
+    setRelationships(transaction.model.relationships);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted ${kind}: ${block.name}`);
   }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
@@ -9315,8 +9392,6 @@ const ADIA = () => {
   }, [createBlock]);
 
   const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
-    addToHistory();
-    if (sourceId === targetId) return;
     const newRel: RelationshipData = {
       id: uuidv4(),
       sourceId,
@@ -9326,14 +9401,28 @@ const ADIA = () => {
       sourceMultiplicity: '1',
       targetMultiplicity: '1'
     };
+    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, newRel);
+    if (!validation.valid) {
+      addError('error', `Invalid ${type}: ${validation.reason}`);
+      return;
+    }
+    addToHistory();
     setRelationships(prev => [...prev, newRel]);
     setSelectedIds([newRel.id]);
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory]);
+  }, [addError, addToHistory, blocks, parts, relationships]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
-    setRelationships(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  }, []);
+    const current = relationships.find(relationship => relationship.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, candidate);
+    if (!validation.valid) {
+      addError('error', `Invalid relationship update: ${validation.reason}`);
+      return;
+    }
+    setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
+  }, [relationships, blocks, parts, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
     addToHistory();
@@ -9368,15 +9457,15 @@ const ADIA = () => {
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
-    const nextModel = cascadeDeleteReportElement(
-      { blocks, relationships, parts, connectors },
-      { kind: 'part', id }
-    );
-    setParts(nextModel.parts as PartData[]);
-    setConnectors(nextModel.connectors as ConnectorData[]);
-    setRelationships(nextModel.relationships as RelationshipData[]);
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setRelationships(transaction.model.relationships);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted part: ${part.name}`);
   }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
@@ -9568,14 +9657,20 @@ const ADIA = () => {
             return;
           }
 
-          addToHistory();
           const newConnector: ConnectorData = {
             id: uuidv4(),
             sourcePartId: connectorSource.partId,
             sourcePortId: connectorSource.portId,
             targetPartId: partId,
-            targetPortId: portId
+            targetPortId: portId,
+            kind: connectorSource.partId === currentLayerId || partId === currentLayerId ? 'delegation' : 'assembly'
           };
+          const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, newConnector, currentLayerId);
+          if (!validation.valid) {
+            addError('error', `Invalid connector: ${validation.reason}`);
+            return;
+          }
+          addToHistory();
           setConnectors(prev => [...prev, newConnector]);
           addError('info', 'Created connection');
         }
@@ -9585,7 +9680,7 @@ const ADIA = () => {
         setConnectorSource({ partId, portId });
       }
     }
-  }, [isCreatingConnector, connectorSource, parts, blocks, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
+  }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
 
   const deleteConnector = useCallback((id: string) => {
     addToHistory();
@@ -9595,8 +9690,16 @@ const ADIA = () => {
   }, [addError, addToHistory]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    setConnectors(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-  }, []);
+    const current = connectors.find(connector => connector.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, candidate, currentLayerId);
+    if (!validation.valid) {
+      addError('error', `Invalid connector update: ${validation.reason}`);
+      return;
+    }
+    setConnectors(prev => prev.map(c => c.id === id ? candidate : c));
+  }, [connectors, blocks, parts, currentLayerId, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();
@@ -10422,6 +10525,11 @@ const ADIA = () => {
   }, [handleOpenProjectDialog]);
 
   const handleGenerateReport = useCallback((projectName: string = 'My Project', author: string = 'Engineer') => {
+    const sysmlGate = evaluateSysmlOperationGate(canonicalSysmlRepository, 'report');
+    if (!sysmlGate.allowed) {
+      sysmlGate.diagnostics.filter(item => item.severity === 'error').forEach(item => addError('error', `${item.code}: ${item.message}`, 'SysML'));
+      return;
+    }
     const snapshot = createReportSnapshot({
       blocks,
       relationships,
@@ -11256,7 +11364,7 @@ const ADIA = () => {
               markerStart = `url(#m-diamond-${type})`;
             } else if (relType === 'generalization') {
               markerEnd = `url(#m-triangle-${type})`;
-            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
+            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(relType)) {
               strokeDash = '4,2';
               middleLabel = `«${relType}»`;
               markerEnd = `url(#m-arrow-${type})`;
@@ -13041,7 +13149,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -13904,8 +14012,12 @@ const ADIA = () => {
           <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">«{block.stereotype}»</text>
-          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{block.name}</text>
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">
+            {block.isAbstract ? `«${block.stereotype}, abstract»` : `«${block.stereotype}»`}
+          </text>
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
+            {block.name}{block.isLeaf ? ' {leaf}' : ''}
+          </text>
           <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
 
           {/* Requirement Specifics */}
@@ -13939,7 +14051,7 @@ const ADIA = () => {
             <g transform="translate(5, 45)">
               {block.properties.slice(0, 3).map((prop, i) => (
                 <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
-                  {prop.name}: {prop.type}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
+                  {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                 </text>
               ))}
               {block.classes && block.classes.length > 0 && (
@@ -14066,9 +14178,10 @@ const ADIA = () => {
       );
 
       const isSelected = selectedIds.includes(rel.id);
-      const strokeColor = isSelected ? '#f97316' : '#888';
+      const isSuspect = Boolean((rel as any).suspect);
+      const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
       const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
-      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(rel.type);
+      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
       const { sp, tp, labelPos, angle } = route;
 
       return (
@@ -14099,15 +14212,21 @@ const ADIA = () => {
           {/* Stereotype / Label Badge with background to prevent overlapping text */}
           {(isTrace || rel.type === 'allocation' || rel.label) && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
-              <rect x={-32} y={-10} width={64} height={16} rx={3} fill="#141414" stroke="#333" strokeWidth={0.8} />
+              <rect x={-36} y={-10} width={72} height={16} rx={3} fill="#141414" stroke={isSuspect ? '#ef4444' : '#333'} strokeWidth={isSuspect ? 1.2 : 0.8} />
               <text x={0} y={2} textAnchor="middle" fill={strokeColor} fontSize={9} fontWeight="600">
-                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}
+                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}{isSuspect ? ' [!]' : ''}
               </text>
             </g>
           )}
 
+          {(rel as any).sourceRole && (
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
+          )}
           {rel.sourceMultiplicity && (
             <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
+          )}
+          {(rel as any).targetRole && (
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
           )}
           {rel.targetMultiplicity && (
             <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
@@ -14582,7 +14701,7 @@ const ADIA = () => {
       {showStandby && (
         <IntroStandbyOverlay mode="standby" onClose={() => setShowStandby(false)} />
       )}
-      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} />
       <FactoryIOGateway 
         isOpen={showFactoryIOGateway} 
         onClose={() => setShowFactoryIOGateway(false)}
@@ -15002,7 +15121,7 @@ const ADIA = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowHelpModal(true)}
+              onClick={() => handleOpenHelp()}
               className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Help & Documentation"
             >
@@ -15367,6 +15486,7 @@ const ADIA = () => {
                     setEntropyEdges(edges);
                   }}
                   onAddError={addError}
+                  onOpenHelp={(topic) => handleOpenHelp(topic || 'entropy-opm')}
                   sysmlState={{
                     blocks: blocks.filter(b => b.stereotype !== 'requirement'),
                     requirements: blocks.filter(b => b.stereotype === 'requirement'),
@@ -16479,6 +16599,7 @@ const ADIA = () => {
                       <option value="interfaceBlock">Interface Block</option>
                       <option value="valueType">ValueType</option>
                       <option value="enumeration">Enumeration</option>
+                      <option value="verificationCase">Verification Case</option>
                       {customStereotypes
                         ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
                         .map(s => (
@@ -16510,17 +16631,34 @@ const ADIA = () => {
                         >
                           Assign
                         </button>
+                        <button
+                          onClick={() => setActivePropTab('governance')}
+                          className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
+                            activePropTab === 'governance'
+                              ? 'border-[#f97316] text-[#e0e0e0]'
+                              : 'border-transparent text-[#666] hover:text-[#aaa]'
+                          }`}
+                        >
+                          Governance
+                        </button>
                       </div>
 
-                      {activePropTab === 'general' ? (
+                      {activePropTab === 'general' && (
                         <>
                           <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
-                            <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select value={selectedBlock.status || ''} onChange={(e) => {
+                              const validation = validateLegacyRequirementStatusTransition(blocks, relationships, selectedBlock.id, e.target.value);
+                              if (!validation.valid) addError('error', `Invalid requirement status: ${validation.reason}`);
+                              else updateBlock(selectedBlock.id, { status: e.target.value });
+                            }} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="Draft">Draft</option>
                               <option value="Approved">Approved</option>
                               <option value="Verified">Verified</option>
                               <option value="Implemented">Implemented</option>
+                              <option value="Failed">Failed</option>
+                              <option value="Stale">Stale</option>
+                              <option value="Retired">Retired</option>
                             </select>
                           </div>
                           <div><Label>Priority</Label>
@@ -16528,6 +16666,7 @@ const ADIA = () => {
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
+                              <option value="Critical">Critical</option>
                             </select>
                           </div>
                           <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
@@ -16537,6 +16676,7 @@ const ADIA = () => {
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
+                              <option value="Critical">Critical</option>
                             </select>
                           </div>
                           <div>
@@ -16549,6 +16689,9 @@ const ADIA = () => {
                             </select>
                           </div>
                           <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Version</Label><Input value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Rationale</Label><textarea value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
+                          <div><Label>Baseline ID</Label><Input value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
 
                           <div className="mt-4 pt-3 border-t border-[#333]">
                             <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
@@ -16676,7 +16819,8 @@ const ADIA = () => {
                             </div>
                           </div>
                         </>
-                      ) : (
+                      )}
+                      {activePropTab === 'assign' && (
                         <div className="space-y-4">
                           <div>
                             <Label>Assigned To</Label>
@@ -16713,7 +16857,83 @@ const ADIA = () => {
                           </div>
                         </div>
                       )}
+                      {activePropTab === 'governance' && (() => {
+                        const reqDef = canonicalSysmlRepository.requirements[selectedBlock.id] || {
+                          id: selectedBlock.id,
+                          requirementId: selectedBlock.reqId || selectedBlock.id,
+                          name: selectedBlock.name,
+                          text: selectedBlock.description || '',
+                          status: selectedBlock.status,
+                          priority: selectedBlock.priority,
+                          risk: selectedBlock.risk,
+                          verificationMethod: selectedBlock.verificationMethod,
+                          baselineId: selectedBlock.baselineId,
+                          version: selectedBlock.version || '1.0',
+                          copiedFromId: (selectedBlock as any).copiedFromId,
+                        };
+                        const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
+                        const suspectLinks = Object.values(canonicalSysmlRepository.relationships).filter(
+                          r => (r.sourceId === selectedBlock.id || r.targetId === selectedBlock.id) && r.suspect
+                        );
+                        const evidenceHistory = Object.values(canonicalSysmlRepository.evidence).filter(
+                          e => e.requirementId === selectedBlock.id
+                        );
+
+                        return (
+                          <RequirementGovernancePanel
+                            requirement={reqDef}
+                            masterRequirement={masterReq}
+                            baselines={canonicalSysmlRepository.baselines}
+                            suspectLinks={suspectLinks}
+                            evidenceHistory={evidenceHistory}
+                            onCreateBaseline={(name) => {
+                              const res = createModelBaseline(canonicalSysmlRepository, name);
+                              setCanonicalSysmlRepository(res.repository);
+                              addError('info', `Created baseline: ${name}`);
+                            }}
+                            onClearSuspect={(relId) => {
+                              const updated = clearSuspectLink(canonicalSysmlRepository, relId);
+                              setCanonicalSysmlRepository(updated);
+                              addError('info', `Cleared suspect flag on link: ${relId}`);
+                            }}
+                            onSyncFromMaster={() => {
+                              const res = synchronizeRequirementCopy(canonicalSysmlRepository, selectedBlock.id);
+                              setCanonicalSysmlRepository(res.repository);
+                              if (masterReq) {
+                                updateBlock(selectedBlock.id, {
+                                  name: masterReq.name,
+                                  description: masterReq.text,
+                                  status: masterReq.status,
+                                  version: masterReq.version,
+                                  priority: masterReq.priority,
+                                  risk: masterReq.risk,
+                                });
+                              }
+                              addError('info', 'Synchronized copy requirement from master');
+                            }}
+                          />
+                        );
+                      })()}
                     </>
+                  )}
+                  {selectedBlock.stereotype === 'verificationCase' && (
+                    <div className="space-y-3 border-t border-[#333] pt-3">
+                      <div><Label>Verification Method</Label><Input value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="mt-1" /></div>
+                      <div><Label>Result</Label>
+                        <select value={selectedBlock.verificationResult || ''} onChange={(e) => updateBlock(selectedBlock.id, { verificationResult: e.target.value ? e.target.value as 'passed' | 'failed' : undefined, executedAt: e.target.value ? new Date().toISOString() : undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                          <option value="">Not Executed</option><option value="passed">Passed</option><option value="failed">Failed</option>
+                        </select>
+                      </div>
+                      <div><Label>Evidence Artifact URI</Label><Input value={selectedBlock.artifactUri || ''} onChange={(e) => updateBlock(selectedBlock.id, { artifactUri: e.target.value })} className="mt-1" /></div>
+                      {selectedBlock.executedAt && <div className="text-[10px] text-[#777]">Executed: {selectedBlock.executedAt}</div>}
+                    </div>
+                  )}
+                  {selectedBlock.stereotype === 'block' && (
+                    <div className="space-y-2 border-t border-[#333] pt-3">
+                      <div><Label>Namespace</Label><Input value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
+                    </div>
                   )}
                   <div>
                     <Label>Ports</Label>
@@ -16826,24 +17046,17 @@ const ADIA = () => {
                     />
                   </div>
                   <div>
-                    <Label>Properties (comma sep)</Label>
-                    <textarea
-                      value={selectedBlock.properties.map(p => `${p.name}:${p.type}${p.defaultValue ? '=' + p.defaultValue : ''}`).join(',\n')}
-                      onChange={(e) => {
-                        const newProperties: ValuePropertyData[] = e.target.value.split(/[,;\n]/).map(s => s.trim()).filter(s => s).map(pStr => {
-                          const [name, rest] = pStr.split(':');
-                          const [type, defaultValue] = rest ? rest.split('=') : ['any', undefined];
-                          return {
-                            id: uuidv4(),
-                            name: name?.trim() || 'prop',
-                            type: type?.trim() || 'any',
-                            defaultValue: defaultValue?.trim(),
-                          };
-                        });
-                        updateBlock(selectedBlock.id, { properties: newProperties });
-                      }}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
+                    <Label>Properties</Label>
+                    <BlockPropertiesEditor
+                      properties={selectedBlock.properties}
+                      typeOptions={blocks.filter(block => block.stereotype !== 'requirement')}
+                      inheritedProperties={inheritedProperties(blocks, relationships, selectedBlock.id)}
+                      onChange={(properties) => updateBlock(selectedBlock.id, { properties })}
                     />
+                    {(() => {
+                      const result = validateLegacyBlockProperties(blocks, relationships, selectedBlock.id);
+                      return !result.valid && <div role="alert" className="mt-2 text-xs text-red-400">{result.messages.join('; ')}</div>;
+                    })()}
                   </div>
                   <div>
                     <Label>Satisfied Requirements</Label>
@@ -16884,22 +17097,45 @@ const ADIA = () => {
                       <option value="satisfy">Satisfy</option>
                       <option value="verify">Verify</option>
                       <option value="trace">Trace</option>
+                      <option value="copy">Copy</option>
+                      <option value="binding">Binding</option>
+                      <option value="dependency">Dependency</option>
                     </select>
                   </div>
                   <div>
                     <Label>Label</Label>
                     <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label>Source Mult.</Label>
-                      <Input value={selectedRelationship.sourceMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { sourceMultiplicity: e.target.value })} className="mt-1" placeholder="0..1" />
-                    </div>
-                    <div>
-                      <Label>Target Mult.</Label>
-                      <Input value={selectedRelationship.targetMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { targetMultiplicity: e.target.value })} className="mt-1" placeholder="*" />
-                    </div>
-                  </div>
+                  <RelationshipEndEditor
+                    relationship={{
+                      id: selectedRelationship.id,
+                      kind: selectedRelationship.type === 'aggregation' ? 'sharedAggregation' : selectedRelationship.type === 'derive' ? 'deriveReqt' : selectedRelationship.type as any,
+                      sourceId: selectedRelationship.sourceId,
+                      targetId: selectedRelationship.targetId,
+                      sourceRole: (selectedRelationship as any).sourceRole,
+                      targetRole: (selectedRelationship as any).targetRole,
+                      sourceMultiplicity: safeParseMultiplicity(selectedRelationship.sourceMultiplicity),
+                      targetMultiplicity: safeParseMultiplicity(selectedRelationship.targetMultiplicity),
+                      sourceNavigable: (selectedRelationship as any).sourceNavigable,
+                      targetNavigable: (selectedRelationship as any).targetNavigable,
+                      sourceAggregation: (selectedRelationship as any).sourceAggregation,
+                      targetAggregation: (selectedRelationship as any).targetAggregation,
+                    }}
+                    diagnostics={canonicalSysmlRepository.relationships[selectedRelationship.id] ? validateAssociationEnds(canonicalSysmlRepository, selectedRelationship.id) : []}
+                    onChange={(updatedRel) => {
+                      updateRelationship(selectedRelationship.id, {
+                        type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
+                        sourceRole: updatedRel.sourceRole,
+                        targetRole: updatedRel.targetRole,
+                        sourceMultiplicity: updatedRel.sourceMultiplicity ? `${updatedRel.sourceMultiplicity.lower}..${updatedRel.sourceMultiplicity.upper}` : undefined,
+                        targetMultiplicity: updatedRel.targetMultiplicity ? `${updatedRel.targetMultiplicity.lower}..${updatedRel.targetMultiplicity.upper}` : undefined,
+                        sourceNavigable: updatedRel.sourceNavigable,
+                        targetNavigable: updatedRel.targetNavigable,
+                        sourceAggregation: updatedRel.sourceAggregation,
+                        targetAggregation: updatedRel.targetAggregation,
+                      } as any);
+                    }}
+                  />
                   <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
                 </>
               ) : selectedPart ? (
@@ -16999,11 +17235,47 @@ const ADIA = () => {
                 </>
               ) : selectedConnector ? (
                 <>
-                  <div>
-                    <Label>Item Flow</Label>
-                    <Input value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value })} className="mt-1" placeholder="e.g., PowerSignal" />
-                  </div>
-                  <div>
+                  <IbdConnectorEditor
+                    connector={{
+                      id: selectedConnector.id,
+                      kind: selectedConnector.kind || 'assembly',
+                      ownerId: currentLayerId,
+                      sourcePortId: `${selectedConnector.sourcePartId}::${selectedConnector.sourcePortId}`,
+                      targetPortId: `${selectedConnector.targetPartId}::${selectedConnector.targetPortId}`,
+                      itemFlowId: selectedConnector.itemFlow,
+                      sourceParameterId: (selectedConnector as any).sourceParameterId,
+                      targetParameterId: (selectedConnector as any).targetParameterId,
+                      itemProperty: (selectedConnector as any).itemProperty,
+                      itemUnit: (selectedConnector as any).itemUnit,
+                    }}
+                    availablePorts={parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
+                      const b = blocks.find(b => b.id === p.typeId);
+                      return (b?.ports || []).map(port => ({
+                        id: `${p.id}::${port.id}`,
+                        name: port.name,
+                        ownerName: p.name,
+                      }));
+                    })}
+                    definitions={canonicalSysmlRepository.definitions}
+                    diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
+                    onChange={(updatedConn) => {
+                      const [srcPart, srcPort] = updatedConn.sourcePortId.split('::');
+                      const [tgtPart, tgtPort] = updatedConn.targetPortId.split('::');
+                      updateConnector(selectedConnector.id, {
+                        kind: updatedConn.kind,
+                        sourcePartId: srcPart || selectedConnector.sourcePartId,
+                        sourcePortId: srcPort || selectedConnector.sourcePortId,
+                        targetPartId: tgtPart || selectedConnector.targetPartId,
+                        targetPortId: tgtPort || selectedConnector.targetPortId,
+                        itemFlow: updatedConn.itemFlowId,
+                        sourceParameterId: updatedConn.sourceParameterId,
+                        targetParameterId: updatedConn.targetParameterId,
+                        itemProperty: updatedConn.itemProperty,
+                        itemUnit: updatedConn.itemUnit,
+                      } as any);
+                    }}
+                  />
+                  <div className="mt-2">
                     <Label>Label (Text)</Label>
                     <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
                   </div>
@@ -17594,7 +17866,15 @@ const ADIA = () => {
             onClose={() => toggleWindow('rtm')}
             onUpdate={updateManagedWindow}
           >
-            <TraceabilityMatrix blocks={blocks} relationships={relationships} parts={parts} onClose={() => toggleWindow('rtm')} />
+            <CanonicalTraceabilityMatrix
+              repository={canonicalSysmlRepository}
+              onNavigate={(elementId) => {
+                setSelectedIds([elementId]);
+                if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');
+                else if (blocks.some(block => block.id === elementId)) setDiagramMode('bdd');
+                else if (parts.some(part => part.id === elementId) || connectors.some(connector => connector.id === elementId)) setDiagramMode('ibd');
+              }}
+            />
           </FloatingWindow>
         )}
 

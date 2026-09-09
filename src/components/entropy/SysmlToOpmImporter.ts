@@ -5,31 +5,55 @@
  * Mapping:
  *   block (stereotype 'block')          → object node
  *   requirement block                   → requirement node (requirementText = description)
- *   composition / aggregation relation   → aggregation link
+ *   composition relation                 → conceptual-only aggregation projection with loss diagnostic
+ *   aggregation relation                 → aggregation link
  *   generalization relation              → generalization link
  *   satisfy / verify relation            → satisfies / verifies link (requirement → target)
  *   ports + connectors                   → NOT auto-mapped; reported as a warning
  *   association / allocation / others    → warning (author decides the OPM equivalent)
  */
-import type { AppNode, AppEdge, OPMLinkType } from './EntropyTypes';
+import type { AppNode, AppEdge, OPMLinkType, OpmLifecycleDiagnostic } from './EntropyTypes';
 import type { SysMLDiagramState } from '../../types/sysml_types';
 
-const RELATION_MAP: Record<string, { link: OPMLinkType; flip?: boolean } | undefined> = {
-  composition: { link: 'aggregation' },
+export type SysmlMappingStatus = 'mapped' | 'conceptual-only' | 'unsupported' | 'unresolved';
+
+export interface SysmlConnectorMapping {
+  sourceConnectorId: string;
+  sourceBlockId?: string;
+  targetBlockId?: string;
+  sourcePortId?: string;
+  targetPortId?: string;
+  status: SysmlMappingStatus;
+  diagnostic?: string;
+}
+
+export interface SysmlImportResult {
+  nodes: AppNode[];
+  edges: AppEdge[];
+  warnings: string[];
+  connectorMappings: SysmlConnectorMapping[];
+  diagnostics: OpmLifecycleDiagnostic[];
+}
+
+const RELATION_MAP: Record<string, { link: OPMLinkType; flip?: boolean; status?: SysmlMappingStatus; diagnosticCode?: string; diagnostic?: string } | undefined> = {
+  composition: {
+    link: 'aggregation',
+    status: 'conceptual-only',
+    diagnosticCode: 'OPM_COMPOSITION_OWNERSHIP_LOSS',
+    diagnostic: 'OPM aggregation does not preserve SysML composite part-usage lifetime ownership; native SysML remains authoritative.',
+  },
   aggregation: { link: 'aggregation' },
   generalization: { link: 'generalization', flip: true },
   satisfy: { link: 'satisfies' },
   verify: { link: 'verifies' },
 };
 
-export function importSysmlToOpm(state: SysMLDiagramState): {
-  nodes: AppNode[];
-  edges: AppEdge[];
-  warnings: string[];
-} {
+export function importSysmlToOpm(state: SysMLDiagramState): SysmlImportResult {
   const nodes: AppNode[] = [];
   const edges: AppEdge[] = [];
   const warnings: string[] = [];
+  const connectorMappings: SysmlConnectorMapping[] = [];
+  const diagnostics: OpmLifecycleDiagnostic[] = [];
   const requirementIds = new Set((state.requirements || []).map(r => r.id));
 
   const makeNode = (
@@ -66,26 +90,78 @@ export function importSysmlToOpm(state: SysMLDiagramState): {
   relationSource.forEach(rel => {
     const mapped = RELATION_MAP[rel.type];
     if (!mapped) {
-      warnings.push(
-        `Relationship [${rel.type}] from ${rel.sourceId} to ${rel.targetId} has no automatic OPM equivalent — model it manually (e.g. as an instrument or effect link).`
-      );
+      const msg = `Relationship [${rel.type}] from ${rel.sourceId} to ${rel.targetId} has no automatic OPM equivalent — model it manually (e.g. as an instrument or effect link).`;
+      warnings.push(msg);
+      connectorMappings.push({
+        sourceConnectorId: rel.id,
+        sourceBlockId: rel.sourceId,
+        targetBlockId: rel.targetId,
+        status: 'unsupported',
+        diagnostic: msg,
+      });
+      diagnostics.push({
+        code: 'SYSML_RELATION_UNSUPPORTED',
+        severity: 'warning',
+        message: msg,
+        elementId: rel.id,
+      });
       return;
     }
     const source = mapped.flip ? rel.targetId : rel.sourceId;
     const target = mapped.flip ? rel.sourceId : rel.targetId;
+    const mappingStatus = mapped.status ?? 'mapped';
     edges.push({
       id: `imp-${rel.id}`,
       source,
       target,
-      data: { type: mapped.link },
+      data: {
+        type: mapped.link,
+        sysmlMappingStatus: mappingStatus,
+        sysmlRelationId: rel.id,
+        sysmlSourceKind: rel.type,
+      },
     } as AppEdge);
+    connectorMappings.push({
+      sourceConnectorId: rel.id,
+      sourceBlockId: rel.sourceId,
+      targetBlockId: rel.targetId,
+      status: mappingStatus,
+      diagnostic: mapped.diagnostic,
+    });
+    if (mapped.diagnosticCode && mapped.diagnostic) {
+      warnings.push(mapped.diagnostic);
+      diagnostics.push({
+        code: mapped.diagnosticCode,
+        severity: 'warning',
+        message: mapped.diagnostic,
+        elementId: rel.id,
+      });
+    }
   });
 
   if ((state.connectors?.length ?? 0) > 0) {
-    warnings.push(
-      `${state.connectors.length} IBD connector(s) were not auto-mapped: in OPM, model the exchanged items as processes with consumption/result links between the owning objects.`
-    );
+    state.connectors!.forEach(c => {
+      const connAny = c as any;
+      const connName = connAny.label || connAny.name || 'unnamed';
+      const msg = `IBD connector "${c.id}" (${connName}) was not auto-mapped. In OPM, model the exchanged items as processes with consumption/result links.`;
+      warnings.push(msg);
+      connectorMappings.push({
+        sourceConnectorId: c.id,
+        sourceBlockId: connAny.sourceBlockId || connAny.sourcePartId,
+        targetBlockId: connAny.targetBlockId || connAny.targetPartId,
+        sourcePortId: connAny.sourcePortId,
+        targetPortId: connAny.targetPortId,
+        status: 'unresolved',
+        diagnostic: msg,
+      });
+      diagnostics.push({
+        code: 'SYSML_CONNECTOR_UNRESOLVED',
+        severity: 'warning',
+        message: msg,
+        elementId: c.id,
+      });
+    });
   }
 
-  return { nodes, edges, warnings };
+  return { nodes, edges, warnings, connectorMappings, diagnostics };
 }

@@ -1,12 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { AppNode, AppEdge, OPMLinkType, OPMPort } from './EntropyTypes';
+import { analyzeOpmDeletion } from './OpmDeletionImpact';
 import type { OpmNodeKind } from './OpmMigrations';
+import type {
+  OpmExecutionConfig,
+  OpmDiagnostic,
+  OpmAttribute,
+  OpmAssignment,
+  OpmProcessExecution,
+  OpmStateExecution,
+  OpmObjectExecution,
+  OpmLinkExecution,
+  OpmEventDefinition,
+  OpmEnumDefinition,
+} from '../../engine/opm/executableTypes';
+import {
+  toCIdentifier,
+  nextStableId,
+  TypedValueEditor,
+  AssignmentRows,
+} from './OpmExecutionPropertiesPanel';
 import {
   X, Trash2, Plus, Play, Pause, ArrowRight, RotateCcw,
-  ChevronDown, ChevronRight, ZoomIn, Layers, Zap, Activity
+  ChevronDown, ChevronRight, ZoomIn, Layers, Zap, Activity, AlertTriangle
 } from 'lucide-react';
 
 export interface OpmRightPanelContentProps {
+  nodes?: AppNode[];
+  edges?: AppEdge[];
   selectedNode: AppNode | null;
   selectedEdge: AppEdge | null;
   onCloseInspector: () => void;
@@ -37,9 +58,15 @@ export interface OpmRightPanelContentProps {
   smartShowTabContent: React.ReactNode;
   codegenTabContent: React.ReactNode;
   isWideLayout?: boolean;
+  executionConfig?: OpmExecutionConfig;
+  onUpdateSelectionExecution?: (updatedExecution: any) => void;
+  writableAttributes?: readonly Pick<OpmAttribute, 'id' | 'displayName'>[];
+  diagnostics?: OpmDiagnostic[];
 }
 
 export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
+  nodes,
+  edges,
   selectedNode,
   selectedEdge,
   onCloseInspector,
@@ -70,11 +97,33 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
   smartShowTabContent,
   codegenTabContent,
   isWideLayout = false,
+  executionConfig,
+  onUpdateSelectionExecution,
+  writableAttributes = [],
+  diagnostics = [],
 }) => {
+  const events = executionConfig?.events ?? [];
+  const enums = executionConfig?.enums ?? [];
+  const enumById = React.useMemo(() => {
+    const map = new Map<string, OpmEnumDefinition>();
+    for (const def of enums) map.set(def.id, def);
+    return map;
+  }, [enums]);
   // Collapsible section state for Inspector
   const [statesExpanded, setStatesExpanded] = useState(true);
   const [attributesExpanded, setAttributesExpanded] = useState(true);
   const [portsExpanded, setPortsExpanded] = useState(true);
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    setConfirmDelete(false);
+  }, [selectedNode?.id]);
+
+  const deleteImpact = useMemo(() => {
+    if (!selectedNode || !nodes || !edges) return null;
+    return analyzeOpmDeletion({ nodes, edges }, { nodeIds: [selectedNode.id] });
+  }, [selectedNode, nodes, edges]);
 
   // Local state for adding custom ports
   const [newPortName, setNewPortName] = useState('');
@@ -177,6 +226,298 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 className="rounded border-white/20 bg-[#0e0e11] text-orange-500 w-4 h-4 accent-orange-500"
               />
             </div>
+
+            {/* State Execution & Behaviors (for State nodes) */}
+            {selectedNode.data.type === 'state' && (() => {
+              const exec: OpmStateExecution = (selectedNode.data as any)?.stateExecution || selectedNode.data?.execution || {
+                enabled: true,
+                initial: false,
+                terminal: false,
+                entryAssignments: [],
+                exitAssignments: [],
+              };
+
+              const handleUpdateStateExecution = (patch: Partial<OpmStateExecution>) => {
+                const updated = { ...exec, ...patch };
+                if (onUpdateSelectionExecution) {
+                  onUpdateSelectionExecution(updated);
+                }
+              };
+
+              const handleAddEntry = () => {
+                const newAsgn: OpmAssignment = {
+                  id: nextStableId('asgn'),
+                  targetAttributeId: '',
+                  operator: '=',
+                  expression: '0',
+                  enabled: true,
+                };
+                handleUpdateStateExecution({
+                  entryAssignments: [...(exec.entryAssignments || []), newAsgn],
+                });
+              };
+
+              const handleAddExit = () => {
+                const newAsgn: OpmAssignment = {
+                  id: nextStableId('asgn'),
+                  targetAttributeId: '',
+                  operator: '=',
+                  expression: '0',
+                  enabled: true,
+                };
+                handleUpdateStateExecution({
+                  exitAssignments: [...(exec.exitAssignments || []), newAsgn],
+                });
+              };
+
+              return (
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-200">
+                      <input
+                        data-testid="state-initial-checkbox"
+                        aria-label="Initial state"
+                        data-opm-path="stateExecution.initial"
+                        type="checkbox"
+                        checked={Boolean(exec.initial)}
+                        onChange={(e) => handleUpdateStateExecution({ initial: e.target.checked })}
+                        className="rounded border-white/20 bg-[#0e0e11] text-amber-500 w-4 h-4 accent-amber-500"
+                      />
+                      <span className="font-semibold">Initial State</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-200">
+                      <input
+                        data-testid="state-terminal-checkbox"
+                        aria-label="Terminal state"
+                        data-opm-path="stateExecution.terminal"
+                        type="checkbox"
+                        checked={Boolean(exec.terminal)}
+                        onChange={(e) => handleUpdateStateExecution({ terminal: e.target.checked })}
+                        className="rounded border-white/20 bg-[#0e0e11] text-amber-500 w-4 h-4 accent-amber-500"
+                      />
+                      <span className="font-semibold">Terminal State</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout">
+                        Timeout (ms)
+                      </label>
+                      <input
+                        id="state-timeout"
+                        data-testid="state-timeout-input"
+                        data-opm-path="stateExecution.timeoutMs"
+                        type="number"
+                        value={exec.timeoutMs ?? ''}
+                        onChange={(e) =>
+                          handleUpdateStateExecution({
+                            timeoutMs: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                        placeholder="e.g. 5000"
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout-ev">
+                        Timeout Event
+                      </label>
+                      <select
+                        id="state-timeout-ev"
+                        data-testid="state-timeout-event-select"
+                        data-opm-path="stateExecution.timeoutEventId"
+                        value={exec.timeoutEventId || ''}
+                        onChange={(e) =>
+                          handleUpdateStateExecution({ timeoutEventId: e.target.value || undefined })
+                        }
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                      >
+                        <option value="">-- none --</option>
+                        {events.map((ev) => (
+                          <option key={ev.id} value={ev.id}>
+                            {ev.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase text-amber-400">Entry Actions</span>
+                      <button
+                        data-testid="add-entry-assignment-btn"
+                        aria-label="Add entry assignment"
+                        onClick={handleAddEntry}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded hover:bg-amber-900 font-bold"
+                      >
+                        <Plus size={10} /> Add Entry
+                      </button>
+                    </div>
+                    <AssignmentRows
+                      value={exec.entryAssignments || []}
+                      writableAttributes={writableAttributes}
+                      basePath="stateExecution.entryAssignments"
+                      testIdPrefix="entry-assignment"
+                      onChange={(next) => handleUpdateStateExecution({ entryAssignments: next })}
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase text-amber-400">Exit Actions</span>
+                      <button
+                        data-testid="add-exit-assignment-btn"
+                        aria-label="Add exit assignment"
+                        onClick={handleAddExit}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded hover:bg-amber-900 font-bold"
+                      >
+                        <Plus size={10} /> Add Exit
+                      </button>
+                    </div>
+                    <AssignmentRows
+                      value={exec.exitAssignments || []}
+                      writableAttributes={writableAttributes}
+                      basePath="stateExecution.exitAssignments"
+                      testIdPrefix="exit-assignment"
+                      onChange={(next) => handleUpdateStateExecution({ exitAssignments: next })}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Process Execution Inspector (for Process nodes) */}
+            {selectedNode.data.type === 'process' && (() => {
+              const procExec: OpmProcessExecution = (selectedNode.data as any)?.processExecution || selectedNode.data?.execution || {
+                enabled: true,
+                activation: 'cyclic',
+                guard: '',
+                assignments: [],
+                priority: 1,
+                periodMs: 100,
+                debounceMs: 0,
+                reentrancy: 'reject',
+                inputAttributeIds: [],
+                outputAttributeIds: [],
+              };
+
+              const handleUpdateProcExec = (patch: Partial<OpmProcessExecution>) => {
+                const updated = { ...procExec, ...patch };
+                if (onUpdateSelectionExecution) {
+                  onUpdateSelectionExecution(updated);
+                }
+              };
+
+              const handleAddAssignment = () => {
+                const newAsgn: OpmAssignment = {
+                  id: nextStableId('asgn'),
+                  targetAttributeId: '',
+                  operator: '=',
+                  expression: '0',
+                  enabled: true,
+                };
+                handleUpdateProcExec({
+                  assignments: [...(procExec.assignments || []), newAsgn],
+                });
+              };
+
+              return (
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="proc-activation" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Activation Mode
+                    </label>
+                    <select
+                      id="proc-activation"
+                      data-testid="process-activation-select"
+                      data-opm-path="processExecution.activation"
+                      value={procExec.activation}
+                      onChange={(e) => handleUpdateProcExec({ activation: e.target.value as any })}
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                    >
+                      <option value="cyclic">cyclic</option>
+                      <option value="triggered">triggered</option>
+                      <option value="both">both</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-period">
+                        Period (ms)
+                      </label>
+                      <input
+                        id="proc-period"
+                        data-testid="process-period-input"
+                        data-opm-path="processExecution.periodMs"
+                        type="number"
+                        value={procExec.periodMs ?? ''}
+                        onChange={(e) =>
+                          handleUpdateProcExec({
+                            periodMs: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                        placeholder="e.g. 100"
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-priority">
+                        Priority
+                      </label>
+                      <input
+                        id="proc-priority"
+                        data-testid="process-priority-input"
+                        data-opm-path="processExecution.priority"
+                        type="number"
+                        value={procExec.priority ?? 1}
+                        onChange={(e) => handleUpdateProcExec({ priority: Number(e.target.value) })}
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-guard">
+                      Guard Expression
+                    </label>
+                    <input
+                      id="proc-guard"
+                      data-testid="guard-expr-input"
+                      data-opm-path="processExecution.guard"
+                      value={procExec.guard || ''}
+                      onChange={(e) => handleUpdateProcExec({ guard: e.target.value })}
+                      placeholder="e.g. temperature.value < 100.0"
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase text-sky-400">
+                        Action Assignments
+                      </span>
+                      <button
+                        data-testid="add-assignment-btn"
+                        aria-label="Add assignment"
+                        onClick={handleAddAssignment}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-sky-950 text-sky-400 border border-sky-800 rounded hover:bg-sky-900 font-bold"
+                      >
+                        <Plus size={10} /> Add Assignment
+                      </button>
+                    </div>
+                    <AssignmentRows
+                      value={procExec.assignments || []}
+                      writableAttributes={writableAttributes}
+                      basePath="processExecution.assignments"
+                      onChange={(next) => handleUpdateProcExec({ assignments: next })}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Collapsible States Section (for Objects) */}
@@ -279,60 +620,211 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
             </div>
           )}
 
-          {/* Collapsible Attributes Section */}
-          {selectedNode.data.type === 'object' && (
-            <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setAttributesExpanded(!attributesExpanded)}
-                className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
-              >
-                <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-gray-300">
-                  {attributesExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                  <span>Attributes ({attrsCount})</span>
-                </div>
-                <span className="text-[8px] px-1.5 py-0.2 rounded font-mono font-bold bg-white/5 text-gray-400">
-                  {attrsCount}
-                </span>
-              </button>
+          {/* Collapsible Variables & Attributes Section */}
+          {selectedNode.data.type === 'object' && (() => {
+            const objExec: OpmObjectExecution = (selectedNode.data as any)?.objectExecution || selectedNode.data?.execution || {
+              enabled: true,
+              attributes: [],
+            };
+            const typedAttributes = objExec.attributes || [];
 
-              {attributesExpanded && (
-                <div className="p-2.5 space-y-2 border-t border-white/5">
-                  <div className="space-y-1">
-                    {(selectedNode.data.attributes || []).map((attr, idx) => (
-                      <div key={idx} className="flex justify-between bg-black/30 border border-white/5 px-2.5 py-1 rounded font-mono text-[11px]">
-                        <span className="text-gray-400">{attr.key}:</span>
-                        <span className="text-amber-300 font-bold">{attr.value}</span>
-                      </div>
-                    ))}
+            const handleUpdateObjExec = (patch: Partial<OpmObjectExecution>) => {
+              const updated = { ...objExec, ...patch };
+              if (onUpdateSelectionExecution) {
+                onUpdateSelectionExecution(updated);
+              }
+            };
+
+            const handleAddTypedAttribute = () => {
+              const n = typedAttributes.length + 1;
+              const displayName = `var_${n}`;
+              const newAttr: OpmAttribute = {
+                id: nextStableId('attr'),
+                displayName,
+                cIdentifier: toCIdentifier(displayName, `var_${n}`),
+                type: { kind: 'float32' },
+                initialValue: 0,
+                overflow: 'wrap',
+                access: 'readWrite',
+                persistent: false,
+              };
+              handleUpdateObjExec({ attributes: [...typedAttributes, newAttr] });
+            };
+
+            const handleUpdateTypedAttr = (index: number, patch: Partial<OpmAttribute>) => {
+              const next = [...typedAttributes];
+              next[index] = { ...next[index], ...patch };
+              handleUpdateObjExec({ attributes: next });
+            };
+
+            const handleDeleteTypedAttr = (index: number) => {
+              const next = typedAttributes.filter((_, i) => i !== index);
+              handleUpdateObjExec({ attributes: next });
+            };
+
+            const totalCount = typedAttributes.length + attrsCount;
+
+            return (
+              <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setAttributesExpanded(!attributesExpanded)}
+                  className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-emerald-400">
+                    {attributesExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    <span>Variables & Attributes ({totalCount})</span>
                   </div>
-
-                  <div className="flex gap-1.5 pt-1">
-                    <input
-                      placeholder="Key"
-                      id="new-attr-key"
-                      className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const valEl = document.getElementById('new-attr-val') as HTMLInputElement;
-                          if (e.currentTarget.value && valEl.value) {
-                            onAddAttribute(e.currentTarget.value, valEl.value);
-                            e.currentTarget.value = '';
-                            valEl.value = '';
-                          }
-                        }
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-testid="add-attr-btn"
+                      aria-label="Add attribute"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddTypedAttribute();
                       }}
-                    />
-                    <input
-                      placeholder="Val"
-                      id="new-attr-val"
-                      className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
-                    />
+                      className="flex items-center gap-1 text-[9px] px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded hover:bg-emerald-900 font-bold"
+                    >
+                      <Plus size={10} /> Add Variable
+                    </button>
+                    <span className="text-[8px] px-1.5 py-0.2 rounded font-mono font-bold bg-white/5 text-gray-400">
+                      {totalCount}
+                    </span>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                </button>
+
+                {attributesExpanded && (
+                  <div className="p-2.5 space-y-3 border-t border-white/5">
+                    {/* Typed Executable Variables */}
+                    <div className="space-y-2">
+                      {typedAttributes.length === 0 && (
+                        <div className="text-[10px] text-gray-500 italic text-center py-0.5">
+                          No typed variables. Click &quot;+ Add Variable&quot; to declare one.
+                        </div>
+                      )}
+                      {typedAttributes.map((attr, idx) => {
+                        const enumDef =
+                          attr.type.kind === 'enum' ? enumById.get(attr.type.enumId) : undefined;
+                        return (
+                          <div
+                            key={attr.id}
+                            className="p-2 bg-black/40 border border-white/10 rounded-lg flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <input
+                                data-testid="attr-name-input"
+                                aria-label={`Attribute ${idx + 1} display name`}
+                                data-opm-path={`objectExecution.attributes[${idx}].displayName`}
+                                value={attr.displayName}
+                                onChange={(e) =>
+                                  handleUpdateTypedAttr(idx, {
+                                    displayName: e.target.value,
+                                    cIdentifier: toCIdentifier(e.target.value, attr.id),
+                                  })
+                                }
+                                placeholder="Attribute name"
+                                className="bg-[#0e0e11] border border-white/10 rounded px-1.5 py-0.5 text-xs text-white font-mono flex-1 focus:border-emerald-500 focus:outline-none"
+                              />
+                              <select
+                                data-testid="attr-type-select"
+                                aria-label={`Attribute ${idx + 1} type`}
+                                data-opm-path={`objectExecution.attributes[${idx}].type`}
+                                value={
+                                  attr.type.kind === 'enum' ? `enum:${attr.type.enumId}` : attr.type.kind
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val.startsWith('enum:')) {
+                                    const enumId = val.replace('enum:', '');
+                                    handleUpdateTypedAttr(idx, { type: { kind: 'enum', enumId }, initialValue: null });
+                                  } else {
+                                    const kind = val as 'bool' | 'int32' | 'uint32' | 'float32';
+                                    handleUpdateTypedAttr(idx, {
+                                      type: { kind },
+                                      initialValue: kind === 'bool' ? false : 0,
+                                    });
+                                  }
+                                }}
+                                className="bg-[#0e0e11] border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white font-mono focus:border-emerald-500 focus:outline-none"
+                              >
+                                <option value="float32">float32</option>
+                                <option value="int32">int32</option>
+                                <option value="uint32">uint32</option>
+                                <option value="bool">bool</option>
+                                {enums.map((en) => (
+                                  <option key={en.id} value={`enum:${en.id}`}>
+                                    enum {en.displayName}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                data-testid="attr-delete-btn"
+                                aria-label={`Delete attribute ${idx + 1}`}
+                                onClick={() => handleDeleteTypedAttr(idx)}
+                                className="text-red-500 hover:text-red-400 p-0.5"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] pt-1">
+                              <span className="text-gray-400">Initial Value:</span>
+                              <TypedValueEditor
+                                type={attr.type}
+                                value={attr.initialValue}
+                                enumOptions={enumDef?.members}
+                                onChange={(val) => handleUpdateTypedAttr(idx, { initialValue: val })}
+                                testId="attr-initial-value-input"
+                                opmPath={`objectExecution.attributes[${idx}].initialValue`}
+                                label={`Attribute ${idx + 1} initial value`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Metadata / String Key-Value Attributes */}
+                    <div className="pt-2 border-t border-white/5 space-y-1.5">
+                      <span className="text-[9px] uppercase font-bold text-gray-400">Metadata Properties</span>
+                      <div className="space-y-1">
+                        {(selectedNode.data.attributes || []).map((attr, idx) => (
+                          <div key={idx} className="flex justify-between bg-black/30 border border-white/5 px-2.5 py-1 rounded font-mono text-[11px]">
+                            <span className="text-gray-400">{attr.key}:</span>
+                            <span className="text-amber-300 font-bold">{attr.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-1.5 pt-1">
+                        <input
+                          placeholder="Key"
+                          id="new-attr-key"
+                          className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const valEl = document.getElementById('new-attr-val') as HTMLInputElement;
+                              if (e.currentTarget.value && valEl.value) {
+                                onAddAttribute(e.currentTarget.value, valEl.value);
+                                e.currentTarget.value = '';
+                                valEl.value = '';
+                              }
+                            }
+                          }}
+                        />
+                        <input
+                          placeholder="Val"
+                          id="new-attr-val"
+                          className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Collapsible Ports Manager Section */}
           {(selectedNode.data.type === 'object' || selectedNode.data.type === 'process') && (
@@ -489,73 +981,317 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onDeleteSelectedNode}
-              className="py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 hover:bg-red-900/40 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Trash2 size={12} /> Delete Element
-            </button>
+            {confirmDelete && deleteImpact?.isHighImpact ? (
+              <div className="bg-red-950/50 border border-red-800/80 rounded-lg p-2.5 space-y-2 text-xs" data-testid="deletion-impact-preview">
+                <div className="font-bold text-red-300 flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-red-400" /> High-Impact Deletion Warning
+                </div>
+                <div className="text-red-200/90 text-[11px] leading-relaxed">
+                  Deleting <span className="font-semibold text-white">[{selectedNode.data.name}]</span> will cascade:
+                </div>
+                <ul className="list-disc list-inside text-[10px] text-red-300/80 font-mono space-y-0.5">
+                  {deleteImpact.summary.descendantsCascadedCount > 0 && (
+                    <li>{deleteImpact.summary.descendantsCascadedCount} child state/element(s)</li>
+                  )}
+                  {deleteImpact.summary.deletedEdgeCount > 0 && (
+                    <li>{deleteImpact.summary.deletedEdgeCount} connected link(s)</li>
+                  )}
+                  {deleteImpact.summary.affectedRequirementCount > 0 && (
+                    <li>{deleteImpact.summary.affectedRequirementCount} requirement relation(s)</li>
+                  )}
+                  {deleteImpact.affectedSimulationIds.length > 0 && (
+                    <li>{deleteImpact.affectedSimulationIds.length} simulation entity reference(s)</li>
+                  )}
+                </ul>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    data-testid="cancel-delete-btn"
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    data-testid="confirm-delete-btn"
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      onDeleteSelectedNode();
+                    }}
+                    className="flex-1 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs font-semibold transition-colors"
+                  >
+                    Confirm Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  if (deleteImpact?.isHighImpact) {
+                    setConfirmDelete(true);
+                  } else {
+                    onDeleteSelectedNode();
+                  }
+                }}
+                className="py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 hover:bg-red-900/40 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Trash2 size={12} /> Delete Element
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {/* ─── SECTION B: SELECTED EDGE INSPECTOR ─── */}
-      {selectedEdge && !selectedNode && (
-        <div
-          className={`${
-            isWideLayout ? 'w-1/2 shrink-0' : 'w-full shrink-0'
-          } bg-[#16161a]/95 backdrop-blur-md border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5`}
-        >
-          <div className="flex items-center justify-between border-b border-white/10 pb-2">
-            <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
-              Link Inspector
-            </span>
-            <button
-              onClick={onCloseInspector}
-              aria-label="Close Link Inspector"
-              data-testid="opm-close-edge-inspector"
-              className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
-              title="Close Link Inspector"
-            >
-              <X size={13} />
-            </button>
-          </div>
+      {selectedEdge && !selectedNode && (() => {
+        const linkExec: OpmLinkExecution = (selectedEdge.data as any)?.linkExecution || selectedEdge.data?.execution || {
+          enabled: true,
+          guard: '',
+          assignments: [],
+          priority: 1,
+          delayMs: 0,
+        };
 
-          <div className="space-y-2">
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Link ID</label>
-              <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
-            </div>
+        const handleUpdateLinkExecution = (patch: Partial<OpmLinkExecution>) => {
+          const updated = { ...linkExec, ...patch };
+          if (onUpdateSelectionExecution) {
+            onUpdateSelectionExecution(updated);
+          }
+        };
 
-            <div className="flex flex-col gap-1 pt-1">
-              <label htmlFor="opm-convert-edge-type" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                Link Role
-              </label>
-              <select
-                id="opm-convert-edge-type"
-                aria-label="Link Role"
-                value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
-                onChange={(e) => onConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
-                className="bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 text-white font-medium"
-                data-testid="opm-convert-edge-type"
+        const handleAddAssignment = () => {
+          const newAsgn: OpmAssignment = {
+            id: nextStableId('asgn'),
+            targetAttributeId: '',
+            operator: '=',
+            expression: '0',
+            enabled: true,
+          };
+          handleUpdateLinkExecution({
+            assignments: [...(linkExec.assignments || []), newAsgn],
+          });
+        };
+
+        return (
+          <div
+            data-testid="link-execution-inspector"
+            className={`${
+              isWideLayout ? 'w-1/2 shrink-0' : 'w-full shrink-0'
+            } bg-[#16161a]/95 backdrop-blur-md border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5`}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
+                Link Inspector
+              </span>
+              <button
+                onClick={onCloseInspector}
+                aria-label="Close Link Inspector"
+                data-testid="opm-close-edge-inspector"
+                className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
+                title="Close Link Inspector"
               >
-                <option value="consumption">Consumption</option>
-                <option value="result">Result</option>
-                <option value="effect">Effect</option>
-                <option value="agent">Agent</option>
-                <option value="instrument">Instrument</option>
-                <option value="trigger">Trigger</option>
-                <option value="condition">Condition</option>
-                <option value="aggregation">Aggregation</option>
-                <option value="generalization">Generalization</option>
-                <option value="exhibition">Exhibition</option>
-                <option value="satisfies">Satisfies</option>
-                <option value="verifies">Verifies</option>
-              </select>
+                <X size={13} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Link ID</label>
+                <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
+              </div>
+
+              <div className="flex flex-col gap-1 pt-1">
+                <label htmlFor="opm-convert-edge-type" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                  Link Role
+                </label>
+                <select
+                  id="opm-convert-edge-type"
+                  aria-label="Link Role"
+                  value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
+                  onChange={(e) => onConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
+                  className="bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 text-white font-medium"
+                  data-testid="opm-convert-edge-type"
+                >
+                  <option value="consumption">Consumption</option>
+                  <option value="result">Result</option>
+                  <option value="effect">Effect</option>
+                  <option value="agent">Agent</option>
+                  <option value="instrument">Instrument</option>
+                  <option value="trigger">Trigger</option>
+                  <option value="condition">Condition</option>
+                  <option value="aggregation">Aggregation</option>
+                  <option value="generalization">Generalization</option>
+                  <option value="exhibition">Exhibition</option>
+                  <option value="satisfies">Satisfies</option>
+                  <option value="verifies">Verifies</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-event">
+                  Event Trigger
+                </label>
+                <select
+                  id="link-event"
+                  data-testid="link-event-select"
+                  data-opm-path="linkExecution.eventId"
+                  value={linkExec.eventId || ''}
+                  onChange={(e) => handleUpdateLinkExecution({ eventId: e.target.value || undefined })}
+                  className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="">-- none --</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-guard">
+                  Guard Expression
+                </label>
+                <input
+                  id="link-guard"
+                  data-testid="guard-expr-input"
+                  data-opm-path="linkExecution.guard"
+                  value={linkExec.guard || ''}
+                  onChange={(e) => handleUpdateLinkExecution({ guard: e.target.value })}
+                  placeholder="e.g. ready == true"
+                  className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-prio">
+                    Priority
+                  </label>
+                  <input
+                    id="link-prio"
+                    data-testid="link-priority-input"
+                    data-opm-path="linkExecution.priority"
+                    type="number"
+                    value={linkExec.priority ?? 1}
+                    onChange={(e) => handleUpdateLinkExecution({ priority: Number(e.target.value) })}
+                    className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-delay">
+                    Delay (ms)
+                  </label>
+                  <input
+                    id="link-delay"
+                    data-testid="link-delay-input"
+                    data-opm-path="linkExecution.delayMs"
+                    type="number"
+                    value={linkExec.delayMs ?? 0}
+                    onChange={(e) => handleUpdateLinkExecution({ delayMs: Number(e.target.value) })}
+                    className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10 space-y-2">
+                <span className="text-[10px] font-bold uppercase text-orange-400 tracking-wider">
+                  State Transition Target
+                </span>
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-owner">
+                    Owner Object ID
+                  </label>
+                  <input
+                    id="link-trans-owner"
+                    data-testid="link-transition-owner-input"
+                    data-opm-path="linkExecution.transition.ownerObjectId"
+                    value={linkExec.transition?.ownerObjectId || ''}
+                    onChange={(e) =>
+                      handleUpdateLinkExecution({
+                        transition: {
+                          ownerObjectId: e.target.value,
+                          targetStateId: linkExec.transition?.targetStateId || '',
+                          sourceStateId: linkExec.transition?.sourceStateId,
+                        },
+                      })
+                    }
+                    placeholder="e.g. obj_boiler"
+                    className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-src">
+                      Source State ID
+                    </label>
+                    <input
+                      id="link-trans-src"
+                      data-testid="link-transition-source-input"
+                      data-opm-path="linkExecution.transition.sourceStateId"
+                      value={linkExec.transition?.sourceStateId || ''}
+                      onChange={(e) =>
+                        handleUpdateLinkExecution({
+                          transition: {
+                            ownerObjectId: linkExec.transition?.ownerObjectId || '',
+                            targetStateId: linkExec.transition?.targetStateId || '',
+                            sourceStateId: e.target.value || undefined,
+                          },
+                        })
+                      }
+                      placeholder="optional"
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-tgt">
+                      Target State ID
+                    </label>
+                    <input
+                      id="link-trans-tgt"
+                      data-testid="link-transition-target-input"
+                      data-opm-path="linkExecution.transition.targetStateId"
+                      value={linkExec.transition?.targetStateId || ''}
+                      onChange={(e) =>
+                        handleUpdateLinkExecution({
+                          transition: {
+                            ownerObjectId: linkExec.transition?.ownerObjectId || '',
+                            targetStateId: e.target.value,
+                            sourceStateId: linkExec.transition?.sourceStateId,
+                          },
+                        })
+                      }
+                      placeholder="e.g. st_active"
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold uppercase text-gray-400">
+                    Action Assignments
+                  </span>
+                  <button
+                    data-testid="add-assignment-btn"
+                    aria-label="Add assignment"
+                    onClick={handleAddAssignment}
+                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-sky-950 text-sky-400 border border-sky-800 rounded hover:bg-sky-900"
+                  >
+                    <Plus size={10} /> Add Assignment
+                  </button>
+                </div>
+                <AssignmentRows
+                  value={linkExec.assignments || []}
+                  writableAttributes={writableAttributes}
+                  basePath="linkExecution.assignments"
+                  onChange={(next) => handleUpdateLinkExecution({ assignments: next })}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── SECTION C: STUDIO TABS DASHBOARD ─── */}
       <div

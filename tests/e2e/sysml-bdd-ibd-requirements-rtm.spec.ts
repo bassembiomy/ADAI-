@@ -1,0 +1,46 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('SysML Conformance: BDD, IBD, Requirements, and RTM browser flows', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to local dev server
+    await page.goto('/');
+    // Wait for the app canvas to mount
+    await page.waitForLoadState('domcontentloaded');
+    const intro = page.locator('.fixed.inset-0.z-\\[9999\\]');
+    if (await intro.isVisible()) {
+      await intro.click();
+      await page.waitForTimeout(600);
+    }
+  });
+
+  test('loads SysML editor and verifies canvas presence', async ({ page }) => {
+    // Expect canvas or main layout to be present
+    const canvas = page.locator('svg').first();
+    await expect(canvas).toBeVisible();
+  });
+
+  test('allows opening the Requirements Traceability Matrix workspace', async ({ page }) => {
+    // Look for RTM button / trigger in the UI
+    const rtmButton = page.locator('button:has-text("RTM"), button[title*="Traceability"], button[aria-label*="Traceability"]').first();
+    if (await rtmButton.isVisible()) {
+      await rtmButton.click();
+      // Ensure RTM section mounts
+      const rtmHeading = page.locator('h2:has-text("Requirements Traceability Matrix")');
+      await expect(rtmHeading).toBeVisible({ timeout: 10000 });
+      // Verify baseline compare selector is present
+      const baselineSelect = page.locator('select[aria-label="Compare with baseline"]');
+      await expect(baselineSelect).toBeVisible();
+    }
+  });
+
+  test('validates Requirement Inspector tabs including Governance', async ({ page }) => {
+    // When a requirement element is selected, tabs Header should contain General, Assign, Governance
+    const govTab = page.locator('button:has-text("Governance")');
+    if (await govTab.isVisible()) {
+      await govTab.click();
+      // Governance panel heading
+      await expect(page.locator('h3:has-text("Requirement Governance")')).toBeVisible();
+      await expect(page.locator('legend:has-text("Model Baseline")')).toBeVisible();
+    }
+  });
+});

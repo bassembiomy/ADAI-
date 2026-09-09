@@ -8,6 +8,7 @@ describe('HELP_DATA catalog completeness and integrity', () => {
     const requiredKeys = [
       'getting-started',
       'architecture-guide',
+      'entropy-opm',
       'state-machine-fundamentals',
       'state-machine-transitions',
       'state-machine-simulation',
@@ -77,6 +78,45 @@ describe('HELP_DATA catalog completeness and integrity', () => {
     expect(smBody).toContain('Entry Action');
     expect(smBody).toContain('During Action');
     expect(smBody).toContain('Exit Action');
+  });
+
+  it('verifies OPM & ENTROPY Embedded C guide topic integrity, drawing, and sections', () => {
+    const opmTopic = HELP_DATA['entropy-opm'];
+    expect(opmTopic).toBeDefined();
+    expect(opmTopic.title).toContain('OPM (ISO 19450)');
+    expect(opmTopic.category).toBe('Architecture');
+    expect(opmTopic.image).toBeTruthy();
+    expect(opmTopic.sections).toBeDefined();
+    expect(opmTopic.sections?.length).toBeGreaterThanOrEqual(6);
+
+    const fullText = JSON.stringify(opmTopic);
+    // Section 1: Dual layers
+    expect(fullText).toContain('Conceptual OPM');
+    expect(fullText).toContain('Executable OPM');
+    // Section 2: Pipeline drawing & 10-phase tick
+    expect(fullText).toContain('Deterministic Normalization');
+    expect(fullText).toContain('10-phase tick cycle');
+    expect(fullText).toContain('C99 Code Generator');
+    // Section 3: Block types & port catalogues
+    expect(fullText).toContain('Object');
+    expect(fullText).toContain('Process');
+    expect(fullText).toContain('State');
+    expect(fullText).toContain('Requirement');
+    // Section 4: Link types
+    expect(fullText).toContain('Agent');
+    expect(fullText).toContain('Instrument');
+    expect(fullText).toContain('Consumption');
+    expect(fullText).toContain('Result');
+    expect(fullText).toContain('Effect');
+    expect(fullText).toContain('Trigger');
+    expect(fullText).toContain('Condition');
+    // Section 5: Step-by-step
+    expect(fullText).toContain('Open ENTROPY OPM');
+    expect(fullText).toContain('Target Settings');
+    // Section 6: Connection mechanics & wiring patterns
+    expect(fullText).toContain('Pick Link Type First');
+    expect(fullText).toContain('Hover Source Port');
+    expect(fullText).toContain('X does Y');
   });
 
   it('verifies all VLAB_LIBRARY blocks transform with valid properties for HelpModal', () => {
