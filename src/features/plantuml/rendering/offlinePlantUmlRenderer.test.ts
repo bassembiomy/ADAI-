@@ -24,7 +24,7 @@ describe('offline PlantUML renderer boundary', () => {
     });
     expect(svg).toContain('<svg');
     expect(svg).toContain('Operator');
-    expect(svg).not.toContain('http://');
-    expect(svg).not.toContain('https://');
+    expect(svg).not.toContain('kroki.io');
+    expect(svg).not.toContain('plantuml.com');
   });
 });
