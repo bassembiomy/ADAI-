@@ -111,6 +111,7 @@ import { loadRepository, serializeRepository } from './engine/sysml/persistence'
 import { createEmptyRepository } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { loadCanonicalSysmlProject } from './services/sysmlCommandGateway';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
@@ -7262,10 +7263,14 @@ const ADIA = () => {
 
   const hydrateProject = useCallback((importedData: any) => {
     try {
+      let sysmlLoadedView: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] } | null = null;
       if (importedData.sysmlRepository) {
-        const canonical = loadRepository(importedData.sysmlRepository);
-        if (!canonical.valid) throw new Error(`Canonical SysML repository failed validation: ${canonical.diagnostics.map(item => item.code).join(', ')}`);
-        setCanonicalSysmlRepository(canonical.repository);
+        const loaded = loadCanonicalSysmlProject(importedData);
+        if (!loaded.valid) {
+          throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
+        }
+        setCanonicalSysmlRepository(loaded.repository);
+        sysmlLoadedView = loaded.view;
       }
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
@@ -7284,11 +7289,18 @@ const ADIA = () => {
       }
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
-      // SysML & Requirements — always migrate to ensure layerId is set
-      if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
-      if (importedData.relationships) setRelationships(importedData.relationships);
-      if (importedData.parts) setParts(importedData.parts);
-      if (importedData.connectors) setConnectors(importedData.connectors);
+      // SysML & Requirements — derive from canonical repository if present, else migrate legacy
+      if (sysmlLoadedView) {
+        setBlocks(migrateBlocks(sysmlLoadedView.blocks));
+        setRelationships(sysmlLoadedView.relationships);
+        setParts(sysmlLoadedView.parts);
+        setConnectors(sysmlLoadedView.connectors);
+      } else {
+        if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
+        if (importedData.relationships) setRelationships(importedData.relationships);
+        if (importedData.parts) setParts(importedData.parts);
+        if (importedData.connectors) setConnectors(importedData.connectors);
+      }
       if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
       if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
 
@@ -7550,6 +7562,10 @@ const ADIA = () => {
       parts,
       connectors,
       sysmlRepository: serializeRepository(canonicalSysmlRepository),
+      sysmlCoordinates: Object.fromEntries([
+        ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
+        ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
+      ]),
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
