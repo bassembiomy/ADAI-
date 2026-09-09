@@ -2081,10 +2081,7 @@ const executeDirectOperations = (
     const intrinsicFault = intrinsicOperationFault(runtime, operation);
     if (intrinsicFault !== null && faults[faultStart] === undefined) faults.push(intrinsicFault);
     const fault = intrinsicFault ?? faults[faultStart];
-    // Signal-only models intentionally expose non-finite floating-point values
-    // instead of converting them to the operation fallback value. This keeps
-    // NaN/Infinity observable for diagnostic and simulation workflows.
-    if (fault !== undefined && fault !== 'non-finite') {
+    if (fault !== undefined) {
       recordOperationFault(runtime, operation, fault, snapshot);
     }
   }
@@ -2240,7 +2237,7 @@ const executeSolverSubstep = (
       || operation.type === 'Integrator') {
       writeStateOutputs(runtime, operation, faults);
       const fault = faults[faultStart];
-      if (fault !== undefined && fault !== 'non-finite') {
+      if (fault !== undefined) {
         recordOperationFault(runtime, operation, fault, outputSnapshot);
       }
     }
@@ -2259,7 +2256,7 @@ const executeSolverSubstep = (
     const faultStart = faults.length;
     const updates = statefulUpdate(runtime, operation, faults);
     const fault = faults[faultStart];
-    if (fault !== undefined && fault !== 'non-finite') {
+    if (fault !== undefined) {
       recordOperationFault(runtime, operation, fault, snapshot);
       continue;
     }

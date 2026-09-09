@@ -18,6 +18,7 @@ describe('smReferenceInterpreter', () => {
 
   it('evaluates Step block output across time vectors matching ceiling step threshold (GEN-XB-STEP-007)', () => {
     const model = flatOrFixture();
+    model.states[0].isXBridges = true;
     model.states[0].xBridgesModel = {
       nodes: [
         {
@@ -37,7 +38,7 @@ describe('smReferenceInterpreter', () => {
       ],
       edges: [{ id: 'e1', sourceNodeId: 'step1', sourcePortId: 'out', targetNodeId: 'XB6-StepOut', targetPortId: 'in' }],
       mappings: [
-        { smVarId: 'xb6_step_output', blockId: 'XB6-StepOut', portId: 'out', direction: 'out' },
+        { smVarId: 'v_step', blockId: 'XB6-StepOut', portId: 'out', direction: 'out' },
       ],
     };
     model.variables.push({ id: 'v_step', name: 'xb6_step_output', type: 'double', initialValue: '0', currentValue: 0, visibleInScope: true });
