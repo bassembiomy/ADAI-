@@ -587,8 +587,8 @@ const renderSignalElementWrite = (
 ): readonly string[] => {
   const signal = requireSignal(state, signalId);
   const destination = signalElementStorageExpression(state, signalId, layout, member, index).expression;
-  const resultName = `xb_result_${operationIndex}_${outputIndex}`;
-  const valueName = `xb_value_${operationIndex}_${outputIndex}`;
+  const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
+  const valueName = `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
@@ -742,8 +742,8 @@ const renderSignalWrite = (
   if (field === undefined) {
     throw new Error(`X-Bridges signal '${signal.id}' lacks generated storage`);
   }
-  const resultName = `xb_result_${operationIndex}_${outputIndex}`;
-  const valueName = `xb_value_${operationIndex}_${outputIndex}`;
+  const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
+  const valueName = `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
@@ -2365,8 +2365,7 @@ const renderStateOutputs = (
     const inputSignalId = operation.inputSignalIds[0];
     if (prevSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const outputSignal = requireSignal(state, outputSignalId);
-      const isFloat32 = outputSignal.numericType.kind === 'float32';
-      const isnanFn = isFloat32 ? 'isnanf' : 'isnan';
+      const isnanFn = 'isnan';
       const nanVal = 'NAN';
 
       const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
@@ -3748,8 +3747,7 @@ const renderDiscreteStateUpdates = (
         );
       }
       case 'RATE_LIMITER': {
-        const isFloat32 = slot.numericType.kind === 'float32';
-        const isnanFn = isFloat32 ? 'isnanf' : 'isnan';
+        const isnanFn = 'isnan';
         const nanVal = 'NAN';
 
         const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));

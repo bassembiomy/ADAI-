@@ -173,6 +173,7 @@ export function renderCMatrixInverseGaussJordan(
   const readInput = is2DArray ? `${inputVar}[r][c]` : `${inputVar}[r * ${n}U + c]`;
   const writeOutput = is2DArray ? `${outputVar}[r][c]` : `${outputVar}[r * ${n}U + c]`;
   return [
+    `    double ${outputVar}[${n}][${n}];`,
     `    {`,
     `        double aug_${outputVar}[${n}][${2 * n}];`,
     `        for (uint32_t r = 0U; r < ${n}U; ++r) {`,
