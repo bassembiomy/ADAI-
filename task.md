@@ -65,9 +65,9 @@
 - [x] Step 5: Verify and commit `chore(sysml): enforce evidence-backed conformance claims`.
 
 ## Task 9: Final release qualification and professional-tool acceptance
-- [ ] Step 1: Define the aggregate gate `npm run test:sysml:full-release` in `package.json` and `scripts/verify_sysml_release.ts`.
-- [ ] Step 2: Restore and pin required compiler in script.
-- [ ] Step 3: Run all gates.
-- [ ] Step 4: Perform acceptance audit across every matrix row.
-- [ ] Step 5: Produce release report in `docs/SYSML_RELEASE_REPORT.md`.
-- [ ] Step 6: Final commit and summary.
+- [x] Step 1: Define the aggregate gate `npm run test:sysml:full-release` in `package.json` and `scripts/verify_sysml_release.ts`.
+- [x] Step 2: Restore and pin required compiler in script.
+- [x] Step 3: Run all gates.
+- [x] Step 4: Perform acceptance audit across every matrix row.
+- [x] Step 5: Produce release report in `docs/SYSML_RELEASE_REPORT.md`.
+- [x] Step 6: Final commit and summary.

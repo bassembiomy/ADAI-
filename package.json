@@ -43,6 +43,7 @@
     "test:sysml": "vitest run src/engine/sysml src/components/sysml src/services/sysmlCommandGateway.test.ts src/services/sysmlTransactionAdapter.test.ts src/services/sysmlCreationRules.test.ts src/services/sysmlIntegrityService.test.ts src/services/reportModelConsistency.test.ts",
     "test:sysml:release": "npm run test:sysml && vitest run src/features/reporting --reporter=verbose && tsc --noEmit",
     "test:e2e:sysml": "playwright test tests/e2e",
+    "test:sysml:full-release": "tsx scripts/verify_sysml_release.ts",
     "test:sm:verification": "vitest run src/utils/stateMachine/smTestManifest.test.ts src/utils/stateMachine/smTestPlanBuilder.test.ts src/utils/stateMachine/smCTestRuntimeRenderer.test.ts src/utils/stateMachine/smCTestSuiteRenderer.test.ts src/utils/stateMachine/smCHarness.test.ts src/utils/stateMachine/smCoverageRunner.test.ts src/utils/stateMachine/smDifferential.test.ts src/utils/stateMachine/smAnalysisRunner.test.ts src/utils/stateMachine/smTargetCompileRunner.test.ts src/utils/stateMachine/smPipelineOrchestrator.test.ts src/utils/stateMachine/smReports.test.ts",
     "verify:sm:codegen": "tsx scripts/verify_sm_codegen.ts",
     "audit:prebuild": "npm audit --audit-level=critical || node -e \"console.warn('[WARNING] Unfixable audit vulnerabilities detected (tar, tmp have no upstream fix). Review before production release.')\"",
