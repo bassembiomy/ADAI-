@@ -45,4 +45,32 @@ describe('professional traceability matrix workspace', () => {
     expect(html).toContain('Baseline 1.0');
     expect(html).toContain('aria-label="Filter by change type"');
   });
+
+  it('renders hierarchy and covering blocks with relationship connection types', () => {
+    const repo = repository();
+    repo.requirements.rChild = {
+      id: 'rChild',
+      name: 'Sub-Safety',
+      namespace: [],
+      kind: 'requirement',
+      requirementId: 'REQ-2',
+      text: 'Child safe spec',
+      status: 'approved',
+      version: '1',
+    };
+    repo.relationships.rc = {
+      id: 'rc',
+      kind: 'requirementContainment',
+      sourceId: 'r',
+      targetId: 'rChild',
+    };
+
+    const html = renderToStaticMarkup(<TraceabilityMatrix repository={repo} />);
+    expect(html).toContain('Hierarchy &amp; Relations');
+    expect(html).toContain('«containment»');
+    expect(html).toContain('Sub-Safety');
+    expect(html).toContain('REQ-2');
+    expect(html).toContain('«satisfy»');
+    expect(html).toContain('Controller');
+  });
 });

@@ -6,12 +6,12 @@
   - [x] Step 3: Implement `parents`, `children`, `requirementRelations`, and `satisfiedReqIds` mapping in `rtm.ts` and `persistence.ts`
   - [x] Step 4: Run tests to verify GREEN
   - [x] Step 5: Commit `feat(sysml): add hierarchy and covering block relations to rtm engine`
-- [ ] Task 2: Add Hierarchy & Covering Blocks column to Standard RTM Table
-  - [ ] Step 1: Write failing component test in `src/components/sysml/TraceabilityMatrix.test.tsx`
-  - [ ] Step 2: Run test to verify RED
-  - [ ] Step 3: Implement column with parent, child, covering blocks, and connection type pills in `TraceabilityMatrix.tsx`
-  - [ ] Step 4: Run test to verify GREEN
-  - [ ] Step 5: Commit `feat(sysml): display hierarchy and covering blocks in standard rtm table`
+- [x] Task 2: Add Hierarchy & Covering Blocks column to Standard RTM Table
+  - [x] Step 1: Write failing component test in `src/components/sysml/TraceabilityMatrix.test.tsx`
+  - [x] Step 2: Run test to verify RED
+  - [x] Step 3: Implement column with parent, child, covering blocks, and connection type pills in `TraceabilityMatrix.tsx`
+  - [x] Step 4: Run test to verify GREEN
+  - [x] Step 5: Commit `feat(sysml): display hierarchy and covering blocks in standard rtm table`
 - [ ] Task 3: Add Hierarchy & Covering Blocks to Virtualized Traceability Grid
   - [ ] Step 1: Write failing test in `src/components/sysml/VirtualizedTraceabilityGrid.test.tsx`
   - [ ] Step 2: Run test to verify RED
