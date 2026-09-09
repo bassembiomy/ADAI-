@@ -14938,7 +14938,7 @@ const ADIA = () => {
               { id: 'vlab', label: 'V-Lab' },
               { id: 'hil', label: 'HIL' },
               { id: 'entropy', label: 'ENTROPY OPM' },
-              { id: 'plantuml', label: 'PlantUML' },
+              { id: 'plantuml', label: 'Sequence Diagram / Use Case' },
             ].map(mode => (
               <button
                 key={mode.id}
