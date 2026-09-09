@@ -6159,7 +6159,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
-  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
@@ -14938,7 +14938,7 @@ const ADIA = () => {
               { id: 'vlab', label: 'V-Lab' },
               { id: 'hil', label: 'HIL' },
               { id: 'entropy', label: 'ENTROPY OPM' },
-              { id: 'plantuml', label: 'Sequence Diagram / Use Case' },
+              { id: 'plantuml', label: 'Use Case Diagram' },
             ].map(mode => (
               <button
                 key={mode.id}
