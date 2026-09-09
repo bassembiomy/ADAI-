@@ -16,6 +16,8 @@ import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
 import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
+import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
+import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -6948,6 +6950,20 @@ const ADIA = () => {
       setIsRunning(false);
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
+
+  const exportPlantUmlSource = useCallback(() => {
+    const source = plantUmlDiagram.type === 'sequence'
+      ? generateSequencePlantUml(plantUmlDiagram)
+      : generateUseCasePlantUml(plantUmlDiagram);
+    const blob = new Blob([source], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${(plantUmlDiagram.title || 'adia-diagram').replace(/[^a-z0-9_-]+/gi, '_')}.puml`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    addError('info', 'PlantUML source exported locally.');
+  }, [plantUmlDiagram, addError]);
 
   // Import file as new tab function
   const handleImportFile = useCallback((name: string, type: string, fileData: any) => {
@@ -15503,7 +15519,7 @@ const ADIA = () => {
                   diagram={plantUmlDiagram}
                   onChange={setPlantUmlDiagram}
                   onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
-                  onExport={() => addError('info', 'PlantUML export is available after offline rendering is configured.')}
+                  onExport={exportPlantUmlSource}
                 />
               )}
 

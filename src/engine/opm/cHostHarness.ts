@@ -46,7 +46,7 @@ export function resolveRequiredOpmCompiler(repoRoot: string): string {
     // Development environments may provide a verified host GCC without the
     // optional bundled W64DevKit archive. Use it for the same strict C99
     // qualification flags before failing closed.
-    const hostCompiler = process.env.ComSpec
+    const hostCompiler = fs.existsSync(repoRoot) && process.env.ComSpec
       ? (() => {
         try {
           return execFileSync(process.env.ComSpec, ['/d', '/s', '/c', 'where gcc'], { encoding: 'utf8' }).split(/\r?\n/).find(Boolean);
@@ -54,9 +54,6 @@ export function resolveRequiredOpmCompiler(repoRoot: string): string {
       })()
       : undefined;
     if (hostCompiler && fs.existsSync(hostCompiler.trim())) return hostCompiler.trim();
-    if (fromEnv && fromEnv.length > 0) {
-      return fromEnv;
-    }
     throw new Error(
       `${OPM_QUALIFICATION_COMPILER_ERROR}: expected bundled compiler at ${bundled}`,
     );

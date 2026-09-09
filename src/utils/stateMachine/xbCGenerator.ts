@@ -588,7 +588,9 @@ const renderSignalElementWrite = (
   const signal = requireSignal(state, signalId);
   const destination = signalElementStorageExpression(state, signalId, layout, member, index).expression;
   const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
-  const valueName = `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
+  const valueName = index === '0U'
+    ? `xb_value_${operationIndex}_${outputIndex}`
+    : `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
