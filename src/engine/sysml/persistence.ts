@@ -51,7 +51,7 @@ export function loadRepository(input: string | unknown): LoadRepositoryResult {
     repository = hydrateCanonical(raw);
     migrated = !('artifacts' in raw) || !('auditTrail' in raw);
   } else {
-    repository = migrateLegacy(raw);
+    repository = migrateLegacy(raw, diagnostics);
     migrated = true;
   }
   freezeBaselines(repository);
@@ -120,7 +120,7 @@ function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
   };
 }
 
-function migrateLegacy(raw: unknown): SysmlRepository {
+function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): SysmlRepository {
   const source = isRecord(raw) ? raw : {};
   const repo = createEmptyRepository();
   for (const legacy of arrayOfRecords(source.blocks)) {
@@ -191,11 +191,23 @@ function migrateLegacy(raw: unknown): SysmlRepository {
   for (const legacy of arrayOfRecords(source.relationships)) {
     const id = text(legacy.id);
     if (!id) continue;
+    const sourceId = text(legacy.sourceId);
+    const targetId = text(legacy.targetId);
+    let kind = relationshipKind(legacy.type);
+    if (kind === 'composition' && repo.requirements[sourceId] && repo.requirements[targetId]) {
+      kind = 'requirementContainment';
+      diagnostics.push({
+        code: 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED',
+        severity: 'info',
+        elementId: id,
+        message: `Migrated legacy composition ${id} between requirements to requirementContainment`,
+      });
+    }
     repo.relationships[id] = {
-      id, sourceId: text(legacy.sourceId), targetId: text(legacy.targetId), kind: relationshipKind(legacy.type),
+      id, sourceId, targetId, kind,
     };
-    if (relationshipKind(legacy.type) === 'verify' && repo.verificationCases[text(legacy.sourceId)] && repo.requirements[text(legacy.targetId)]) {
-      repo.verificationCases[text(legacy.sourceId)].verifiesRequirementIds.push(text(legacy.targetId));
+    if (kind === 'verify' && repo.verificationCases[sourceId] && repo.requirements[targetId]) {
+      repo.verificationCases[sourceId].verifiesRequirementIds.push(targetId);
     }
   }
   repo.auditTrail.push({ id: 'change-0-legacy-import', revision: 0, timestamp: new Date(0).toISOString(), command: 'migrateLegacy', elementIds: [] });
@@ -252,7 +264,12 @@ function relationshipKind(value: unknown): SysmlRelationship['kind'] {
   const kind = text(value);
   if (kind === 'aggregation') return 'sharedAggregation';
   if (kind === 'derive') return 'deriveReqt';
-  const supported: SysmlRelationship['kind'][] = ['association', 'sharedAggregation', 'composition', 'generalization', 'dependency', 'allocation', 'binding', 'itemFlow', 'deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy'];
+  if (kind === 'requirementContainment') return 'requirementContainment';
+  const supported: SysmlRelationship['kind'][] = [
+    'association', 'sharedAggregation', 'composition', 'generalization', 'dependency',
+    'allocation', 'binding', 'itemFlow', 'requirementContainment', 'deriveReqt', 'satisfy',
+    'verify', 'refine', 'trace', 'copy',
+  ];
   return supported.includes(kind as SysmlRelationship['kind']) ? kind as SysmlRelationship['kind'] : 'trace';
 }
 function propertyKind(value: unknown): 'value' | 'part' | 'reference' | 'flow' {

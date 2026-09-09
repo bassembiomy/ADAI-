@@ -23,7 +23,40 @@ export interface VerificationEvidence { id: string; verificationCaseId: string; 
 export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; contentHash?: string; elementHashes?: Record<string, string>; }
 export interface TraceArtifact { id: string; name: string; kind: 'behavior' | 'simulation' | 'generatedArtifact' | 'source'; ownerId?: string; revision: number; uri?: string; }
 export interface ModelChangeRecord { id: string; revision: number; timestamp: string; command: string; elementIds: string[]; actor?: string; }
-export interface SysmlRelationship { id: string; kind: 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation' | 'binding' | 'itemFlow' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'copy'; sourceId: string; targetId: string; sourceMultiplicity?: Multiplicity; targetMultiplicity?: Multiplicity; sourceRole?: string; targetRole?: string; sourceNavigable?: boolean; targetNavigable?: boolean; sourceAggregation?: 'none' | 'shared' | 'composite'; targetAggregation?: 'none' | 'shared' | 'composite'; suspect?: boolean; lastValidatedRevision?: number; }
+export type RequirementRelationshipKind =
+  | 'requirementContainment'
+  | 'deriveReqt'
+  | 'satisfy'
+  | 'verify'
+  | 'refine'
+  | 'trace'
+  | 'copy';
+
+export interface SysmlRelationship {
+  id: string;
+  kind:
+    | 'association'
+    | 'sharedAggregation'
+    | 'composition'
+    | 'generalization'
+    | 'dependency'
+    | 'allocation'
+    | 'binding'
+    | 'itemFlow'
+    | RequirementRelationshipKind;
+  sourceId: string;
+  targetId: string;
+  sourceMultiplicity?: Multiplicity;
+  targetMultiplicity?: Multiplicity;
+  sourceRole?: string;
+  targetRole?: string;
+  sourceNavigable?: boolean;
+  targetNavigable?: boolean;
+  sourceAggregation?: 'none' | 'shared' | 'composite';
+  targetAggregation?: 'none' | 'shared' | 'composite';
+  suspect?: boolean;
+  lastValidatedRevision?: number;
+}
 
 export interface SysmlRepository {
   schemaVersion: 2;

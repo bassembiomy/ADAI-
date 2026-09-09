@@ -76,4 +76,44 @@ describe('versioned SysML persistence and baselines', () => {
     expect(loaded.repository.baselines.locked.protected).toBe(true);
     expect(Object.isFrozen(loaded.repository.baselines.locked)).toBe(true);
   });
+
+  it('serializes and round-trips requirementContainment relationship deterministically', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.parent = { id: 'parent', kind: 'requirement', name: 'Parent Req', namespace: [], requirementId: 'REQ-P', text: 'Parent text', status: 'approved', version: '1' };
+    repo.requirements.child = { id: 'child', kind: 'requirement', name: 'Child Req', namespace: [], requirementId: 'REQ-C', text: 'Child text', status: 'approved', version: '1' };
+    repo.relationships.rel1 = { id: 'rel1', kind: 'requirementContainment' as any, sourceId: 'parent', targetId: 'child' };
+
+    const serialized = serializeRepository(repo);
+    const loaded = loadRepository(serialized);
+    expect(loaded.valid).toBe(true);
+    expect(loaded.repository.relationships.rel1).toMatchObject({
+      id: 'rel1',
+      kind: 'requirementContainment',
+      sourceId: 'parent',
+      targetId: 'child',
+    });
+  });
+
+  it('migrates legacy composition between requirements to requirementContainment with diagnostic', () => {
+    const legacy = {
+      blocks: [
+        { id: 'reqParent', name: 'Parent', stereotype: 'requirement', reqId: 'REQ-P', description: 'Parent Req' },
+        { id: 'reqChild', name: 'Child', stereotype: 'requirement', reqId: 'REQ-C', description: 'Child Req' },
+        { id: 'blockSys', name: 'System', stereotype: 'block' },
+      ],
+      parts: [{ id: 'part1', name: 'p1', blockId: 'blockSys', typeId: 'blockSys' }],
+      relationships: [
+        { id: 'r1', sourceId: 'reqParent', targetId: 'reqChild', type: 'composition', label: '' },
+        { id: 'r2', sourceId: 'blockSys', targetId: 'part1', type: 'composition', label: '' },
+      ],
+    };
+
+    const loaded = loadRepository(legacy);
+    expect(loaded.migrated).toBe(true);
+    // Requirement composition converted to requirementContainment
+    expect(loaded.repository.relationships.r1.kind).toBe('requirementContainment');
+    // Block-part composition preserved
+    expect(loaded.repository.relationships.r2.kind).toBe('composition');
+    expect(loaded.diagnostics.some(d => d.code === 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED')).toBe(true);
+  });
 });
