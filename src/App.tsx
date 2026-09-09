@@ -109,7 +109,9 @@ import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { validateAssociationEnds } from './engine/sysml/bdd';
+import { validateConnector } from './engine/sysml/ibd';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
@@ -17162,22 +17164,47 @@ const ADIA = () => {
                 </>
               ) : selectedConnector ? (
                 <>
-                  <div>
-                    <Label>Connector Kind</Label>
-                    <select value={selectedConnector.kind || 'assembly'} onChange={(e) => updateConnector(selectedConnector.id, { kind: e.target.value as ConnectorData['kind'] })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                      <option value="assembly">Assembly</option>
-                      <option value="delegation">Delegation</option>
-                      <option value="binding">Binding</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label>Item Flow</Label>
-                    <select value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value || undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                      <option value="">No conveyed item</option>
-                      {blocks.filter(block => ['valueType', 'interface', 'interfaceBlock'].includes(block.stereotype)).map(block => <option key={block.id} value={block.id}>{block.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
+                  <IbdConnectorEditor
+                    connector={{
+                      id: selectedConnector.id,
+                      kind: selectedConnector.kind || 'assembly',
+                      ownerId: currentLayerId,
+                      sourcePortId: `${selectedConnector.sourcePartId}::${selectedConnector.sourcePortId}`,
+                      targetPortId: `${selectedConnector.targetPartId}::${selectedConnector.targetPortId}`,
+                      itemFlowId: selectedConnector.itemFlow,
+                      sourceParameterId: (selectedConnector as any).sourceParameterId,
+                      targetParameterId: (selectedConnector as any).targetParameterId,
+                      itemProperty: (selectedConnector as any).itemProperty,
+                      itemUnit: (selectedConnector as any).itemUnit,
+                    }}
+                    availablePorts={parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
+                      const b = blocks.find(b => b.id === p.typeId);
+                      return (b?.ports || []).map(port => ({
+                        id: `${p.id}::${port.id}`,
+                        name: port.name,
+                        ownerName: p.name,
+                      }));
+                    })}
+                    definitions={canonicalSysmlRepository.definitions}
+                    diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
+                    onChange={(updatedConn) => {
+                      const [srcPart, srcPort] = updatedConn.sourcePortId.split('::');
+                      const [tgtPart, tgtPort] = updatedConn.targetPortId.split('::');
+                      updateConnector(selectedConnector.id, {
+                        kind: updatedConn.kind,
+                        sourcePartId: srcPart || selectedConnector.sourcePartId,
+                        sourcePortId: srcPort || selectedConnector.sourcePortId,
+                        targetPartId: tgtPart || selectedConnector.targetPartId,
+                        targetPortId: tgtPort || selectedConnector.targetPortId,
+                        itemFlow: updatedConn.itemFlowId,
+                        sourceParameterId: updatedConn.sourceParameterId,
+                        targetParameterId: updatedConn.targetParameterId,
+                        itemProperty: updatedConn.itemProperty,
+                        itemUnit: updatedConn.itemUnit,
+                      } as any);
+                    }}
+                  />
+                  <div className="mt-2">
                     <Label>Label (Text)</Label>
                     <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
                   </div>

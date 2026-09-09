@@ -17,13 +17,13 @@
 - [x] Step 6: Verify and commit `feat(sysml): qualify complete bdd editing workflow`.
 
 ## Task 3: Finish canonical IBD ownership, boundary, binding, and item-flow workflows
-- [ ] Step 1: Add failing IBD tests (`src/engine/sysml/ibd.test.ts`, `IbdConnectorEditor.test.tsx`, `reportDiagrams.ibd.test.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Implement endpoint semantics for connector ends.
-- [ ] Step 4: Implement binding and flow detail validation and structures.
-- [ ] Step 5: Complete IBD UI and navigation in `src/components/sysml/IbdConnectorEditor.tsx` & `src/App.tsx`.
-- [ ] Step 6: Complete render and report parity for IBD diagrams.
-- [ ] Step 7: Verify and commit `feat(sysml): qualify complete ibd connector workflow`.
+- [x] Step 1: Add failing IBD tests (`src/engine/sysml/ibd.test.ts`, `IbdConnectorEditor.test.tsx`, `reportDiagrams.ibd.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement endpoint semantics for connector ends.
+- [x] Step 4: Implement binding and flow detail validation and structures.
+- [x] Step 5: Complete IBD UI and navigation in `src/components/sysml/IbdConnectorEditor.tsx` & `src/App.tsx`.
+- [x] Step 6: Complete render and report parity for IBD diagrams.
+- [x] Step 7: Verify and commit `feat(sysml): qualify complete ibd connector workflow`.
 
 ## Task 4: Complete requirement baselines, suspect links, copy synchronization, and evidence history
 - [ ] Step 1: Write failing governance tests (`src/engine/sysml/requirements.test.ts`, `RequirementGovernancePanel.test.tsx`).

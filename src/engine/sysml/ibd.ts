@@ -5,6 +5,7 @@ import type {
   PortDefinition,
   PortUsage,
   SysmlRepository,
+  SysmlUsage,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
 
@@ -75,7 +76,85 @@ export function validateConnector(repo: SysmlRepository, connectorId: string): S
   ));
   if (duplicate) diagnostics.push(diag('DUPLICATE_CONNECTOR', connector.id, undefined, `Connector duplicates ${duplicate.id}`));
   diagnostics.push(...validateItemFlow(repo, connectorId));
+  if (connector.kind === 'binding') {
+    diagnostics.push(...validateBindingConnector(repo, connectorId));
+  }
   return uniqueDiagnostics(diagnostics);
+}
+
+export function validateBindingConnector(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {
+  const connector = repo.connectors[connectorId];
+  if (!connector || connector.kind !== 'binding') return [];
+  const diagnostics: SysmlDiagnostic[] = [];
+
+  if (connector.sourceParameterId && connector.targetParameterId) {
+    const sourceOwner = repo.usages[connector.sourcePortId];
+    const targetOwner = repo.usages[connector.targetPortId];
+    const sourceBlockId = sourceOwner?.kind === 'part' ? sourceOwner.typeId : connector.sourcePortId;
+    const targetBlockId = targetOwner?.kind === 'part' ? targetOwner.typeId : connector.targetPortId;
+
+    const sourceDef = repo.definitions[sourceBlockId];
+    const targetDef = repo.definitions[targetBlockId];
+
+    if (sourceDef?.kind === 'block' && targetDef?.kind === 'block') {
+      const sourceProp = sourceDef.properties.find(p => p.id === connector.sourceParameterId);
+      const targetProp = targetDef.properties.find(p => p.id === connector.targetParameterId);
+
+      if (sourceProp && targetProp && sourceProp.typeId !== targetProp.typeId) {
+        diagnostics.push(diag(
+          'INCOMPATIBLE_BINDING_TYPE',
+          connector.id,
+          'targetParameterId',
+          `Binding connector cannot bind incompatible types ${sourceProp.typeId} and ${targetProp.typeId}`
+        ));
+      }
+    }
+  }
+
+  return diagnostics;
+}
+
+export function formatItemFlowLabel(details: {
+  conveyedName: string;
+  itemProperty?: string;
+  multiplicity?: string;
+  unit?: string;
+  direction?: 'in' | 'out' | 'inout';
+}): string {
+  const prop = details.itemProperty ? `${details.itemProperty}: ` : '';
+  const mult = details.multiplicity ? ` [${details.multiplicity}]` : '';
+  const unit = details.unit ? ` (${details.unit})` : '';
+  const dir = details.direction === 'out' ? ' ➔' : details.direction === 'in' ? ' ⬅' : '';
+  return `«itemFlow» ${prop}${details.conveyedName}${mult}${unit}${dir}`.trim();
+}
+
+export interface IbdBreadcrumbItem {
+  id: string;
+  name: string;
+  kind: 'block' | 'part';
+}
+
+export function deriveIbdBreadcrumb(repo: SysmlRepository, contextId: string): IbdBreadcrumbItem[] {
+  const result: IbdBreadcrumbItem[] = [];
+  let currentId: string | undefined = contextId;
+  const visited = new Set<string>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const usage: SysmlUsage | undefined = repo.usages[currentId];
+    if (usage && usage.kind === 'part') {
+      result.unshift({ id: usage.id, name: usage.name, kind: 'part' });
+      currentId = usage.ownerId;
+      continue;
+    }
+    const def = repo.definitions[currentId];
+    if (def && def.kind === 'block') {
+      result.unshift({ id: def.id, name: def.name, kind: 'block' });
+      break;
+    }
+    break;
+  }
+  return result;
 }
 
 export function validateItemFlow(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {

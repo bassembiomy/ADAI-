@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type BlockDefinition, type PortDefinition, type SysmlRepository } from './model';
-import { deriveIbdView, resolvePortUsage, validateConnector, validateItemFlow } from './ibd';
+import { deriveIbdBreadcrumb, deriveIbdView, resolvePortUsage, validateBindingConnector, validateConnector, validateItemFlow } from './ibd';
 
 const one = { lower: 1, upper: 1 as const, ordered: false, unique: true };
 const block = (id: string, ports: PortDefinition[] = [], supertypeIds: string[] = []): BlockDefinition => ({
@@ -83,4 +83,71 @@ describe('canonical IBD semantics', () => {
     expect(view.ports.map(p => p.usage.id).sort()).toEqual(['aOut', 'bIn', 'boundary']);
     expect(view.connectors.map(c => c.id)).toEqual(['c']);
   });
+
+  it('derives IBD breadcrumb path from root block down to nested parts', () => {
+    const repo = model();
+    repo.usages.nested = { id: 'nested', name: 'nestedPart', kind: 'part', ownerId: 'a', typeId: 'component', aggregation: 'composite', multiplicity: one };
+
+    const rootBreadcrumb = deriveIbdBreadcrumb(repo, 'system');
+    expect(rootBreadcrumb).toEqual([
+      { id: 'system', name: 'system', kind: 'block' },
+    ]);
+
+    const nestedBreadcrumb = deriveIbdBreadcrumb(repo, 'nested');
+    expect(nestedBreadcrumb).toEqual([
+      { id: 'system', name: 'system', kind: 'block' },
+      { id: 'a', name: 'a', kind: 'part' },
+      { id: 'nested', name: 'nestedPart', kind: 'part' },
+    ]);
+  });
+
+  it('validates binding connectors between compatible and incompatible value/constraint parameters', () => {
+    const repo = model();
+    repo.definitions.Pressure = { id: 'Pressure', name: 'Pressure', namespace: [], kind: 'valueType', unit: 'Pa', dimension: 'pressure' };
+    repo.definitions.Speed = { id: 'Speed', name: 'Speed', namespace: [], kind: 'valueType', unit: 'm/s', dimension: 'speed' };
+    (repo.definitions.component as BlockDefinition).properties = [
+      { id: 'p_pressure', name: 'p1', kind: 'value', typeId: 'Pressure', multiplicity: one },
+      { id: 'p_speed', name: 's1', kind: 'value', typeId: 'Speed', multiplicity: one },
+    ];
+
+    // Binding between same type is valid
+    repo.connectors.bind1 = {
+      id: 'bind1',
+      kind: 'binding',
+      ownerId: 'system',
+      sourcePortId: 'a',
+      targetPortId: 'b',
+      sourceParameterId: 'p_pressure',
+      targetParameterId: 'p_pressure',
+    };
+    expect(validateBindingConnector(repo, 'bind1')).toEqual([]);
+
+    // Binding between incompatible types is rejected
+    repo.connectors.bindBad = {
+      id: 'bindBad',
+      kind: 'binding',
+      ownerId: 'system',
+      sourcePortId: 'a',
+      targetPortId: 'b',
+      sourceParameterId: 'p_pressure',
+      targetParameterId: 'p_speed',
+    };
+    const diags = validateBindingConnector(repo, 'bindBad');
+    expect(diags.map(d => d.code)).toContain('INCOMPATIBLE_BINDING_TYPE');
+  });
+
+  it('leaves part usages unresolved rather than cascading when a BlockDefinition is deleted', () => {
+    const repo = model();
+    expect(repo.usages.a).toBeDefined();
+    expect((repo.usages.a as any).typeId).toBe('component');
+
+    // Deleting definition does NOT delete usage
+    delete repo.definitions.component;
+    expect(repo.usages.a).toBeDefined();
+
+    // Port resolution fails closed / unresolved
+    const portUsage = resolvePortUsage(repo, 'bIn');
+    expect(portUsage).toBeUndefined();
+  });
 });
+

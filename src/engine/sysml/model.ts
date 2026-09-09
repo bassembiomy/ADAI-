@@ -16,7 +16,7 @@ export type SysmlDefinition = BlockDefinition | ValueTypeDefinition | InterfaceD
 export interface PartUsage { id: string; kind: 'part'; name: string; ownerId: string; typeId: string; aggregation: 'composite' | 'shared' | 'reference'; multiplicity: Multiplicity; }
 export interface PortUsage { id: string; kind: 'port'; name: string; ownerId: string; definitionId: string; }
 export type SysmlUsage = PartUsage | PortUsage;
-export interface ConnectorUsage { id: string; kind: 'assembly' | 'delegation' | 'binding'; ownerId: string; sourcePortId: string; targetPortId: string; itemFlowId?: string; }
+export interface ConnectorUsage { id: string; kind: 'assembly' | 'delegation' | 'binding'; ownerId: string; sourcePortId: string; targetPortId: string; itemFlowId?: string; sourceParameterId?: string; targetParameterId?: string; itemProperty?: string; itemMultiplicity?: Multiplicity; itemUnit?: string; }
 export interface RequirementDefinition extends NamedElement { kind: 'requirement'; requirementId: string; text: string; status: 'draft' | 'approved' | 'implemented' | 'verified' | 'failed' | 'stale' | 'retired'; version: string; baselineId?: string; source?: string; rationale?: string; owner?: string; risk?: 'low' | 'medium' | 'high' | 'critical'; priority?: 'low' | 'medium' | 'high' | 'critical'; copiedFromId?: string; }
 export interface VerificationCase extends NamedElement { kind: 'verificationCase'; method: string; verifiesRequirementIds: string[]; }
 export interface VerificationEvidence { id: string; verificationCaseId: string; requirementId: string; revision: number; result: 'passed' | 'failed'; executedAt: string; artifactUri?: string; semanticFingerprint?: string; status?: 'current' | 'stale'; }
