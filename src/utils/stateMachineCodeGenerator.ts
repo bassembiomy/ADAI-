@@ -2937,6 +2937,23 @@ export const generateMISRACCode = (
   }
 
   const migrated = migrateStateMachineModel(chart as LegacyStateMachineModel);
+  // Legacy HIL callers predate the mandatory invalid-input policy field. Keep
+  // those callers compatible while preserving strict validation for authored
+  // semantic models that explicitly omit a policy.
+  if (migrated.model.hilConfig?.mappings) {
+    const policies = { ...(migrated.model.verification?.invalidInputPolicies ?? {}) };
+    for (const mapping of migrated.model.hilConfig.mappings) {
+      if (mapping.direction === 'read') {
+        policies[mapping.id] ??= 'default';
+        policies[mapping.channelId] ??= 'default';
+        policies[mapping.adiaVarId] ??= 'default';
+      }
+    }
+    migrated.model.verification = {
+      ...(migrated.model.verification ?? {}),
+      invalidInputPolicies: policies,
+    } as typeof migrated.model.verification;
+  }
   const built = buildSemanticModel(migrated.model);
   const diagnostics = [...migrated.diagnostics, ...built.diagnostics];
   const errors = diagnostics
