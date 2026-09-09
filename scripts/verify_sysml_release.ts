@@ -80,6 +80,10 @@ async function verifyRelease() {
   log('TEST:E2E', 'Executing Playwright real-browser end-to-end tests...');
   runCommand('npm', ['run', 'test:e2e:sysml']);
 
+  // 7. Production Build Gate
+  log('BUILD', 'Executing production bundle and protected electron packaging build...');
+  runCommand('npm', ['run', 'build']);
+
   console.log('\n================================================================');
   console.log('       ALL SYSML FULL CONFORMANCE GATES PASSED CLEANLY!         ');
   console.log('================================================================\n');
