@@ -17,11 +17,38 @@ export interface RtmFilters {
   changedSinceRevision?: number;
 }
 
+export interface RtmRequirementRef {
+  id: string;
+  requirementId: string;
+  name: string;
+  kind: SysmlRelationship['kind'];
+}
+
+export interface RtmCoveringElement {
+  id: string;
+  name: string;
+  kind: SysmlRelationship['kind'];
+  type: 'block' | 'part';
+}
+
+export interface RtmRequirementRelation {
+  relationshipId: string;
+  kind: SysmlRelationship['kind'];
+  direction: 'incoming' | 'outgoing';
+  otherRequirementId: string;
+  otherReqIdentifier: string;
+  otherRequirementName: string;
+}
+
 export interface RtmRow {
   requirement: RequirementDefinition;
   status: RtmStatus;
   changeKind?: RtmChangeKind;
   relationshipIds: string[];
+  parents: RtmRequirementRef[];
+  children: RtmRequirementRef[];
+  coveringBlocks: RtmCoveringElement[];
+  requirementRelations: RtmRequirementRelation[];
   blocks: string[];
   parts: string[];
   ports: string[];
@@ -71,32 +98,38 @@ export function projectRtmChangeSet(
 }
 
 export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetrics {
-  const count = (status: RtmStatus) => matrix.rows.filter(row => row.status === status).length;
   const total = matrix.rows.length;
-  const verified = count('verified');
-  const coveredOnly = count('covered');
-  const covered = coveredOnly + verified;
-  return {
-    total,
-    covered,
-    verified,
-    failed: count('failed'),
-    stale: count('stale'),
-    suspect: count('suspect'),
-    uncovered: count('uncovered'),
-    orphan: count('orphan'),
-    unresolved: count('unresolved'),
-    coveragePercent: total ? covered * 100 / total : 100,
-    verificationPercent: total ? verified * 100 / total : 100,
-  };
+  let covered = 0;
+  let verified = 0;
+  let failed = 0;
+  let stale = 0;
+  let suspect = 0;
+  let uncovered = 0;
+  let orphan = 0;
+  let unresolved = 0;
+  for (const row of matrix.rows) {
+    if (row.status === 'covered') covered += 1;
+    else if (row.status === 'verified') { verified += 1; covered += 1; }
+    else if (row.status === 'failed') failed += 1;
+    else if (row.status === 'stale') stale += 1;
+    else if (row.status === 'suspect') suspect += 1;
+    else if (row.status === 'uncovered') uncovered += 1;
+    else if (row.status === 'orphan') orphan += 1;
+    else if (row.status === 'unresolved') unresolved += 1;
+  }
+  const coveragePercent = total ? (covered * 100) / total : 100;
+  const verificationPercent = total ? (verified * 100) / total : 100;
+  return { total, covered, verified, failed, stale, suspect, uncovered, orphan, unresolved, coveragePercent, verificationPercent };
 }
 
 export function exportRtmCsv(matrix: TraceabilityMatrix): string {
+  const csv = (value: string) => `"${value.replace(/"/g, '""')}"`;
   const hasChange = Boolean(matrix.filters.compareBaselineId || matrix.rows.some(r => r.changeKind !== undefined));
   const headers = [
     'Requirement ID', 'Name', 'Text', 'Status',
     ...(hasChange ? ['Change'] : []),
     'Owner', 'Risk', 'Version', 'Baseline',
+    'Parents', 'Children', 'Covering Blocks',
     'Blocks', 'Parts', 'Ports', 'Connectors', 'Behaviors', 'Simulations', 'Verification Cases',
     'Evidence', 'Artifacts', 'Relationships', 'Unresolved Endpoints',
   ];
@@ -104,11 +137,14 @@ export function exportRtmCsv(matrix: TraceabilityMatrix): string {
     row.requirement.requirementId, row.requirement.name, row.requirement.text, row.status,
     ...(hasChange ? [row.changeKind ?? 'unchanged'] : []),
     row.requirement.owner ?? '', row.requirement.risk ?? '', row.requirement.version, row.requirement.baselineId ?? '',
+    row.parents.map(p => `[${p.kind}] ${p.requirementId} ${p.name}`).join(';'),
+    row.children.map(c => `[${c.kind}] ${c.requirementId} ${c.name}`).join(';'),
+    row.coveringBlocks.map(b => `[${b.kind}] ${b.name}`).join(';'),
     row.blocks.join(';'), row.parts.join(';'), row.ports.join(';'), row.connectors.join(';'),
     row.behaviors.join(';'), row.simulations.join(';'), row.verificationCases.join(';'), row.evidence.join(';'),
     row.artifacts.join(';'), row.relationshipIds.join(';'), row.unresolvedEndpointIds.join(';'),
   ]);
-  return [headers, ...rows].map(columns => columns.map(csv).join(',')).join('\r\n');
+  return [headers.join(','), ...rows.map(columns => columns.map(csv).join(','))].join('\r\n');
 }
 
 function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, compareBaselineId?: string): RtmRow {
@@ -122,6 +158,52 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
   const simulations: string[] = [];
   const artifacts: string[] = [];
   const unresolvedEndpointIds: string[] = [];
+  const parents: RtmRequirementRef[] = [];
+  const children: RtmRequirementRef[] = [];
+  const coveringBlocks: RtmCoveringElement[] = [];
+  const requirementRelations: RtmRequirementRelation[] = [];
+
+  for (const r of relationships) {
+    const isSource = r.sourceId === requirement.id;
+    const otherId = isSource ? r.targetId : r.sourceId;
+
+    const otherReq = repo.requirements[otherId];
+    if (otherReq) {
+      requirementRelations.push({
+        relationshipId: r.id,
+        kind: r.kind,
+        direction: isSource ? 'outgoing' : 'incoming',
+        otherRequirementId: otherReq.id,
+        otherReqIdentifier: otherReq.requirementId,
+        otherRequirementName: otherReq.name,
+      });
+
+      if (r.kind === 'requirementContainment') {
+        if (!isSource) {
+          parents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        } else {
+          children.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        }
+      } else if (r.kind === 'deriveReqt') {
+        if (isSource) {
+          parents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        } else {
+          children.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        }
+      }
+    }
+
+    if (r.kind === 'satisfy') {
+      const def = repo.definitions[otherId];
+      const usage = repo.usages[otherId];
+      if (def?.kind === 'block') {
+        coveringBlocks.push({ id: def.id, name: def.name, kind: r.kind, type: 'block' });
+      } else if (usage?.kind === 'part') {
+        coveringBlocks.push({ id: usage.id, name: usage.name, kind: r.kind, type: 'part' });
+      }
+    }
+  }
+
   for (const id of relatedIds) {
     const definition = repo.definitions[id];
     const usage = repo.usages[id];
@@ -164,6 +246,10 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     requirement,
     changeKind,
     relationshipIds: relationships.map(item => item.id).sort(),
+    parents,
+    children,
+    coveringBlocks,
+    requirementRelations,
     blocks: sortedUnique(blocks), parts: sortedUnique(parts), ports: sortedUnique(ports), connectors: sortedUnique(connectors),
     behaviors: sortedUnique(behaviors), simulations: sortedUnique(simulations), verificationCases: sortedUnique(verificationCases),
     evidence: sortedUnique(evidence), artifacts: sortedUnique(artifacts), unresolvedEndpointIds: sortedUnique(unresolvedEndpointIds),

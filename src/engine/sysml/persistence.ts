@@ -157,6 +157,12 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
         isDerived: Boolean(property.isDerived), redefinesId: optionalText(property.redefinesId), subsetsId: optionalText(property.subsetsId),
       })), ports, operations: stringArray(legacy.operations), constraints: stringArray(legacy.constraints),
     } satisfies BlockDefinition;
+    if (Array.isArray(legacy.satisfiedReqIds)) {
+      for (const reqId of legacy.satisfiedReqIds) {
+        const satId = `satisfy-${id}-${text(reqId)}`;
+        repo.relationships[satId] = { id: satId, kind: 'satisfy', sourceId: id, targetId: text(reqId) };
+      }
+    }
   }
   for (const legacy of arrayOfRecords(source.parts)) {
     const id = text(legacy.id);
@@ -166,6 +172,12 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
       typeId: text(legacy.typeBlockId) || text(legacy.typeId) || text(legacy.blockId), aggregation: 'composite',
       multiplicity: safeMultiplicity(legacy.multiplicity),
     };
+    if (Array.isArray(legacy.satisfiedReqIds)) {
+      for (const reqId of legacy.satisfiedReqIds) {
+        const satId = `satisfy-${id}-${text(reqId)}`;
+        repo.relationships[satId] = { id: satId, kind: 'satisfy', sourceId: id, targetId: text(reqId) };
+      }
+    }
   }
   for (const legacy of arrayOfRecords(source.connectors)) {
     const id = text(legacy.id);

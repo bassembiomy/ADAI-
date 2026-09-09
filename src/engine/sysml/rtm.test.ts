@@ -168,5 +168,77 @@ describe('canonical requirements traceability matrix', () => {
     expect(rowMid.evidence).toHaveLength(0);
     expect(rowLeaf.verificationCases).toHaveLength(0);
     expect(rowLeaf.evidence).toHaveLength(0);
+
+    // Parent and child hierarchy links with connection type
+    expect(rowRoot.parents).toHaveLength(0);
+    expect(rowRoot.children).toHaveLength(1);
+    expect(rowRoot.children[0]).toMatchObject({ id: 'rMid', kind: 'requirementContainment' });
+
+    expect(rowMid.parents).toHaveLength(1);
+    expect(rowMid.parents[0]).toMatchObject({ id: 'rRoot', kind: 'requirementContainment' });
+    expect(rowMid.children).toHaveLength(1);
+    expect(rowMid.children[0]).toMatchObject({ id: 'rLeaf', kind: 'requirementContainment' });
+
+    expect(rowLeaf.parents).toHaveLength(1);
+    expect(rowLeaf.parents[0]).toMatchObject({ id: 'rMid', kind: 'requirementContainment' });
+    expect(rowLeaf.children).toHaveLength(0);
+  });
+
+  it('populates coveringBlocks and requirement relations in RTM rows and CSV', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.ctrl = {
+      id: 'ctrl',
+      name: 'PowerController',
+      namespace: [],
+      kind: 'block',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    repo.requirements.r1 = {
+      id: 'r1',
+      requirementId: 'REQ-001',
+      name: 'Base Power',
+      text: 'Shall provide power',
+      status: 'approved',
+      version: '1.0',
+      namespace: [],
+    };
+    repo.requirements.r2 = {
+      id: 'r2',
+      requirementId: 'REQ-002',
+      name: 'Derived Voltage',
+      text: 'Shall provide 12V',
+      status: 'approved',
+      version: '1.0',
+      namespace: [],
+    };
+
+    // ctrl satisfies r1
+    repo.relationships.s1 = { id: 's1', kind: 'satisfy', sourceId: 'ctrl', targetId: 'r1' };
+    // r2 derives from r1
+    repo.relationships.d1 = { id: 'd1', kind: 'deriveReqt', sourceId: 'r2', targetId: 'r1' };
+
+    const matrix = buildTraceabilityMatrix(repo);
+    const row1 = matrix.rows.find(r => r.requirement.id === 'r1')!;
+    const row2 = matrix.rows.find(r => r.requirement.id === 'r2')!;
+
+    expect(row1.coveringBlocks).toHaveLength(1);
+    expect(row1.coveringBlocks[0]).toMatchObject({ id: 'ctrl', name: 'PowerController', kind: 'satisfy' });
+
+    expect(row2.parents).toHaveLength(1);
+    expect(row2.parents[0]).toMatchObject({ id: 'r1', kind: 'deriveReqt' });
+
+    expect(row1.children).toHaveLength(1);
+    expect(row1.children[0]).toMatchObject({ id: 'r2', kind: 'deriveReqt' });
+
+    const csv = exportRtmCsv(matrix);
+    expect(csv).toContain('Parents');
+    expect(csv).toContain('Children');
+    expect(csv).toContain('Covering Blocks');
+    expect(csv).toContain('PowerController');
   });
 });

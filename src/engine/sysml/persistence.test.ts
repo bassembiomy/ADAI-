@@ -55,6 +55,28 @@ describe('versioned SysML persistence and baselines', () => {
     expect(loaded.repository.connectors.c.sourcePortId).toBe('b::boundary');
   });
 
+  it('migrates legacy block and part satisfiedReqIds into satisfy relationships', () => {
+    const legacy = {
+      blocks: [
+        { id: 'b1', name: 'PowerController', stereotype: 'block', satisfiedReqIds: ['req1'] },
+        { id: 'req1', name: 'SafetyReq', stereotype: 'requirement', reqId: 'REQ-SAFE-1' },
+      ],
+      parts: [
+        { id: 'part1', name: 'subController', blockId: 'b1', satisfiedReqIds: ['req1'] },
+      ],
+      relationships: [],
+    };
+
+    const loaded = loadRepository(legacy);
+    const rels = Object.values(loaded.repository.relationships);
+    const blockSatisfy = rels.find(r => r.sourceId === 'b1' && r.targetId === 'req1');
+    const partSatisfy = rels.find(r => r.sourceId === 'part1' && r.targetId === 'req1');
+    expect(blockSatisfy).toBeDefined();
+    expect(blockSatisfy?.kind).toBe('satisfy');
+    expect(partSatisfy).toBeDefined();
+    expect(partSatisfy?.kind).toBe('satisfy');
+  });
+
   it('creates protected immutable baselines, records audit, and compares revisions', () => {
     let repo = createEmptyRepository();
     repo.definitions.a = block('a');
