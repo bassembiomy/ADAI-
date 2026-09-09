@@ -48,6 +48,6 @@ describe('SysML release conformance manifest', () => {
     const matrixDocPath = resolve(rootDir, 'docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md');
     expect(existsSync(matrixDocPath)).toBe(true);
     const fileContent = readFileSync(matrixDocPath, 'utf-8');
-    expect(fileContent.trim()).toBe(markdown.trim());
+    expect(fileContent.replace(/\r\n/g, '\n').trim()).toBe(markdown.replace(/\r\n/g, '\n').trim());
   });
 });
