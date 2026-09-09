@@ -5,6 +5,8 @@ import type { SysmlDiagnostic } from '../../engine/sysml/validation';
 export interface RelationshipEndEditorProps {
   relationship: SysmlRelationship;
   diagnostics?: SysmlDiagnostic[];
+  sourceIsRequirement?: boolean;
+  targetIsRequirement?: boolean;
   onChange: (relationship: SysmlRelationship) => void;
 }
 
@@ -13,6 +15,8 @@ const AGGREGATION_KINDS: NonNullable<SysmlRelationship['sourceAggregation']>[] =
 export function RelationshipEndEditor({
   relationship,
   diagnostics = [],
+  sourceIsRequirement = false,
+  targetIsRequirement = false,
   onChange,
 }: RelationshipEndEditorProps) {
   const update = (patch: Partial<SysmlRelationship>) => {
@@ -36,8 +40,39 @@ export function RelationshipEndEditor({
     d => d.elementId === relationship.id || d.propertyPath?.startsWith(`relationships.${relationship.id}`)
   );
 
+  const isContainment = relationship.kind === 'requirementContainment';
+
   return (
     <div className="space-y-4 text-xs" aria-label="Relationship End Editor">
+      {/* Relationship Kind */}
+      <div>
+        <label className="block text-gray-300 font-semibold mb-1">
+          Relationship Kind
+          <select
+            aria-label="Relationship kind"
+            value={relationship.kind}
+            onChange={e => update({ kind: e.target.value as any })}
+            className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1 mt-1 text-gray-200"
+          >
+            <option value="association">Association</option>
+            <option value="generalization">Generalization</option>
+            <option value="composition">Composition</option>
+            <option value="sharedAggregation">Aggregation</option>
+            <option value="allocation">Allocation</option>
+            <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
+            <option value="refine">Refine</option>
+            <option value="satisfy">Satisfy</option>
+            <option value="verify">Verify</option>
+            <option value="trace">Trace</option>
+            <option value="copy">Copy</option>
+            <option value="dependency">Dependency</option>
+            <option value="requirementContainment" disabled={!(sourceIsRequirement && targetIsRequirement)}>
+              Requirement Containment (parent → child)
+            </option>
+          </select>
+        </label>
+      </div>
+
       {/* Diagnostics */}
       {relDiagnostics.length > 0 && (
         <div role="alert" className="space-y-1 rounded border border-red-700 bg-red-950/40 p-2 text-red-300">
@@ -52,10 +87,12 @@ export function RelationshipEndEditor({
 
       {/* Source End */}
       <fieldset className="rounded border border-gray-700 p-2 space-y-2">
-        <legend className="px-1 font-semibold text-gray-300">Source End ({relationship.sourceId})</legend>
+        <legend className="px-1 font-semibold text-gray-300">
+          Source End ({relationship.sourceId}) {isContainment && <span className="text-orange-400">· Container (parent)</span>}
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           <label>
-            Role name
+            Role name {isContainment && <span className="text-gray-400 font-normal">(Container (parent))</span>}
             <input
               aria-label="Source role name"
               value={relationship.sourceRole || ''}
@@ -101,10 +138,12 @@ export function RelationshipEndEditor({
 
       {/* Target End */}
       <fieldset className="rounded border border-gray-700 p-2 space-y-2">
-        <legend className="px-1 font-semibold text-gray-300">Target End ({relationship.targetId})</legend>
+        <legend className="px-1 font-semibold text-gray-300">
+          Target End ({relationship.targetId}) {isContainment && <span className="text-orange-400">· Nested (child)</span>}
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           <label>
-            Role name
+            Role name {isContainment && <span className="text-gray-400 font-normal">(Nested (child))</span>}
             <input
               aria-label="Target role name"
               value={relationship.targetRole || ''}

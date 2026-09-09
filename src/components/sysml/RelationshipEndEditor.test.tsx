@@ -55,4 +55,46 @@ describe('RelationshipEndEditor', () => {
     expect(html).toContain('Composition composite end multiplicity upper must be at most 1');
     expect(html).toContain('At least one end must be navigable');
   });
+
+  it('includes Requirement Containment option, enables only when both endpoints are requirements, and shows container/nested roles', () => {
+    const containmentRel: SysmlRelationship = {
+      id: 'rc1',
+      kind: 'requirementContainment',
+      sourceId: 'req1',
+      targetId: 'req2',
+      sourceRole: 'parent',
+      targetRole: 'child',
+    };
+
+    // Both endpoints are requirements -> option enabled
+    const htmlEnabled = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={containmentRel}
+        sourceIsRequirement={true}
+        targetIsRequirement={true}
+        diagnostics={[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(htmlEnabled).toContain('Requirement Containment (parent → child)');
+    expect(htmlEnabled).toContain('value="requirementContainment"');
+    expect(htmlEnabled).not.toMatch(/value="requirementContainment"[^>]*disabled/);
+    expect(htmlEnabled).toContain('Container (parent)');
+    expect(htmlEnabled).toContain('Nested (child)');
+
+    // One endpoint is not a requirement -> option disabled
+    const htmlDisabled = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={containmentRel}
+        sourceIsRequirement={false}
+        targetIsRequirement={true}
+        diagnostics={[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(htmlDisabled).toMatch(/value="requirementContainment"[^>]*disabled/);
+  });
 });
+

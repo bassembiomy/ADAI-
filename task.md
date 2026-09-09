@@ -24,13 +24,13 @@
 - [x] Step 6: Run GREEN and commit `fix(sysml): enforce requirement containment deletion lifecycle`.
 
 ## Task 4: Add contextual Requirement Diagram creation and notation
-- [ ] Step 1: Write failing component/report tests (`src/components/sysml/RelationshipEndEditor.test.tsx`, `src/features/reporting/reportDiagrams.sysml.test.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Add contextual creation choice in `src/App.tsx`.
-- [ ] Step 4: Update the inspector (`RelationshipEndEditor.tsx`).
-- [ ] Step 5: Render SysML notation (circle-plus/crosshair marker).
-- [ ] Step 6: Add accessible guidance.
-- [ ] Step 7: Run GREEN and commit `feat(sysml): add requirement containment diagram tooling`.
+- [x] Step 1: Write failing component/report tests (`src/components/sysml/RelationshipEndEditor.test.tsx`, `src/features/reporting/reportDiagrams.sysml.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Add contextual creation choice in `src/App.tsx`.
+- [x] Step 4: Update the inspector (`RelationshipEndEditor.tsx`).
+- [x] Step 5: Render SysML notation (circle-plus/crosshair marker).
+- [x] Step 6: Add accessible guidance.
+- [x] Step 7: Run GREEN and commit `feat(sysml): add requirement containment diagram tooling`.
 
 ## Task 5: Separate diagram removal from semantic model deletion
 - [ ] Step 1: Write failing distinction tests (`src/services/sysmlCommandGateway.test.ts`, `src/utils/adiaProjectPersistence.test.ts`).

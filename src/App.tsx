@@ -112,6 +112,7 @@ import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor'
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { validateAssociationEnds } from './engine/sysml/bdd';
+import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
 import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
@@ -874,7 +875,7 @@ const LegacyTraceabilityMatrix = ({
     const source = blocks.find(b => b.id === rel.sourceId);
     const target = blocks.find(b => b.id === rel.targetId);
     if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-      if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+      if (rel.type === 'requirementContainment' || rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
         if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
         childrenMap.get(rel.sourceId)!.push(rel.targetId);
         parentSet.add(rel.targetId);
@@ -6096,6 +6097,7 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
+  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
@@ -6239,7 +6241,7 @@ const ADIA = () => {
       case 'requirements': {
         const reqRelEndpoints = new Set(
           relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'composition' || r.type === 'trace')
+            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'requirementContainment' || r.type === 'copy' || r.type === 'trace')
             .flatMap(r => [r.sourceId, r.targetId])
         );
         return {
@@ -10265,7 +10267,10 @@ const ADIA = () => {
           let type: RelationshipData['type'] = 'association';
 
           if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-            type = 'deriveReqt';
+            setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
+            setIsCreatingTransition(false);
+            setTransitionSourceId(null);
+            return;
           }
 
           createRelationship(transitionSourceId, blockId, type);
@@ -11117,6 +11122,8 @@ const ADIA = () => {
           <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
           <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#333" stroke="#333" /></marker>
           <marker id="m-triangle-${type}" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto"><path d="M1,1 L13,6 L1,11 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
+          <marker id="requirement-containment-crosshair" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
+          <marker id="m-containment-${type}" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
         </defs>`;
 
       // If IBD, render the outer context block boundary and its ports
@@ -11360,6 +11367,10 @@ const ADIA = () => {
             const relType = e.type;
             if (relType === 'composition') {
               markerStart = `url(#m-diamond-fill-${type})`;
+            } else if (relType === 'requirementContainment') {
+              markerStart = `url(#requirement-containment-crosshair)`;
+              middleLabel = '«contains»';
+              strokeColor = '#546e7a';
             } else if (relType === 'aggregation') {
               markerStart = `url(#m-diamond-${type})`;
             } else if (relType === 'generalization') {
@@ -11578,7 +11589,7 @@ const ADIA = () => {
         const target = hierarchySource.blocks.find(b => b.id === rel.targetId);
         if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
           // Only use specific SysML relationships for parent-child nesting, matching the Traceability Matrix
-          if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+          if (rel.type === 'requirementContainment' || rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
             if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
             childrenMap.get(rel.sourceId)!.push(rel.targetId);
             parentSet.add(rel.targetId);
@@ -14182,10 +14193,24 @@ const ADIA = () => {
       const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
       const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
+      const isReqContainment = rel.type === 'requirementContainment';
+      const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
+        ? validateRequirementContainment(canonicalSysmlRepository, rel.id)
+        : [];
+      const containmentErrorText = containmentDiagnostics.map(d => d.message).join('; ');
+      const ariaLabel = isReqContainment
+        ? `Requirement containment: ${source.name || source.reqId || source.id} contains ${target.name || target.reqId || target.id}${containmentErrorText ? ` - Error: ${containmentErrorText}` : ''}`
+        : undefined;
       const { sp, tp, labelPos, angle } = route;
 
       return (
-        <g key={rel.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }} style={{ cursor: 'pointer' }}>
+        <g
+          key={rel.id}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}
+          style={{ cursor: 'pointer' }}
+          role={isReqContainment ? "graphics-symbol" : undefined}
+          aria-label={ariaLabel}
+        >
           {/* Broad click target */}
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
 
@@ -14199,6 +14224,13 @@ const ADIA = () => {
           {rel.type === 'composition' && (
             <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
+          {rel.type === 'requirementContainment' && (
+            <g transform={`translate(${sp.x}, ${sp.y}) rotate(${angle})`}>
+              <circle cx={7} cy={0} r={6} fill="#141414" stroke={strokeColor} strokeWidth={1.5} />
+              <line x1={1} y1={0} x2={13} y2={0} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
+              <line x1={7} y1={-6} x2={7} y2={6} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
+            </g>
+          )}
           {rel.type === 'aggregation' && (
             <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
@@ -14210,11 +14242,29 @@ const ADIA = () => {
           )}
 
           {/* Stereotype / Label Badge with background to prevent overlapping text */}
-          {(isTrace || rel.type === 'allocation' || rel.label) && (
+          {(isTrace || rel.type === 'allocation' || rel.type === 'requirementContainment' || rel.label) && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
-              <rect x={-36} y={-10} width={72} height={16} rx={3} fill="#141414" stroke={isSuspect ? '#ef4444' : '#333'} strokeWidth={isSuspect ? 1.2 : 0.8} />
-              <text x={0} y={2} textAnchor="middle" fill={strokeColor} fontSize={9} fontWeight="600">
-                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}{isSuspect ? ' [!]' : ''}
+              <rect
+                x={-42}
+                y={-10}
+                width={84}
+                height={16}
+                rx={3}
+                fill="#141414"
+                stroke={isSuspect || containmentDiagnostics.length > 0 ? '#ef4444' : '#333'}
+                strokeWidth={isSuspect || containmentDiagnostics.length > 0 ? 1.2 : 0.8}
+              />
+              <text
+                x={0}
+                y={2}
+                textAnchor="middle"
+                fill={containmentDiagnostics.length > 0 ? '#ef4444' : strokeColor}
+                fontSize={9}
+                fontWeight="600"
+              >
+                {rel.type === 'requirementContainment'
+                  ? (containmentDiagnostics.length > 0 ? '«contains» [!]' : '«contains»')
+                  : (rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`)}{isSuspect ? ' [!]' : ''}
               </text>
             </g>
           )}
@@ -17098,6 +17148,12 @@ const ADIA = () => {
                       <option value="verify">Verify</option>
                       <option value="trace">Trace</option>
                       <option value="copy">Copy</option>
+                      <option
+                        value="requirementContainment"
+                        disabled={!(blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement' && blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement')}
+                      >
+                        Requirement Containment (parent → child)
+                      </option>
                       <option value="binding">Binding</option>
                       <option value="dependency">Dependency</option>
                     </select>
@@ -17121,7 +17177,15 @@ const ADIA = () => {
                       sourceAggregation: (selectedRelationship as any).sourceAggregation,
                       targetAggregation: (selectedRelationship as any).targetAggregation,
                     }}
-                    diagnostics={canonicalSysmlRepository.relationships[selectedRelationship.id] ? validateAssociationEnds(canonicalSysmlRepository, selectedRelationship.id) : []}
+                    diagnostics={
+                      canonicalSysmlRepository.relationships[selectedRelationship.id]
+                        ? selectedRelationship.type === 'requirementContainment'
+                          ? validateRequirementContainment(canonicalSysmlRepository, selectedRelationship.id)
+                          : validateAssociationEnds(canonicalSysmlRepository, selectedRelationship.id)
+                        : []
+                    }
+                    sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
+                    targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -17735,6 +17799,97 @@ const ADIA = () => {
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {deleteConfirmState.totalStates > 1 ? `Delete ${deleteConfirmState.totalStates} States` : 'Delete State'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Requirement Connection Picker Modal */}
+        {requirementConnectionPicker && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            onMouseDown={() => setRequirementConnectionPicker(null)}
+          >
+            <div
+              className="bg-[#141414] border border-[#333] rounded-lg w-[420px] shadow-2xl p-5 flex flex-col gap-4 text-[#e0e0e0]"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-base font-semibold text-white">Create Requirement Relationship</h3>
+                <p className="text-xs text-[#888] mt-1">
+                  Choose the relationship kind between{' '}
+                  <span className="text-[#f97316] font-medium">
+                    {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
+                  </span>{' '}
+                  and{' '}
+                  <span className="text-[#f97316] font-medium">
+                    {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'requirementContainment');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Requirement Containment</div>
+                    <div className="text-xs text-[#aaa] font-normal">Parent contains child (source → target)</div>
+                  </div>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'deriveReqt');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Derive Requirement («deriveReqt»)</div>
+                    <div className="text-xs text-[#aaa] font-normal">Derived requirement from source</div>
+                  </div>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'copy');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Copy («copy»)</div>
+                    <div className="text-xs text-[#aaa] font-normal">Requirement copy relationship</div>
+                  </div>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'trace');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Trace («trace»)</div>
+                    <div className="text-xs text-[#aaa] font-normal">General traceability relationship</div>
+                  </div>
+                </Button>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
+                <Button
+                  variant="outline"
+                  onClick={() => setRequirementConnectionPicker(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#222]"
+                >
+                  Cancel
                 </Button>
               </div>
             </div>
