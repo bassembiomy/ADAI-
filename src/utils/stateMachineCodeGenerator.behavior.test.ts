@@ -52,7 +52,9 @@ const writeFiles = (dir: string, files: { name: string; content: string }[]) => 
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   files.forEach(f => {
     if (f.name.endsWith('.c') || f.name.endsWith('.h')) {
-      fs.writeFileSync(path.join(dir, f.name), f.content);
+      const target = path.join(dir, f.name);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, f.content);
     }
   });
 };

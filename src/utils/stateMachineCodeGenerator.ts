@@ -2989,8 +2989,17 @@ export const generateMISRACCode = (
     };
   });
   const combinedFiles = [...files, ...hilFiles, ...testShimFiles];
+  const flatAliases = options.legacyFlatLayout === true
+    ? []
+    : files
+      .filter((file) => file.name.startsWith('production/'))
+      .filter((file) => /\.(c|h)$/.test(file.name))
+      .map((file) => ({
+        ...file,
+        name: file.name.slice('production/'.length),
+      }));
   return {
-    files: combinedFiles,
+    files: [...combinedFiles, ...flatAliases],
     errors: [...errors, ...rendered.errors],
     warnings: [...warnings, ...rendered.warnings, ...hilWarnings],
   };
