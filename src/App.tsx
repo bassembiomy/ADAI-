@@ -110,8 +110,10 @@ import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor'
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
+import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateConnector } from './engine/sysml/ibd';
+import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
@@ -6154,7 +6156,7 @@ const ADIA = () => {
     setShowHelpModal(true);
   }, [diagramMode]);
 
-  const [activePropTab, setActivePropTab] = useState<'general' | 'assign'>('general');
+  const [activePropTab, setActivePropTab] = useState<'general' | 'assign' | 'governance'>('general');
 
   // HIL (Hardware-in-the-Loop) state
   const [hilConfig, setHilConfig] = useState<HILConfig>({
@@ -11362,7 +11364,7 @@ const ADIA = () => {
               markerStart = `url(#m-diamond-${type})`;
             } else if (relType === 'generalization') {
               markerEnd = `url(#m-triangle-${type})`;
-            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
+            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(relType)) {
               strokeDash = '4,2';
               middleLabel = `«${relType}»`;
               markerEnd = `url(#m-arrow-${type})`;
@@ -14176,9 +14178,10 @@ const ADIA = () => {
       );
 
       const isSelected = selectedIds.includes(rel.id);
-      const strokeColor = isSelected ? '#f97316' : '#888';
+      const isSuspect = Boolean((rel as any).suspect);
+      const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
       const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
-      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(rel.type);
+      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
       const { sp, tp, labelPos, angle } = route;
 
       return (
@@ -14209,9 +14212,9 @@ const ADIA = () => {
           {/* Stereotype / Label Badge with background to prevent overlapping text */}
           {(isTrace || rel.type === 'allocation' || rel.label) && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
-              <rect x={-32} y={-10} width={64} height={16} rx={3} fill="#141414" stroke="#333" strokeWidth={0.8} />
+              <rect x={-36} y={-10} width={72} height={16} rx={3} fill="#141414" stroke={isSuspect ? '#ef4444' : '#333'} strokeWidth={isSuspect ? 1.2 : 0.8} />
               <text x={0} y={2} textAnchor="middle" fill={strokeColor} fontSize={9} fontWeight="600">
-                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}
+                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}{isSuspect ? ' [!]' : ''}
               </text>
             </g>
           )}
@@ -16628,9 +16631,19 @@ const ADIA = () => {
                         >
                           Assign
                         </button>
+                        <button
+                          onClick={() => setActivePropTab('governance')}
+                          className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
+                            activePropTab === 'governance'
+                              ? 'border-[#f97316] text-[#e0e0e0]'
+                              : 'border-transparent text-[#666] hover:text-[#aaa]'
+                          }`}
+                        >
+                          Governance
+                        </button>
                       </div>
 
-                      {activePropTab === 'general' ? (
+                      {activePropTab === 'general' && (
                         <>
                           <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
@@ -16806,7 +16819,8 @@ const ADIA = () => {
                             </div>
                           </div>
                         </>
-                      ) : (
+                      )}
+                      {activePropTab === 'assign' && (
                         <div className="space-y-4">
                           <div>
                             <Label>Assigned To</Label>
@@ -16843,6 +16857,63 @@ const ADIA = () => {
                           </div>
                         </div>
                       )}
+                      {activePropTab === 'governance' && (() => {
+                        const reqDef = canonicalSysmlRepository.requirements[selectedBlock.id] || {
+                          id: selectedBlock.id,
+                          requirementId: selectedBlock.reqId || selectedBlock.id,
+                          name: selectedBlock.name,
+                          text: selectedBlock.description || '',
+                          status: selectedBlock.status,
+                          priority: selectedBlock.priority,
+                          risk: selectedBlock.risk,
+                          verificationMethod: selectedBlock.verificationMethod,
+                          baselineId: selectedBlock.baselineId,
+                          version: selectedBlock.version || '1.0',
+                          copiedFromId: (selectedBlock as any).copiedFromId,
+                        };
+                        const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
+                        const suspectLinks = Object.values(canonicalSysmlRepository.relationships).filter(
+                          r => (r.sourceId === selectedBlock.id || r.targetId === selectedBlock.id) && r.suspect
+                        );
+                        const evidenceHistory = Object.values(canonicalSysmlRepository.evidence).filter(
+                          e => e.requirementId === selectedBlock.id
+                        );
+
+                        return (
+                          <RequirementGovernancePanel
+                            requirement={reqDef}
+                            masterRequirement={masterReq}
+                            baselines={canonicalSysmlRepository.baselines}
+                            suspectLinks={suspectLinks}
+                            evidenceHistory={evidenceHistory}
+                            onCreateBaseline={(name) => {
+                              const res = createModelBaseline(canonicalSysmlRepository, name);
+                              setCanonicalSysmlRepository(res.repository);
+                              addError('info', `Created baseline: ${name}`);
+                            }}
+                            onClearSuspect={(relId) => {
+                              const updated = clearSuspectLink(canonicalSysmlRepository, relId);
+                              setCanonicalSysmlRepository(updated);
+                              addError('info', `Cleared suspect flag on link: ${relId}`);
+                            }}
+                            onSyncFromMaster={() => {
+                              const res = synchronizeRequirementCopy(canonicalSysmlRepository, selectedBlock.id);
+                              setCanonicalSysmlRepository(res.repository);
+                              if (masterReq) {
+                                updateBlock(selectedBlock.id, {
+                                  name: masterReq.name,
+                                  description: masterReq.text,
+                                  status: masterReq.status,
+                                  version: masterReq.version,
+                                  priority: masterReq.priority,
+                                  risk: masterReq.risk,
+                                });
+                              }
+                              addError('info', 'Synchronized copy requirement from master');
+                            }}
+                          />
+                        );
+                      })()}
                     </>
                   )}
                   {selectedBlock.stereotype === 'verificationCase' && (

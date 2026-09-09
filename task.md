@@ -26,12 +26,12 @@
 - [x] Step 7: Verify and commit `feat(sysml): qualify complete ibd connector workflow`.
 
 ## Task 4: Complete requirement baselines, suspect links, copy synchronization, and evidence history
-- [ ] Step 1: Write failing governance tests (`src/engine/sysml/requirements.test.ts`, `RequirementGovernancePanel.test.tsx`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Implement governed operations in `src/engine/sysml/requirements.ts` and `src/engine/sysml/evidence.ts`.
-- [ ] Step 4: Build governance UI in `src/components/sysml/RequirementGovernancePanel.tsx` and `src/App.tsx`.
-- [ ] Step 5: Qualify relationship direction and notation across toolbar, canvas, inspector, and report.
-- [ ] Step 6: Verify and commit `feat(sysml): complete requirement governance workflows`.
+- [x] Step 1: Write failing governance tests (`src/engine/sysml/requirements.test.ts`, `RequirementGovernancePanel.test.tsx`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement governed operations in `src/engine/sysml/requirements.ts` and `src/engine/sysml/evidence.ts`.
+- [x] Step 4: Build governance UI in `src/components/sysml/RequirementGovernancePanel.tsx` and `src/App.tsx`.
+- [x] Step 5: Qualify relationship direction and notation across toolbar, canvas, inspector, and report.
+- [x] Step 6: Verify and commit `feat(sysml): complete requirement governance workflows`.
 
 ## Task 5: Finish RTM change-set controls, scalable rendering, and navigation
 - [ ] Step 1: Add failing RTM tests (`src/engine/sysml/rtm.test.ts`, `TraceabilityMatrix.test.tsx`, `VirtualizedTraceabilityGrid.test.tsx`).

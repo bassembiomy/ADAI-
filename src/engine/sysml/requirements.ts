@@ -1,4 +1,4 @@
-import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
+import type { ModelBaseline, RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import type { SysmlDiagnostic } from './validation';
 import { deriveEvidenceStatus } from './evidence';
 
@@ -91,6 +91,110 @@ export function markSuspectLinks(repo: SysmlRepository, changedElementIds: reado
   return next;
 }
 
+export function clearSuspectLink(repo: SysmlRepository, relationshipId: string): SysmlRepository {
+  const next = structuredClone(repo);
+  const rel = next.relationships[relationshipId];
+  if (!rel) return repo;
+  rel.suspect = false;
+  rel.lastValidatedRevision = next.revision;
+  next.revision += 1;
+  next.auditTrail.push({
+    id: `change-${next.revision}-clear-suspect-${relationshipId}`,
+    revision: next.revision,
+    timestamp: new Date().toISOString(),
+    command: 'clearSuspectLink',
+    elementIds: [relationshipId],
+  });
+  return next;
+}
+
+export function createModelBaseline(
+  repo: SysmlRepository,
+  name: string,
+): { repository: SysmlRepository; baseline: ModelBaseline } {
+  const next = structuredClone(repo);
+  const elementHashes: Record<string, string> = {};
+  const records = [
+    next.definitions,
+    next.usages,
+    next.connectors,
+    next.relationships,
+    next.requirements,
+    next.verificationCases,
+    next.evidence,
+    next.artifacts,
+  ];
+  for (const record of records) {
+    for (const element of Object.values(record)) {
+      elementHashes[element.id] = hash(stableStringify(element));
+    }
+  }
+  const contentHash = hash(stableStringify(elementHashes));
+  const id = `baseline-${next.revision}-${Object.keys(next.baselines).length + 1}`;
+  const baseline: ModelBaseline = {
+    id,
+    name,
+    revision: next.revision,
+    createdAt: new Date().toISOString(),
+    protected: true,
+    contentHash,
+    elementHashes,
+  };
+  next.baselines[id] = baseline;
+  next.revision += 1;
+  next.auditTrail.push({
+    id: `change-${next.revision}-baseline-${id}`,
+    revision: next.revision,
+    timestamp: baseline.createdAt,
+    command: 'createModelBaseline',
+    elementIds: [id],
+  });
+  return { repository: next, baseline };
+}
+
+export function synchronizeRequirementCopy(
+  repo: SysmlRepository,
+  copyRequirementId: string,
+): { repository: SysmlRepository; diff: { field: string; from: any; to: any }[] } {
+  const next = structuredClone(repo);
+  const copyReq = next.requirements[copyRequirementId];
+  if (!copyReq || !copyReq.copiedFromId) return { repository: repo, diff: [] };
+  const masterReq = next.requirements[copyReq.copiedFromId];
+  if (!masterReq) return { repository: repo, diff: [] };
+
+  const diff: { field: string; from: any; to: any }[] = [];
+  const fields: Array<keyof RequirementDefinition> = [
+    'name',
+    'text',
+    'status',
+    'version',
+    'source',
+    'rationale',
+    'priority',
+    'risk',
+  ];
+
+  for (const field of fields) {
+    if (copyReq[field] !== masterReq[field] && masterReq[field] !== undefined) {
+      diff.push({ field, from: copyReq[field], to: masterReq[field] });
+      (copyReq as any)[field] = masterReq[field];
+    }
+  }
+
+  if (diff.length > 0) {
+    next.revision += 1;
+    next.auditTrail.push({
+      id: `change-${next.revision}-sync-copy-${copyRequirementId}`,
+      revision: next.revision,
+      timestamp: new Date().toISOString(),
+      command: 'synchronizeRequirementCopy',
+      elementIds: [copyRequirementId, masterReq.id],
+    });
+  }
+
+  return { repository: next, diff };
+}
+
 export function deriveRequirementView(repo: SysmlRepository): RequirementView {
   const relationships = Object.values(repo.relationships).filter(relationship => GOVERNED_RELATIONSHIPS.has(relationship.kind));
   const diagnostics = Object.values(repo.requirements).flatMap(requirement => validateRequirement(repo, requirement.id));
@@ -163,4 +267,21 @@ function cycleDiagnostics(repo: SysmlRepository, relationships: SysmlRelationshi
 
 function diag(code: string, elementId: string, propertyPath: string | undefined, message: string): SysmlDiagnostic {
   return { code, severity: 'error', elementId, propertyPath, message };
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as Record<string, unknown>).sort().map(key => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function hash(value: string): string {
+  let result = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    result ^= value.charCodeAt(index);
+    result = Math.imul(result, 16777619);
+  }
+  return (result >>> 0).toString(16).padStart(8, '0');
 }

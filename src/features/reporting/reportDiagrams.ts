@@ -59,7 +59,7 @@ export function drawLabeledNode(
   return rect;
 }
 
-const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding']);
+const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding', 'copy']);
 
 export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
   const dashed = DASHED_REL_TYPES.has(edge.kind) ? ' stroke-dasharray="5 4"' : '';
