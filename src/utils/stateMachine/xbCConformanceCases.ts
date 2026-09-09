@@ -597,7 +597,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
       [
         createNode('c1', 'Constant', { value: 1 }),
         createNode('c0', 'Constant', { value: 0 }),
-        createNode('clk', 'Step', { stepTime: 0 }),
+        createNode('clk', 'Step', { stepTime: 0, initialValue: 0, finalValue: 1 }),
         
         createNode('dff', 'DFlipFlop'),
         createNode('jk', 'JKFlipFlop'),
@@ -631,7 +631,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
       [
         createNode('c1', 'Constant', { value: 1 }),
         createNode('c0', 'Constant', { value: 0 }),
-        createNode('clk', 'Step', { stepTime: 0 }),
+        createNode('clk', 'Step', { stepTime: 0, initialValue: 0, finalValue: 1 }),
         
         createNode('reg', 'Register', { bitWidth: 8 }),
         createNode('cnt', 'Counter', { maxValue: 255 }),

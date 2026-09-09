@@ -2970,8 +2970,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     expect(coreSource).toContain('instance->state_timers[SM_ST_A_IDX] < 300U');
     expect(coreSource).not.toContain('state_timers[0U]');
-    expect(coreSource).toContain('instance->data.xb6_step_output = (double)(instance->xb_a.XB6_StepOut_out);');
-    expect(coreSource).not.toContain('(float)((double)(instance->xb_a.XB6_StepOut_out))');
+    expect(coreSource).toContain('instance->data.xb6_step_output = (float)(instance->xb_a.XB6_StepOut_out);');
+    expect(coreSource).not.toContain('(double)((double)(instance->xb_a.XB6_StepOut_out))');
     expect(coreSource).not.toContain('instance->data.xb6_step_output = instance->xb_a.step1_out;');
 
     const check = compileGeneratedCSyntax(artifacts, true);
@@ -3009,7 +3009,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const artifacts = generateCArtifacts(ir!);
     const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
 
-    expect(coreSource).toContain('instance->data.xb6_step_output = (double)(instance->xb_a.XB6_StepOut_out);');
+    expect(coreSource).toContain('instance->data.xb6_step_output = (float)(instance->xb_a.XB6_StepOut_out);');
   });
 
   it('generates vector signal array and indexed assignments for MUX and DEMUX (GEN-XB-MUX-DEMUX-VECTOR)', () => {

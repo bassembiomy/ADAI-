@@ -2010,9 +2010,7 @@ const renderMappedOutputExpression = (
   );
   const sourceType = nativeSignalCType(storage.signal.numericType);
   if (sourceType !== null) {
-    return sourceType === destinationType
-      ? storage.expression
-      : `(${destinationType})(${storage.expression})`;
+    return `(${destinationType})(${storage.expression})`;
   }
   return `(${destinationType})(${signalRealExpression(
     state,
