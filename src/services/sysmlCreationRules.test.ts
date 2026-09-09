@@ -50,4 +50,39 @@ describe('native SysML creation rules', () => {
     expect(validateLegacyRequirementStatusTransition([req, testCase], [relationship('verify', 'v', 'r', 'verify')], 'r', 'Verified').valid).toBe(true);
     expect(validateLegacyRequirementStatusTransition([{ ...req, status: 'Draft' }], [], 'r', 'Implemented').codes).toContain('INVALID_REQUIREMENT_STATUS_TRANSITION');
   });
+
+  it('validates requirementContainment endpoint kinds, self-containment, multiple containers, and cycles', () => {
+    const blocks = [block('b'), block('r1', 'requirement'), block('r2', 'requirement'), block('r3', 'requirement')];
+    const model = { blocks, parts: [], relationships: [] as RelationshipData[] };
+
+    // Valid containment r1 -> r2
+    const rc1 = relationship('rc1', 'r1', 'r2', 'requirementContainment');
+    expect(validateLegacyRelationshipCandidate(model, rc1).valid).toBe(true);
+
+    // Non-requirement endpoint (block -> requirement)
+    const badRc = relationship('badRc', 'b', 'r1', 'requirementContainment');
+    expect(validateLegacyRelationshipCandidate(model, badRc).codes).toContain('INVALID_REQUIREMENT_CONTAINMENT_ENDPOINT');
+
+    // Self-containment
+    const selfRc = relationship('selfRc', 'r1', 'r1', 'requirementContainment');
+    expect(validateLegacyRelationshipCandidate(model, selfRc).codes).toContain('REQUIREMENT_SELF_CONTAINMENT');
+
+    // Multiple containers: r3 already contained by r1, candidate attempts r2 -> r3
+    const existingWithRc = [relationship('rcExisting', 'r1', 'r3', 'requirementContainment')];
+    const multipleRc = relationship('rcMultiple', 'r2', 'r3', 'requirementContainment');
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existingWithRc }, multipleRc).codes).toContain('MULTIPLE_REQUIREMENT_CONTAINERS');
+
+    // Cycle detection: r1 -> r2 existing, candidate r2 -> r1
+    const existingForCycle = [relationship('rc1', 'r1', 'r2', 'requirementContainment')];
+    const cycleRc = relationship('rcCycle', 'r2', 'r1', 'requirementContainment');
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existingForCycle }, cycleRc).codes).toContain('REQUIREMENT_CONTAINMENT_CYCLE');
+
+    // Re-homing: after removing rcExisting, r2 -> r3 is valid
+    expect(validateLegacyRelationshipCandidate(model, multipleRc).valid).toBe(true);
+
+    // BDD composition between requirements is rejected
+    const compReq = relationship('compReq', 'r1', 'r2', 'composition');
+    expect(validateLegacyRelationshipCandidate(model, compReq).codes).toContain('INVALID_COMPOSITION_ENDPOINTS');
+  });
 });
+

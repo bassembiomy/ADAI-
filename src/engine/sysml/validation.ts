@@ -1,4 +1,7 @@
 import { qualifiedName, type BlockDefinition, type SysmlRepository } from './model';
+import { validateRequirementContainment } from './requirements';
+
+export { validateRequirementContainment };
 
 export interface SysmlDiagnostic {
   code: string;
@@ -86,7 +89,9 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
         error('MULTIPLE_COMPOSITE_OWNERS', relationship.targetId, 'ownerId', `Composite usage is owned by both ${previous} and ${relationship.sourceId}`);
       } else compositionOwners.set(relationship.targetId, relationship.sourceId);
     }
-    if (!hasValidDirection(relationship.kind, relationship.sourceId, relationship.targetId, repo)) {
+    if (relationship.kind === 'requirementContainment') {
+      diagnostics.push(...validateRequirementContainment(repo, relationship.id));
+    } else if (!hasValidDirection(relationship.kind, relationship.sourceId, relationship.targetId, repo)) {
       error('INVALID_RELATIONSHIP_DIRECTION', relationship.id, 'kind', `${relationship.kind} has invalid SysML endpoint direction`);
     }
   }
@@ -142,6 +147,7 @@ function hasValidDirection(kind: string, sourceId: string, targetId: string, rep
   switch (kind) {
     case 'deriveReqt':
     case 'copy': return sourceRequirement && targetRequirement;
+    case 'composition': return !sourceRequirement && !targetRequirement;
     case 'satisfy': return !sourceRequirement && targetRequirement;
     case 'verify': return Boolean(repo.verificationCases[sourceId]) && targetRequirement;
     case 'refine': return !sourceRequirement && targetRequirement;

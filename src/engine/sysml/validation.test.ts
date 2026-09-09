@@ -92,4 +92,45 @@ describe('validateSysmlRepository', () => {
     expect(report.diagnostics.map(d => d.code)).toContain('INVALID_RELATIONSHIP_DIRECTION');
     expect(report.canVerify).toBe(false);
   });
+
+  it('validates SysML requirement containment rules in repository', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.b = block('b');
+    repo.requirements.r1 = {
+      id: 'r1', name: 'R1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'x', status: 'draft', version: '1',
+    };
+    repo.requirements.r2 = {
+      id: 'r2', name: 'R2', namespace: [], kind: 'requirement', requirementId: 'REQ-2',
+      text: 'y', status: 'draft', version: '1',
+    };
+    repo.requirements.r3 = {
+      id: 'r3', name: 'R3', namespace: [], kind: 'requirement', requirementId: 'REQ-3',
+      text: 'z', status: 'draft', version: '1',
+    };
+
+    // Valid containment: r1 contains r2
+    repo.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    expect(validateSysmlRepository(repo).valid).toBe(true);
+
+    // Non-requirement endpoint
+    repo.relationships.badRc = { id: 'badRc', kind: 'requirementContainment', sourceId: 'b', targetId: 'r1' };
+    expect(validateSysmlRepository(repo).diagnostics.map(d => d.code)).toContain('INVALID_REQUIREMENT_CONTAINMENT_ENDPOINT');
+    delete repo.relationships.badRc;
+
+    // Self containment
+    repo.relationships.selfRc = { id: 'selfRc', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r1' };
+    expect(validateSysmlRepository(repo).diagnostics.map(d => d.code)).toContain('REQUIREMENT_SELF_CONTAINMENT');
+    delete repo.relationships.selfRc;
+
+    // Multiple containers for r2
+    repo.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'r3', targetId: 'r2' };
+    expect(validateSysmlRepository(repo).diagnostics.map(d => d.code)).toContain('MULTIPLE_REQUIREMENT_CONTAINERS');
+    delete repo.relationships.rc2;
+
+    // Containment cycle
+    repo.relationships.cycleRc = { id: 'cycleRc', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r1' };
+    expect(validateSysmlRepository(repo).diagnostics.map(d => d.code)).toContain('REQUIREMENT_CONTAINMENT_CYCLE');
+  });
 });
+

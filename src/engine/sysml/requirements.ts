@@ -23,7 +23,7 @@ export interface RequirementTransitionResult {
   diagnostics: SysmlDiagnostic[];
 }
 
-const GOVERNED_RELATIONSHIPS = new Set(['deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy', 'composition']);
+const GOVERNED_RELATIONSHIPS = new Set(['deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy', 'requirementContainment']);
 const NORMAL_TRANSITIONS: Record<RequirementDefinition['status'], RequirementDefinition['status'][]> = {
   draft: ['approved'],
   approved: ['implemented'],
@@ -195,14 +195,103 @@ export function synchronizeRequirementCopy(
   return { repository: next, diff };
 }
 
+export function validateRequirementContainment(repo: SysmlRepository, relationshipId: string): SysmlDiagnostic[] {
+  const rel = repo.relationships[relationshipId];
+  if (!rel) return [];
+  if (rel.kind !== 'requirementContainment') return [];
+  const diagnostics: SysmlDiagnostic[] = [];
+
+  const sourceReq = Boolean(repo.requirements[rel.sourceId]);
+  const targetReq = Boolean(repo.requirements[rel.targetId]);
+
+  if (!sourceReq || !targetReq) {
+    diagnostics.push(diag('INVALID_REQUIREMENT_CONTAINMENT_ENDPOINT', rel.id, 'endpoints', 'Requirement containment endpoints must both be requirements'));
+  }
+
+  if (rel.sourceId === rel.targetId) {
+    diagnostics.push(diag('REQUIREMENT_SELF_CONTAINMENT', rel.id, 'targetId', `Requirement ${rel.sourceId} cannot contain itself`));
+  }
+
+  const otherContainers = Object.values(repo.relationships).filter(r =>
+    r.id !== rel.id &&
+    r.kind === 'requirementContainment' &&
+    r.targetId === rel.targetId
+  );
+  if (otherContainers.length > 0) {
+    diagnostics.push(diag('MULTIPLE_REQUIREMENT_CONTAINERS', rel.targetId, 'targetId', `Requirement ${rel.targetId} is contained by multiple parents`));
+  }
+
+  if (sourceReq && targetReq && isReachableViaContainment(repo, rel.targetId, rel.sourceId, new Set([rel.id]))) {
+    diagnostics.push(diag('REQUIREMENT_CONTAINMENT_CYCLE', rel.id, 'relationships', `Requirement containment cycle detected involving ${rel.sourceId}`));
+  }
+
+  return diagnostics;
+}
+
+function isReachableViaContainment(
+  repo: SysmlRepository,
+  fromId: string,
+  toId: string,
+  excludeRelIds = new Set<string>(),
+  visitedNodeIds = new Set<string>(),
+): boolean {
+  if (fromId === toId) return true;
+  visitedNodeIds.add(fromId);
+  for (const r of Object.values(repo.relationships)) {
+    if (r.kind !== 'requirementContainment' || excludeRelIds.has(r.id)) continue;
+    if (r.sourceId === fromId) {
+      if (r.targetId === toId) return true;
+      if (!visitedNodeIds.has(r.targetId)) {
+        if (isReachableViaContainment(repo, r.targetId, toId, excludeRelIds, visitedNodeIds)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function getNestedRequirementIds(repo: SysmlRepository, containerId: string): string[] {
+  const result: string[] = [];
+  const visited = new Set<string>([containerId]);
+
+  function dfs(currentId: string) {
+    const children: string[] = [];
+    for (const rel of Object.values(repo.relationships)) {
+      if (rel.kind === 'requirementContainment' && rel.sourceId === currentId && repo.requirements[rel.targetId]) {
+        children.push(rel.targetId);
+      }
+    }
+    children.sort((a, b) => a.localeCompare(b));
+
+    for (const childId of children) {
+      if (!visited.has(childId)) {
+        visited.add(childId);
+        result.push(childId);
+        dfs(childId);
+      }
+    }
+  }
+
+  dfs(containerId);
+  return result;
+}
+
 export function deriveRequirementView(repo: SysmlRepository): RequirementView {
   const relationships = Object.values(repo.relationships).filter(relationship => GOVERNED_RELATIONSHIPS.has(relationship.kind));
   const diagnostics = Object.values(repo.requirements).flatMap(requirement => validateRequirement(repo, requirement.id));
   for (const relationship of relationships) {
-    if (!validDirection(repo, relationship)) diagnostics.push(diag('INVALID_REQUIREMENT_RELATION_DIRECTION', relationship.id, 'kind', `${relationship.kind} has invalid requirement endpoints`));
+    if (relationship.kind === 'requirementContainment') {
+      diagnostics.push(...validateRequirementContainment(repo, relationship.id));
+    } else if (!validDirection(repo, relationship)) {
+      diagnostics.push(diag('INVALID_REQUIREMENT_RELATION_DIRECTION', relationship.id, 'kind', `${relationship.kind} has invalid requirement endpoints`));
+    }
   }
   diagnostics.push(...cycleDiagnostics(repo, relationships.filter(r => r.kind === 'deriveReqt' || r.kind === 'copy'), 'REQUIREMENT_DERIVATION_CYCLE'));
-  diagnostics.push(...cycleDiagnostics(repo, relationships.filter(r => r.kind === 'composition' && repo.requirements[r.sourceId] && repo.requirements[r.targetId]), 'REQUIREMENT_CONTAINMENT_CYCLE'));
+  const containmentCycles = cycleDiagnostics(repo, relationships.filter(r => r.kind === 'requirementContainment'), 'REQUIREMENT_CONTAINMENT_CYCLE');
+  for (const cycleDiag of containmentCycles) {
+    if (!diagnostics.some(d => d.code === 'REQUIREMENT_CONTAINMENT_CYCLE' && d.elementId === cycleDiag.elementId)) {
+      diagnostics.push(cycleDiag);
+    }
+  }
   const requirements = Object.values(repo.requirements).sort((a, b) => a.requirementId.localeCompare(b.requirementId)).map(requirement => {
     const incoming = relationships.filter(r => r.targetId === requirement.id);
     const outgoing = relationships.filter(r => r.sourceId === requirement.id);
@@ -230,7 +319,7 @@ function validDirection(repo: SysmlRepository, relationship: SysmlRelationship):
   switch (relationship.kind) {
     case 'deriveReqt':
     case 'copy':
-    case 'composition': return sourceReq && targetReq;
+    case 'requirementContainment': return sourceReq && targetReq;
     case 'satisfy': return !sourceReq && targetReq;
     case 'verify': return Boolean(repo.verificationCases[relationship.sourceId]) && targetReq;
     case 'refine': return !sourceReq && targetReq;

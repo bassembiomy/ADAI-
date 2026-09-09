@@ -8,12 +8,12 @@
 - [x] Step 5: Run GREEN and commit `feat(sysml): add requirement containment relationship kind`.
 
 ## Task 2: Implement validation, ownership, and lifecycle semantics
-- [ ] Step 1: Write failing semantic tests (`src/engine/sysml/requirements.test.ts`, `src/engine/sysml/validation.test.ts`, `src/services/sysmlCreationRules.test.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Implement validation with exact diagnostic codes.
-- [ ] Step 4: Replace overloaded checks.
-- [ ] Step 5: Implement deterministic traversal (`getNestedRequirementIds`).
-- [ ] Step 6: Run GREEN and commit `feat(sysml): enforce requirement containment semantics`.
+- [x] Step 1: Write failing semantic tests (`src/engine/sysml/requirements.test.ts`, `src/engine/sysml/validation.test.ts`, `src/services/sysmlCreationRules.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement validation with exact diagnostic codes.
+- [x] Step 4: Replace overloaded checks.
+- [x] Step 5: Implement deterministic traversal (`getNestedRequirementIds`).
+- [x] Step 6: Run GREEN and commit `feat(sysml): enforce requirement containment semantics`.
 
 ## Task 3: Add correct deletion, impact-preview, and undo behavior
 - [ ] Step 1: Write failing lifecycle tests (`src/engine/sysml/mutations.test.ts`, `src/services/sysmlTransactionAdapter.test.ts`, `src/services/sysmlCommandGateway.test.ts`).
