@@ -92,6 +92,7 @@ import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
+import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -4912,11 +4913,13 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
+  const [showArchitectureExplorer, setShowArchitectureExplorer] = useState(false);
 
   useEffect(() => {
     if (initialTopic && isOpen) {
       setActiveTopic(initialTopic);
       setShowBlockRef(false);
+      setShowArchitectureExplorer(false);
     }
   }, [initialTopic, isOpen]);
   
@@ -5161,6 +5164,9 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
             {!showBlockRef ? (
               /* TOPIC VIEW */
               <div className="max-w-4xl mx-auto">
+                {activeTopic === 'software-architecture' && showArchitectureExplorer ? (
+                  <SoftwareArchitectureExplorer onClose={() => setShowArchitectureExplorer(false)} />
+                ) : <>
                 <div className="mb-14">
                   <nav className="flex items-center gap-3 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-6">
                     <span className="hover:text-orange-500 cursor-pointer" onClick={() => setActiveTopic("getting-started")}>ADIA Docs</span>
@@ -5170,13 +5176,19 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                     <span className="text-white">{topic.title}</span>
                   </nav>
                   
-                  <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
+                <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
                     {topic.title}
                   </h1>
                   <p className="text-lg text-gray-400 leading-relaxed font-light max-w-3xl">
                     {topic.description}
                   </p>
                 </div>
+
+                {activeTopic === 'software-architecture' && (
+                  <button onClick={() => setShowArchitectureExplorer(true)} className="mb-10 flex items-center gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 px-5 py-3 text-sm font-bold text-orange-400 hover:bg-orange-500/20">
+                    <Layers size={18} /> Open Architecture Explorer
+                  </button>
+                )}
 
                 {topic.image && (
                   <div className="mb-14 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative bg-black/40">
@@ -5249,6 +5261,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                     </div>
                   )}
                 </div>
+                </>}
               </div>
             ) : (
               /* BLOCK REFERENCE VIEW */

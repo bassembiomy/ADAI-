@@ -16,6 +16,16 @@ export const HELP_DATA: Record<string, {
   sections?: { title: string; body: string; code?: string; list?: string[] }[];
   related?: string[];
 }> = {
+  "software-architecture": {
+    title: "Software Architecture Explorer",
+    category: "System",
+    description: "Explore ADIA's layered architecture, shared data types, execution paths, and safeguards that protect engineering work.",
+    content: "The interactive explorer maps the read-only flow from editing through validation, persistence, execution, deployment, and telemetry feedback.",
+    sections: [
+      { title: "Explore the architecture", body: "Select **Open Architecture Explorer** to inspect layers, component responsibilities, source locations, data types, and protection mechanisms." },
+      { title: "Protection model", body: "The map highlights validation, integrity, bounded work, recoverable errors, verification gates, and deny-by-default HIL policies." }
+    ]
+  },
   "getting-started": {
     title: "Getting Started with ADIA",
     category: "Fundamentals",
