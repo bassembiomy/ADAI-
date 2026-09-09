@@ -45,6 +45,7 @@ export const migrateVisualDiagram = (raw: unknown): VisualDiagramModel => {
   return {
     ...value,
     version: 1,
+    type: value.type,
     id: typeof value.id === 'string' ? value.id : id(),
     title: typeof value.title === 'string' ? value.title : '',
     elements: Array.isArray(value.elements) ? value.elements : [],
