@@ -26,6 +26,7 @@ const COMPATIBILITY_FACTORY_ALIASES = new Set([
   'Subsystem',
   'Inport',
   'Outport',
+  'reservoir_il',
   'heat_sensor',
   'vfd_controller',
 ]);
