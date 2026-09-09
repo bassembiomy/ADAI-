@@ -335,5 +335,118 @@ describe('sysmlCommandGateway', () => {
     expect(undone.repository.relationships['rel-rc']).toBeDefined();
     expect(undone.repository.revision).toBe(initialRevision);
   });
+
+  it('separates diagram removal from semantic model deletion and preserves containment & revision', () => {
+    let state = createSysmlGatewayState();
+    const parentReq: RequirementDefinition = {
+      id: 'req-parent',
+      name: 'System Specification',
+      requirementId: 'REQ-001',
+      text: 'The system shall perform all operations.',
+      namespace: [],
+      kind: 'requirement',
+      status: 'approved',
+      priority: 'high',
+      risk: 'low',
+      version: '1.0',
+    };
+    const childReq: RequirementDefinition = {
+      id: 'req-child',
+      name: 'Subsystem Specification',
+      requirementId: 'REQ-002',
+      text: 'The subsystem shall perform sub-operations.',
+      namespace: [],
+      kind: 'requirement',
+      status: 'draft',
+      priority: 'medium',
+      risk: 'medium',
+      version: '1.0',
+    };
+    const containmentRel: SysmlRelationship = {
+      id: 'rel-contain',
+      kind: 'requirementContainment',
+      sourceId: 'req-parent',
+      targetId: 'req-child',
+    };
+
+    const s1 = executeSysmlCommand(state, { type: 'createElement', element: parentReq });
+    const s2 = executeSysmlCommand({ ...state, repository: s1.repository, history: s1.history }, { type: 'createElement', element: childReq });
+    const s3 = executeSysmlCommand({ ...state, repository: s2.repository, history: s2.history }, { type: 'createElement', element: containmentRel });
+
+    const initialRevision = s3.repository.revision;
+    const initialAuditLength = s3.repository.auditTrail.length;
+
+    // Set initial diagram presentation membership
+    state = {
+      ...state,
+      repository: s3.repository,
+      history: s3.history,
+      diagramPresentations: {
+        'req-diagram-1': { elementIds: ['req-parent', 'req-child'] },
+      },
+    };
+
+    // Remove parent from diagram only
+    const removeResult = executeSysmlCommand(state, {
+      type: 'removeFromDiagram',
+      diagramId: 'req-diagram-1',
+      elementIds: ['req-parent'],
+    });
+
+    expect(removeResult.committed).toBe(true);
+    // 1. Repository revision is preserved!
+    expect(removeResult.repository.revision).toBe(initialRevision);
+    expect(removeResult.repository.auditTrail).toHaveLength(initialAuditLength);
+
+    // 2. Both semantic requirements, containment relationship, and RTM rows survive
+    expect(removeResult.repository.requirements['req-parent']).toBeDefined();
+    expect(removeResult.repository.requirements['req-child']).toBeDefined();
+    expect(removeResult.repository.relationships['rel-contain']).toBeDefined();
+    expect(removeResult.repository.relationships['rel-contain'].kind).toBe('requirementContainment');
+
+    // 3. Only presentation membership changes
+    expect(removeResult.diagramPresentations['req-diagram-1'].elementIds).toEqual(['req-child']);
+    expect(removeResult.diagramPresentations['req-diagram-1'].elementIds).not.toContain('req-parent');
+
+    // 4. View for this diagram filters out removed element
+    const filteredView = projectLegacyDiagram(removeResult.repository, removeResult.coordinates, removeResult.diagramPresentations, 'req-diagram-1');
+    expect(filteredView.blocks.map(b => b.id)).toEqual(['req-child']);
+
+    // 5. Presentation-only operation undoes without modifying repository revision
+    const undonePresentation = executeSysmlCommand(
+      {
+        ...state,
+        repository: removeResult.repository,
+        coordinates: removeResult.coordinates,
+        diagramPresentations: removeResult.diagramPresentations,
+        history: removeResult.history,
+        presentationHistory: (removeResult as any).presentationHistory,
+      },
+      { type: 'undo' },
+    );
+    expect(undonePresentation.committed).toBe(true);
+    expect(undonePresentation.diagramPresentations['req-diagram-1'].elementIds).toEqual(expect.arrayContaining(['req-parent', 'req-child']));
+    expect(undonePresentation.repository.revision).toBe(initialRevision);
+
+    // 6. Project payload serialization & load round-trips diagramPresentations
+    const payload = buildCanonicalSysmlProjectPayload(
+      {
+        ...state,
+        repository: removeResult.repository,
+        diagramPresentations: removeResult.diagramPresentations,
+      },
+      { version: '1.0', projectName: 'Test Project' },
+    );
+    expect(payload.diagramPresentations).toEqual({
+      'req-diagram-1': { elementIds: ['req-child'] },
+    });
+
+    const loaded = loadCanonicalSysmlProject(payload);
+    expect(loaded.diagramPresentations).toEqual({
+      'req-diagram-1': { elementIds: ['req-child'] },
+    });
+    expect(loaded.repository.requirements['req-parent']).toBeDefined();
+    expect(loaded.repository.requirements['req-child']).toBeDefined();
+  });
 });
 

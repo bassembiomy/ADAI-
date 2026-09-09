@@ -6098,6 +6098,7 @@ const ADIA = () => {
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
   const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
+  const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
@@ -7288,6 +7289,9 @@ const ADIA = () => {
           throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
         }
         setCanonicalSysmlRepository(loaded.repository);
+        if (loaded.diagramPresentations) {
+          setDiagramPresentations(loaded.diagramPresentations);
+        }
         sysmlLoadedView = loaded.view;
       }
       // Logic & Simulation
@@ -7584,6 +7588,7 @@ const ADIA = () => {
         ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
         ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
       ]),
+      diagramPresentations,
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7621,6 +7626,7 @@ const ADIA = () => {
     parts,
     connectors,
     canonicalSysmlRepository,
+    diagramPresentations,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
@@ -9388,6 +9394,27 @@ const ADIA = () => {
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted ${kind}: ${block.name}`);
   }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+
+  const removeFromDiagram = useCallback((ids: string | string[]) => {
+    const rawIds = Array.isArray(ids) ? ids : [ids];
+    if (rawIds.length === 0) return;
+    const idSet = new Set(rawIds);
+    addToHistory();
+    const currentDiagramId = diagramMode === 'requirements' ? 'requirements' : (diagramMode || 'default');
+    setDiagramPresentations(prev => {
+      const existing = prev[currentDiagramId]?.elementIds ?? blocks.map(b => b.id);
+      return {
+        ...prev,
+        [currentDiagramId]: {
+          elementIds: existing.filter(id => !idSet.has(id)),
+        },
+      };
+    });
+    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
+    setRelationships(prev => prev.filter(r => !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
+    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
+    addError('info', `Removed ${rawIds.length} element(s) from diagram (preserved in model)`);
+  }, [addToHistory, diagramMode, blocks, addError]);
 
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
@@ -13377,6 +13404,8 @@ const ADIA = () => {
 
           if (selectedStateIds.length > 0) {
             deleteStates(selectedStateIds, otherSelectedIds);
+          } else if (diagramMode === 'requirements' || diagramMode === 'bdd') {
+            removeFromDiagram(otherSelectedIds);
           } else {
             deleteNonStateElements(otherSelectedIds);
           }
@@ -13405,7 +13434,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -17125,7 +17154,24 @@ const ADIA = () => {
                     </select>
                     <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deleteBlock(selectedBlock.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Block</Button>
+                  <div className="flex flex-col gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => removeFromDiagram(selectedBlock.id)}
+                      className="w-full border-[#444] text-[#ccc] hover:bg-[#222]"
+                    >
+                      Remove from Diagram
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteBlock(selectedBlock.id)}
+                      className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
+                    >
+                      Delete from Model…
+                    </Button>
+                  </div>
                 </>
               ) : selectedRelationship ? (
                 <>

@@ -55,10 +55,21 @@ export type SysmlElement =
   | VerificationEvidence
   | ModelBaseline;
 
+export interface DiagramPresentation {
+  diagramId: string;
+  elementIds: string[];
+}
+
+export interface PresentationSnapshot {
+  coordinates: Record<string, PresentationCoordinates>;
+  diagramPresentations: Record<string, { elementIds: string[] }>;
+}
+
 export type SysmlEditorCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown> }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string }
+  | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
   | { type: 'undo' }
   | { type: 'redo' };
 
@@ -66,6 +77,13 @@ export interface SysmlGatewayState {
   repository: SysmlRepository;
   history: MutationHistory;
   coordinates: Record<string, PresentationCoordinates>;
+  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  presentationHistory?: {
+    past: PresentationSnapshot[];
+    future: PresentationSnapshot[];
+  };
+  actionStack?: Array<'semantic' | 'presentation'>;
+  redoStack?: Array<'semantic' | 'presentation'>;
 }
 
 export interface SysmlCommandResult {
@@ -76,17 +94,32 @@ export interface SysmlCommandResult {
   committed: boolean;
   history: MutationHistory;
   coordinates: Record<string, PresentationCoordinates>;
+  diagramPresentations: Record<string, { elementIds: string[] }>;
+  presentationHistory?: {
+    past: PresentationSnapshot[];
+    future: PresentationSnapshot[];
+  };
+  actionStack?: Array<'semantic' | 'presentation'>;
+  redoStack?: Array<'semantic' | 'presentation'>;
 }
 
 export function createSysmlGatewayState(
   initialRepo?: SysmlRepository,
   initialCoordinates?: Record<string, PresentationCoordinates>,
+  initialDiagramPresentations?: Record<string, { elementIds: string[] }>,
 ): SysmlGatewayState {
   const repo = initialRepo ?? createEmptyRepository();
   return {
     repository: repo,
     history: createHistory(repo),
     coordinates: initialCoordinates ?? {},
+    diagramPresentations: initialDiagramPresentations ?? {},
+    presentationHistory: {
+      past: [],
+      future: [],
+    },
+    actionStack: [],
+    redoStack: [],
   };
 }
 
@@ -116,14 +149,22 @@ function formatMultiplicityText(m?: Multiplicity): string {
 export function projectLegacyDiagram(
   repository: SysmlRepository,
   coordinates: Record<string, PresentationCoordinates> = {},
+  diagramPresentations: Record<string, { elementIds: string[] }> = {},
+  diagramId?: string,
 ): LegacySysmlView {
   const blocks: BlockData[] = [];
   const parts: PartData[] = [];
   const relationships: RelationshipData[] = [];
   const connectors: ConnectorData[] = [];
 
+  const visibleFilter = diagramId && diagramPresentations[diagramId]
+    ? new Set(diagramPresentations[diagramId].elementIds)
+    : null;
+  const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
+
   // Project definitions (blocks, valueTypes, interfaces)
   for (const def of Object.values(repository.definitions)) {
+    if (!isVisible(def.id)) continue;
     const coords = coordinates[def.id] ?? {};
     if (def.kind === 'block') {
       const b = def as BlockDefinition;
@@ -185,6 +226,7 @@ export function projectLegacyDiagram(
 
   // Project requirements
   for (const req of Object.values(repository.requirements)) {
+    if (!isVisible(req.id)) continue;
     const coords = coordinates[req.id] ?? {};
     blocks.push({
       id: req.id,
@@ -214,6 +256,7 @@ export function projectLegacyDiagram(
 
   // Project verification cases
   for (const vc of Object.values(repository.verificationCases)) {
+    if (!isVisible(vc.id)) continue;
     const coords = coordinates[vc.id] ?? {};
     blocks.push({
       id: vc.id,
@@ -235,6 +278,7 @@ export function projectLegacyDiagram(
   // Project usages as parts
   for (const usage of Object.values(repository.usages)) {
     if (usage.kind === 'part') {
+      if (!isVisible(usage.id)) continue;
       const coords = coordinates[usage.id] ?? {};
       parts.push({
         id: usage.id,
@@ -254,6 +298,11 @@ export function projectLegacyDiagram(
 
   // Project connectors
   for (const conn of Object.values(repository.connectors)) {
+    if (!isVisible(conn.id)) {
+      const sp = conn.sourcePortId.split('::')[0];
+      const tp = conn.targetPortId.split('::')[0];
+      if (!isVisible(sp) || !isVisible(tp)) continue;
+    }
     const parseEndpoint = (portUsageId: string) => {
       if (portUsageId.includes('::')) {
         const [partId, portId] = portUsageId.split('::');
@@ -277,6 +326,9 @@ export function projectLegacyDiagram(
 
   // Project relationships
   for (const rel of Object.values(repository.relationships)) {
+    if (!isVisible(rel.id)) {
+      if (!isVisible(rel.sourceId) || !isVisible(rel.targetId)) continue;
+    }
     let legacyType: RelationshipData['type'] = 'trace';
     if (rel.kind === 'deriveReqt') legacyType = 'derive';
     else if (rel.kind === 'sharedAggregation') legacyType = 'aggregation';
@@ -394,12 +446,45 @@ export function executeSysmlCommand(
   command: SysmlEditorCommand,
 ): SysmlCommandResult {
   const coordinates = { ...state.coordinates };
+  const diagramPresentations = structuredClone(state.diagramPresentations ?? {});
 
   if (command.type === 'undo') {
+    const actionStack = [...(state.actionStack ?? [])];
+    const lastAction = actionStack.pop();
+
+    if (lastAction === 'presentation' || (lastAction === undefined && (state.presentationHistory?.past?.length ?? 0) > 0)) {
+      const past = [...(state.presentationHistory?.past ?? [])];
+      const prev = past.pop();
+      if (prev) {
+        const currentSnapshot: PresentationSnapshot = {
+          coordinates: structuredClone(state.coordinates),
+          diagramPresentations: structuredClone(diagramPresentations),
+        };
+        const nextPresentationHistory = {
+          past,
+          future: [currentSnapshot, ...(state.presentationHistory?.future ?? [])],
+        };
+        const validation = validateSysmlRepository(state.repository);
+        const view = projectLegacyDiagram(state.repository, prev.coordinates, prev.diagramPresentations);
+        return {
+          repository: state.repository,
+          view,
+          diagnostics: validation.diagnostics,
+          committed: true,
+          history: state.history,
+          coordinates: prev.coordinates,
+          diagramPresentations: prev.diagramPresentations,
+          presentationHistory: nextPresentationHistory,
+          actionStack,
+          redoStack: ['presentation', ...(state.redoStack ?? [])],
+        };
+      }
+    }
+
     const nextHistory = historyUndo(state.history);
     const repo = nextHistory.present;
     const validation = validateSysmlRepository(repo);
-    const view = projectLegacyDiagram(repo, coordinates);
+    const view = projectLegacyDiagram(repo, coordinates, diagramPresentations);
     return {
       repository: repo,
       view,
@@ -407,14 +492,50 @@ export function executeSysmlCommand(
       committed: true,
       history: nextHistory,
       coordinates,
+      diagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack,
+      redoStack: lastAction ? [lastAction, ...(state.redoStack ?? [])] : state.redoStack,
     };
   }
 
   if (command.type === 'redo') {
+    const redoStack = [...(state.redoStack ?? [])];
+    const nextAction = redoStack.shift();
+
+    if (nextAction === 'presentation') {
+      const future = [...(state.presentationHistory?.future ?? [])];
+      const next = future.shift();
+      if (next) {
+        const currentSnapshot: PresentationSnapshot = {
+          coordinates: structuredClone(state.coordinates),
+          diagramPresentations: structuredClone(diagramPresentations),
+        };
+        const nextPresentationHistory = {
+          past: [...(state.presentationHistory?.past ?? []), currentSnapshot],
+          future,
+        };
+        const validation = validateSysmlRepository(state.repository);
+        const view = projectLegacyDiagram(state.repository, next.coordinates, next.diagramPresentations);
+        return {
+          repository: state.repository,
+          view,
+          diagnostics: validation.diagnostics,
+          committed: true,
+          history: state.history,
+          coordinates: next.coordinates,
+          diagramPresentations: next.diagramPresentations,
+          presentationHistory: nextPresentationHistory,
+          actionStack: [...(state.actionStack ?? []), 'presentation'],
+          redoStack,
+        };
+      }
+    }
+
     const nextHistory = historyRedo(state.history);
     const repo = nextHistory.present;
     const validation = validateSysmlRepository(repo);
-    const view = projectLegacyDiagram(repo, coordinates);
+    const view = projectLegacyDiagram(repo, coordinates, diagramPresentations);
     return {
       repository: repo,
       view,
@@ -422,6 +543,10 @@ export function executeSysmlCommand(
       committed: true,
       history: nextHistory,
       coordinates,
+      diagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: nextAction ? [...(state.actionStack ?? []), nextAction] : state.actionStack,
+      redoStack,
     };
   }
 
@@ -446,7 +571,7 @@ export function executeSysmlCommand(
       future: [],
     };
     const validation = validateSysmlRepository(nextRepo);
-    const view = projectLegacyDiagram(nextRepo, coordinates);
+    const view = projectLegacyDiagram(nextRepo, coordinates, diagramPresentations);
 
     return {
       repository: nextRepo,
@@ -455,6 +580,10 @@ export function executeSysmlCommand(
       committed: true,
       history: nextHistory,
       coordinates,
+      diagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
+      redoStack: [],
     };
   }
 
@@ -462,7 +591,7 @@ export function executeSysmlCommand(
     const nextRepo: SysmlRepository = structuredClone(state.repository);
     const patched = findAndPatchElement(nextRepo, command.elementId, command.patch);
     if (!patched) {
-      const view = projectLegacyDiagram(state.repository, coordinates);
+      const view = projectLegacyDiagram(state.repository, coordinates, diagramPresentations);
       return {
         repository: state.repository,
         view,
@@ -470,6 +599,10 @@ export function executeSysmlCommand(
         committed: false,
         history: state.history,
         coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
       };
     }
     nextRepo.revision += 1;
@@ -487,7 +620,7 @@ export function executeSysmlCommand(
       future: [],
     };
     const validation = validateSysmlRepository(nextRepo);
-    const view = projectLegacyDiagram(nextRepo, coordinates);
+    const view = projectLegacyDiagram(nextRepo, coordinates, diagramPresentations);
 
     return {
       repository: nextRepo,
@@ -496,6 +629,10 @@ export function executeSysmlCommand(
       committed: true,
       history: nextHistory,
       coordinates,
+      diagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
+      redoStack: [],
     };
   }
 
@@ -506,7 +643,7 @@ export function executeSysmlCommand(
     if (needsConfirmation) {
       const expectedHash = computeImpactHash(impact);
       if (command.confirmedImpactHash !== expectedHash) {
-        const view = projectLegacyDiagram(state.repository, coordinates);
+        const view = projectLegacyDiagram(state.repository, coordinates, diagramPresentations);
         return {
           repository: state.repository,
           view,
@@ -515,6 +652,10 @@ export function executeSysmlCommand(
           committed: false,
           history: state.history,
           coordinates,
+          diagramPresentations,
+          presentationHistory: state.presentationHistory,
+          actionStack: state.actionStack,
+          redoStack: state.redoStack,
         };
       }
     }
@@ -524,6 +665,12 @@ export function executeSysmlCommand(
 
     for (const delId of impact.deletedElementIds) {
       delete coordinates[delId];
+    }
+    const nextDiagramPresentations = structuredClone(diagramPresentations);
+    for (const dId of Object.keys(nextDiagramPresentations)) {
+      nextDiagramPresentations[dId].elementIds = nextDiagramPresentations[dId].elementIds.filter(
+        id => !impact.deletedElementIds.includes(id)
+      );
     }
 
     nextRepo.auditTrail.push({
@@ -539,7 +686,7 @@ export function executeSysmlCommand(
       present: structuredClone(nextRepo),
       future: [],
     };
-    const view = projectLegacyDiagram(nextRepo, coordinates);
+    const view = projectLegacyDiagram(nextRepo, coordinates, nextDiagramPresentations);
 
     return {
       repository: nextRepo,
@@ -549,6 +696,47 @@ export function executeSysmlCommand(
       committed: true,
       history: nextHistory,
       coordinates,
+      diagramPresentations: nextDiagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
+      redoStack: [],
+    };
+  }
+
+  if (command.type === 'removeFromDiagram') {
+    const currentPresentation = diagramPresentations[command.diagramId] ?? { elementIds: [] };
+    const nextPresentation = {
+      elementIds: currentPresentation.elementIds.filter(id => !command.elementIds.includes(id)),
+    };
+    const nextDiagramPresentations = {
+      ...diagramPresentations,
+      [command.diagramId]: nextPresentation,
+    };
+
+    const pastPresentation: PresentationSnapshot = {
+      coordinates: structuredClone(state.coordinates),
+      diagramPresentations: structuredClone(diagramPresentations),
+    };
+    const nextPresentationHistory = {
+      past: [...(state.presentationHistory?.past ?? []), pastPresentation],
+      future: [],
+    };
+    const nextActionStack: Array<'semantic' | 'presentation'> = [...(state.actionStack ?? []), 'presentation'];
+
+    const validation = validateSysmlRepository(state.repository);
+    const view = projectLegacyDiagram(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
+
+    return {
+      repository: state.repository,
+      view,
+      diagnostics: validation.diagnostics,
+      committed: true,
+      history: state.history,
+      coordinates,
+      diagramPresentations: nextDiagramPresentations,
+      presentationHistory: nextPresentationHistory,
+      actionStack: nextActionStack,
+      redoStack: [],
     };
   }
 
@@ -565,6 +753,7 @@ export function buildCanonicalSysmlProjectPayload(
     ...metadata,
     sysmlRepository: serializedRepo,
     sysmlCoordinates: state.coordinates,
+    diagramPresentations: state.diagramPresentations ?? {},
     timestamp: new Date().toISOString(),
   };
 }
@@ -573,32 +762,36 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
   repository: SysmlRepository;
   view: LegacySysmlView;
   coordinates: Record<string, PresentationCoordinates>;
+  diagramPresentations: Record<string, { elementIds: string[] }>;
   valid: boolean;
   diagnostics: SysmlDiagnostic[];
 } {
+  const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
+  const diagramPresentations = (payload.diagramPresentations as Record<string, { elementIds: string[] }>) ?? {};
   const rawRepo = payload.sysmlRepository;
+
   if (!rawRepo) {
     // Fallback: migrate legacy payload
     const loadRes = loadRepository(payload);
-    const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
-    const view = projectLegacyDiagram(loadRes.repository, coordinates);
+    const view = projectLegacyDiagram(loadRes.repository, coordinates, diagramPresentations);
     return {
       repository: loadRes.repository,
       view,
       coordinates,
+      diagramPresentations,
       valid: loadRes.valid,
       diagnostics: loadRes.diagnostics,
     };
   }
 
   const loadRes = loadRepository(rawRepo);
-  const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
-  const view = projectLegacyDiagram(loadRes.repository, coordinates);
+  const view = projectLegacyDiagram(loadRes.repository, coordinates, diagramPresentations);
 
   return {
     repository: loadRes.repository,
     view,
     coordinates,
+    diagramPresentations,
     valid: loadRes.valid,
     diagnostics: loadRes.diagnostics,
   };

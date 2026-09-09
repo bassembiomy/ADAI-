@@ -33,12 +33,12 @@
 - [x] Step 7: Run GREEN and commit `feat(sysml): add requirement containment diagram tooling`.
 
 ## Task 5: Separate diagram removal from semantic model deletion
-- [ ] Step 1: Write failing distinction tests (`src/services/sysmlCommandGateway.test.ts`, `src/utils/adiaProjectPersistence.test.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Add presentation membership (`diagramPresentations[diagramId].elementIds`).
-- [ ] Step 4: Add explicit UI actions (`Remove from Diagram` and `Delete from Model…`).
-- [ ] Step 5: Verify save/load and undo.
-- [ ] Step 6: Run GREEN and commit `feat(sysml): separate diagram removal from model deletion`.
+- [x] Step 1: Write failing distinction tests (`src/services/sysmlCommandGateway.test.ts`, `src/utils/adiaProjectPersistence.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Add presentation membership (`diagramPresentations[diagramId].elementIds`).
+- [x] Step 4: Add explicit UI actions (`Remove from Diagram` and `Delete from Model…`).
+- [x] Step 5: Verify save/load and undo.
+- [x] Step 6: Run GREEN and commit `feat(sysml): separate diagram removal from model deletion`.
 
 ## Task 6: Integrate RTM, reports, fixture, conformance evidence, and browser qualification
 - [ ] Step 1: Add failing RTM and fixture tests (`src/engine/sysml/rtm.test.ts`, `src/engine/sysml/profileFixture.test.ts`).
