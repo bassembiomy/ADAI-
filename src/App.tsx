@@ -13,6 +13,8 @@ import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
+import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
+import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -330,7 +332,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
 
 interface WorkspaceFile {
   id: string;
@@ -6154,6 +6156,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
@@ -14913,6 +14916,7 @@ const ADIA = () => {
               { id: 'vlab', label: 'V-Lab' },
               { id: 'hil', label: 'HIL' },
               { id: 'entropy', label: 'ENTROPY OPM' },
+              { id: 'plantuml', label: 'PlantUML' },
             ].map(mode => (
               <button
                 key={mode.id}
@@ -15460,7 +15464,7 @@ const ADIA = () => {
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
             <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
-              {(xBridgesStateId || diagramMode === 'xbridges') && (
+            {(xBridgesStateId || diagramMode === 'xbridges') && (
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
                   initialNodes={syncXBBoundaryNodeMetadata(
@@ -15485,6 +15489,15 @@ const ADIA = () => {
                   workspaceFiles={workspaceFiles}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
+                />
+              )}
+
+              {diagramMode === 'plantuml' && (
+                <PlantUmlWorkspace
+                  diagram={plantUmlDiagram}
+                  onChange={setPlantUmlDiagram}
+                  onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
+                  onExport={() => addError('info', 'PlantUML export is available after offline rendering is configured.')}
                 />
               )}
 
