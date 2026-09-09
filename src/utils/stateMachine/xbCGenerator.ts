@@ -752,9 +752,10 @@ const renderSignalWrite = (
       : []),
   ];
   if (signal.numericType.kind === 'boolean') {
+    const booleanValueName = `xb_value_${operationIndex}_${outputIndex}`;
     return [
-      `    const bool ${valueName} = (${expression});`,
-      `    instance->${member}.${field} = ${valueName};`,
+      `    const bool ${booleanValueName} = (${expression});`,
+      `    instance->${member}.${field} = ${booleanValueName};`,
     ];
   }
   const precision = signal.numericType.kind === 'float'
