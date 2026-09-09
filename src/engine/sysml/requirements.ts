@@ -269,7 +269,7 @@ function diag(code: string, elementId: string, propertyPath: string | undefined,
   return { code, severity: 'error', elementId, propertyPath, message };
 }
 
-function stableStringify(value: unknown): string {
+export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   if (value && typeof value === 'object') {
     return `{${Object.keys(value as Record<string, unknown>).sort().map(key => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`).join(',')}}`;
@@ -277,7 +277,7 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function hash(value: string): string {
+export function hash(value: string): string {
   let result = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
     result ^= value.charCodeAt(index);

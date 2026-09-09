@@ -1,10 +1,14 @@
 import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import { deriveEvidenceStatus } from './evidence';
+import { hash, stableStringify } from './requirements';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
+export type RtmChangeKind = 'unchanged' | 'added' | 'modified' | 'suspect';
 
 export interface RtmFilters {
   baselineId?: string;
+  compareBaselineId?: string;
+  changeType?: 'all' | 'added' | 'modified' | 'suspect';
   subsystem?: string;
   owner?: string;
   risk?: RequirementDefinition['risk'];
@@ -16,6 +20,7 @@ export interface RtmFilters {
 export interface RtmRow {
   requirement: RequirementDefinition;
   status: RtmStatus;
+  changeKind?: RtmChangeKind;
   relationshipIds: string[];
   blocks: string[];
   parts: string[];
@@ -51,10 +56,18 @@ export interface CoverageMetrics {
 
 export function buildTraceabilityMatrix(repo: SysmlRepository, filters: RtmFilters = {}): TraceabilityMatrix {
   const rows = Object.values(repo.requirements)
-    .map(requirement => buildRow(repo, requirement))
+    .map(requirement => buildRow(repo, requirement, filters.compareBaselineId))
     .filter(row => matchesFilters(repo, row, filters))
     .sort((a, b) => a.requirement.requirementId.localeCompare(b.requirement.requirementId) || a.requirement.id.localeCompare(b.requirement.id));
   return { revision: repo.revision, filters: { ...filters }, rows };
+}
+
+export function projectRtmChangeSet(
+  repo: SysmlRepository,
+  baselineId: string,
+  changeType: RtmFilters['changeType'] = 'all',
+): TraceabilityMatrix {
+  return buildTraceabilityMatrix(repo, { compareBaselineId: baselineId, changeType });
 }
 
 export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetrics {
@@ -79,13 +92,17 @@ export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetr
 }
 
 export function exportRtmCsv(matrix: TraceabilityMatrix): string {
+  const hasChange = Boolean(matrix.filters.compareBaselineId || matrix.rows.some(r => r.changeKind !== undefined));
   const headers = [
-    'Requirement ID', 'Name', 'Text', 'Status', 'Owner', 'Risk', 'Version', 'Baseline',
+    'Requirement ID', 'Name', 'Text', 'Status',
+    ...(hasChange ? ['Change'] : []),
+    'Owner', 'Risk', 'Version', 'Baseline',
     'Blocks', 'Parts', 'Ports', 'Connectors', 'Behaviors', 'Simulations', 'Verification Cases',
     'Evidence', 'Artifacts', 'Relationships', 'Unresolved Endpoints',
   ];
   const rows = matrix.rows.map(row => [
     row.requirement.requirementId, row.requirement.name, row.requirement.text, row.status,
+    ...(hasChange ? [row.changeKind ?? 'unchanged'] : []),
     row.requirement.owner ?? '', row.requirement.risk ?? '', row.requirement.version, row.requirement.baselineId ?? '',
     row.blocks.join(';'), row.parts.join(';'), row.ports.join(';'), row.connectors.join(';'),
     row.behaviors.join(';'), row.simulations.join(';'), row.verificationCases.join(';'), row.evidence.join(';'),
@@ -94,7 +111,7 @@ export function exportRtmCsv(matrix: TraceabilityMatrix): string {
   return [headers, ...rows].map(columns => columns.map(csv).join(',')).join('\r\n');
 }
 
-function buildRow(repo: SysmlRepository, requirement: RequirementDefinition): RtmRow {
+function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, compareBaselineId?: string): RtmRow {
   const relationships = Object.values(repo.relationships).filter(r => r.sourceId === requirement.id || r.targetId === requirement.id);
   const relatedIds = relationships.map(r => r.sourceId === requirement.id ? r.targetId : r.sourceId);
   const blocks: string[] = [];
@@ -124,8 +141,28 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition): Rt
   const evidence = Object.values(repo.evidence)
     .filter(item => item.requirementId === requirement.id || verificationCases.includes(item.verificationCaseId))
     .map(item => item.id);
+
+  let changeKind: RtmChangeKind | undefined = undefined;
+  if (compareBaselineId && repo.baselines[compareBaselineId]) {
+    const baseline = repo.baselines[compareBaselineId];
+    const baseHash = baseline.elementHashes?.[requirement.id];
+    if (!baseHash) {
+      changeKind = 'added';
+    } else {
+      const currentHash = hash(stableStringify(requirement));
+      if (currentHash !== baseHash) {
+        changeKind = 'modified';
+      } else if (relationships.some(r => r.suspect)) {
+        changeKind = 'suspect';
+      } else {
+        changeKind = 'unchanged';
+      }
+    }
+  }
+
   const row: Omit<RtmRow, 'status'> = {
     requirement,
+    changeKind,
     relationshipIds: relationships.map(item => item.id).sort(),
     blocks: sortedUnique(blocks), parts: sortedUnique(parts), ports: sortedUnique(ports), connectors: sortedUnique(connectors),
     behaviors: sortedUnique(behaviors), simulations: sortedUnique(simulations), verificationCases: sortedUnique(verificationCases),
@@ -159,6 +196,12 @@ function matchesFilters(repo: SysmlRepository, row: RtmRow, filters: RtmFilters)
   if (filters.risk && requirement.risk !== filters.risk) return false;
   if (filters.status && row.status !== filters.status) return false;
   if (filters.method && !row.verificationCases.some(id => repo.verificationCases[id]?.method.toLocaleLowerCase() === filters.method!.toLocaleLowerCase())) return false;
+  if (filters.changeType && row.changeKind) {
+    if (filters.changeType === 'added' && row.changeKind !== 'added') return false;
+    if (filters.changeType === 'modified' && row.changeKind !== 'modified') return false;
+    if (filters.changeType === 'suspect' && row.changeKind !== 'suspect') return false;
+    if (filters.changeType === 'all' && row.changeKind === 'unchanged') return false;
+  }
   if (filters.changedSinceRevision !== undefined) {
     const revisions = [
       ...row.evidence.map(id => repo.evidence[id]?.revision ?? -1),

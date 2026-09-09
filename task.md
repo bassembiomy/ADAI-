@@ -34,12 +34,12 @@
 - [x] Step 6: Verify and commit `feat(sysml): complete requirement governance workflows`.
 
 ## Task 5: Finish RTM change-set controls, scalable rendering, and navigation
-- [ ] Step 1: Add failing RTM tests (`src/engine/sysml/rtm.test.ts`, `TraceabilityMatrix.test.tsx`, `VirtualizedTraceabilityGrid.test.tsx`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Implement baseline/change-set projection.
-- [ ] Step 4: Implement two-axis virtualization in `src/components/sysml/VirtualizedTraceabilityGrid.tsx`.
-- [ ] Step 5: Complete navigation and export parity.
-- [ ] Step 6: Verify performance and commit `feat(sysml): qualify scalable baseline-aware rtm`.
+- [x] Step 1: Add failing RTM tests (`src/engine/sysml/rtm.test.ts`, `TraceabilityMatrix.test.tsx`, `VirtualizedTraceabilityGrid.test.tsx`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement baseline/change-set projection.
+- [x] Step 4: Implement two-axis virtualization in `src/components/sysml/VirtualizedTraceabilityGrid.tsx`.
+- [x] Step 5: Complete navigation and export parity.
+- [x] Step 6: Verify performance and commit `feat(sysml): qualify scalable baseline-aware rtm`.
 
 ## Task 6: Add real-browser end-to-end qualification
 - [ ] Step 1: Add Playwright and failing smoke flow (`playwright.config.ts`, `tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts`).

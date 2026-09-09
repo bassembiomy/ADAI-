@@ -30,4 +30,19 @@ describe('professional traceability matrix workspace', () => {
     expect(nextRtmFocusIndex(1, 'Home', 3)).toBe(0);
     expect(nextRtmFocusIndex(1, 'End', 3)).toBe(2);
   });
+
+  it('renders baseline comparison selector and change-set filter dropdown', () => {
+    const repo = repository();
+    repo.baselines.base1 = {
+      id: 'base1',
+      name: 'Baseline 1.0',
+      revision: 1,
+      createdAt: '2026-09-08',
+      protected: true,
+    };
+    const html = renderToStaticMarkup(<TraceabilityMatrix repository={repo} />);
+    expect(html).toContain('aria-label="Compare with baseline"');
+    expect(html).toContain('Baseline 1.0');
+    expect(html).toContain('aria-label="Filter by change type"');
+  });
 });

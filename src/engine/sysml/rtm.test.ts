@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type RequirementDefinition, type SysmlRepository } from './model';
 import { buildTraceabilityMatrix, computeCoverageMetrics, exportRtmCsv } from './rtm';
+import { createModelBaseline } from './requirements';
 
 const requirement = (id: string, status: RequirementDefinition['status'] = 'implemented'): RequirementDefinition => ({
   id, name: id, namespace: ['Powertrain'], kind: 'requirement', requirementId: id.toUpperCase(), text: `${id} shall work`,
@@ -88,5 +89,44 @@ describe('canonical requirements traceability matrix', () => {
     expect(csv1).toBe(csv2);
     expect(csv1).toContain('Requirement ID,Name,Text,Status');
     expect(csv1).toContain('"Voltage, current, and ""power"""');
+  });
+
+  it('projects baseline change-sets with added, modified, and suspect classification', () => {
+    const repo = model();
+    // Create baseline at current state
+    const { baseline, repository: baseRepo } = createModelBaseline(repo, 'Baseline Alpha');
+
+    // Mutate repository:
+    // 1. Add r4 (added)
+    baseRepo.requirements.r4 = requirement('r4');
+    // 2. Modify r1 text (modified)
+    baseRepo.requirements.r1.text = 'r1 shall work with upgraded power';
+    // 3. Mark relationship to r2 suspect (suspect)
+    baseRepo.relationships.s1.suspect = true; // wait, s1 is to r1; let's add a suspect link to r2
+    baseRepo.relationships.s_r2 = { id: 's_r2', kind: 'satisfy', sourceId: 'b', targetId: 'r2', suspect: true };
+
+    const matrixAll = buildTraceabilityMatrix(baseRepo, { compareBaselineId: baseline.id });
+    const r4Row = matrixAll.rows.find(r => r.requirement.id === 'r4');
+    const r1Row = matrixAll.rows.find(r => r.requirement.id === 'r1');
+    const r2Row = matrixAll.rows.find(r => r.requirement.id === 'r2');
+    const r3Row = matrixAll.rows.find(r => r.requirement.id === 'r3');
+
+    expect(r4Row?.changeKind).toBe('added');
+    expect(r1Row?.changeKind).toBe('modified');
+    expect(r2Row?.changeKind).toBe('suspect');
+    expect(r3Row?.changeKind).toBe('unchanged');
+
+    // Filter by changeType
+    const matrixAdded = buildTraceabilityMatrix(baseRepo, { compareBaselineId: baseline.id, changeType: 'added' });
+    expect(matrixAdded.rows.map(r => r.requirement.id)).toEqual(['r4']);
+
+    const matrixChangesOnly = buildTraceabilityMatrix(baseRepo, { compareBaselineId: baseline.id, changeType: 'all' });
+    expect(matrixChangesOnly.rows.map(r => r.requirement.id).sort()).toEqual(['r1', 'r2', 'r4']);
+
+    // CSV export includes Change column when compareBaselineId is set
+    const csv = exportRtmCsv(matrixAll);
+    expect(csv).toContain('Requirement ID,Name,Text,Status,Change');
+    expect(csv).toContain('added');
+    expect(csv).toContain('modified');
   });
 });

@@ -5,7 +5,9 @@ import {
   computeCoverageMetrics,
   exportRtmCsv,
   type RtmStatus,
+  type RtmChangeKind,
 } from '../../engine/sysml/rtm';
+import { VirtualizedTraceabilityGrid } from './VirtualizedTraceabilityGrid';
 
 export interface TraceabilityMatrixProps {
   repository: SysmlRepository;
@@ -27,8 +29,17 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
   const [owner, setOwner] = useState('');
   const [risk, setRisk] = useState('');
   const [query, setQuery] = useState('');
+  const [compareBaselineId, setCompareBaselineId] = useState('');
+  const [changeType, setChangeType] = useState<RtmChangeKind | 'all' | ''>('');
+  const [useVirtualGrid, setUseVirtualGrid] = useState(false);
   const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
-  const complete = useMemo(() => buildTraceabilityMatrix(repository), [repository]);
+
+  const baselines = Object.values(repository.baselines || {});
+  const complete = useMemo(() => buildTraceabilityMatrix(repository, {
+    compareBaselineId: compareBaselineId || undefined,
+    changeType: (changeType as any) || undefined,
+  }), [repository, compareBaselineId, changeType]);
+
   const matrix = useMemo(() => ({
     ...complete,
     rows: complete.rows.filter(row => {
@@ -62,9 +73,20 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
             <h2 id="rtm-title" className="text-sm font-semibold">Requirements Traceability Matrix</h2>
             <p className="text-[11px] text-neutral-400">Canonical revision {repository.revision} · {metrics.covered}/{metrics.total} covered · {metrics.verified} verified</p>
           </div>
-          <button type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUseVirtualGrid(prev => !prev)}
+              className={`rounded border px-2.5 py-1 text-xs transition-colors ${
+                useVirtualGrid ? 'border-orange-500 bg-orange-950/60 text-orange-200' : 'border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-neutral-200'
+              }`}
+            >
+              {useVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
+            </button>
+            <button type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
+          </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-6">
           <input aria-label="Search requirements" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search ID, name, or text" className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs" />
           <select aria-label="Filter by traceability status" value={status} onChange={event => setStatus(event.target.value as RtmStatus | '')} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All trace statuses</option>
@@ -78,40 +100,67 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
             <option value="">All risks</option>
             {['low', 'medium', 'high', 'critical'].map(value => <option key={value}>{value}</option>)}
           </select>
+          <select aria-label="Compare with baseline" value={compareBaselineId} onChange={event => setCompareBaselineId(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+            <option value="">No baseline comparison</option>
+            {baselines.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select aria-label="Filter by change type" value={changeType} onChange={event => setChangeType(event.target.value as any)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+            <option value="">All change types</option>
+            <option value="added">Added</option>
+            <option value="modified">Modified</option>
+            <option value="suspect">Suspect</option>
+            <option value="all">Any change</option>
+          </select>
         </div>
       </header>
       <div className="flex-1 overflow-auto" role="region" aria-label="Traceability results" tabIndex={0}>
-        <table className="w-full border-collapse text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-neutral-950 text-neutral-400">
-            <tr>{['Requirement', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-neutral-800 p-2 font-medium">{label}</th>)}</tr>
-          </thead>
-          <tbody>
-            {matrix.rows.map((row, index) => (
-              <tr
-                key={row.requirement.id}
-                ref={element => { rowRefs.current[index] = element; }}
-                tabIndex={index === 0 ? 0 : -1}
-                data-status={row.status}
-                className="border-b border-neutral-900 hover:bg-neutral-900 focus:bg-neutral-900 focus:outline focus:outline-1 focus:outline-orange-500"
-                onDoubleClick={() => onNavigate?.(row.requirement.id)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') return onNavigate?.(row.requirement.id);
-                  const next = nextRtmFocusIndex(index, event.key, matrix.rows.length);
-                  if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
-                }}
-              >
-                <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{row.requirement.name}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
-                <td className="p-2"><StatusBadge status={row.status} /></td>
-                <td className="p-2 text-neutral-300"><span className="block">{row.requirement.owner || 'Unassigned'}</span><span className="text-neutral-500">{row.requirement.risk || 'unspecified'} risk</span></td>
-                <td className="p-2"><ElementLinks ids={[...row.blocks, ...row.parts]} repository={repository} onNavigate={onNavigate} empty="Uncovered" /></td>
-                <td className="p-2"><ElementLinks ids={[...row.ports, ...row.connectors]} repository={repository} onNavigate={onNavigate} empty="None" /></td>
-                <td className="p-2"><ElementLinks ids={row.verificationCases} repository={repository} onNavigate={onNavigate} empty="Not verified" /></td>
-                <td className="p-2"><ElementLinks ids={[...row.evidence, ...row.behaviors, ...row.simulations, ...row.artifacts]} repository={repository} onNavigate={onNavigate} empty="No evidence" /></td>
-              </tr>
-            ))}
-            {!matrix.rows.length && <tr><td colSpan={7} className="p-8 text-center text-neutral-500">No requirements match the active filters.</td></tr>}
-          </tbody>
-        </table>
+        {useVirtualGrid ? (
+          <VirtualizedTraceabilityGrid
+            rows={matrix.rows}
+            onNavigate={onNavigate}
+            containerHeight={500}
+            rowHeight={42}
+          />
+        ) : (
+          <table className="w-full border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-neutral-950 text-neutral-400">
+              <tr>{['Requirement', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-neutral-800 p-2 font-medium">{label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {matrix.rows.map((row, index) => (
+                <tr
+                  key={row.requirement.id}
+                  ref={element => { rowRefs.current[index] = element; }}
+                  tabIndex={index === 0 ? 0 : -1}
+                  data-status={row.status}
+                  className="border-b border-neutral-900 hover:bg-neutral-900 focus:bg-neutral-900 focus:outline focus:outline-1 focus:outline-orange-500"
+                  onDoubleClick={() => onNavigate?.(row.requirement.id)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') return onNavigate?.(row.requirement.id);
+                    const next = nextRtmFocusIndex(index, event.key, matrix.rows.length);
+                    if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
+                  }}
+                >
+                  <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{row.requirement.name}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
+                  <td className="p-2">
+                    <StatusBadge status={row.status} />
+                    {row.changeKind && row.changeKind !== 'unchanged' && (
+                      <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/70 text-amber-300 border border-amber-700">
+                        [{row.changeKind.toUpperCase()}]
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2 text-neutral-300"><span className="block">{row.requirement.owner || 'Unassigned'}</span><span className="text-neutral-500">{row.requirement.risk || 'unspecified'} risk</span></td>
+                  <td className="p-2"><ElementLinks ids={[...row.blocks, ...row.parts]} repository={repository} onNavigate={onNavigate} empty="Uncovered" /></td>
+                  <td className="p-2"><ElementLinks ids={[...row.ports, ...row.connectors]} repository={repository} onNavigate={onNavigate} empty="None" /></td>
+                  <td className="p-2"><ElementLinks ids={row.verificationCases} repository={repository} onNavigate={onNavigate} empty="Not verified" /></td>
+                  <td className="p-2"><ElementLinks ids={[...row.evidence, ...row.behaviors, ...row.simulations, ...row.artifacts]} repository={repository} onNavigate={onNavigate} empty="No evidence" /></td>
+                </tr>
+              ))}
+              {!matrix.rows.length && <tr><td colSpan={7} className="p-8 text-center text-neutral-500">No requirements match the active filters.</td></tr>}
+            </tbody>
+          </table>
+        )}
       </div>
     </section>
   );
