@@ -14945,7 +14945,7 @@ const ADIA = () => {
                 onClick={() => setDiagramMode(mode.id as DiagramMode)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
+                    ? mode.id === 'plantuml' ? 'bg-orange-500 text-zinc-950 shadow-sm font-semibold' : 'bg-zinc-800 text-white shadow-sm font-semibold'
                     : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
                 }`}
               >
