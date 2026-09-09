@@ -18,7 +18,7 @@
   - [x] Step 3: Implement column in `VirtualizedTraceabilityGrid.tsx`
   - [x] Step 4: Run test to verify GREEN
   - [x] Step 5: Commit `feat(sysml): display hierarchy and covering blocks in virtualized rtm grid`
-- [ ] Task 4: Full Suite Qualification & End-to-End Verification
-  - [ ] Step 1: Run `npm run test:sysml` (27 test files, 187+ tests)
-  - [ ] Step 2: Run `npm run build`
-  - [ ] Step 3: Final report and summary
+- [x] Task 4: Full Suite Qualification & End-to-End Verification
+  - [x] Step 1: Run `npm run test:sysml` (27 test files, 191 tests passing)
+  - [x] Step 2: Run `npm run build` (tsc, vite, electron bytecode all clean)
+  - [x] Step 3: Final report and summary

@@ -200,6 +200,7 @@ describe('canonical requirements traceability matrix', () => {
     };
     repo.requirements.r1 = {
       id: 'r1',
+      kind: 'requirement',
       requirementId: 'REQ-001',
       name: 'Base Power',
       text: 'Shall provide power',
@@ -209,6 +210,7 @@ describe('canonical requirements traceability matrix', () => {
     };
     repo.requirements.r2 = {
       id: 'r2',
+      kind: 'requirement',
       requirementId: 'REQ-002',
       name: 'Derived Voltage',
       text: 'Shall provide 12V',
