@@ -104,6 +104,7 @@ export const SVG_MARKER_DEFS = `<defs>
 <marker id="rf-diamond-filled" viewBox="0 0 12 10" refX="1" refY="5" markerWidth="10" markerHeight="9" orient="auto"><path d="M 1 5 L 6 1 L 11 5 L 6 9 z" fill="#546e7a"/></marker>
 <marker id="rf-diamond-hollow" viewBox="0 0 12 10" refX="1" refY="5" markerWidth="10" markerHeight="9" orient="auto"><path d="M 1 5 L 6 1 L 11 5 L 6 9 z" fill="#ffffff" stroke="#546e7a"/></marker>
 <marker id="rf-triangle-hollow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="10" orient="auto"><path d="M 1 1 L 11 6 L 1 11 z" fill="#ffffff" stroke="#546e7a"/></marker>
+<marker id="requirement-containment-crosshair" viewBox="0 0 16 16" refX="8" refY="8" markerWidth="12" markerHeight="12" orient="auto"><circle cx="8" cy="8" r="6" fill="#ffffff" stroke="#546e7a" stroke-width="1.2"/><line x1="8" y1="2" x2="8" y2="14" stroke="#546e7a" stroke-width="1.2"/><line x1="2" y1="8" x2="14" y2="8" stroke="#546e7a" stroke-width="1.2"/></marker>
 </defs>`;
 
 export function wrapFigure(svgInner: string, caption: string, viewBox: DiagramRect): string {

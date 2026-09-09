@@ -17,6 +17,16 @@ export interface ValuePropertyData {
   name: string;
   type: string;
   defaultValue?: string;
+  kind?: 'value' | 'part' | 'reference' | 'flow';
+  typeId?: string;
+  multiplicity?: string;
+  unit?: string;
+  dimension?: string;
+  ordered?: boolean;
+  unique?: boolean;
+  isDerived?: boolean;
+  redefinesId?: string;
+  subsetsId?: string;
 }
 
 export interface BlockData {
@@ -47,13 +57,23 @@ export interface BlockData {
   attachedFiles?: { name: string; content: string }[];
   assignedTo?: string;
   layerId?: string; // Which requirements layer this block belongs to ('root' or a block id)
+  namespace?: string[];
+  isAbstract?: boolean;
+  isLeaf?: boolean;
+  version?: string;
+  rationale?: string;
+  baselineId?: string;
+  verificationResult?: 'passed' | 'failed';
+  executedAt?: string;
+  artifactUri?: string;
+  evidenceRevision?: number;
 }
 
 export interface RelationshipData {
   id: string;
   sourceId: string;
   targetId: string;
-  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'binding' | 'dependency';
+  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'requirementContainment';
   label: string;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
@@ -84,6 +104,7 @@ export interface ConnectorData {
   targetPortId: string;
   itemFlow?: string;
   label?: string;
+  kind?: 'assembly' | 'delegation' | 'binding';
 }
 
 export interface InterfaceRealizationData {

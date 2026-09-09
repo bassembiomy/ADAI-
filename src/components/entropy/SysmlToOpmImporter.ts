@@ -5,7 +5,8 @@
  * Mapping:
  *   block (stereotype 'block')          → object node
  *   requirement block                   → requirement node (requirementText = description)
- *   composition / aggregation relation   → aggregation link
+ *   composition relation                 → conceptual-only aggregation projection with loss diagnostic
+ *   aggregation relation                 → aggregation link
  *   generalization relation              → generalization link
  *   satisfy / verify relation            → satisfies / verifies link (requirement → target)
  *   ports + connectors                   → NOT auto-mapped; reported as a warning
@@ -34,8 +35,13 @@ export interface SysmlImportResult {
   diagnostics: OpmLifecycleDiagnostic[];
 }
 
-const RELATION_MAP: Record<string, { link: OPMLinkType; flip?: boolean } | undefined> = {
-  composition: { link: 'aggregation' },
+const RELATION_MAP: Record<string, { link: OPMLinkType; flip?: boolean; status?: SysmlMappingStatus; diagnosticCode?: string; diagnostic?: string } | undefined> = {
+  composition: {
+    link: 'aggregation',
+    status: 'conceptual-only',
+    diagnosticCode: 'OPM_COMPOSITION_OWNERSHIP_LOSS',
+    diagnostic: 'OPM aggregation does not preserve SysML composite part-usage lifetime ownership; native SysML remains authoritative.',
+  },
   aggregation: { link: 'aggregation' },
   generalization: { link: 'generalization', flip: true },
   satisfy: { link: 'satisfies' },
@@ -103,16 +109,34 @@ export function importSysmlToOpm(state: SysMLDiagramState): SysmlImportResult {
     }
     const source = mapped.flip ? rel.targetId : rel.sourceId;
     const target = mapped.flip ? rel.sourceId : rel.targetId;
+    const mappingStatus = mapped.status ?? 'mapped';
     edges.push({
       id: `imp-${rel.id}`,
       source,
       target,
       data: {
         type: mapped.link,
-        sysmlMappingStatus: 'mapped',
+        sysmlMappingStatus: mappingStatus,
         sysmlRelationId: rel.id,
+        sysmlSourceKind: rel.type,
       },
     } as AppEdge);
+    connectorMappings.push({
+      sourceConnectorId: rel.id,
+      sourceBlockId: rel.sourceId,
+      targetBlockId: rel.targetId,
+      status: mappingStatus,
+      diagnostic: mapped.diagnostic,
+    });
+    if (mapped.diagnosticCode && mapped.diagnostic) {
+      warnings.push(mapped.diagnostic);
+      diagnostics.push({
+        code: mapped.diagnosticCode,
+        severity: 'warning',
+        message: mapped.diagnostic,
+        elementId: rel.id,
+      });
+    }
   });
 
   if ((state.connectors?.length ?? 0) > 0) {

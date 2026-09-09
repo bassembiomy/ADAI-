@@ -1,5 +1,6 @@
 import type { BlockData, ConnectorData, HmiComponent, PartData, RelationshipData } from '../../types/sysml_types';
 import type { JunctionData, Layer, StateData, TransitionData } from '../../types/sm_types';
+import { formatLegacyProperty } from '../../services/sysmlPropertyRules';
 import {
   DiagramEdgeInput, DiagramRect, MAX_NODES_PER_FIGURE, SizedNode,
   boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
@@ -58,7 +59,7 @@ export function drawLabeledNode(
   return rect;
 }
 
-const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding']);
+const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding', 'copy']);
 
 export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
   const dashed = DASHED_REL_TYPES.has(edge.kind) ? ' stroke-dasharray="5 4"' : '';
@@ -66,6 +67,7 @@ export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
   if (edge.kind === 'composition') marker = ' marker-start="url(#rf-diamond-filled)"';
   else if (edge.kind === 'aggregation') marker = ' marker-start="url(#rf-diamond-hollow)"';
   else if (edge.kind === 'generalization') marker = ' marker-end="url(#rf-triangle-hollow)"';
+  else if (edge.kind === 'requirementContainment') marker = ' marker-start="url(#requirement-containment-crosshair)"';
   const label = edge.label
     ? `<text font-size="9" fill="#65717e" text-anchor="middle"><textPath href="#edge-${edge.id}" startOffset="50%">${escapeHtml(edge.label)}</textPath></text>`
     : '';
@@ -152,15 +154,17 @@ export function renderBddDiagram(source: ReportBlockSource): string {
     const sized = new Map(page.map(b => {
       const isReq = b.stereotype === 'requirement';
       const hasIbd = !isReq && (source.parts ?? []).some(p => p.blockId === b.id);
+      const stereotypePrefix = b.isAbstract ? '«block, abstract»' : `«${b.stereotype ?? 'block'}»`;
       const stereotypeLabel = isReq
         ? '«requirement»'
         : hasIbd
-          ? `«${b.stereotype ?? 'block'}» ⤓ [IBD]`
-          : `«${b.stereotype ?? 'block'}»`;
+          ? `${stereotypePrefix} ⤓ [IBD]`
+          : stereotypePrefix;
+      const nameLabel = b.isLeaf ? `${b.name ?? ''} {leaf}` : (b.name ?? '');
       return [b.id, measureNode(b.id, [
         stereotypeLabel,
-        b.name ?? '',
-        ...(b.properties ?? []).slice(0, 3).map(p => `${p.name}: ${p.type}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
+        nameLabel,
+        ...(b.properties ?? []).slice(0, 3).map(p => `${formatLegacyProperty(p)}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
       ], isReq ? 'req' : 'bdd', 96)];
     }));
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
@@ -168,9 +172,13 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       const src = nodeById(placed, e.sourceId)!;
       const tgt = nodeById(placed, e.targetId)!;
       const rel = source.relationships.find(r => r.id === e.id);
+      const sourceRole = (rel as any)?.sourceRole ? `+${(rel as any).sourceRole} ` : '';
+      const targetRole = (rel as any)?.targetRole ? `+${(rel as any).targetRole} ` : '';
+      const sourceText = `${sourceRole}${rel?.sourceMultiplicity ?? ''}`.trim();
+      const targetText = `${targetRole}${rel?.targetMultiplicity ?? ''}`.trim();
       return drawStyledEdge(e, routeEdgePath(src, tgt))
-        + multiplicityLabel(rel?.sourceMultiplicity ?? '', src.x + src.width - 4, src.y - 6)
-        + multiplicityLabel(rel?.targetMultiplicity ?? '', tgt.x + 4, tgt.y - 6);
+        + multiplicityLabel(sourceText, src.x + src.width - 4, src.y - 6)
+        + multiplicityLabel(targetText, tgt.x + 4, tgt.y - 6);
     });
     const inner = [...edgeEls, ...placed.map(pos => {
       const node = allNodes.find(n => n.id === pos.id);

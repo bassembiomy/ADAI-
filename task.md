@@ -1,29 +1,51 @@
-# Tasks: HIL Workspace Scalable Panels & Visualization
+# Task Checklist: SysML Requirement Containment Implementation
 
-- [x] Task 1: Create `ResizableSplitPaneGroup` Component & Unit Tests
-  - [x] Step 1: Write failing unit test `src/components/common/ResizableSplitPane.test.tsx`
-  - [x] Step 2: Run test to verify failure
-  - [x] Step 3: Implement `src/components/common/ResizableSplitPane.tsx`
-  - [x] Step 4: Run unit test to verify pass
-  - [x] Step 5: Commit Task 1
-- [x] Task 2: Integrate Scalable Panels & Collapsible Header into Tab 1 (Configure)
-  - [x] Step 1: Add maximize state & header collapse state in `HILWorkspace.tsx`
-  - [x] Step 2: Update Target Pack Registry to be collapsible with summary view
-  - [x] Step 3: Replace fixed grid with `ResizableSplitPaneGroup` and add Maximize buttons
-  - [x] Step 4: Test Tab 1 rendering & typecheck
-  - [x] Step 5: Commit Task 2
-- [x] Task 3: Integrate Scalable Panels into Tab 2 (Build & Flash)
-  - [x] Step 1: Add maximize state in `HILWorkspace.tsx` for Tab 2
-  - [x] Step 2: Replace fixed grid with `ResizableSplitPaneGroup` and add Maximize buttons
-  - [x] Step 3: Test Tab 2 rendering & typecheck
-  - [x] Step 4: Commit Task 3
-- [x] Task 4: Integrate Scalable Panels into Tab 3 (Telemetry Dashboard)
-  - [x] Step 1: Add maximize state in `HILDashboard.tsx`
-  - [x] Step 2: Wrap Telemetry Scope and Faults/Logs in `ResizableSplitPaneGroup` and add Maximize buttons
-  - [x] Step 3: Test Tab 3 rendering & typecheck
-  - [x] Step 4: Commit Task 4
-- [x] Task 5: Full Regression Testing & Verification
-  - [x] Step 1: Run unit tests
-  - [x] Step 2: Run security audit & test suite (`npm run test:security`)
-  - [x] Step 3: Run TypeScript compiler check (`npx tsc --noEmit`)
-  - [x] Step 4: Commit and finalize
+## Task 1: Add the canonical Requirement Containment metamodel kind
+- [x] Step 1: Write failing type and round-trip tests (`src/engine/sysml/model.test.ts`, `src/engine/sysml/persistence.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Extend the canonical and compatibility unions.
+- [x] Step 4: Add a one-time migration (`LEGACY_REQUIREMENT_COMPOSITION_MIGRATED`).
+- [x] Step 5: Run GREEN and commit `feat(sysml): add requirement containment relationship kind`.
+
+## Task 2: Implement validation, ownership, and lifecycle semantics
+- [x] Step 1: Write failing semantic tests (`src/engine/sysml/requirements.test.ts`, `src/engine/sysml/validation.test.ts`, `src/services/sysmlCreationRules.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement validation with exact diagnostic codes.
+- [x] Step 4: Replace overloaded checks.
+- [x] Step 5: Implement deterministic traversal (`getNestedRequirementIds`).
+- [x] Step 6: Run GREEN and commit `feat(sysml): enforce requirement containment semantics`.
+
+## Task 3: Add correct deletion, impact-preview, and undo behavior
+- [x] Step 1: Write failing lifecycle tests (`src/engine/sysml/mutations.test.ts`, `src/services/sysmlTransactionAdapter.test.ts`, `src/services/sysmlCommandGateway.test.ts`).
+- [x] Step 2: Add non-cascade tests.
+- [x] Step 3: Add confirmation and transaction tests.
+- [x] Step 4: Run RED.
+- [x] Step 5: Extend the deletion closure.
+- [x] Step 6: Run GREEN and commit `fix(sysml): enforce requirement containment deletion lifecycle`.
+
+## Task 4: Add contextual Requirement Diagram creation and notation
+- [x] Step 1: Write failing component/report tests (`src/components/sysml/RelationshipEndEditor.test.tsx`, `src/features/reporting/reportDiagrams.sysml.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Add contextual creation choice in `src/App.tsx`.
+- [x] Step 4: Update the inspector (`RelationshipEndEditor.tsx`).
+- [x] Step 5: Render SysML notation (circle-plus/crosshair marker).
+- [x] Step 6: Add accessible guidance.
+- [x] Step 7: Run GREEN and commit `feat(sysml): add requirement containment diagram tooling`.
+
+## Task 5: Separate diagram removal from semantic model deletion
+- [x] Step 1: Write failing distinction tests (`src/services/sysmlCommandGateway.test.ts`, `src/utils/adiaProjectPersistence.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Add presentation membership (`diagramPresentations[diagramId].elementIds`).
+- [x] Step 4: Add explicit UI actions (`Remove from Diagram` and `Delete from Model…`).
+- [x] Step 5: Verify save/load and undo.
+- [x] Step 6: Run GREEN and commit `feat(sysml): separate diagram removal from model deletion`.
+
+## Task 6: Integrate RTM, reports, fixture, conformance evidence, and browser qualification
+- [x] Step 1: Add failing RTM and fixture tests (`src/engine/sysml/rtm.test.ts`, `src/engine/sysml/profileFixture.test.ts`).
+- [x] Step 2: Add failing browser creation test.
+- [x] Step 3: Add failing browser lifecycle test.
+- [x] Step 4: Implement fixture/profile evidence (`req.containment` in `src/engine/sysml/profile.ts` & `src/engine/sysml/conformanceManifest.ts`).
+- [x] Step 5: Run the full qualification gate (`npm run test:sysml:full-release`).
+- [x] Step 6: Audit and promote in `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md`.
+- [x] Step 7: Commit `test(sysml): qualify requirement containment lifecycle`.
+

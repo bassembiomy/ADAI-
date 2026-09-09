@@ -85,6 +85,24 @@ describe('renderBddDiagram', () => {
     expect(html).toContain('2 blocks');
   });
 
+  it('renders complete SysML property notation', () => {
+    const html = renderBddDiagram({
+      blocks: [block({ id: 'typed', properties: [{
+        id: 'flow', name: 'speed', type: 'Velocity', typeId: 'velocity', kind: 'flow',
+        multiplicity: '0..*', ordered: true, unique: false, isDerived: true,
+        unit: 'm/s', dimension: 'velocity', redefinesId: 'base-speed', subsetsId: 'available-speed',
+      }] })],
+      relationships: [],
+    });
+    expect(html).toContain('/speed: velocity [0..*]');
+    expect(html).toContain('{ordered,');
+    expect(html).toContain('nonunique}');
+    expect(html).toContain('«flow»');
+    expect(html).toContain('{unit=m/s}');
+    expect(html).toContain('{dimension=velocity} redefines');
+    expect(html).toContain('base-speed subsets available-speed');
+  });
+
   it('renders generalization with a hollow triangle', () => {
     const html = renderBddDiagram({
       blocks: bddBlocks,
@@ -162,5 +180,25 @@ describe('renderDiagrams — snapshot consistency', () => {
     expect(renderRequirementsDiagram({ blocks: source.blocks, relationships: source.relationships })).not.toContain('edge-deleted-rel');
   });
 });
+
+describe('renderRequirementsDiagram — Requirement Containment notation', () => {
+  const reqBlocks = [
+    block({ id: 'rParent', name: 'Parent Spec', stereotype: 'requirement', reqId: 'REQ-P' }),
+    block({ id: 'rChild', name: 'Child Spec', stereotype: 'requirement', reqId: 'REQ-C' }),
+  ];
+  const reqRels = [
+    rel({ id: 'rc1', sourceId: 'rParent', targetId: 'rChild', type: 'requirementContainment' }),
+  ];
+
+  it('renders a circle-plus/crosshair marker at container end and never renders composition diamond', () => {
+    const html = renderRequirementsDiagram({ blocks: reqBlocks, relationships: reqRels });
+    expect(html).toContain('REQ-P');
+    expect(html).toContain('REQ-C');
+    expect(html).toContain('marker-start="url(#requirement-containment-crosshair)"');
+    expect(html).toContain('id="requirement-containment-crosshair"');
+    expect(html).not.toContain('url(#rf-diamond-filled)');
+  });
+});
+
 
 

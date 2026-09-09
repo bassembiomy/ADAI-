@@ -54,7 +54,9 @@ export function cascadeDeleteReportElement(
       const removedBlockIds = new Set<string>([target.id]);
       const removedPortIds = new Set<string>((targetBlock.ports || []).map(p => p.id));
 
-      // Find all parts referencing this block directly or via parent/type, plus descendants
+      // Delete usages owned by the definition's IBD context and nested descendants.
+      // A type reference is not ownership: usages typed by a deleted classifier are
+      // preserved as unresolved model impacts for validation/retyping.
       const removedPartIds = new Set<string>();
       let partChanged = true;
       while (partChanged) {
@@ -63,9 +65,7 @@ export function cascadeDeleteReportElement(
           if (!removedPartIds.has(p.id)) {
             const matchesBlock =
               (p.blockId && removedBlockIds.has(p.blockId)) ||
-              (p.typeId && removedBlockIds.has(p.typeId)) ||
-              (p.parentBlockId && removedBlockIds.has(p.parentBlockId)) ||
-              (p.typeBlockId && removedBlockIds.has(p.typeBlockId));
+              (p.parentBlockId && removedBlockIds.has(p.parentBlockId));
             const matchesParentPart =
               p.parentPartId && removedPartIds.has(p.parentPartId);
 

@@ -36,4 +36,33 @@ describe('ADIA unified project persistence', () => {
     expect(shouldConfirmProjectReplacement({ ...current, states: [{ id: 's1' }] }, clean)).toBe(true);
     expect(shouldConfirmProjectReplacement(current, null)).toBe(false);
   });
+
+  it('preserves diagramPresentations membership and tracks unsaved changes', () => {
+    const payload = createUnifiedProjectPayload(
+      {
+        version: '1.0',
+        projectName: 'SysML Project',
+        diagramPresentations: {
+          'req-diagram': { elementIds: ['req-1', 'req-2'] },
+        },
+      },
+      () => new Date('2026-09-09T12:00:00.000Z')
+    );
+    expect(payload).toMatchObject({
+      version: '1.0',
+      projectName: 'SysML Project',
+      diagramPresentations: {
+        'req-diagram': { elementIds: ['req-1', 'req-2'] },
+      },
+    });
+
+    const clean = createProjectSnapshot(payload);
+    const modified = {
+      ...payload,
+      diagramPresentations: {
+        'req-diagram': { elementIds: ['req-2'] },
+      },
+    };
+    expect(hasUnsavedProjectChanges(modified, clean)).toBe(true);
+  });
 });

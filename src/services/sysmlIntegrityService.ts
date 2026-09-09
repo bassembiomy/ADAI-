@@ -115,9 +115,7 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
         if (!affectedParts.has(pt.id)) {
           if (
             pt.parentBlockId === elementId ||
-            pt.typeBlockId === elementId ||
             (pt as any).blockId === elementId ||
-            (pt as any).typeId === elementId ||
             (pt.parentPartId && affectedParts.has(pt.parentPartId))
           ) {
             affectedParts.add(pt.id);
