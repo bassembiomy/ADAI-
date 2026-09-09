@@ -4101,8 +4101,14 @@ const renderSolverSubstep = (
         member,
       )
         .map((line) => `    ${line}`);
+      // Kalman state is advanced at the direct-filter sample cadence. The
+      // generated solver performs two internal filter updates per emitted
+      // trace substep, matching the interpreter's sample schedule.
+      const effectiveOutputs = operation.type === 'KALMAN_FILTER'
+        ? [...outputs, ...outputs]
+        : outputs;
       if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
-        return outputs;
+        return effectiveOutputs;
       }
       const counter = layout.counterFields.get(operation.id);
       if (counter === undefined) {
@@ -4110,7 +4116,7 @@ const renderSolverSubstep = (
       }
       return [
         `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
-        ...outputs.map((line) => `    ${line}`),
+        ...effectiveOutputs.map((line) => `    ${line}`),
         '    }',
       ];
     }),
