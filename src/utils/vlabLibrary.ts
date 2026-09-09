@@ -8303,6 +8303,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "description": "Establishes the absolute pressure reference for an isothermal liquid network, equivalent to connecting to a large reservoir."
       },
       {
+        "id": "reservoir_il",
+        "name": "Reservoir (IL)",
+        "color": "#2563eb",
+        "icon": "reservoir_il",
+        "category": "Sources",
+        "params": {
+          "referencePressure": { "value": 101325, "unit": "Pa", "label": "Reference Pressure" }
+        },
+        "ports": [
+          { "id": "a", "pos": "top", "label": "A", "domain": "isothermal_liquid" }
+        ],
+        "equation": "p_A = p_absolute + rho*g*(z_ref - z_A)",
+        "description": "Reservoir maintaining a specified reference pressure in an isothermal liquid network."
+      },
+      {
         "id": "pump_il",
         "name": "Pump (IL)",
         "color": "#2563eb",

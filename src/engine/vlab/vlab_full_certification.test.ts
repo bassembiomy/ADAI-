@@ -103,6 +103,7 @@ const VALID_PORT_POSITIONS = new Set(['left', 'right', 'top', 'bottom']);
 const VALID_PORT_DOMAINS = new Set([
   'Electrical',
   'Fluid',
+  'isothermal_liquid',
   'Physical',
   'Rotational',
   'Thermal',
@@ -161,7 +162,7 @@ const ZERO_RESIDUAL_FACTORIES = new Set([
   'ground', 'delta_ref', 'open_circuit', 'subsystem', 'inport', 'outport', 'rot_ref', 'trans_ref',
   'thermal_ref', 'ma_ref', 'gas_ref', 'gas_properties', 'mag_ref', 'world_frame',
   'ref_frame', 'ps_terminator', 'fluid_ref', 'scope', 'solver_config', 'mech_config',
-  'belt_properties', 'ma_properties',
+  'belt_properties', 'ma_properties', 'hydraulic_reference_il', 'reservoir_il',
 ]);
 
 const numericParams = (block: VLabBlock): Record<string, number | string> =>
