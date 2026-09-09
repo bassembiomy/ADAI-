@@ -6,7 +6,15 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 
 const AVR_GPP = path.join(__dirname, '../../../avr-gcc/avr-gcc-15.2.0-x64-windows/bin/avr-g++.exe');
-const ARM_GCC = path.join(__dirname, '../../../toolchains/arm-gcc/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc.exe');
+const resolveArmGcc = (): string => {
+  const candidates = [
+    process.env.ADIA_ARM_GCC,
+    path.join(__dirname, '../../../toolchains/arm-gcc/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc.exe'),
+    'C:\\qp\\qtools\\gnu_arm-none-eabi\\bin\\arm-none-eabi-gcc.exe',
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]!;
+};
+const ARM_GCC = resolveArmGcc();
 let HOST_GCC: string | null = null;
 try {
   execSync('gcc --version', { stdio: 'ignore' });
