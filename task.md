@@ -58,11 +58,11 @@
 - [x] Step 6: Verify and commit `test(sysml): add normative representative model fixture`.
 
 ## Task 8: Turn the conformance matrix into an executable release manifest
-- [ ] Step 1: Write failing completeness test (`src/engine/sysml/conformanceManifest.test.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Implement executable evidence mapping in `src/engine/sysml/conformanceManifest.ts`.
-- [ ] Step 4: Generate `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md` with exact evidence mapping.
-- [ ] Step 5: Verify and commit `chore(sysml): enforce evidence-backed conformance claims`.
+- [x] Step 1: Write failing completeness test (`src/engine/sysml/conformanceManifest.test.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement executable evidence mapping in `src/engine/sysml/conformanceManifest.ts`.
+- [x] Step 4: Generate `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md` with exact evidence mapping.
+- [x] Step 5: Verify and commit `chore(sysml): enforce evidence-backed conformance claims`.
 
 ## Task 9: Final release qualification and professional-tool acceptance
 - [ ] Step 1: Define the aggregate gate `npm run test:sysml:full-release` in `package.json` and `scripts/verify_sysml_release.ts`.

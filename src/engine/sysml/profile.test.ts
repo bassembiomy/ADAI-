@@ -19,7 +19,7 @@ describe('ADIA SysML profile', () => {
   ])('registers capability %s with conformance evidence', id => {
     const capability = getCapability(id);
     expect(capability?.id).toBe(id);
-    expect(['supported', 'partial', 'unsupported']).toContain(capability?.status);
+    expect(capability?.status).toBe('supported');
     expect(capability?.normativeReference).toMatch(/SysML 1\.6/);
     expect(capability?.testId).toMatch(/^SYSML-/);
   });

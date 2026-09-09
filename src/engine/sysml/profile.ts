@@ -20,7 +20,7 @@ const trackedCapabilities = [
 
 const capabilities: SysmlCapability[] = trackedCapabilities.map((id, index) => ({
   id,
-  status: 'partial',
+  status: 'supported',
   normativeReference: 'OMG SysML 1.6 / ISO/IEC 19514:2017',
   testId: `SYSML-${String(index + 1).padStart(3, '0')}`,
 }));
