@@ -36,3 +36,5 @@ test_bool.*
 scratch_pdf/
 scratch-opm-probe/
 .codex-*
+test-results/
+playwright-report/

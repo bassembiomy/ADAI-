@@ -42,12 +42,12 @@
 - [x] Step 6: Verify performance and commit `feat(sysml): qualify scalable baseline-aware rtm`.
 
 ## Task 6: Add real-browser end-to-end qualification
-- [ ] Step 1: Add Playwright and failing smoke flow (`playwright.config.ts`, `tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Add deletion lifecycle scenarios in `tests/e2e/sysml-deletion-lifecycle.spec.ts`.
-- [ ] Step 4: Add persistence and report scenarios in `tests/e2e/sysml-persistence-report.spec.ts`.
-- [ ] Step 5: Stabilize accessibility selectors.
-- [ ] Step 6: Verify and commit `test(sysml): add browser conformance qualification`.
+- [x] Step 1: Add Playwright and failing smoke flow (`playwright.config.ts`, `tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Add deletion lifecycle scenarios in `tests/e2e/sysml-deletion-lifecycle.spec.ts`.
+- [x] Step 4: Add persistence and report scenarios in `tests/e2e/sysml-persistence-report.spec.ts`.
+- [x] Step 5: Stabilize accessibility selectors.
+- [x] Step 6: Verify and commit `test(sysml): add browser conformance qualification`.
 
 ## Task 7: Add normative model fixtures and interchange diagnostics
 - [ ] Step 1: Build fixture test first (`src/engine/sysml/profileFixture.test.ts`).
