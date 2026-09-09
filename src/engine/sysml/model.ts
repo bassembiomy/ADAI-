@@ -8,8 +8,8 @@ export interface Multiplicity {
 export interface NamedElement { id: string; name: string; namespace: string[]; }
 export interface ValueTypeDefinition extends NamedElement { kind: 'valueType'; unit?: string; dimension?: string; }
 export interface InterfaceDefinition extends NamedElement { kind: 'interface'; features: string[]; }
-export interface PropertyDefinition { id: string; name: string; kind: 'value' | 'part' | 'reference' | 'flow'; typeId: string; multiplicity: Multiplicity; isDerived?: boolean; redefinesId?: string; subsetsId?: string; }
-export interface PortDefinition { id: string; name: string; kind: 'full' | 'proxy'; typeId: string; direction: 'in' | 'out' | 'inout'; isConjugated: boolean; multiplicity: Multiplicity; }
+export interface PropertyDefinition { id: string; name: string; kind: 'value' | 'part' | 'reference' | 'flow'; typeId: string; multiplicity: Multiplicity; unit?: string; dimension?: string; defaultValue?: string; isDerived?: boolean; redefinesId?: string; subsetsId?: string; inheritedFromId?: string; }
+export interface PortDefinition { id: string; name: string; kind: 'full' | 'proxy'; typeId: string; direction: 'in' | 'out' | 'inout'; isConjugated: boolean; multiplicity: Multiplicity; inheritedFromId?: string; }
 export interface BlockDefinition extends NamedElement { kind: 'block'; isAbstract: boolean; isLeaf: boolean; supertypeIds?: string[]; properties: PropertyDefinition[]; ports: PortDefinition[]; operations: string[]; constraints: string[]; }
 export type SysmlDefinition = BlockDefinition | ValueTypeDefinition | InterfaceDefinition;
 
@@ -23,7 +23,7 @@ export interface VerificationEvidence { id: string; verificationCaseId: string; 
 export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; contentHash?: string; elementHashes?: Record<string, string>; }
 export interface TraceArtifact { id: string; name: string; kind: 'behavior' | 'simulation' | 'generatedArtifact' | 'source'; ownerId?: string; revision: number; uri?: string; }
 export interface ModelChangeRecord { id: string; revision: number; timestamp: string; command: string; elementIds: string[]; actor?: string; }
-export interface SysmlRelationship { id: string; kind: 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation' | 'binding' | 'itemFlow' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'copy'; sourceId: string; targetId: string; sourceMultiplicity?: Multiplicity; targetMultiplicity?: Multiplicity; suspect?: boolean; lastValidatedRevision?: number; }
+export interface SysmlRelationship { id: string; kind: 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation' | 'binding' | 'itemFlow' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'copy'; sourceId: string; targetId: string; sourceMultiplicity?: Multiplicity; targetMultiplicity?: Multiplicity; sourceRole?: string; targetRole?: string; sourceNavigable?: boolean; targetNavigable?: boolean; sourceAggregation?: 'none' | 'shared' | 'composite'; targetAggregation?: 'none' | 'shared' | 'composite'; suspect?: boolean; lastValidatedRevision?: number; }
 
 export interface SysmlRepository {
   schemaVersion: 2;

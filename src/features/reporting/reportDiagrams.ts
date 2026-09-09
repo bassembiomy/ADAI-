@@ -153,14 +153,16 @@ export function renderBddDiagram(source: ReportBlockSource): string {
     const sized = new Map(page.map(b => {
       const isReq = b.stereotype === 'requirement';
       const hasIbd = !isReq && (source.parts ?? []).some(p => p.blockId === b.id);
+      const stereotypePrefix = b.isAbstract ? '«block, abstract»' : `«${b.stereotype ?? 'block'}»`;
       const stereotypeLabel = isReq
         ? '«requirement»'
         : hasIbd
-          ? `«${b.stereotype ?? 'block'}» ⤓ [IBD]`
-          : `«${b.stereotype ?? 'block'}»`;
+          ? `${stereotypePrefix} ⤓ [IBD]`
+          : stereotypePrefix;
+      const nameLabel = b.isLeaf ? `${b.name ?? ''} {leaf}` : (b.name ?? '');
       return [b.id, measureNode(b.id, [
         stereotypeLabel,
-        b.name ?? '',
+        nameLabel,
         ...(b.properties ?? []).slice(0, 3).map(p => `${formatLegacyProperty(p)}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
       ], isReq ? 'req' : 'bdd', 96)];
     }));
@@ -169,9 +171,13 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       const src = nodeById(placed, e.sourceId)!;
       const tgt = nodeById(placed, e.targetId)!;
       const rel = source.relationships.find(r => r.id === e.id);
+      const sourceRole = (rel as any)?.sourceRole ? `+${(rel as any).sourceRole} ` : '';
+      const targetRole = (rel as any)?.targetRole ? `+${(rel as any).targetRole} ` : '';
+      const sourceText = `${sourceRole}${rel?.sourceMultiplicity ?? ''}`.trim();
+      const targetText = `${targetRole}${rel?.targetMultiplicity ?? ''}`.trim();
       return drawStyledEdge(e, routeEdgePath(src, tgt))
-        + multiplicityLabel(rel?.sourceMultiplicity ?? '', src.x + src.width - 4, src.y - 6)
-        + multiplicityLabel(rel?.targetMultiplicity ?? '', tgt.x + 4, tgt.y - 6);
+        + multiplicityLabel(sourceText, src.x + src.width - 4, src.y - 6)
+        + multiplicityLabel(targetText, tgt.x + 4, tgt.y - 6);
     });
     const inner = [...edgeEls, ...placed.map(pos => {
       const node = allNodes.find(n => n.id === pos.id);

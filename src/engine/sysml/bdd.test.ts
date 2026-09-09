@@ -5,7 +5,7 @@ import {
   type PropertyDefinition,
   type SysmlRepository,
 } from './model';
-import { deriveBddView, resolveInheritedFeatures, validateBlockDefinition } from './bdd';
+import { deriveBddView, resolveInheritedFeatures, validateBlockDefinition, validateAssociationEnds } from './bdd';
 
 const multiplicity = (lower = 1, upper: number | '*' = 1) => ({ lower, upper, ordered: false, unique: true });
 const property = (
@@ -119,4 +119,107 @@ describe('canonical BDD semantics', () => {
     expect(view.relationships.find(r => r.id === 'composition')?.notation).toBe('filled-diamond');
     expect(view.relationships.find(r => r.id === 'generalization')?.notation).toBe('hollow-triangle');
   });
+
+  it('tracks origin block IDs and names on inherited features', () => {
+    const model = repo();
+    model.definitions.parent = block('parent', {
+      name: 'ParentBlock',
+      properties: [property('p1', 'parentProp', 'value', 'Real')],
+      ports: [{ id: 'port1', name: 'pPort', kind: 'proxy', typeId: 'IF', direction: 'in', isConjugated: false, multiplicity: multiplicity() }],
+      operations: ['doWork()'],
+      constraints: ['p1 > 0'],
+    });
+    model.definitions.child = block('child', {
+      name: 'ChildBlock',
+      supertypeIds: ['parent'],
+      properties: [property('c1', 'childProp', 'value', 'Real')],
+    });
+
+    const resolved = resolveInheritedFeatures(model, 'child');
+    expect(resolved.diagnostics).toEqual([]);
+    
+    // Check annotated properties
+    const p1 = resolved.properties.find(p => p.id === 'p1');
+    expect(p1).toBeDefined();
+    expect(p1?.inheritedFromId).toBe('parent');
+
+    const c1 = resolved.properties.find(p => p.id === 'c1');
+    expect(c1).toBeDefined();
+    expect(c1?.inheritedFromId).toBeUndefined();
+
+    // Check origins
+    expect(resolved.annotatedProperties?.find(p => p.id === 'p1')?.originName).toBe('ParentBlock');
+    expect(resolved.annotatedProperties?.find(p => p.id === 'p1')?.isInherited).toBe(true);
+    expect(resolved.annotatedProperties?.find(p => p.id === 'c1')?.isInherited).toBe(false);
+
+    expect(resolved.ports.find(p => p.id === 'port1')?.inheritedFromId).toBe('parent');
+  });
+
+  it('validates full and proxy ports, direction, and conjugation', () => {
+    const model = repo();
+    model.definitions.MotorBlock = block('MotorBlock');
+    model.definitions.tester = block('tester', {
+      ports: [
+        // Full port typed by a Block is valid
+        { id: 'fp1', name: 'motorPort', kind: 'full', typeId: 'MotorBlock', direction: 'inout', isConjugated: false, multiplicity: multiplicity() },
+        // Full port typed by missing definition is invalid
+        { id: 'fp2', name: 'badFull', kind: 'full', typeId: 'MissingBlock', direction: 'in', isConjugated: false, multiplicity: multiplicity() },
+        // Proxy port conjugated reverses direction
+        { id: 'pp1', name: 'conjugatedIF', kind: 'proxy', typeId: 'IF', direction: 'in', isConjugated: true, multiplicity: multiplicity() },
+      ],
+    });
+
+    const diags = validateBlockDefinition(model, 'tester');
+    const codes = diags.map(d => d.code);
+    expect(codes).toContain('MISSING_PORT_TYPE');
+    expect(codes).not.toContain('INVALID_PORT_KIND');
+  });
+
+  it('validates association ends: multiplicities, unique roles, navigability, and composition ownership', () => {
+    const model = repo();
+    model.definitions.A = block('A', {
+      properties: [property('ap', 'existingRole', 'value', 'Real')],
+    });
+    model.definitions.B = block('B');
+
+    // Valid composition: source is whole (diamond), target is part, source multiplicity <= 1
+    model.relationships.comp1 = {
+      id: 'comp1',
+      kind: 'composition',
+      sourceId: 'A',
+      targetId: 'B',
+      sourceMultiplicity: multiplicity(0, 1),
+      targetMultiplicity: multiplicity(1, '*'),
+      sourceRole: 'whole',
+      targetRole: 'partItem',
+      sourceNavigable: false,
+      targetNavigable: true,
+      sourceAggregation: 'composite',
+      targetAggregation: 'none',
+    };
+
+    const validDiags = validateAssociationEnds(model, 'comp1');
+    expect(validDiags).toEqual([]);
+
+    // Invalid composition: composite end upper > 1 (multiple owners sharing a composite part)
+    model.relationships.badComp = {
+      id: 'badComp',
+      kind: 'composition',
+      sourceId: 'A',
+      targetId: 'B',
+      sourceMultiplicity: multiplicity(1, 2), // Error: upper cannot be > 1 for composite end
+      targetMultiplicity: multiplicity(1, 1),
+      sourceRole: 'existingRole', // Error: duplicates existing property name on A
+      targetRole: 'partItem2',
+      sourceNavigable: false,
+      targetNavigable: false, // Error: both ends non-navigable
+    };
+
+    const badDiags = validateAssociationEnds(model, 'badComp');
+    const paths = badDiags.map(d => d.propertyPath);
+    expect(paths).toContain('relationships.badComp.sourceMultiplicity');
+    expect(paths).toContain('relationships.badComp.sourceRole');
+    expect(paths).toContain('relationships.badComp.navigability');
+  });
 });
+

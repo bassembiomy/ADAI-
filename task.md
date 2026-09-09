@@ -9,12 +9,12 @@
 - [x] Step 6: Verify all SysML tests and commit `refactor(sysml): make canonical repository authoritative`.
 
 ## Task 2: Finish BDD feature, inheritance, port, and association-end workflows
-- [ ] Step 1: Add failing BDD tests (`src/engine/sysml/bdd.test.ts`, `BlockFeatureEditor.test.tsx`, `RelationshipEndEditor.test.tsx`).
-- [ ] Step 2: Run RED.
-- [ ] Step 3: Implement association-end validation.
-- [ ] Step 4: Complete BDD inspector in `src/components/sysml/BlockFeatureEditor.tsx` & `RelationshipEndEditor.tsx`.
-- [ ] Step 5: Complete BDD rendering and reporting in `src/App.tsx` and `src/features/reporting/reportDiagrams.ts`.
-- [ ] Step 6: Verify and commit `feat(sysml): qualify complete bdd editing workflow`.
+- [x] Step 1: Add failing BDD tests (`src/engine/sysml/bdd.test.ts`, `BlockFeatureEditor.test.tsx`, `RelationshipEndEditor.test.tsx`).
+- [x] Step 2: Run RED.
+- [x] Step 3: Implement association-end validation.
+- [x] Step 4: Complete BDD inspector in `src/components/sysml/BlockFeatureEditor.tsx` & `RelationshipEndEditor.tsx`.
+- [x] Step 5: Complete BDD rendering and reporting in `src/App.tsx` and `src/features/reporting/reportDiagrams.ts`.
+- [x] Step 6: Verify and commit `feat(sysml): qualify complete bdd editing workflow`.
 
 ## Task 3: Finish canonical IBD ownership, boundary, binding, and item-flow workflows
 - [ ] Step 1: Add failing IBD tests (`src/engine/sysml/ibd.test.ts`, `IbdConnectorEditor.test.tsx`, `reportDiagrams.ibd.test.ts`).

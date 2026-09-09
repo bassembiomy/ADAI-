@@ -107,8 +107,11 @@ import {
 } from './features/reporting';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
+import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
+import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { validateAssociationEnds } from './engine/sysml/bdd';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
-import { createEmptyRepository } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject } from './services/sysmlCommandGateway';
@@ -125,6 +128,15 @@ const escapeHtml = (str: unknown): string => {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
     .replace(/\x60/g, '&#96;');
+};
+
+const safeParseMultiplicity = (str?: string) => {
+  if (!str) return undefined;
+  try {
+    return parseMultiplicity(str);
+  } catch {
+    return undefined;
+  }
 };
 
 // Security Helper: Safe React renderer for Help Center bold text without dangerouslySetInnerHTML
@@ -13996,8 +14008,12 @@ const ADIA = () => {
           <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">«{block.stereotype}»</text>
-          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{block.name}</text>
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">
+            {block.isAbstract ? `«${block.stereotype}, abstract»` : `«${block.stereotype}»`}
+          </text>
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
+            {block.name}{block.isLeaf ? ' {leaf}' : ''}
+          </text>
           <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
 
           {/* Requirement Specifics */}
@@ -14198,8 +14214,14 @@ const ADIA = () => {
             </g>
           )}
 
+          {(rel as any).sourceRole && (
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
+          )}
           {rel.sourceMultiplicity && (
             <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
+          )}
+          {(rel as any).targetRole && (
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
           )}
           {rel.targetMultiplicity && (
             <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
@@ -17011,16 +17033,36 @@ const ADIA = () => {
                     <Label>Label</Label>
                     <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label>Source Mult.</Label>
-                      <Input value={selectedRelationship.sourceMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { sourceMultiplicity: e.target.value })} className="mt-1" placeholder="0..1" />
-                    </div>
-                    <div>
-                      <Label>Target Mult.</Label>
-                      <Input value={selectedRelationship.targetMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { targetMultiplicity: e.target.value })} className="mt-1" placeholder="*" />
-                    </div>
-                  </div>
+                  <RelationshipEndEditor
+                    relationship={{
+                      id: selectedRelationship.id,
+                      kind: selectedRelationship.type === 'aggregation' ? 'sharedAggregation' : selectedRelationship.type === 'derive' ? 'deriveReqt' : selectedRelationship.type as any,
+                      sourceId: selectedRelationship.sourceId,
+                      targetId: selectedRelationship.targetId,
+                      sourceRole: (selectedRelationship as any).sourceRole,
+                      targetRole: (selectedRelationship as any).targetRole,
+                      sourceMultiplicity: safeParseMultiplicity(selectedRelationship.sourceMultiplicity),
+                      targetMultiplicity: safeParseMultiplicity(selectedRelationship.targetMultiplicity),
+                      sourceNavigable: (selectedRelationship as any).sourceNavigable,
+                      targetNavigable: (selectedRelationship as any).targetNavigable,
+                      sourceAggregation: (selectedRelationship as any).sourceAggregation,
+                      targetAggregation: (selectedRelationship as any).targetAggregation,
+                    }}
+                    diagnostics={canonicalSysmlRepository.relationships[selectedRelationship.id] ? validateAssociationEnds(canonicalSysmlRepository, selectedRelationship.id) : []}
+                    onChange={(updatedRel) => {
+                      updateRelationship(selectedRelationship.id, {
+                        type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
+                        sourceRole: updatedRel.sourceRole,
+                        targetRole: updatedRel.targetRole,
+                        sourceMultiplicity: updatedRel.sourceMultiplicity ? `${updatedRel.sourceMultiplicity.lower}..${updatedRel.sourceMultiplicity.upper}` : undefined,
+                        targetMultiplicity: updatedRel.targetMultiplicity ? `${updatedRel.targetMultiplicity.lower}..${updatedRel.targetMultiplicity.upper}` : undefined,
+                        sourceNavigable: updatedRel.sourceNavigable,
+                        targetNavigable: updatedRel.targetNavigable,
+                        sourceAggregation: updatedRel.sourceAggregation,
+                        targetAggregation: updatedRel.targetAggregation,
+                      } as any);
+                    }}
+                  />
                   <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
                 </>
               ) : selectedPart ? (

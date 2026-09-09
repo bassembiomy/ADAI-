@@ -13,6 +13,10 @@ export interface ResolvedBlockFeatures {
   ports: PortDefinition[];
   operations: string[];
   constraints: string[];
+  annotatedProperties?: Array<PropertyDefinition & { originId: string; originName: string; isInherited: boolean }>;
+  annotatedPorts?: Array<PortDefinition & { originId: string; originName: string; isInherited: boolean }>;
+  annotatedOperations?: Array<{ name: string; originId: string; originName: string; isInherited: boolean }>;
+  annotatedConstraints?: Array<{ expression: string; originId: string; originName: string; isInherited: boolean }>;
   diagnostics: SysmlDiagnostic[];
 }
 
@@ -40,6 +44,10 @@ export function resolveInheritedFeatures(repo: SysmlRepository, blockId: string)
   const ports: PortDefinition[] = [];
   const operations: string[] = [];
   const constraints: string[] = [];
+  const annotatedProperties: Array<PropertyDefinition & { originId: string; originName: string; isInherited: boolean }> = [];
+  const annotatedPorts: Array<PortDefinition & { originId: string; originName: string; isInherited: boolean }> = [];
+  const annotatedOperations: Array<{ name: string; originId: string; originName: string; isInherited: boolean }> = [];
+  const annotatedConstraints: Array<{ expression: string; originId: string; originName: string; isInherited: boolean }> = [];
   const visited = new Set<string>();
   const visiting = new Set<string>();
 
@@ -50,30 +58,70 @@ export function resolveInheritedFeatures(repo: SysmlRepository, blockId: string)
       return;
     }
     visiting.add(current.id);
+    const isInherited = current.id !== block.id;
     for (const parentId of current.supertypeIds ?? []) {
       const parent = asBlock(repo.definitions[parentId]);
       if (parent) merge(parent);
       else diagnostics.push(diagnostic('MISSING_SUPERTYPE', current.id, 'supertypeIds', `Supertype ${parentId} does not exist`));
     }
     for (const property of current.properties) {
+      const propWithOrigin: PropertyDefinition = {
+        ...property,
+        inheritedFromId: isInherited ? current.id : undefined,
+      };
       if (property.redefinesId) {
         const index = properties.findIndex(candidate => candidate.id === property.redefinesId);
-        if (index >= 0) properties.splice(index, 1, property);
-        else properties.push(property);
-      } else if (!properties.some(candidate => candidate.id === property.id)) properties.push(property);
+        if (index >= 0) properties.splice(index, 1, propWithOrigin);
+        else properties.push(propWithOrigin);
+      } else if (!properties.some(candidate => candidate.id === property.id)) {
+        properties.push(propWithOrigin);
+      }
+      annotatedProperties.push({
+        ...propWithOrigin,
+        originId: current.id,
+        originName: current.name,
+        isInherited,
+      });
     }
     for (const port of current.ports) {
+      const portWithOrigin: PortDefinition = {
+        ...port,
+        inheritedFromId: isInherited ? current.id : undefined,
+      };
       const sameName = ports.findIndex(candidate => candidate.name === port.name);
-      if (sameName >= 0) ports.splice(sameName, 1, port);
-      else ports.push(port);
+      if (sameName >= 0) ports.splice(sameName, 1, portWithOrigin);
+      else ports.push(portWithOrigin);
+
+      annotatedPorts.push({
+        ...portWithOrigin,
+        originId: current.id,
+        originName: current.name,
+        isInherited,
+      });
     }
-    for (const operation of current.operations) if (!operations.includes(operation)) operations.push(operation);
-    for (const constraint of current.constraints) if (!constraints.includes(constraint)) constraints.push(constraint);
+    for (const operation of current.operations) {
+      if (!operations.includes(operation)) operations.push(operation);
+      annotatedOperations.push({ name: operation, originId: current.id, originName: current.name, isInherited });
+    }
+    for (const constraint of current.constraints) {
+      if (!constraints.includes(constraint)) constraints.push(constraint);
+      annotatedConstraints.push({ expression: constraint, originId: current.id, originName: current.name, isInherited });
+    }
     visiting.delete(current.id);
     visited.add(current.id);
   };
   merge(block);
-  return { properties, ports, operations, constraints, diagnostics };
+  return {
+    properties,
+    ports,
+    operations,
+    constraints,
+    annotatedProperties,
+    annotatedPorts,
+    annotatedOperations,
+    annotatedConstraints,
+    diagnostics,
+  };
 }
 
 export function validateBlockDefinition(repo: SysmlRepository, blockId: string): SysmlDiagnostic[] {
@@ -111,8 +159,66 @@ export function validateBlockDefinition(repo: SysmlRepository, blockId: string):
   }
   for (const port of block.ports) {
     const type = repo.definitions[port.typeId];
-    if (!type || type.kind !== 'interface') diagnostics.push(diagnostic('MISSING_PORT_TYPE', port.id, 'typeId', `Port type ${port.typeId} must be an InterfaceDefinition`));
+    if (port.kind === 'proxy') {
+      if (!type || type.kind !== 'interface') {
+        diagnostics.push(diagnostic('MISSING_PORT_TYPE', port.id, 'typeId', `Port type ${port.typeId} must be an InterfaceDefinition`));
+      }
+    } else if (port.kind === 'full') {
+      if (!type || (type.kind !== 'block' && type.kind !== 'interface' && type.kind !== 'valueType')) {
+        diagnostics.push(diagnostic('MISSING_PORT_TYPE', port.id, 'typeId', `Full port type ${port.typeId} must resolve to a valid definition`));
+      }
+    }
   }
+  return diagnostics;
+}
+
+export function validateAssociationEnds(repo: SysmlRepository, relationshipId: string): SysmlDiagnostic[] {
+  const diagnostics: SysmlDiagnostic[] = [];
+  const rel = repo.relationships[relationshipId];
+  if (!rel) {
+    return [diagnostic('RELATIONSHIP_NOT_FOUND', relationshipId, undefined, `Relationship ${relationshipId} does not exist`)];
+  }
+  const source = repo.definitions[rel.sourceId];
+  const target = repo.definitions[rel.targetId];
+
+  // Validate multiplicities
+  if (rel.sourceMultiplicity) {
+    if (rel.sourceMultiplicity.lower < 0 || (rel.sourceMultiplicity.upper !== '*' && rel.sourceMultiplicity.upper < rel.sourceMultiplicity.lower)) {
+      diagnostics.push(diagnostic('INVALID_MULTIPLICITY', rel.id, `relationships.${rel.id}.sourceMultiplicity`, `Source multiplicity is invalid`));
+    }
+    if (rel.kind === 'composition') {
+      // Composition ownership at diamond end: composite end multiplicity upper must be at most 1
+      if (rel.sourceMultiplicity.upper === '*' || rel.sourceMultiplicity.upper > 1) {
+        diagnostics.push(diagnostic('INVALID_MULTIPLICITY', rel.id, `relationships.${rel.id}.sourceMultiplicity`, `Composition composite end multiplicity upper must be at most 1`));
+      }
+    }
+  }
+
+  if (rel.targetMultiplicity) {
+    if (rel.targetMultiplicity.lower < 0 || (rel.targetMultiplicity.upper !== '*' && rel.targetMultiplicity.upper < rel.targetMultiplicity.lower)) {
+      diagnostics.push(diagnostic('INVALID_MULTIPLICITY', rel.id, `relationships.${rel.id}.targetMultiplicity`, `Target multiplicity is invalid`));
+    }
+  }
+
+  // Validate unique role names per classifier
+  if (source && source.kind === 'block' && rel.sourceRole) {
+    const duplicateProperty = source.properties.some(p => p.name === rel.sourceRole);
+    if (duplicateProperty) {
+      diagnostics.push(diagnostic('DUPLICATE_ROLE_NAME', rel.id, `relationships.${rel.id}.sourceRole`, `Role ${rel.sourceRole} collides with existing property in ${source.name}`));
+    }
+  }
+  if (target && target.kind === 'block' && rel.targetRole) {
+    const duplicateProperty = target.properties.some(p => p.name === rel.targetRole);
+    if (duplicateProperty) {
+      diagnostics.push(diagnostic('DUPLICATE_ROLE_NAME', rel.id, `relationships.${rel.id}.targetRole`, `Role ${rel.targetRole} collides with existing property in ${target.name}`));
+    }
+  }
+
+  // Validate navigability flags
+  if (rel.sourceNavigable === false && rel.targetNavigable === false) {
+    diagnostics.push(diagnostic('NON_NAVIGABLE_ENDS', rel.id, `relationships.${rel.id}.navigability`, `At least one end must be navigable`));
+  }
+
   return diagnostics;
 }
 
