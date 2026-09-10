@@ -174,8 +174,75 @@ export function computeViewportBounds(
   return { x, y, width, height, scale, overscan };
 }
 
+export interface EdgeEndpointIndex {
+  relationshipsByEndpoint: Map<string, RelationshipData[]>;
+  connectorsByPart: Map<string, ConnectorData[]>;
+}
+
+const edgeIndexCache = new WeakMap<readonly RelationshipData[], EdgeEndpointIndex>();
+
+export function getOrCreateEdgeEndpointIndex(
+  relationships: readonly RelationshipData[],
+  connectors: readonly ConnectorData[],
+): EdgeEndpointIndex {
+  let index = edgeIndexCache.get(relationships);
+  if (!index) {
+    const relationshipsByEndpoint = new Map<string, RelationshipData[]>();
+    const connectorsByPart = new Map<string, ConnectorData[]>();
+
+    for (const rel of relationships) {
+      let s = relationshipsByEndpoint.get(rel.sourceId);
+      if (!s) {
+        s = [];
+        relationshipsByEndpoint.set(rel.sourceId, s);
+      }
+      s.push(rel);
+
+      if (rel.targetId !== rel.sourceId) {
+        let t = relationshipsByEndpoint.get(rel.targetId);
+        if (!t) {
+          t = [];
+          relationshipsByEndpoint.set(rel.targetId, t);
+        }
+        t.push(rel);
+      }
+    }
+
+    for (const conn of connectors) {
+      let s = connectorsByPart.get(conn.sourcePartId);
+      if (!s) {
+        s = [];
+        connectorsByPart.set(conn.sourcePartId, s);
+      }
+      s.push(conn);
+
+      if (conn.targetPartId !== conn.sourcePartId) {
+        let t = connectorsByPart.get(conn.targetPartId);
+        if (!t) {
+          t = [];
+          connectorsByPart.set(conn.targetPartId, t);
+        }
+        t.push(conn);
+      }
+    }
+
+    index = { relationshipsByEndpoint, connectorsByPart };
+    edgeIndexCache.set(relationships, index);
+  }
+  return index;
+}
+
+export interface CullElementsOptions {
+  edgeIndex?: EdgeEndpointIndex;
+  ibdContextBlockId?: string;
+  storeRevision?: number;
+}
+
+let lastCullRevision: number | undefined = undefined;
+let lastCullResult: VisibleElementSet | null = null;
+
 /**
- * Cull diagram elements against the active viewport using the spatial index.
+ * Cull diagram elements against the active viewport using the spatial index and indexed edge culling.
  * Automatically enables degraded rendering mode for very large models.
  */
 export function cullElements(
@@ -186,6 +253,7 @@ export function cullElements(
   connectors: readonly ConnectorData[],
   spatialGrid?: DiagramSpatialGrid,
   performanceModeThreshold = 500,
+  options?: CullElementsOptions,
 ): VisibleElementSet {
   const overscan = viewport.overscan ?? 200;
   const queryBox = {
@@ -241,25 +309,54 @@ export function cullElements(
     }
   }
 
-  // An edge (relationship or connector) is visible if either endpoint is visible,
-  // or if its line segment crosses the query box.
+  // Edge culling via endpoint indexes
+  const edgeIndex = options?.edgeIndex ?? getOrCreateEdgeEndpointIndex(relationships, connectors);
   const visibleRelationships: RelationshipData[] = [];
-  for (const rel of relationships) {
-    if (visibleIds.has(rel.sourceId) || visibleIds.has(rel.targetId)) {
-      visibleRelationships.push(rel);
-      visibleIds.add(rel.id);
-    }
-  }
-
   const visibleConnectors: ConnectorData[] = [];
-  for (const conn of connectors) {
-    if (visibleIds.has(conn.sourcePartId) || visibleIds.has(conn.targetPartId)) {
-      visibleConnectors.push(conn);
-      visibleIds.add(conn.id);
+  const seenRels = new Set<string>();
+  const seenConns = new Set<string>();
+
+  const queryEndpoints = new Set(visibleIds);
+  if (options?.ibdContextBlockId) {
+    queryEndpoints.add(options.ibdContextBlockId);
+  }
+
+  for (const endpointId of queryEndpoints) {
+    const rels = edgeIndex.relationshipsByEndpoint.get(endpointId);
+    if (rels) {
+      for (const rel of rels) {
+        if (!seenRels.has(rel.id)) {
+          seenRels.add(rel.id);
+          visibleRelationships.push(rel);
+          visibleIds.add(rel.id);
+        }
+      }
+    }
+
+    const conns = edgeIndex.connectorsByPart.get(endpointId);
+    if (conns) {
+      for (const conn of conns) {
+        if (!seenConns.has(conn.id)) {
+          seenConns.add(conn.id);
+          visibleConnectors.push(conn);
+          visibleIds.add(conn.id);
+        }
+      }
     }
   }
 
-  return {
+  // Reference stability check: return previous result reference if visible elements haven't changed
+  if (
+    options?.storeRevision !== undefined &&
+    lastCullRevision === options.storeRevision &&
+    lastCullResult &&
+    lastCullResult.visibleIds.size === visibleIds.size &&
+    [...visibleIds].every(id => lastCullResult!.visibleIds.has(id))
+  ) {
+    return lastCullResult;
+  }
+
+  const result: VisibleElementSet = {
     visibleBlocks,
     visibleRelationships,
     visibleParts,
@@ -267,6 +364,13 @@ export function cullElements(
     visibleIds,
     isDegradedMode,
   };
+
+  if (options?.storeRevision !== undefined) {
+    lastCullRevision = options.storeRevision;
+    lastCullResult = result;
+  }
+
+  return result;
 }
 
 /**

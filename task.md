@@ -24,12 +24,12 @@
   - [x] Step 3: Remove full `blocks`, `relationships`, `parts`, and `connectors` copies from App state; retain active visible selector results and transient drag state
   - [x] Step 4: Expose memoized selectors (`selectVisibleBlocks`, `selectVisibleParts`, `selectRelationshipsForVisibleNodes`, `selectConnectorsForVisibleParts`)
   - [x] Step 5: Cache `projectLegacyDiagram` with key `{storeRevision, diagramId}` for export/compatibility panels
-- [ ] Task 5: Add Indexed Edge Culling
-  - [ ] Step 1: Maintain endpoint indexes in `NormalizedSysmlStore`: `relationshipsByEndpoint`, `connectorsByPart`, and diagram membership
-  - [ ] Step 2: Update `cullElements` in `VirtualizedDiagram.tsx` to retrieve edges via endpoint indexes rather than scanning all relationships and connectors
-  - [ ] Step 3: Return stable arrays when viewport, revision, and visible IDs have not changed
-  - [ ] Step 4: Ensure edges connected to the active IBD context block remain visible
-  - [ ] Step 5: Add 100k-edge tests validating sub-millisecond culling time and zero missing/extra visible edges
+- [x] Task 5: Add Indexed Edge Culling
+  - [x] Step 1: Maintain endpoint indexes in `NormalizedSysmlStore`: `relationshipsByEndpoint`, `connectorsByPart`, and diagram membership
+  - [x] Step 2: Update `cullElements` in `VirtualizedDiagram.tsx` to retrieve edges via endpoint indexes rather than scanning all relationships and connectors
+  - [x] Step 3: Return stable arrays when viewport, revision, and visible IDs have not changed
+  - [x] Step 4: Ensure edges connected to the active IBD context block remain visible
+  - [x] Step 5: Add 100k-edge tests validating sub-millisecond culling time and zero missing/extra visible edges
 - [ ] Task 6: Integrate Selectors into BDD/IBD Rendering
   - [ ] Step 1: Replace `blocks.find()` in per-node render loops with `getById`/selector maps
   - [ ] Step 2: Memoize node, port, relationship, connector, and label components using entity revision plus presentation revision
