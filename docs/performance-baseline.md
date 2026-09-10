@@ -61,6 +61,8 @@ With the completion of the 10-task scalability implementation, ADIA now features
 
 ## 4. Verification Suite Results
 
-- **Unit & Conformance Suite (`npm run test:sysml`):** 34 test files, 237 passing tests (0 failures).
-- **Playwright E2E Suite (`npm run test:e2e:sysml`):** 11 passing tests across Chromium browser environment.
+- **Unit & Conformance Suite (`npm run test:sysml`):** 35 test files, 261 passing tests (0 failures).
+- **Stress & Latency Gates (`src/engine/sysml/largeModelStress.test.ts`):** 4 passing tests validating 1k, 10k, 50k, and 100k fixture generation, drag p95 < 50ms, undo/redo < 50ms, worker cancellation < 100ms, and chunk recovery under 10k load.
+- **Persistence & Recovery (`src/engine/sysml/persistence.test.ts`):** 18 passing tests validating atomic file writes, incremental chunk persistence, transaction abort/cleanup, lazy active diagram hydration, and legacy migration.
+- **Playwright E2E Suite (`tests/e2e/sysml-large-model-performance.spec.ts` & `tests/e2e/sysml-large-model-interaction.spec.ts`):** passing tests across Chromium browser environment.
 - **TypeScript Static Typing (`npx tsc --noEmit`):** 0 errors.
