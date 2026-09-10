@@ -48,12 +48,12 @@
   - [x] Step 4: Load manifest first, then lazy-load definitions/usages for the active diagram; validate checksums per chunk
   - [x] Step 5: Provide full export as an explicit operation that streams chunks rather than building one giant intermediate string when possible
   - [x] Step 6: Test interrupted writes, checksum mismatch, migration, partial loading, and round-trip equivalence
-- [ ] Task 8: Reduce Memory Pressure in Import, Export, and Reports
-  - [ ] Step 1: Remove duplicate full copies of blocks/relationships between canonical repository, legacy view, undo history, and export payload where not required
-  - [ ] Step 2: Use stable IDs and references in report generation; materialize full arrays only at final output boundaries
-  - [ ] Step 3: Debounce autosave and never serialize on every pointer or text-change event
-  - [ ] Step 4: Add explicit progress/cancel UI for full export, migration, validation, and report generation
-  - [ ] Step 5: Add tests asserting no repeated full serialization during drag and that cancellation releases worker data
+- [x] Task 8: Reduce Memory Pressure in Import, Export, and Reports
+  - [x] Step 1: Remove duplicate full copies of blocks/relationships between canonical repository, legacy view, undo history, and export payload where not required
+  - [x] Step 2: Use stable IDs and references in report generation; materialize full arrays only at final output boundaries
+  - [x] Step 3: Debounce autosave and never serialize on every pointer or text-change event
+  - [x] Step 4: Add explicit progress/cancel UI for full export, migration, validation, and report generation
+  - [x] Step 5: Add tests asserting no repeated full serialization during drag and that cancellation releases worker data
 - [ ] Task 9: Add Large-Model UX and Safety Limits
   - [ ] Step 1: Show entity counts, active diagram counts, renderer mode, pending worker jobs, last save, and estimated memory
   - [ ] Step 2: Warn before opening a project above configurable thresholds and offer "performance mode"

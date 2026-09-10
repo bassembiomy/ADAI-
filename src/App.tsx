@@ -6205,8 +6205,12 @@ const ADIA = () => {
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const sysmlStore = useMemo(() => fromRepository(canonicalSysmlRepository), [canonicalSysmlRepository]);
   useEffect(() => {
-    setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
-  }, [blocks, parts, connectors, relationships]);
+    if (isDragging) return;
+    const timer = setTimeout(() => {
+      setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [blocks, parts, connectors, relationships, isDragging]);
 
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
