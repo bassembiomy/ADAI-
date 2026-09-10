@@ -14,6 +14,14 @@ import {
 } from '../engine/sysml/workerProtocol';
 import { handleWorkerMessage } from '../engine/sysml/sysmlWorker';
 import { createSysmlWorker, isWorkerSupported } from './sysmlWorkerFactory';
+import { toWorkerSnapshot } from '../engine/sysml/normalizedStore';
+
+function toWorkerSafePayload(payload: any, diagramId?: string): any {
+  if (payload && typeof payload === 'object' && 'indexes' in payload && payload.definitions instanceof Map) {
+    return toWorkerSnapshot(payload, diagramId);
+  }
+  return payload;
+}
 
 export interface SysmlWorkerDiagnostics {
   workerAvailable: boolean;
@@ -161,7 +169,15 @@ export class SysmlWorkerClient {
         timestamp: Date.now(),
       });
 
-      this.worker!.postMessage(request);
+      const workerSafeRequest = { ...request };
+      if ('payload' in workerSafeRequest) {
+        (workerSafeRequest as any).payload = toWorkerSafePayload(
+          (workerSafeRequest as any).payload,
+          (workerSafeRequest as any).diagramId
+        );
+      }
+
+      this.worker!.postMessage(workerSafeRequest);
     });
   }
 

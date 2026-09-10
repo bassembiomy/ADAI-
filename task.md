@@ -6,12 +6,12 @@
   - [x] Step 3: Update `src/services/sysmlWorkerClient.ts` to use default factory when `Worker` is available, allow `workerFactory: null` for tests, and expose `workerAvailable`, `lastWorkerError`, `fallbackReason` in diagnostics
   - [x] Step 4: Add unit tests in `src/services/sysmlWorkerFactory.test.ts` for factory injection, no-worker fallback, error handling, termination, and stale revision rejection
   - [x] Step 5: Verify tests with `npm run test:sysml` and verify build bundle with `npm run build`
-- [ ] Task 2: Make Worker Payloads Transferable and Safe
-  - [ ] Step 1: Define `WorkerStoreSnapshot` using plain objects/arrays in `src/engine/sysml/workerProtocol.ts`
-  - [ ] Step 2: Implement `toWorkerSnapshot(store)` and `fromWorkerSnapshot(snapshot)` with schema and revision validation in `src/engine/sysml/normalizedStore.ts`
-  - [ ] Step 3: Ensure projection requests transfer only target diagram ID and required element IDs
-  - [ ] Step 4: Add cancellation checks inside large loops in `src/engine/sysml/sysmlWorker.ts`
-  - [ ] Step 5: Add tests comparing worker and main-thread outputs for validation, projection, impact, and serialization
+- [x] Task 2: Make Worker Payloads Transferable and Safe
+  - [x] Step 1: Define `WorkerStoreSnapshot` using plain objects/arrays in `src/engine/sysml/workerProtocol.ts`
+  - [x] Step 2: Implement `toWorkerSnapshot(store)` and `fromWorkerSnapshot(snapshot)` with schema and revision validation in `src/engine/sysml/normalizedStore.ts`
+  - [x] Step 3: Ensure projection requests transfer only target diagram ID and required element IDs
+  - [x] Step 4: Add cancellation checks inside large loops in `src/engine/sysml/sysmlWorker.ts`
+  - [x] Step 5: Add tests comparing worker and main-thread outputs for validation, projection, impact, and serialization
 - [ ] Task 3: Remove Full-Snapshot History from Large-Model Mutations
   - [ ] Step 1: Define `HistoryBudgetOptions` with `maxEntries`, `maxBytes`, `checkpointEvery`, and `maxReplayOperations` in `src/engine/sysml/patches.ts`
   - [ ] Step 2: Make committed mutations produce one forward/inverse patch and eliminate full-repository cloning (`structuredClone`) in `sysmlCommandGateway.ts`

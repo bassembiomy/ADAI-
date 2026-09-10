@@ -1,4 +1,10 @@
-import { toRepository, fromRepository, projectNormalizedDiagram, type NormalizedSysmlStore } from './normalizedStore';
+import {
+  toRepository,
+  fromRepository,
+  fromWorkerSnapshot,
+  projectNormalizedDiagram,
+  type NormalizedSysmlStore,
+} from './normalizedStore';
 import type { SysmlRepository } from './model';
 import { validateSysmlRepository, type SysmlValidationReport } from './validation';
 import { analyzeMutation, type MutationImpact } from './mutations';
@@ -6,6 +12,7 @@ import { serializeRepository } from './persistence';
 import type {
   WorkerRequest,
   WorkerResponse,
+  WorkerStoreSnapshot,
   CompactProjectDelta,
   CompactImpactDelta,
 } from './workerProtocol';
@@ -16,16 +23,32 @@ function isNormalizedStore(payload: any): payload is NormalizedSysmlStore {
   return Boolean(payload && typeof payload === 'object' && 'indexes' in payload && payload.definitions instanceof Map);
 }
 
-function ensureRepository(payload: SysmlRepository | NormalizedSysmlStore): SysmlRepository {
+function isWorkerSnapshot(payload: any): payload is WorkerStoreSnapshot {
+  return Boolean(
+    payload &&
+    typeof payload === 'object' &&
+    payload.schemaVersion === 2 &&
+    typeof payload.revision === 'number' &&
+    !(payload.definitions instanceof Map)
+  );
+}
+
+function ensureRepository(payload: WorkerStoreSnapshot | SysmlRepository | NormalizedSysmlStore): SysmlRepository {
   if (isNormalizedStore(payload)) {
     return toRepository(payload);
+  }
+  if (isWorkerSnapshot(payload)) {
+    return toRepository(fromWorkerSnapshot(payload));
   }
   return payload as SysmlRepository;
 }
 
-function ensureStore(payload: SysmlRepository | NormalizedSysmlStore): NormalizedSysmlStore {
+function ensureStore(payload: WorkerStoreSnapshot | SysmlRepository | NormalizedSysmlStore): NormalizedSysmlStore {
   if (isNormalizedStore(payload)) {
     return payload;
+  }
+  if (isWorkerSnapshot(payload)) {
+    return fromWorkerSnapshot(payload);
   }
   return fromRepository(payload as SysmlRepository);
 }
@@ -58,6 +81,37 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
       success: false,
       error: 'Request cancelled before execution',
       cancelled: true,
+    };
+  }
+
+  // Validate payload format & revision match
+  if (!payload || typeof payload !== 'object') {
+    return {
+      requestId,
+      revision,
+      taskType,
+      success: false,
+      error: 'Malformed worker request: payload must be a non-null object',
+    };
+  }
+
+  if ('schemaVersion' in payload && payload.schemaVersion !== 2) {
+    return {
+      requestId,
+      revision,
+      taskType,
+      success: false,
+      error: `Unsupported schemaVersion: ${(payload as any).schemaVersion} (expected 2)`,
+    };
+  }
+
+  if ('revision' in payload && typeof payload.revision === 'number' && payload.revision !== revision) {
+    return {
+      requestId,
+      revision,
+      taskType,
+      success: false,
+      error: `Revision mismatch: request revision ${revision} != payload revision ${payload.revision}`,
     };
   }
 

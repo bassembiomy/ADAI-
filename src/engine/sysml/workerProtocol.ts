@@ -1,19 +1,56 @@
-import type { SysmlRepository } from './model';
+import type {
+  SysmlRepository,
+  SysmlDefinition,
+  SysmlUsage,
+  ConnectorUsage,
+  SysmlRelationship,
+  RequirementDefinition,
+  VerificationCase,
+  VerificationEvidence,
+  ModelBaseline,
+  TraceArtifact,
+  ModelChangeRecord,
+} from './model';
 import type { NormalizedSysmlStore } from './normalizedStore';
 import type { SysmlValidationReport } from './validation';
 import type { MutationImpact } from './mutations';
+import type { PresentationCoordinates } from '../../services/sysmlCommandGateway';
 
 export const SYSML_WORKER_PROTOCOL_VERSION = '1.0.0';
 
 export type WorkerTaskType = 'validate' | 'project' | 'impact' | 'serialize';
+
+/**
+ * Worker-safe serializable snapshot using plain objects/arrays (no Map/Set).
+ * Can be transferred efficiently across Web Worker postMessage boundaries.
+ */
+export interface WorkerStoreSnapshot {
+  schemaVersion: 2;
+  profileId: 'OMG-SysML-1.6-ADIA';
+  revision: number;
+  definitions: Record<string, SysmlDefinition>;
+  usages: Record<string, SysmlUsage>;
+  connectors: Record<string, ConnectorUsage>;
+  relationships: Record<string, SysmlRelationship>;
+  requirements: Record<string, RequirementDefinition>;
+  verificationCases: Record<string, VerificationCase>;
+  evidence?: Record<string, VerificationEvidence>;
+  baselines?: Record<string, ModelBaseline>;
+  artifacts?: Record<string, TraceArtifact>;
+  auditTrail?: ModelChangeRecord[];
+  coordinates?: Record<string, PresentationCoordinates>;
+  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  activeDiagramId?: string;
+  activeDiagramElementIds?: string[];
+}
 
 export interface WorkerBaseRequest {
   version?: string;
   requestId: string;
   revision: number;
   taskType: WorkerTaskType;
-  /** Serialized repository or normalized store snapshot */
-  payload: SysmlRepository | NormalizedSysmlStore;
+  /** Worker-safe snapshot or normalized store / repository */
+  payload: WorkerStoreSnapshot | SysmlRepository | NormalizedSysmlStore;
 }
 
 export interface WorkerValidateRequest extends WorkerBaseRequest {
@@ -23,6 +60,7 @@ export interface WorkerValidateRequest extends WorkerBaseRequest {
 export interface WorkerProjectRequest extends WorkerBaseRequest {
   taskType: 'project';
   diagramId?: string;
+  elementIds?: string[];
 }
 
 export interface WorkerImpactRequest extends WorkerBaseRequest {

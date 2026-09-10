@@ -27,6 +27,7 @@ import type {
   RelationshipData,
   PortData,
 } from '../../types/sysml_types';
+import type { WorkerStoreSnapshot } from './workerProtocol';
 
 export interface StoreIndexes {
   ownerId: Map<string, Set<string>>;
@@ -1049,4 +1050,73 @@ export function targetedUpdatePresentation(
   const existing = store.coordinates.get(id) ?? {};
   store.coordinates.set(id, { ...existing, ...coords });
   store.revision += 1;
+}
+
+/**
+ * Convert a NormalizedSysmlStore into a transferable WorkerStoreSnapshot.
+ * Plain objects only, ensuring safe serialization across WebWorker postMessage boundaries.
+ */
+export function toWorkerSnapshot(
+  store: NormalizedSysmlStore,
+  targetDiagramId?: string
+): WorkerStoreSnapshot {
+  const activeDiagramElementIds = targetDiagramId
+    ? store.diagramPresentations.get(targetDiagramId)?.elementIds ?? []
+    : undefined;
+
+  return {
+    schemaVersion: 2,
+    profileId: store.profileId,
+    revision: store.revision,
+    definitions: Object.fromEntries(store.definitions),
+    usages: Object.fromEntries(store.usages),
+    connectors: Object.fromEntries(store.connectors),
+    relationships: Object.fromEntries(store.relationships),
+    requirements: Object.fromEntries(store.requirements),
+    verificationCases: Object.fromEntries(store.verificationCases),
+    evidence: Object.fromEntries(store.evidence),
+    baselines: Object.fromEntries(store.baselines),
+    artifacts: Object.fromEntries(store.artifacts),
+    auditTrail: [...store.auditTrail],
+    coordinates: Object.fromEntries(store.coordinates),
+    diagramPresentations: Object.fromEntries(store.diagramPresentations),
+    activeDiagramId: targetDiagramId,
+    activeDiagramElementIds,
+  };
+}
+
+/**
+ * Hydrate a NormalizedSysmlStore from a WorkerStoreSnapshot with schema and revision validation.
+ */
+export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
+  if (!snapshot || typeof snapshot !== 'object') {
+    throw new Error('Malformed worker snapshot: payload must be a non-null object');
+  }
+
+  const snap = snapshot as WorkerStoreSnapshot;
+  if (snap.schemaVersion !== 2) {
+    throw new Error(`Unsupported worker snapshot schemaVersion: ${snap.schemaVersion} (expected 2)`);
+  }
+
+  if (typeof snap.revision !== 'number' || isNaN(snap.revision)) {
+    throw new Error(`Invalid worker snapshot revision: ${snap.revision}`);
+  }
+
+  const repo: SysmlRepository = {
+    schemaVersion: snap.schemaVersion,
+    profileId: snap.profileId ?? 'OMG-SysML-1.6-ADIA',
+    revision: snap.revision,
+    definitions: snap.definitions ?? {},
+    usages: snap.usages ?? {},
+    connectors: snap.connectors ?? {},
+    relationships: snap.relationships ?? {},
+    requirements: snap.requirements ?? {},
+    verificationCases: snap.verificationCases ?? {},
+    evidence: snap.evidence ?? {},
+    baselines: snap.baselines ?? {},
+    artifacts: snap.artifacts ?? {},
+    auditTrail: snap.auditTrail ?? [],
+  };
+
+  return fromRepository(repo, snap.coordinates, snap.diagramPresentations);
 }

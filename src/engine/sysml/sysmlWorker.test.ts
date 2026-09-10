@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { handleWorkerMessage, cancelRequest } from './sysmlWorker';
 import { SysmlWorkerClient } from '../../services/sysmlWorkerClient';
 import { generateSysmlModel } from './largeModelGenerator';
-import { fromRepository } from './normalizedStore';
+import { fromRepository, toWorkerSnapshot, fromWorkerSnapshot, projectNormalizedDiagram } from './normalizedStore';
 import type { SysmlRepository } from './model';
+import { validateSysmlRepository } from './validation';
+import { analyzeMutation } from './mutations';
+import { serializeRepository } from './persistence';
 
 function getFixture(count = 50): SysmlRepository {
   return generateSysmlModel({ targetElementCount: count, seed: 100 }).repository;
@@ -131,11 +134,12 @@ describe('SysML Worker Protocol & Execution', () => {
 
     it('rejects stale responses when newer revisions are submitted', async () => {
       const client = new SysmlWorkerClient();
-      const fixture = getFixture(30);
+      const fixture1 = { ...getFixture(30), revision: 1 };
+      const fixture2 = { ...getFixture(30), revision: 2 };
 
       // Submit revision 1 and revision 2 in sequence
-      const promise1 = client.validate(fixture, 1);
-      const promise2 = client.validate(fixture, 2);
+      const promise1 = client.validate(fixture1, 1);
+      const promise2 = client.validate(fixture2, 2);
 
       const [res1, res2] = await Promise.all([promise1, promise2]);
       expect(res1).toBeDefined();
@@ -170,7 +174,116 @@ describe('SysML Worker Protocol & Execution', () => {
 
       expect(response.success).toBe(false);
       if (!response.success) {
-        expect(response.error).toBeDefined();
+        expect(response.error).toContain('non-null object');
+      }
+    });
+
+    it('rejects worker snapshot with unsupported schemaVersion or revision mismatch', () => {
+      const fixture = getFixture(20);
+      const store = fromRepository(fixture);
+      const snapshot = toWorkerSnapshot(store);
+
+      // Schema mismatch
+      const resBadSchema = handleWorkerMessage({
+        requestId: 'err-schema',
+        revision: snapshot.revision,
+        taskType: 'validate',
+        payload: { ...snapshot, schemaVersion: 1 as any },
+      });
+      expect(resBadSchema.success).toBe(false);
+      if (!resBadSchema.success) {
+        expect(resBadSchema.error).toContain('Unsupported schemaVersion');
+      }
+
+      // Revision mismatch
+      const resBadRev = handleWorkerMessage({
+        requestId: 'err-rev',
+        revision: snapshot.revision + 5,
+        taskType: 'validate',
+        payload: snapshot,
+      });
+      expect(resBadRev.success).toBe(false);
+      if (!resBadRev.success) {
+        expect(resBadRev.error).toContain('Revision mismatch');
+      }
+    });
+
+    it('round-trips store through toWorkerSnapshot and fromWorkerSnapshot without Map/Set leaks', () => {
+      const fixture = getFixture(50);
+      const store = fromRepository(fixture);
+      const snapshot = toWorkerSnapshot(store, 'diagram-root');
+
+      // Assert plain object structure (transferable across postMessage)
+      expect(snapshot.definitions instanceof Map).toBe(false);
+      expect(typeof snapshot.definitions).toBe('object');
+      expect(snapshot.activeDiagramId).toBe('diagram-root');
+      expect(Array.isArray(snapshot.activeDiagramElementIds)).toBe(true);
+
+      const rehydrated = fromWorkerSnapshot(snapshot);
+      expect(rehydrated.definitions instanceof Map).toBe(true);
+      expect(rehydrated.definitions.size).toBe(store.definitions.size);
+      expect(rehydrated.usages.size).toBe(store.usages.size);
+      expect(rehydrated.relationships.size).toBe(store.relationships.size);
+      expect(rehydrated.revision).toBe(store.revision);
+    });
+
+    it('verifies exact equivalence between worker snapshot execution and direct main-thread execution', async () => {
+      const fixture = getFixture(50);
+      const store = fromRepository(fixture);
+      const snapshot = toWorkerSnapshot(store);
+
+      // 1. Validation equivalence
+      const mainVal = validateSysmlRepository(fixture);
+      const workerValRes = handleWorkerMessage({
+        requestId: 'eq-val',
+        revision: store.revision,
+        taskType: 'validate',
+        payload: snapshot,
+      });
+      expect(workerValRes.success).toBe(true);
+      if (workerValRes.success) {
+        expect(workerValRes.result).toEqual(mainVal);
+      }
+
+      // 2. Projection equivalence
+      const mainProj = projectNormalizedDiagram(store);
+      const workerProjRes = handleWorkerMessage({
+        requestId: 'eq-proj',
+        revision: store.revision,
+        taskType: 'project',
+        payload: snapshot,
+      });
+      expect(workerProjRes.success).toBe(true);
+      if (workerProjRes.success) {
+        expect((workerProjRes.result as any).view).toEqual(mainProj);
+      }
+
+      // 3. Impact analysis equivalence
+      const firstId = Object.keys(fixture.definitions)[0];
+      const mainImpact = analyzeMutation(fixture, { kind: 'deleteElements', elementIds: [firstId] });
+      const workerImpactRes = handleWorkerMessage({
+        requestId: 'eq-imp',
+        revision: store.revision,
+        taskType: 'impact',
+        targetElementIds: [firstId],
+        payload: snapshot,
+      });
+      expect(workerImpactRes.success).toBe(true);
+      if (workerImpactRes.success) {
+        expect((workerImpactRes.result as any).impact).toEqual(mainImpact);
+      }
+
+      // 4. Serialization equivalence
+      const mainSer = serializeRepository(fixture);
+      const workerSerRes = handleWorkerMessage({
+        requestId: 'eq-ser',
+        revision: store.revision,
+        taskType: 'serialize',
+        payload: snapshot,
+      });
+      expect(workerSerRes.success).toBe(true);
+      if (workerSerRes.success) {
+        expect(workerSerRes.result).toBe(mainSer);
       }
     });
   });
