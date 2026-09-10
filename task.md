@@ -19,13 +19,13 @@
   - [x] Step 4: Coalesce pointer-move updates into one history entry on pointer-up
   - [x] Step 5: Retain a periodic checkpoint only when patch replay cost exceeds the configured threshold
   - [x] Step 6: Add tests proving undo/redo equivalence, bounded history bytes, deletion cascade restoration, and compatibility with existing commands
-- [ ] Task 4: Move App State to Store Selectors
-  - [ ] Step 1: Keep one gateway/store state as the source of truth for SysML data
-  - [ ] Step 2: Replace repeated `blocks.find/filter/map` mutations with indexed selectors and targeted updates
-  - [ ] Step 3: Expose only the active diagram's visible IDs to React
-  - [ ] Step 4: Keep `LegacySysmlView` projection available for existing panels and exports, but compute it lazily and cache it by repository revision plus diagram ID
-  - [ ] Step 5: Ensure selecting/editing one element does not recreate unrelated block/relationship objects
-  - [ ] Step 6: Run `npm run test:sysml` and `npx tsc --noEmit`
+- [x] Task 4: Move App State to Store Selectors
+  - [x] Step 1: Keep one gateway/store state as the source of truth for SysML data
+  - [x] Step 2: Replace repeated `blocks.find/filter/map` mutations with indexed selectors and targeted updates
+  - [x] Step 3: Expose only the active diagram's visible IDs to React
+  - [x] Step 4: Keep `LegacySysmlView` projection available for existing panels and exports, but compute it lazily and cache it by repository revision plus diagram ID
+  - [x] Step 5: Ensure selecting/editing one element does not recreate unrelated block/relationship objects
+  - [x] Step 6: Run `npm run test:sysml` and `npx tsc --noEmit`
 - [ ] Task 5: Add Viewport Culling and Memoized Diagram Rendering
   - [ ] Step 1: Define `DiagramViewport` and `VisibleElementSet` APIs
   - [ ] Step 2: Build a grid/R-tree-compatible spatial index over coordinates; query viewport plus overscan on pan/zoom

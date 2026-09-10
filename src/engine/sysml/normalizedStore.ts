@@ -12,6 +12,7 @@ import type {
   ModelChangeRecord,
   Multiplicity,
   BlockDefinition,
+  PartUsage,
   SysmlEntity,
   SysmlEntityCollection,
 } from './model';
@@ -385,6 +386,7 @@ export function upsertEntity(
   }
 
   indexEntity(store, collection, entity.id, entity);
+  store.revision += 1;
 }
 
 /**
@@ -430,6 +432,14 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
   }
 
   store.coordinates.delete(id);
+  store.revision += 1;
+  const cache = entityProjectionCaches.get(store);
+  if (cache) {
+    cache.blocks.delete(id);
+    cache.parts.delete(id);
+    cache.connectors.delete(id);
+    cache.relationships.delete(id);
+  }
   return true;
 }
 
@@ -449,9 +459,33 @@ function formatMultiplicityText(m?: Multiplicity): string {
   return `${m.lower}..${m.upper === Infinity ? '*' : m.upper}`;
 }
 
+interface EntityProjectionCache {
+  blocks: Map<string, { entity: SysmlEntity; coords?: PresentationCoordinates; result: BlockData }>;
+  parts: Map<string, { entity: SysmlUsage; coords?: PresentationCoordinates; result: PartData }>;
+  relationships: Map<string, { entity: SysmlRelationship; result: RelationshipData }>;
+  connectors: Map<string, { entity: ConnectorUsage; result: ConnectorData }>;
+}
+
+const entityProjectionCaches = new WeakMap<NormalizedSysmlStore, EntityProjectionCache>();
+
+function getEntityProjectionCache(store: NormalizedSysmlStore): EntityProjectionCache {
+  let cache = entityProjectionCaches.get(store);
+  if (!cache) {
+    cache = {
+      blocks: new Map(),
+      parts: new Map(),
+      relationships: new Map(),
+      connectors: new Map(),
+    };
+    entityProjectionCaches.set(store, cache);
+  }
+  return cache;
+}
+
 /**
  * Project a diagram from the normalized store.
  * When a diagramId is given, only queries elements relevant to that diagram without scanning unrelated model entities.
+ * Reuses stable object references for unedited entities across projections.
  */
 export function projectNormalizedDiagram(
   store: NormalizedSysmlStore,
@@ -462,6 +496,8 @@ export function projectNormalizedDiagram(
   const relationships: RelationshipData[] = [];
   const connectors: ConnectorData[] = [];
 
+  const entityCache = getEntityProjectionCache(store);
+
   const visibleFilter = diagramId && store.diagramPresentations.has(diagramId)
     ? new Set(store.diagramPresentations.get(diagramId)!.elementIds)
     : null;
@@ -469,7 +505,14 @@ export function projectNormalizedDiagram(
 
   // Helper to project a definition
   const projectDef = (def: SysmlDefinition) => {
-    const coords = store.coordinates.get(def.id) ?? {};
+    const coords = store.coordinates.get(def.id);
+    const cached = entityCache.blocks.get(def.id);
+    if (cached && cached.entity === def && cached.coords === coords) {
+      blocks.push(cached.result);
+      return;
+    }
+
+    let result: BlockData;
     if (def.kind === 'block') {
       const b = def as BlockDefinition;
       const legacyPorts: PortData[] = (b.ports ?? []).map(p => ({
@@ -482,16 +525,16 @@ export function projectNormalizedDiagram(
         multiplicity: formatMultiplicityText(p.multiplicity),
       }));
 
-      blocks.push({
+      result = {
         id: b.id,
         name: b.name,
         stereotype: 'block',
         isAbstract: b.isAbstract,
         isLeaf: b.isLeaf,
-        x: coords.x ?? 0,
-        y: coords.y ?? 0,
-        width: coords.width ?? 160,
-        height: coords.height ?? 100,
+        x: coords?.x ?? 0,
+        y: coords?.y ?? 0,
+        width: coords?.width ?? 160,
+        height: coords?.height ?? 100,
         properties: (b.properties ?? []).map(prop => ({
           id: prop.id,
           name: prop.name,
@@ -509,28 +552,36 @@ export function projectNormalizedDiagram(
         constraints: b.constraints ?? [],
         classes: [],
         ports: legacyPorts,
-      });
+      };
     } else {
-      blocks.push({
+      result = {
         id: def.id,
         name: def.name,
         stereotype: def.kind as 'valueType' | 'interface',
-        x: coords.x ?? 0,
-        y: coords.y ?? 0,
-        width: coords.width ?? 140,
-        height: coords.height ?? 80,
+        x: coords?.x ?? 0,
+        y: coords?.y ?? 0,
+        width: coords?.width ?? 140,
+        height: coords?.height ?? 80,
         properties: [],
         operations: [],
         constraints: [],
         classes: [],
         ports: [],
-      });
+      };
     }
+    entityCache.blocks.set(def.id, { entity: def, coords, result });
+    blocks.push(result);
   };
 
   const projectReq = (req: RequirementDefinition) => {
-    const coords = store.coordinates.get(req.id) ?? {};
-    blocks.push({
+    const coords = store.coordinates.get(req.id);
+    const cached = entityCache.blocks.get(req.id);
+    if (cached && cached.entity === req && cached.coords === coords) {
+      blocks.push(cached.result);
+      return;
+    }
+
+    const result: BlockData = {
       id: req.id,
       name: req.name,
       stereotype: 'requirement',
@@ -544,53 +595,72 @@ export function projectNormalizedDiagram(
       rationale: req.rationale,
       version: req.version,
       baselineId: req.baselineId,
-      x: coords.x ?? 0,
-      y: coords.y ?? 0,
-      width: coords.width ?? 180,
-      height: coords.height ?? 90,
+      x: coords?.x ?? 0,
+      y: coords?.y ?? 0,
+      width: coords?.width ?? 180,
+      height: coords?.height ?? 90,
       properties: [],
       operations: [],
       constraints: [],
       classes: [],
       ports: [],
-    });
+    };
+    entityCache.blocks.set(req.id, { entity: req, coords, result });
+    blocks.push(result);
   };
 
   const projectVc = (vc: VerificationCase) => {
-    const coords = store.coordinates.get(vc.id) ?? {};
-    blocks.push({
+    const coords = store.coordinates.get(vc.id);
+    const cached = entityCache.blocks.get(vc.id);
+    if (cached && cached.entity === vc && cached.coords === coords) {
+      blocks.push(cached.result);
+      return;
+    }
+
+    const result: BlockData = {
       id: vc.id,
       name: vc.name,
       stereotype: 'verificationCase',
       verificationMethod: vc.method,
-      x: coords.x ?? 0,
-      y: coords.y ?? 0,
-      width: coords.width ?? 160,
-      height: coords.height ?? 80,
+      x: coords?.x ?? 0,
+      y: coords?.y ?? 0,
+      width: coords?.width ?? 160,
+      height: coords?.height ?? 80,
       properties: [],
       operations: [],
       constraints: [],
       classes: [],
       ports: [],
-    });
+    };
+    entityCache.blocks.set(vc.id, { entity: vc, coords, result });
+    blocks.push(result);
   };
 
   const projectPart = (usage: SysmlUsage) => {
     if (usage.kind === 'part') {
-      const coords = store.coordinates.get(usage.id) ?? {};
-      parts.push({
-        id: usage.id,
-        name: usage.name,
-        blockId: usage.ownerId,
-        parentBlockId: usage.ownerId,
-        typeId: usage.typeId,
-        typeBlockId: usage.typeId,
-        multiplicity: formatMultiplicityText(usage.multiplicity),
-        x: coords.x ?? 0,
-        y: coords.y ?? 0,
-        width: coords.width ?? 150,
-        height: coords.height ?? 100,
-      });
+      const pUsage = usage as PartUsage;
+      const coords = store.coordinates.get(pUsage.id);
+      const cached = entityCache.parts.get(pUsage.id);
+      if (cached && cached.entity === pUsage && cached.coords === coords) {
+        parts.push(cached.result);
+        return;
+      }
+
+      const result: PartData = {
+        id: pUsage.id,
+        name: pUsage.name,
+        blockId: pUsage.ownerId,
+        parentBlockId: pUsage.ownerId,
+        typeId: pUsage.typeId,
+        typeBlockId: pUsage.typeId,
+        multiplicity: formatMultiplicityText(pUsage.multiplicity),
+        x: coords?.x ?? 0,
+        y: coords?.y ?? 0,
+        width: coords?.width ?? 150,
+        height: coords?.height ?? 100,
+      };
+      entityCache.parts.set(pUsage.id, { entity: pUsage, coords, result });
+      parts.push(result);
     }
   };
 
@@ -600,6 +670,13 @@ export function projectNormalizedDiagram(
       const tp = conn.targetPortId.split('::')[0];
       if (!isVisible(sp) || !isVisible(tp)) return;
     }
+
+    const cached = entityCache.connectors.get(conn.id);
+    if (cached && cached.entity === conn) {
+      connectors.push(cached.result);
+      return;
+    }
+
     const parseEndpoint = (portUsageId: string) => {
       if (portUsageId.includes('::')) {
         const [partId, portId] = portUsageId.split('::');
@@ -610,7 +687,7 @@ export function projectNormalizedDiagram(
     const src = parseEndpoint(conn.sourcePortId);
     const tgt = parseEndpoint(conn.targetPortId);
 
-    connectors.push({
+    const result: ConnectorData = {
       id: conn.id,
       kind: conn.kind,
       sourcePartId: src.partId,
@@ -618,13 +695,22 @@ export function projectNormalizedDiagram(
       sourcePortId: src.portId,
       targetPortId: tgt.portId,
       itemFlow: conn.itemFlowId,
-    });
+    };
+    entityCache.connectors.set(conn.id, { entity: conn, result });
+    connectors.push(result);
   };
 
   const projectRel = (rel: SysmlRelationship) => {
     if (!isVisible(rel.id)) {
       if (!isVisible(rel.sourceId) || !isVisible(rel.targetId)) return;
     }
+
+    const cached = entityCache.relationships.get(rel.id);
+    if (cached && cached.entity === rel) {
+      relationships.push(cached.result);
+      return;
+    }
+
     let legacyType: RelationshipData['type'] = 'trace';
     if (rel.kind === 'deriveReqt') legacyType = 'derive';
     else if (rel.kind === 'sharedAggregation') legacyType = 'aggregation';
@@ -644,7 +730,7 @@ export function projectNormalizedDiagram(
       legacyType = rel.kind;
     }
 
-    relationships.push({
+    const result: RelationshipData = {
       id: rel.id,
       sourceId: rel.sourceId,
       targetId: rel.targetId,
@@ -652,10 +738,15 @@ export function projectNormalizedDiagram(
       label: (rel as any).name ?? '',
       sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
       targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
-    });
+    };
+    entityCache.relationships.set(rel.id, { entity: rel, result });
+    relationships.push(result);
   };
 
   if (visibleFilter) {
+    const seenRels = new Set<string>();
+    const seenConns = new Set<string>();
+
     // DIAGRAM-SCOPED FAST PATH: Only project elements in the diagram!
     for (const elemId of visibleFilter) {
       const meta = store.indexes.byId.get(elemId);
@@ -682,27 +773,33 @@ export function projectNormalizedDiagram(
           break;
         }
         case 'connectors': {
-          const conn = store.connectors.get(elemId);
-          if (conn) projectConn(conn);
+          if (!seenConns.has(elemId)) {
+            seenConns.add(elemId);
+            const conn = store.connectors.get(elemId);
+            if (conn) projectConn(conn);
+          }
           break;
         }
         case 'relationships': {
-          const rel = store.relationships.get(elemId);
-          if (rel) projectRel(rel);
+          if (!seenRels.has(elemId)) {
+            seenRels.add(elemId);
+            const rel = store.relationships.get(elemId);
+            if (rel) projectRel(rel);
+          }
           break;
         }
       }
     }
 
     // Also project any relationships and connectors whose endpoints are both in the diagram
-    // by using our secondary indexes!
     for (const elemId of visibleFilter) {
       const outRels = store.indexes.sourceId.get(elemId);
       if (outRels) {
         for (const relId of outRels) {
-          if (!visibleFilter.has(relId)) {
+          if (!seenRels.has(relId)) {
             const rel = store.relationships.get(relId);
             if (rel && visibleFilter.has(rel.targetId)) {
+              seenRels.add(relId);
               projectRel(rel);
             }
           }
@@ -711,7 +808,8 @@ export function projectNormalizedDiagram(
       const outConns = store.indexes.ownerId.get(elemId);
       if (outConns) {
         for (const connId of outConns) {
-          if (!visibleFilter.has(connId)) {
+          if (!seenConns.has(connId)) {
+            seenConns.add(connId);
             const conn = store.connectors.get(connId);
             if (conn) projectConn(conn);
           }
@@ -729,4 +827,226 @@ export function projectNormalizedDiagram(
   }
 
   return { blocks, relationships, parts, connectors };
+}
+
+const legacyViewCache = new WeakMap<
+  NormalizedSysmlStore,
+  Map<string, { revision: number; view: LegacySysmlView }>
+>();
+
+/**
+ * Get a cached legacy diagram projection keyed by store revision and diagramId.
+ * Guarantees O(1) performance when no changes have occurred.
+ */
+export function getCachedLegacyView(
+  store: NormalizedSysmlStore,
+  diagramId?: string,
+): LegacySysmlView {
+  let storeCache = legacyViewCache.get(store);
+  if (!storeCache) {
+    storeCache = new Map();
+    legacyViewCache.set(store, storeCache);
+  }
+  const key = diagramId ?? '__full__';
+  const entry = storeCache.get(key);
+  if (entry && entry.revision === store.revision) {
+    return entry.view;
+  }
+  const view = projectNormalizedDiagram(store, diagramId);
+  storeCache.set(key, { revision: store.revision, view });
+  return view;
+}
+
+/**
+ * Clear legacy view and entity projection caches.
+ */
+export function clearLegacyViewCache(store?: NormalizedSysmlStore): void {
+  if (store) {
+    legacyViewCache.delete(store);
+    entityProjectionCaches.delete(store);
+  }
+}
+
+/**
+ * Select an entity by ID with O(1) performance.
+ */
+export function selectEntityById<T extends SysmlEntity = SysmlEntity>(
+  store: NormalizedSysmlStore,
+  id: string,
+): T | undefined {
+  return getById(store, id) as T | undefined;
+}
+
+/**
+ * Select a block definition by ID.
+ */
+export function selectBlockById(
+  store: NormalizedSysmlStore,
+  id: string,
+): BlockDefinition | undefined {
+  const def = store.definitions.get(id);
+  return def && def.kind === 'block' ? (def as BlockDefinition) : undefined;
+}
+
+/**
+ * Select a definition by ID.
+ */
+export function selectDefinitionById(
+  store: NormalizedSysmlStore,
+  id: string,
+): SysmlDefinition | undefined {
+  return store.definitions.get(id);
+}
+
+/**
+ * Select a requirement definition by ID.
+ */
+export function selectRequirementById(
+  store: NormalizedSysmlStore,
+  id: string,
+): RequirementDefinition | undefined {
+  return store.requirements.get(id);
+}
+
+/**
+ * Select all usages owned by a parent element using secondary indexes.
+ */
+export function selectUsagesByOwner(
+  store: NormalizedSysmlStore,
+  ownerId: string,
+): SysmlUsage[] {
+  const ids = idsByIndex(store, 'ownerId', ownerId);
+  const result: SysmlUsage[] = [];
+  for (const id of ids) {
+    const u = store.usages.get(id);
+    if (u) result.push(u);
+  }
+  return result;
+}
+
+/**
+ * Select all connectors owned by a parent element using secondary indexes.
+ */
+export function selectConnectorsByOwner(
+  store: NormalizedSysmlStore,
+  ownerId: string,
+): ConnectorUsage[] {
+  const ids = idsByIndex(store, 'ownerId', ownerId);
+  const result: ConnectorUsage[] = [];
+  for (const id of ids) {
+    const c = store.connectors.get(id);
+    if (c) result.push(c);
+  }
+  return result;
+}
+
+/**
+ * Select all relationships where the element is source or target using secondary indexes.
+ */
+export function selectRelationshipsByEndpoint(
+  store: NormalizedSysmlStore,
+  endpointId: string,
+): SysmlRelationship[] {
+  const sourceIds = idsByIndex(store, 'sourceId', endpointId);
+  const targetIds = idsByIndex(store, 'targetId', endpointId);
+  const seen = new Set<string>();
+  const result: SysmlRelationship[] = [];
+  for (const id of sourceIds) {
+    seen.add(id);
+    const r = store.relationships.get(id);
+    if (r) result.push(r);
+  }
+  for (const id of targetIds) {
+    if (!seen.has(id)) {
+      const r = store.relationships.get(id);
+      if (r) result.push(r);
+    }
+  }
+  return result;
+}
+
+/**
+ * Select evidence records linked to a requirement using secondary indexes.
+ */
+export function selectEvidenceForRequirement(
+  store: NormalizedSysmlStore,
+  requirementId: string,
+): VerificationEvidence[] {
+  const ids = idsByIndex(store, 'requirementId', requirementId);
+  const result: VerificationEvidence[] = [];
+  for (const id of ids) {
+    const e = store.evidence.get(id);
+    if (e) result.push(e);
+  }
+  return result;
+}
+
+/**
+ * Select suspect links for an entity or across the entire store.
+ */
+export function selectSuspectLinks(
+  store: NormalizedSysmlStore,
+  entityId?: string,
+): SysmlRelationship[] {
+  if (entityId) {
+    return selectRelationshipsByEndpoint(store, entityId).filter(r => r.suspect);
+  }
+  const result: SysmlRelationship[] = [];
+  for (const r of store.relationships.values()) {
+    if (r.suspect) result.push(r);
+  }
+  return result;
+}
+
+/**
+ * Select visible element IDs for a diagram or all IDs if no diagram specified.
+ */
+export function selectVisibleElementIds(
+  store: NormalizedSysmlStore,
+  diagramId?: string,
+): ReadonlySet<string> {
+  if (diagramId && store.diagramPresentations.has(diagramId)) {
+    return new Set(store.diagramPresentations.get(diagramId)!.elementIds);
+  }
+  return new Set(store.indexes.byId.keys());
+}
+
+/**
+ * Select the active diagram's element IDs as an array.
+ */
+export function selectActiveDiagramElementIds(
+  store: NormalizedSysmlStore,
+  diagramId?: string,
+): string[] {
+  return projectIds(store, diagramId);
+}
+
+/**
+ * Targeted entity update in store. Replaces only the specified entity and updates indexes.
+ */
+export function targetedUpdateEntity<T extends SysmlEntity>(
+  store: NormalizedSysmlStore,
+  id: string,
+  patch: Partial<T>,
+): { success: boolean; entity?: T } {
+  const existing = getById(store, id);
+  if (!existing) return { success: false };
+  const collection = getCollectionForId(store, id);
+  if (!collection) return { success: false };
+  const updated = { ...existing, ...patch } as T;
+  upsertEntity(store, collection, updated);
+  return { success: true, entity: updated };
+}
+
+/**
+ * Targeted coordinate update in store.
+ */
+export function targetedUpdatePresentation(
+  store: NormalizedSysmlStore,
+  id: string,
+  coords: PresentationCoordinates,
+): void {
+  const existing = store.coordinates.get(id) ?? {};
+  store.coordinates.set(id, { ...existing, ...coords });
+  store.revision += 1;
 }

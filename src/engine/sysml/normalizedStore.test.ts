@@ -9,10 +9,24 @@ import {
   removeEntity,
   projectIds,
   projectNormalizedDiagram,
+  getCachedLegacyView,
+  selectEntityById,
+  selectBlockById,
+  selectDefinitionById,
+  selectRequirementById,
+  selectUsagesByOwner,
+  selectConnectorsByOwner,
+  selectRelationshipsByEndpoint,
+  selectEvidenceForRequirement,
+  selectSuspectLinks,
+  selectVisibleElementIds,
+  selectActiveDiagramElementIds,
+  targetedUpdateEntity,
+  targetedUpdatePresentation,
 } from './normalizedStore';
 import { generate1kModel, generate10kModel } from './largeModelGenerator';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
-import type { BlockDefinition, PartUsage, SysmlRelationship } from './model';
+import type { BlockDefinition, PartUsage, SysmlRelationship, RequirementDefinition } from './model';
 
 describe('NormalizedSysmlStore', () => {
   it('creates an empty normalized store with initialized indexes', () => {
@@ -174,5 +188,101 @@ describe('NormalizedSysmlStore', () => {
     expect(normalizedView.blocks.length).toBe(legacyView.blocks.length);
     // Normalized projection avoids scanning all 10,000 elements!
     expect(normalizedDuration).toBeLessThan(legacyDuration + 1); // Significantly faster or comparable
+  });
+
+  it('provides indexed selectors for entities, usages, relationships, and evidence', () => {
+    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const store = fromRepository(repository, coordinates, diagramPresentations);
+
+    // selectEntityById
+    const entity = selectEntityById<BlockDefinition>(store, 'blk_1');
+    expect(entity).toBeDefined();
+    expect(entity?.id).toBe('blk_1');
+
+    // selectBlockById
+    const block = selectBlockById(store, 'blk_1');
+    expect(block).toBeDefined();
+    expect(block?.kind).toBe('block');
+
+    // selectDefinitionById
+    const def = selectDefinitionById(store, 'blk_1');
+    expect(def?.name).toBe('Block_1');
+
+    // selectUsagesByOwner
+    const usages = selectUsagesByOwner(store, 'blk_1');
+    expect(usages.length).toBeGreaterThan(0);
+    expect(usages.every(u => u.ownerId === 'blk_1')).toBe(true);
+
+    // selectRelationshipsByEndpoint
+    const rels = selectRelationshipsByEndpoint(store, 'blk_1');
+    expect(rels.every(r => r.sourceId === 'blk_1' || r.targetId === 'blk_1')).toBe(true);
+
+    // selectVisibleElementIds & selectActiveDiagramElementIds
+    const visibleIds = selectVisibleElementIds(store, 'diagram-root');
+    const diagramIds = selectActiveDiagramElementIds(store, 'diagram-root');
+    expect(visibleIds.size).toBe(diagramIds.length);
+    expect(diagramIds.length).toBeGreaterThan(0);
+  });
+
+  it('provides cached legacy view with reference stability when revision is unchanged', () => {
+    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const store = fromRepository(repository, coordinates, diagramPresentations);
+
+    const view1 = getCachedLegacyView(store, 'diagram-root');
+    const view2 = getCachedLegacyView(store, 'diagram-root');
+
+    // Exact same reference - 0ms computation, 0 bytes allocated!
+    expect(view1).toBe(view2);
+    expect(view1.blocks).toBe(view2.blocks);
+
+    // When revision changes, fresh view is computed
+    store.revision += 1;
+    const view3 = getCachedLegacyView(store, 'diagram-root');
+    expect(view3).not.toBe(view1);
+  });
+
+  it('ensures editing one element does not recreate unrelated block objects', () => {
+    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const store = fromRepository(repository, coordinates, diagramPresentations);
+
+    const viewBefore = projectNormalizedDiagram(store, 'diagram-root');
+    const block0Before = viewBefore.blocks[0];
+    const block1Before = viewBefore.blocks[1];
+
+    // Targeted update of block 0
+    targetedUpdateEntity(store, block0Before.id, { name: 'RenamedBlock' });
+
+    const viewAfter = projectNormalizedDiagram(store, 'diagram-root');
+    const block0After = viewAfter.blocks.find(b => b.id === block0Before.id);
+    const block1After = viewAfter.blocks.find(b => b.id === block1Before.id);
+
+    // Block 0 was edited, so its projected object was recreated with the new name
+    expect(block0After?.name).toBe('RenamedBlock');
+    expect(block0After).not.toBe(block0Before);
+
+    // Block 1 was UNRELATED, so its object reference is EXACTLY preserved!
+    expect(block1After).toBe(block1Before);
+  });
+
+  it('performs targeted presentation updates and preserves unrelated block objects', () => {
+    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const store = fromRepository(repository, coordinates, diagramPresentations);
+
+    const viewBefore = projectNormalizedDiagram(store, 'diagram-root');
+    const targetBlock = viewBefore.blocks[0];
+    const otherBlock = viewBefore.blocks[1];
+
+    targetedUpdatePresentation(store, targetBlock.id, { x: 999, y: 888 });
+
+    const viewAfter = projectNormalizedDiagram(store, 'diagram-root');
+    const updatedTarget = viewAfter.blocks.find(b => b.id === targetBlock.id);
+    const unchangedOther = viewAfter.blocks.find(b => b.id === otherBlock.id);
+
+    expect(updatedTarget?.x).toBe(999);
+    expect(updatedTarget?.y).toBe(888);
+    expect(updatedTarget).not.toBe(targetBlock);
+
+    // Unrelated block object identity is completely stable
+    expect(unchangedOther).toBe(otherBlock);
   });
 });
