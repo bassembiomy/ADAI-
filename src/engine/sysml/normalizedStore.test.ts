@@ -23,6 +23,10 @@ import {
   selectActiveDiagramElementIds,
   targetedUpdateEntity,
   targetedUpdatePresentation,
+  selectVisibleBlocks,
+  selectVisibleParts,
+  selectRelationshipsForVisibleNodes,
+  selectConnectorsForVisibleParts,
 } from './normalizedStore';
 import { generate1kModel, generate10kModel } from './largeModelGenerator';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
@@ -283,6 +287,42 @@ describe('NormalizedSysmlStore', () => {
     expect(updatedTarget).not.toBe(targetBlock);
 
     // Unrelated block object identity is completely stable
+    expect(unchangedOther).toBe(otherBlock);
+  });
+
+  it('selects visible blocks, parts, relationships, and connectors with stable references', () => {
+    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const store = fromRepository(repository, coordinates, diagramPresentations);
+
+    const activeIds = selectActiveDiagramElementIds(store, 'diagram-root');
+    expect(activeIds.length).toBeGreaterThan(0);
+
+    const visibleBlocks = selectVisibleBlocks(store, activeIds, 'diagram-root');
+    const visibleParts = selectVisibleParts(store, activeIds, 'diagram-root');
+    expect(visibleBlocks.length).toBeGreaterThan(0);
+
+    // Test relationship selector with known connected endpoints
+    const rel1 = Object.values(repository.relationships)[0];
+    const nodeIds = [rel1.sourceId, rel1.targetId];
+    const visibleRels = selectRelationshipsForVisibleNodes(store, nodeIds);
+    expect(visibleRels.length).toBeGreaterThan(0);
+    expect(visibleRels[0].id).toBe(rel1.id);
+
+    // Second call with same revision returns exact same references
+    const visibleBlocks2 = selectVisibleBlocks(store, activeIds, 'diagram-root');
+    expect(visibleBlocks2[0]).toBe(visibleBlocks[0]);
+
+    // Updating one block preserves references for all other visible blocks
+    const targetBlock = visibleBlocks[0];
+    const otherBlock = visibleBlocks[1];
+    targetedUpdateEntity(store, targetBlock.id, { name: 'NewName' });
+
+    const visibleBlocksAfter = selectVisibleBlocks(store, activeIds, 'diagram-root');
+    const updatedTarget = visibleBlocksAfter.find(b => b.id === targetBlock.id);
+    const unchangedOther = visibleBlocksAfter.find(b => b.id === otherBlock.id);
+
+    expect(updatedTarget?.name).toBe('NewName');
+    expect(updatedTarget).not.toBe(targetBlock);
     expect(unchangedOther).toBe(otherBlock);
   });
 });

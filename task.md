@@ -18,12 +18,12 @@
   - [x] Step 3: Use `applyPatch` against normalized store for undo/redo, materializing repository only when compatibility callers explicitly ask
   - [x] Step 4: Add periodic checkpoints only after `checkpointEvery` operations or when replay cost exceeds threshold
   - [x] Step 5: Test memory bound, multi-step undo/redo, cascade-delete restoration, and patch replay from checkpoint
-- [ ] Task 4: Make the Normalized Store the Single Source of Truth
-  - [ ] Step 1: Initialize gateway state containing normalized store and presentation maps as single semantic truth
-  - [ ] Step 2: Remove 150ms `mergeLegacyDiagramIntoRepository` synchronization effect in `App.tsx`
-  - [ ] Step 3: Remove full `blocks`, `relationships`, `parts`, and `connectors` copies from App state; retain active visible selector results and transient drag state
-  - [ ] Step 4: Expose memoized selectors (`selectVisibleBlocks`, `selectVisibleParts`, `selectRelationshipsForVisibleNodes`, `selectConnectorsForVisibleParts`)
-  - [ ] Step 5: Cache `projectLegacyDiagram` with key `{storeRevision, diagramId}` for export/compatibility panels
+- [x] Task 4: Make the Normalized Store the Single Source of Truth
+  - [x] Step 1: Initialize gateway state containing normalized store and presentation maps as single semantic truth
+  - [x] Step 2: Remove 150ms `mergeLegacyDiagramIntoRepository` synchronization effect in `App.tsx`
+  - [x] Step 3: Remove full `blocks`, `relationships`, `parts`, and `connectors` copies from App state; retain active visible selector results and transient drag state
+  - [x] Step 4: Expose memoized selectors (`selectVisibleBlocks`, `selectVisibleParts`, `selectRelationshipsForVisibleNodes`, `selectConnectorsForVisibleParts`)
+  - [x] Step 5: Cache `projectLegacyDiagram` with key `{storeRevision, diagramId}` for export/compatibility panels
 - [ ] Task 5: Add Indexed Edge Culling
   - [ ] Step 1: Maintain endpoint indexes in `NormalizedSysmlStore`: `relationshipsByEndpoint`, `connectorsByPart`, and diagram membership
   - [ ] Step 2: Update `cullElements` in `VirtualizedDiagram.tsx` to retrieve edges via endpoint indexes rather than scanning all relationships and connectors

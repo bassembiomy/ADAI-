@@ -6204,14 +6204,7 @@ const ADIA = () => {
   const [parts, setParts] = useState<PartData[]>([]);
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
-  const sysmlStore = useMemo(() => fromRepository(canonicalSysmlRepository), [canonicalSysmlRepository]);
-  useEffect(() => {
-    if (isDragging) return;
-    const timer = setTimeout(() => {
-      setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [blocks, parts, connectors, relationships, isDragging]);
+  const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
 
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -7354,6 +7347,7 @@ const ADIA = () => {
           throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
         }
         setCanonicalSysmlRepository(loaded.repository);
+        setSysmlStore(fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations));
         if (loaded.diagramPresentations) {
           setDiagramPresentations(loaded.diagramPresentations);
         }

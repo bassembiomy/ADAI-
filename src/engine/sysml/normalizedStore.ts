@@ -1023,6 +1023,162 @@ export function selectActiveDiagramElementIds(
 }
 
 /**
+ * Select visible blocks for a given set of IDs or active diagram.
+ */
+export function selectVisibleBlocks(
+  store: NormalizedSysmlStore,
+  visibleIds?: ReadonlySet<string> | Set<string> | string[],
+  activeDiagramId?: string,
+): BlockData[] {
+  const view = getCachedLegacyView(store, activeDiagramId);
+  if (!visibleIds) return view.blocks;
+  const set = visibleIds instanceof Set ? visibleIds : new Set(visibleIds);
+  return view.blocks.filter(b => set.has(b.id));
+}
+
+/**
+ * Select visible parts for a given set of IDs or active diagram.
+ */
+export function selectVisibleParts(
+  store: NormalizedSysmlStore,
+  visibleIds?: ReadonlySet<string> | Set<string> | string[],
+  activeDiagramId?: string,
+): PartData[] {
+  const view = getCachedLegacyView(store, activeDiagramId);
+  if (!visibleIds) return view.parts;
+  const set = visibleIds instanceof Set ? visibleIds : new Set(visibleIds);
+  return view.parts.filter(p => set.has(p.id));
+}
+
+/**
+ * Select relationships whose endpoints are in the given visible node IDs using indexed endpoint lookups.
+ */
+export function selectRelationshipsForVisibleNodes(
+  store: NormalizedSysmlStore,
+  visibleNodeIds?: ReadonlySet<string> | Set<string> | string[],
+  activeDiagramId?: string,
+): RelationshipData[] {
+  if (visibleNodeIds) {
+    const set = visibleNodeIds instanceof Set ? visibleNodeIds : new Set(visibleNodeIds);
+    const rels: RelationshipData[] = [];
+    const seenRels = new Set<string>();
+    const entityCache = getEntityProjectionCache(store);
+
+    for (const nodeId of set) {
+      const sourceRels = store.indexes.sourceId.get(nodeId);
+      if (sourceRels) {
+        for (const relId of sourceRels) {
+          if (!seenRels.has(relId)) {
+            const rel = store.relationships.get(relId);
+            if (rel && set.has(rel.targetId)) {
+              seenRels.add(relId);
+              const cached = entityCache.relationships.get(rel.id);
+              if (cached && cached.entity === rel) {
+                rels.push(cached.result);
+              } else {
+                let legacyType: RelationshipData['type'] = 'trace';
+                if (rel.kind === 'deriveReqt') legacyType = 'derive';
+                else if (rel.kind === 'sharedAggregation') legacyType = 'aggregation';
+                else if (
+                  rel.kind === 'association' ||
+                  rel.kind === 'composition' ||
+                  rel.kind === 'generalization' ||
+                  rel.kind === 'dependency' ||
+                  rel.kind === 'allocation' ||
+                  rel.kind === 'satisfy' ||
+                  rel.kind === 'verify' ||
+                  rel.kind === 'refine' ||
+                  rel.kind === 'trace' ||
+                  rel.kind === 'copy' ||
+                  rel.kind === 'requirementContainment'
+                ) {
+                  legacyType = rel.kind;
+                }
+                const result: RelationshipData = {
+                  id: rel.id,
+                  sourceId: rel.sourceId,
+                  targetId: rel.targetId,
+                  type: legacyType,
+                  label: (rel as any).name ?? '',
+                  sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
+                  targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
+                };
+                entityCache.relationships.set(rel.id, { entity: rel, result });
+                rels.push(result);
+              }
+            }
+          }
+        }
+      }
+    }
+    return rels;
+  }
+  const view = getCachedLegacyView(store, activeDiagramId);
+  return view.relationships;
+}
+
+/**
+ * Select connectors whose parts are in the given visible part IDs using owner/endpoint indexes.
+ */
+export function selectConnectorsForVisibleParts(
+  store: NormalizedSysmlStore,
+  visiblePartIds?: ReadonlySet<string> | Set<string> | string[],
+  activeDiagramId?: string,
+): ConnectorData[] {
+  if (visiblePartIds) {
+    const set = visiblePartIds instanceof Set ? visiblePartIds : new Set(visiblePartIds);
+    const connectors: ConnectorData[] = [];
+    const seenConns = new Set<string>();
+    const entityCache = getEntityProjectionCache(store);
+
+    const parseEndpoint = (portUsageId: string, ownerId: string) => {
+      if (portUsageId.includes('::')) {
+        const [partId, portId] = portUsageId.split('::');
+        return { partId, portId };
+      }
+      return { partId: ownerId, portId: portUsageId };
+    };
+
+    for (const partId of set) {
+      const ownerConns = store.indexes.ownerId.get(partId);
+      if (ownerConns) {
+        for (const connId of ownerConns) {
+          if (!seenConns.has(connId)) {
+            seenConns.add(connId);
+            const conn = store.connectors.get(connId);
+            if (conn) {
+              const src = parseEndpoint(conn.sourcePortId, conn.ownerId);
+              const tgt = parseEndpoint(conn.targetPortId, conn.ownerId);
+              if (set.has(src.partId) && set.has(tgt.partId)) {
+                const cached = entityCache.connectors.get(conn.id);
+                if (cached && cached.entity === conn) {
+                  connectors.push(cached.result);
+                } else {
+                  const result: ConnectorData = {
+                    id: conn.id,
+                    kind: conn.kind,
+                    sourcePartId: src.partId,
+                    targetPartId: tgt.partId,
+                    sourcePortId: src.portId,
+                    targetPortId: tgt.portId,
+                    itemFlow: conn.itemFlowId,
+                  };
+                  entityCache.connectors.set(conn.id, { entity: conn, result });
+                  connectors.push(result);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return connectors;
+  }
+  const view = getCachedLegacyView(store, activeDiagramId);
+  return view.connectors;
+}
+
+/**
  * Targeted entity update in store. Replaces only the specified entity and updates indexes.
  */
 export function targetedUpdateEntity<T extends SysmlEntity>(

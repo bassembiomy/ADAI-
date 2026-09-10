@@ -54,6 +54,10 @@ import {
   selectActiveDiagramElementIds,
   targetedUpdateEntity,
   targetedUpdatePresentation,
+  selectVisibleBlocks,
+  selectVisibleParts,
+  selectRelationshipsForVisibleNodes,
+  selectConnectorsForVisibleParts,
 } from '../engine/sysml/normalizedStore';
 import {
   type PatchHistoryState,
@@ -82,6 +86,10 @@ export {
   selectSuspectLinks,
   selectVisibleElementIds,
   selectActiveDiagramElementIds,
+  selectVisibleBlocks,
+  selectVisibleParts,
+  selectRelationshipsForVisibleNodes,
+  selectConnectorsForVisibleParts,
   targetedUpdateEntity,
   targetedUpdatePresentation,
 };
