@@ -8,10 +8,20 @@ import {
   type WorkerTaskType,
   type CompactProjectDelta,
   type CompactImpactDelta,
+  SYSML_WORKER_PROTOCOL_VERSION,
   WORKER_FAST_PATH_THRESHOLD,
   shouldRunInWorker,
 } from '../engine/sysml/workerProtocol';
 import { handleWorkerMessage } from '../engine/sysml/sysmlWorker';
+import { createSysmlWorker, isWorkerSupported } from './sysmlWorkerFactory';
+
+export interface SysmlWorkerDiagnostics {
+  workerAvailable: boolean;
+  lastWorkerError: string | null;
+  fallbackReason: string | null;
+  pendingCount: number;
+  staleCount: number;
+}
 
 interface PendingRequest<T> {
   requestId: string;
@@ -28,17 +38,41 @@ export class SysmlWorkerClient {
   private latestRevisionByType = new Map<WorkerTaskType, number>();
   private activeRequestByType = new Map<WorkerTaskType, string>();
   private requestCounter = 0;
+  private lastWorkerError: string | null = null;
+  private fallbackReason: string | null = null;
+  private staleCount = 0;
 
-  constructor(workerFactory?: () => Worker) {
-    if (typeof Worker !== 'undefined' && workerFactory) {
+  constructor(workerFactory?: (() => Worker) | null) {
+    if (workerFactory === null) {
+      this.worker = null;
+      this.fallbackReason = 'Worker explicitly disabled by configuration';
+      return;
+    }
+
+    const factory = workerFactory ?? (isWorkerSupported() ? createSysmlWorker : null);
+    if (factory) {
       try {
-        this.worker = workerFactory();
+        this.worker = factory();
         this.worker.onmessage = this.handleWorkerResponse.bind(this);
         this.worker.onerror = this.handleWorkerError.bind(this);
-      } catch {
+      } catch (err: any) {
         this.worker = null;
+        this.lastWorkerError = err?.message || 'Failed to instantiate Web Worker';
+        this.fallbackReason = `Worker instantiation failed: ${this.lastWorkerError}`;
       }
+    } else {
+      this.fallbackReason = 'Web Workers are not supported in this runtime environment';
     }
+  }
+
+  public getDiagnostics(): SysmlWorkerDiagnostics {
+    return {
+      workerAvailable: this.worker !== null,
+      lastWorkerError: this.lastWorkerError,
+      fallbackReason: this.fallbackReason,
+      pendingCount: this.pendingRequests.size,
+      staleCount: this.staleCount,
+    };
   }
 
   private nextRequestId(): string {
@@ -55,6 +89,7 @@ export class SysmlWorkerClient {
     // Stale result rejection: if a newer revision has arrived for this task type, discard
     const latestRev = this.latestRevisionByType.get(pending.taskType) ?? 0;
     if (response.revision < latestRev) {
+      this.staleCount++;
       pending.reject(new Error(`Stale result rejected: revision ${response.revision} < latest ${latestRev}`));
       return;
     }
@@ -67,8 +102,10 @@ export class SysmlWorkerClient {
   }
 
   private handleWorkerError(error: ErrorEvent): void {
+    const errorMsg = error?.message || 'Worker runtime failure';
+    this.lastWorkerError = errorMsg;
     for (const [id, pending] of this.pendingRequests.entries()) {
-      pending.reject(new Error(`Worker encountered an unhandled error: ${error.message}`));
+      pending.reject(new Error(`Worker encountered an unhandled error: ${errorMsg}`));
       this.pendingRequests.delete(id);
     }
   }
@@ -133,6 +170,7 @@ export class SysmlWorkerClient {
     revision: number
   ): Promise<SysmlValidationReport> {
     return this.execute<SysmlValidationReport>('validate', revision, requestId => ({
+      version: SYSML_WORKER_PROTOCOL_VERSION,
       requestId,
       revision,
       taskType: 'validate',
@@ -146,6 +184,7 @@ export class SysmlWorkerClient {
     diagramId?: string
   ): Promise<{ view: LegacySysmlView; delta: CompactProjectDelta }> {
     return this.execute<{ view: LegacySysmlView; delta: CompactProjectDelta }>('project', revision, requestId => ({
+      version: SYSML_WORKER_PROTOCOL_VERSION,
       requestId,
       revision,
       taskType: 'project',
@@ -160,6 +199,7 @@ export class SysmlWorkerClient {
     targetElementIds: string[]
   ): Promise<CompactImpactDelta> {
     return this.execute<CompactImpactDelta>('impact', revision, requestId => ({
+      version: SYSML_WORKER_PROTOCOL_VERSION,
       requestId,
       revision,
       taskType: 'impact',
@@ -173,6 +213,7 @@ export class SysmlWorkerClient {
     revision: number
   ): Promise<string> {
     return this.execute<string>('serialize', revision, requestId => ({
+      version: SYSML_WORKER_PROTOCOL_VERSION,
       requestId,
       revision,
       taskType: 'serialize',
@@ -188,7 +229,7 @@ export class SysmlWorkerClient {
     }
 
     if (this.worker) {
-      this.worker.postMessage({ taskType: 'cancel', requestId });
+      this.worker.postMessage({ version: SYSML_WORKER_PROTOCOL_VERSION, taskType: 'cancel', requestId });
     }
   }
 

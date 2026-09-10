@@ -1,68 +1,61 @@
-# Task: Very Large SysML Model Scalability Implementation
+# Task: Large-Model Remaining Gaps Implementation Plan
 
-- [x] Task 1: Establish Baselines and Synthetic Large-Model Fixtures
-  - [x] Step 1: Add deterministic generators for 1k, 10k, 50k, and 100k definitions/usages/relationships with bounded property/port counts
-  - [x] Step 2: Add `measureSync(label, fn)` and `measureAsync(label, fn)` returning duration, heap delta when available, and long-task observations
-  - [x] Step 3: Add baseline tests for load, project, select, update, delete-impact, serialize, and render-data preparation
-  - [x] Step 4: Run `npx vitest run src/engine/sysml/largeModelGenerator.test.ts` and record current failures/measurements in `docs/performance-baseline.md`
-  - [x] Step 5: Commit the fixture and baseline only
-- [x] Task 2: Add a Normalized Store and Secondary Indexes
-  - [x] Step 1: Define `NormalizedSysmlStore` with `definitions`, `usages`, `connectors`, `relationships`, `requirements`, `verificationCases`, plus `coordinates` and `diagramPresentations`
-  - [x] Step 2: Define indexes for `ownerId`, `typeId`, `sourceId`, `targetId`, `diagramId`, and `requirementId`
-  - [x] Step 3: Implement `fromRepository`, `getById`, `idsByIndex`, `upsert`, `remove`, and `projectIds` without scanning unrelated entities
-  - [x] Step 4: Keep `SysmlRepository` serialization shape unchanged through `toRepository()`
-  - [x] Step 5: Test index correctness after create/update/delete and compare normalized projection against current `projectLegacyDiagram` output
-- [x] Task 3: Replace Full-Snapshot History with Bounded Inverse Patches
-  - [x] Step 1: Define typed operations: `add`, `replace`, `remove`, `batch`
-  - [x] Step 2: Make `applyCommand` return `{ nextStore, forwardPatch, inversePatch, impact }`
-  - [x] Step 3: Store history entries as patches with configurable `maxEntries`, `maxBytes`, and coalescing key for drag operations
-  - [x] Step 4: Coalesce pointer-move updates into one history entry on pointer-up
-  - [x] Step 5: Retain a periodic checkpoint only when patch replay cost exceeds the configured threshold
-  - [x] Step 6: Add tests proving undo/redo equivalence, bounded history bytes, deletion cascade restoration, and compatibility with existing commands
-- [x] Task 4: Move App State to Store Selectors
-  - [x] Step 1: Keep one gateway/store state as the source of truth for SysML data
-  - [x] Step 2: Replace repeated `blocks.find/filter/map` mutations with indexed selectors and targeted updates
-  - [x] Step 3: Expose only the active diagram's visible IDs to React
-  - [x] Step 4: Keep `LegacySysmlView` projection available for existing panels and exports, but compute it lazily and cache it by repository revision plus diagram ID
-  - [x] Step 5: Ensure selecting/editing one element does not recreate unrelated block/relationship objects
-  - [x] Step 6: Run `npm run test:sysml` and `npx tsc --noEmit`
-- [x] Task 5: Add Viewport Culling and Memoized Diagram Rendering
-  - [x] Step 1: Define `DiagramViewport` and `VisibleElementSet` APIs
-  - [x] Step 2: Build a grid/R-tree-compatible spatial index over coordinates; query viewport plus overscan on pan/zoom
-  - [x] Step 3: Render only visible blocks/parts and edges whose endpoints or bounds intersect the viewport
-  - [x] Step 4: Memoize block, port, relationship, connector, and label components by stable entity revision
-  - [x] Step 5: During rapid pan/drag, render simplified nodes and defer labels/edge routing to idle time
-  - [x] Step 6: Add a large-model mode that disables shadows, animations, and expensive labels above configured thresholds
-  - [x] Step 7: Add Playwright tests verifying offscreen elements are not mounted and visible elements remain correct after zoom/pan
-- [x] Task 6: Make Projection, Validation, and Impact Analysis Worker-Backed
-  - [x] Step 1: Define request IDs, revision numbers, cancellation tokens, and stale-result rejection
-  - [x] Step 2: Move full validation, diagram projection, deletion-impact analysis, and full serialization off the UI thread
-  - [x] Step 3: Return compact deltas (`added`, `updated`, `removed`, diagnostics) instead of cloning the full result
-  - [x] Step 4: Keep small-model fast paths synchronous when estimated work is below a threshold
-  - [x] Step 5: Cancel obsolete validation/projection jobs when a newer revision is submitted
-  - [x] Step 6: Test ordering, cancellation, stale responses, worker errors, and deterministic results
-- [x] Task 7: Implement Chunked and Incremental Persistence
-  - [x] Step 1: Preserve current `ADIA-SysML` JSON export/import as a compatibility format
-  - [x] Step 2: Add an internal chunk format keyed by collection and entity ID, with manifest containing schema version, revision, checksum, and chunk checksums
-  - [x] Step 3: Write only changed chunks after patch commits; perform writes asynchronously and atomically through temporary files/rename in Electron
-  - [x] Step 4: Load manifest first, then lazy-load definitions/usages for the active diagram; validate checksums per chunk
-  - [x] Step 5: Provide full export as an explicit operation that streams chunks rather than building one giant intermediate string when possible
-  - [x] Step 6: Test interrupted writes, checksum mismatch, migration, partial loading, and round-trip equivalence
-- [x] Task 8: Reduce Memory Pressure in Import, Export, and Reports
-  - [x] Step 1: Remove duplicate full copies of blocks/relationships between canonical repository, legacy view, undo history, and export payload where not required
-  - [x] Step 2: Use stable IDs and references in report generation; materialize full arrays only at final output boundaries
-  - [x] Step 3: Debounce autosave and never serialize on every pointer or text-change event
-  - [x] Step 4: Add explicit progress/cancel UI for full export, migration, validation, and report generation
-  - [x] Step 5: Add tests asserting no repeated full serialization during drag and that cancellation releases worker data
-- [x] Task 9: Add Large-Model UX and Safety Limits
-  - [x] Step 1: Show entity counts, active diagram counts, renderer mode, pending worker jobs, last save, and estimated memory
-  - [x] Step 2: Warn before opening a project above configurable thresholds and offer "performance mode"
-  - [x] Step 3: Disable or confirm expensive operations such as full auto-layout, whole-project SVG export, and global report generation
-  - [x] Step 4: Show recoverable progress/errors instead of allowing a silent UI freeze
-  - [x] Step 5: Persist user limits separately from the SysML semantic model
-- [x] Task 10: Benchmark Gates and Regression Protection
-  - [x] Step 1: Benchmark 1k/10k/50k/100k fixtures on load, edit, drag, pan, zoom, validation, undo/redo, save, and reopen
-  - [x] Step 2: Fail CI if p95 edit/drag exceeds 50 ms, any main-thread task exceeds 100 ms in performance mode, or memory exceeds the configured budget
-  - [x] Step 3: Compare normalized gateway output with legacy behavior on all existing SysML tests
-  - [x] Step 4: Run `npm run test:sysml`, `npm run test:e2e:sysml`, `npx tsc --noEmit`, and the new performance suite
-  - [x] Step 5: Document machine profile, browser/Electron version, fixture size, thresholds, and known degraded modes
+- [x] Task 1: Create and Verify the Real Worker Factory
+  - [x] Step 1: Create `src/services/sysmlWorkerFactory.ts` with `createSysmlWorker()` using `new Worker(new URL('../engine/sysml/sysmlWorker.ts', import.meta.url), { type: 'module' })` and Electron-safe constructor seam
+  - [x] Step 2: Update `src/engine/sysml/workerProtocol.ts` to add protocol `version: '1.0.0'` and validate `requestId`, `revision`, and `taskType`
+  - [x] Step 3: Update `src/services/sysmlWorkerClient.ts` to use default factory when `Worker` is available, allow `workerFactory: null` for tests, and expose `workerAvailable`, `lastWorkerError`, `fallbackReason` in diagnostics
+  - [x] Step 4: Add unit tests in `src/services/sysmlWorkerFactory.test.ts` for factory injection, no-worker fallback, error handling, termination, and stale revision rejection
+  - [x] Step 5: Verify tests with `npm run test:sysml` and verify build bundle with `npm run build`
+- [ ] Task 2: Make Worker Payloads Transferable and Safe
+  - [ ] Step 1: Define `WorkerStoreSnapshot` using plain objects/arrays in `src/engine/sysml/workerProtocol.ts`
+  - [ ] Step 2: Implement `toWorkerSnapshot(store)` and `fromWorkerSnapshot(snapshot)` with schema and revision validation in `src/engine/sysml/normalizedStore.ts`
+  - [ ] Step 3: Ensure projection requests transfer only target diagram ID and required element IDs
+  - [ ] Step 4: Add cancellation checks inside large loops in `src/engine/sysml/sysmlWorker.ts`
+  - [ ] Step 5: Add tests comparing worker and main-thread outputs for validation, projection, impact, and serialization
+- [ ] Task 3: Remove Full-Snapshot History from Large-Model Mutations
+  - [ ] Step 1: Define `HistoryBudgetOptions` with `maxEntries`, `maxBytes`, `checkpointEvery`, and `maxReplayOperations` in `src/engine/sysml/patches.ts`
+  - [ ] Step 2: Make committed mutations produce one forward/inverse patch and eliminate full-repository cloning (`structuredClone`) in `sysmlCommandGateway.ts`
+  - [ ] Step 3: Use `applyPatch` against normalized store for undo/redo, materializing repository only when compatibility callers explicitly ask
+  - [ ] Step 4: Add periodic checkpoints only after `checkpointEvery` operations or when replay cost exceeds threshold
+  - [ ] Step 5: Test memory bound, multi-step undo/redo, cascade-delete restoration, and patch replay from checkpoint
+- [ ] Task 4: Make the Normalized Store the Single Source of Truth
+  - [ ] Step 1: Initialize gateway state containing normalized store and presentation maps as single semantic truth
+  - [ ] Step 2: Remove 150ms `mergeLegacyDiagramIntoRepository` synchronization effect in `App.tsx`
+  - [ ] Step 3: Remove full `blocks`, `relationships`, `parts`, and `connectors` copies from App state; retain active visible selector results and transient drag state
+  - [ ] Step 4: Expose memoized selectors (`selectVisibleBlocks`, `selectVisibleParts`, `selectRelationshipsForVisibleNodes`, `selectConnectorsForVisibleParts`)
+  - [ ] Step 5: Cache `projectLegacyDiagram` with key `{storeRevision, diagramId}` for export/compatibility panels
+- [ ] Task 5: Add Indexed Edge Culling
+  - [ ] Step 1: Maintain endpoint indexes in `NormalizedSysmlStore`: `relationshipsByEndpoint`, `connectorsByPart`, and diagram membership
+  - [ ] Step 2: Update `cullElements` in `VirtualizedDiagram.tsx` to retrieve edges via endpoint indexes rather than scanning all relationships and connectors
+  - [ ] Step 3: Return stable arrays when viewport, revision, and visible IDs have not changed
+  - [ ] Step 4: Ensure edges connected to the active IBD context block remain visible
+  - [ ] Step 5: Add 100k-edge tests validating sub-millisecond culling time and zero missing/extra visible edges
+- [ ] Task 6: Integrate Selectors into BDD/IBD Rendering
+  - [ ] Step 1: Replace `blocks.find()` in per-node render loops with `getById`/selector maps
+  - [ ] Step 2: Memoize node, port, relationship, connector, and label components using entity revision plus presentation revision
+  - [ ] Step 3: Render only current diagram/layer IDs and viewport-visible subset
+  - [ ] Step 4: Defer labels, route recomputation, and shadows during pan/drag via idle/rAF scheduling
+  - [ ] Step 5: Verify selection, hit testing, context block behavior, and Playwright DOM node counts
+- [ ] Task 7: Connect Worker Scheduling to Real Application Operations
+  - [ ] Step 1: Schedule large validation after edits with cancellation and revision checks
+  - [ ] Step 2: Schedule projection only for active diagram (never whole-repo for local update)
+  - [ ] Step 3: Schedule deletion-impact analysis before confirmation for large repositories
+  - [ ] Step 4: Show visible "main-thread fallback" warning in `LargeModelDiagnostics` if worker unavailable
+  - [ ] Step 5: Expose worker queue count, last task duration, fallback reason, and stale-result count
+- [ ] Task 8: Add Real Large-Model Performance and Memory Gates
+  - [ ] Step 1: Create realistic fixtures (1k, 10k, 50k, 100k) with high relationship/connector density in `src/engine/sysml/largeModelStress.test.ts`
+  - [ ] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
+  - [ ] Step 3: Enforce gates: no main-thread task > 100ms in performance mode, drag p95 < 50ms, worker cancellation < 100ms
+  - [ ] Step 4: Create real UI performance test in `tests/e2e/sysml-large-model-interaction.spec.ts`
+- [ ] Task 9: Verify Persistence and Recovery Under Load
+  - [ ] Step 1: Test incremental save after one patch without serializing unrelated chunks
+  - [ ] Step 2: Test interrupted chunk writes, temporary file cleanup, checksum failure, and recovery from last valid manifest
+  - [ ] Step 3: Test lazy loading of inactive diagrams and materialization of active diagram only
+  - [ ] Step 4: Test full legacy JSON export/import remains byte-valid semantically
+  - [ ] Step 5: Verify save cancellation never leaves store in half-committed revision
+- [ ] Task 10: Final Regression and Release Gate
+  - [ ] Step 1: Run `npm run test:sysml`
+  - [ ] Step 2: Run `npm run test:e2e:sysml`
+  - [ ] Step 3: Run `npx tsc --noEmit` and `npm run build`
+  - [ ] Step 4: Verify 100k stress and Electron performance suites
+  - [ ] Step 5: Document measured results and machine profile in `docs/performance-baseline.md`

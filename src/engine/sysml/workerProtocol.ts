@@ -3,9 +3,12 @@ import type { NormalizedSysmlStore } from './normalizedStore';
 import type { SysmlValidationReport } from './validation';
 import type { MutationImpact } from './mutations';
 
+export const SYSML_WORKER_PROTOCOL_VERSION = '1.0.0';
+
 export type WorkerTaskType = 'validate' | 'project' | 'impact' | 'serialize';
 
 export interface WorkerBaseRequest {
+  version?: string;
   requestId: string;
   revision: number;
   taskType: WorkerTaskType;
@@ -32,8 +35,10 @@ export interface WorkerSerializeRequest extends WorkerBaseRequest {
 }
 
 export interface WorkerCancelRequest {
+  version?: string;
   taskType: 'cancel';
   requestId: string;
+  revision?: number;
 }
 
 export type WorkerRequest =
@@ -44,6 +49,7 @@ export type WorkerRequest =
   | WorkerCancelRequest;
 
 export interface WorkerSuccessResponse<T = unknown> {
+  version?: string;
   requestId: string;
   revision: number;
   taskType: WorkerTaskType;
@@ -53,6 +59,7 @@ export interface WorkerSuccessResponse<T = unknown> {
 }
 
 export interface WorkerErrorResponse {
+  version?: string;
   requestId: string;
   revision: number;
   taskType: WorkerTaskType;
