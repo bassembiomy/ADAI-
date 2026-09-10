@@ -6206,6 +6206,31 @@ const ADIA = () => {
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
 
+  // The legacy diagram editors still expose array setters. Keep the canonical
+  // store current until every editor has been migrated to gateway commands.
+  // The debounce prevents pointer-move events from rebuilding the store on
+  // every frame, while the revision is advanced only for a settled edit.
+  useEffect(() => {
+    if (isDragging) return;
+    const timer = setTimeout(() => {
+      setCanonicalSysmlRepository(previous => {
+        const next = mergeLegacyDiagramIntoRepository(previous, {
+          blocks,
+          parts,
+          connectors,
+          relationships,
+        });
+        setSysmlStore(current => fromRepository(
+          next,
+          Object.fromEntries(current.coordinates.entries()),
+          Object.fromEntries(current.diagramPresentations.entries()),
+        ));
+        return next;
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [blocks, parts, connectors, relationships, isDragging]);
+
   const blocksById = useMemo(() => {
     const map = new Map<string, BlockData>();
     for (const b of blocks) {

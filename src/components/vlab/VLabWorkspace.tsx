@@ -1942,13 +1942,21 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const sDomain = sourcePort?.domain || sourceData.domain;
       const tDomain = targetPort?.domain || targetData.domain;
 
-      const isUniversalBlock = (id: string) => 
+      const isUniversalBlock = (id: string) =>
         id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
         id === 'subsystem' || id === 'Subsystem' ||
         id === 'inport' || id === 'Inport' ||
         id === 'outport' || id === 'Outport' ||
         id === 'solver_config' || id === 'solver_configuration';
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
+      // Domain-bridge converters accept a connection from ANY domain on either
+      // side so they can join blocks from two different physical models.
+      const isDomainBridge = (id: string) =>
+        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
+      const isWildcardDomain = (d: any) =>
+        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
+      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
+        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
+        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
 
       if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
         const sLabel = sourceData.label || sourceData.type;
@@ -2072,13 +2080,21 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const sDomain = sourcePort?.domain || sourceData.domain;
       const tDomain = targetPort?.domain || targetData.domain;
 
-      const isUniversalBlock = (id: string) => 
+      const isUniversalBlock = (id: string) =>
         id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
         id === 'subsystem' || id === 'Subsystem' ||
         id === 'inport' || id === 'Inport' ||
         id === 'outport' || id === 'Outport' ||
         id === 'solver_config' || id === 'solver_configuration';
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
+      // Domain-bridge converters accept a connection from ANY domain on either
+      // side so they can join blocks from two different physical models.
+      const isDomainBridge = (id: string) =>
+        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
+      const isWildcardDomain = (d: any) =>
+        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
+      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
+        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
+        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
 
       if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
         const sName = sourceData.label || sourceData.type;
@@ -2121,13 +2137,21 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const tDomain = targetPort?.domain || targetData.domain;
 
       // Relaxed validation for scopes and probes to allow easy visualization
-      const isUniversalBlock = (id: string) => 
+      const isUniversalBlock = (id: string) =>
         id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
         id === 'subsystem' || id === 'Subsystem' ||
         id === 'inport' || id === 'Inport' ||
         id === 'outport' || id === 'Outport' ||
         id === 'solver_config' || id === 'solver_configuration';
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
+      // Domain-bridge converters accept a connection from ANY domain on either
+      // side so they can join blocks from two different physical models.
+      const isDomainBridge = (id: string) =>
+        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
+      const isWildcardDomain = (d: any) =>
+        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
+      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
+        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
+        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
 
       if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
         invalid.add(edge.id);

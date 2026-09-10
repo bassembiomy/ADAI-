@@ -7,6 +7,7 @@ import {
 import { SysmlWorkerClient } from './sysmlWorkerClient';
 import { SYSML_WORKER_PROTOCOL_VERSION } from '../engine/sysml/workerProtocol';
 import { createEmptyRepository } from '../engine/sysml/model';
+import { generate1kModel } from '../engine/sysml/largeModelGenerator';
 
 describe('sysmlWorkerFactory and sysmlWorkerClient integration', () => {
   let mockWorker: any;
@@ -48,7 +49,7 @@ describe('sysmlWorkerFactory and sysmlWorkerClient integration', () => {
     expect(diag.fallbackReason).toContain('explicitly disabled');
 
     // Fast-path execution still succeeds synchronously
-    const repo = createEmptyRepository();
+    const repo = generate1kModel(7).repository;
     const report = await client.validate(repo, 1);
     expect(report.valid).toBe(true);
   });
@@ -126,5 +127,21 @@ describe('sysmlWorkerFactory and sysmlWorkerClient integration', () => {
     expect(client.getDiagnostics().workerAvailable).toBe(false);
 
     await expect(promise).rejects.toThrow('SysmlWorkerClient terminated');
+  });
+
+  it('scheduleValidation cancels the actual validation request ID', async () => {
+    const client = new SysmlWorkerClient(() => mockWorker);
+    const repo = generate1kModel(7).repository;
+    const cancel = client.scheduleValidation(repo, 1, vi.fn());
+
+    expect(mockWorker.postMessage).toHaveBeenCalledTimes(1);
+    const requestId = mockWorker.postMessage.mock.calls[0][0].requestId;
+    cancel();
+
+    expect(mockWorker.postMessage).toHaveBeenLastCalledWith({
+      version: SYSML_WORKER_PROTOCOL_VERSION,
+      taskType: 'cancel',
+      requestId,
+    });
   });
 });

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADIA — State Machine + Code Generation Engine (Detailed)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b1220;color:#e2e8f0;padding:28px 22px}
+.page{max-width:1300px;margin:0 auto}
+h1{font-size:22px}h1 span{color:#22d3ee}
+.sub{color:#94a3b8;font-size:12.5px;margin:6px 0 18px;line-height:1.6}
+.sub code,.box code,.note code{font-family:Consolas,monospace;color:#67e8f9;font-size:10.5px}
+.stage{border:1px solid #1e293b;border-radius:14px;padding:15px;margin-bottom:6px;background:#0f172a}
+.stage.t0{border-color:#1d4ed8}.stage.t1{border-color:#0e7490}.stage.t2{border-color:#6d28d9}
+.stage.t3{border-color:#b45309}.stage.t4{border-color:#166534}.stage.t5{border-color:#9f1239}
+.st{display:flex;gap:10px;align-items:center;margin-bottom:11px;flex-wrap:wrap}
+.n{font-size:11px;font-weight:800;padding:4px 11px;border-radius:999px;background:#334155;white-space:nowrap}
+.t0 .n{background:#1d4ed8}.t1 .n{background:#0e7490}.t2 .n{background:#6d28d9}
+.t3 .n{background:#b45309}.t4 .n{background:#166534}.t5 .n{background:#9f1239}
+.st h2{font-size:13.5px}.st p{font-size:11px;color:#94a3b8;margin-left:auto}
+.grid{display:grid;gap:10px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+.box{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:10px 11px;min-height:80px}
+.box h3{font-size:12px;color:#fff;margin-bottom:4px}.box h3 i{font-style:normal;margin-right:5px}
+.box p{font-size:11px;color:#94a3b8;line-height:1.55}.box code{display:block;margin-top:5px;word-break:break-word;line-height:1.55}
+.box.key{border-color:#22c55e}.box.warn{border-color:#f59e0b}
+.arrow{text-align:center;color:#475569;font-size:15px;padding:4px 0;line-height:1.35}
+.arrow small{display:block;font-size:10.5px;color:#64748b}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.note{border:1px dashed #334155;border-radius:12px;padding:13px 15px;margin-top:12px;background:#0f172a}
+.note h2{font-size:12.5px;margin-bottom:7px;color:#fcd34d}
+.note ol,.note ul,.note table{font-size:11.5px;color:#cbd5e1;line-height:1.7}
+.note ol,.note ul{padding-left:18px}
+table{width:100%;border-collapse:collapse;margin-top:6px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #1e293b;font-size:11px;vertical-align:top}
+th{color:#fcd34d;font-size:10.5px;letter-spacing:.4px}
+td.c{font-family:Consolas,monospace;color:#67e8f9;font-size:10px}
+@media(max-width:1000px){.g4,.g5,.g3,.cols2{grid-template-columns:1fr}}
+@media print{body{background:#fff;color:#111}.stage,.note{background:#fff;border-color:#999}.box{background:#f1f5f9;border-color:#999}.box h3{color:#111}.box p,.sub{color:#333}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>ADIA State Machine + Codegen Engine <span>— Detailed View</span></h1>
+<p class="sub">Covers <code>src/types/sm_types.ts · src/utils/stateMachine/* (~90 modules) · src/utils/smAnalysisEngine.ts · src/utils/stateMachineCodeGenerator.ts · scripts/build_state_machine_runtime.ts · scripts/verify_sm_codegen.ts · src/features/reporting/reportDiagrams.sm.*</code> — verified 2026-09-08. Read top→bottom: author → front-end → IR → twin execution → C backend → verification → deploy.</p>
+
+<div class="stage t0">
+<div class="st"><span class="n">STAGE 0 · AUTHOR</span><h2>Editor model — what the user draws</h2><p>sm_types.ts · smModel.ts · smModelMigration.ts · App.tsx canvas</p></div>
+<div class="grid g4">
+<div class="box"><h3><i>🧱</i>States + hierarchy</h3><p>Nested states, OR/AND layers, regions, priority, history (shallow/deep), autostart, safe/terminal flags, entry/during/exit script text.</p><code>StateData · Layer/StateMachineLayerV4 (decomposition OR|AND) · smStatePruner</code></div>
+<div class="box"><h3><i>🔀</i>Transitions + junctions</h3><p>Guards + actions as text; condition | after(ticks) | and | or | internal; control points, order, exit/entry sets computed later.</p><code>TransitionData · JunctionData · transitionGeometry · stateMachineClipboard</code></div>
+<div class="box"><h3><i>🔣</i>Variables + timing</h3><p>Typed vars (bool/int*/float/double), initial literals validated, scope visibility; tick base + logical-tick vs actual-delta policy.</p><code>VariableDef · smTiming · SMVerificationConfig (tickMs, timerPolicy, tickToleranceMs)</code></div>
+<div class="box"><h3><i>🗂️</i>Schema + migration</h3><p>Versioned model V4→V5 (adds verification block); legacy hydration normalized before anything else touches it.</p><code>CURRENT_SM_SCHEMA_VERSION=5 · smModelMigration · LegacyStateMachineModel</code></div>
+</div>
+</div>
+<div class="arrow">▼<small>raw editor model → front-end (parse → build IR → validate → analyze)</small></div>
+
+<div class="stage t1">
+<div class="st"><span class="n">STAGE 1 · FRONT-END</span><h2>Text → typed semantic IR (single choke point)</h2><p>smExpressions · smSemanticBuilder · smSemanticValidator · smAnalysisEngine</p></div>
+<div class="grid g5">
+<div class="box"><h3><i>🔤</i>Parse</h3><p>Guards/actions/internal-transition text parsed to AST; C-identifier sanitizing; XB legacy→persisted normalization.</p><code>smExpressions · smCIdentifierPolicy · xbModelAdapter</code></div>
+<div class="box key"><h3><i>🏗️</i>Build IR</h3><p>Hierarchy index, LCA per transition, exit/entry state sets, junction routes, IO mapping, enum/slot/activity indices, model hash.</p><code>smSemanticBuilder → SemanticModel (smSemanticModel.ts)</code></div>
+<div class="box"><h3><i>✅</i>Validate</h3><p>Structural + semantic + state-space + XB-target checks; diagnostics with elementId + severity gate codegen.</p><code>smSemanticValidator · stateSpaceValidation · xbSemanticValidator · ModelDiagnostic</code></div>
+<div class="box"><h3><i>🔬</i>Analyze</h3><p>Critical paths, deadlock/unreachable/race detection, C-function metrics, external-ID allocation for traceability.</p><code>smAnalysisEngine · smAnalysisRunner · smCIdentifierPolicy</code></div>
+<div class="box"><h3><i>🧩</i>XB states</h3><p>States can own an X-Bridges control model; flattened/static-matrix/shape-resolved then emitted as per-state C functions.</p><code>xbSemanticModel/Builder · xbSubsystemFlattener · xbStaticMatrix · xbCGenerator</code></div>
+</div>
+</div>
+<div class="arrow">▼<small>SemanticModel IR (typed, hashed) → two consumers: live twin + C backend</small></div>
+
+<div class="stage t2">
+<div class="st"><span class="n">STAGE 2 · TWIN EXECUTION</span><h2>Same IR runs in-app AND oracles the C code</h2><p>smInterpreter · smReferenceInterpreter · smAppAdapter · smTrace</p></div>
+<div class="grid g4">
+<div class="box"><h3><i>▶️</i>Live simulator</h3><p>Step/tick runtime behind a generation-guarded session; powers canvas animation, scopes, FactoryIO mapping.</p><code>smInterpreter (createRuntime/init/step/reset) · smTiming</code></div>
+<div class="box key"><h3><i>🧪</i>Golden oracle</h3><p>Deterministic reference trace over verification vectors (tick, deltaMs, inputs, events) — the expected behavior C must match.</p><code>smReferenceInterpreter (SMTraceStep: activeStates, transitionIds, vars, timers, error)</code></div>
+<div class="box"><h3><i>🔌</i>App adapter</h3><p>Session lifecycle (begin/finish/invalidate), IO channel mapping, trace events for UI; XB integration hooks.</p><code>smAppAdapter · smXBridgesAppIntegration · AppSimulationSession/Update</code></div>
+<div class="box"><h3><i>📼</i>Trace + reports</h3><p>Per-tick frames feed scope views, SM report renderer, and the differential comparator input.</p><code>smTrace · smHostHarness · reportDiagrams.sm.*</code></div>
+</div>
+</div>
+<div class="arrow">▼<small>IR → C backend (deterministic render, MISRA-flavored output)</small></div>
+
+<div class="stage t3">
+<div class="st"><span class="n">STAGE 3 · C BACKEND</span><h2>IR → compilable firmware package</h2><p>smCGenerator · smCExpressions · smRuntimeGenerator · smFileWriter · stateMachineCodeGenerator</p></div>
+<div class="grid g4">
+<div class="box key"><h3><i>⚙️</i>Model C files</h3><p>State/layer enums + indices, guard/action rendering, transition tables with LCA exit/entry sequences, init/enter/step fns per XB state.</p><code>smCGenerator.generateCArtifacts → sm_model.h/.c · sm_types.h · manifest</code></div>
+<div class="box"><h3><i>🧱</i>Fixed runtime</h3><p>Versioned runtime infra (config/version headers, error enum, coverage/assert hooks); model hash binds code↔model.</p><code>smRuntimeGenerator (sm_config.h · sm_version.h · sm_runtime.h/.c · manifest.json v3.1)</code></div>
+<div class="box"><h3><i>🔤</i>Expression lowering</h3><p>Guard/action AST → C with type mapping (bool→bool, int→int32_t …), initial-value literals, top-level condition unwrap.</p><code>smCExpressions (renderCExpression/Action/Type/InitialValue) · getCTimeType · validateInitialValue</code></div>
+<div class="box"><h3><i>💾</i>Emit + HAL glue</h3><p>File writer (overwrite policies), host smoke harness, standalone runtime, HAL/driver stitching for HIL targets.</p><code>smFileWriter · smStandaloneRuntime · stateMachineCodeGenerator.ts (facade v3.0) · hilCodeGenerator.generateHALCode</code></div>
+</div>
+</div>
+<div class="arrow">▼<small>generated package → verification pipeline (prove C ≡ oracle, then gate it)</small></div>
+
+<div class="stage t4">
+<div class="st"><span class="n">STAGE 4 · VERIFICATION PIPELINE</span><h2>Orchestrated evidence bundle — deny-by-default</h2><p>smPipelineOrchestrator · smCHarness · smCoverageRunner · smDifferentialEngine · smTargetCompileRunner</p></div>
+<div class="grid g4">
+<div class="box"><h3><i>📋</i>Plan + vectors</h3><p>Test manifest/plan built from IR; boundary vectors (clamp/reject/default/diagnostic-fault per input policy).</p><code>smTestManifest · smTestPlanBuilder · smBoundaryVectors · SMInvalidInputPolicy</code></div>
+<div class="box key"><h3><i>🖥️</i>Host prove-out</h3><p>Compile package (c90/c99/c11), run CTest suite, sanitizers; coverage stmt/branch/MCDC vs targets (default 100/100).</p><code>smCHarness · smCTestSuiteRenderer · smCTestRuntimeRenderer · smCoverageRunner</code></div>
+<div class="box key"><h3><i>⚖️</i>Differential</h3><p>Cycle-by-cycle compare: C observations vs oracle SMTraceStep; mismatches fail the bundle with cycle evidence.</p><code>smDifferentialEngine.compareCycleObservations · smDifferential · smVerificationAggregator</code></div>
+<div class="box"><h3><i>🎯</i>Static + target</h3><p>Pluggable static/MISRA adapters, target cross-compile adapter, tool runner; traceability.json binds requirement→model→code→test.</p><code>smAnalysisRunner · smTargetCompileRunner · smToolRunner · smTraceabilityEngine · smReports</code></div>
+</div>
+<div class="grid g3" style="margin-top:10px">
+<div class="box"><h3><i>📦</i>Evidence bundle</h3><p>Per-activity PASS/FAIL/NOT_RUN (structural…hardware); acceptance derived; reports rendered for UI + export.</p><code>smVerificationEvidence · smVerificationAggregator · smReports (metrics + testing reports)</code></div>
+<div class="box warn"><h3><i>🛡️</i>Security gate</h3><p>Generated-code verifier (hash/fingerprint) must pass before build/flash; toolchain hash-pinned; SAST + audit in CI.</p><code>security/generatedCodeVerifier · toolchainHashVerifier · scripts/security_sast_scan</code></div>
+<div class="box"><h3><i>🏃</i>One-command gates</h3><p>Deterministic scripts: build the runtime bundle; verify codegen goldens end-to-end (incl. e2e generated-verification test).</p><code>scripts/build_state_machine_runtime.ts · scripts/verify_sm_codegen.ts · smGeneratedVerification.e2e.test.ts</code></div>
+</div>
+</div>
+<div class="arrow">▼<small>verified bundle → deploy &amp; observe</small></div>
+
+<div class="stage t5">
+<div class="st"><span class="n">STAGE 5 · DEPLOY & OBSERVE</span><h2>HIL flash → telemetry → report</h2><p>hilOrchestrator · hilSerialSession · FactoryIOGateway · reportDiagrams.sm</p></div>
+<div class="grid g3">
+<div class="box"><h3><i>🔥</i>Flash (policy-gated)</h3><p>Build/flash recipes + policies + probe service; ELF inspection; vector suites + trace comparator on device output.</p><code>engine/hil/* · security/hilBuild* · hilFlash* · hilProbeService</code></div>
+<div class="box"><h3><i>📡</i>Observe</h3><p>Serial telemetry into dashboards/scopes; repeated-execution soak (default 100k cycles); hardware activity stays PENDING until bench access.</p><code>hilSerialSession · hilProtocol · hilTraceComparator · ScopePanel</code></div>
+<div class="box"><h3><i>📄</i>Report</h3><p>SM diagram renderer + verification evidence flow into the canonical report snapshot → PDF/DOCX export.</p><code>features/reporting/reportDiagrams.sm.* · reportSnapshot · exportReportToPdf/Docx</code></div>
+</div>
+</div>
+
+<div class="cols2">
+<div class="note"><h2>🔄 The one sentence to remember</h2>
+<ul><li>Editor text is parsed <b>once</b> into a typed, hashed <code>SemanticModel</code>; everything downstream (live sim, C code, oracle, coverage, reports) consumes that same IR — so C ≡ canvas by construction, and the differential stage proves it.</li></ul>
+<h2 style="margin-top:10px">📁 File map (where to look first)</h2>
+<table><tr><th>Concern</th><th>Files</th></tr>
+<tr><td>Types / schema</td><td class="c">types/sm_types.ts · stateMachine/smModel.ts · smModelMigration.ts</td></tr>
+<tr><td>Front-end</td><td class="c">smExpressions.ts · smSemanticBuilder.ts · smSemanticValidator.ts · stateSpaceValidation.ts · smAnalysisEngine.ts</td></tr>
+<tr><td>IR</td><td class="c">stateMachine/smSemanticModel.ts (SemanticState/Layer/Transition+routes, symbols, IO, hash)</td></tr>
+<tr><td>Twins</td><td class="c">smInterpreter.ts · smReferenceInterpreter.ts · smAppAdapter.ts · smTrace.ts · smTiming.ts</td></tr>
+<tr><td>Backend</td><td class="c">smCGenerator.ts · smCExpressions.ts · smRuntimeGenerator.ts · smFileWriter.ts · smStandaloneRuntime.ts · xbCGenerator.ts</td></tr>
+<tr><td>Verify</td><td class="c">smPipelineOrchestrator.ts · smTestPlanBuilder/TestManifest · smCHarness · smCTestSuiteRenderer · smCoverageRunner · smDifferentialEngine · smTargetCompileRunner · smAnalysisRunner · smTraceabilityEngine · smReports</td></tr>
+<tr><td>Facade/scripts</td><td class="c">stateMachineCodeGenerator.ts · scripts/build_state_machine_runtime.ts · scripts/verify_sm_codegen.ts</td></tr>
+</table></div>
+<div class="note"><h2>⚠️ Gotchas for contributors</h2>
+<ol>
+<li>Never bypass <code>buildSemanticModel</code> — hand-rolled IR skips LCA/exit-entry computation and silently mistargets transitions.</li>
+<li><code>after(ticks)</code> semantics depend on <code>timerPolicy</code> (logical-tick vs actual-delta) + <code>tickMs</code>; keep host vectors, C harness, and target timebase consistent.</li>
+<li>Guards/actions must survive <code>smCExpressions</code> lowering — verify new syntax in <code>smExpressions.test</code> <b>and</b> <code>smCGenerator.behavior</code> goldens.</li>
+<li>XB-owned states emit <code>SM_XB_*_Init/Enter/Step</code> — changes to XB numerics need <code>xbCConformance/xbDeclaredCConformance</code> re-run.</li>
+<li>HIL <code>hardware</code> activity is PENDING without a bench; CI green ≠ hardware proven — check the evidence bundle's per-activity table.</li>
+</ol></div>
+</div>
+<div class="sub" style="margin-top:12px">Print-friendly: Ctrl+P → Save as PDF · Companion overview: <code>docs/architecture-diagram.html</code> · Tests: <code>npm run test:sm:verification</code> + <code>npm run verify:sm:codegen</code></div>
+</div>
+</body>
+</html>

@@ -143,14 +143,15 @@ export class SysmlWorkerClient {
     taskType: WorkerTaskType,
     revision: number,
     createRequest: (requestId: string) => WorkerRequest,
-    entityCount?: number
+    entityCount?: number,
+    requestIdOverride?: string,
   ): Promise<T> {
     const previousReqId = this.activeRequestByType.get(taskType);
     if (previousReqId && this.pendingRequests.has(previousReqId)) {
       this.cancel(previousReqId);
     }
 
-    const requestId = this.nextRequestId();
+    const requestId = requestIdOverride ?? this.nextRequestId();
     this.latestRevisionByType.set(taskType, revision);
     this.activeRequestByType.set(taskType, requestId);
 
@@ -204,7 +205,7 @@ export class SysmlWorkerClient {
     let cancelled = false;
     const reqId = this.nextRequestId();
 
-    this.validate(payload, revision)
+    this.validate(payload, revision, reqId)
       .then(report => {
         if (!cancelled) {
           onResult(report);
@@ -224,7 +225,8 @@ export class SysmlWorkerClient {
 
   public async validate(
     payload: SysmlRepository | NormalizedSysmlStore,
-    revision: number
+    revision: number,
+    requestIdOverride?: string,
   ): Promise<SysmlValidationReport> {
     return this.execute<SysmlValidationReport>('validate', revision, requestId => ({
       version: SYSML_WORKER_PROTOCOL_VERSION,
@@ -232,7 +234,7 @@ export class SysmlWorkerClient {
       revision,
       taskType: 'validate',
       payload,
-    }));
+    }), undefined, requestIdOverride);
   }
 
   public async project(

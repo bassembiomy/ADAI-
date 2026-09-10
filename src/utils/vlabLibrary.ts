@@ -7679,12 +7679,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Any"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Any"
           }
         ],
         "equation": "PS-Simulink Converter governing physical equation",
@@ -7701,12 +7703,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Any"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Any"
           }
         ],
         "equation": "Simulink-PS Converter governing physical equation",
