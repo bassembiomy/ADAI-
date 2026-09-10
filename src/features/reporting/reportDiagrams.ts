@@ -67,6 +67,7 @@ export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
   if (edge.kind === 'composition') marker = ' marker-start="url(#rf-diamond-filled)"';
   else if (edge.kind === 'aggregation') marker = ' marker-start="url(#rf-diamond-hollow)"';
   else if (edge.kind === 'generalization') marker = ' marker-end="url(#rf-triangle-hollow)"';
+  else if (edge.kind === 'requirementContainment') marker = ' marker-start="url(#requirement-containment-crosshair)"';
   const label = edge.label
     ? `<text font-size="9" fill="#65717e" text-anchor="middle"><textPath href="#edge-${edge.id}" startOffset="50%">${escapeHtml(edge.label)}</textPath></text>`
     : '';

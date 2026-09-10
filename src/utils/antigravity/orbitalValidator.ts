@@ -63,7 +63,13 @@ export async function runOrbitalValidation(files: Record<string, string>): Promi
     return { success: true, errors: [], tierUsed: 'AST' };
   } finally {
     if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      } catch {
+        // Windows can briefly retain compiler-created files. Cleanup is
+        // best-effort and must never turn a completed validation into a
+        // validation failure.
+      }
     }
   }
 }

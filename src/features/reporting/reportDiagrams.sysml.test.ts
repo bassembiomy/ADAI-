@@ -181,4 +181,24 @@ describe('renderDiagrams — snapshot consistency', () => {
   });
 });
 
+describe('renderRequirementsDiagram — Requirement Containment notation', () => {
+  const reqBlocks = [
+    block({ id: 'rParent', name: 'Parent Spec', stereotype: 'requirement', reqId: 'REQ-P' }),
+    block({ id: 'rChild', name: 'Child Spec', stereotype: 'requirement', reqId: 'REQ-C' }),
+  ];
+  const reqRels = [
+    rel({ id: 'rc1', sourceId: 'rParent', targetId: 'rChild', type: 'requirementContainment' }),
+  ];
+
+  it('renders a circle-plus/crosshair marker at container end and never renders composition diamond', () => {
+    const html = renderRequirementsDiagram({ blocks: reqBlocks, relationships: reqRels });
+    expect(html).toContain('REQ-P');
+    expect(html).toContain('REQ-C');
+    expect(html).toContain('marker-start="url(#requirement-containment-crosshair)"');
+    expect(html).toContain('id="requirement-containment-crosshair"');
+    expect(html).not.toContain('url(#rf-diamond-filled)');
+  });
+});
+
+
 

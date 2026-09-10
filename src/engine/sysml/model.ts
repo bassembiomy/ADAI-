@@ -23,7 +23,40 @@ export interface VerificationEvidence { id: string; verificationCaseId: string; 
 export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; contentHash?: string; elementHashes?: Record<string, string>; }
 export interface TraceArtifact { id: string; name: string; kind: 'behavior' | 'simulation' | 'generatedArtifact' | 'source'; ownerId?: string; revision: number; uri?: string; }
 export interface ModelChangeRecord { id: string; revision: number; timestamp: string; command: string; elementIds: string[]; actor?: string; }
-export interface SysmlRelationship { id: string; kind: 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation' | 'binding' | 'itemFlow' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'copy'; sourceId: string; targetId: string; sourceMultiplicity?: Multiplicity; targetMultiplicity?: Multiplicity; sourceRole?: string; targetRole?: string; sourceNavigable?: boolean; targetNavigable?: boolean; sourceAggregation?: 'none' | 'shared' | 'composite'; targetAggregation?: 'none' | 'shared' | 'composite'; suspect?: boolean; lastValidatedRevision?: number; }
+export type RequirementRelationshipKind =
+  | 'requirementContainment'
+  | 'deriveReqt'
+  | 'satisfy'
+  | 'verify'
+  | 'refine'
+  | 'trace'
+  | 'copy';
+
+export interface SysmlRelationship {
+  id: string;
+  kind:
+    | 'association'
+    | 'sharedAggregation'
+    | 'composition'
+    | 'generalization'
+    | 'dependency'
+    | 'allocation'
+    | 'binding'
+    | 'itemFlow'
+    | RequirementRelationshipKind;
+  sourceId: string;
+  targetId: string;
+  sourceMultiplicity?: Multiplicity;
+  targetMultiplicity?: Multiplicity;
+  sourceRole?: string;
+  targetRole?: string;
+  sourceNavigable?: boolean;
+  targetNavigable?: boolean;
+  sourceAggregation?: 'none' | 'shared' | 'composite';
+  targetAggregation?: 'none' | 'shared' | 'composite';
+  suspect?: boolean;
+  lastValidatedRevision?: number;
+}
 
 export interface SysmlRepository {
   schemaVersion: 2;
@@ -59,4 +92,36 @@ export function parseMultiplicity(input: string): Multiplicity {
   const modifiers = new Set((match[3] || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean));
   if ([...modifiers].some(v => !['ordered', 'unordered', 'unique', 'nonunique'].includes(v))) throw new Error(`Invalid multiplicity modifier: ${input}`);
   return { lower, upper, ordered: modifiers.has('ordered'), unique: !modifiers.has('nonunique') };
+}
+
+export type SysmlEntityCollection =
+  | 'definitions'
+  | 'usages'
+  | 'connectors'
+  | 'relationships'
+  | 'requirements'
+  | 'verificationCases'
+  | 'evidence'
+  | 'baselines'
+  | 'artifacts';
+
+export type SysmlEntity =
+  | SysmlDefinition
+  | SysmlUsage
+  | ConnectorUsage
+  | SysmlRelationship
+  | RequirementDefinition
+  | VerificationCase
+  | VerificationEvidence
+  | ModelBaseline
+  | TraceArtifact;
+
+export interface ModelPersistenceMetadata {
+  isChunked?: boolean;
+  chunkCount?: number;
+  chunkSize?: number;
+  checksum?: string;
+  lastSavedRevision?: number;
+  lastSavedAt?: string;
+  formatVersion?: string;
 }

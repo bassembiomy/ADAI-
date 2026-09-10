@@ -272,4 +272,274 @@ describe('sysmlCommandGateway', () => {
     expect(loadResult.valid).toBe(false);
     expect(loadResult.diagnostics.some((d: any) => d.code === 'PERSISTENCE_CHECKSUM_MISMATCH')).toBe(true);
   });
+
+  it('previews container deletion impact, cancels without mutation or revision change, confirms with single revision/audit record, and undoes completely', () => {
+    let state = createSysmlGatewayState();
+    const parentReq: RequirementDefinition = {
+      id: 'req-parent', name: 'ParentReq', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-P', text: 'Parent', status: 'draft', version: '1.0',
+    };
+    const childReq: RequirementDefinition = {
+      id: 'req-child', name: 'ChildReq', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-C', text: 'Child', status: 'draft', version: '1.0',
+    };
+    const containmentRel: SysmlRelationship = {
+      id: 'rel-rc', kind: 'requirementContainment', sourceId: 'req-parent', targetId: 'req-child',
+    };
+
+    // Add elements to state
+    let r = executeSysmlCommand(state, { type: 'createElement', element: parentReq, presentation: { x: 10, y: 10, width: 100, height: 60 } });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, history: r.history };
+    r = executeSysmlCommand(state, { type: 'createElement', element: childReq, presentation: { x: 10, y: 100, width: 100, height: 60 } });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, history: r.history };
+    r = executeSysmlCommand(state, { type: 'createElement', element: containmentRel });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, history: r.history };
+
+    const initialRevision = state.repository.revision;
+    const initialAuditLength = state.repository.auditTrail.length;
+
+    // 1. Preview without confirmation hash -> uncommitted, preview lists complete subtree
+    const unconfirmed = executeSysmlCommand(state, { type: 'deleteElements', elementIds: ['req-parent'] });
+    expect(unconfirmed.committed).toBe(false);
+    expect(unconfirmed.impact).toBeDefined();
+    expect(unconfirmed.impact!.nestedRequirementIds).toEqual(['req-child']);
+    expect(unconfirmed.impact!.deletedElementIds).toEqual(expect.arrayContaining(['req-parent', 'req-child', 'rel-rc']));
+    expect(unconfirmed.repository.revision).toBe(initialRevision);
+    expect(unconfirmed.repository.auditTrail).toHaveLength(initialAuditLength);
+    expect(unconfirmed.repository.requirements['req-parent']).toBeDefined();
+    expect(unconfirmed.repository.requirements['req-child']).toBeDefined();
+
+    // 2. Confirmed deletion with computed impact hash
+    const impactHash = computeImpactHash(unconfirmed.impact!);
+    const confirmed = executeSysmlCommand(state, {
+      type: 'deleteElements',
+      elementIds: ['req-parent'],
+      confirmedImpactHash: impactHash,
+    });
+    expect(confirmed.committed).toBe(true);
+    expect(confirmed.repository.revision).toBe(initialRevision + 1);
+    expect(confirmed.repository.auditTrail).toHaveLength(initialAuditLength + 1);
+    expect(confirmed.repository.auditTrail[confirmed.repository.auditTrail.length - 1].command).toBe('deleteElements');
+    expect(confirmed.repository.requirements['req-parent']).toBeUndefined();
+    expect(confirmed.repository.requirements['req-child']).toBeUndefined();
+    expect(confirmed.repository.relationships['rel-rc']).toBeUndefined();
+
+    // 3. One undo restores exact repository prior to deletion
+    const undone = executeSysmlCommand(
+      { ...state, repository: confirmed.repository, coordinates: confirmed.coordinates, history: confirmed.history },
+      { type: 'undo' },
+    );
+    expect(undone.committed).toBe(true);
+    expect(undone.repository.requirements['req-parent']).toBeDefined();
+    expect(undone.repository.requirements['req-child']).toBeDefined();
+    expect(undone.repository.relationships['rel-rc']).toBeDefined();
+    expect(undone.repository.revision).toBe(initialRevision);
+  });
+
+  it('separates diagram removal from semantic model deletion and preserves containment & revision', () => {
+    let state = createSysmlGatewayState();
+    const parentReq: RequirementDefinition = {
+      id: 'req-parent',
+      name: 'System Specification',
+      requirementId: 'REQ-001',
+      text: 'The system shall perform all operations.',
+      namespace: [],
+      kind: 'requirement',
+      status: 'approved',
+      priority: 'high',
+      risk: 'low',
+      version: '1.0',
+    };
+    const childReq: RequirementDefinition = {
+      id: 'req-child',
+      name: 'Subsystem Specification',
+      requirementId: 'REQ-002',
+      text: 'The subsystem shall perform sub-operations.',
+      namespace: [],
+      kind: 'requirement',
+      status: 'draft',
+      priority: 'medium',
+      risk: 'medium',
+      version: '1.0',
+    };
+    const containmentRel: SysmlRelationship = {
+      id: 'rel-contain',
+      kind: 'requirementContainment',
+      sourceId: 'req-parent',
+      targetId: 'req-child',
+    };
+
+    const s1 = executeSysmlCommand(state, { type: 'createElement', element: parentReq });
+    const s2 = executeSysmlCommand({ ...state, repository: s1.repository, history: s1.history }, { type: 'createElement', element: childReq });
+    const s3 = executeSysmlCommand({ ...state, repository: s2.repository, history: s2.history }, { type: 'createElement', element: containmentRel });
+
+    const initialRevision = s3.repository.revision;
+    const initialAuditLength = s3.repository.auditTrail.length;
+
+    // Set initial diagram presentation membership
+    state = {
+      ...state,
+      repository: s3.repository,
+      history: s3.history,
+      diagramPresentations: {
+        'req-diagram-1': { elementIds: ['req-parent', 'req-child'] },
+      },
+    };
+
+    // Remove parent from diagram only
+    const removeResult = executeSysmlCommand(state, {
+      type: 'removeFromDiagram',
+      diagramId: 'req-diagram-1',
+      elementIds: ['req-parent'],
+    });
+
+    expect(removeResult.committed).toBe(true);
+    // 1. Repository revision is preserved!
+    expect(removeResult.repository.revision).toBe(initialRevision);
+    expect(removeResult.repository.auditTrail).toHaveLength(initialAuditLength);
+
+    // 2. Both semantic requirements, containment relationship, and RTM rows survive
+    expect(removeResult.repository.requirements['req-parent']).toBeDefined();
+    expect(removeResult.repository.requirements['req-child']).toBeDefined();
+    expect(removeResult.repository.relationships['rel-contain']).toBeDefined();
+    expect(removeResult.repository.relationships['rel-contain'].kind).toBe('requirementContainment');
+
+    // 3. Only presentation membership changes
+    expect(removeResult.diagramPresentations['req-diagram-1'].elementIds).toEqual(['req-child']);
+    expect(removeResult.diagramPresentations['req-diagram-1'].elementIds).not.toContain('req-parent');
+
+    // 4. View for this diagram filters out removed element
+    const filteredView = projectLegacyDiagram(removeResult.repository, removeResult.coordinates, removeResult.diagramPresentations, 'req-diagram-1');
+    expect(filteredView.blocks.map(b => b.id)).toEqual(['req-child']);
+
+    // 5. Presentation-only operation undoes without modifying repository revision
+    const undonePresentation = executeSysmlCommand(
+      {
+        ...state,
+        repository: removeResult.repository,
+        coordinates: removeResult.coordinates,
+        diagramPresentations: removeResult.diagramPresentations,
+        history: removeResult.history,
+        presentationHistory: (removeResult as any).presentationHistory,
+      },
+      { type: 'undo' },
+    );
+    expect(undonePresentation.committed).toBe(true);
+    expect(undonePresentation.diagramPresentations['req-diagram-1'].elementIds).toEqual(expect.arrayContaining(['req-parent', 'req-child']));
+    expect(undonePresentation.repository.revision).toBe(initialRevision);
+
+    // 6. Project payload serialization & load round-trips diagramPresentations
+    const payload = buildCanonicalSysmlProjectPayload(
+      {
+        ...state,
+        repository: removeResult.repository,
+        diagramPresentations: removeResult.diagramPresentations,
+      },
+      { version: '1.0', projectName: 'Test Project' },
+    );
+    expect(payload.diagramPresentations).toEqual({
+      'req-diagram-1': { elementIds: ['req-child'] },
+    });
+
+    const loaded = loadCanonicalSysmlProject(payload);
+    expect(loaded.diagramPresentations).toEqual({
+      'req-diagram-1': { elementIds: ['req-child'] },
+    });
+    expect(loaded.repository.requirements['req-parent']).toBeDefined();
+    expect(loaded.repository.requirements['req-child']).toBeDefined();
+  });
+
+  it('coalesces rapid pointer drag updates sharing a coalesceKey into a single history entry', () => {
+    let state = createSysmlGatewayState();
+    const block: BlockDefinition = {
+      id: 'blk-drag',
+      name: 'DraggableBlock',
+      kind: 'block',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+
+    let r = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: block,
+      presentation: { x: 0, y: 0 },
+    });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, store: r.store, patchHistory: r.patchHistory, history: r.history };
+
+    // Simulate 10 drag move events with same coalesceKey
+    for (let i = 1; i <= 10; i++) {
+      r = executeSysmlCommand(state, {
+        type: 'updatePresentation',
+        elementId: 'blk-drag',
+        presentation: { x: i * 10, y: i * 10 },
+        coalesceKey: 'drag-blk-drag',
+      });
+      state = { ...state, coordinates: r.coordinates, store: r.store, patchHistory: r.patchHistory, history: r.history };
+    }
+
+    expect(state.coordinates['blk-drag']).toEqual({ x: 100, y: 100 });
+    // In patchHistory, all 10 drag operations should have coalesced into ONE entry!
+    expect(state.patchHistory?.past.length).toBe(2); // 1 create + 1 coalesced drag
+
+    // Single undo restores back to initial position (0, 0)
+    const undone = executeSysmlCommand(state, { type: 'undo' });
+    expect(undone.coordinates['blk-drag']).toEqual({ x: 0, y: 0 });
+
+    // Redo restores to final position (100, 100)
+    const redone = executeSysmlCommand(
+      {
+        ...state,
+        repository: undone.repository,
+        coordinates: undone.coordinates,
+        diagramPresentations: undone.diagramPresentations,
+        store: undone.store,
+        patchHistory: undone.patchHistory,
+        history: undone.history,
+      },
+      { type: 'redo' },
+    );
+    expect(redone.coordinates['blk-drag']).toEqual({ x: 100, y: 100 });
+  });
+
+  it('bounds history memory under configurable budget', () => {
+    let state = createSysmlGatewayState(undefined, undefined, undefined, {
+      maxEntries: 5,
+      maxBytes: 5000,
+    });
+
+    const block: BlockDefinition = {
+      id: 'blk-budget',
+      name: 'BudgetBlock',
+      kind: 'block',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    let r = executeSysmlCommand(state, { type: 'createElement', element: block });
+    state = { ...state, repository: r.repository, store: r.store, patchHistory: r.patchHistory, history: r.history };
+
+    for (let i = 1; i <= 15; i++) {
+      r = executeSysmlCommand(state, {
+        type: 'updateElement',
+        elementId: 'blk-budget',
+        patch: { name: `Name_v${i}` },
+      });
+      state = { ...state, repository: r.repository, store: r.store, patchHistory: r.patchHistory, history: r.history };
+    }
+
+    // Both patchHistory and legacy MutationHistory are capped to prevent memory leaks!
+    expect(state.patchHistory?.past.length).toBeLessThanOrEqual(5);
+    expect(state.history.past.length).toBeLessThanOrEqual(20);
+  });
 });
+
+

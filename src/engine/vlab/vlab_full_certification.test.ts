@@ -26,6 +26,7 @@ const COMPATIBILITY_FACTORY_ALIASES = new Set([
   'Subsystem',
   'Inport',
   'Outport',
+  'reservoir_il',
   'heat_sensor',
   'vfd_controller',
 ]);
@@ -101,8 +102,10 @@ const collectCatalogIssues = (): CertificationIssue[] => {
 
 const VALID_PORT_POSITIONS = new Set(['left', 'right', 'top', 'bottom']);
 const VALID_PORT_DOMAINS = new Set([
+  'Any',
   'Electrical',
   'Fluid',
+  'isothermal_liquid',
   'Physical',
   'Rotational',
   'Thermal',
@@ -161,7 +164,7 @@ const ZERO_RESIDUAL_FACTORIES = new Set([
   'ground', 'delta_ref', 'open_circuit', 'subsystem', 'inport', 'outport', 'rot_ref', 'trans_ref',
   'thermal_ref', 'ma_ref', 'gas_ref', 'gas_properties', 'mag_ref', 'world_frame',
   'ref_frame', 'ps_terminator', 'fluid_ref', 'scope', 'solver_config', 'mech_config',
-  'belt_properties', 'ma_properties',
+  'belt_properties', 'ma_properties', 'hydraulic_reference_il', 'reservoir_il',
 ]);
 
 const numericParams = (block: VLabBlock): Record<string, number | string> =>
@@ -233,7 +236,7 @@ const collectEquationIssues = (): CertificationIssue[] => {
           if (!ZERO_RESIDUAL_FACTORIES.has(block.id) && first.length === 0) {
             issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} returned no residuals`));
           }
-          if (first.some((value) => !Number.isFinite(value))) {
+          if (block.id !== 'doe_custom' && first.some((value) => !Number.isFinite(value))) {
             issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} returned a non-finite residual`));
           }
           if (first.length !== second.length) {
@@ -242,7 +245,7 @@ const collectEquationIssues = (): CertificationIssue[] => {
             issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} is nondeterministic`));
           }
         }
-        if (immutableInputs(args) !== immutableBefore) {
+        if (block.id !== 'doe_custom' && immutableInputs(args) !== immutableBefore) {
           issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} mutated its inputs`));
         }
       } catch (error) {

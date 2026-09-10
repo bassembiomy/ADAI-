@@ -26,6 +26,10 @@ function mockRows(count: number): RtmRow[] {
     status: i === 0 ? 'verified' : i === 1 ? 'failed' : i === 2 ? 'suspect' : 'covered',
     changeKind: i === 0 ? 'modified' : i === 1 ? 'added' : i === 2 ? 'suspect' : 'unchanged',
     relationshipIds: [`rel-${i}`],
+    parents: [],
+    children: [],
+    coveringBlocks: [],
+    requirementRelations: [],
     blocks: [`blk-${i}`],
     parts: [],
     ports: [],
@@ -87,5 +91,51 @@ describe('VirtualizedTraceabilityGrid component', () => {
     expect(nextGridFocusIndex(5, 'End', 10)).toBe(9);
     expect(nextGridFocusIndex(5, 'PageDown', 10, 5)).toBe(9);
     expect(nextGridFocusIndex(5, 'PageUp', 10, 5)).toBe(0);
+  });
+
+  it('renders hierarchy and covering blocks with relationship connection types in virtual grid', () => {
+    const row: RtmRow = {
+      requirement: {
+        id: 'r1',
+        requirementId: 'REQ-001',
+        name: 'Parent Requirement',
+        text: 'Top level',
+        status: 'approved',
+        version: '1.0',
+        kind: 'requirement',
+        namespace: [],
+      },
+      status: 'covered',
+      relationshipIds: ['rc1', 's1'],
+      parents: [],
+      children: [{ id: 'r2', requirementId: 'REQ-002', name: 'Child Requirement', kind: 'requirementContainment' }],
+      coveringBlocks: [{ id: 'b1', name: 'SubsystemBlock', kind: 'satisfy', type: 'block' }],
+      requirementRelations: [],
+      blocks: ['b1'],
+      parts: [],
+      ports: [],
+      connectors: [],
+      behaviors: [],
+      simulations: [],
+      verificationCases: [],
+      evidence: [],
+      artifacts: [],
+      unresolvedEndpointIds: [],
+    };
+
+    const html = renderToStaticMarkup(
+      <VirtualizedTraceabilityGrid
+        rows={[row]}
+        containerHeight={200}
+        rowHeight={40}
+        scrollTop={0}
+      />
+    );
+
+    expect(html).toContain('Hierarchy &amp; Relations');
+    expect(html).toContain('«containment»');
+    expect(html).toContain('REQ-002');
+    expect(html).toContain('«satisfy»');
+    expect(html).toContain('SubsystemBlock');
   });
 });

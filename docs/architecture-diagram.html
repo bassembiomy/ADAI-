@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADIA Engineering Suite — Software Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0b1220; color: #e2e8f0; padding: 32px 24px; }
+  .page { max-width: 1280px; margin: 0 auto; }
+  h1 { font-size: 24px; letter-spacing: .3px; }
+  h1 span { color: #22d3ee; }
+  .sub { color: #94a3b8; font-size: 13px; margin: 6px 0 20px; line-height: 1.6; }
+  .layer { border: 1px solid #1e293b; border-radius: 14px; padding: 16px 16px 14px; margin-bottom: 6px; background: #0f172a; }
+  .layer-title { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; letter-spacing: .6px; white-space: nowrap; }
+  .l0 .badge { background: #1d4ed8; } .l1 .badge { background: #0e7490; }
+  .l2 .badge { background: #6d28d9; } .l3 .badge { background: #b45309; }
+  .l4 .badge { background: #166534; } .l5 .badge { background: #9f1239; }
+  .layer-title h2 { font-size: 14px; }
+  .layer-title p { font-size: 11.5px; color: #94a3b8; margin-left: auto; font-family: Consolas, monospace; }
+  .grid { display: grid; gap: 10px; }
+  .g6 { grid-template-columns: repeat(6, 1fr); } .g5 { grid-template-columns: repeat(5, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); } .g3 { grid-template-columns: repeat(3, 1fr); }
+  .box { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px 11px; min-height: 88px; }
+  .box h3 { font-size: 12.5px; color: #fff; margin-bottom: 4px; }
+  .box h3 i { font-style: normal; margin-right: 6px; }
+  .box p { font-size: 11px; color: #94a3b8; line-height: 1.5; }
+  .box code { font-size: 10px; color: #67e8f9; display: block; margin-top: 5px; word-break: break-word; font-family: Consolas, monospace; line-height: 1.5; }
+  .box.hot { border-color: #f59e0b; box-shadow: 0 0 0 1px #f59e0b inset; }
+  .box.ok { border-color: #22c55e; }
+  .arrow { text-align: center; color: #475569; font-size: 16px; line-height: 1.3; padding: 4px 0; }
+  .arrow small { display: block; font-size: 10.5px; color: #64748b; letter-spacing: .3px; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .note { border: 1px dashed #334155; border-radius: 12px; padding: 14px 16px; margin-top: 14px; background: #0f172a; }
+  .note h2 { font-size: 13px; margin-bottom: 8px; color: #fcd34d; }
+  .note ol, .note ul { font-size: 12px; color: #cbd5e1; line-height: 1.7; padding-left: 18px; }
+  .note code { color: #67e8f9; font-size: 11px; font-family: Consolas, monospace; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: #94a3b8; margin-top: 14px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+  @media (max-width: 1000px) { .g6,.g5,.g4 { grid-template-columns: repeat(2,1fr);} .g3,.cols2{grid-template-columns:1fr;} }
+  @media print { body { background: #fff; color: #111; } .layer,.note { background:#fff; border-color:#999;} .box{background:#f1f5f9;border-color:#999;} .box h3{color:#111;} .box p,.sub{color:#333;} }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>ADIA Engineering Suite <span>— Software Architecture</span></h1>
+  <p class="sub">Electron + React 18 + Vite + TypeScript &nbsp;|&nbsp; Desktop shell (Forge/Squirrel) + Capacitor/Android &nbsp;|&nbsp; Verified against live repo: <code>src/App.tsx · src/electron · src/components · src/engine · src/services · src/features/reporting · src/security · src/utils</code></p>
+
+  <!-- L0 -->
+  <div class="layer l0">
+    <div class="layer-title"><span class="badge">L0 · SHELL & ENTRY</span><h2>Desktop shell, bootstrap, UI foundation</h2><p>src/main.cjs · electron/ · index.tsx · App.tsx · bootstrap.cjs</p></div>
+    <div class="grid g4">
+      <div class="box"><h3><i>🖥️</i>Electron shell</h3><p>Forge packaging, Squirrel lifecycle, .adia file association, protected/obfuscated build (bytenode), main↔renderer IPC.</p><code>src/main.cjs · preload.cjs · electron/main · electron/preload · projectFiles/</code></div>
+      <div class="box"><h3><i>🧭</i>App shell + router</h3><p>Canvas editors, tabs, undo history, error boundary, global error panel, FPS monitor, standby/intro overlays.</p><code>App.tsx · index.tsx · GlobalErrorBoundary · LiveFpsMonitor · standby/</code></div>
+      <div class="box"><h3><i>🎨</i>UI toolkit</h3><p>Tailwind + Radix/shadcn primitives, xyflow diagrams, three.js 3D, Plotly/recharts charts, GSAP motion.</p><code>components/common · components/ThreeDX* · index.css · tailwind.config</code></div>
+      <div class="box"><h3><i>🤖</i>AI assistants</h3><p>Gemini-backed Architect/Vibe sidebars; actions applied to the model via a validated action processor.</p><code>components/AiArchitectSidebar · ArchitectBrainSidebar · VibeDashboard · utils/aiActionProcessor · services/ai</code></div>
+    </div>
+  </div>
+  <div class="arrow">▼<small>editor state → blocks · parts · ports · connectors · relationships · states · transitions · labs</small></div>
+
+  <!-- L1 -->
+  <div class="layer l1">
+    <div class="layer-title"><span class="badge">L1 · EDITOR WORKSPACES</span><h2>Diagram editors — all mutate one project model</h2><p>components/vlab · xbridges · hil · entropy · doe · reporting</p></div>
+    <div class="grid g6">
+      <div class="box"><h3><i>🧱</i>SysML BDD / IBD / Req</h3><p>Blocks, ports, parts, connectors, satisfy / verify / deriveReqt / trace; connection routing.</p><code>sysml_types · sysmlConnectionRouting</code></div>
+      <div class="box"><h3><i>🔁</i>State Machine</h3><p>States, layers, transitions, junctions, HSM-LCA; clipboard + geometry helpers.</p><code>types/sm_types · utils/stateMachine/ · transitionGeometry</code></div>
+      <div class="box"><h3><i>🧪</i>VLab workspace</h3><p>Physical-system canvas, labs library, scope panels.</p><code>components/vlab/VLabWorkspace · utils/vlabLibrary</code></div>
+      <div class="box"><h3><i>🎛️</i>X-Bridges workspace</h3><p>Control block diagrams, shortcuts, vector views.</p><code>components/xbridges/XbridgesWorkspace · utils/xbridges/</code></div>
+      <div class="box"><h3><i>🔌</i>HIL workspace</h3><p>Configure · Build &amp; Flash · telemetry dashboard, split panes, HW sync modal.</p><code>components/hil/HILWorkspace · HardwareSyncModal</code></div>
+      <div class="box"><h3><i>🌀</i>OPM / Entropy + DOE</h3><p>OPM objects/processes, RSM/GMDH/Taguchi stats + Plotly views.</p><code>components/entropy · components/doe</code></div>
+    </div>
+  </div>
+  <div class="arrow">▼<small>mutations → integrity + persistence (single project payload, snapshots, .adia files)</small></div>
+
+  <!-- L2 -->
+  <div class="layer l2">
+    <div class="layer-title"><span class="badge">L2 · INTEGRITY · PERSISTENCE · REPORTING</span><h2>Single source of truth: rules → snapshot → report</h2><p>services/ · projectFiles/ · features/reporting/ · utils/adiaProjectPersistence</p></div>
+    <div class="grid g4">
+      <div class="box ok"><h3><i>✅</i>sysmlIntegrityService</h3><p>Cascade delete block/port/part/requirement, impact preview, connector + traceability validators, req-ID uniqueness, migration.</p><code>services/sysmlIntegrityService.ts</code></div>
+      <div class="box ok"><h3><i>✅</i>reportModelConsistency</h3><p>UI-wired cascade (App deleteBlock/deletePart), reconciles dangling / duplicate / invalid refs into deterministic snapshot.</p><code>services/reportModelConsistency.ts</code></div>
+      <div class="box ok"><h3><i>✅</i>Persistence + .adia</h3><p>Unified payload, snapshots, unsaved-guard, legacy JSON hydration, import validation, Windows association + Squirrel hooks.</p><code>utils/adiaProjectPersistence · jsonImportValidator · projectFiles/ · diagramExporter</code></div>
+      <div class="box ok"><h3><i>✅</i>Reporting pipeline</h3><p>snapshot → validate → BDD · Req · IBD · Trace · SM · XHMI renderers → HTML → PDF / DOCX / XLSX / ZIP.</p><code>features/reporting/ (reportSnapshot · reportDocumentModel · reportDiagrams* · exportReportToPdf/Docx)</code></div>
+    </div>
+  </div>
+  <div class="arrow">▼<small>validated snapshot + generated artifacts → simulation &amp; codegen engines</small></div>
+
+  <!-- L3 -->
+  <div class="layer l3">
+    <div class="layer-title"><span class="badge">L3 · SIMULATION & CODEGEN ENGINES</span><h2>Execution semantics per domain (headless, testable)</h2><p>engine/vlab · xbridges · opm · doe · gmdh · embedded · mcal · targetPacks</p></div>
+    <div class="grid g5">
+      <div class="box"><h3><i>🌊</i>VLab kernel</h3><p>Network extract → DAE assemble → Euler/RK4/BDF/Adaptive + Sparse/Dense solvers; whitebox + certification harnesses.</p><code>engine/vlab (DAEAssembler · ImplicitSolver · SparseLinearSolver · kernel/)</code></div>
+      <div class="box"><h3><i>📦</i>X-Bridges engine</h3><p>Block-definition library, solvers, adaptive + MPC solvers, field-weakening scripts.</p><code>engine/xbridges (BlockDefinitions · Solvers · AdaptiveSolver · MpcSolver · XbridgesEngine)</code></div>
+      <div class="box"><h3><i>⚙️</i>State-machine → C</h3><p>Analysis engine, MISRA C generator, compiled runtime bundle, golden/behavior/phase-2 tests.</p><code>utils/stateMachineCodeGenerator · smAnalysisEngine · generated/</code></div>
+      <div class="box"><h3><i>🧬</i>OPM → Embedded C</h3><p>Pipeline: OPL lex/parse → C-IR → C generator + host harness; conformance + mutation-resistance suites.</p><code>engine/opm (pipeline · runtime · expression* · cGenerator · cRuntimeGenerator · conformanceHarness)</code></div>
+      <div class="box"><h3><i>📊</i>DOE / GMDH stats</h3><p>RSM, GMDH-combi, Taguchi, least-squares fitting; hydraulic units lib.</p><code>engine/doe · engine/gmdh · utils/hydraulicUnits</code></div>
+    </div>
+    <div class="grid g3" style="margin-top:10px">
+      <div class="box"><h3><i>🔧</i>Embedded / HIL codegen</h3><p>HIL code + driver templates, self-test generator, compilation + evidence checks.</p><code>engine/embedded · engine/hil (hilCodeGenerator · hilDriverTemplates · hilSelfTestGenerator)</code></div>
+      <div class="box"><h3><i>🎯</i>Target packs / MCAL</h3><p>Registry, resolver, schema + asset validation, builtin loader.</p><code>engine/targetPacks · engine/mcal · target-packs/</code></div>
+      <div class="box"><h3><i>🧰</i>Toolchains</h3><p>Bundled AVR-GCC + toolchain manager/verifier (hash-pinned) for reproducible firmware builds.</p><code>toolchains/avr-gcc · security/toolchain*</code></div>
+    </div>
+  </div>
+  <div class="arrow">▼<small>build → flash → observe loop (firmware + telemetry)</small></div>
+
+  <!-- L4 -->
+  <div class="layer l4">
+    <div class="layer-title"><span class="badge">L4 · HIL / TARGETS & EXTERNAL GATEWAYS</span><h2>Hardware + interchange with the outside world</h2><p>engine/hil · serialport · FactoryIOGateway · ThreeDXGateway · simulink export</p></div>
+    <div class="grid g4">
+      <div class="box"><h3><i>🔥</i>HIL build &amp; flash</h3><p>Orchestrator, serial sessions, wire protocol, pin validation, trace comparator, vector suites, env doctor + build matrix.</p><code>engine/hil (hilOrchestrator · hilSerialSession · hilProtocol · hilTraceComparator) · scripts/hil_*</code></div>
+      <div class="box"><h3><i>🛡️</i>HIL policy gates</h3><p>Build/flash policies + services, probe service, recipes, ELF inspector — unsafe operations blocked by default.</p><code>security/hilBuild* · hilFlash* · hilProbeService · elfInspector</code></div>
+      <div class="box"><h3><i>🔗</i>Gateways &amp; twins</h3><p>FactoryIO, ThreeDX dashboard/service, Simulink .m export, vacuum/airfryer/induction-heater twins, nav-library verifier.</p><code>FactoryIOGateway · ThreeDXGateway · threeDXService · generate_simulink_model.m · *.adia/.json twins</code></div>
+      <div class="box"><h3><i>📄</i>Exports &amp; delivery</h3><p>PDF (jspdf+html2canvas), DOCX, XLSX, JSZip bundles, 3D/CDN assets, Capacitor Android target.</p><code>exportReportToPdf/Docx · jszip/xlsx · public/ · @capacitor/*</code></div>
+    </div>
+  </div>
+  <div class="arrow">▼<small>cross-cutting concerns wrap all layers</small></div>
+
+  <!-- L5 -->
+  <div class="layer l5">
+    <div class="layer-title"><span class="badge">L5 · CROSS-CUTTING</span><h2>Security · quality · build &amp; ship</h2><p>src/security · scripts/ · vitest suites · vite/forge</p></div>
+    <div class="grid g3">
+      <div class="box"><h3><i>🛡️</i>Security &amp; safety</h3><p>Input validation, roles, credential vault, ASAR guard, rate limiter, generated-code + OPM + toolchain verifiers, SAST scan.</p><code>security/inputValidator · roleSecurity · credentialVault · asarGuard · generatedCodeVerifier · opmCodeVerifier · SECURITY.md</code></div>
+      <div class="box"><h3><i>🧪</i>Verification</h3><p>Vitest per engine (VLab cert, OPM goldens/conformance, SM verification, DOE, HIL matrices/opt/flash/vector), zero-G CI gate.</p><code>npm run test:* · scripts/zero_g_ci · scripts/run_hil_* · scripts/hil_build_matrix</code></div>
+      <div class="box"><h3><i>🚀</i>Build &amp; ship</h3><p>tsc + Vite bundle, Electron Forge makers (Squirrel/zip/deb/rpm), obfuscation, audits, Tailwind/three/plotly stack.</p><code>vite.config · forge.config.cjs · audit:security · scan:sast · audit:prebuild</code></div>
+    </div>
+  </div>
+
+  <div class="cols2">
+    <div class="note">
+      <h2>🔄 Canonical data flow (top → bottom, then loop back)</h2>
+      <ol>
+        <li><b>Edit:</b> workspaces mutate the project model in <code>App.tsx</code> (blocks · parts · ports · connectors · relationships · states · labs).</li>
+        <li><b>Guard:</b> <code>sysmlIntegrityService</code> + <code>reportModelConsistency</code> cascade/clean deletions; persistence writes snapshots / <code>.adia</code>.</li>
+        <li><b>Report:</b> <code>features/reporting</code> builds a validated <code>rev_*</code> snapshot → renders BDD/Req/IBD/Trace/SM/XHMI → exports PDF/DOCX.</li>
+        <li><b>Execute:</b> domain engines run headless (VLab DAE, X-Bridges blocks, SM→C, OPM→C, DOE/GMDH) — each with its own Vitest goldens.</li>
+        <li><b>Deploy &amp; observe:</b> HIL orchestrator builds (hash-pinned toolchain) → policy-gated flash → serial telemetry back into dashboards.</li>
+      </ol>
+    </div>
+    <div class="note">
+      <h2>⚠️ Known decoupling (read before extending)</h2>
+      <ol>
+        <li><b>SysML ⇆ simulation is manual:</b> no automatic Block→VLab/X-Bridges binding; <code>verify/allocation</code> links are labels, not execution bindings.</li>
+        <li><b>Two deletion paths coexist:</b> UI cascade helper vs pure-rule integrity service — converge new logic on the service.</li>
+        <li><b>Report assembly:</b> prefer the canonical <code>features/reporting</code> snapshot pipeline over legacy inline filters in <code>App.tsx</code>.</li>
+        <li><b>HIL is deny-by-default:</b> build/flash/probe go through <code>src/security/hil*</code> policy gates; keep recipes + hashes in sync.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#22c55e"></span>✓ implemented + tested</span>
+    <span><span class="dot" style="background:#f59e0b"></span>⚠ policy-gated / needs care (HIL flash)</span>
+    <span><span class="dot" style="background:#38bdf8"></span>▼ data-flow direction (top → bottom, then hardware loop)</span>
+    <span>Print-friendly: Ctrl+P → Save as PDF · Source: this repo, verified 2026-09-08</span>
+  </div>
+</div>
+</body>
+</html>

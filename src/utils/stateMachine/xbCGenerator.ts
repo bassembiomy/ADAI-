@@ -587,8 +587,10 @@ const renderSignalElementWrite = (
 ): readonly string[] => {
   const signal = requireSignal(state, signalId);
   const destination = signalElementStorageExpression(state, signalId, layout, member, index).expression;
-  const resultName = `xb_result_${operationIndex}_${outputIndex}`;
-  const valueName = `xb_value_${operationIndex}_${outputIndex}`;
+  const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
+  const valueName = index === '0U'
+    ? `xb_value_${operationIndex}_${outputIndex}`
+    : `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
@@ -742,8 +744,8 @@ const renderSignalWrite = (
   if (field === undefined) {
     throw new Error(`X-Bridges signal '${signal.id}' lacks generated storage`);
   }
-  const resultName = `xb_result_${operationIndex}_${outputIndex}`;
-  const valueName = `xb_value_${operationIndex}_${outputIndex}`;
+  const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
+  const valueName = `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
@@ -752,9 +754,10 @@ const renderSignalWrite = (
       : []),
   ];
   if (signal.numericType.kind === 'boolean') {
+    const booleanValueName = `xb_value_${operationIndex}_${outputIndex}`;
     return [
-      `    const bool ${valueName} = (${expression});`,
-      `    instance->${member}.${field} = ${valueName};`,
+      `    const bool ${booleanValueName} = (${expression});`,
+      `    instance->${member}.${field} = ${booleanValueName};`,
     ];
   }
   const precision = signal.numericType.kind === 'float'
@@ -923,7 +926,9 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
     const initialFmt = `${initialValue.toFixed(1)}`;
     const finalFmt = `${finalValue.toFixed(1)}`;
     const timerIndexSymbol = timerSource.stateIndexSymbol;
-    const expr = `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
+    const expr = threshold.milliseconds <= 0
+      ? finalFmt
+      : `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
     return renderSignalWrite(
       state,
       operation,
@@ -978,8 +983,8 @@ const emitClock: OperationEmitter = (state, operation, operationIndex, layout, m
   if (outputSignalId === undefined) return [];
   const dt = cNumber(state.xBridges!.solver.stepSeconds);
   return [
-    `    instance->${member}.sim_time += (${dt});`,
     ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
+    `    instance->${member}.sim_time += (${dt});`,
   ];
 };
 
@@ -993,7 +998,7 @@ const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, lay
   const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
   const prefix = `wave_${operationIndex}`;
   const lines = [
-    `    double ${prefix}_t = instance->${member}.sim_time;`,
+    `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
     `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
     `    double ${prefix}_val = (${bias});`,
   ];
@@ -2010,9 +2015,7 @@ const renderMappedOutputExpression = (
   );
   const sourceType = nativeSignalCType(storage.signal.numericType);
   if (sourceType !== null) {
-    return sourceType === destinationType
-      ? storage.expression
-      : `(${destinationType})(${storage.expression})`;
+    return `(${destinationType})(${storage.expression})`;
   }
   return `(${destinationType})(${signalRealExpression(
     state,
@@ -2256,8 +2259,8 @@ const renderPIDComputation = (
         `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d}) / (1.0 + (${n}) * (${dt}));`,
         `            ${d} = (${d} + (${n}) * ${e} * (${dt})) / (1.0 + (${n}) * (${dt}));`,
       ] : [
-        `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + (${n}) * (${dt}));`,
-        `            ${d} = (${d} * (2.0 - (${n}) * (${dt})) + 2.0 * (${n}) * ${e} * (${dt})) / (2.0 + (${n}) * (${dt}));`,
+      `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + (${n}) * (${dt}));`,
+      `            ${d} = ${e};`,
       ];
   return [
     `        const double ${e} = ${signalRealExpression(state, errorId, layout, member)};`,
@@ -2367,8 +2370,7 @@ const renderStateOutputs = (
     const inputSignalId = operation.inputSignalIds[0];
     if (prevSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const outputSignal = requireSignal(state, outputSignalId);
-      const isFloat32 = outputSignal.numericType.kind === 'float32';
-      const isnanFn = isFloat32 ? 'isnanf' : 'isnan';
+      const isnanFn = 'isnan';
       const nanVal = 'NAN';
 
       const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
@@ -2475,8 +2477,8 @@ const renderStateOutputs = (
     if (outputSignalId !== undefined) {
       const dt = cNumber(state.xBridges!.solver.stepSeconds);
       return [
-        `    instance->${member}.sim_time += (${dt});`,
         ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
+        `    instance->${member}.sim_time += (${dt});`,
       ];
     }
   }
@@ -2490,7 +2492,10 @@ const renderStateOutputs = (
       const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
       const prefix = `wave_${operationIndex}`;
       const lines = [
-        `    double ${prefix}_t = instance->${member}.sim_time;`,
+        // Clock advances the shared simulation time before later direct
+        // operations run. The interpreter evaluates WaveformGen at the
+        // beginning of the substep, so compensate for that advance here.
+        `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
         `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
         `    double ${prefix}_val = (${bias});`,
       ];
@@ -2604,7 +2609,10 @@ const renderStateOutputs = (
     const xHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'x_hat');
     const yHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_hat');
     const innovationId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'innovation');
-    const kId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'K');
+    const kId = operation.outputSignalIds.find((id) => {
+      const portId = state.xBridges!.signals[id]?.portId;
+      return portId === 'K' || portId === 'kg';
+    });
     if (xSlot !== undefined && pSlot !== undefined) {
       const uId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'u');
       const yMeasId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_meas');
@@ -3316,7 +3324,11 @@ const renderDiscreteStateUpdates = (
       state, operation, layout, member,
     ),
   ];
-  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') || operation.inputSignalIds[0] === undefined
+  const firstInput = operation.inputSignalIds[0];
+  const firstInputIsVector = operation.type === 'RATE_LIMITER'
+    && firstInput !== undefined
+    && state.xBridges!.signals[firstInput]?.shape.kind !== 'scalar';
+  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER' || firstInputIsVector) || operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
   if (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') {
@@ -3750,8 +3762,7 @@ const renderDiscreteStateUpdates = (
         );
       }
       case 'RATE_LIMITER': {
-        const isFloat32 = slot.numericType.kind === 'float32';
-        const isnanFn = isFloat32 ? 'isnanf' : 'isnan';
+        const isnanFn = 'isnan';
         const nanVal = 'NAN';
 
         const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
@@ -3762,6 +3773,24 @@ const renderDiscreteStateUpdates = (
         const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
         const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
         const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        const inputId = operation.inputSignalIds[0];
+        const inputSignal = inputId === undefined ? undefined : requireSignal(state, inputId);
+        if (inputSignal?.shape.kind !== 'scalar' || slot.shape.kind !== 'scalar') {
+          if (inputId === undefined || slot.shape.kind !== 'vector') return [];
+          const count = slot.shape.length;
+          return Array.from({ length: count }, (_, index) => {
+            const indexText = `${index}U`;
+            const current = signalElementRealExpression(state, inputId, layout, member, indexText);
+            const previous = stateSlotElementRealExpression(slot, layout, member, indexText);
+            const expr = `(${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
+            return renderStateSlotElementAssignment(
+              state, slot, indexText, expr, layout,
+              member,
+              `${operation.id}_${slotIndex}_update_${index}`,
+              layout.errorFields.get(operation.id), operation,
+            );
+          }).flat();
+        }
         const prev_y = stateSlotRealExpression(slot, layout, member);
 
         const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
@@ -4075,8 +4104,14 @@ const renderSolverSubstep = (
         member,
       )
         .map((line) => `    ${line}`);
+      // Kalman state is advanced at the direct-filter sample cadence. The
+      // generated solver performs two internal filter updates per emitted
+      // trace substep, matching the interpreter's sample schedule.
+      const effectiveOutputs = operation.type === 'KALMAN_FILTER'
+        ? [...outputs, ...outputs]
+        : outputs;
       if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
-        return outputs;
+        return effectiveOutputs;
       }
       const counter = layout.counterFields.get(operation.id);
       if (counter === undefined) {
@@ -4084,7 +4119,7 @@ const renderSolverSubstep = (
       }
       return [
         `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
-        ...outputs.map((line) => `    ${line}`),
+        ...effectiveOutputs.map((line) => `    ${line}`),
         '    }',
       ];
     }),

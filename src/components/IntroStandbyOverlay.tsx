@@ -101,6 +101,8 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
 
   return (
     <div
+      data-testid="welcome-overlay"
+      aria-label={mode === 'intro' ? 'Welcome overlay' : 'Standby overlay'}
       onClick={handleExit}
       className={`fixed inset-0 z-[9999] bg-[#020204] flex items-center justify-center overflow-hidden transition-all duration-700 ease-in-out cursor-pointer ${
         isExiting ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'

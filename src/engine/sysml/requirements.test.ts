@@ -4,10 +4,12 @@ import {
   clearSuspectLink,
   createModelBaseline,
   deriveRequirementView,
+  getNestedRequirementIds,
   markSuspectLinks,
   synchronizeRequirementCopy,
   transitionRequirementStatus,
   validateRequirement,
+  validateRequirementContainment,
 } from './requirements';
 
 const requirement = (id: string, requirementId = id): RequirementDefinition => ({
@@ -42,8 +44,8 @@ describe('governed SysML requirements', () => {
     model.relationships.badSatisfy = { id: 'badSatisfy', kind: 'satisfy', sourceId: 'r1', targetId: 'b' };
     model.relationships.d1 = { id: 'd1', kind: 'deriveReqt', sourceId: 'r1', targetId: 'r2' };
     model.relationships.d2 = { id: 'd2', kind: 'deriveReqt', sourceId: 'r2', targetId: 'r1' };
-    model.relationships.h1 = { id: 'h1', kind: 'composition', sourceId: 'r1', targetId: 'r2' };
-    model.relationships.h2 = { id: 'h2', kind: 'composition', sourceId: 'r2', targetId: 'r1' };
+    model.relationships.h1 = { id: 'h1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    model.relationships.h2 = { id: 'h2', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r1' };
 
     const codes = deriveRequirementView(model).diagnostics.map(d => d.code);
     expect(codes).toEqual(expect.arrayContaining([
@@ -134,4 +136,107 @@ describe('governed SysML requirements', () => {
     ]));
   });
 });
+
+describe('SysML requirement containment semantics and traversal', () => {
+  it('validates parent-to-child containment and rejects non-requirement endpoints', () => {
+    const model = repo();
+    model.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    expect(validateRequirementContainment(model, 'rc1')).toEqual([]);
+
+    model.relationships.badRc = { id: 'badRc', kind: 'requirementContainment', sourceId: 'b', targetId: 'r1' };
+    const diags = validateRequirementContainment(model, 'badRc');
+    expect(diags.map(d => d.code)).toContain('INVALID_REQUIREMENT_CONTAINMENT_ENDPOINT');
+  });
+
+  it('rejects self-containment', () => {
+    const model = repo();
+    model.relationships.selfRc = { id: 'selfRc', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r1' };
+    const diags = validateRequirementContainment(model, 'selfRc');
+    expect(diags.map(d => d.code)).toContain('REQUIREMENT_SELF_CONTAINMENT');
+  });
+
+  it('rejects multiple containers for a single nested requirement', () => {
+    const model = repo();
+    model.requirements.r3 = requirement('r3', 'REQ-3');
+    model.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r3' };
+    model.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r3' };
+
+    const diags = validateRequirementContainment(model, 'rc2');
+    expect(diags.map(d => d.code)).toContain('MULTIPLE_REQUIREMENT_CONTAINERS');
+  });
+
+  it('detects direct and transitive containment cycles', () => {
+    const model = repo();
+    model.requirements.r3 = requirement('r3', 'REQ-3');
+    // Direct cycle r1 -> r2 -> r1
+    model.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    model.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r1' };
+    expect(validateRequirementContainment(model, 'rc2').map(d => d.code)).toContain('REQUIREMENT_CONTAINMENT_CYCLE');
+
+    // Transitive cycle r1 -> r2 -> r3 -> r1
+    const modelTrans = repo();
+    modelTrans.requirements.r3 = requirement('r3', 'REQ-3');
+    modelTrans.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    modelTrans.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r3' };
+    modelTrans.relationships.rc3 = { id: 'rc3', kind: 'requirementContainment', sourceId: 'r3', targetId: 'r1' };
+    expect(validateRequirementContainment(modelTrans, 'rc3').map(d => d.code)).toContain('REQUIREMENT_CONTAINMENT_CYCLE');
+  });
+
+  it('allows valid re-homing after deleting previous containment relationship', () => {
+    const model = repo();
+    model.requirements.r3 = requirement('r3', 'REQ-3');
+    model.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r3' };
+    expect(validateRequirementContainment(model, 'rc1')).toEqual([]);
+
+    // Delete rc1 to re-home r3 under r2
+    delete model.relationships.rc1;
+    model.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r3' };
+    expect(validateRequirementContainment(model, 'rc2')).toEqual([]);
+  });
+
+  it('getNestedRequirementIds returns descendants in deterministic depth-first, stable-ID order, protecting against cycles and excluding root', () => {
+    const model = repo();
+    // Tree:
+    // root: r1
+    // r1 -> r3, r2 (siblings: r2, r3 in sorted order)
+    // r2 -> r5, r4 (sorted: r4, r5)
+    // r3 -> r6
+    model.requirements.r3 = requirement('r3', 'REQ-3');
+    model.requirements.r4 = requirement('r4', 'REQ-4');
+    model.requirements.r5 = requirement('r5', 'REQ-5');
+    model.requirements.r6 = requirement('r6', 'REQ-6');
+
+    model.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r3' };
+    model.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    model.relationships.rc3 = { id: 'rc3', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r5' };
+    model.relationships.rc4 = { id: 'rc4', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r4' };
+    model.relationships.rc5 = { id: 'rc5', kind: 'requirementContainment', sourceId: 'r3', targetId: 'r6' };
+
+    const descendants = getNestedRequirementIds(model, 'r1');
+    // Depth-first with sorted sibling IDs:
+    // r1's children: r2, r3
+    // Under r2: r4, r5
+    // Under r3: r6
+    // Expected order: r2, r4, r5, r3, r6
+    expect(descendants).toEqual(['r2', 'r4', 'r5', 'r3', 'r6']);
+    expect(descendants).not.toContain('r1');
+
+    // Corrupt cycle: r6 points back to r1 and r2
+    model.relationships.corrupt1 = { id: 'corrupt1', kind: 'requirementContainment', sourceId: 'r6', targetId: 'r1' };
+    model.relationships.corrupt2 = { id: 'corrupt2', kind: 'requirementContainment', sourceId: 'r6', targetId: 'r2' };
+    const cycleDescendants = getNestedRequirementIds(model, 'r1');
+    expect(cycleDescendants).toEqual(['r2', 'r4', 'r5', 'r3', 'r6']);
+    expect(cycleDescendants).not.toContain('r1');
+  });
+
+  it('deriveRequirementView incorporates requirementContainment and ignores composition between requirements', () => {
+    const model = repo();
+    model.relationships.rc = { id: 'rc', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    const view = deriveRequirementView(model);
+    expect(view.relationships.map(r => r.id)).toContain('rc');
+    const r1Row = view.requirements.find(r => r.requirement.id === 'r1');
+    expect(r1Row?.outgoing.map(r => r.id)).toContain('rc');
+  });
+});
+
 

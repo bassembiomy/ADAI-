@@ -143,13 +143,14 @@ export function VirtualizedTraceabilityGrid({
   };
 
   const headers = [
-    { label: 'Requirement', width: '28%' },
-    { label: 'Status & Change', width: '16%' },
-    { label: 'Owner / Risk', width: '14%' },
-    { label: 'Satisfied by', width: '14%' },
-    { label: 'IBD', width: '10%' },
-    { label: 'Verification', width: '10%' },
-    { label: 'Evidence', width: '8%' },
+    { label: 'Requirement', width: '22%' },
+    { label: 'Hierarchy & Relations', width: '20%' },
+    { label: 'Status & Change', width: '14%' },
+    { label: 'Owner / Risk', width: '12%' },
+    { label: 'Satisfied by', width: '13%' },
+    { label: 'IBD', width: '7%' },
+    { label: 'Verification', width: '6%' },
+    { label: 'Evidence', width: '6%' },
   ];
 
   return (
@@ -238,12 +239,60 @@ export function VirtualizedTraceabilityGrid({
                     )}
                   </div>
 
-                  {/* Col 2: Status & Change Badge */}
+                  {/* Col 2: Hierarchy & Relations */}
                   <div
                     role="gridcell"
                     aria-colindex={2}
-                    className="px-3 flex items-center gap-1.5 border-r border-neutral-900 truncate"
+                    className="px-2 flex flex-col justify-center border-r border-neutral-900 overflow-hidden text-[11px]"
                     style={{ width: headers[1].width }}
+                  >
+                    <div className="flex flex-col gap-0.5 truncate">
+                      {row.parents && row.parents.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">P:</span>
+                          {row.parents.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(p.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-blue-900/50 bg-blue-950/40 px-1 text-blue-300 text-[10px] truncate hover:border-blue-500"
+                              title={`Parent: [${p.requirementId}] ${p.name} («${p.kind}»)`}
+                            >
+                              <span className="font-mono text-[9px] text-blue-400">«{p.kind === 'requirementContainment' ? 'containment' : p.kind}»</span>
+                              <span className="font-mono text-orange-300">{p.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {row.children && row.children.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">C:</span>
+                          {row.children.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(c.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-purple-900/50 bg-purple-950/40 px-1 text-purple-300 text-[10px] truncate hover:border-purple-500"
+                              title={`Child: [${c.requirementId}] ${c.name} («${c.kind}»)`}
+                            >
+                              <span className="font-mono text-[9px] text-purple-400">«{c.kind === 'requirementContainment' ? 'containment' : c.kind}»</span>
+                              <span className="font-mono text-orange-300">{c.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {(!row.parents || row.parents.length === 0) && (!row.children || row.children.length === 0) && (
+                        <span className="text-neutral-600 italic text-[10px]">None</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Col 3: Status & Change Badge */}
+                  <div
+                    role="gridcell"
+                    aria-colindex={3}
+                    className="px-3 flex items-center gap-1.5 border-r border-neutral-900 truncate"
+                    style={{ width: headers[2].width }}
                   >
                     <span
                       aria-label={`Traceability status: ${row.status}`}
@@ -260,12 +309,12 @@ export function VirtualizedTraceabilityGrid({
                     )}
                   </div>
 
-                  {/* Col 3: Owner / Risk */}
+                  {/* Col 4: Owner / Risk */}
                   <div
                     role="gridcell"
-                    aria-colindex={3}
+                    aria-colindex={4}
                     className="px-3 flex flex-col justify-center border-r border-neutral-900 truncate text-[11px]"
-                    style={{ width: headers[2].width }}
+                    style={{ width: headers[3].width }}
                   >
                     <span className="text-neutral-300 truncate">{row.requirement.owner || 'Unassigned'}</span>
                     {row.requirement.risk && (
@@ -273,14 +322,28 @@ export function VirtualizedTraceabilityGrid({
                     )}
                   </div>
 
-                  {/* Col 4: Satisfied by (blocks) */}
+                  {/* Col 5: Satisfied by (blocks) */}
                   <div
                     role="gridcell"
-                    aria-colindex={4}
+                    aria-colindex={5}
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate"
-                    style={{ width: headers[3].width }}
+                    style={{ width: headers[4].width }}
                   >
-                    {row.blocks.length > 0 ? (
+                    {row.coveringBlocks && row.coveringBlocks.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 truncate">
+                        {row.coveringBlocks.map(cb => (
+                          <button
+                            key={cb.id}
+                            type="button"
+                            onClick={e => { e.stopPropagation(); onNavigate?.(cb.id); }}
+                            className="inline-flex items-center gap-0.5 rounded border border-emerald-900/50 bg-emerald-950/40 px-1 text-emerald-300 text-[10px] truncate hover:border-emerald-500"
+                          >
+                            <span className="text-[9px] text-emerald-400 font-mono">«{cb.kind}»</span>
+                            <span>{cb.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : row.blocks.length > 0 ? (
                       row.blocks.map(id => (
                         <button
                           key={id}
@@ -292,16 +355,16 @@ export function VirtualizedTraceabilityGrid({
                         </button>
                       ))
                     ) : (
-                      <span className="text-neutral-600 text-[11px]">None</span>
+                      <span className="text-neutral-600 text-[11px]">Uncovered</span>
                     )}
                   </div>
 
-                  {/* Col 5: IBD (Parts/Connectors) */}
+                  {/* Col 6: IBD (Parts/Connectors) */}
                   <div
                     role="gridcell"
-                    aria-colindex={5}
+                    aria-colindex={6}
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate text-[11px]"
-                    style={{ width: headers[4].width }}
+                    style={{ width: headers[5].width }}
                   >
                     {row.parts.length + row.connectors.length > 0 ? (
                       <span className="text-neutral-300">
@@ -313,12 +376,12 @@ export function VirtualizedTraceabilityGrid({
                     )}
                   </div>
 
-                  {/* Col 6: Verification Cases */}
+                  {/* Col 7: Verification Cases */}
                   <div
                     role="gridcell"
-                    aria-colindex={6}
+                    aria-colindex={7}
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate text-[11px]"
-                    style={{ width: headers[5].width }}
+                    style={{ width: headers[6].width }}
                   >
                     {row.verificationCases.length > 0 ? (
                       row.verificationCases.map(vc => (
@@ -336,12 +399,12 @@ export function VirtualizedTraceabilityGrid({
                     )}
                   </div>
 
-                  {/* Col 7: Evidence */}
+                  {/* Col 8: Evidence */}
                   <div
                     role="gridcell"
-                    aria-colindex={7}
+                    aria-colindex={8}
                     className="px-3 flex items-center gap-1 truncate text-[11px]"
-                    style={{ width: headers[6].width }}
+                    style={{ width: headers[7].width }}
                   >
                     {row.evidence.length > 0 ? (
                       <span className="text-emerald-400 font-mono text-[10px]">{row.evidence.length} passed</span>

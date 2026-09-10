@@ -17,6 +17,55 @@ export interface LegacySysmlDeletionResult {
   impact: MutationImpact;
 }
 
+function isRecordShallowEqual<T extends Record<string, any>>(
+  a: Record<string, T>,
+  b: Record<string, T>,
+): boolean {
+  if (a === b) return true;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i++) {
+    const key = aKeys[i];
+    const valA = a[key];
+    const valB = b[key];
+    if (valA === valB) continue;
+    if (!valB || typeof valA !== 'object' || typeof valB !== 'object') return false;
+    const propKeysA = Object.keys(valA);
+    const propKeysB = Object.keys(valB);
+    if (propKeysA.length !== propKeysB.length) return false;
+    for (let j = 0; j < propKeysA.length; j++) {
+      const p = propKeysA[j];
+      const pA = valA[p];
+      const pB = valB[p];
+      if (pA === pB) continue;
+      if (Array.isArray(pA) && Array.isArray(pB)) {
+        if (pA.length !== pB.length) return false;
+        if (JSON.stringify(pA) !== JSON.stringify(pB)) return false;
+      } else if (typeof pA === 'object' && pA !== null && typeof pB === 'object' && pB !== null) {
+        if (JSON.stringify(pA) !== JSON.stringify(pB)) return false;
+      } else {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function isSemanticEqual(
+  a: Record<string, Record<string, any>>,
+  b: Record<string, Record<string, any>>,
+): boolean {
+  return (
+    isRecordShallowEqual(a.definitions, b.definitions) &&
+    isRecordShallowEqual(a.usages, b.usages) &&
+    isRecordShallowEqual(a.connectors, b.connectors) &&
+    isRecordShallowEqual(a.relationships, b.relationships) &&
+    isRecordShallowEqual(a.requirements, b.requirements) &&
+    isRecordShallowEqual(a.verificationCases, b.verificationCases)
+  );
+}
+
 export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, model: LegacySysmlModel): SysmlRepository {
   const projected = loadRepository({ blocks: model.blocks, relationships: model.relationships, parts: model.parts, connectors: model.connectors }).repository;
   const mergeRecords = <T extends { id: string }>(current: Record<string, T>, incoming: Record<string, T>): Record<string, T> =>
@@ -41,7 +90,7 @@ export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, mo
     requirements: repository.requirements,
     verificationCases: repository.verificationCases,
   };
-  if (JSON.stringify(semantic) === JSON.stringify(currentSemantic)) return repository;
+  if (isSemanticEqual(semantic, currentSemantic)) return repository;
   const next: SysmlRepository = { ...structuredClone(repository), ...semantic, revision: repository.revision + 1 };
   next.auditTrail.push({
     id: `change-${next.revision}-legacy-editor-sync`, revision: next.revision, timestamp: new Date().toISOString(),
@@ -53,6 +102,8 @@ export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, mo
 export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
   const requested = new Set(impact.requestedElementIds);
   return impact.deletedElementIds.some(id => !requested.has(id))
+    || impact.nestedRequirementIds.length > 0
+    || impact.removedRelationshipIds.some(id => !requested.has(id))
     || impact.unresolvedUsageIds.length > 0
     || impact.invalidatedEvidenceIds.length > 0
     || impact.affectedRequirementIds.length > 0
@@ -66,6 +117,8 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
     'SysML deletion impact',
     `Requested: ${impact.requestedElementIds.join(', ') || 'none'}`,
     `Cascade deleted: ${cascade.join(', ') || 'none'}`,
+    `Nested requirements: ${impact.nestedRequirementIds.join(', ') || 'none'}`,
+    `Removed relationships: ${impact.removedRelationshipIds.join(', ') || 'none'}`,
     `Affected diagrams: ${impact.affectedDiagramKinds.join(', ') || 'none'}`,
     `Affected requirements: ${impact.affectedRequirementIds.join(', ') || 'none'}`,
     `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
@@ -116,6 +169,10 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
   const impact: MutationImpact = {
     ...transaction.impact,
     deletedElementIds: [...deleted].sort(),
+    removedRelationshipIds: [...new Set([
+      ...transaction.impact.removedRelationshipIds,
+      ...model.relationships.filter(r => deleted.has(r.id) || deleted.has(r.sourceId) || deleted.has(r.targetId)).map(r => r.id),
+    ])].sort(),
     affectedDiagramKinds: [...new Set([
       ...transaction.impact.affectedDiagramKinds,
       ...(model.connectors.some(connector => deleted.has(connector.id)) ? ['ibd' as const] : []),

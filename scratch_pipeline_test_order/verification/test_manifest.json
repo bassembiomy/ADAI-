@@ -1,0 +1,946 @@
+{
+  "schemaVersion": 1,
+  "modelId": "state_machine",
+  "modelHash": "0000000000000000",
+  "verification": {
+    "cStandard": "c11",
+    "tickToleranceMs": 0,
+    "timerPolicy": "logical-tick",
+    "resetPolicy": "always-authorized",
+    "watchdogAfterCriticalFault": "do-not-service",
+    "statementCoverageTarget": 100,
+    "branchCoverageTarget": 100,
+    "requireMcdc": false,
+    "repeatedExecutionCycles": 100000,
+    "staticAnalysisToolId": null,
+    "misraToolId": null,
+    "targetId": null,
+    "invalidInputPolicies": {}
+  },
+  "cases": [
+    {
+      "id": "SM-TC-INIT-DEFAULT",
+      "suite": "initialization",
+      "name": "Default initialization enters initial states and binds variables",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "a"
+        },
+        {
+          "kind": "variable",
+          "variableId": "count",
+          "value": 1
+        },
+        {
+          "kind": "variable",
+          "variableId": "go",
+          "value": false
+        },
+        {
+          "kind": "variable",
+          "variableId": "ratio",
+          "value": 0
+        },
+        {
+          "kind": "variable",
+          "variableId": "total",
+          "value": 0
+        },
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-INIT-002",
+          "TEST-INIT-003"
+        ],
+        "generatedFunctions": [
+          "SM_Init"
+        ],
+        "testCaseId": "SM-TC-INIT-DEFAULT"
+      }
+    },
+    {
+      "id": "SM-TC-INIT-MEMSET-GARBAGE",
+      "suite": "initialization",
+      "name": "Initialization clears instance storage and resets flags from memory prefilled with 0xA5",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-INIT-004"
+        ],
+        "generatedFunctions": [
+          "SM_Init"
+        ],
+        "testCaseId": "SM-TC-INIT-MEMSET-GARBAGE"
+      }
+    },
+    {
+      "id": "SM-TC-INIT-NULL-INSTANCE",
+      "suite": "initialization",
+      "name": "SM_Init handles null instance parameter with error",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_NULL_INSTANCE"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-INIT-001"
+        ],
+        "generatedFunctions": [
+          "SM_Init"
+        ],
+        "testCaseId": "SM-TC-INIT-NULL-INSTANCE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-A-B-FALSE",
+      "suite": "transitions",
+      "name": "Transition from A to B blocked when condition is false",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": false
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "a"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "b"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a",
+          "b"
+        ],
+        "transitionIds": [
+          "t_ab"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-A-B-FALSE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-A-B-TRUE",
+      "suite": "transitions",
+      "name": "Transition from A to B fires when condition is met",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "b"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "a"
+        },
+        {
+          "kind": "transition-fired",
+          "transitionId": "t_ab"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a",
+          "b"
+        ],
+        "transitionIds": [
+          "t_ab"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-001",
+          "TEST-TRANS-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-A-B-TRUE"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-LOWER-10MS",
+      "suite": "timing",
+      "name": "Lower timing boundary of 10ms is accepted",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-LOWER-10MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-NOMINAL-10MS",
+      "suite": "timing",
+      "name": "Nominal step with configured tick interval of 10ms",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-NOMINAL-10MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-REJECT-11MS",
+      "suite": "timing",
+      "name": "Step duration of 11ms above upper threshold is rejected",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 11
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_TIMING"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-005"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-REJECT-11MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-REJECT-9MS",
+      "suite": "timing",
+      "name": "Step duration of 9ms below lower threshold is rejected",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 9
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_TIMING"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-004"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-REJECT-9MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-SATURATION",
+      "suite": "timing",
+      "name": "State timers saturate at UINT32_MAX without rollover",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-timer",
+          "stateId": "a",
+          "valueMs": 4294967294
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "timer",
+          "stateId": "a",
+          "expectedMs": 4294967295
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-006"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-SATURATION"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-UPPER-10MS",
+      "suite": "timing",
+      "name": "Upper timing boundary of 10ms is accepted",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-UPPER-10MS"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-CORRUPT-SLOT",
+      "suite": "safety",
+      "name": "Corrupted active slot value triggers configuration fault",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "executionSlot",
+          "targetId": "0",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_CONFIGURATION"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-002"
+        ],
+        "generatedFunctions": [
+          "SM_Validate_State_Consistency"
+        ],
+        "testCaseId": "SM-TC-SAFE-CORRUPT-SLOT"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-CORRUPT-STATE",
+      "suite": "safety",
+      "name": "Corrupted active state detects RAM fault and latches configuration error",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_CONFIGURATION"
+        },
+        {
+          "kind": "fault-latched",
+          "latched": true
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-001"
+        ],
+        "generatedFunctions": [
+          "SM_Validate_State_Consistency"
+        ],
+        "testCaseId": "SM-TC-SAFE-CORRUPT-STATE"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-LATCHED-BLOCKING",
+      "suite": "safety",
+      "name": "Latched fault blocks normal state machine execution in subsequent ticks",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "fault-latched",
+          "latched": true
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-SAFE-LATCHED-BLOCKING"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-OUTPUTS-APPLIED",
+      "suite": "safety",
+      "name": "Safety fault immediately writes safe outputs to mapped hardware channels",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "fault-latched",
+          "latched": true
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-004"
+        ],
+        "generatedFunctions": [
+          "SM_Apply_Safe_Outputs"
+        ],
+        "testCaseId": "SM-TC-SAFE-OUTPUTS-APPLIED"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-WATCHDOG-POLICY",
+      "suite": "safety",
+      "name": "Watchdog policy is strictly enforced during normal execution and after fault",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "watchdog-kicks",
+          "count": 1
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-005"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-SAFE-WATCHDOG-POLICY"
+      }
+    },
+    {
+      "id": "SM-TC-RESET-AUTHORIZED",
+      "suite": "reset",
+      "name": "Authorized reset restores initial states, resets timers, and clears error flags",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        },
+        {
+          "kind": "reset",
+          "authorized": true
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-RESET-001"
+        ],
+        "generatedFunctions": [
+          "SM_Reset"
+        ],
+        "testCaseId": "SM-TC-RESET-AUTHORIZED"
+      }
+    },
+    {
+      "id": "SM-TC-RESET-FAULT-RECOVERY",
+      "suite": "reset",
+      "name": "Authorized reset from latched fault clears error latch and recovers normal execution",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        },
+        {
+          "kind": "reset",
+          "authorized": true
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-RESET-002"
+        ],
+        "generatedFunctions": [
+          "SM_Reset"
+        ],
+        "testCaseId": "SM-TC-RESET-FAULT-RECOVERY"
+      }
+    },
+    {
+      "id": "SM-TC-RESET-NULL-INSTANCE",
+      "suite": "reset",
+      "name": "SM_Reset returns error when called with null instance pointer",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_NULL_INSTANCE"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-RESET-003"
+        ],
+        "generatedFunctions": [
+          "SM_Reset"
+        ],
+        "testCaseId": "SM-TC-RESET-NULL-INSTANCE"
+      }
+    },
+    {
+      "id": "SM-TC-ROB-NULL-STEP",
+      "suite": "robustness",
+      "name": "SM_Step rejects null instance argument with error",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_NULL_INSTANCE"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ROB-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ROB-NULL-STEP"
+      }
+    },
+    {
+      "id": "SM-TC-ROB-REPEATED-CYCLES",
+      "suite": "robustness",
+      "name": "Repeated step execution across 100000 cycles for stability",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "repeat-step",
+          "cycles": 100000,
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "a"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ROB-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ROB-REPEATED-CYCLES"
+      }
+    },
+    {
+      "id": "SM-TC-HIER-DEEP-HISTORY",
+      "suite": "hierarchy",
+      "name": "Deep history restoration across nested composite levels",
+      "applicability": {
+        "status": "not-applicable",
+        "reason": "Model has flat topology with no deep history junctions."
+      },
+      "operations": [],
+      "expectations": [],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-HIER-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-HIER-DEEP-HISTORY"
+      }
+    },
+    {
+      "id": "SM-TC-HIER-PARALLEL-REGIONS",
+      "suite": "hierarchy",
+      "name": "Simultaneous activation and synchronization of parallel AND regions",
+      "applicability": {
+        "status": "not-applicable",
+        "reason": "Model has flat OR decomposition with no parallel AND regions."
+      },
+      "operations": [],
+      "expectations": [],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-HIER-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-HIER-PARALLEL-REGIONS"
+      }
+    },
+    {
+      "id": "SM-TC-HIER-SHALLOW-HISTORY",
+      "suite": "hierarchy",
+      "name": "Shallow history restoration on containing state reentry",
+      "applicability": {
+        "status": "not-applicable",
+        "reason": "Model has flat topology with no sub-states or shallow history junctions."
+      },
+      "operations": [],
+      "expectations": [],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-HIER-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-HIER-SHALLOW-HISTORY"
+      }
+    }
+  ]
+}

@@ -145,6 +145,10 @@ const createNode = (
         inferredDimensions = [params.value.length, params.value[0].length];
       }
     }
+    if ((type === 'DISCRETE_TRANSFER_FUNCTION' || type === 'STATE_SPACE')
+      && inferredShape !== 'scalar' && inferredDimensions.length === 0) {
+      inferredDimensions = [1];
+    }
     return {
       id: p.id,
       direction: p.direction,
@@ -366,7 +370,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     fixture: makeXBridgesFixture(
       [
         createNode('c1', 'Constant', { value: 1 }),
-        createNode('del1', 'DELAY', { delayTime: 0.01, initialCondition: 0 }),
+        createNode('del1', 'DELAY', { delayTime: 0.01, delayLength: 1, initialCondition: 0 }),
       ],
       [
         { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'del1', targetPortId: 'u' },
@@ -597,7 +601,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
       [
         createNode('c1', 'Constant', { value: 1 }),
         createNode('c0', 'Constant', { value: 0 }),
-        createNode('clk', 'Step', { stepTime: 0 }),
+        createNode('clk', 'Step', { stepTime: 0, initialValue: 0, finalValue: 1 }),
         
         createNode('dff', 'DFlipFlop'),
         createNode('jk', 'JKFlipFlop'),
@@ -631,7 +635,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
       [
         createNode('c1', 'Constant', { value: 1 }),
         createNode('c0', 'Constant', { value: 0 }),
-        createNode('clk', 'Step', { stepTime: 0 }),
+        createNode('clk', 'Step', { stepTime: 0, initialValue: 0, finalValue: 1 }),
         
         createNode('reg', 'Register', { bitWidth: 8 }),
         createNode('cnt', 'Counter', { maxValue: 255 }),

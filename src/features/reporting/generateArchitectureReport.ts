@@ -100,7 +100,7 @@ export function generateArchitectureReport(
       const s = source.blocks.find(b => b.id === rel.sourceId);
       const t = source.blocks.find(b => b.id === rel.targetId);
       if (s?.stereotype === 'requirement' && t?.stereotype === 'requirement') {
-        if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+        if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt' || rel.type === 'requirementContainment') {
           if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
           childrenMap.get(rel.sourceId)!.push(rel.targetId);
           parentSet.add(rel.targetId);
@@ -109,7 +109,15 @@ export function generateArchitectureReport(
     });
 
     const roots = reqs.filter(r => !parentSet.has(r.id));
+    const visitedRequirements = new Set<string>();
+    const activeRequirements = new Set<string>();
     const renderReqRow = (r: BlockData, level: number): string => {
+      if (activeRequirements.has(r.id)) {
+        return `<tr><td colspan="6" style="padding: 10px; border: 1px solid #ddd; color: #b45309;">Cycle detected at ${escapeHtml(r.reqId || r.id)}</td></tr>`;
+      }
+      if (visitedRequirements.has(r.id)) return '';
+      visitedRequirements.add(r.id);
+      activeRequirements.add(r.id);
       const prefix = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + (level > 0 ? '└ ' : '');
       let rowHtml = `<tr>
         <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #888;">${escapeHtml(r.reqId || '')}</td>
@@ -126,6 +134,7 @@ export function generateArchitectureReport(
           rowHtml += renderReqRow(child, level + 1);
         }
       });
+      activeRequirements.delete(r.id);
       return rowHtml;
     };
 

@@ -51,6 +51,8 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
     }),
   }), [complete, owner, query, risk, status]);
   const metrics = useMemo(() => computeCoverageMetrics(complete), [complete]);
+  const autoVirtualize = complete.rows.length >= 500;
+  const renderVirtualGrid = useVirtualGrid || autoVirtualize;
   const owners = [...new Set(complete.rows.map(row => row.requirement.owner).filter((value): value is string => Boolean(value)))].sort();
 
   const exportCsv = () => {
@@ -81,7 +83,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                 useVirtualGrid ? 'border-orange-500 bg-orange-950/60 text-orange-200' : 'border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              {useVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
+              {renderVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
             </button>
             <button type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
           </div>
@@ -114,7 +116,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
         </div>
       </header>
       <div className="flex-1 overflow-auto" role="region" aria-label="Traceability results" tabIndex={0}>
-        {useVirtualGrid ? (
+        {renderVirtualGrid ? (
           <VirtualizedTraceabilityGrid
             rows={matrix.rows}
             onNavigate={onNavigate}
@@ -124,7 +126,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
         ) : (
           <table className="w-full border-collapse text-left text-xs">
             <thead className="sticky top-0 z-10 bg-neutral-950 text-neutral-400">
-              <tr>{['Requirement', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-neutral-800 p-2 font-medium">{label}</th>)}</tr>
+              <tr>{['Requirement', 'Hierarchy & Relations', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-neutral-800 p-2 font-medium">{label}</th>)}</tr>
             </thead>
             <tbody>
               {matrix.rows.map((row, index) => (
@@ -143,6 +145,47 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                 >
                   <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{row.requirement.name}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
                   <td className="p-2">
+                    <div className="flex flex-col gap-1 max-w-xs">
+                      {row.parents && row.parents.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Parent:</span>
+                          {row.parents.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => onNavigate?.(p.id)}
+                              className="inline-flex items-center gap-1 rounded border border-blue-800/60 bg-blue-950/40 px-1.5 py-0.5 text-blue-200 hover:border-blue-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-blue-400 font-mono">«{p.kind === 'requirementContainment' ? 'containment' : p.kind}»</span>
+                              <span className="font-mono text-orange-300">{p.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{p.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {row.children && row.children.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Child:</span>
+                          {row.children.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => onNavigate?.(c.id)}
+                              className="inline-flex items-center gap-1 rounded border border-purple-800/60 bg-purple-950/40 px-1.5 py-0.5 text-purple-200 hover:border-purple-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-purple-400 font-mono">«{c.kind === 'requirementContainment' ? 'containment' : c.kind}»</span>
+                              <span className="font-mono text-orange-300">{c.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{c.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {(!row.parents || row.parents.length === 0) && (!row.children || row.children.length === 0) && (
+                        <span className="text-neutral-600 italic">None</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-2">
                     <StatusBadge status={row.status} />
                     {row.changeKind && row.changeKind !== 'unchanged' && (
                       <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/70 text-amber-300 border border-amber-700">
@@ -151,13 +194,31 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                     )}
                   </td>
                   <td className="p-2 text-neutral-300"><span className="block">{row.requirement.owner || 'Unassigned'}</span><span className="text-neutral-500">{row.requirement.risk || 'unspecified'} risk</span></td>
-                  <td className="p-2"><ElementLinks ids={[...row.blocks, ...row.parts]} repository={repository} onNavigate={onNavigate} empty="Uncovered" /></td>
+                  <td className="p-2">
+                    {row.coveringBlocks && row.coveringBlocks.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {row.coveringBlocks.map(cb => (
+                          <button
+                            key={cb.id}
+                            type="button"
+                            onClick={() => onNavigate?.(cb.id)}
+                            className="inline-flex items-center gap-1 rounded border border-emerald-800/60 bg-emerald-950/40 px-1.5 py-0.5 text-emerald-300 hover:border-emerald-500 text-[11px]"
+                          >
+                            <span className="text-[10px] text-emerald-400 font-mono">«{cb.kind}»</span>
+                            <span>{cb.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <ElementLinks ids={[...row.blocks, ...row.parts]} repository={repository} onNavigate={onNavigate} empty="Uncovered" />
+                    )}
+                  </td>
                   <td className="p-2"><ElementLinks ids={[...row.ports, ...row.connectors]} repository={repository} onNavigate={onNavigate} empty="None" /></td>
                   <td className="p-2"><ElementLinks ids={row.verificationCases} repository={repository} onNavigate={onNavigate} empty="Not verified" /></td>
                   <td className="p-2"><ElementLinks ids={[...row.evidence, ...row.behaviors, ...row.simulations, ...row.artifacts]} repository={repository} onNavigate={onNavigate} empty="No evidence" /></td>
                 </tr>
               ))}
-              {!matrix.rows.length && <tr><td colSpan={7} className="p-8 text-center text-neutral-500">No requirements match the active filters.</td></tr>}
+              {!matrix.rows.length && <tr><td colSpan={8} className="p-8 text-center text-neutral-500">No requirements match the active filters.</td></tr>}
             </tbody>
           </table>
         )}

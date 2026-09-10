@@ -37,6 +37,7 @@ SysML v2 semantic equivalence: unsupported; requires a separate versioned adapte
 | SYSML-027 | RTM many-to-many | supported | `rtm.ts`, `TraceabilityMatrix.tsx`, `VirtualizedTraceabilityGrid.tsx` | `rtm.test.ts`, `TraceabilityMatrix.test.tsx`, `VirtualizedTraceabilityGrid.test.tsx`, `sysml-bdd-ibd-requirements-rtm.spec.ts` | None; fully qualified. |
 | SYSML-028 | RTM baseline/change sensitivity | supported | `persistence.ts`, `rtm.ts`, `TraceabilityMatrix.tsx` | `persistence.test.ts`, `rtm.test.ts`, `TraceabilityMatrix.test.tsx` | None; fully qualified. |
 | SYSML-029 | SysML v2 equivalence | unsupported | `profile.ts`, `SYSML_INTERCHANGE_LIMITATIONS.md` | `profile.test.ts` | No semantic-equivalence claim is made for SysML v2. |
+| SYSML-030 | Requirement containment | supported | `model.ts`, `requirements.ts`, `mutations.ts`, `sysmlCommandGateway.ts`, `RelationshipEndEditor.tsx`, `reportDiagrams.ts` | `requirements.test.ts`, `validation.test.ts`, `mutations.test.ts`, `sysmlCommandGateway.test.ts`, `RelationshipEndEditor.test.tsx`, `reportDiagrams.sysml.test.ts`, `sysml-deletion-lifecycle.spec.ts` | None; fully qualified. |
 
 ## Current automated qualification
 

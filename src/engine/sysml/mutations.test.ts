@@ -80,4 +80,80 @@ describe('composition-aware SysML transactions', () => {
     expect(history.present).toEqual(original);
     expect(original.definitions.whole).toBeDefined();
   });
+
+  it('recursively deletes nested requirements and containment edges when container is deleted, while unrelated elements survive', () => {
+    const repo = repository();
+    repo.requirements.rParent = { id: 'rParent', name: 'Parent', namespace: [], kind: 'requirement', requirementId: 'REQ-P', text: 'Parent', status: 'draft', version: '1' };
+    repo.requirements.rChild = { id: 'rChild', name: 'Child', namespace: [], kind: 'requirement', requirementId: 'REQ-C', text: 'Child', status: 'draft', version: '1' };
+    repo.requirements.rGrandchild = { id: 'rGrandchild', name: 'Grandchild', namespace: [], kind: 'requirement', requirementId: 'REQ-GC', text: 'Grandchild', status: 'draft', version: '1' };
+    repo.requirements.rUnrelated = { id: 'rUnrelated', name: 'Unrelated', namespace: [], kind: 'requirement', requirementId: 'REQ-U', text: 'Unrelated', status: 'draft', version: '1' };
+
+    repo.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'rParent', targetId: 'rChild' };
+    repo.relationships.rc2 = { id: 'rc2', kind: 'requirementContainment', sourceId: 'rChild', targetId: 'rGrandchild' };
+    repo.relationships.sat = { id: 'sat', kind: 'satisfy', sourceId: 'whole', targetId: 'rChild' };
+
+    repo.verificationCases.v = { id: 'v', name: 'V', namespace: [], kind: 'verificationCase', method: 'test', verifiesRequirementIds: ['rGrandchild'] };
+    repo.evidence.ev = { id: 'ev', verificationCaseId: 'v', requirementId: 'rGrandchild', revision: 0, result: 'passed', executedAt: '2026-09-09' };
+
+    const impact = analyzeMutation(repo, { kind: 'deleteElements', elementIds: ['rParent'] });
+    expect(impact.nestedRequirementIds).toEqual(['rChild', 'rGrandchild']);
+    expect(impact.removedRelationshipIds).toEqual(expect.arrayContaining(['rc1', 'rc2', 'sat']));
+
+    const result = applyCommand(repo, { kind: 'deleteElements', elementIds: ['rParent'] });
+    expect(result.repository.requirements.rParent).toBeUndefined();
+    expect(result.repository.requirements.rChild).toBeUndefined();
+    expect(result.repository.requirements.rGrandchild).toBeUndefined();
+    expect(result.repository.relationships.rc1).toBeUndefined();
+    expect(result.repository.relationships.rc2).toBeUndefined();
+    expect(result.repository.relationships.sat).toBeUndefined();
+    expect(result.repository.evidence.ev).toBeUndefined();
+
+    // Unrelated requirement, supplier block, and verification case survive
+    expect(result.repository.requirements.rUnrelated).toBeDefined();
+    expect(result.repository.definitions.whole).toBeDefined();
+    expect(result.repository.verificationCases.v).toBeDefined();
+    expect(result.repository.verificationCases.v.verifiesRequirementIds).toEqual([]);
+  });
+
+  it('deleting only a containment relationship preserves both container and nested requirements', () => {
+    const repo = repository();
+    repo.requirements.rParent = { id: 'rParent', name: 'Parent', namespace: [], kind: 'requirement', requirementId: 'REQ-P', text: 'Parent', status: 'draft', version: '1' };
+    repo.requirements.rChild = { id: 'rChild', name: 'Child', namespace: [], kind: 'requirement', requirementId: 'REQ-C', text: 'Child', status: 'draft', version: '1' };
+    repo.relationships.rc = { id: 'rc', kind: 'requirementContainment', sourceId: 'rParent', targetId: 'rChild' };
+
+    const impact = analyzeMutation(repo, { kind: 'deleteElements', elementIds: ['rc'] });
+    expect(impact.nestedRequirementIds).toEqual([]);
+    expect(impact.deletedElementIds).toEqual(['rc']);
+    expect(impact.removedRelationshipIds).toEqual(['rc']);
+
+    const result = applyCommand(repo, { kind: 'deleteElements', elementIds: ['rc'] });
+    expect(result.repository.relationships.rc).toBeUndefined();
+    expect(result.repository.requirements.rParent).toBeDefined();
+    expect(result.repository.requirements.rChild).toBeDefined();
+  });
+
+  it('deleting non-containment relationships never cascades to connected elements', () => {
+    const repo = repository();
+    repo.requirements.r1 = { id: 'r1', name: 'R1', namespace: [], kind: 'requirement', requirementId: 'REQ-1', text: 'R1', status: 'draft', version: '1' };
+    repo.requirements.r2 = { id: 'r2', name: 'R2', namespace: [], kind: 'requirement', requirementId: 'REQ-2', text: 'R2', status: 'draft', version: '1' };
+    repo.definitions.b = block('b');
+    repo.verificationCases.v = { id: 'v', name: 'V', namespace: [], kind: 'verificationCase', method: 'test', verifiesRequirementIds: ['r1'] };
+
+    repo.relationships.d = { id: 'rel_d', kind: 'deriveReqt', sourceId: 'r1', targetId: 'r2' };
+    repo.relationships.s = { id: 'rel_s', kind: 'satisfy', sourceId: 'b', targetId: 'r1' };
+    repo.relationships.v = { id: 'rel_v', kind: 'verify', sourceId: 'v', targetId: 'r1' };
+    repo.relationships.ref = { id: 'rel_ref', kind: 'refine', sourceId: 'b', targetId: 'r1' };
+    repo.relationships.tr = { id: 'rel_tr', kind: 'trace', sourceId: 'r1', targetId: 'b' };
+    repo.relationships.cp = { id: 'rel_cp', kind: 'copy', sourceId: 'r1', targetId: 'r2' };
+
+    for (const relId of ['rel_d', 'rel_s', 'rel_v', 'rel_ref', 'rel_tr', 'rel_cp']) {
+      const result = applyCommand(repo, { kind: 'deleteElements', elementIds: [relId] });
+      expect(result.repository.relationships[relId]).toBeUndefined();
+      expect(result.repository.requirements.r1).toBeDefined();
+      expect(result.repository.requirements.r2).toBeDefined();
+      expect(result.repository.definitions.b).toBeDefined();
+      expect(result.repository.verificationCases.v).toBeDefined();
+    }
+  });
 });
+

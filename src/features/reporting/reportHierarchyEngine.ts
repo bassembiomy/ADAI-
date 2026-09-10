@@ -21,7 +21,6 @@ export interface HierarchyLayerInfo {
   elementCount: number;
   connectionCount: number;
 }
-
 export class ReportHierarchyRegistry {
   private childLayerMap = new Map<string, HierarchyLayerInfo>();
   public layers = new Map<string, { title: string; type: string; svgContent?: string }>();
@@ -51,10 +50,29 @@ export class ReportHierarchyRegistry {
 export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarchyRegistry {
   const registry = new ReportHierarchyRegistry();
 
+  const blocksById = new Map<string, BlockData>();
+  for (const b of model.blocks) blocksById.set(b.id, b as BlockData);
+
+  const partsByBlockId = new Map<string, PartData[]>();
+  for (const p of model.parts) {
+    if (!p.blockId) continue;
+    let list = partsByBlockId.get(p.blockId);
+    if (!list) {
+      list = [];
+      partsByBlockId.set(p.blockId, list);
+    }
+    list.push(p as PartData);
+  }
+
+  const layersByParentStateId = new Map<string, Layer>();
+  for (const l of model.layers) {
+    if (l.parentStateId) layersByParentStateId.set(l.parentStateId, l);
+  }
+
   // 1. Map BDD Blocks with IBD Parts or Ports to their IBD Context Layer
   for (const block of model.blocks) {
     if (block.stereotype === 'requirement') continue;
-    const blockParts = model.parts.filter(p => p.blockId === block.id);
+    const blockParts = partsByBlockId.get(block.id) ?? [];
     const blockPartIds = new Set(blockParts.map(p => p.id));
     const blockEnvPortIds = new Set((block.ports ?? []).map(p => p.id));
     const blockConnectors = model.connectors.filter(c => {
@@ -77,9 +95,9 @@ export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarc
   // 2. Map IBD Parts with Nested Sub-Parts to their Sub-IBD Layer
   for (const part of model.parts) {
     if (!part.typeId) continue;
-    const typeBlock = model.blocks.find(b => b.id === part.typeId);
+    const typeBlock = blocksById.get(part.typeId);
     if (!typeBlock) continue;
-    const subParts = model.parts.filter(p => p.blockId === part.typeId);
+    const subParts = partsByBlockId.get(part.typeId) ?? [];
     const subPartIds = new Set(subParts.map(p => p.id));
     const subEnvPortIds = new Set((typeBlock.ports ?? []).map(p => p.id));
     const subConnectors = model.connectors.filter(c => {
@@ -101,7 +119,7 @@ export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarc
 
   // 3. Map States with Child Sub-States to their Sub-State Machine Layer
   for (const state of model.states) {
-    const childLayer = model.layers.find(l => l.parentStateId === state.id);
+    const childLayer = layersByParentStateId.get(state.id);
     const childStates = model.states.filter(s => childLayer ? childLayer.stateIds.includes(s.id) : (state.children ?? []).includes(s.id));
     const childTransitions = model.transitions.filter(t => childLayer ? childLayer.transitionIds.includes(t.id) : false);
 

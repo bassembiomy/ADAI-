@@ -71,17 +71,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "r",
             "pos": "top",
-            "label": "R"
+            "label": "R",
+            "domain": "Physical"
           }
         ],
         "equation": "V = I * R(t)",
@@ -313,27 +316,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.01,
             "unit": "Ω",
             "label": "On Resistance"
+          },
+          "Roff": {
+            "value": 1000000,
+            "unit": "Ω",
+            "label": "Off Resistance"
+          },
+          "threshold": {
+            "value": 0.5,
+            "unit": "V",
+            "label": "Threshold"
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "v",
             "pos": "top",
-            "label": "v"
+            "label": "v",
+            "domain": "Physical"
           }
         ],
-        "equation": "V = I * R_sw\\nR_sw = (v > 0) ? Ron : Roff",
-        "description": "An ideal switch controlled by a physical signal. When the control signal is positive, the switch is closed with a low resistance Ron."
+        "equation": "V = I * R_sw\\nR_sw = (v > threshold) ? Ron : Roff",
+        "description": "An ideal switch controlled by a physical signal. When the control signal exceeds threshold, the switch is closed with low resistance Ron; otherwise it opens with high resistance Roff."
       },
       {
         "id": "diode",
@@ -525,22 +541,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Translational"
           }
         ],
         "equation": "V = Bl * v\nF = Bl * I",
@@ -571,9 +591,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "g",
+            "id": "a",
             "pos": "left",
-            "label": "G",
+            "label": "A",
+            "domain": "Electrical"
+          },
+          {
+            "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Electrical"
+          },
+          {
+            "id": "c",
+            "pos": "left",
+            "label": "C",
+            "domain": "Electrical"
+          },
+          {
+            "id": "n",
+            "pos": "left",
+            "label": "N",
             "domain": "Electrical"
           },
           {
@@ -7679,12 +7717,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Any"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Any"
           }
         ],
         "equation": "PS-Simulink Converter governing physical equation",
@@ -7701,12 +7741,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Any"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Any"
           }
         ],
         "equation": "Simulink-PS Converter governing physical equation",

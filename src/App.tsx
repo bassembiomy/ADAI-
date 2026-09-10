@@ -13,6 +13,11 @@ import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
+import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
+import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
+import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
+import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
+import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -25,7 +30,7 @@ import {
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
   Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
-  Sun, Moon
+  Sun, Moon, Gauge
 } from 'lucide-react';
 import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
@@ -92,6 +97,7 @@ import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
+import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -112,13 +118,18 @@ import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor'
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { validateAssociationEnds } from './engine/sysml/bdd';
+import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
 import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
+import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
+import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
+import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
+import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
@@ -328,7 +339,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
 
 interface WorkspaceFile {
   id: string;
@@ -874,7 +885,7 @@ const LegacyTraceabilityMatrix = ({
     const source = blocks.find(b => b.id === rel.sourceId);
     const target = blocks.find(b => b.id === rel.targetId);
     if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-      if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+      if (rel.type === 'requirementContainment' || rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
         if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
         childrenMap.get(rel.sourceId)!.push(rel.targetId);
         parentSet.add(rel.targetId);
@@ -4936,11 +4947,13 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
+  const [showArchitectureExplorer, setShowArchitectureExplorer] = useState(false);
 
   useEffect(() => {
     if (initialTopic && isOpen) {
       setActiveTopic(initialTopic);
       setShowBlockRef(false);
+      setShowArchitectureExplorer(false);
     }
   }, [initialTopic, isOpen]);
   
@@ -5185,6 +5198,9 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
             {!showBlockRef ? (
               /* TOPIC VIEW */
               <div className="max-w-4xl mx-auto">
+                {activeTopic === 'software-architecture' && showArchitectureExplorer ? (
+                  <SoftwareArchitectureExplorer onClose={() => setShowArchitectureExplorer(false)} />
+                ) : <>
                 <div className="mb-14">
                   <nav className="flex items-center gap-3 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-6">
                     <span className="hover:text-orange-500 cursor-pointer" onClick={() => setActiveTopic("getting-started")}>ADIA Docs</span>
@@ -5194,13 +5210,19 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                     <span className="text-white">{topic.title}</span>
                   </nav>
                   
-                  <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
+                <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
                     {topic.title}
                   </h1>
                   <p className="text-lg text-gray-400 leading-relaxed font-light max-w-3xl">
                     {topic.description}
                   </p>
                 </div>
+
+                {activeTopic === 'software-architecture' && (
+                  <button onClick={() => setShowArchitectureExplorer(true)} className="mb-10 flex items-center gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 px-5 py-3 text-sm font-bold text-orange-400 hover:bg-orange-500/20">
+                    <Layers size={18} /> Open Architecture Explorer
+                  </button>
+                )}
 
                 {topic.image && (
                   <div className="mb-14 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative bg-black/40">
@@ -5273,6 +5295,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                     </div>
                   )}
                 </div>
+                </>}
               </div>
             ) : (
               /* BLOCK REFERENCE VIEW */
@@ -6096,6 +6119,8 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
+  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
+  const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
@@ -6138,6 +6163,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
@@ -6180,9 +6206,90 @@ const ADIA = () => {
   const [parts, setParts] = useState<PartData[]>([]);
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
+  const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
+
+  // The legacy diagram editors still expose array setters. Keep the canonical
+  // store current until every editor has been migrated to gateway commands.
+  // The debounce prevents pointer-move events from rebuilding the store on
+  // every frame, while the revision is advanced only for a settled edit.
   useEffect(() => {
-    setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
-  }, [blocks, parts, connectors, relationships]);
+    if (isDragging) return;
+    const timer = setTimeout(() => {
+      setCanonicalSysmlRepository(previous => {
+        const next = mergeLegacyDiagramIntoRepository(previous, {
+          blocks,
+          parts,
+          connectors,
+          relationships,
+        });
+        setSysmlStore(current => fromRepository(
+          next,
+          Object.fromEntries(current.coordinates.entries()),
+          Object.fromEntries(current.diagramPresentations.entries()),
+        ));
+        return next;
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [blocks, parts, connectors, relationships, isDragging]);
+
+  const blocksById = useMemo(() => {
+    const map = new Map<string, BlockData>();
+    for (const b of blocks) {
+      map.set(b.id, b);
+    }
+    return map;
+  }, [blocks]);
+
+  const partsById = useMemo(() => {
+    const map = new Map<string, PartData>();
+    for (const p of parts) {
+      map.set(p.id, p);
+    }
+    return map;
+  }, [parts]);
+
+  const partTypeIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of parts) {
+      if (p.typeId) set.add(p.typeId);
+    }
+    return set;
+  }, [parts]);
+
+  const diagramViewport = useMemo(() => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const w = rect?.width || 1200;
+    const h = rect?.height || 800;
+    return computeViewportBounds(view, { width: w, height: h }, 300);
+  }, [view]);
+
+  const culledDiagram = useMemo(() => {
+    const limits = loadStoredPerformanceLimits();
+    const threshold = limits.virtualizationThreshold ?? 150;
+    if (!limits.forcePerformanceMode && blocks.length < threshold && parts.length < threshold) {
+      return null;
+    }
+    return cullElements(diagramViewport, blocks, relationships, parts, connectors, undefined, 500, {
+      storeRevision: sysmlStore.revision,
+      ibdContextBlockId: currentLayerId,
+    });
+  }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
+
+  // Schedule large validation asynchronously after edits with revision-based cancellation
+  useEffect(() => {
+    if (blocks.length === 0 && parts.length === 0) return;
+    const cancel = getDefaultSysmlWorkerClient().scheduleValidation(
+      sysmlStore,
+      sysmlStore.revision,
+      () => {
+        // Validation completed in worker thread without blocking UI
+      }
+    );
+    return cancel;
+  }, [sysmlStore.revision]);
+
+  const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
   const [uiZoom, setUiZoom] = useState(1.0);
@@ -6239,7 +6346,7 @@ const ADIA = () => {
       case 'requirements': {
         const reqRelEndpoints = new Set(
           relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'composition' || r.type === 'trace')
+            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'requirementContainment' || r.type === 'copy' || r.type === 'trace')
             .flatMap(r => [r.sourceId, r.targetId])
         );
         return {
@@ -6929,6 +7036,20 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
+  const exportPlantUmlSource = useCallback(() => {
+    const source = plantUmlDiagram.type === 'sequence'
+      ? generateSequencePlantUml(plantUmlDiagram)
+      : generateUseCasePlantUml(plantUmlDiagram);
+    const blob = new Blob([source], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${(plantUmlDiagram.title || 'adia-diagram').replace(/[^a-z0-9_-]+/gi, '_')}.puml`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    addError('info', 'PlantUML source exported locally.');
+  }, [plantUmlDiagram, addError]);
+
   // Import file as new tab function
   const handleImportFile = useCallback((name: string, type: string, fileData: any) => {
     const newId = `file_${Date.now()}`;
@@ -7145,6 +7266,14 @@ const ADIA = () => {
   }, [results, data, headers, addError]);
 
   const executeExportProject = useCallback(async (selectedKeys: string[]) => {
+    const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
+    const limits = loadStoredPerformanceLimits();
+    if (totalEntities >= limits.largeModelWarningThreshold && selectedKeys.includes('unified')) {
+      const ok = window.confirm?.(
+        `Exporting complete unified project with ${totalEntities.toLocaleString()} entities may take a moment. Proceed?`
+      );
+      if (!ok) return;
+    }
     const projectFiles: Record<string, any> = {};
     const persistedStateMachine = createPersistedAppSimulationModel({
       tickMs, states, junctions, transitions, layers, variables,
@@ -7286,6 +7415,10 @@ const ADIA = () => {
           throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
         }
         setCanonicalSysmlRepository(loaded.repository);
+        setSysmlStore(fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations));
+        if (loaded.diagramPresentations) {
+          setDiagramPresentations(loaded.diagramPresentations);
+        }
         sysmlLoadedView = loaded.view;
       }
       // Logic & Simulation
@@ -7338,6 +7471,9 @@ const ADIA = () => {
 
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
+
+      const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
+      if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
 
       // DOE Modeling Suite
       if (importedData.doe) {
@@ -7582,6 +7718,7 @@ const ADIA = () => {
         ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
         ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
       ]),
+      diagramPresentations,
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7603,6 +7740,7 @@ const ADIA = () => {
       workspaceFiles,
       openTabIds,
       activeFileId,
+      plantUml: { version: 1, diagrams: [plantUmlDiagram] },
     });
   }, [
     currentProjectName,
@@ -7619,6 +7757,7 @@ const ADIA = () => {
     parts,
     connectors,
     canonicalSysmlRepository,
+    diagramPresentations,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
@@ -7638,6 +7777,7 @@ const ADIA = () => {
     workspaceFiles,
     openTabIds,
     activeFileId,
+    plantUmlDiagram,
   ]);
 
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
@@ -9387,6 +9527,27 @@ const ADIA = () => {
     addError('info', `Deleted ${kind}: ${block.name}`);
   }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
+  const removeFromDiagram = useCallback((ids: string | string[]) => {
+    const rawIds = Array.isArray(ids) ? ids : [ids];
+    if (rawIds.length === 0) return;
+    const idSet = new Set(rawIds);
+    addToHistory();
+    const currentDiagramId = diagramMode === 'requirements' ? 'requirements' : (diagramMode || 'default');
+    setDiagramPresentations(prev => {
+      const existing = prev[currentDiagramId]?.elementIds ?? blocks.map(b => b.id);
+      return {
+        ...prev,
+        [currentDiagramId]: {
+          elementIds: existing.filter(id => !idSet.has(id)),
+        },
+      };
+    });
+    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
+    setRelationships(prev => prev.filter(r => !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
+    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
+    addError('info', `Removed ${rawIds.length} element(s) from diagram (preserved in model)`);
+  }, [addToHistory, diagramMode, blocks, addError]);
+
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
   }, [createBlock]);
@@ -9493,6 +9654,13 @@ const ADIA = () => {
     const visibleReqs = reqs.filter(block => (block.layerId ?? 'root') === currentLayerId);
 
     if (visibleReqs.length === 0) return;
+    const limits = loadStoredPerformanceLimits();
+    if (visibleReqs.length >= limits.performanceModeThreshold) {
+      const proceed = window.confirm?.(
+        `Auto-layout on ${visibleReqs.length} requirement elements may cause temporary UI latency. Proceed?`
+      );
+      if (!proceed) return;
+    }
     const visibleIds = new Set(visibleReqs.map(r => r.id));
 
     const levels: Record<string, number> = {};
@@ -10265,7 +10433,10 @@ const ADIA = () => {
           let type: RelationshipData['type'] = 'association';
 
           if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-            type = 'deriveReqt';
+            setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
+            setIsCreatingTransition(false);
+            setTransitionSourceId(null);
+            return;
           }
 
           createRelationship(transitionSourceId, blockId, type);
@@ -10506,7 +10677,22 @@ const ADIA = () => {
           setImportValidationError(validation);
           return;
         }
-        hydrateProject(validation.sanitizedData || importedData);
+        const dataToHydrate = validation.sanitizedData || importedData;
+        const estEntities = (dataToHydrate.blocks?.length || 0) +
+                            (dataToHydrate.parts?.length || 0) +
+                            (dataToHydrate.connectors?.length || 0) +
+                            (dataToHydrate.relationships?.length || 0) +
+                            (dataToHydrate.definitions?.length || 0);
+        const limits = loadStoredPerformanceLimits();
+        if (estEntities >= limits.largeModelWarningThreshold) {
+          const enablePerf = window.confirm?.(
+            `This project contains ${estEntities.toLocaleString()} entities. Would you like to enable Performance Mode (spatial culling & simplified rendering) for faster editing?`
+          );
+          if (enablePerf) {
+            saveStoredPerformanceLimits({ ...limits, forcePerformanceMode: true });
+          }
+        }
+        hydrateProject(dataToHydrate);
         addError('info', `Imported project: ${file.name}`);
       } catch (error) {
         setImportValidationError({
@@ -10530,17 +10716,33 @@ const ADIA = () => {
       sysmlGate.diagnostics.filter(item => item.severity === 'error').forEach(item => addError('error', `${item.code}: ${item.message}`, 'SysML'));
       return;
     }
+    const limits = loadStoredPerformanceLimits();
+    const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
+    if (totalEntities >= limits.largeModelWarningThreshold) {
+      const ok = window.confirm?.(
+        `This model contains ${totalEntities.toLocaleString()} entities. Generating a global report with diagrams may take several seconds. Proceed?`
+      );
+      if (!ok) return;
+    }
+    const canonicalReportView = projectLegacyDiagram(canonicalSysmlRepository);
     const snapshot = createReportSnapshot({
-      blocks,
-      relationships,
-      parts,
-      connectors,
+      blocks: canonicalReportView.blocks,
+      relationships: canonicalReportView.relationships,
+      parts: canonicalReportView.parts,
+      connectors: canonicalReportView.connectors,
       states,
       layers,
       transitions,
       junctions,
     });
     const hierarchySource = toHierarchySource(snapshot);
+    const traceabilitySnapshot = buildCanonicalTraceabilitySnapshot(canonicalSysmlRepository);
+    const traceabilityMatrix = buildTraceabilityMatrix(
+      canonicalSysmlRepository,
+      {},
+      traceabilitySnapshot.index,
+    );
+    const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
     const style = `
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
@@ -10598,6 +10800,18 @@ const ADIA = () => {
       html += `<div class="consistency-summary" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px; font-size: 0.9em;">
         <strong>Model Consistency Summary:</strong> revision: ${escapeHtml(snapshot.revision)} &bull; removed connections: ${totalRemoved} (relationships: ${removedRelCount}, connectors: ${removedConnCount}) &bull; errors: ${errorCount}
       </div>`;
+    }
+
+    html += `<h2>Traceability Matrix</h2>`;
+    html += `<div class="consistency-summary"><strong>Canonical revision:</strong> ${escapeHtml(String(traceabilitySnapshot.repositoryRevision))} &bull; <strong>Model hash:</strong> ${escapeHtml(traceabilitySnapshot.modelHash)} &bull; <strong>Coverage:</strong> ${traceabilityMetrics.coveragePercent.toFixed(1)}% &bull; <strong>Verification:</strong> ${traceabilityMetrics.verificationPercent.toFixed(1)}%</div>`;
+    html += `<table><tr><th>Requirement</th><th>Status</th><th>Change</th><th>Owner / Risk</th><th>Covering Elements</th><th>Verification / Evidence</th><th>Unresolved</th></tr>`;
+    for (const row of traceabilityMatrix.rows) {
+      const links = [...row.coveringBlocks.map(item => item.name), ...row.blocks, ...row.parts].join('; ');
+      html += `<tr><td>${escapeHtml(row.requirement.requirementId)} · ${escapeHtml(row.requirement.name)}</td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.changeKind ?? 'unchanged')}</td><td>${escapeHtml(`${row.requirement.owner ?? 'Unassigned'} / ${row.requirement.risk ?? 'unspecified'}`)}</td><td>${escapeHtml(links || 'None')}</td><td>${escapeHtml(`${row.verificationCases.length} cases / ${row.evidence.length} evidence`)}</td><td>${escapeHtml(row.unresolvedEndpointIds.join('; ') || 'None')}</td></tr>`;
+    }
+    html += `</table>`;
+    if (traceabilitySnapshot.diagnostics.length > 0) {
+      html += `<h3>Traceability Diagnostics</h3><ul>${traceabilitySnapshot.diagnostics.map(item => `<li>${escapeHtml(item.code)}: ${escapeHtml(item.message)}</li>`).join('')}</ul>`;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -11036,7 +11250,7 @@ const ADIA = () => {
       contextId?: string,
       diagId?: string
     ) => {
-      const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
+      const contextBlock = contextId ? blocksById.get(contextId) : null;
 
       // Calculate bounds for this page's nodes to render local context frame
       let minX_ = Infinity, minY_ = Infinity, maxX_ = -Infinity, maxY_ = -Infinity;
@@ -11076,7 +11290,7 @@ const ADIA = () => {
         const node = isString ? displayNodes.find(n => n.id === id) : nodeOrId;
         if (!node) return { x: 0, y: 0 };
 
-        let block = type === 'ibd' ? blocks.find(b => b.id === node.typeId) : node;
+        let block = type === 'ibd' ? blocksById.get(node.typeId) : node;
         if (!block) return { x: node.displayX + (node.width || 120) / 2, y: node.displayY + (node.height || 80) / 2 };
 
         const port = block.ports?.find((p: any) => p.id === portId);
@@ -11117,6 +11331,8 @@ const ADIA = () => {
           <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
           <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#333" stroke="#333" /></marker>
           <marker id="m-triangle-${type}" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto"><path d="M1,1 L13,6 L1,11 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
+          <marker id="requirement-containment-crosshair" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
+          <marker id="m-containment-${type}" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
         </defs>`;
 
       // If IBD, render the outer context block boundary and its ports
@@ -11360,6 +11576,10 @@ const ADIA = () => {
             const relType = e.type;
             if (relType === 'composition') {
               markerStart = `url(#m-diamond-fill-${type})`;
+            } else if (relType === 'requirementContainment') {
+              markerStart = `url(#requirement-containment-crosshair)`;
+              middleLabel = '«contains»';
+              strokeColor = '#546e7a';
             } else if (relType === 'aggregation') {
               markerStart = `url(#m-diamond-${type})`;
             } else if (relType === 'generalization') {
@@ -11578,7 +11798,7 @@ const ADIA = () => {
         const target = hierarchySource.blocks.find(b => b.id === rel.targetId);
         if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
           // Only use specific SysML relationships for parent-child nesting, matching the Traceability Matrix
-          if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+          if (rel.type === 'requirementContainment' || rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
             if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
             childrenMap.get(rel.sourceId)!.push(rel.targetId);
             parentSet.add(rel.targetId);
@@ -13366,6 +13586,8 @@ const ADIA = () => {
 
           if (selectedStateIds.length > 0) {
             deleteStates(selectedStateIds, otherSelectedIds);
+          } else if (diagramMode === 'requirements' || diagramMode === 'bdd') {
+            removeFromDiagram(otherSelectedIds);
           } else {
             deleteNonStateElements(otherSelectedIds);
           }
@@ -13394,7 +13616,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -13895,8 +14117,10 @@ const ADIA = () => {
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
+    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+    const isDegraded = Boolean(culledDiagram?.isDegradedMode && view.scale < 0.7);
 
-    return blocks.map(block => {
+    return targetBlocks.map(block => {
       if (diagramMode === 'ibd') {
         if (block.id === currentLayerId) {
           const frame = { x: block.ibdX ?? 50, y: block.ibdY ?? 50, w: block.ibdWidth ?? 1200, h: block.ibdHeight ?? 800 };
@@ -13962,7 +14186,7 @@ const ADIA = () => {
         // or if they are currently being connected.
         const isRealizedInCurrentLayer = interfaceRealizations.some(realization => {
           if (realization.interfaceId !== block.id) return false;
-          const part = parts.find(p => p.id === realization.partId);
+          const part = partsById.get(realization.partId);
           return part && part.blockId === currentLayerId;
         });
         const isConnectionSource = isCreatingTransition && transitionSourceId === block.id;
@@ -13981,7 +14205,7 @@ const ADIA = () => {
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
       // In BDD mode, hide any block that is being used as a type for a part.
-      if (diagramMode === 'bdd' && parts.some(p => p.typeId === block.id)) {
+      if (diagramMode === 'bdd' && partTypeIds.has(block.id)) {
         return null;
       }
 
@@ -14020,101 +14244,106 @@ const ADIA = () => {
           </text>
           <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
 
-          {/* Requirement Specifics */}
-          {block.stereotype === 'requirement' ? (
-            <g transform="translate(5, 45)">
-              <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
-              <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
-                <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
-                  {block.description}
-                </div>
-              </foreignObject>
-              {/* Status Indicator */}
-              <circle cx={displayWidth - 15} cy={-35} r={3} fill={
-                block.status === 'Verified' ? '#4ade80' :
-                  block.status === 'Approved' ? '#6c9ac6' :
-                    block.status === 'Draft' ? '#888' : '#c96c8a'
-              } />
-              {/* Attached PDFs Indicator */}
-              {block.attachedFiles && block.attachedFiles.length > 0 && (
-                <g transform={`translate(${displayWidth - 35}, -40)`}>
-                  <title>{`${block.attachedFiles.length} PDF(s) attached`}</title>
-                  <rect x="0" y="0" width="8" height="10" rx="1" fill="none" stroke="#f97316" strokeWidth={1} />
-                  <line x1="2" y1="3" x2="6" y2="3" stroke="#f97316" strokeWidth={1} />
-                  <line x1="2" y1="5" x2="6" y2="5" stroke="#f97316" strokeWidth={1} />
-                  <line x1="2" y1="7" x2="5" y2="7" stroke="#f97316" strokeWidth={1} />
-                  <text x="11" y="9" fill="#f97316" fontSize={8} fontWeight="bold">{block.attachedFiles.length}</text>
+          {/* If degraded mode active, skip complex sub-elements for performance */}
+          {!isDegraded && (
+            <>
+              {/* Requirement Specifics */}
+              {block.stereotype === 'requirement' ? (
+                <g transform="translate(5, 45)">
+                  <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
+                  <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
+                    <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
+                      {block.description}
+                    </div>
+                  </foreignObject>
+                  {/* Status Indicator */}
+                  <circle cx={displayWidth - 15} cy={-35} r={3} fill={
+                    block.status === 'Verified' ? '#4ade80' :
+                      block.status === 'Approved' ? '#6c9ac6' :
+                        block.status === 'Draft' ? '#888' : '#c96c8a'
+                  } />
+                  {/* Attached PDFs Indicator */}
+                  {block.attachedFiles && block.attachedFiles.length > 0 && (
+                    <g transform={`translate(${displayWidth - 35}, -40)`}>
+                      <title>{`${block.attachedFiles.length} PDF(s) attached`}</title>
+                      <rect x="0" y="0" width="8" height="10" rx="1" fill="none" stroke="#f97316" strokeWidth={1} />
+                      <line x1="2" y1="3" x2="6" y2="3" stroke="#f97316" strokeWidth={1} />
+                      <line x1="2" y1="5" x2="6" y2="5" stroke="#f97316" strokeWidth={1} />
+                      <line x1="2" y1="7" x2="5" y2="7" stroke="#f97316" strokeWidth={1} />
+                      <text x="11" y="9" fill="#f97316" fontSize={8} fontWeight="bold">{block.attachedFiles.length}</text>
+                    </g>
+                  )}
                 </g>
-              )}
-            </g>
-          ) : (
-            <g transform="translate(5, 45)">
-              {block.properties.slice(0, 3).map((prop, i) => (
-                <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
-                  {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
-                </text>
-              ))}
-              {block.classes && block.classes.length > 0 && (
-                <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
-                  <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                  {block.classes.slice(0, 3).map((cls, i) => (
-                    <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
-                      {cls}
+              ) : (
+                <g transform="translate(5, 45)">
+                  {block.properties.slice(0, 3).map((prop, i) => (
+                    <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
+                      {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
+                  {block.classes && block.classes.length > 0 && (
+                    <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
+                      <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
+                      {block.classes.slice(0, 3).map((cls, i) => (
+                        <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
+                          {cls}
+                        </text>
+                      ))}
+                    </g>
+                  )}
                 </g>
               )}
-            </g>
-          )}
 
-          {/* Operations Separator if needed */}
-          {block.operations.length > 0 && (
-            <>
-              <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
-              <g transform={`translate(5, ${displayHeight - 15})`}>
-                {block.operations.slice(0, 2).map((op, i) => (
-                  <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
-                ))}
-              </g>
-            </>
-          )}
+              {/* Operations Separator if needed */}
+              {block.operations.length > 0 && (
+                <>
+                  <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${displayHeight - 15})`}>
+                    {block.operations.slice(0, 2).map((op, i) => (
+                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
+                    ))}
+                  </g>
+                </>
+              )}
 
-          {/* Constraints */}
-          {block.constraints && block.constraints.length > 0 && (
-            <>
-              <line x1={0} y1={displayHeight - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={displayHeight - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
-              <g transform={`translate(5, ${displayHeight - (block.operations.length > 0 ? 30 : 15)})`}>
-                {block.constraints.slice(0, 2).map((c, i) => (
-                  <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
-                ))}
-              </g>
-            </>
-          )}
+              {/* Constraints */}
+              {block.constraints && block.constraints.length > 0 && (
+                <>
+                  <line x1={0} y1={displayHeight - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={displayHeight - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${displayHeight - (block.operations.length > 0 ? 30 : 15)})`}>
+                    {block.constraints.slice(0, 2).map((c, i) => (
+                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
+                    ))}
+                  </g>
+                </>
+              )}
 
-          {/* Ports */}
-          {block.ports.map((port, i) => (
-            <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
-              <rect
-                width={10}
-                height={10}
-                fill="#333"
-                stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
-                strokeWidth={1}
-              />
-              {port.kind === 'flow' && (
-                <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
-                  {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
+              {/* Ports */}
+              {block.ports.map((port, i) => (
+                <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
+                  <rect
+                    width={10}
+                    height={10}
+                    fill="#333"
+                    stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
+                    strokeWidth={1}
+                  />
+                  {port.kind === 'flow' && (
+                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
+                      {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
+                    </text>
+                  )}
+                  <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
+                </g>
+              ))}
+
+              {/* Satisfied Requirements Indicator */}
+              {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
+                <text x={displayWidth - 5} y={displayHeight - 5} textAnchor="end" fill="#4ade80" fontSize={9} fontWeight="bold">
+                  ✓ {block.satisfiedReqIds.length}
                 </text>
               )}
-              <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
-            </g>
-          ))}
-
-          {/* Satisfied Requirements Indicator */}
-          {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
-            <text x={displayWidth - 5} y={displayHeight - 5} textAnchor="end" fill="#4ade80" fontSize={9} fontWeight="bold">
-              ✓ {block.satisfiedReqIds.length}
-            </text>
+            </>
           )}
 
           {/* Resize Handles */}
@@ -14134,19 +14363,22 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
+  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
+    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
+    const isInteracting = isDragging || isPanning;
+
     const pairGroups = new Map<string, string[]>();
-    relationships.forEach(rel => {
+    targetRelationships.forEach(rel => {
       const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
       if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
       pairGroups.get(pairKey)!.push(rel.id);
     });
 
-    return relationships.map(rel => {
-      const source = blocks.find(b => b.id === rel.sourceId);
-      const target = blocks.find(b => b.id === rel.targetId);
+    return targetRelationships.map(rel => {
+      const source = blocksById.get(rel.sourceId);
+      const target = blocksById.get(rel.targetId);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
@@ -14182,10 +14414,24 @@ const ADIA = () => {
       const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
       const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
+      const isReqContainment = rel.type === 'requirementContainment';
+      const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
+        ? validateRequirementContainment(canonicalSysmlRepository, rel.id)
+        : [];
+      const containmentErrorText = containmentDiagnostics.map(d => d.message).join('; ');
+      const ariaLabel = isReqContainment
+        ? `Requirement containment: ${source.name || source.reqId || source.id} contains ${target.name || target.reqId || target.id}${containmentErrorText ? ` - Error: ${containmentErrorText}` : ''}`
+        : undefined;
       const { sp, tp, labelPos, angle } = route;
 
       return (
-        <g key={rel.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }} style={{ cursor: 'pointer' }}>
+        <g
+          key={rel.id}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}
+          style={{ cursor: 'pointer' }}
+          role={isReqContainment ? "graphics-symbol" : undefined}
+          aria-label={ariaLabel}
+        >
           {/* Broad click target */}
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
 
@@ -14199,6 +14445,13 @@ const ADIA = () => {
           {rel.type === 'composition' && (
             <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
+          {rel.type === 'requirementContainment' && (
+            <g transform={`translate(${sp.x}, ${sp.y}) rotate(${angle})`}>
+              <circle cx={7} cy={0} r={6} fill="#141414" stroke={strokeColor} strokeWidth={1.5} />
+              <line x1={1} y1={0} x2={13} y2={0} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
+              <line x1={7} y1={-6} x2={7} y2={6} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
+            </g>
+          )}
           {rel.type === 'aggregation' && (
             <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
@@ -14209,38 +14462,57 @@ const ADIA = () => {
             <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
 
-          {/* Stereotype / Label Badge with background to prevent overlapping text */}
-          {(isTrace || rel.type === 'allocation' || rel.label) && (
+          {/* Stereotype / Label Badge with background - deferred during drag/pan */}
+          {!isInteracting && (isTrace || rel.type === 'allocation' || rel.type === 'requirementContainment' || rel.label) && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
-              <rect x={-36} y={-10} width={72} height={16} rx={3} fill="#141414" stroke={isSuspect ? '#ef4444' : '#333'} strokeWidth={isSuspect ? 1.2 : 0.8} />
-              <text x={0} y={2} textAnchor="middle" fill={strokeColor} fontSize={9} fontWeight="600">
-                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}{isSuspect ? ' [!]' : ''}
+              <rect
+                x={-42}
+                y={-10}
+                width={84}
+                height={16}
+                rx={3}
+                fill="#141414"
+                stroke={isSuspect || containmentDiagnostics.length > 0 ? '#ef4444' : '#333'}
+                strokeWidth={isSuspect || containmentDiagnostics.length > 0 ? 1.2 : 0.8}
+              />
+              <text
+                x={0}
+                y={2}
+                textAnchor="middle"
+                fill={containmentDiagnostics.length > 0 ? '#ef4444' : strokeColor}
+                fontSize={9}
+                fontWeight="600"
+              >
+                {rel.type === 'requirementContainment'
+                  ? (containmentDiagnostics.length > 0 ? '«contains» [!]' : '«contains»')
+                  : (rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`)}{isSuspect ? ' [!]' : ''}
               </text>
             </g>
           )}
 
-          {(rel as any).sourceRole && (
+          {!isInteracting && (rel as any).sourceRole && (
             <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
           )}
-          {rel.sourceMultiplicity && (
+          {!isInteracting && rel.sourceMultiplicity && (
             <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
           )}
-          {(rel as any).targetRole && (
+          {!isInteracting && (rel as any).targetRole && (
             <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
           )}
-          {rel.targetMultiplicity && (
+          {!isInteracting && rel.targetMultiplicity && (
             <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
           )}
         </g>
       );
     });
-  }, [relationships, blocks, selectedIds, diagramMode, currentLayerId]);
+  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
     if (diagramMode !== 'ibd') return null;
-    return parts.filter(p => p.blockId === currentLayerId).map(part => {
-      const block = blocks.find(b => b.id === part.typeId);
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
+    return targetParts.filter(p => p.blockId === currentLayerId).map(part => {
+      const block = part.typeId ? blocksById.get(part.typeId) : undefined;
       const isSelected = selectedIds.includes(part.id);
 
       return (
@@ -14333,20 +14605,23 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, blocks, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode]);
+  }, [parts, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const currentPartIds = new Set(parts.filter(p => p.blockId === currentLayerId).map(p => p.id));
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
+    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : connectors;
+    const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
+    const isInteracting = isDragging || isPanning;
 
-    const visibleConnectors = connectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
+    const visibleConnectors = targetConnectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
 
     return visibleConnectors.map((conn, connIdx) => {
       const getPortPos = (partId: string, portId: string) => {
         if (partId === currentLayerId) {
-          const block = blocks.find(b => b.id === partId);
+          const block = blocksById.get(partId);
           const port = block?.ports?.find(p => p.id === portId);
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
           const frame = { x: block?.ibdX ?? 50, y: block?.ibdY ?? 50, w: block?.ibdWidth ?? 1200, h: block?.ibdHeight ?? 800 };
@@ -14359,8 +14634,8 @@ const ADIA = () => {
           const isLeft = index % 2 === 0;
           return { x: isLeft ? frame.x : frame.x + frame.w, y: frame.y + 60 + Math.floor(index / 2) * 40, side: isLeft ? 'left' as const : 'right' as const };
         } else {
-          const part = parts.find(p => p.id === partId);
-          const block = blocks.find(b => b.id === part?.typeId);
+          const part = partsById.get(partId);
+          const block = part?.typeId ? blocksById.get(part.typeId) : undefined;
           const port = block?.ports?.find(p => p.id === portId);
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
           if (!part) return { x: 0, y: 0, side: 'right' as const };
@@ -14389,7 +14664,7 @@ const ADIA = () => {
         <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }} style={{ cursor: 'pointer' }}>
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={12} />
           <path d={route.path} fill="none" stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
-          {(conn.itemFlow || conn.label) && (
+          {!isInteracting && (conn.itemFlow || conn.label) && (
             <g transform={`translate(${route.midX}, ${route.midY})`}>
               <polygon
                 points="0,0 -6,-3 -6,3"
@@ -14405,7 +14680,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [connectors, parts, blocks, selectedIds, currentLayerId, diagramMode]);
+  }, [connectors, parts, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
 
   const renderInterfaceRealizations = useCallback((): React.ReactNode => {
     if (diagramMode !== 'ibd') return null;
@@ -14413,11 +14688,11 @@ const ADIA = () => {
     return interfaceRealizations.map(realization => {
       const { id, interfaceId, partId, portId } = realization;
 
-      const interfaceBlock = blocks.find(b => b.id === interfaceId);
-      const part = parts.find(p => p.id === partId);
+      const interfaceBlock = blocksById.get(interfaceId);
+      const part = partsById.get(partId);
       if (!interfaceBlock || !part || part.blockId !== currentLayerId) return null;
 
-      const partBlock = blocks.find(b => b.id === part.typeId);
+      const partBlock = part.typeId ? blocksById.get(part.typeId) : undefined;
       if (!partBlock) return null;
 
       const port = partBlock.ports.find(p => p.id === portId);
@@ -14452,7 +14727,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [diagramMode, interfaceRealizations, blocks, parts, currentLayerId, selectedIds]);
+  }, [diagramMode, interfaceRealizations, blocksById, partsById, currentLayerId, selectedIds]);
 
   const handleJumpToError = useCallback((error: ErrorItem) => {
     if (!error.elementId) return;
@@ -14732,6 +15007,18 @@ const ADIA = () => {
         plotFactors={plotFactors} 
         holdValues={holdValues} 
       />
+      <LargeModelDiagnostics
+        isOpen={showSysmlDiagnostics}
+        onClose={() => setShowSysmlDiagnostics(false)}
+        totalBlockCount={blocks.length}
+        totalPartCount={parts.length}
+        totalConnectorCount={connectors.length}
+        totalRelationshipCount={relationships.length}
+        visibleCount={culledDiagram ? culledDiagram.visibleBlocks.length + culledDiagram.visibleParts.length : undefined}
+        isVirtualizing={Boolean(culledDiagram)}
+        isDegradedMode={culledDiagram?.isDegradedMode}
+        workerDiagnostics={getDefaultSysmlWorkerClient().getDiagnostics()}
+      />
       {importValidationError && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
           <div className="bg-[#121212] border-2 border-red-500/80 rounded-2xl w-[600px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
@@ -14827,7 +15114,7 @@ const ADIA = () => {
                 onClick={() => setDiagramMode(mode.id as DiagramMode)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
+                    ? mode.id === 'plantuml' ? 'bg-orange-500 text-zinc-950 shadow-sm font-semibold' : 'bg-zinc-800 text-white shadow-sm font-semibold'
                     : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
                 }`}
               >
@@ -15112,6 +15399,18 @@ const ADIA = () => {
               <Cloud size={13} className="mr-1 text-cyan-400" />
               3DEXPERIENCE
             </Button>
+
+            <Button
+              id="sysml-diagnostics-toolbar-btn"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSysmlDiagnostics(true)}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              title="SysML Performance Diagnostics & Limits"
+            >
+              <Gauge size={13} className="mr-1 text-orange-400" />
+              Diagnostics
+            </Button>
           </div>
 
           <div className="flex-1 min-w-4" />
@@ -15368,7 +15667,7 @@ const ADIA = () => {
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
             <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
-              {(xBridgesStateId || diagramMode === 'xbridges') && (
+            {(xBridgesStateId || diagramMode === 'xbridges') && (
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
                   initialNodes={syncXBBoundaryNodeMetadata(
@@ -15393,6 +15692,15 @@ const ADIA = () => {
                   workspaceFiles={workspaceFiles}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
+                />
+              )}
+
+              {diagramMode === 'plantuml' && (
+                <PlantUmlWorkspace
+                  diagram={plantUmlDiagram}
+                  onChange={setPlantUmlDiagram}
+                  onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
+                  onExport={exportPlantUmlSource}
                 />
               )}
 
@@ -16872,12 +17180,8 @@ const ADIA = () => {
                           copiedFromId: (selectedBlock as any).copiedFromId,
                         };
                         const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
-                        const suspectLinks = Object.values(canonicalSysmlRepository.relationships).filter(
-                          r => (r.sourceId === selectedBlock.id || r.targetId === selectedBlock.id) && r.suspect
-                        );
-                        const evidenceHistory = Object.values(canonicalSysmlRepository.evidence).filter(
-                          e => e.requirementId === selectedBlock.id
-                        );
+                        const suspectLinks = selectSuspectLinks(sysmlStore, selectedBlock.id);
+                        const evidenceHistory = selectEvidenceForRequirement(sysmlStore, selectedBlock.id);
 
                         return (
                           <RequirementGovernancePanel
@@ -17075,7 +17379,24 @@ const ADIA = () => {
                     </select>
                     <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deleteBlock(selectedBlock.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Block</Button>
+                  <div className="flex flex-col gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => removeFromDiagram(selectedBlock.id)}
+                      className="w-full border-[#444] text-[#ccc] hover:bg-[#222]"
+                    >
+                      Remove from Diagram
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteBlock(selectedBlock.id)}
+                      className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
+                    >
+                      Delete from Model…
+                    </Button>
+                  </div>
                 </>
               ) : selectedRelationship ? (
                 <>
@@ -17098,6 +17419,12 @@ const ADIA = () => {
                       <option value="verify">Verify</option>
                       <option value="trace">Trace</option>
                       <option value="copy">Copy</option>
+                      <option
+                        value="requirementContainment"
+                        disabled={!(blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement' && blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement')}
+                      >
+                        Requirement Containment (parent → child)
+                      </option>
                       <option value="binding">Binding</option>
                       <option value="dependency">Dependency</option>
                     </select>
@@ -17121,7 +17448,15 @@ const ADIA = () => {
                       sourceAggregation: (selectedRelationship as any).sourceAggregation,
                       targetAggregation: (selectedRelationship as any).targetAggregation,
                     }}
-                    diagnostics={canonicalSysmlRepository.relationships[selectedRelationship.id] ? validateAssociationEnds(canonicalSysmlRepository, selectedRelationship.id) : []}
+                    diagnostics={
+                      canonicalSysmlRepository.relationships[selectedRelationship.id]
+                        ? selectedRelationship.type === 'requirementContainment'
+                          ? validateRequirementContainment(canonicalSysmlRepository, selectedRelationship.id)
+                          : validateAssociationEnds(canonicalSysmlRepository, selectedRelationship.id)
+                        : []
+                    }
+                    sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
+                    targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -17735,6 +18070,97 @@ const ADIA = () => {
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {deleteConfirmState.totalStates > 1 ? `Delete ${deleteConfirmState.totalStates} States` : 'Delete State'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Requirement Connection Picker Modal */}
+        {requirementConnectionPicker && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            onMouseDown={() => setRequirementConnectionPicker(null)}
+          >
+            <div
+              className="bg-[#141414] border border-[#333] rounded-lg w-[420px] shadow-2xl p-5 flex flex-col gap-4 text-[#e0e0e0]"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-base font-semibold text-white">Create Requirement Relationship</h3>
+                <p className="text-xs text-[#888] mt-1">
+                  Choose the relationship kind between{' '}
+                  <span className="text-[#f97316] font-medium">
+                    {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
+                  </span>{' '}
+                  and{' '}
+                  <span className="text-[#f97316] font-medium">
+                    {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'requirementContainment');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Requirement Containment</div>
+                    <div className="text-xs text-[#aaa] font-normal">Parent contains child (source → target)</div>
+                  </div>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'deriveReqt');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Derive Requirement («deriveReqt»)</div>
+                    <div className="text-xs text-[#aaa] font-normal">Derived requirement from source</div>
+                  </div>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'copy');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Copy («copy»)</div>
+                    <div className="text-xs text-[#aaa] font-normal">Requirement copy relationship</div>
+                  </div>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'trace');
+                    setRequirementConnectionPicker(null);
+                  }}
+                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                >
+                  <div>
+                    <div className="font-semibold text-sm">Trace («trace»)</div>
+                    <div className="text-xs text-[#aaa] font-normal">General traceability relationship</div>
+                  </div>
+                </Button>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
+                <Button
+                  variant="outline"
+                  onClick={() => setRequirementConnectionPicker(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#222]"
+                >
+                  Cancel
                 </Button>
               </div>
             </div>

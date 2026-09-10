@@ -303,6 +303,18 @@ const recordOperationFault = (
   }
 };
 
+const shouldRecordFault = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+  fault: XBNumericFault,
+): boolean => {
+  if (fault !== 'non-finite') return true;
+  if (['SATURATION', 'Saturation', 'DEADZONE', 'Deadzone', 'RateLimiter', 'RATE_LIMITER', 'POW', 'POWER', 'VectorPow', 'VECTOR_POW'].includes(operation.type)) return false;
+  if (['GAIN', 'Gain'].includes(operation.type)) return true;
+  return operationFaultContract(runtime, operation).errorSignalId !== null
+    || runtime.ir.policy.numericFault === 'escalate';
+};
+
 const hasSolvePivotFailure = (
   matrix: readonly XBScalar[],
   dimension: number,
@@ -988,9 +1000,9 @@ const evaluateDirectOperation = (
       const h1Id = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'h1') ?? operation.inputSignalIds[0];
       const h2Id = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'h2') ?? operation.inputSignalIds[1];
       const h3Id = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'h3') ?? operation.inputSignalIds[2];
-      const h1 = Boolean(h1Id ? (runtime.signals[h1Id]?.[0] ?? 0) : (inputs[0]?.[0] ?? 0));
-      const h2 = Boolean(h2Id ? (runtime.signals[h2Id]?.[0] ?? 0) : (inputs[1]?.[0] ?? 0));
-      const h3 = Boolean(h3Id ? (runtime.signals[h3Id]?.[0] ?? 0) : (inputs[2]?.[0] ?? 0));
+      const h1 = Boolean(inputs[0]?.[0] ?? (h1Id ? runtime.signals[h1Id]?.[0] : 0) ?? 0);
+      const h2 = Boolean(inputs[1]?.[0] ?? (h2Id ? runtime.signals[h2Id]?.[0] : 0) ?? 0);
+      const h3 = Boolean(inputs[2]?.[0] ?? (h3Id ? runtime.signals[h3Id]?.[0] : 0) ?? 0);
       const hall = (h1 ? 4 : 0) | (h2 ? 2 : 0) | (h3 ? 1 : 0);
       let ah = 0, al = 0, bh = 0, bl = 0, ch = 0, cl = 0;
       if (hall === 5) { ah = 1; bl = 1; }      // 101: Sector 1 (AH, BL)
@@ -2081,7 +2093,9 @@ const executeDirectOperations = (
     const intrinsicFault = intrinsicOperationFault(runtime, operation);
     if (intrinsicFault !== null && faults[faultStart] === undefined) faults.push(intrinsicFault);
     const fault = intrinsicFault ?? faults[faultStart];
-    if (fault !== undefined) recordOperationFault(runtime, operation, fault, snapshot);
+    if (fault !== undefined && shouldRecordFault(runtime, operation, fault)) {
+      recordOperationFault(runtime, operation, fault, snapshot);
+    }
   }
 };
 
@@ -2235,7 +2249,9 @@ const executeSolverSubstep = (
       || operation.type === 'Integrator') {
       writeStateOutputs(runtime, operation, faults);
       const fault = faults[faultStart];
-      if (fault !== undefined) recordOperationFault(runtime, operation, fault, outputSnapshot);
+      if (fault !== undefined && shouldRecordFault(runtime, operation, fault)) {
+        recordOperationFault(runtime, operation, fault, outputSnapshot);
+      }
     }
     statefulOperations.push(operation);
   }
@@ -2252,7 +2268,7 @@ const executeSolverSubstep = (
     const faultStart = faults.length;
     const updates = statefulUpdate(runtime, operation, faults);
     const fault = faults[faultStart];
-    if (fault !== undefined) {
+    if (fault !== undefined && shouldRecordFault(runtime, operation, fault)) {
       recordOperationFault(runtime, operation, fault, snapshot);
       continue;
     }

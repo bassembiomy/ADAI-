@@ -30,4 +30,19 @@ describe('canonical SysML repository', () => {
     expect(repo.definitions.motor.id).toBe('motor');
     expect(repo.usages.leftMotor.typeId).toBe('motor');
   });
+
+  it('supports requirement containment relationship connecting parent to child requirement', () => {
+    const repo: SysmlRepository = createEmptyRepository();
+    repo.requirements.parent = { id: 'parent', kind: 'requirement', name: 'Parent Req', namespace: [], requirementId: 'REQ-P', text: 'Parent text', status: 'approved', version: '1' };
+    repo.requirements.child = { id: 'child', kind: 'requirement', name: 'Child Req', namespace: [], requirementId: 'REQ-C', text: 'Child text', status: 'approved', version: '1' };
+    repo.relationships.rc = {
+      id: 'rc',
+      kind: 'requirementContainment' as any,
+      sourceId: 'parent',
+      targetId: 'child',
+    };
+    expect(repo.relationships.rc.kind).toBe('requirementContainment');
+    expect(repo.relationships.rc.sourceId).toBe('parent');
+    expect(repo.relationships.rc.targetId).toBe('child');
+  });
 });

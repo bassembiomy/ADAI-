@@ -99,7 +99,7 @@ describe('normative representative SysML profile fixture', () => {
     const raw = readFileSync(fixturePath, 'utf-8');
     const { repository: repo } = loadRepository(JSON.parse(raw));
 
-    // Core requirement relationships: deriveReqt, satisfy, verify, refine, trace, copy
+    // Core requirement relationships: deriveReqt, satisfy, verify, refine, trace, copy, requirementContainment
     const relKinds = new Set(Object.values(repo.relationships).map(r => r.kind));
     expect(relKinds.has('deriveReqt')).toBe(true);
     expect(relKinds.has('satisfy')).toBe(true);
@@ -107,6 +107,21 @@ describe('normative representative SysML profile fixture', () => {
     expect(relKinds.has('refine')).toBe(true);
     expect(relKinds.has('trace')).toBe(true);
     expect(relKinds.has('copy')).toBe(true);
+    expect(relKinds.has('requirementContainment')).toBe(true);
+
+    // Three-level requirement containment tree coverage
+    const containmentRels = Object.values(repo.relationships).filter(r => r.kind === 'requirementContainment');
+    expect(containmentRels.length).toBeGreaterThanOrEqual(2);
+    const parentIds = new Set(containmentRels.map(r => r.sourceId));
+    const childIds = new Set(containmentRels.map(r => r.targetId));
+    const midIds = [...parentIds].filter(id => childIds.has(id));
+    expect(midIds.length).toBeGreaterThanOrEqual(1);
+    const midId = midIds[0];
+    const topId = containmentRels.find(r => r.targetId === midId)!.sourceId;
+    const leafId = containmentRels.find(r => r.sourceId === midId)!.targetId;
+    expect(repo.requirements[topId]).toBeDefined();
+    expect(repo.requirements[midId]).toBeDefined();
+    expect(repo.requirements[leafId]).toBeDefined();
 
     // Requirements governance attributes
     const reqs = Object.values(repo.requirements);
