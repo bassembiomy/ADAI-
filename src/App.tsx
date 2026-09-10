@@ -6206,6 +6206,30 @@ const ADIA = () => {
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
 
+  const blocksById = useMemo(() => {
+    const map = new Map<string, BlockData>();
+    for (const b of blocks) {
+      map.set(b.id, b);
+    }
+    return map;
+  }, [blocks]);
+
+  const partsById = useMemo(() => {
+    const map = new Map<string, PartData>();
+    for (const p of parts) {
+      map.set(p.id, p);
+    }
+    return map;
+  }, [parts]);
+
+  const partTypeIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of parts) {
+      if (p.typeId) set.add(p.typeId);
+    }
+    return set;
+  }, [parts]);
+
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
     const w = rect?.width || 1200;
@@ -6219,8 +6243,11 @@ const ADIA = () => {
     if (!limits.forcePerformanceMode && blocks.length < threshold && parts.length < threshold) {
       return null;
     }
-    return cullElements(diagramViewport, blocks, relationships, parts, connectors);
-  }, [diagramViewport, blocks, relationships, parts, connectors]);
+    return cullElements(diagramViewport, blocks, relationships, parts, connectors, undefined, 500, {
+      storeRevision: sysmlStore.revision,
+      ibdContextBlockId: currentLayerId,
+    });
+  }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
   const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
@@ -11162,7 +11189,7 @@ const ADIA = () => {
       contextId?: string,
       diagId?: string
     ) => {
-      const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
+      const contextBlock = contextId ? blocksById.get(contextId) : null;
 
       // Calculate bounds for this page's nodes to render local context frame
       let minX_ = Infinity, minY_ = Infinity, maxX_ = -Infinity, maxY_ = -Infinity;
@@ -11202,7 +11229,7 @@ const ADIA = () => {
         const node = isString ? displayNodes.find(n => n.id === id) : nodeOrId;
         if (!node) return { x: 0, y: 0 };
 
-        let block = type === 'ibd' ? blocks.find(b => b.id === node.typeId) : node;
+        let block = type === 'ibd' ? blocksById.get(node.typeId) : node;
         if (!block) return { x: node.displayX + (node.width || 120) / 2, y: node.displayY + (node.height || 80) / 2 };
 
         const port = block.ports?.find((p: any) => p.id === portId);
@@ -14098,7 +14125,7 @@ const ADIA = () => {
         // or if they are currently being connected.
         const isRealizedInCurrentLayer = interfaceRealizations.some(realization => {
           if (realization.interfaceId !== block.id) return false;
-          const part = parts.find(p => p.id === realization.partId);
+          const part = partsById.get(realization.partId);
           return part && part.blockId === currentLayerId;
         });
         const isConnectionSource = isCreatingTransition && transitionSourceId === block.id;
@@ -14117,7 +14144,7 @@ const ADIA = () => {
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
       // In BDD mode, hide any block that is being used as a type for a part.
-      if (diagramMode === 'bdd' && parts.some(p => p.typeId === block.id)) {
+      if (diagramMode === 'bdd' && partTypeIds.has(block.id)) {
         return null;
       }
 
@@ -14279,7 +14306,7 @@ const ADIA = () => {
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
-    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+    const isInteracting = isDragging || isPanning;
 
     const pairGroups = new Map<string, string[]>();
     targetRelationships.forEach(rel => {
@@ -14289,8 +14316,8 @@ const ADIA = () => {
     });
 
     return targetRelationships.map(rel => {
-      const source = targetBlocks.find(b => b.id === rel.sourceId) || blocks.find(b => b.id === rel.sourceId);
-      const target = targetBlocks.find(b => b.id === rel.targetId) || blocks.find(b => b.id === rel.targetId);
+      const source = blocksById.get(rel.sourceId);
+      const target = blocksById.get(rel.targetId);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
@@ -14374,8 +14401,8 @@ const ADIA = () => {
             <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
 
-          {/* Stereotype / Label Badge with background to prevent overlapping text */}
-          {(isTrace || rel.type === 'allocation' || rel.type === 'requirementContainment' || rel.label) && (
+          {/* Stereotype / Label Badge with background - deferred during drag/pan */}
+          {!isInteracting && (isTrace || rel.type === 'allocation' || rel.type === 'requirementContainment' || rel.label) && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
               <rect
                 x={-42}
@@ -14402,29 +14429,29 @@ const ADIA = () => {
             </g>
           )}
 
-          {(rel as any).sourceRole && (
+          {!isInteracting && (rel as any).sourceRole && (
             <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
           )}
-          {rel.sourceMultiplicity && (
+          {!isInteracting && rel.sourceMultiplicity && (
             <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
           )}
-          {(rel as any).targetRole && (
+          {!isInteracting && (rel as any).targetRole && (
             <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
           )}
-          {rel.targetMultiplicity && (
+          {!isInteracting && rel.targetMultiplicity && (
             <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
           )}
         </g>
       );
     });
-  }, [relationships, blocks, culledDiagram, selectedIds, diagramMode, currentLayerId]);
+  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
     if (diagramMode !== 'ibd') return null;
     const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
     return targetParts.filter(p => p.blockId === currentLayerId).map(part => {
-      const block = blocks.find(b => b.id === part.typeId);
+      const block = part.typeId ? blocksById.get(part.typeId) : undefined;
       const isSelected = selectedIds.includes(part.id);
 
       return (
@@ -14517,7 +14544,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, blocks, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
+  }, [parts, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
@@ -14526,13 +14553,14 @@ const ADIA = () => {
     const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : connectors;
     const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
+    const isInteracting = isDragging || isPanning;
 
     const visibleConnectors = targetConnectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
 
     return visibleConnectors.map((conn, connIdx) => {
       const getPortPos = (partId: string, portId: string) => {
         if (partId === currentLayerId) {
-          const block = blocks.find(b => b.id === partId);
+          const block = blocksById.get(partId);
           const port = block?.ports?.find(p => p.id === portId);
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
           const frame = { x: block?.ibdX ?? 50, y: block?.ibdY ?? 50, w: block?.ibdWidth ?? 1200, h: block?.ibdHeight ?? 800 };
@@ -14545,8 +14573,8 @@ const ADIA = () => {
           const isLeft = index % 2 === 0;
           return { x: isLeft ? frame.x : frame.x + frame.w, y: frame.y + 60 + Math.floor(index / 2) * 40, side: isLeft ? 'left' as const : 'right' as const };
         } else {
-          const part = parts.find(p => p.id === partId);
-          const block = blocks.find(b => b.id === part?.typeId);
+          const part = partsById.get(partId);
+          const block = part?.typeId ? blocksById.get(part.typeId) : undefined;
           const port = block?.ports?.find(p => p.id === portId);
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
           if (!part) return { x: 0, y: 0, side: 'right' as const };
@@ -14575,7 +14603,7 @@ const ADIA = () => {
         <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }} style={{ cursor: 'pointer' }}>
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={12} />
           <path d={route.path} fill="none" stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
-          {(conn.itemFlow || conn.label) && (
+          {!isInteracting && (conn.itemFlow || conn.label) && (
             <g transform={`translate(${route.midX}, ${route.midY})`}>
               <polygon
                 points="0,0 -6,-3 -6,3"
@@ -14591,7 +14619,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [connectors, parts, blocks, culledDiagram, selectedIds, currentLayerId, diagramMode]);
+  }, [connectors, parts, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
 
   const renderInterfaceRealizations = useCallback((): React.ReactNode => {
     if (diagramMode !== 'ibd') return null;
@@ -14599,11 +14627,11 @@ const ADIA = () => {
     return interfaceRealizations.map(realization => {
       const { id, interfaceId, partId, portId } = realization;
 
-      const interfaceBlock = blocks.find(b => b.id === interfaceId);
-      const part = parts.find(p => p.id === partId);
+      const interfaceBlock = blocksById.get(interfaceId);
+      const part = partsById.get(partId);
       if (!interfaceBlock || !part || part.blockId !== currentLayerId) return null;
 
-      const partBlock = blocks.find(b => b.id === part.typeId);
+      const partBlock = part.typeId ? blocksById.get(part.typeId) : undefined;
       if (!partBlock) return null;
 
       const port = partBlock.ports.find(p => p.id === portId);
@@ -14638,7 +14666,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [diagramMode, interfaceRealizations, blocks, parts, currentLayerId, selectedIds]);
+  }, [diagramMode, interfaceRealizations, blocksById, partsById, currentLayerId, selectedIds]);
 
   const handleJumpToError = useCallback((error: ErrorItem) => {
     if (!error.elementId) return;

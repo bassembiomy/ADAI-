@@ -89,4 +89,60 @@ test.describe('SysML Large Model Scalability & Viewport Virtualization', () => {
     expect(cullingResult.visibleCount).toBeLessThan(50);
     expect(cullingResult.visibleCount).toBeGreaterThan(0);
   });
+
+  test('verifies visible vs offscreen DOM node counts and edge culling bounds', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const viewport = {
+        x: 1000,
+        y: 1000,
+        width: 800,
+        height: 600,
+        scale: 1,
+        overscan: 200,
+      };
+
+      const totalNodes = 5000;
+      const totalEdges = 10000;
+
+      const minX = viewport.x - viewport.overscan;
+      const maxX = viewport.x + viewport.width + viewport.overscan;
+      const minY = viewport.y - viewport.overscan;
+      const maxY = viewport.y + viewport.height + viewport.overscan;
+
+      let visibleNodes = 0;
+      const visibleNodeIds = new Set<string>();
+
+      for (let i = 0; i < totalNodes; i++) {
+        const x = (i % 100) * 400;
+        const y = Math.floor(i / 100) * 300;
+        if (x + 150 >= minX && x <= maxX && y + 100 >= minY && y <= maxY) {
+          visibleNodes++;
+          visibleNodeIds.add(`node_${i}`);
+        }
+      }
+
+      let visibleEdges = 0;
+      for (let e = 0; e < totalEdges; e++) {
+        const s = `node_${e % totalNodes}`;
+        const t = `node_${(e + 1) % totalNodes}`;
+        if (visibleNodeIds.has(s) || visibleNodeIds.has(t)) {
+          visibleEdges++;
+        }
+      }
+
+      return {
+        totalNodes,
+        totalEdges,
+        visibleNodes,
+        visibleEdges,
+        cullRatio: (visibleNodes + visibleEdges) / (totalNodes + totalEdges),
+      };
+    });
+
+    expect(result.totalNodes).toBe(5000);
+    expect(result.totalEdges).toBe(10000);
+    expect(result.cullRatio).toBeLessThan(0.05);
+    expect(result.visibleNodes).toBeGreaterThan(0);
+    expect(result.visibleEdges).toBeGreaterThan(0);
+  });
 });

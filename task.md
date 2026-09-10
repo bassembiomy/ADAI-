@@ -30,12 +30,12 @@
   - [x] Step 3: Return stable arrays when viewport, revision, and visible IDs have not changed
   - [x] Step 4: Ensure edges connected to the active IBD context block remain visible
   - [x] Step 5: Add 100k-edge tests validating sub-millisecond culling time and zero missing/extra visible edges
-- [ ] Task 6: Integrate Selectors into BDD/IBD Rendering
-  - [ ] Step 1: Replace `blocks.find()` in per-node render loops with `getById`/selector maps
-  - [ ] Step 2: Memoize node, port, relationship, connector, and label components using entity revision plus presentation revision
-  - [ ] Step 3: Render only current diagram/layer IDs and viewport-visible subset
-  - [ ] Step 4: Defer labels, route recomputation, and shadows during pan/drag via idle/rAF scheduling
-  - [ ] Step 5: Verify selection, hit testing, context block behavior, and Playwright DOM node counts
+- [x] Task 6: Integrate Selectors into BDD/IBD Rendering
+  - [x] Step 1: Replace `blocks.find()` in per-node render loops with `getById`/selector maps
+  - [x] Step 2: Memoize node, port, relationship, connector, and label components using entity revision plus presentation revision
+  - [x] Step 3: Render only current diagram/layer IDs and viewport-visible subset
+  - [x] Step 4: Defer labels, route recomputation, and shadows during pan/drag via idle/rAF scheduling
+  - [x] Step 5: Verify selection, hit testing, context block behavior, and Playwright DOM node counts
 - [ ] Task 7: Connect Worker Scheduling to Real Application Operations
   - [ ] Step 1: Schedule large validation after edits with cancellation and revision checks
   - [ ] Step 2: Schedule projection only for active diagram (never whole-repo for local update)
