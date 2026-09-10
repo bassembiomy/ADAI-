@@ -30,7 +30,7 @@ import {
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
   Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
-  Sun, Moon
+  Sun, Moon, Gauge
 } from 'lucide-react';
 import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
@@ -127,6 +127,7 @@ import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, selectSuspectLinks, selectEvidenceForRequirement } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
+import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
@@ -6220,11 +6221,14 @@ const ADIA = () => {
   }, [view]);
 
   const culledDiagram = useMemo(() => {
-    if (blocks.length < 150 && parts.length < 150) {
+    const limits = loadStoredPerformanceLimits();
+    const threshold = limits.virtualizationThreshold ?? 150;
+    if (!limits.forcePerformanceMode && blocks.length < threshold && parts.length < threshold) {
       return null;
     }
     return cullElements(diagramViewport, blocks, relationships, parts, connectors);
   }, [diagramViewport, blocks, relationships, parts, connectors]);
+  const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
   const [uiZoom, setUiZoom] = useState(1.0);
@@ -7201,6 +7205,14 @@ const ADIA = () => {
   }, [results, data, headers, addError]);
 
   const executeExportProject = useCallback(async (selectedKeys: string[]) => {
+    const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
+    const limits = loadStoredPerformanceLimits();
+    if (totalEntities >= limits.largeModelWarningThreshold && selectedKeys.includes('unified')) {
+      const ok = window.confirm?.(
+        `Exporting complete unified project with ${totalEntities.toLocaleString()} entities may take a moment. Proceed?`
+      );
+      if (!ok) return;
+    }
     const projectFiles: Record<string, any> = {};
     const persistedStateMachine = createPersistedAppSimulationModel({
       tickMs, states, junctions, transitions, layers, variables,
@@ -9580,6 +9592,13 @@ const ADIA = () => {
     const visibleReqs = reqs.filter(block => (block.layerId ?? 'root') === currentLayerId);
 
     if (visibleReqs.length === 0) return;
+    const limits = loadStoredPerformanceLimits();
+    if (visibleReqs.length >= limits.performanceModeThreshold) {
+      const proceed = window.confirm?.(
+        `Auto-layout on ${visibleReqs.length} requirement elements may cause temporary UI latency. Proceed?`
+      );
+      if (!proceed) return;
+    }
     const visibleIds = new Set(visibleReqs.map(r => r.id));
 
     const levels: Record<string, number> = {};
@@ -10596,7 +10615,22 @@ const ADIA = () => {
           setImportValidationError(validation);
           return;
         }
-        hydrateProject(validation.sanitizedData || importedData);
+        const dataToHydrate = validation.sanitizedData || importedData;
+        const estEntities = (dataToHydrate.blocks?.length || 0) +
+                            (dataToHydrate.parts?.length || 0) +
+                            (dataToHydrate.connectors?.length || 0) +
+                            (dataToHydrate.relationships?.length || 0) +
+                            (dataToHydrate.definitions?.length || 0);
+        const limits = loadStoredPerformanceLimits();
+        if (estEntities >= limits.largeModelWarningThreshold) {
+          const enablePerf = window.confirm?.(
+            `This project contains ${estEntities.toLocaleString()} entities. Would you like to enable Performance Mode (spatial culling & simplified rendering) for faster editing?`
+          );
+          if (enablePerf) {
+            saveStoredPerformanceLimits({ ...limits, forcePerformanceMode: true });
+          }
+        }
+        hydrateProject(dataToHydrate);
         addError('info', `Imported project: ${file.name}`);
       } catch (error) {
         setImportValidationError({
@@ -10619,6 +10653,14 @@ const ADIA = () => {
     if (!sysmlGate.allowed) {
       sysmlGate.diagnostics.filter(item => item.severity === 'error').forEach(item => addError('error', `${item.code}: ${item.message}`, 'SysML'));
       return;
+    }
+    const limits = loadStoredPerformanceLimits();
+    const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
+    if (totalEntities >= limits.largeModelWarningThreshold) {
+      const ok = window.confirm?.(
+        `This model contains ${totalEntities.toLocaleString()} entities. Generating a global report with diagrams may take several seconds. Proceed?`
+      );
+      if (!ok) return;
     }
     const snapshot = createReportSnapshot({
       blocks,
@@ -14882,6 +14924,17 @@ const ADIA = () => {
         plotFactors={plotFactors} 
         holdValues={holdValues} 
       />
+      <LargeModelDiagnostics
+        isOpen={showSysmlDiagnostics}
+        onClose={() => setShowSysmlDiagnostics(false)}
+        totalBlockCount={blocks.length}
+        totalPartCount={parts.length}
+        totalConnectorCount={connectors.length}
+        totalRelationshipCount={relationships.length}
+        visibleCount={culledDiagram ? culledDiagram.visibleBlocks.length + culledDiagram.visibleParts.length : undefined}
+        isVirtualizing={Boolean(culledDiagram)}
+        isDegradedMode={culledDiagram?.isDegradedMode}
+      />
       {importValidationError && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
           <div className="bg-[#121212] border-2 border-red-500/80 rounded-2xl w-[600px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
@@ -15261,6 +15314,18 @@ const ADIA = () => {
             >
               <Cloud size={13} className="mr-1 text-cyan-400" />
               3DEXPERIENCE
+            </Button>
+
+            <Button
+              id="sysml-diagnostics-toolbar-btn"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSysmlDiagnostics(true)}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              title="SysML Performance Diagnostics & Limits"
+            >
+              <Gauge size={13} className="mr-1 text-orange-400" />
+              Diagnostics
             </Button>
           </div>
 

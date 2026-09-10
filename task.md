@@ -54,12 +54,12 @@
   - [x] Step 3: Debounce autosave and never serialize on every pointer or text-change event
   - [x] Step 4: Add explicit progress/cancel UI for full export, migration, validation, and report generation
   - [x] Step 5: Add tests asserting no repeated full serialization during drag and that cancellation releases worker data
-- [ ] Task 9: Add Large-Model UX and Safety Limits
-  - [ ] Step 1: Show entity counts, active diagram counts, renderer mode, pending worker jobs, last save, and estimated memory
-  - [ ] Step 2: Warn before opening a project above configurable thresholds and offer "performance mode"
-  - [ ] Step 3: Disable or confirm expensive operations such as full auto-layout, whole-project SVG export, and global report generation
-  - [ ] Step 4: Show recoverable progress/errors instead of allowing a silent UI freeze
-  - [ ] Step 5: Persist user limits separately from the SysML semantic model
+- [x] Task 9: Add Large-Model UX and Safety Limits
+  - [x] Step 1: Show entity counts, active diagram counts, renderer mode, pending worker jobs, last save, and estimated memory
+  - [x] Step 2: Warn before opening a project above configurable thresholds and offer "performance mode"
+  - [x] Step 3: Disable or confirm expensive operations such as full auto-layout, whole-project SVG export, and global report generation
+  - [x] Step 4: Show recoverable progress/errors instead of allowing a silent UI freeze
+  - [x] Step 5: Persist user limits separately from the SysML semantic model
 - [ ] Task 10: Benchmark Gates and Regression Protection
   - [ ] Step 1: Benchmark 1k/10k/50k/100k fixtures on load, edit, drag, pan, zoom, validation, undo/redo, save, and reopen
   - [ ] Step 2: Fail CI if p95 edit/drag exceeds 50 ms, any main-thread task exceeds 100 ms in performance mode, or memory exceeds the configured budget
