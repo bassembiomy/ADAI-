@@ -1214,11 +1214,70 @@ export function targetedUpdatePresentation(
  */
 export function toWorkerSnapshot(
   store: NormalizedSysmlStore,
-  targetDiagramId?: string
+  targetDiagramId?: string,
+  scopeOnlyToDiagram?: boolean
 ): WorkerStoreSnapshot {
   const activeDiagramElementIds = targetDiagramId
     ? store.diagramPresentations.get(targetDiagramId)?.elementIds ?? []
     : undefined;
+
+  if (scopeOnlyToDiagram && targetDiagramId && activeDiagramElementIds && activeDiagramElementIds.length > 0) {
+    const activeSet = new Set(activeDiagramElementIds);
+    const defs: Record<string, SysmlDefinition> = {};
+    const usages: Record<string, SysmlUsage> = {};
+    const coords: Record<string, any> = {};
+
+    for (const id of activeSet) {
+      const def = store.definitions.get(id);
+      if (def) defs[id] = def;
+      const usage = store.usages.get(id);
+      if (usage) usages[id] = usage;
+      const c = store.coordinates.get(id);
+      if (c) coords[id] = c;
+    }
+
+    const rels: Record<string, SysmlRelationship> = {};
+    for (const [id, rel] of store.relationships.entries()) {
+      if (activeSet.has(id) || (activeSet.has(rel.sourceId) && activeSet.has(rel.targetId))) {
+        rels[id] = rel;
+      }
+    }
+
+    const conns: Record<string, ConnectorUsage> = {};
+    for (const [id, conn] of store.connectors.entries()) {
+      if (activeSet.has(id) || activeSet.has(conn.ownerId) || activeSet.has(conn.sourcePortId) || activeSet.has(conn.targetPortId)) {
+        conns[id] = conn;
+      }
+    }
+
+    const reqs: Record<string, RequirementDefinition> = {};
+    for (const id of activeSet) {
+      const req = store.requirements.get(id);
+      if (req) reqs[id] = req;
+    }
+
+    return {
+      schemaVersion: 2,
+      profileId: store.profileId,
+      revision: store.revision,
+      definitions: defs,
+      usages,
+      connectors: conns,
+      relationships: rels,
+      requirements: reqs,
+      verificationCases: {},
+      evidence: {},
+      baselines: {},
+      artifacts: {},
+      auditTrail: [],
+      coordinates: coords,
+      diagramPresentations: {
+        [targetDiagramId]: store.diagramPresentations.get(targetDiagramId)!,
+      },
+      activeDiagramId: targetDiagramId,
+      activeDiagramElementIds,
+    };
+  }
 
   return {
     schemaVersion: 2,

@@ -101,4 +101,62 @@ describe('LargeModelDiagnostics component & limits', () => {
     expect(html).toContain('Very Large Model Detected');
     expect(html).toContain('High Performance (Simplified)');
   });
+
+  it('displays main-thread fallback warning when worker is unavailable or fallback active', () => {
+    const html = renderToStaticMarkup(
+      <LargeModelDiagnostics
+        isOpen={true}
+        onClose={vi.fn()}
+        totalBlockCount={100}
+        totalPartCount={50}
+        totalConnectorCount={20}
+        totalRelationshipCount={30}
+        workerDiagnostics={{
+          workerAvailable: false,
+          isMainThreadFallback: true,
+          lastWorkerError: 'Worker initialization failed',
+          fallbackReason: 'Worker unavailable: falling back to main-thread processing for large model',
+          pendingCount: 0,
+          staleCount: 2,
+          lastTaskDurationMs: 42.5,
+        }}
+      />
+    );
+
+    expect(html).toContain('Main-Thread Fallback Warning');
+    expect(html).toContain('Main Thread Fallback');
+    expect(html).toContain('Worker unavailable: falling back to main-thread processing for large model');
+    expect(html).toContain('>2</strong>');
+    expect(html).toContain('Stale Rejected');
+    expect(html).toContain('42.5 ms');
+  });
+
+  it('displays isolated worker status when worker is active', () => {
+    const html = renderToStaticMarkup(
+      <LargeModelDiagnostics
+        isOpen={true}
+        onClose={vi.fn()}
+        totalBlockCount={100}
+        totalPartCount={50}
+        totalConnectorCount={20}
+        totalRelationshipCount={30}
+        workerDiagnostics={{
+          workerAvailable: true,
+          isMainThreadFallback: false,
+          lastWorkerError: null,
+          fallbackReason: null,
+          pendingCount: 3,
+          staleCount: 1,
+          lastTaskDurationMs: 15.2,
+        }}
+      />
+    );
+
+    expect(html).not.toContain('Main-Thread Fallback Warning');
+    expect(html).toContain('Isolated Worker Active');
+    expect(html).toContain('>3</strong> pending');
+    expect(html).toContain('>1</strong>');
+    expect(html).toContain('Stale Rejected');
+    expect(html).toContain('15.2 ms');
+  });
 });

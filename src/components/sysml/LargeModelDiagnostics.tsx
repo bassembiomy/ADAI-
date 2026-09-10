@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, AlertTriangle, Cpu, Database, Eye, Gauge, Layers, ShieldCheck, Zap } from 'lucide-react';
 import type { NormalizedSysmlStore } from '../../engine/sysml/normalizedStore';
+import type { SysmlWorkerDiagnostics } from '../../services/sysmlWorkerClient';
 
 export interface PerformanceLimitsConfig {
   virtualizationThreshold: number;
@@ -61,6 +62,7 @@ export interface LargeModelDiagnosticsProps {
   onTogglePerformanceMode?: (enabled: boolean) => void;
   isOpen: boolean;
   onClose: () => void;
+  workerDiagnostics?: SysmlWorkerDiagnostics;
 }
 
 export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
@@ -76,6 +78,7 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
   onTogglePerformanceMode,
   isOpen,
   onClose,
+  workerDiagnostics,
 }) => {
   const [limits, setLimits] = useState<PerformanceLimitsConfig>(loadStoredPerformanceLimits);
 
@@ -135,6 +138,19 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
             </div>
           )}
 
+          {/* Main-Thread Fallback Warning Banner */}
+          {workerDiagnostics && (!workerDiagnostics.workerAvailable || workerDiagnostics.isMainThreadFallback) && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-red-950/40 border border-red-700/50 text-red-300 text-xs" data-testid="main-thread-fallback-warning">
+              <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+              <div>
+                <span className="font-semibold">Main-Thread Fallback Warning</span>
+                <p className="mt-0.5 text-red-300/80">
+                  {workerDiagnostics.fallbackReason || 'Web Workers are unavailable. Heavy operations are executing synchronously on the main thread.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Status Metrics Grid */}
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="bg-[#1a1a1e] border border-[#242428] rounded-lg p-3">
@@ -181,6 +197,29 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
               <div className="text-[10px] text-[#666] mt-0.5">
                 {pendingWorkerJobs > 0 ? `${pendingWorkerJobs} worker task(s) active` : 'Idle worker queue'}
               </div>
+            </div>
+
+            {/* Worker Engine & Queue Diagnostics */}
+            <div className="bg-[#1a1a1e] border border-[#242428] rounded-lg p-3 col-span-2">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 text-[#888]">
+                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Web Worker Engine</span>
+                </div>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${workerDiagnostics?.workerAvailable && !workerDiagnostics?.isMainThreadFallback ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/40' : 'bg-amber-950/50 text-amber-400 border border-amber-800/40'}`}>
+                  {workerDiagnostics?.workerAvailable && !workerDiagnostics?.isMainThreadFallback ? 'Isolated Worker Active' : 'Main Thread Fallback'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-[#ddd] mt-2">
+                <span>Queue: <strong className="text-[#eee]">{workerDiagnostics?.pendingCount ?? pendingWorkerJobs}</strong> pending</span>
+                <span>Stale Rejected: <strong className="text-[#eee]">{workerDiagnostics?.staleCount ?? 0}</strong></span>
+                <span>Last Task: <strong className="text-[#eee]">{workerDiagnostics?.lastTaskDurationMs != null ? `${workerDiagnostics.lastTaskDurationMs.toFixed(1)} ms` : 'Idle'}</strong></span>
+              </div>
+              {workerDiagnostics?.fallbackReason && (
+                <div className="text-[10px] text-amber-400/90 mt-1.5" data-testid="worker-fallback-reason">
+                  Reason: {workerDiagnostics.fallbackReason}
+                </div>
+              )}
             </div>
           </div>
 

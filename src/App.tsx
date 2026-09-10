@@ -125,7 +125,7 @@ import { loadRepository, serializeRepository } from './engine/sysml/persistence'
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, selectSuspectLinks, selectEvidenceForRequirement } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
@@ -6248,6 +6248,20 @@ const ADIA = () => {
       ibdContextBlockId: currentLayerId,
     });
   }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
+
+  // Schedule large validation asynchronously after edits with revision-based cancellation
+  useEffect(() => {
+    if (blocks.length === 0 && parts.length === 0) return;
+    const cancel = getDefaultSysmlWorkerClient().scheduleValidation(
+      sysmlStore,
+      sysmlStore.revision,
+      () => {
+        // Validation completed in worker thread without blocking UI
+      }
+    );
+    return cancel;
+  }, [sysmlStore.revision]);
+
   const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
@@ -14956,6 +14970,7 @@ const ADIA = () => {
         visibleCount={culledDiagram ? culledDiagram.visibleBlocks.length + culledDiagram.visibleParts.length : undefined}
         isVirtualizing={Boolean(culledDiagram)}
         isDegradedMode={culledDiagram?.isDegradedMode}
+        workerDiagnostics={getDefaultSysmlWorkerClient().getDiagnostics()}
       />
       {importValidationError && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>

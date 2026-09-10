@@ -18,17 +18,19 @@ import { toWorkerSnapshot } from '../engine/sysml/normalizedStore';
 
 function toWorkerSafePayload(payload: any, diagramId?: string): any {
   if (payload && typeof payload === 'object' && 'indexes' in payload && payload.definitions instanceof Map) {
-    return toWorkerSnapshot(payload, diagramId);
+    return toWorkerSnapshot(payload, diagramId, Boolean(diagramId));
   }
   return payload;
 }
 
 export interface SysmlWorkerDiagnostics {
   workerAvailable: boolean;
+  isMainThreadFallback: boolean;
   lastWorkerError: string | null;
   fallbackReason: string | null;
   pendingCount: number;
   staleCount: number;
+  lastTaskDurationMs: number | null;
 }
 
 interface PendingRequest<T> {
@@ -49,6 +51,8 @@ export class SysmlWorkerClient {
   private lastWorkerError: string | null = null;
   private fallbackReason: string | null = null;
   private staleCount = 0;
+  private lastTaskDurationMs: number | null = null;
+  private isMainThreadFallback = false;
 
   constructor(workerFactory?: (() => Worker) | null) {
     if (workerFactory === null) {
@@ -76,10 +80,12 @@ export class SysmlWorkerClient {
   public getDiagnostics(): SysmlWorkerDiagnostics {
     return {
       workerAvailable: this.worker !== null,
+      isMainThreadFallback: this.isMainThreadFallback,
       lastWorkerError: this.lastWorkerError,
       fallbackReason: this.fallbackReason,
       pendingCount: this.pendingRequests.size,
       staleCount: this.staleCount,
+      lastTaskDurationMs: this.lastTaskDurationMs,
     };
   }
 
@@ -93,6 +99,8 @@ export class SysmlWorkerClient {
     if (!pending) return;
 
     this.pendingRequests.delete(response.requestId);
+    const duration = Date.now() - pending.timestamp;
+    this.lastTaskDurationMs = duration;
 
     // Stale result rejection: if a newer revision has arrived for this task type, discard
     const latestRev = this.latestRevisionByType.get(pending.taskType) ?? 0;
@@ -151,7 +159,13 @@ export class SysmlWorkerClient {
     // Fast path: if payload is small or no WebWorker instance available, compute synchronously
     const count = entityCount ?? ('payload' in request ? this.countEntities((request as any).payload) : 0);
     if (!this.worker || !shouldRunInWorker(count)) {
+      if (!this.worker && shouldRunInWorker(count)) {
+        this.isMainThreadFallback = true;
+        this.fallbackReason = this.fallbackReason || 'Worker unavailable: falling back to main-thread processing for large model';
+      }
+      const t0 = performance.now();
       const response = handleWorkerMessage(request);
+      this.lastTaskDurationMs = performance.now() - t0;
       if (response.success) {
         return response.result as T;
       }
@@ -179,6 +193,33 @@ export class SysmlWorkerClient {
 
       this.worker!.postMessage(workerSafeRequest);
     });
+  }
+
+  public scheduleValidation(
+    payload: SysmlRepository | NormalizedSysmlStore,
+    revision: number,
+    onResult: (report: SysmlValidationReport) => void,
+    onError?: (err: any) => void
+  ): () => void {
+    let cancelled = false;
+    const reqId = this.nextRequestId();
+
+    this.validate(payload, revision)
+      .then(report => {
+        if (!cancelled) {
+          onResult(report);
+        }
+      })
+      .catch(err => {
+        if (!cancelled && onError) {
+          onError(err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      this.cancel(reqId);
+    };
   }
 
   public async validate(

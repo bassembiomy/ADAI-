@@ -286,5 +286,59 @@ describe('SysML Worker Protocol & Execution', () => {
         expect(workerSerRes.result).toBe(mainSer);
       }
     });
+
+    it('scheduleValidation invokes callback asynchronously with validation report', async () => {
+      const client = new SysmlWorkerClient();
+      const fixture = getFixture(50);
+      const store = fromRepository(fixture);
+
+      let callbackReport: any = null;
+      const cancel = client.scheduleValidation(store, store.revision, (report) => {
+        callbackReport = report;
+      });
+
+      // Allow microtask resolution
+      await new Promise(r => setTimeout(r, 10));
+      expect(callbackReport).not.toBeNull();
+      expect(callbackReport.valid).toBe(true);
+      expect(typeof cancel).toBe('function');
+    });
+
+    it('scopes projection snapshot only to active diagram elements when diagramId is specified', () => {
+      const fixture = getFixture(100);
+      const store = fromRepository(fixture);
+      const defKeys = Array.from(store.definitions.keys());
+
+      // Create a diagram with only first 5 elements
+      const activeIds = defKeys.slice(0, 5);
+      store.diagramPresentations.set('diag_small', {
+        elementIds: activeIds,
+      });
+
+      const scopedSnapshot = toWorkerSnapshot(store, 'diag_small', true);
+      expect(Object.keys(scopedSnapshot.definitions).length).toBe(5);
+      expect(scopedSnapshot.activeDiagramId).toBe('diag_small');
+      expect(scopedSnapshot.activeDiagramElementIds).toEqual(activeIds);
+
+      // Unscoped snapshot contains all definitions
+      const fullSnapshot = toWorkerSnapshot(store);
+      expect(Object.keys(fullSnapshot.definitions).length).toBe(store.definitions.size);
+    });
+
+    it('tracks lastTaskDurationMs, queue count, and fallback diagnostics', async () => {
+      const client = new SysmlWorkerClient(null); // Force fallback
+      const fixture = getFixture(20);
+      const store = fromRepository(fixture);
+
+      await client.validate(store, 1);
+      const diags = client.getDiagnostics();
+
+      expect(diags.workerAvailable).toBe(false);
+      expect(diags.fallbackReason).toContain('disabled');
+      expect(diags.pendingCount).toBe(0);
+      expect(diags.staleCount).toBe(0);
+      expect(typeof diags.lastTaskDurationMs).toBe('number');
+      expect(diags.lastTaskDurationMs).toBeGreaterThanOrEqual(0);
+    });
   });
 });

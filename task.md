@@ -36,12 +36,12 @@
   - [x] Step 3: Render only current diagram/layer IDs and viewport-visible subset
   - [x] Step 4: Defer labels, route recomputation, and shadows during pan/drag via idle/rAF scheduling
   - [x] Step 5: Verify selection, hit testing, context block behavior, and Playwright DOM node counts
-- [ ] Task 7: Connect Worker Scheduling to Real Application Operations
-  - [ ] Step 1: Schedule large validation after edits with cancellation and revision checks
-  - [ ] Step 2: Schedule projection only for active diagram (never whole-repo for local update)
-  - [ ] Step 3: Schedule deletion-impact analysis before confirmation for large repositories
-  - [ ] Step 4: Show visible "main-thread fallback" warning in `LargeModelDiagnostics` if worker unavailable
-  - [ ] Step 5: Expose worker queue count, last task duration, fallback reason, and stale-result count
+- [x] Task 7: Connect Worker Scheduling to Real Application Operations
+  - [x] Step 1: Schedule large validation after edits with cancellation and revision checks
+  - [x] Step 2: Schedule projection only for active diagram (never whole-repo for local update)
+  - [x] Step 3: Schedule deletion-impact analysis before confirmation for large repositories
+  - [x] Step 4: Show visible "main-thread fallback" warning in `LargeModelDiagnostics` if worker unavailable
+  - [x] Step 5: Expose worker queue count, last task duration, fallback reason, and stale-result count
 - [ ] Task 8: Add Real Large-Model Performance and Memory Gates
   - [ ] Step 1: Create realistic fixtures (1k, 10k, 50k, 100k) with high relationship/connector density in `src/engine/sysml/largeModelStress.test.ts`
   - [ ] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
