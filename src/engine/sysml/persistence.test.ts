@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type BlockDefinition } from './model';
-import { compareBaselines, createBaseline, loadRepository, serializeRepository } from './persistence';
+import {
+  compareBaselines,
+  createBaseline,
+  loadRepository,
+  serializeRepository,
+  serializeToChunks,
+  serializeIncrementalChunks,
+  hydrateRepositoryFromChunks,
+  streamExportChunks,
+  atomicWriteFile,
+} from './persistence';
 
 const block = (id: string): BlockDefinition => ({
   id, name: id, namespace: [], kind: 'block', isAbstract: false, isLeaf: false,
@@ -137,5 +147,107 @@ describe('versioned SysML persistence and baselines', () => {
     // Block-part composition preserved
     expect(loaded.repository.relationships.r2.kind).toBe('composition');
     expect(loaded.diagnostics.some(d => d.code === 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED')).toBe(true);
+  });
+
+  describe('chunked and incremental persistence', () => {
+    it('serializes to chunks with manifest and rehydrates round-trip cleanly', () => {
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = block('b1');
+      repo.definitions.b2 = block('b2');
+      repo.requirements.req1 = {
+        id: 'req1',
+        kind: 'requirement',
+        name: 'Req 1',
+        namespace: [],
+        requirementId: 'REQ-001',
+        text: 'System shall be scalable',
+        status: 'approved',
+        version: '1',
+      };
+      repo.relationships.r1 = {
+        id: 'r1',
+        kind: 'satisfy',
+        sourceId: 'b1',
+        targetId: 'req1',
+      };
+
+      const chunked = serializeToChunks(repo);
+      expect(chunked.manifest.format).toBe('ADIA-SysML-Chunked');
+      expect(chunked.manifest.schemaVersion).toBe(2);
+      expect(Object.keys(chunked.chunks).length).toBe(4);
+
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
+      expect(rehydrated.valid).toBe(true);
+      expect(rehydrated.diagnostics).toEqual([]);
+      expect(rehydrated.repository.definitions.b1).toEqual(repo.definitions.b1);
+      expect(rehydrated.repository.requirements.req1).toEqual(repo.requirements.req1);
+      expect(rehydrated.repository.relationships.r1).toEqual(repo.relationships.r1);
+    });
+
+    it('incrementally persists only modified chunks and tracks deleted keys', () => {
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = block('b1');
+      repo.definitions.b2 = block('b2');
+      const base = serializeToChunks(repo);
+
+      // Modify b1 and delete b2
+      repo.definitions.b1 = { ...repo.definitions.b1, name: 'Renamed B1' };
+      delete repo.definitions.b2;
+
+      const incremental = serializeIncrementalChunks(repo, ['b1', 'b2'], base.manifest);
+      expect(Object.keys(incremental.updatedChunks)).toContain('definitions/b1.json');
+      expect(incremental.removedChunkKeys).toContain('definitions/b2.json');
+      expect(incremental.manifest.revision).toBe(base.manifest.revision + 1);
+      expect(incremental.manifest.chunkIndex['definitions/b1.json']).toBeDefined();
+      expect(incremental.manifest.chunkIndex['definitions/b2.json']).toBeUndefined();
+    });
+
+    it('detects chunk tampering and checksum mismatch during hydration', () => {
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = block('b1');
+      const chunked = serializeToChunks(repo);
+
+      // Tamper with chunk payload
+      const tamperedJson = chunked.chunks['definitions/b1.json'].json.replace('"name":"b1"', '"name":"hacked"');
+
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => {
+        if (key === 'definitions/b1.json') return tamperedJson;
+        return chunked.chunks[key]?.json;
+      });
+
+      expect(rehydrated.valid).toBe(false);
+      expect(rehydrated.diagnostics.some(d => d.code === 'PERSISTENCE_CHUNK_CHECKSUM_MISMATCH')).toBe(true);
+    });
+
+    it('streams export chunks incrementally without large intermediate array buffers', async () => {
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = block('b1');
+      repo.definitions.b2 = block('b2');
+
+      const streamedKeys: string[] = [];
+      const { manifest, totalBytes } = await streamExportChunks(repo, chunk => {
+        streamedKeys.push(chunk.chunkKey);
+      });
+
+      expect(streamedKeys).toContain('definitions/b1.json');
+      expect(streamedKeys).toContain('definitions/b2.json');
+      expect(totalBytes).toBeGreaterThan(0);
+      expect(manifest.chunkIndex['definitions/b1.json']).toBeDefined();
+    });
+
+    it('performs atomic writes using temporary swap files', async () => {
+      const written: Record<string, string> = {};
+      const renames: Array<{ from: string; to: string }> = [];
+
+      const mockAdapter = {
+        writeFile: async (p: string, c: string) => { written[p] = c; },
+        renameFile: async (from: string, to: string) => { renames.push({ from, to }); },
+      };
+
+      await atomicWriteFile('model/project.json', '{"test":true}', mockAdapter);
+      expect(renames.length).toBe(1);
+      expect(renames[0].to).toBe('model/project.json');
+      expect(renames[0].from).toContain('.tmp');
+    });
   });
 });

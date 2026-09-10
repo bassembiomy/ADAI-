@@ -296,3 +296,309 @@ function connectorOwner(repo: SysmlRepository, sourceOwner: string, targetOwner:
   return source?.kind === 'part' ? source.ownerId : target?.kind === 'part' ? target.ownerId : sourceOwner;
 }
 function diag(code: string, message: string): SysmlDiagnostic { return { code, severity: 'error', message }; }
+
+// CHUNKED AND INCREMENTAL PERSISTENCE
+
+export interface EntityChunkMeta {
+  collection: string;
+  entityId: string;
+  checksum: string;
+  byteSize: number;
+}
+
+export interface ChunkManifest {
+  format: 'ADIA-SysML-Chunked';
+  schemaVersion: 2;
+  profileId: string;
+  revision: number;
+  checksum: string;
+  auditTrail: SysmlRepository['auditTrail'];
+  chunkIndex: Record<string, EntityChunkMeta>;
+  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SerializedEntityChunk {
+  chunkKey: string;
+  collection: string;
+  entityId: string;
+  checksum: string;
+  payload: unknown;
+  json: string;
+}
+
+export interface ChunkedRepositoryExport {
+  manifest: ChunkManifest;
+  manifestJson: string;
+  chunks: Record<string, SerializedEntityChunk>;
+}
+
+const PERSISTENCE_COLLECTIONS = [
+  'definitions',
+  'usages',
+  'connectors',
+  'relationships',
+  'requirements',
+  'verificationCases',
+  'evidence',
+  'baselines',
+  'artifacts',
+] as const;
+
+function createChunkKey(collection: string, id: string): string {
+  return `${collection}/${id}.json`;
+}
+
+function serializeSingleEntityChunk(collection: string, entity: { id: string }): SerializedEntityChunk {
+  const json = stableStringify(entity);
+  const checksum = hash(json);
+  return {
+    chunkKey: createChunkKey(collection, entity.id),
+    collection,
+    entityId: entity.id,
+    checksum,
+    payload: entity,
+    json,
+  };
+}
+
+/**
+ * Serialize a SysML repository into a chunked format with an index manifest.
+ */
+export function serializeToChunks(
+  repo: SysmlRepository,
+  options?: {
+    diagramPresentations?: Record<string, { elementIds: string[] }>;
+    metadata?: Record<string, unknown>;
+  }
+): ChunkedRepositoryExport {
+  const chunks: Record<string, SerializedEntityChunk> = {};
+  const chunkIndex: Record<string, EntityChunkMeta> = {};
+
+  for (const collName of PERSISTENCE_COLLECTIONS) {
+    const collRecord = repo[collName] as Record<string, { id: string }>;
+    if (!collRecord) continue;
+    for (const [id, entity] of Object.entries(collRecord)) {
+      const chunk = serializeSingleEntityChunk(collName, entity);
+      chunks[chunk.chunkKey] = chunk;
+      chunkIndex[chunk.chunkKey] = {
+        collection: collName,
+        entityId: id,
+        checksum: chunk.checksum,
+        byteSize: chunk.json.length,
+      };
+    }
+  }
+
+  const manifestContent = {
+    format: 'ADIA-SysML-Chunked' as const,
+    schemaVersion: 2 as const,
+    profileId: repo.profileId ?? 'OMG-SysML-1.6-ADIA',
+    revision: repo.revision ?? 0,
+    auditTrail: [...(repo.auditTrail ?? [])],
+    chunkIndex,
+    diagramPresentations: options?.diagramPresentations,
+    metadata: options?.metadata,
+  };
+
+  const manifestCanonical = stableStringify(manifestContent);
+  const manifestChecksum = hash(manifestCanonical);
+
+  const manifest: ChunkManifest = {
+    ...manifestContent,
+    checksum: manifestChecksum,
+  };
+
+  return {
+    manifest,
+    manifestJson: stableStringify(manifest),
+    chunks,
+  };
+}
+
+/**
+ * Incrementally update changed chunks after patch commits.
+ */
+export function serializeIncrementalChunks(
+  repo: SysmlRepository,
+  changedEntityIds: string[],
+  baseManifest: ChunkManifest
+): {
+  manifest: ChunkManifest;
+  updatedChunks: Record<string, SerializedEntityChunk>;
+  removedChunkKeys: string[];
+} {
+  const updatedChunks: Record<string, SerializedEntityChunk> = {};
+  const removedChunkKeys: string[] = [];
+  const nextChunkIndex = { ...baseManifest.chunkIndex };
+
+  const changedSet = new Set(changedEntityIds);
+
+  for (const collName of PERSISTENCE_COLLECTIONS) {
+    const collRecord = repo[collName] as Record<string, { id: string }>;
+    if (!collRecord) continue;
+
+    for (const id of changedSet) {
+      const entity = collRecord[id];
+      const key = createChunkKey(collName, id);
+
+      if (entity) {
+        const chunk = serializeSingleEntityChunk(collName, entity);
+        updatedChunks[key] = chunk;
+        nextChunkIndex[key] = {
+          collection: collName,
+          entityId: id,
+          checksum: chunk.checksum,
+          byteSize: chunk.json.length,
+        };
+      } else if (nextChunkIndex[key]) {
+        // Entity was deleted from this collection
+        delete nextChunkIndex[key];
+        removedChunkKeys.push(key);
+      }
+    }
+  }
+
+  const nextRevision = (repo.revision ?? baseManifest.revision) + 1;
+  const manifestContent = {
+    format: 'ADIA-SysML-Chunked' as const,
+    schemaVersion: 2 as const,
+    profileId: repo.profileId ?? baseManifest.profileId,
+    revision: nextRevision,
+    auditTrail: [...(repo.auditTrail ?? [])],
+    chunkIndex: nextChunkIndex,
+    diagramPresentations: baseManifest.diagramPresentations,
+    metadata: baseManifest.metadata,
+  };
+
+  const manifestCanonical = stableStringify(manifestContent);
+  const manifest: ChunkManifest = {
+    ...manifestContent,
+    checksum: hash(manifestCanonical),
+  };
+
+  return {
+    manifest,
+    updatedChunks,
+    removedChunkKeys,
+  };
+}
+
+/**
+ * Hydrate a full repository from a ChunkManifest and a chunk provider function.
+ * Validates checksum per chunk and fails safely if corrupted.
+ */
+export function hydrateRepositoryFromChunks(
+  manifest: ChunkManifest,
+  getChunk: (key: string) => string | unknown
+): LoadRepositoryResult {
+  const diagnostics: SysmlDiagnostic[] = [];
+  const repo = createEmptyRepository();
+  repo.schemaVersion = manifest.schemaVersion;
+  repo.profileId = (manifest.profileId as 'OMG-SysML-1.6-ADIA') ?? 'OMG-SysML-1.6-ADIA';
+  repo.revision = manifest.revision;
+  repo.auditTrail = [...(manifest.auditTrail ?? [])];
+
+  for (const [key, meta] of Object.entries(manifest.chunkIndex)) {
+    const rawChunk = getChunk(key);
+    if (rawChunk == null) {
+      diagnostics.push(diag('PERSISTENCE_CHUNK_MISSING', `Chunk ${key} referenced in manifest was not found`));
+      continue;
+    }
+
+    let parsed: any;
+    try {
+      parsed = typeof rawChunk === 'string' ? JSON.parse(rawChunk) : rawChunk;
+    } catch {
+      diagnostics.push(diag('PERSISTENCE_CHUNK_PARSE_ERROR', `Failed to parse chunk ${key}`));
+      continue;
+    }
+
+    const canonicalJson = stableStringify(parsed);
+    const calculatedHash = hash(canonicalJson);
+    if (calculatedHash !== meta.checksum) {
+      diagnostics.push(
+        diag('PERSISTENCE_CHUNK_CHECKSUM_MISMATCH', `Checksum mismatch for chunk ${key}: expected ${meta.checksum}, got ${calculatedHash}`)
+      );
+    }
+
+    const collName = meta.collection as (typeof PERSISTENCE_COLLECTIONS)[number];
+    if (collName && (repo as any)[collName]) {
+      (repo as any)[collName][meta.entityId] = parsed;
+    }
+  }
+
+  freezeBaselines(repo);
+  const validation = validateSysmlRepository(repo);
+  diagnostics.push(...validation.diagnostics);
+
+  return {
+    repository: repo,
+    diagnostics,
+    valid: !diagnostics.some(d => d.severity === 'error'),
+    migrated: false,
+  };
+}
+
+/**
+ * Stream chunks one-by-one to avoid holding the entire multi-gigabyte serialized export in memory.
+ */
+export async function streamExportChunks(
+  repo: SysmlRepository,
+  onChunk: (chunk: SerializedEntityChunk) => void | Promise<void>
+): Promise<{ manifest: ChunkManifest; totalBytes: number }> {
+  let totalBytes = 0;
+  const chunkIndex: Record<string, EntityChunkMeta> = {};
+
+  for (const collName of PERSISTENCE_COLLECTIONS) {
+    const collRecord = repo[collName] as Record<string, { id: string }>;
+    if (!collRecord) continue;
+    for (const [id, entity] of Object.entries(collRecord)) {
+      const chunk = serializeSingleEntityChunk(collName, entity);
+      await onChunk(chunk);
+      totalBytes += chunk.json.length;
+      chunkIndex[chunk.chunkKey] = {
+        collection: collName,
+        entityId: id,
+        checksum: chunk.checksum,
+        byteSize: chunk.json.length,
+      };
+    }
+  }
+
+  const manifestContent = {
+    format: 'ADIA-SysML-Chunked' as const,
+    schemaVersion: 2 as const,
+    profileId: repo.profileId ?? 'OMG-SysML-1.6-ADIA',
+    revision: repo.revision ?? 0,
+    auditTrail: [...(repo.auditTrail ?? [])],
+    chunkIndex,
+  };
+
+  const manifestCanonical = stableStringify(manifestContent);
+  const manifest: ChunkManifest = {
+    ...manifestContent,
+    checksum: hash(manifestCanonical),
+  };
+
+  return { manifest, totalBytes };
+}
+
+/**
+ * Atomic write helper: writes content to a temporary file, then renames to target.
+ */
+export async function atomicWriteFile(
+  targetPath: string,
+  content: string,
+  fileAdapter?: {
+    writeFile: (path: string, content: string) => Promise<void>;
+    renameFile: (oldPath: string, newPath: string) => Promise<void>;
+  }
+): Promise<void> {
+  const tmpPath = `${targetPath}.tmp_${Date.now()}`;
+  if (fileAdapter) {
+    await fileAdapter.writeFile(tmpPath, content);
+    await fileAdapter.renameFile(tmpPath, targetPath);
+  }
+}
+

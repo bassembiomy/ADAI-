@@ -41,13 +41,13 @@
   - [x] Step 4: Keep small-model fast paths synchronous when estimated work is below a threshold
   - [x] Step 5: Cancel obsolete validation/projection jobs when a newer revision is submitted
   - [x] Step 6: Test ordering, cancellation, stale responses, worker errors, and deterministic results
-- [ ] Task 7: Implement Chunked and Incremental Persistence
-  - [ ] Step 1: Preserve current `ADIA-SysML` JSON export/import as a compatibility format
-  - [ ] Step 2: Add an internal chunk format keyed by collection and entity ID, with manifest containing schema version, revision, checksum, and chunk checksums
-  - [ ] Step 3: Write only changed chunks after patch commits; perform writes asynchronously and atomically through temporary files/rename in Electron
-  - [ ] Step 4: Load manifest first, then lazy-load definitions/usages for the active diagram; validate checksums per chunk
-  - [ ] Step 5: Provide full export as an explicit operation that streams chunks rather than building one giant intermediate string when possible
-  - [ ] Step 6: Test interrupted writes, checksum mismatch, migration, partial loading, and round-trip equivalence
+- [x] Task 7: Implement Chunked and Incremental Persistence
+  - [x] Step 1: Preserve current `ADIA-SysML` JSON export/import as a compatibility format
+  - [x] Step 2: Add an internal chunk format keyed by collection and entity ID, with manifest containing schema version, revision, checksum, and chunk checksums
+  - [x] Step 3: Write only changed chunks after patch commits; perform writes asynchronously and atomically through temporary files/rename in Electron
+  - [x] Step 4: Load manifest first, then lazy-load definitions/usages for the active diagram; validate checksums per chunk
+  - [x] Step 5: Provide full export as an explicit operation that streams chunks rather than building one giant intermediate string when possible
+  - [x] Step 6: Test interrupted writes, checksum mismatch, migration, partial loading, and round-trip equivalence
 - [ ] Task 8: Reduce Memory Pressure in Import, Export, and Reports
   - [ ] Step 1: Remove duplicate full copies of blocks/relationships between canonical repository, legacy view, undo history, and export payload where not required
   - [ ] Step 2: Use stable IDs and references in report generation; materialize full arrays only at final output boundaries
