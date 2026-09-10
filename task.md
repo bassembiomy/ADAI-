@@ -12,12 +12,12 @@
   - [x] Step 3: Ensure projection requests transfer only target diagram ID and required element IDs
   - [x] Step 4: Add cancellation checks inside large loops in `src/engine/sysml/sysmlWorker.ts`
   - [x] Step 5: Add tests comparing worker and main-thread outputs for validation, projection, impact, and serialization
-- [ ] Task 3: Remove Full-Snapshot History from Large-Model Mutations
-  - [ ] Step 1: Define `HistoryBudgetOptions` with `maxEntries`, `maxBytes`, `checkpointEvery`, and `maxReplayOperations` in `src/engine/sysml/patches.ts`
-  - [ ] Step 2: Make committed mutations produce one forward/inverse patch and eliminate full-repository cloning (`structuredClone`) in `sysmlCommandGateway.ts`
-  - [ ] Step 3: Use `applyPatch` against normalized store for undo/redo, materializing repository only when compatibility callers explicitly ask
-  - [ ] Step 4: Add periodic checkpoints only after `checkpointEvery` operations or when replay cost exceeds threshold
-  - [ ] Step 5: Test memory bound, multi-step undo/redo, cascade-delete restoration, and patch replay from checkpoint
+- [x] Task 3: Remove Full-Snapshot History from Large-Model Mutations
+  - [x] Step 1: Define `HistoryBudgetOptions` with `maxEntries`, `maxBytes`, `checkpointEvery`, and `maxReplayOperations` in `src/engine/sysml/patches.ts`
+  - [x] Step 2: Make committed mutations produce one forward/inverse patch and eliminate full-repository cloning (`structuredClone`) in `sysmlCommandGateway.ts`
+  - [x] Step 3: Use `applyPatch` against normalized store for undo/redo, materializing repository only when compatibility callers explicitly ask
+  - [x] Step 4: Add periodic checkpoints only after `checkpointEvery` operations or when replay cost exceeds threshold
+  - [x] Step 5: Test memory bound, multi-step undo/redo, cascade-delete restoration, and patch replay from checkpoint
 - [ ] Task 4: Make the Normalized Store the Single Source of Truth
   - [ ] Step 1: Initialize gateway state containing normalized store and presentation maps as single semantic truth
   - [ ] Step 2: Remove 150ms `mergeLegacyDiagramIntoRepository` synchronization effect in `App.tsx`

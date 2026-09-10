@@ -203,5 +203,17 @@ function removeFrom<T>(record: Record<string, T>, removed: ReadonlySet<string>) 
 }
 
 function cloneRepository(repo: SysmlRepository): SysmlRepository {
-  return structuredClone(repo);
+  return {
+    ...repo,
+    definitions: { ...repo.definitions },
+    usages: { ...repo.usages },
+    connectors: { ...repo.connectors },
+    relationships: { ...repo.relationships },
+    requirements: { ...repo.requirements },
+    verificationCases: { ...repo.verificationCases },
+    evidence: { ...repo.evidence },
+    baselines: { ...repo.baselines },
+    artifacts: { ...repo.artifacts },
+    auditTrail: [...repo.auditTrail],
+  };
 }

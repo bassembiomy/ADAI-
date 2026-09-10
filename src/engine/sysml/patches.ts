@@ -8,7 +8,12 @@ import {
   getById,
   upsertEntity,
   removeEntity,
+  toWorkerSnapshot,
+  fromWorkerSnapshot,
+  toRepository,
+  fromRepository,
 } from './normalizedStore';
+import type { WorkerStoreSnapshot } from './workerProtocol';
 import type { PresentationCoordinates } from '../../services/sysmlCommandGateway';
 
 export type PatchOpType = 'add' | 'replace' | 'remove' | 'batch';
@@ -58,11 +63,22 @@ export interface HistoryBudgetOptions {
   maxEntries?: number;
   maxBytes?: number;
   checkpointInterval?: number;
+  checkpointEvery?: number;
+  maxReplayOperations?: number;
 }
 
 export interface PatchHistoryCheckpoint {
   revision: number;
-  storeSnapshot: SysmlRepository;
+  storeSnapshot?: SysmlRepository;
+  snapshot?: WorkerStoreSnapshot;
+  timestamp: string;
+}
+
+export interface PatchHistoryOptions {
+  maxEntries: number;
+  maxBytes: number;
+  checkpointEvery: number;
+  maxReplayOperations: number;
 }
 
 export interface PatchHistoryState {
@@ -71,7 +87,8 @@ export interface PatchHistoryState {
   checkpoints: PatchHistoryCheckpoint[];
   currentRevision: number;
   totalBytes: number;
-  options: Required<HistoryBudgetOptions>;
+  options: PatchHistoryOptions;
+  lastCheckpointRevision: number;
   activeCoalesceKey?: string;
 }
 
@@ -179,6 +196,8 @@ export function applyPatch(store: NormalizedSysmlStore, operations: PatchOperati
 }
 
 export function createPatchHistory(options: HistoryBudgetOptions = {}): PatchHistoryState {
+  const checkpointEvery = options.checkpointEvery ?? options.checkpointInterval ?? 25;
+  const maxReplayOperations = options.maxReplayOperations ?? 100;
   return {
     past: [],
     future: [],
@@ -188,13 +207,80 @@ export function createPatchHistory(options: HistoryBudgetOptions = {}): PatchHis
     options: {
       maxEntries: options.maxEntries ?? 50,
       maxBytes: options.maxBytes ?? 10 * 1024 * 1024, // 10 MB default
-      checkpointInterval: options.checkpointInterval ?? 25,
+      checkpointEvery,
+      maxReplayOperations,
     },
+    lastCheckpointRevision: 0,
   };
 }
 
+export function createCheckpoint(
+  history: PatchHistoryState,
+  store: NormalizedSysmlStore,
+  repo?: SysmlRepository,
+): PatchHistoryCheckpoint {
+  const snapshot = toWorkerSnapshot(store);
+  const checkpoint: PatchHistoryCheckpoint = {
+    revision: store.revision,
+    snapshot,
+    storeSnapshot: repo ?? toRepository(store),
+    timestamp: new Date().toISOString(),
+  };
+  history.checkpoints.push(checkpoint);
+  history.lastCheckpointRevision = store.revision;
+  while (history.checkpoints.length > 5) {
+    history.checkpoints.shift();
+  }
+  return checkpoint;
+}
+
+export function replayFromCheckpoint(
+  checkpoint: PatchHistoryCheckpoint,
+  store: NormalizedSysmlStore,
+  patches: SysmlPatch[] = [],
+): void {
+  if (checkpoint.snapshot) {
+    const restored = fromWorkerSnapshot(checkpoint.snapshot);
+    store.revision = restored.revision;
+    store.definitions = restored.definitions;
+    store.usages = restored.usages;
+    store.connectors = restored.connectors;
+    store.relationships = restored.relationships;
+    store.requirements = restored.requirements;
+    store.verificationCases = restored.verificationCases;
+    store.evidence = restored.evidence;
+    store.baselines = restored.baselines;
+    store.artifacts = restored.artifacts;
+    store.coordinates = restored.coordinates;
+    store.diagramPresentations = restored.diagramPresentations;
+    store.indexes = restored.indexes;
+  } else if (checkpoint.storeSnapshot) {
+    const restored = fromRepository(checkpoint.storeSnapshot);
+    store.revision = restored.revision;
+    store.definitions = restored.definitions;
+    store.usages = restored.usages;
+    store.connectors = restored.connectors;
+    store.relationships = restored.relationships;
+    store.requirements = restored.requirements;
+    store.verificationCases = restored.verificationCases;
+    store.evidence = restored.evidence;
+    store.baselines = restored.baselines;
+    store.artifacts = restored.artifacts;
+    store.coordinates = restored.coordinates;
+    store.diagramPresentations = restored.diagramPresentations;
+    store.indexes = restored.indexes;
+  }
+
+  for (const patch of patches) {
+    if (patch.revision > checkpoint.revision) {
+      applyPatch(store, patch.forward);
+      store.revision = patch.revision;
+    }
+  }
+}
+
 /**
- * Push a new patch onto the history with coalescing and budget pruning.
+ * Push a new patch onto the history with coalescing, checkpointing, and budget pruning.
  */
 export function pushPatch(
   history: PatchHistoryState,
@@ -222,6 +308,14 @@ export function pushPatch(
   history.future = []; // Clear redo stack on new action
   history.totalBytes += bytes;
   history.currentRevision = patch.revision;
+
+  // Periodic checkpoint creation when thresholds are reached
+  if (currentStore && history.options.checkpointEvery > 0) {
+    const revDiff = patch.revision - history.lastCheckpointRevision;
+    if (revDiff >= history.options.checkpointEvery || revDiff >= history.options.maxReplayOperations) {
+      createCheckpoint(history, currentStore);
+    }
+  }
 
   // Prune history to respect budgets
   while (

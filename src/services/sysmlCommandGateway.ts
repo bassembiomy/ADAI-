@@ -546,7 +546,7 @@ export function executeSysmlCommand(
   activeDiagramId?: string,
 ): SysmlCommandResult {
   const coordinates = { ...state.coordinates };
-  const diagramPresentations = structuredClone(state.diagramPresentations ?? {});
+  const diagramPresentations: Record<string, { elementIds: string[] }> = { ...(state.diagramPresentations ?? {}) };
   const store = state.store ?? fromRepository(state.repository, coordinates, diagramPresentations);
   const patchHistory = state.patchHistory ?? createPatchHistory();
 
@@ -567,14 +567,45 @@ export function executeSysmlCommand(
     const actionStack = [...(state.actionStack ?? [])];
     const lastAction = actionStack.pop();
 
+    if (patchHistory.past.length > 0) {
+      const undoRes = undoPatch(patchHistory, store);
+      if (undoRes) {
+        store.revision = Math.max(0, undoRes.appliedPatch.revision - 1);
+        const repo = toRepository(store);
+        const nextCoords = Object.fromEntries(store.coordinates);
+        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+        const validation = validateSysmlRepository(repo);
+        const view = getView(repo, nextCoords, nextDiagrams);
+        const nextHistory: MutationHistory = {
+          past: [],
+          present: repo,
+          future: [],
+        };
+        return {
+          repository: repo,
+          store,
+          patchHistory,
+          view,
+          diagnostics: validation.diagnostics,
+          committed: true,
+          history: nextHistory,
+          coordinates: nextCoords,
+          diagramPresentations: nextDiagrams,
+          presentationHistory: state.presentationHistory,
+          actionStack,
+          redoStack: [lastAction ?? 'semantic', ...(state.redoStack ?? [])],
+        };
+      }
+    }
+
     if (lastAction === 'presentation' || (lastAction === undefined && (state.presentationHistory?.past?.length ?? 0) > 0)) {
       if ((state.presentationHistory?.past?.length ?? 0) > 0) {
         const past = [...(state.presentationHistory?.past ?? [])];
         const prev = past.pop();
         if (prev) {
           const currentSnapshot: PresentationSnapshot = {
-            coordinates: structuredClone(state.coordinates),
-            diagramPresentations: structuredClone(diagramPresentations),
+            coordinates: { ...state.coordinates },
+            diagramPresentations: { ...diagramPresentations },
           };
           const nextPresentationHistory = {
             past,
@@ -606,59 +637,6 @@ export function executeSysmlCommand(
           };
         }
       }
-      if (patchHistory.past.length > 0) {
-        const undoRes = undoPatch(patchHistory, store);
-        if (undoRes) {
-          const nextCoords = Object.fromEntries(store.coordinates);
-          const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-          const view = getView(state.repository, nextCoords, nextDiagrams);
-          return {
-            repository: state.repository,
-            store,
-            patchHistory,
-            view,
-            diagnostics: [],
-            committed: true,
-            history: state.history,
-            coordinates: nextCoords,
-            diagramPresentations: nextDiagrams,
-            presentationHistory: state.presentationHistory,
-            actionStack,
-            redoStack: ['presentation', ...(state.redoStack ?? [])],
-          };
-        }
-      }
-    }
-
-    if (patchHistory.past.length > 0) {
-      const undoRes = undoPatch(patchHistory, store);
-      if (undoRes) {
-        store.revision = Math.max(0, undoRes.appliedPatch.revision - 1);
-        const repo = toRepository(store);
-        const nextCoords = Object.fromEntries(store.coordinates);
-        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-        const validation = validateSysmlRepository(repo);
-        const view = getView(repo, nextCoords, nextDiagrams);
-        const nextHistory: MutationHistory = {
-          past: state.history.past.slice(0, -1),
-          present: repo,
-          future: [state.history.present, ...state.history.future],
-        };
-        return {
-          repository: repo,
-          store,
-          patchHistory,
-          view,
-          diagnostics: validation.diagnostics,
-          committed: true,
-          history: nextHistory,
-          coordinates: nextCoords,
-          diagramPresentations: nextDiagrams,
-          presentationHistory: state.presentationHistory,
-          actionStack,
-          redoStack: [lastAction ?? 'semantic', ...(state.redoStack ?? [])],
-        };
-      }
     }
 
     const nextHistory = historyUndo(state.history);
@@ -689,14 +667,45 @@ export function executeSysmlCommand(
     const redoStack = [...(state.redoStack ?? [])];
     const nextAction = redoStack.shift();
 
+    if (patchHistory.future.length > 0) {
+      const redoRes = redoPatch(patchHistory, store);
+      if (redoRes) {
+        store.revision = redoRes.appliedPatch.revision;
+        const repo = toRepository(store);
+        const nextCoords = Object.fromEntries(store.coordinates);
+        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+        const validation = validateSysmlRepository(repo);
+        const view = getView(repo, nextCoords, nextDiagrams);
+        const nextHistory: MutationHistory = {
+          past: [],
+          present: repo,
+          future: [],
+        };
+        return {
+          repository: repo,
+          store,
+          patchHistory,
+          view,
+          diagnostics: validation.diagnostics,
+          committed: true,
+          history: nextHistory,
+          coordinates: nextCoords,
+          diagramPresentations: nextDiagrams,
+          presentationHistory: state.presentationHistory,
+          actionStack: [...(state.actionStack ?? []), nextAction ?? 'semantic'],
+          redoStack,
+        };
+      }
+    }
+
     if (nextAction === 'presentation') {
       if ((state.presentationHistory?.future?.length ?? 0) > 0) {
         const future = [...(state.presentationHistory?.future ?? [])];
         const next = future.shift();
         if (next) {
           const currentSnapshot: PresentationSnapshot = {
-            coordinates: structuredClone(state.coordinates),
-            diagramPresentations: structuredClone(diagramPresentations),
+            coordinates: { ...state.coordinates },
+            diagramPresentations: { ...diagramPresentations },
           };
           const nextPresentationHistory = {
             past: [...(state.presentationHistory?.past ?? []), currentSnapshot],
@@ -727,59 +736,6 @@ export function executeSysmlCommand(
             redoStack,
           };
         }
-      }
-      if (patchHistory.future.length > 0) {
-        const redoRes = redoPatch(patchHistory, store);
-        if (redoRes) {
-          const nextCoords = Object.fromEntries(store.coordinates);
-          const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-          const view = getView(state.repository, nextCoords, nextDiagrams);
-          return {
-            repository: state.repository,
-            store,
-            patchHistory,
-            view,
-            diagnostics: [],
-            committed: true,
-            history: state.history,
-            coordinates: nextCoords,
-            diagramPresentations: nextDiagrams,
-            presentationHistory: state.presentationHistory,
-            actionStack: [...(state.actionStack ?? []), 'presentation'],
-            redoStack,
-          };
-        }
-      }
-    }
-
-    if (patchHistory.future.length > 0) {
-      const redoRes = redoPatch(patchHistory, store);
-      if (redoRes) {
-        store.revision = redoRes.appliedPatch.revision;
-        const repo = toRepository(store);
-        const nextCoords = Object.fromEntries(store.coordinates);
-        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-        const validation = validateSysmlRepository(repo);
-        const view = getView(repo, nextCoords, nextDiagrams);
-        const nextHistory: MutationHistory = {
-          past: [...state.history.past, state.history.present],
-          present: repo,
-          future: state.history.future.slice(1),
-        };
-        return {
-          repository: repo,
-          store,
-          patchHistory,
-          view,
-          diagnostics: validation.diagnostics,
-          committed: true,
-          history: nextHistory,
-          coordinates: nextCoords,
-          diagramPresentations: nextDiagrams,
-          presentationHistory: state.presentationHistory,
-          actionStack: [...(state.actionStack ?? []), nextAction ?? 'semantic'],
-          redoStack,
-        };
       }
     }
 
@@ -841,23 +797,36 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'createElement') {
-    const nextRepo: SysmlRepository = structuredClone(state.repository);
-    nextRepo.revision += 1;
-    storeElementInRepository(nextRepo, command.element);
+    const collection = getCollectionFromElement(command.element);
+    upsertEntity(store, collection, command.element as any);
     if (command.presentation) {
       coordinates[command.element.id] = { ...command.presentation };
       store.coordinates.set(command.element.id, { ...command.presentation });
     }
-    nextRepo.auditTrail.push({
-      id: `change-${nextRepo.revision}-${command.element.id}`,
-      revision: nextRepo.revision,
-      timestamp: new Date().toISOString(),
-      command: 'createElement',
-      elementIds: [command.element.id],
-    });
 
-    const collection = getCollectionFromElement(command.element);
-    upsertEntity(store, collection, command.element as any);
+    const nextRepo: SysmlRepository = {
+      ...state.repository,
+      revision: state.repository.revision + 1,
+      definitions: collection === 'definitions' ? { ...state.repository.definitions, [command.element.id]: command.element as any } : state.repository.definitions,
+      usages: collection === 'usages' ? { ...state.repository.usages, [command.element.id]: command.element as any } : state.repository.usages,
+      connectors: collection === 'connectors' ? { ...state.repository.connectors, [command.element.id]: command.element as any } : state.repository.connectors,
+      relationships: collection === 'relationships' ? { ...state.repository.relationships, [command.element.id]: command.element as any } : state.repository.relationships,
+      requirements: collection === 'requirements' ? { ...state.repository.requirements, [command.element.id]: command.element as any } : state.repository.requirements,
+      verificationCases: collection === 'verificationCases' ? { ...state.repository.verificationCases, [command.element.id]: command.element as any } : state.repository.verificationCases,
+      evidence: collection === 'evidence' ? { ...state.repository.evidence, [command.element.id]: command.element as any } : state.repository.evidence,
+      baselines: collection === 'baselines' ? { ...state.repository.baselines, [command.element.id]: command.element as any } : state.repository.baselines,
+      artifacts: collection === 'artifacts' ? { ...state.repository.artifacts, [command.element.id]: command.element as any } : state.repository.artifacts,
+      auditTrail: [
+        ...state.repository.auditTrail,
+        {
+          id: `change-${state.repository.revision + 1}-${command.element.id}`,
+          revision: state.repository.revision + 1,
+          timestamp: new Date().toISOString(),
+          command: 'createElement',
+          elementIds: [command.element.id],
+        },
+      ],
+    };
 
     const forwardOps: import('../engine/sysml/patches').PatchOperation[] = [
       { op: 'add', collection, id: command.element.id, value: command.element },
@@ -878,11 +847,9 @@ export function executeSysmlCommand(
     });
     pushPatch(patchHistory, patch, store);
 
-    const nextHistoryPast = [...state.history.past, structuredClone(state.repository)];
-    while (nextHistoryPast.length > 20) nextHistoryPast.shift();
     const nextHistory: MutationHistory = {
-      past: nextHistoryPast,
-      present: structuredClone(nextRepo),
+      past: [],
+      present: nextRepo,
       future: [],
     };
     const validation = validateSysmlRepository(nextRepo);
@@ -915,9 +882,7 @@ export function executeSysmlCommand(
       state.repository.evidence[command.elementId] ||
       state.repository.baselines[command.elementId]
     );
-    const nextRepo: SysmlRepository = structuredClone(state.repository);
-    const patched = findAndPatchElement(nextRepo, command.elementId, command.patch);
-    if (!patched || !existing) {
+    if (!existing) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
         repository: state.repository,
@@ -934,18 +899,29 @@ export function executeSysmlCommand(
         redoStack: state.redoStack,
       };
     }
-    nextRepo.revision += 1;
-    nextRepo.auditTrail.push({
-      id: `change-${nextRepo.revision}-${command.elementId}`,
-      revision: nextRepo.revision,
-      timestamp: new Date().toISOString(),
-      command: 'updateElement',
-      elementIds: [command.elementId],
-    });
 
     const collection = getCollectionForId(store, command.elementId) ?? getCollectionFromElement(existing);
     const nextElement = { ...existing, ...command.patch } as SysmlEntity;
     upsertEntity(store, collection, nextElement);
+
+    const nextRepo: SysmlRepository = {
+      ...state.repository,
+      revision: state.repository.revision + 1,
+      [collection]: {
+        ...state.repository[collection],
+        [command.elementId]: nextElement,
+      },
+      auditTrail: [
+        ...state.repository.auditTrail,
+        {
+          id: `change-${state.repository.revision + 1}-${command.elementId}`,
+          revision: state.repository.revision + 1,
+          timestamp: new Date().toISOString(),
+          command: 'updateElement',
+          elementIds: [command.elementId],
+        },
+      ],
+    };
 
     const patch = createSysmlPatch({
       revision: nextRepo.revision,
@@ -956,11 +932,9 @@ export function executeSysmlCommand(
     });
     pushPatch(patchHistory, patch, store);
 
-    const nextHistoryPast = [...state.history.past, structuredClone(state.repository)];
-    while (nextHistoryPast.length > 20) nextHistoryPast.shift();
     const nextHistory: MutationHistory = {
-      past: nextHistoryPast,
-      present: structuredClone(nextRepo),
+      past: [],
+      present: nextRepo,
       future: [],
     };
     const validation = validateSysmlRepository(nextRepo);
@@ -1022,11 +996,10 @@ export function executeSysmlCommand(
       delete coordinates[delId];
       removeEntity(store, delId);
     }
-    const nextDiagramPresentations = structuredClone(diagramPresentations);
-    for (const dId of Object.keys(nextDiagramPresentations)) {
-      nextDiagramPresentations[dId].elementIds = nextDiagramPresentations[dId].elementIds.filter(
-        id => !impact.deletedElementIds.includes(id)
-      );
+    const nextDiagramPresentations: Record<string, { elementIds: string[] }> = {};
+    for (const [dId, pres] of Object.entries(diagramPresentations)) {
+      const nextIds = pres.elementIds.filter(id => !impact.deletedElementIds.includes(id));
+      nextDiagramPresentations[dId] = { elementIds: nextIds };
       store.diagramPresentations.set(dId, nextDiagramPresentations[dId]);
     }
 
@@ -1046,11 +1019,9 @@ export function executeSysmlCommand(
       elementIds: impact.deletedElementIds,
     });
 
-    const nextHistoryPast = [...state.history.past, structuredClone(state.repository)];
-    while (nextHistoryPast.length > 20) nextHistoryPast.shift();
     const nextHistory: MutationHistory = {
-      past: nextHistoryPast,
-      present: structuredClone(nextRepo),
+      past: [],
+      present: nextRepo,
       future: [],
     };
     const view = getView(nextRepo, coordinates, nextDiagramPresentations);
@@ -1077,18 +1048,34 @@ export function executeSysmlCommand(
     const nextPresentation = {
       elementIds: currentPresentation.elementIds.filter(id => !command.elementIds.includes(id)),
     };
-    const nextDiagramPresentations = {
+    const nextDiagramPresentations: Record<string, { elementIds: string[] }> = {
       ...diagramPresentations,
       [command.diagramId]: nextPresentation,
     };
     store.diagramPresentations.set(command.diagramId, nextPresentation);
 
-    const pastPresentation: PresentationSnapshot = {
-      coordinates: structuredClone(state.coordinates),
-      diagramPresentations: structuredClone(diagramPresentations),
-    };
+    const patch = createSysmlPatch({
+      revision: store.revision + 1,
+      forward: [{
+        op: 'replace',
+        collection: 'diagramPresentations',
+        id: command.diagramId,
+        oldValue: currentPresentation,
+        value: nextPresentation,
+      }],
+      inverse: [{
+        op: 'replace',
+        collection: 'diagramPresentations',
+        id: command.diagramId,
+        oldValue: nextPresentation,
+        value: currentPresentation,
+      }],
+      description: 'removeFromDiagram',
+    });
+    pushPatch(patchHistory, patch, store);
+
     const nextPresentationHistory = {
-      past: [...(state.presentationHistory?.past ?? []), pastPresentation],
+      past: state.presentationHistory?.past ?? [],
       future: [],
     };
     const nextActionStack: Array<'semantic' | 'presentation'> = [...(state.actionStack ?? []), 'presentation'];
