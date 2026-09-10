@@ -124,8 +124,10 @@ import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } fro
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
+import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
+import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
@@ -10722,17 +10724,25 @@ const ADIA = () => {
       );
       if (!ok) return;
     }
+    const canonicalReportView = projectLegacyDiagram(canonicalSysmlRepository);
     const snapshot = createReportSnapshot({
-      blocks,
-      relationships,
-      parts,
-      connectors,
+      blocks: canonicalReportView.blocks,
+      relationships: canonicalReportView.relationships,
+      parts: canonicalReportView.parts,
+      connectors: canonicalReportView.connectors,
       states,
       layers,
       transitions,
       junctions,
     });
     const hierarchySource = toHierarchySource(snapshot);
+    const traceabilitySnapshot = buildCanonicalTraceabilitySnapshot(canonicalSysmlRepository);
+    const traceabilityMatrix = buildTraceabilityMatrix(
+      canonicalSysmlRepository,
+      {},
+      traceabilitySnapshot.index,
+    );
+    const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
     const style = `
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
@@ -10790,6 +10800,18 @@ const ADIA = () => {
       html += `<div class="consistency-summary" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px; font-size: 0.9em;">
         <strong>Model Consistency Summary:</strong> revision: ${escapeHtml(snapshot.revision)} &bull; removed connections: ${totalRemoved} (relationships: ${removedRelCount}, connectors: ${removedConnCount}) &bull; errors: ${errorCount}
       </div>`;
+    }
+
+    html += `<h2>Traceability Matrix</h2>`;
+    html += `<div class="consistency-summary"><strong>Canonical revision:</strong> ${escapeHtml(String(traceabilitySnapshot.repositoryRevision))} &bull; <strong>Model hash:</strong> ${escapeHtml(traceabilitySnapshot.modelHash)} &bull; <strong>Coverage:</strong> ${traceabilityMetrics.coveragePercent.toFixed(1)}% &bull; <strong>Verification:</strong> ${traceabilityMetrics.verificationPercent.toFixed(1)}%</div>`;
+    html += `<table><tr><th>Requirement</th><th>Status</th><th>Change</th><th>Owner / Risk</th><th>Covering Elements</th><th>Verification / Evidence</th><th>Unresolved</th></tr>`;
+    for (const row of traceabilityMatrix.rows) {
+      const links = [...row.coveringBlocks.map(item => item.name), ...row.blocks, ...row.parts].join('; ');
+      html += `<tr><td>${escapeHtml(row.requirement.requirementId)} · ${escapeHtml(row.requirement.name)}</td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.changeKind ?? 'unchanged')}</td><td>${escapeHtml(`${row.requirement.owner ?? 'Unassigned'} / ${row.requirement.risk ?? 'unspecified'}`)}</td><td>${escapeHtml(links || 'None')}</td><td>${escapeHtml(`${row.verificationCases.length} cases / ${row.evidence.length} evidence`)}</td><td>${escapeHtml(row.unresolvedEndpointIds.join('; ') || 'None')}</td></tr>`;
+    }
+    html += `</table>`;
+    if (traceabilitySnapshot.diagnostics.length > 0) {
+      html += `<h3>Traceability Diagnostics</h3><ul>${traceabilitySnapshot.diagnostics.map(item => `<li>${escapeHtml(item.code)}: ${escapeHtml(item.message)}</li>`).join('')}</ul>`;
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -1,6 +1,7 @@
 import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import { deriveEvidenceStatus } from './evidence';
 import { hash, stableStringify } from './requirements';
+import { buildTraceabilityIndex, type TraceabilityIndex } from './traceabilityIndex';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
 export type RtmChangeKind = 'unchanged' | 'added' | 'modified' | 'suspect';
@@ -77,13 +78,15 @@ export interface CoverageMetrics {
   uncovered: number;
   orphan: number;
   unresolved: number;
+  unsupported: number;
   coveragePercent: number;
   verificationPercent: number;
 }
 
-export function buildTraceabilityMatrix(repo: SysmlRepository, filters: RtmFilters = {}): TraceabilityMatrix {
+export function buildTraceabilityMatrix(repo: SysmlRepository, filters: RtmFilters = {}, suppliedIndex?: TraceabilityIndex): TraceabilityMatrix {
+  const index = suppliedIndex ?? buildTraceabilityIndex(repo);
   const rows = Object.values(repo.requirements)
-    .map(requirement => buildRow(repo, requirement, filters.compareBaselineId))
+    .map(requirement => buildRow(repo, requirement, filters.compareBaselineId, index))
     .filter(row => matchesFilters(repo, row, filters))
     .sort((a, b) => a.requirement.requirementId.localeCompare(b.requirement.requirementId) || a.requirement.id.localeCompare(b.requirement.id));
   return { revision: repo.revision, filters: { ...filters }, rows };
@@ -107,6 +110,7 @@ export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetr
   let uncovered = 0;
   let orphan = 0;
   let unresolved = 0;
+  let unsupported = 0;
   for (const row of matrix.rows) {
     if (row.status === 'covered') covered += 1;
     else if (row.status === 'verified') { verified += 1; covered += 1; }
@@ -116,10 +120,11 @@ export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetr
     else if (row.status === 'uncovered') uncovered += 1;
     else if (row.status === 'orphan') orphan += 1;
     else if (row.status === 'unresolved') unresolved += 1;
+    else if (row.status === 'unsupported') unsupported += 1;
   }
   const coveragePercent = total ? (covered * 100) / total : 100;
   const verificationPercent = total ? (verified * 100) / total : 100;
-  return { total, covered, verified, failed, stale, suspect, uncovered, orphan, unresolved, coveragePercent, verificationPercent };
+  return { total, covered, verified, failed, stale, suspect, uncovered, orphan, unresolved, unsupported, coveragePercent, verificationPercent };
 }
 
 export function exportRtmCsv(matrix: TraceabilityMatrix): string {
@@ -147,8 +152,8 @@ export function exportRtmCsv(matrix: TraceabilityMatrix): string {
   return [headers.join(','), ...rows.map(columns => columns.map(csv).join(','))].join('\r\n');
 }
 
-function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, compareBaselineId?: string): RtmRow {
-  const relationships = Object.values(repo.relationships).filter(r => r.sourceId === requirement.id || r.targetId === requirement.id);
+function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, compareBaselineId: string | undefined, index: TraceabilityIndex): RtmRow {
+  const relationships = index.relationshipsByEndpoint.get(requirement.id) ?? [];
   const relatedIds = relationships.map(r => r.sourceId === requirement.id ? r.targetId : r.sourceId);
   const blocks: string[] = [];
   const parts: string[] = [];
@@ -217,12 +222,14 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     else if (artifact) artifacts.push(id);
     else if (!repo.requirements[id] && !repo.verificationCases[id]) unresolvedEndpointIds.push(id);
   }
-  const verificationCases = Object.values(repo.verificationCases)
-    .filter(test => test.verifiesRequirementIds.includes(requirement.id) || relatedIds.includes(test.id))
-    .map(test => test.id);
-  const evidence = Object.values(repo.evidence)
-    .filter(item => item.requirementId === requirement.id || verificationCases.includes(item.verificationCaseId))
-    .map(item => item.id);
+  const verificationCases = sortedUnique([
+    ...(index.verificationCasesByRequirement.get(requirement.id) ?? []),
+    ...relatedIds.filter(id => Boolean(repo.verificationCases[id])),
+  ]);
+  const evidence = sortedUnique([
+    ...(index.evidenceByRequirement.get(requirement.id) ?? []),
+    ...verificationCases.flatMap(id => index.evidenceByVerificationCase.get(id) ?? []),
+  ]);
 
   let changeKind: RtmChangeKind | undefined = undefined;
   if (compareBaselineId && repo.baselines[compareBaselineId]) {

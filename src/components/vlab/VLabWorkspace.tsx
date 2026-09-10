@@ -829,6 +829,16 @@ const VLabScopeWindow = ({
   );
 };
 
+export const areDomainsCompatible = (d1?: string, d2?: string): boolean => {
+  if (!d1 || !d2) return true;
+  const a = d1.toLowerCase();
+  const b = d2.toLowerCase();
+  if (a === b) return true;
+  if (a === 'mechanical' && (b === 'translational' || b === 'rotational')) return true;
+  if (b === 'mechanical' && (a === 'translational' || a === 'rotational')) return true;
+  return false;
+};
+
 export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   nodes: initialNodes,
   edges: initialEdges,
@@ -1958,7 +1968,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
         isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
 
-      if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
+      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
         const sLabel = sourceData.label || sourceData.type;
         const tLabel = targetData.label || targetData.type;
         invalidErrors.push(`${sLabel} (${sDomain}) ➔ ${tLabel} (${tDomain})`);
@@ -2096,7 +2106,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
         isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
 
-      if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
+      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
         const sName = sourceData.label || sourceData.type;
         const tName = targetData.label || targetData.type;
         setStatus({
@@ -2153,7 +2163,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
         isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
 
-      if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
+      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
         invalid.add(edge.id);
       }
     });

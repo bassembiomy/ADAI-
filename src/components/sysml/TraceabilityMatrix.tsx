@@ -51,6 +51,8 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
     }),
   }), [complete, owner, query, risk, status]);
   const metrics = useMemo(() => computeCoverageMetrics(complete), [complete]);
+  const autoVirtualize = complete.rows.length >= 500;
+  const renderVirtualGrid = useVirtualGrid || autoVirtualize;
   const owners = [...new Set(complete.rows.map(row => row.requirement.owner).filter((value): value is string => Boolean(value)))].sort();
 
   const exportCsv = () => {
@@ -81,7 +83,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                 useVirtualGrid ? 'border-orange-500 bg-orange-950/60 text-orange-200' : 'border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              {useVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
+              {renderVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
             </button>
             <button type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
           </div>
@@ -114,7 +116,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
         </div>
       </header>
       <div className="flex-1 overflow-auto" role="region" aria-label="Traceability results" tabIndex={0}>
-        {useVirtualGrid ? (
+        {renderVirtualGrid ? (
           <VirtualizedTraceabilityGrid
             rows={matrix.rows}
             onNavigate={onNavigate}

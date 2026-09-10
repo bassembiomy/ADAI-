@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "modelHash": "0000000000000000",
+  "generatedAt": "2026-09-09T13:12:47.265Z",
+  "overallStatus": "PASS",
+  "acceptance": true,
+  "activities": {
+    "structural": {
+      "activity": "structural",
+      "status": "PASS",
+      "summary": "Structural model validation passed: 2 states, 1 layers.",
+      "command": null,
+      "details": null
+    },
+    "semantic": {
+      "activity": "semantic",
+      "status": "PASS",
+      "summary": "Semantic model validation passed: configuration slots and history mappings validated.",
+      "command": null,
+      "details": null
+    },
+    "test-generation": {
+      "activity": "test-generation",
+      "status": "PASS",
+      "summary": "Generated 27 package artifacts with canonical manifest (24 test cases).",
+      "command": null,
+      "details": {
+        "testCaseCount": 24,
+        "fileCount": 27
+      }
+    },
+    "host-compilation": {
+      "activity": "host-compilation",
+      "status": "PASS",
+      "summary": "host-compilation passed mock",
+      "command": null,
+      "details": null
+    },
+    "host-runtime": {
+      "activity": "host-runtime",
+      "status": "PASS",
+      "summary": "host-runtime passed mock",
+      "command": null,
+      "details": null
+    },
+    "sanitizers": {
+      "activity": "sanitizers",
+      "status": "PASS",
+      "summary": "sanitizers passed mock",
+      "command": null,
+      "details": null
+    },
+    "statement-coverage": {
+      "activity": "statement-coverage",
+      "status": "PASS",
+      "summary": "statement-coverage passed mock",
+      "command": null,
+      "details": null
+    },
+    "branch-coverage": {
+      "activity": "branch-coverage",
+      "status": "PASS",
+      "summary": "branch-coverage passed mock",
+      "command": null,
+      "details": null
+    },
+    "mcdc-coverage": {
+      "activity": "mcdc-coverage",
+      "status": "NOT_APPLICABLE",
+      "summary": "MC/DC coverage not required for non-safety model",
+      "command": null,
+      "details": null
+    },
+    "differential": {
+      "activity": "differential",
+      "status": "PASS",
+      "summary": "Differential equivalence confirmed across 1 cycles",
+      "command": null,
+      "details": {
+        "totalCycles": 1,
+        "divergence": null,
+        "modelHash": "0000000000000000"
+      }
+    },
+    "static-analysis": {
+      "activity": "static-analysis",
+      "status": "NOT_RUN",
+      "summary": "Static analysis not configured in verification settings",
+      "command": null,
+      "details": null
+    },
+    "misra-analysis": {
+      "activity": "misra-analysis",
+      "status": "NOT_RUN",
+      "summary": "MISRA analysis not configured in verification settings",
+      "command": null,
+      "details": null
+    },
+    "target-compilation": {
+      "activity": "target-compilation",
+      "status": "NOT_RUN",
+      "summary": "No target configured for model",
+      "command": null,
+      "details": null
+    },
+    "hardware": {
+      "activity": "hardware",
+      "status": "PENDING",
+      "summary": "Hardware execution pending physical bench access",
+      "command": null,
+      "details": null
+    }
+  }
+}

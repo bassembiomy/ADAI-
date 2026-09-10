@@ -59,3 +59,9 @@
   - [x] Step 3: Run `npx tsc --noEmit` and `npm run build` (tsc 0 errors, Vite build successful with 4,073 modules transformed and dedicated worker chunk)
   - [x] Step 4: Verify 100k stress and Electron performance suites (benchmarks and stress tests pass with sub-millisecond culling and < 50ms latency)
   - [x] Step 5: Document measured results and machine profile in `docs/performance-baseline.md`
+- [x] Task 11: VLab Block Port Domains and Parameter Definitions
+  - [x] Step 1: Fix Variable Resistor (`variable_resistor`) port domain definitions (p/n: Electrical, r: Physical)
+  - [x] Step 2: Fix Switch (`switch`) parameters (`Roff`, `threshold`) and port domains (p/n: Electrical, v: Physical) with updated equation
+  - [x] Step 3: Fix Translational EM Converter (`translational_electromechanical_converter`) port domains (p/n: Electrical, r/c: Translational)
+  - [x] Step 4: Add umbrella domain compatibility in `VLabWorkspace.tsx` (`Mechanical` <-> `Translational`/`Rotational`)
+  - [x] Step 5: Verify unit tests and full VLab certification suite (`vlab_block_fixes.test.ts`, `vlab_full_certification.test.ts`, `tsc --noEmit`)

@@ -4,9 +4,9 @@ test.describe('SysML Large Model Real UI Interaction & Latency Gates', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    const intro = page.locator('.fixed.inset-0.z-\\[9999\\]');
+    const intro = page.getByTestId('welcome-overlay');
     if (await intro.isVisible()) {
-      await intro.click();
+      await intro.click({ position: { x: 8, y: 8 } });
       await page.waitForTimeout(600);
     }
   });
