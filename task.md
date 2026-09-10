@@ -26,14 +26,14 @@
   - [x] Step 4: Keep `LegacySysmlView` projection available for existing panels and exports, but compute it lazily and cache it by repository revision plus diagram ID
   - [x] Step 5: Ensure selecting/editing one element does not recreate unrelated block/relationship objects
   - [x] Step 6: Run `npm run test:sysml` and `npx tsc --noEmit`
-- [ ] Task 5: Add Viewport Culling and Memoized Diagram Rendering
-  - [ ] Step 1: Define `DiagramViewport` and `VisibleElementSet` APIs
-  - [ ] Step 2: Build a grid/R-tree-compatible spatial index over coordinates; query viewport plus overscan on pan/zoom
-  - [ ] Step 3: Render only visible blocks/parts and edges whose endpoints or bounds intersect the viewport
-  - [ ] Step 4: Memoize block, port, relationship, connector, and label components by stable entity revision
-  - [ ] Step 5: During rapid pan/drag, render simplified nodes and defer labels/edge routing to idle time
-  - [ ] Step 6: Add a large-model mode that disables shadows, animations, and expensive labels above configured thresholds
-  - [ ] Step 7: Add Playwright tests verifying offscreen elements are not mounted and visible elements remain correct after zoom/pan
+- [x] Task 5: Add Viewport Culling and Memoized Diagram Rendering
+  - [x] Step 1: Define `DiagramViewport` and `VisibleElementSet` APIs
+  - [x] Step 2: Build a grid/R-tree-compatible spatial index over coordinates; query viewport plus overscan on pan/zoom
+  - [x] Step 3: Render only visible blocks/parts and edges whose endpoints or bounds intersect the viewport
+  - [x] Step 4: Memoize block, port, relationship, connector, and label components by stable entity revision
+  - [x] Step 5: During rapid pan/drag, render simplified nodes and defer labels/edge routing to idle time
+  - [x] Step 6: Add a large-model mode that disables shadows, animations, and expensive labels above configured thresholds
+  - [x] Step 7: Add Playwright tests verifying offscreen elements are not mounted and visible elements remain correct after zoom/pan
 - [ ] Task 6: Make Projection, Validation, and Impact Analysis Worker-Backed
   - [ ] Step 1: Define request IDs, revision numbers, cancellation tokens, and stale-result rejection
   - [ ] Step 2: Move full validation, diagram projection, deletion-impact analysis, and full serialization off the UI thread

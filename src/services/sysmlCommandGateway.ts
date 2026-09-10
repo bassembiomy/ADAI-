@@ -67,6 +67,8 @@ import {
 } from '../engine/sysml/patches';
 
 export {
+  fromRepository,
+  toRepository,
   getCachedLegacyView,
   clearLegacyViewCache,
   selectEntityById,

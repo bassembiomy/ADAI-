@@ -125,7 +125,8 @@ import { loadRepository, serializeRepository } from './engine/sysml/persistence'
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, selectSuspectLinks, selectEvidenceForRequirement } from './services/sysmlCommandGateway';
+import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
@@ -6202,9 +6203,24 @@ const ADIA = () => {
   const [parts, setParts] = useState<PartData[]>([]);
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
+  const sysmlStore = useMemo(() => fromRepository(canonicalSysmlRepository), [canonicalSysmlRepository]);
   useEffect(() => {
     setCanonicalSysmlRepository(previous => mergeLegacyDiagramIntoRepository(previous, { blocks, parts, connectors, relationships }));
   }, [blocks, parts, connectors, relationships]);
+
+  const diagramViewport = useMemo(() => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const w = rect?.width || 1200;
+    const h = rect?.height || 800;
+    return computeViewportBounds(view, { width: w, height: h }, 300);
+  }, [view]);
+
+  const culledDiagram = useMemo(() => {
+    if (blocks.length < 150 && parts.length < 150) {
+      return null;
+    }
+    return cullElements(diagramViewport, blocks, relationships, parts, connectors);
+  }, [diagramViewport, blocks, relationships, parts, connectors]);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
   const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
   const [uiZoom, setUiZoom] = useState(1.0);
@@ -13973,8 +13989,10 @@ const ADIA = () => {
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
+    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+    const isDegraded = Boolean(culledDiagram?.isDegradedMode && view.scale < 0.7);
 
-    return blocks.map(block => {
+    return targetBlocks.map(block => {
       if (diagramMode === 'ibd') {
         if (block.id === currentLayerId) {
           const frame = { x: block.ibdX ?? 50, y: block.ibdY ?? 50, w: block.ibdWidth ?? 1200, h: block.ibdHeight ?? 800 };
@@ -14098,101 +14116,106 @@ const ADIA = () => {
           </text>
           <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
 
-          {/* Requirement Specifics */}
-          {block.stereotype === 'requirement' ? (
-            <g transform="translate(5, 45)">
-              <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
-              <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
-                <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
-                  {block.description}
-                </div>
-              </foreignObject>
-              {/* Status Indicator */}
-              <circle cx={displayWidth - 15} cy={-35} r={3} fill={
-                block.status === 'Verified' ? '#4ade80' :
-                  block.status === 'Approved' ? '#6c9ac6' :
-                    block.status === 'Draft' ? '#888' : '#c96c8a'
-              } />
-              {/* Attached PDFs Indicator */}
-              {block.attachedFiles && block.attachedFiles.length > 0 && (
-                <g transform={`translate(${displayWidth - 35}, -40)`}>
-                  <title>{`${block.attachedFiles.length} PDF(s) attached`}</title>
-                  <rect x="0" y="0" width="8" height="10" rx="1" fill="none" stroke="#f97316" strokeWidth={1} />
-                  <line x1="2" y1="3" x2="6" y2="3" stroke="#f97316" strokeWidth={1} />
-                  <line x1="2" y1="5" x2="6" y2="5" stroke="#f97316" strokeWidth={1} />
-                  <line x1="2" y1="7" x2="5" y2="7" stroke="#f97316" strokeWidth={1} />
-                  <text x="11" y="9" fill="#f97316" fontSize={8} fontWeight="bold">{block.attachedFiles.length}</text>
+          {/* If degraded mode active, skip complex sub-elements for performance */}
+          {!isDegraded && (
+            <>
+              {/* Requirement Specifics */}
+              {block.stereotype === 'requirement' ? (
+                <g transform="translate(5, 45)">
+                  <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
+                  <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
+                    <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
+                      {block.description}
+                    </div>
+                  </foreignObject>
+                  {/* Status Indicator */}
+                  <circle cx={displayWidth - 15} cy={-35} r={3} fill={
+                    block.status === 'Verified' ? '#4ade80' :
+                      block.status === 'Approved' ? '#6c9ac6' :
+                        block.status === 'Draft' ? '#888' : '#c96c8a'
+                  } />
+                  {/* Attached PDFs Indicator */}
+                  {block.attachedFiles && block.attachedFiles.length > 0 && (
+                    <g transform={`translate(${displayWidth - 35}, -40)`}>
+                      <title>{`${block.attachedFiles.length} PDF(s) attached`}</title>
+                      <rect x="0" y="0" width="8" height="10" rx="1" fill="none" stroke="#f97316" strokeWidth={1} />
+                      <line x1="2" y1="3" x2="6" y2="3" stroke="#f97316" strokeWidth={1} />
+                      <line x1="2" y1="5" x2="6" y2="5" stroke="#f97316" strokeWidth={1} />
+                      <line x1="2" y1="7" x2="5" y2="7" stroke="#f97316" strokeWidth={1} />
+                      <text x="11" y="9" fill="#f97316" fontSize={8} fontWeight="bold">{block.attachedFiles.length}</text>
+                    </g>
+                  )}
                 </g>
-              )}
-            </g>
-          ) : (
-            <g transform="translate(5, 45)">
-              {block.properties.slice(0, 3).map((prop, i) => (
-                <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
-                  {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
-                </text>
-              ))}
-              {block.classes && block.classes.length > 0 && (
-                <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
-                  <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                  {block.classes.slice(0, 3).map((cls, i) => (
-                    <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
-                      {cls}
+              ) : (
+                <g transform="translate(5, 45)">
+                  {block.properties.slice(0, 3).map((prop, i) => (
+                    <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
+                      {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
+                  {block.classes && block.classes.length > 0 && (
+                    <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
+                      <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
+                      {block.classes.slice(0, 3).map((cls, i) => (
+                        <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
+                          {cls}
+                        </text>
+                      ))}
+                    </g>
+                  )}
                 </g>
               )}
-            </g>
-          )}
 
-          {/* Operations Separator if needed */}
-          {block.operations.length > 0 && (
-            <>
-              <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
-              <g transform={`translate(5, ${displayHeight - 15})`}>
-                {block.operations.slice(0, 2).map((op, i) => (
-                  <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
-                ))}
-              </g>
-            </>
-          )}
+              {/* Operations Separator if needed */}
+              {block.operations.length > 0 && (
+                <>
+                  <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${displayHeight - 15})`}>
+                    {block.operations.slice(0, 2).map((op, i) => (
+                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
+                    ))}
+                  </g>
+                </>
+              )}
 
-          {/* Constraints */}
-          {block.constraints && block.constraints.length > 0 && (
-            <>
-              <line x1={0} y1={displayHeight - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={displayHeight - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
-              <g transform={`translate(5, ${displayHeight - (block.operations.length > 0 ? 30 : 15)})`}>
-                {block.constraints.slice(0, 2).map((c, i) => (
-                  <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
-                ))}
-              </g>
-            </>
-          )}
+              {/* Constraints */}
+              {block.constraints && block.constraints.length > 0 && (
+                <>
+                  <line x1={0} y1={displayHeight - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={displayHeight - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${displayHeight - (block.operations.length > 0 ? 30 : 15)})`}>
+                    {block.constraints.slice(0, 2).map((c, i) => (
+                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
+                    ))}
+                  </g>
+                </>
+              )}
 
-          {/* Ports */}
-          {block.ports.map((port, i) => (
-            <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
-              <rect
-                width={10}
-                height={10}
-                fill="#333"
-                stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
-                strokeWidth={1}
-              />
-              {port.kind === 'flow' && (
-                <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
-                  {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
+              {/* Ports */}
+              {block.ports.map((port, i) => (
+                <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
+                  <rect
+                    width={10}
+                    height={10}
+                    fill="#333"
+                    stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
+                    strokeWidth={1}
+                  />
+                  {port.kind === 'flow' && (
+                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
+                      {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
+                    </text>
+                  )}
+                  <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
+                </g>
+              ))}
+
+              {/* Satisfied Requirements Indicator */}
+              {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
+                <text x={displayWidth - 5} y={displayHeight - 5} textAnchor="end" fill="#4ade80" fontSize={9} fontWeight="bold">
+                  ✓ {block.satisfiedReqIds.length}
                 </text>
               )}
-              <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
-            </g>
-          ))}
-
-          {/* Satisfied Requirements Indicator */}
-          {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
-            <text x={displayWidth - 5} y={displayHeight - 5} textAnchor="end" fill="#4ade80" fontSize={9} fontWeight="bold">
-              ✓ {block.satisfiedReqIds.length}
-            </text>
+            </>
           )}
 
           {/* Resize Handles */}
@@ -14212,19 +14235,22 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
+  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
+    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
+    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+
     const pairGroups = new Map<string, string[]>();
-    relationships.forEach(rel => {
+    targetRelationships.forEach(rel => {
       const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
       if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
       pairGroups.get(pairKey)!.push(rel.id);
     });
 
-    return relationships.map(rel => {
-      const source = blocks.find(b => b.id === rel.sourceId);
-      const target = blocks.find(b => b.id === rel.targetId);
+    return targetRelationships.map(rel => {
+      const source = targetBlocks.find(b => b.id === rel.sourceId) || blocks.find(b => b.id === rel.sourceId);
+      const target = targetBlocks.find(b => b.id === rel.targetId) || blocks.find(b => b.id === rel.targetId);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
@@ -14351,12 +14377,13 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, blocks, selectedIds, diagramMode, currentLayerId]);
+  }, [relationships, blocks, culledDiagram, selectedIds, diagramMode, currentLayerId]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
     if (diagramMode !== 'ibd') return null;
-    return parts.filter(p => p.blockId === currentLayerId).map(part => {
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
+    return targetParts.filter(p => p.blockId === currentLayerId).map(part => {
       const block = blocks.find(b => b.id === part.typeId);
       const isSelected = selectedIds.includes(part.id);
 
@@ -14450,15 +14477,17 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, blocks, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode]);
+  }, [parts, blocks, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const currentPartIds = new Set(parts.filter(p => p.blockId === currentLayerId).map(p => p.id));
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
+    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : connectors;
+    const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
 
-    const visibleConnectors = connectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
+    const visibleConnectors = targetConnectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
 
     return visibleConnectors.map((conn, connIdx) => {
       const getPortPos = (partId: string, portId: string) => {
@@ -14522,7 +14551,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [connectors, parts, blocks, selectedIds, currentLayerId, diagramMode]);
+  }, [connectors, parts, blocks, culledDiagram, selectedIds, currentLayerId, diagramMode]);
 
   const renderInterfaceRealizations = useCallback((): React.ReactNode => {
     if (diagramMode !== 'ibd') return null;
@@ -16998,12 +17027,8 @@ const ADIA = () => {
                           copiedFromId: (selectedBlock as any).copiedFromId,
                         };
                         const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
-                        const suspectLinks = Object.values(canonicalSysmlRepository.relationships).filter(
-                          r => (r.sourceId === selectedBlock.id || r.targetId === selectedBlock.id) && r.suspect
-                        );
-                        const evidenceHistory = Object.values(canonicalSysmlRepository.evidence).filter(
-                          e => e.requirementId === selectedBlock.id
-                        );
+                        const suspectLinks = selectSuspectLinks(sysmlStore, selectedBlock.id);
+                        const evidenceHistory = selectEvidenceForRequirement(sysmlStore, selectedBlock.id);
 
                         return (
                           <RequirementGovernancePanel
