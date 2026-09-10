@@ -42,11 +42,11 @@
   - [x] Step 3: Schedule deletion-impact analysis before confirmation for large repositories
   - [x] Step 4: Show visible "main-thread fallback" warning in `LargeModelDiagnostics` if worker unavailable
   - [x] Step 5: Expose worker queue count, last task duration, fallback reason, and stale-result count
-- [ ] Task 8: Add Real Large-Model Performance and Memory Gates
-  - [ ] Step 1: Create realistic fixtures (1k, 10k, 50k, 100k) with high relationship/connector density in `src/engine/sysml/largeModelStress.test.ts`
-  - [ ] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
-  - [ ] Step 3: Enforce gates: no main-thread task > 100ms in performance mode, drag p95 < 50ms, worker cancellation < 100ms
-  - [ ] Step 4: Create real UI performance test in `tests/e2e/sysml-large-model-interaction.spec.ts`
+- [x] Task 8: Add Real Large-Model Performance and Memory Gates
+  - [x] Step 1: Create realistic fixtures (1k, 10k, 50k, 100k) with high relationship/connector density in `src/engine/sysml/largeModelStress.test.ts`
+  - [x] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
+  - [x] Step 3: Enforce gates: no main-thread task > 100ms in performance mode, drag p95 < 50ms, worker cancellation < 100ms
+  - [x] Step 4: Create real UI performance test in `tests/e2e/sysml-large-model-interaction.spec.ts`
 - [ ] Task 9: Verify Persistence and Recovery Under Load
   - [ ] Step 1: Test incremental save after one patch without serializing unrelated chunks
   - [ ] Step 2: Test interrupted chunk writes, temporary file cleanup, checksum failure, and recovery from last valid manifest
