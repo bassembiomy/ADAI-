@@ -93,3 +93,35 @@ export function parseMultiplicity(input: string): Multiplicity {
   if ([...modifiers].some(v => !['ordered', 'unordered', 'unique', 'nonunique'].includes(v))) throw new Error(`Invalid multiplicity modifier: ${input}`);
   return { lower, upper, ordered: modifiers.has('ordered'), unique: !modifiers.has('nonunique') };
 }
+
+export type SysmlEntityCollection =
+  | 'definitions'
+  | 'usages'
+  | 'connectors'
+  | 'relationships'
+  | 'requirements'
+  | 'verificationCases'
+  | 'evidence'
+  | 'baselines'
+  | 'artifacts';
+
+export type SysmlEntity =
+  | SysmlDefinition
+  | SysmlUsage
+  | ConnectorUsage
+  | SysmlRelationship
+  | RequirementDefinition
+  | VerificationCase
+  | VerificationEvidence
+  | ModelBaseline
+  | TraceArtifact;
+
+export interface ModelPersistenceMetadata {
+  isChunked?: boolean;
+  chunkCount?: number;
+  chunkSize?: number;
+  checksum?: string;
+  lastSavedRevision?: number;
+  lastSavedAt?: string;
+  formatVersion?: string;
+}

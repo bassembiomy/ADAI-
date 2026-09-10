@@ -6,12 +6,12 @@
   - [x] Step 3: Add baseline tests for load, project, select, update, delete-impact, serialize, and render-data preparation
   - [x] Step 4: Run `npx vitest run src/engine/sysml/largeModelGenerator.test.ts` and record current failures/measurements in `docs/performance-baseline.md`
   - [x] Step 5: Commit the fixture and baseline only
-- [ ] Task 2: Add a Normalized Store and Secondary Indexes
-  - [ ] Step 1: Define `NormalizedSysmlStore` with `definitions`, `usages`, `connectors`, `relationships`, `requirements`, `verificationCases`, plus `coordinates` and `diagramPresentations`
-  - [ ] Step 2: Define indexes for `ownerId`, `typeId`, `sourceId`, `targetId`, `diagramId`, and `requirementId`
-  - [ ] Step 3: Implement `fromRepository`, `getById`, `idsByIndex`, `upsert`, `remove`, and `projectIds` without scanning unrelated entities
-  - [ ] Step 4: Keep `SysmlRepository` serialization shape unchanged through `toRepository()`
-  - [ ] Step 5: Test index correctness after create/update/delete and compare normalized projection against current `projectLegacyDiagram` output
+- [x] Task 2: Add a Normalized Store and Secondary Indexes
+  - [x] Step 1: Define `NormalizedSysmlStore` with `definitions`, `usages`, `connectors`, `relationships`, `requirements`, `verificationCases`, plus `coordinates` and `diagramPresentations`
+  - [x] Step 2: Define indexes for `ownerId`, `typeId`, `sourceId`, `targetId`, `diagramId`, and `requirementId`
+  - [x] Step 3: Implement `fromRepository`, `getById`, `idsByIndex`, `upsert`, `remove`, and `projectIds` without scanning unrelated entities
+  - [x] Step 4: Keep `SysmlRepository` serialization shape unchanged through `toRepository()`
+  - [x] Step 5: Test index correctness after create/update/delete and compare normalized projection against current `projectLegacyDiagram` output
 - [ ] Task 3: Replace Full-Snapshot History with Bounded Inverse Patches
   - [ ] Step 1: Define typed operations: `add`, `replace`, `remove`, `batch`
   - [ ] Step 2: Make `applyCommand` return `{ nextStore, forwardPatch, inversePatch, impact }`
