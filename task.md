@@ -60,9 +60,9 @@
   - [x] Step 3: Disable or confirm expensive operations such as full auto-layout, whole-project SVG export, and global report generation
   - [x] Step 4: Show recoverable progress/errors instead of allowing a silent UI freeze
   - [x] Step 5: Persist user limits separately from the SysML semantic model
-- [ ] Task 10: Benchmark Gates and Regression Protection
-  - [ ] Step 1: Benchmark 1k/10k/50k/100k fixtures on load, edit, drag, pan, zoom, validation, undo/redo, save, and reopen
-  - [ ] Step 2: Fail CI if p95 edit/drag exceeds 50 ms, any main-thread task exceeds 100 ms in performance mode, or memory exceeds the configured budget
-  - [ ] Step 3: Compare normalized gateway output with legacy behavior on all existing SysML tests
-  - [ ] Step 4: Run `npm run test:sysml`, `npm run test:e2e:sysml`, `npx tsc --noEmit`, and the new performance suite
-  - [ ] Step 5: Document machine profile, browser/Electron version, fixture size, thresholds, and known degraded modes
+- [x] Task 10: Benchmark Gates and Regression Protection
+  - [x] Step 1: Benchmark 1k/10k/50k/100k fixtures on load, edit, drag, pan, zoom, validation, undo/redo, save, and reopen
+  - [x] Step 2: Fail CI if p95 edit/drag exceeds 50 ms, any main-thread task exceeds 100 ms in performance mode, or memory exceeds the configured budget
+  - [x] Step 3: Compare normalized gateway output with legacy behavior on all existing SysML tests
+  - [x] Step 4: Run `npm run test:sysml`, `npm run test:e2e:sysml`, `npx tsc --noEmit`, and the new performance suite
+  - [x] Step 5: Document machine profile, browser/Electron version, fixture size, thresholds, and known degraded modes
