@@ -86,6 +86,18 @@ export {
   targetedUpdatePresentation,
 };
 
+import { SysmlWorkerClient } from './sysmlWorkerClient';
+export { SysmlWorkerClient };
+export * from '../engine/sysml/workerProtocol';
+
+let defaultWorkerClient: SysmlWorkerClient | null = null;
+export function getDefaultSysmlWorkerClient(): SysmlWorkerClient {
+  if (!defaultWorkerClient) {
+    defaultWorkerClient = new SysmlWorkerClient();
+  }
+  return defaultWorkerClient;
+}
+
 export interface PresentationCoordinates {
   x?: number;
   y?: number;

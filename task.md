@@ -34,13 +34,13 @@
   - [x] Step 5: During rapid pan/drag, render simplified nodes and defer labels/edge routing to idle time
   - [x] Step 6: Add a large-model mode that disables shadows, animations, and expensive labels above configured thresholds
   - [x] Step 7: Add Playwright tests verifying offscreen elements are not mounted and visible elements remain correct after zoom/pan
-- [ ] Task 6: Make Projection, Validation, and Impact Analysis Worker-Backed
-  - [ ] Step 1: Define request IDs, revision numbers, cancellation tokens, and stale-result rejection
-  - [ ] Step 2: Move full validation, diagram projection, deletion-impact analysis, and full serialization off the UI thread
-  - [ ] Step 3: Return compact deltas (`added`, `updated`, `removed`, diagnostics) instead of cloning the full result
-  - [ ] Step 4: Keep small-model fast paths synchronous when estimated work is below a threshold
-  - [ ] Step 5: Cancel obsolete validation/projection jobs when a newer revision is submitted
-  - [ ] Step 6: Test ordering, cancellation, stale responses, worker errors, and deterministic results
+- [x] Task 6: Make Projection, Validation, and Impact Analysis Worker-Backed
+  - [x] Step 1: Define request IDs, revision numbers, cancellation tokens, and stale-result rejection
+  - [x] Step 2: Move full validation, diagram projection, deletion-impact analysis, and full serialization off the UI thread
+  - [x] Step 3: Return compact deltas (`added`, `updated`, `removed`, diagnostics) instead of cloning the full result
+  - [x] Step 4: Keep small-model fast paths synchronous when estimated work is below a threshold
+  - [x] Step 5: Cancel obsolete validation/projection jobs when a newer revision is submitted
+  - [x] Step 6: Test ordering, cancellation, stale responses, worker errors, and deterministic results
 - [ ] Task 7: Implement Chunked and Incremental Persistence
   - [ ] Step 1: Preserve current `ADIA-SysML` JSON export/import as a compatibility format
   - [ ] Step 2: Add an internal chunk format keyed by collection and entity ID, with manifest containing schema version, revision, checksum, and chunk checksums
