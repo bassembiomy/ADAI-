@@ -232,9 +232,12 @@ function snapshotElementHashes(repo: SysmlRepository): Record<string, string> {
 }
 
 function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value === undefined) return 'null';
+  if (Array.isArray(value)) return `[${value.map(v => v === undefined ? 'null' : stableStringify(v)).join(',')}]`;
   if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>).sort().map(key => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`).join(',')}}`;
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
+    return `{${keys.map(key => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
   }
   return JSON.stringify(value);
 }
@@ -601,4 +604,171 @@ export async function atomicWriteFile(
     await fileAdapter.renameFile(tmpPath, targetPath);
   }
 }
+
+/**
+ * Hydrate only entities needed for a specific active diagram, deferring inactive diagrams.
+ * Drastically reduces memory and hydration latency when opening a large model.
+ */
+export function hydrateActiveDiagramFromChunks(
+  manifest: ChunkManifest,
+  activeDiagramId: string,
+  getChunk: (key: string) => string | unknown
+): LoadRepositoryResult & { loadedEntityCount: number; deferredChunkCount: number } {
+  const diagnostics: SysmlDiagnostic[] = [];
+  const repo = createEmptyRepository();
+  repo.schemaVersion = manifest.schemaVersion;
+  repo.profileId = (manifest.profileId as 'OMG-SysML-1.6-ADIA') ?? 'OMG-SysML-1.6-ADIA';
+  repo.revision = manifest.revision;
+  repo.auditTrail = [...(manifest.auditTrail ?? [])];
+
+  const diagramMeta = manifest.diagramPresentations?.[activeDiagramId];
+  const requiredElementIds = new Set<string>(diagramMeta?.elementIds ?? [activeDiagramId]);
+
+  let loadedCount = 0;
+  let deferredCount = 0;
+
+  for (const [key, meta] of Object.entries(manifest.chunkIndex)) {
+    // If element is not in active diagram, defer loading
+    if (requiredElementIds.size > 0 && !requiredElementIds.has(meta.entityId) && meta.entityId !== activeDiagramId) {
+      deferredCount++;
+      continue;
+    }
+
+    const rawChunk = getChunk(key);
+    if (rawChunk == null) {
+      diagnostics.push(diag('PERSISTENCE_CHUNK_MISSING', `Chunk ${key} referenced in manifest was not found`));
+      continue;
+    }
+
+    let parsed: any;
+    try {
+      parsed = typeof rawChunk === 'string' ? JSON.parse(rawChunk) : rawChunk;
+    } catch {
+      diagnostics.push(diag('PERSISTENCE_CHUNK_PARSE_ERROR', `Failed to parse chunk ${key}`));
+      continue;
+    }
+
+    const canonicalJson = stableStringify(parsed);
+    const calculatedHash = hash(canonicalJson);
+    if (calculatedHash !== meta.checksum) {
+      diagnostics.push(
+        diag('PERSISTENCE_CHUNK_CHECKSUM_MISMATCH', `Checksum mismatch for chunk ${key}: expected ${meta.checksum}, got ${calculatedHash}`)
+      );
+    }
+
+    const collName = meta.collection as (typeof PERSISTENCE_COLLECTIONS)[number];
+    if (collName && (repo as any)[collName]) {
+      (repo as any)[collName][meta.entityId] = parsed;
+      loadedCount++;
+    }
+  }
+
+  return {
+    repository: repo,
+    diagnostics,
+    valid: !diagnostics.some(d => d.severity === 'error'),
+    migrated: false,
+    loadedEntityCount: loadedCount,
+    deferredChunkCount: deferredCount,
+  };
+}
+
+export interface SaveTransactionAdapter {
+  writeFile: (path: string, content: string) => Promise<void>;
+  renameFile: (oldPath: string, newPath: string) => Promise<void>;
+  deleteFile?: (path: string) => Promise<void>;
+}
+
+export interface SaveTransactionOptions {
+  abortSignal?: AbortSignal;
+  fileAdapter: SaveTransactionAdapter;
+  lastValidRevision?: number;
+}
+
+export interface SaveTransactionResult {
+  success: boolean;
+  committedRevision: number;
+  temporaryFilesCleaned: number;
+  error?: Error;
+}
+
+/**
+ * Save repository chunks transactionally with atomic temporary writes and rollback on abort/error.
+ * Ensures that if save is aborted or fails midway, temporary files are cleaned up and the manifest
+ * is never partially overwritten or left at a half-committed revision.
+ */
+export async function saveRepositoryTransactionally(
+  basePath: string,
+  manifest: ChunkManifest,
+  chunks: Record<string, SerializedEntityChunk>,
+  options: SaveTransactionOptions
+): Promise<SaveTransactionResult> {
+  const { abortSignal, fileAdapter, lastValidRevision = manifest.revision - 1 } = options;
+  const tempFiles: string[] = [];
+  const stagedRenames: Array<{ from: string; to: string }> = [];
+
+  const cleanupTempFiles = async () => {
+    let cleaned = 0;
+    if (fileAdapter.deleteFile) {
+      for (const tmp of tempFiles) {
+        try {
+          await fileAdapter.deleteFile(tmp);
+          cleaned++;
+        } catch {
+          // ignore cleanup failures
+        }
+      }
+    }
+    return cleaned;
+  };
+
+  try {
+    if (abortSignal?.aborted) {
+      throw new Error('Save cancelled before execution');
+    }
+
+    const timestamp = Date.now();
+    for (const [key, chunk] of Object.entries(chunks)) {
+      if (abortSignal?.aborted) {
+        throw new Error('Save cancelled during chunk write');
+      }
+      const targetPath = `${basePath}/${key}`;
+      const tempPath = `${targetPath}.tmp_${timestamp}`;
+      tempFiles.push(tempPath);
+      await fileAdapter.writeFile(tempPath, chunk.json);
+      stagedRenames.push({ from: tempPath, to: targetPath });
+    }
+
+    // Now rename all chunks atomically
+    for (const rename of stagedRenames) {
+      if (abortSignal?.aborted) {
+        throw new Error('Save cancelled during commit');
+      }
+      await fileAdapter.renameFile(rename.from, rename.to);
+    }
+
+    // Finally write manifest atomically
+    const manifestJson = stableStringify(manifest);
+    const manifestPath = `${basePath}/manifest.json`;
+    const manifestTmp = `${manifestPath}.tmp_${timestamp}`;
+    tempFiles.push(manifestTmp);
+    await fileAdapter.writeFile(manifestTmp, manifestJson);
+    await fileAdapter.renameFile(manifestTmp, manifestPath);
+
+    return {
+      success: true,
+      committedRevision: manifest.revision,
+      temporaryFilesCleaned: 0,
+    };
+  } catch (err: any) {
+    const cleaned = await cleanupTempFiles();
+    return {
+      success: false,
+      committedRevision: lastValidRevision,
+      temporaryFilesCleaned: cleaned,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
+  }
+}
+
 

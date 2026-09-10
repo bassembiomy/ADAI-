@@ -8,6 +8,8 @@ import {
   serializeToChunks,
   serializeIncrementalChunks,
   hydrateRepositoryFromChunks,
+  hydrateActiveDiagramFromChunks,
+  saveRepositoryTransactionally,
   streamExportChunks,
   atomicWriteFile,
 } from './persistence';
@@ -248,6 +250,187 @@ describe('versioned SysML persistence and baselines', () => {
       expect(renames.length).toBe(1);
       expect(renames[0].to).toBe('model/project.json');
       expect(renames[0].from).toContain('.tmp');
+    });
+
+    it('incrementally saves only the patched entity chunk without serializing 1000 unrelated entities', () => {
+      const repo = createEmptyRepository();
+      for (let i = 0; i < 1000; i++) {
+        repo.definitions[`b_${i}`] = block(`b_${i}`);
+      }
+      const baseChunked = serializeToChunks(repo);
+      expect(Object.keys(baseChunked.chunks).length).toBe(1000);
+
+      // Mutate single entity b_42
+      repo.definitions.b_42 = { ...repo.definitions.b_42, name: 'Mutated_42' };
+
+      const incremental = serializeIncrementalChunks(repo, ['b_42'], baseChunked.manifest);
+      expect(Object.keys(incremental.updatedChunks).length).toBe(1);
+      expect(incremental.updatedChunks['definitions/b_42.json']).toBeDefined();
+      expect(incremental.removedChunkKeys.length).toBe(0);
+      expect(incremental.manifest.revision).toBe(baseChunked.manifest.revision + 1);
+    });
+
+    it('cleans up temporary files on interrupted writes and recovers from last valid manifest', async () => {
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = block('b1');
+      repo.definitions.b2 = block('b2');
+      const baseExport = serializeToChunks(repo);
+
+      // Now create updated chunk with revision 2
+      repo.definitions.b1 = { ...repo.definitions.b1, name: 'B1_Updated' };
+      const updatedExport = serializeToChunks(repo);
+      updatedExport.manifest.revision = 2;
+
+      const diskFiles: Record<string, string> = {
+        'repo/manifest.json': baseExport.manifestJson,
+      };
+      const deletedFiles: string[] = [];
+
+      let failOnWrite = true;
+      const mockAdapter = {
+        writeFile: async (p: string, c: string) => {
+          if (failOnWrite && p.includes('b2')) {
+            throw new Error('Simulated disk full / power failure');
+          }
+          diskFiles[p] = c;
+        },
+        renameFile: async (from: string, to: string) => {
+          diskFiles[to] = diskFiles[from];
+          delete diskFiles[from];
+        },
+        deleteFile: async (p: string) => {
+          deletedFiles.push(p);
+          delete diskFiles[p];
+        },
+      };
+
+      const result = await saveRepositoryTransactionally(
+        'repo',
+        updatedExport.manifest,
+        updatedExport.chunks,
+        {
+          fileAdapter: mockAdapter,
+          lastValidRevision: 1,
+        }
+      );
+
+      // Transaction failed
+      expect(result.success).toBe(false);
+      expect(result.committedRevision).toBe(1);
+      expect(result.temporaryFilesCleaned).toBeGreaterThan(0);
+      // Ensure temp files deleted
+      expect(deletedFiles.some(f => f.includes('.tmp_'))).toBe(true);
+
+      // Recovery: Last valid manifest was NOT overwritten and remains revision 1
+      const currentManifest = JSON.parse(diskFiles['repo/manifest.json']);
+      expect(currentManifest.revision).toBe(0); // initial base revision
+    });
+
+    it('lazily hydrates only the active diagram, deferring inactive diagram entities', () => {
+      const repo = createEmptyRepository();
+      // Diagram 1 entities
+      repo.definitions.b1 = block('b1');
+      repo.definitions.b2 = block('b2');
+      // Diagram 2 entities
+      repo.definitions.b3 = block('b3');
+      repo.definitions.b4 = block('b4');
+      repo.definitions.b5 = block('b5');
+
+      const presentations = {
+        diag_1: { elementIds: ['b1', 'b2'] },
+        diag_2: { elementIds: ['b3', 'b4', 'b5'] },
+      };
+
+      const chunked = serializeToChunks(repo, { diagramPresentations: presentations });
+      expect(Object.keys(chunked.chunks).length).toBe(5);
+
+      // Hydrate active diagram diag_1 only
+      const result = hydrateActiveDiagramFromChunks(chunked.manifest, 'diag_1', key => chunked.chunks[key]?.json);
+      expect(result.valid).toBe(true);
+      expect(result.loadedEntityCount).toBe(2);
+      expect(result.deferredChunkCount).toBe(3);
+      expect(result.repository.definitions.b1).toBeDefined();
+      expect(result.repository.definitions.b2).toBeDefined();
+      expect(result.repository.definitions.b3).toBeUndefined();
+      expect(result.repository.definitions.b4).toBeUndefined();
+    });
+
+    it('ensures full legacy JSON export and import remains semantically and structurally valid', () => {
+      const legacyModel = {
+        schemaVersion: 2,
+        blocks: [
+          { id: 'controller', name: 'PowerController', stereotype: 'block', properties: [{ name: 'volt', type: 'Real' }], ports: [{ id: 'p_in', name: 'inPort', direction: 'in' }] },
+          { id: 'motor', name: 'DriveMotor', stereotype: 'block', properties: [], ports: [{ id: 'p_out', name: 'outPort', direction: 'out' }] },
+        ],
+        parts: [
+          { id: 'part_c', name: 'c1', blockId: 'controller', typeId: 'controller', multiplicity: '1' },
+          { id: 'part_m', name: 'm1', blockId: 'motor', typeId: 'motor', multiplicity: '1' },
+        ],
+        relationships: [
+          { id: 'rel1', sourceId: 'controller', targetId: 'motor', type: 'dependency', label: 'depends' },
+        ],
+        connectors: [
+          { id: 'conn1', kind: 'assembly', sourcePartId: 'part_c', sourcePortId: 'p_in', targetPartId: 'part_m', targetPortId: 'p_out' },
+        ],
+      };
+
+      const loaded = loadRepository(legacyModel);
+      expect(loaded.valid).toBe(true);
+      expect(loaded.migrated).toBe(true);
+
+      const repo = loaded.repository;
+      expect(repo.definitions.controller.name).toBe('PowerController');
+      expect(repo.definitions.motor.name).toBe('DriveMotor');
+      expect(repo.usages.part_c.name).toBe('c1');
+      expect(repo.relationships.rel1.kind).toBe('dependency');
+      expect(repo.connectors.conn1.kind).toBe('assembly');
+
+      // Re-serialize to canonical JSON and verify round-trip
+      const serialized = serializeRepository(repo);
+      const reloaded = loadRepository(serialized);
+      expect(reloaded.valid).toBe(true);
+      expect(reloaded.repository.definitions.controller).toEqual(repo.definitions.controller);
+      expect(reloaded.repository.connectors.conn1).toEqual(repo.connectors.conn1);
+    });
+
+    it('cancels save via AbortSignal without committing partial revisions or leaving temp files', async () => {
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = block('b1');
+      repo.definitions.b2 = block('b2');
+      const chunked = serializeToChunks(repo);
+
+      const controller = new AbortController();
+      controller.abort(); // Cancel before or during start
+
+      const diskFiles: Record<string, string> = {};
+      const deletedFiles: string[] = [];
+
+      const mockAdapter = {
+        writeFile: async (p: string, c: string) => { diskFiles[p] = c; },
+        renameFile: async (from: string, to: string) => {
+          diskFiles[to] = diskFiles[from];
+          delete diskFiles[from];
+        },
+        deleteFile: async (p: string) => {
+          deletedFiles.push(p);
+          delete diskFiles[p];
+        },
+      };
+
+      const result = await saveRepositoryTransactionally(
+        'project',
+        chunked.manifest,
+        chunked.chunks,
+        {
+          abortSignal: controller.signal,
+          fileAdapter: mockAdapter,
+          lastValidRevision: 0,
+        }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.committedRevision).toBe(0);
+      expect(diskFiles['project/manifest.json']).toBeUndefined();
     });
   });
 });

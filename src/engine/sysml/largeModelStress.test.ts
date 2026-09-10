@@ -23,8 +23,8 @@ import {
   DiagramSpatialGrid,
   cullElements,
   type DiagramViewport,
-  type BlockData,
 } from '../../components/sysml/VirtualizedDiagram';
+import type { BlockData } from '../../types/sysml_types';
 import { SysmlWorkerClient } from '../../services/sysmlWorkerClient';
 import { analyzeMutation } from './mutations';
 
@@ -118,11 +118,11 @@ describe('SysML Large Model Stress & Performance Gates', () => {
     expect(dragP95).toBeLessThan(50); // Enforce drag p95 < 50ms
 
     // 4. UNDO / REDO GATE: Multi-step patch history operations < 50ms
-    const patchHistory = createPatchHistory(100);
+    const patchHistory = createPatchHistory({ maxEntries: 100 });
     const patch = createSysmlPatch({
       revision: 1,
-      forward: [{ op: 'replace', collection: 'definitions', id: firstDefId, path: ['name'], value: 'Undo_Redo_Name' }],
-      inverse: [{ op: 'replace', collection: 'definitions', id: firstDefId, path: ['name'], value: 'Original_Name' }],
+      forward: [{ op: 'replace', collection: 'definitions', id: firstDefId, path: ['name'], oldValue: 'Original_Name', value: 'Undo_Redo_Name' }],
+      inverse: [{ op: 'replace', collection: 'definitions', id: firstDefId, path: ['name'], oldValue: 'Undo_Redo_Name', value: 'Original_Name' }],
     });
     pushPatch(patchHistory, patch);
 

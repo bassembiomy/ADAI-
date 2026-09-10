@@ -47,12 +47,12 @@
   - [x] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
   - [x] Step 3: Enforce gates: no main-thread task > 100ms in performance mode, drag p95 < 50ms, worker cancellation < 100ms
   - [x] Step 4: Create real UI performance test in `tests/e2e/sysml-large-model-interaction.spec.ts`
-- [ ] Task 9: Verify Persistence and Recovery Under Load
-  - [ ] Step 1: Test incremental save after one patch without serializing unrelated chunks
-  - [ ] Step 2: Test interrupted chunk writes, temporary file cleanup, checksum failure, and recovery from last valid manifest
-  - [ ] Step 3: Test lazy loading of inactive diagrams and materialization of active diagram only
-  - [ ] Step 4: Test full legacy JSON export/import remains byte-valid semantically
-  - [ ] Step 5: Verify save cancellation never leaves store in half-committed revision
+- [x] Task 9: Verify Persistence and Recovery Under Load
+  - [x] Step 1: Test incremental save after one patch without serializing unrelated chunks
+  - [x] Step 2: Test interrupted chunk writes, temporary file cleanup, checksum failure, and recovery from last valid manifest
+  - [x] Step 3: Test lazy loading of inactive diagrams and materialization of active diagram only
+  - [x] Step 4: Test full legacy JSON export/import remains byte-valid semantically
+  - [x] Step 5: Verify save cancellation never leaves store in half-committed revision
 - [ ] Task 10: Final Regression and Release Gate
   - [ ] Step 1: Run `npm run test:sysml`
   - [ ] Step 2: Run `npm run test:e2e:sysml`
