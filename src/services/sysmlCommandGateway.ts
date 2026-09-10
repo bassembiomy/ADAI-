@@ -11,7 +11,10 @@ import type {
   VerificationCase,
   VerificationEvidence,
   ModelBaseline,
+  TraceArtifact,
   Multiplicity,
+  SysmlEntityCollection,
+  SysmlEntity,
 } from '../engine/sysml/model';
 import { createEmptyRepository } from '../engine/sysml/model';
 import {
@@ -27,6 +30,26 @@ import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/v
 import { serializeRepository, loadRepository } from '../engine/sysml/persistence';
 import { requiresDeletionConfirmation } from './sysmlTransactionAdapter';
 import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
+import {
+  type NormalizedSysmlStore,
+  fromRepository,
+  toRepository,
+  projectNormalizedDiagram,
+  upsertEntity,
+  removeEntity,
+  getById as getEntityById,
+  getCollectionForId,
+} from '../engine/sysml/normalizedStore';
+import {
+  type PatchHistoryState,
+  type SysmlPatch,
+  type HistoryBudgetOptions,
+  createPatchHistory,
+  pushPatch,
+  undoPatch,
+  redoPatch,
+  createSysmlPatch,
+} from '../engine/sysml/patches';
 
 export interface PresentationCoordinates {
   x?: number;
@@ -53,7 +76,8 @@ export type SysmlElement =
   | RequirementDefinition
   | VerificationCase
   | VerificationEvidence
-  | ModelBaseline;
+  | ModelBaseline
+  | TraceArtifact;
 
 export interface DiagramPresentation {
   diagramId: string;
@@ -66,16 +90,19 @@ export interface PresentationSnapshot {
 }
 
 export type SysmlEditorCommand =
-  | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates }
-  | { type: 'updateElement'; elementId: string; patch: Record<string, unknown> }
+  | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
+  | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
+  | { type: 'updatePresentation'; elementId: string; presentation: PresentationCoordinates; coalesceKey?: string }
   | { type: 'undo' }
   | { type: 'redo' };
 
 export interface SysmlGatewayState {
   repository: SysmlRepository;
   history: MutationHistory;
+  store?: NormalizedSysmlStore;
+  patchHistory?: PatchHistoryState;
   coordinates: Record<string, PresentationCoordinates>;
   diagramPresentations?: Record<string, { elementIds: string[] }>;
   presentationHistory?: {
@@ -93,6 +120,8 @@ export interface SysmlCommandResult {
   impact?: MutationImpact;
   committed: boolean;
   history: MutationHistory;
+  store?: NormalizedSysmlStore;
+  patchHistory?: PatchHistoryState;
   coordinates: Record<string, PresentationCoordinates>;
   diagramPresentations: Record<string, { elementIds: string[] }>;
   presentationHistory?: {
@@ -107,13 +136,21 @@ export function createSysmlGatewayState(
   initialRepo?: SysmlRepository,
   initialCoordinates?: Record<string, PresentationCoordinates>,
   initialDiagramPresentations?: Record<string, { elementIds: string[] }>,
+  budgetOptions?: HistoryBudgetOptions,
 ): SysmlGatewayState {
   const repo = initialRepo ?? createEmptyRepository();
+  const coords = initialCoordinates ?? {};
+  const diagrams = initialDiagramPresentations ?? {};
+  const store = fromRepository(repo, coords, diagrams);
+  const patchHistory = createPatchHistory(budgetOptions);
+
   return {
     repository: repo,
     history: createHistory(repo),
-    coordinates: initialCoordinates ?? {},
-    diagramPresentations: initialDiagramPresentations ?? {},
+    store,
+    patchHistory,
+    coordinates: coords,
+    diagramPresentations: diagrams,
     presentationHistory: {
       past: [],
       future: [],
@@ -441,52 +478,130 @@ function findAndPatchElement(repo: SysmlRepository, elementId: string, patch: Re
   return false;
 }
 
+function getCollectionFromElement(element: SysmlElement): SysmlEntityCollection {
+  if ('kind' in element) {
+    if (element.kind === 'block' || element.kind === 'valueType' || element.kind === 'interface') return 'definitions';
+    if (element.kind === 'part' || element.kind === 'port') return 'usages';
+    if (element.kind === 'assembly' || element.kind === 'delegation' || element.kind === 'binding') return 'connectors';
+    if (element.kind === 'requirement') return 'requirements';
+    if (element.kind === 'verificationCase') return 'verificationCases';
+  }
+  if ('sourceId' in element && 'targetId' in element) return 'relationships';
+  if ('verificationCaseId' in element && 'status' in element) return 'evidence';
+  if ('protected' in element && 'contentHash' in element) return 'baselines';
+  if ('uri' in element && 'kind' in element) return 'artifacts';
+  return 'definitions';
+}
+
 export function executeSysmlCommand(
   state: SysmlGatewayState,
   command: SysmlEditorCommand,
 ): SysmlCommandResult {
   const coordinates = { ...state.coordinates };
   const diagramPresentations = structuredClone(state.diagramPresentations ?? {});
+  const store = state.store ?? fromRepository(state.repository, coordinates, diagramPresentations);
+  const patchHistory = state.patchHistory ?? createPatchHistory();
 
   if (command.type === 'undo') {
     const actionStack = [...(state.actionStack ?? [])];
     const lastAction = actionStack.pop();
 
     if (lastAction === 'presentation' || (lastAction === undefined && (state.presentationHistory?.past?.length ?? 0) > 0)) {
-      const past = [...(state.presentationHistory?.past ?? [])];
-      const prev = past.pop();
-      if (prev) {
-        const currentSnapshot: PresentationSnapshot = {
-          coordinates: structuredClone(state.coordinates),
-          diagramPresentations: structuredClone(diagramPresentations),
+      if ((state.presentationHistory?.past?.length ?? 0) > 0) {
+        const past = [...(state.presentationHistory?.past ?? [])];
+        const prev = past.pop();
+        if (prev) {
+          const currentSnapshot: PresentationSnapshot = {
+            coordinates: structuredClone(state.coordinates),
+            diagramPresentations: structuredClone(diagramPresentations),
+          };
+          const nextPresentationHistory = {
+            past,
+            future: [currentSnapshot, ...(state.presentationHistory?.future ?? [])],
+          };
+          const validation = validateSysmlRepository(state.repository);
+          const view = projectLegacyDiagram(state.repository, prev.coordinates, prev.diagramPresentations);
+          return {
+            repository: state.repository,
+            store,
+            patchHistory,
+            view,
+            diagnostics: validation.diagnostics,
+            committed: true,
+            history: state.history,
+            coordinates: prev.coordinates,
+            diagramPresentations: prev.diagramPresentations,
+            presentationHistory: nextPresentationHistory,
+            actionStack,
+            redoStack: ['presentation', ...(state.redoStack ?? [])],
+          };
+        }
+      }
+      if (patchHistory.past.length > 0) {
+        const undoRes = undoPatch(patchHistory, store);
+        if (undoRes) {
+          const nextCoords = Object.fromEntries(store.coordinates);
+          const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+          const view = projectLegacyDiagram(state.repository, nextCoords, nextDiagrams);
+          return {
+            repository: state.repository,
+            store,
+            patchHistory,
+            view,
+            diagnostics: [],
+            committed: true,
+            history: state.history,
+            coordinates: nextCoords,
+            diagramPresentations: nextDiagrams,
+            presentationHistory: state.presentationHistory,
+            actionStack,
+            redoStack: ['presentation', ...(state.redoStack ?? [])],
+          };
+        }
+      }
+    }
+
+    if (patchHistory.past.length > 0) {
+      const undoRes = undoPatch(patchHistory, store);
+      if (undoRes) {
+        store.revision = Math.max(0, undoRes.appliedPatch.revision - 1);
+        const repo = toRepository(store);
+        const nextCoords = Object.fromEntries(store.coordinates);
+        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+        const validation = validateSysmlRepository(repo);
+        const view = projectLegacyDiagram(repo, nextCoords, nextDiagrams);
+        const nextHistory: MutationHistory = {
+          past: state.history.past.slice(0, -1),
+          present: repo,
+          future: [state.history.present, ...state.history.future],
         };
-        const nextPresentationHistory = {
-          past,
-          future: [currentSnapshot, ...(state.presentationHistory?.future ?? [])],
-        };
-        const validation = validateSysmlRepository(state.repository);
-        const view = projectLegacyDiagram(state.repository, prev.coordinates, prev.diagramPresentations);
         return {
-          repository: state.repository,
+          repository: repo,
+          store,
+          patchHistory,
           view,
           diagnostics: validation.diagnostics,
           committed: true,
-          history: state.history,
-          coordinates: prev.coordinates,
-          diagramPresentations: prev.diagramPresentations,
-          presentationHistory: nextPresentationHistory,
+          history: nextHistory,
+          coordinates: nextCoords,
+          diagramPresentations: nextDiagrams,
+          presentationHistory: state.presentationHistory,
           actionStack,
-          redoStack: ['presentation', ...(state.redoStack ?? [])],
+          redoStack: [lastAction ?? 'semantic', ...(state.redoStack ?? [])],
         };
       }
     }
 
     const nextHistory = historyUndo(state.history);
     const repo = nextHistory.present;
+    store.revision = repo.revision;
+
     const validation = validateSysmlRepository(repo);
     const view = projectLegacyDiagram(repo, coordinates, diagramPresentations);
     return {
       repository: repo,
+      store,
+      patchHistory,
       view,
       diagnostics: validation.diagnostics,
       committed: true,
@@ -504,29 +619,86 @@ export function executeSysmlCommand(
     const nextAction = redoStack.shift();
 
     if (nextAction === 'presentation') {
-      const future = [...(state.presentationHistory?.future ?? [])];
-      const next = future.shift();
-      if (next) {
-        const currentSnapshot: PresentationSnapshot = {
-          coordinates: structuredClone(state.coordinates),
-          diagramPresentations: structuredClone(diagramPresentations),
+      if ((state.presentationHistory?.future?.length ?? 0) > 0) {
+        const future = [...(state.presentationHistory?.future ?? [])];
+        const next = future.shift();
+        if (next) {
+          const currentSnapshot: PresentationSnapshot = {
+            coordinates: structuredClone(state.coordinates),
+            diagramPresentations: structuredClone(diagramPresentations),
+          };
+          const nextPresentationHistory = {
+            past: [...(state.presentationHistory?.past ?? []), currentSnapshot],
+            future,
+          };
+          const validation = validateSysmlRepository(state.repository);
+          const view = projectLegacyDiagram(state.repository, next.coordinates, next.diagramPresentations);
+          return {
+            repository: state.repository,
+            store,
+            patchHistory,
+            view,
+            diagnostics: validation.diagnostics,
+            committed: true,
+            history: state.history,
+            coordinates: next.coordinates,
+            diagramPresentations: next.diagramPresentations,
+            presentationHistory: nextPresentationHistory,
+            actionStack: [...(state.actionStack ?? []), 'presentation'],
+            redoStack,
+          };
+        }
+      }
+      if (patchHistory.future.length > 0) {
+        const redoRes = redoPatch(patchHistory, store);
+        if (redoRes) {
+          const nextCoords = Object.fromEntries(store.coordinates);
+          const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+          const view = projectLegacyDiagram(state.repository, nextCoords, nextDiagrams);
+          return {
+            repository: state.repository,
+            store,
+            patchHistory,
+            view,
+            diagnostics: [],
+            committed: true,
+            history: state.history,
+            coordinates: nextCoords,
+            diagramPresentations: nextDiagrams,
+            presentationHistory: state.presentationHistory,
+            actionStack: [...(state.actionStack ?? []), 'presentation'],
+            redoStack,
+          };
+        }
+      }
+    }
+
+    if (patchHistory.future.length > 0) {
+      const redoRes = redoPatch(patchHistory, store);
+      if (redoRes) {
+        store.revision = redoRes.appliedPatch.revision;
+        const repo = toRepository(store);
+        const nextCoords = Object.fromEntries(store.coordinates);
+        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+        const validation = validateSysmlRepository(repo);
+        const view = projectLegacyDiagram(repo, nextCoords, nextDiagrams);
+        const nextHistory: MutationHistory = {
+          past: [...state.history.past, state.history.present],
+          present: repo,
+          future: state.history.future.slice(1),
         };
-        const nextPresentationHistory = {
-          past: [...(state.presentationHistory?.past ?? []), currentSnapshot],
-          future,
-        };
-        const validation = validateSysmlRepository(state.repository);
-        const view = projectLegacyDiagram(state.repository, next.coordinates, next.diagramPresentations);
         return {
-          repository: state.repository,
+          repository: repo,
+          store,
+          patchHistory,
           view,
           diagnostics: validation.diagnostics,
           committed: true,
-          history: state.history,
-          coordinates: next.coordinates,
-          diagramPresentations: next.diagramPresentations,
-          presentationHistory: nextPresentationHistory,
-          actionStack: [...(state.actionStack ?? []), 'presentation'],
+          history: nextHistory,
+          coordinates: nextCoords,
+          diagramPresentations: nextDiagrams,
+          presentationHistory: state.presentationHistory,
+          actionStack: [...(state.actionStack ?? []), nextAction ?? 'semantic'],
           redoStack,
         };
       }
@@ -534,10 +706,14 @@ export function executeSysmlCommand(
 
     const nextHistory = historyRedo(state.history);
     const repo = nextHistory.present;
+    store.revision = repo.revision;
+
     const validation = validateSysmlRepository(repo);
     const view = projectLegacyDiagram(repo, coordinates, diagramPresentations);
     return {
       repository: repo,
+      store,
+      patchHistory,
       view,
       diagnostics: validation.diagnostics,
       committed: true,
@@ -550,12 +726,45 @@ export function executeSysmlCommand(
     };
   }
 
+  if (command.type === 'updatePresentation') {
+    const prevCoords = store.coordinates.get(command.elementId) ?? coordinates[command.elementId] ?? {};
+    store.coordinates.set(command.elementId, { ...command.presentation });
+    coordinates[command.elementId] = { ...command.presentation };
+
+    const patch = createSysmlPatch({
+      revision: state.repository.revision,
+      coalesceKey: command.coalesceKey,
+      forward: [{ op: 'replace', collection: 'coordinates', id: command.elementId, oldValue: prevCoords, value: command.presentation }],
+      inverse: [{ op: 'replace', collection: 'coordinates', id: command.elementId, oldValue: command.presentation, value: prevCoords }],
+      description: 'updatePresentation',
+    });
+    pushPatch(patchHistory, patch, store);
+
+    const validation = validateSysmlRepository(state.repository);
+    const view = projectLegacyDiagram(state.repository, coordinates, diagramPresentations);
+    return {
+      repository: state.repository,
+      store,
+      patchHistory,
+      view,
+      diagnostics: validation.diagnostics,
+      committed: true,
+      history: state.history,
+      coordinates,
+      diagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'presentation'],
+      redoStack: [],
+    };
+  }
+
   if (command.type === 'createElement') {
     const nextRepo: SysmlRepository = structuredClone(state.repository);
     nextRepo.revision += 1;
     storeElementInRepository(nextRepo, command.element);
     if (command.presentation) {
       coordinates[command.element.id] = { ...command.presentation };
+      store.coordinates.set(command.element.id, { ...command.presentation });
     }
     nextRepo.auditTrail.push({
       id: `change-${nextRepo.revision}-${command.element.id}`,
@@ -565,8 +774,32 @@ export function executeSysmlCommand(
       elementIds: [command.element.id],
     });
 
+    const collection = getCollectionFromElement(command.element);
+    upsertEntity(store, collection, command.element as any);
+
+    const forwardOps: import('../engine/sysml/patches').PatchOperation[] = [
+      { op: 'add', collection, id: command.element.id, value: command.element },
+    ];
+    const inverseOps: import('../engine/sysml/patches').PatchOperation[] = [
+      { op: 'remove', collection, id: command.element.id, oldValue: command.element },
+    ];
+    if (command.presentation) {
+      forwardOps.push({ op: 'add', collection: 'coordinates', id: command.element.id, value: command.presentation });
+      inverseOps.push({ op: 'remove', collection: 'coordinates', id: command.element.id, oldValue: command.presentation });
+    }
+    const patch = createSysmlPatch({
+      revision: nextRepo.revision,
+      coalesceKey: command.coalesceKey,
+      forward: forwardOps,
+      inverse: inverseOps,
+      description: 'createElement',
+    });
+    pushPatch(patchHistory, patch, store);
+
+    const nextHistoryPast = [...state.history.past, structuredClone(state.repository)];
+    while (nextHistoryPast.length > 20) nextHistoryPast.shift();
     const nextHistory: MutationHistory = {
-      past: [...state.history.past, structuredClone(state.repository)],
+      past: nextHistoryPast,
       present: structuredClone(nextRepo),
       future: [],
     };
@@ -575,6 +808,8 @@ export function executeSysmlCommand(
 
     return {
       repository: nextRepo,
+      store,
+      patchHistory,
       view,
       diagnostics: validation.diagnostics,
       committed: true,
@@ -588,12 +823,24 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'updateElement') {
+    const existing = getEntityById(store, command.elementId) ?? (
+      state.repository.definitions[command.elementId] ||
+      state.repository.usages[command.elementId] ||
+      state.repository.connectors[command.elementId] ||
+      state.repository.relationships[command.elementId] ||
+      state.repository.requirements[command.elementId] ||
+      state.repository.verificationCases[command.elementId] ||
+      state.repository.evidence[command.elementId] ||
+      state.repository.baselines[command.elementId]
+    );
     const nextRepo: SysmlRepository = structuredClone(state.repository);
     const patched = findAndPatchElement(nextRepo, command.elementId, command.patch);
-    if (!patched) {
+    if (!patched || !existing) {
       const view = projectLegacyDiagram(state.repository, coordinates, diagramPresentations);
       return {
         repository: state.repository,
+        store,
+        patchHistory,
         view,
         diagnostics: [{ code: 'ELEMENT_NOT_FOUND', severity: 'error', message: `Element ${command.elementId} not found` }],
         committed: false,
@@ -614,8 +861,23 @@ export function executeSysmlCommand(
       elementIds: [command.elementId],
     });
 
+    const collection = getCollectionForId(store, command.elementId) ?? getCollectionFromElement(existing);
+    const nextElement = { ...existing, ...command.patch } as SysmlEntity;
+    upsertEntity(store, collection, nextElement);
+
+    const patch = createSysmlPatch({
+      revision: nextRepo.revision,
+      coalesceKey: command.coalesceKey,
+      forward: [{ op: 'replace', collection, id: command.elementId, oldValue: existing, value: nextElement }],
+      inverse: [{ op: 'replace', collection, id: command.elementId, oldValue: nextElement, value: existing }],
+      description: 'updateElement',
+    });
+    pushPatch(patchHistory, patch, store);
+
+    const nextHistoryPast = [...state.history.past, structuredClone(state.repository)];
+    while (nextHistoryPast.length > 20) nextHistoryPast.shift();
     const nextHistory: MutationHistory = {
-      past: [...state.history.past, structuredClone(state.repository)],
+      past: nextHistoryPast,
       present: structuredClone(nextRepo),
       future: [],
     };
@@ -624,6 +886,8 @@ export function executeSysmlCommand(
 
     return {
       repository: nextRepo,
+      store,
+      patchHistory,
       view,
       diagnostics: validation.diagnostics,
       committed: true,
@@ -646,6 +910,8 @@ export function executeSysmlCommand(
         const view = projectLegacyDiagram(state.repository, coordinates, diagramPresentations);
         return {
           repository: state.repository,
+          store,
+          patchHistory,
           view,
           diagnostics: [],
           impact,
@@ -663,15 +929,32 @@ export function executeSysmlCommand(
     const mutationResult = applyCommand(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
     const nextRepo = mutationResult.repository;
 
+    const forwardOps = [...(mutationResult.forwardPatch?.forward ?? [])];
+    const inverseOps = [...(mutationResult.forwardPatch?.inverse ?? [])];
+
     for (const delId of impact.deletedElementIds) {
+      if (coordinates[delId]) {
+        forwardOps.push({ op: 'remove', collection: 'coordinates', id: delId, oldValue: coordinates[delId] });
+        inverseOps.push({ op: 'add', collection: 'coordinates', id: delId, value: coordinates[delId] });
+      }
       delete coordinates[delId];
+      removeEntity(store, delId);
     }
     const nextDiagramPresentations = structuredClone(diagramPresentations);
     for (const dId of Object.keys(nextDiagramPresentations)) {
       nextDiagramPresentations[dId].elementIds = nextDiagramPresentations[dId].elementIds.filter(
         id => !impact.deletedElementIds.includes(id)
       );
+      store.diagramPresentations.set(dId, nextDiagramPresentations[dId]);
     }
+
+    const deletePatch = createSysmlPatch({
+      revision: nextRepo.revision,
+      forward: forwardOps,
+      inverse: inverseOps,
+      description: 'deleteElements',
+    });
+    pushPatch(patchHistory, deletePatch, store);
 
     nextRepo.auditTrail.push({
       id: `change-${nextRepo.revision}-deletion`,
@@ -681,8 +964,10 @@ export function executeSysmlCommand(
       elementIds: impact.deletedElementIds,
     });
 
+    const nextHistoryPast = [...state.history.past, structuredClone(state.repository)];
+    while (nextHistoryPast.length > 20) nextHistoryPast.shift();
     const nextHistory: MutationHistory = {
-      past: [...state.history.past, structuredClone(state.repository)],
+      past: nextHistoryPast,
       present: structuredClone(nextRepo),
       future: [],
     };
@@ -690,6 +975,8 @@ export function executeSysmlCommand(
 
     return {
       repository: nextRepo,
+      store,
+      patchHistory,
       view,
       diagnostics: mutationResult.validation.diagnostics,
       impact,
@@ -712,6 +999,7 @@ export function executeSysmlCommand(
       ...diagramPresentations,
       [command.diagramId]: nextPresentation,
     };
+    store.diagramPresentations.set(command.diagramId, nextPresentation);
 
     const pastPresentation: PresentationSnapshot = {
       coordinates: structuredClone(state.coordinates),
@@ -728,6 +1016,8 @@ export function executeSysmlCommand(
 
     return {
       repository: state.repository,
+      store,
+      patchHistory,
       view,
       diagnostics: validation.diagnostics,
       committed: true,

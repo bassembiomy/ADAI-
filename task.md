@@ -12,13 +12,13 @@
   - [x] Step 3: Implement `fromRepository`, `getById`, `idsByIndex`, `upsert`, `remove`, and `projectIds` without scanning unrelated entities
   - [x] Step 4: Keep `SysmlRepository` serialization shape unchanged through `toRepository()`
   - [x] Step 5: Test index correctness after create/update/delete and compare normalized projection against current `projectLegacyDiagram` output
-- [ ] Task 3: Replace Full-Snapshot History with Bounded Inverse Patches
-  - [ ] Step 1: Define typed operations: `add`, `replace`, `remove`, `batch`
-  - [ ] Step 2: Make `applyCommand` return `{ nextStore, forwardPatch, inversePatch, impact }`
-  - [ ] Step 3: Store history entries as patches with configurable `maxEntries`, `maxBytes`, and coalescing key for drag operations
-  - [ ] Step 4: Coalesce pointer-move updates into one history entry on pointer-up
-  - [ ] Step 5: Retain a periodic checkpoint only when patch replay cost exceeds the configured threshold
-  - [ ] Step 6: Add tests proving undo/redo equivalence, bounded history bytes, deletion cascade restoration, and compatibility with existing commands
+- [x] Task 3: Replace Full-Snapshot History with Bounded Inverse Patches
+  - [x] Step 1: Define typed operations: `add`, `replace`, `remove`, `batch`
+  - [x] Step 2: Make `applyCommand` return `{ nextStore, forwardPatch, inversePatch, impact }`
+  - [x] Step 3: Store history entries as patches with configurable `maxEntries`, `maxBytes`, and coalescing key for drag operations
+  - [x] Step 4: Coalesce pointer-move updates into one history entry on pointer-up
+  - [x] Step 5: Retain a periodic checkpoint only when patch replay cost exceeds the configured threshold
+  - [x] Step 6: Add tests proving undo/redo equivalence, bounded history bytes, deletion cascade restoration, and compatibility with existing commands
 - [ ] Task 4: Move App State to Store Selectors
   - [ ] Step 1: Keep one gateway/store state as the source of truth for SysML data
   - [ ] Step 2: Replace repeated `blocks.find/filter/map` mutations with indexed selectors and targeted updates

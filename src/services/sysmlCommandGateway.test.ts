@@ -448,5 +448,98 @@ describe('sysmlCommandGateway', () => {
     expect(loaded.repository.requirements['req-parent']).toBeDefined();
     expect(loaded.repository.requirements['req-child']).toBeDefined();
   });
+
+  it('coalesces rapid pointer drag updates sharing a coalesceKey into a single history entry', () => {
+    let state = createSysmlGatewayState();
+    const block: BlockDefinition = {
+      id: 'blk-drag',
+      name: 'DraggableBlock',
+      kind: 'block',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+
+    let r = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: block,
+      presentation: { x: 0, y: 0 },
+    });
+    state = { ...state, repository: r.repository, coordinates: r.coordinates, store: r.store, patchHistory: r.patchHistory, history: r.history };
+
+    // Simulate 10 drag move events with same coalesceKey
+    for (let i = 1; i <= 10; i++) {
+      r = executeSysmlCommand(state, {
+        type: 'updatePresentation',
+        elementId: 'blk-drag',
+        presentation: { x: i * 10, y: i * 10 },
+        coalesceKey: 'drag-blk-drag',
+      });
+      state = { ...state, coordinates: r.coordinates, store: r.store, patchHistory: r.patchHistory, history: r.history };
+    }
+
+    expect(state.coordinates['blk-drag']).toEqual({ x: 100, y: 100 });
+    // In patchHistory, all 10 drag operations should have coalesced into ONE entry!
+    expect(state.patchHistory?.past.length).toBe(2); // 1 create + 1 coalesced drag
+
+    // Single undo restores back to initial position (0, 0)
+    const undone = executeSysmlCommand(state, { type: 'undo' });
+    expect(undone.coordinates['blk-drag']).toEqual({ x: 0, y: 0 });
+
+    // Redo restores to final position (100, 100)
+    const redone = executeSysmlCommand(
+      {
+        ...state,
+        repository: undone.repository,
+        coordinates: undone.coordinates,
+        diagramPresentations: undone.diagramPresentations,
+        store: undone.store,
+        patchHistory: undone.patchHistory,
+        history: undone.history,
+      },
+      { type: 'redo' },
+    );
+    expect(redone.coordinates['blk-drag']).toEqual({ x: 100, y: 100 });
+  });
+
+  it('bounds history memory under configurable budget', () => {
+    let state = createSysmlGatewayState(undefined, undefined, undefined, {
+      maxEntries: 5,
+      maxBytes: 5000,
+    });
+
+    const block: BlockDefinition = {
+      id: 'blk-budget',
+      name: 'BudgetBlock',
+      kind: 'block',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    let r = executeSysmlCommand(state, { type: 'createElement', element: block });
+    state = { ...state, repository: r.repository, store: r.store, patchHistory: r.patchHistory, history: r.history };
+
+    for (let i = 1; i <= 15; i++) {
+      r = executeSysmlCommand(state, {
+        type: 'updateElement',
+        elementId: 'blk-budget',
+        patch: { name: `Name_v${i}` },
+      });
+      state = { ...state, repository: r.repository, store: r.store, patchHistory: r.patchHistory, history: r.history };
+    }
+
+    // Both patchHistory and legacy MutationHistory are capped to prevent memory leaks!
+    expect(state.patchHistory?.past.length).toBeLessThanOrEqual(5);
+    expect(state.history.past.length).toBeLessThanOrEqual(20);
+  });
 });
+
 

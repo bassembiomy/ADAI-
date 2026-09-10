@@ -21,6 +21,8 @@ export interface MutationResult {
   repository: SysmlRepository;
   impact: MutationImpact;
   validation: SysmlValidationReport;
+  forwardPatch?: import('./patches').SysmlPatch;
+  inversePatch?: import('./patches').SysmlPatch;
 }
 
 export interface MutationHistory {
@@ -109,6 +111,35 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand): Muta
   const impact = analyzeMutation(repo, command);
   const removed = new Set(impact.deletedElementIds);
   const next = cloneRepository(repo);
+
+  const forwardOps: Array<import('./patches').PatchOperation> = [];
+  const inverseOps: Array<import('./patches').PatchOperation> = [];
+
+  for (const id of impact.deletedElementIds) {
+    if (repo.definitions[id]) {
+      forwardOps.push({ op: 'remove', collection: 'definitions', id, oldValue: repo.definitions[id] });
+      inverseOps.push({ op: 'add', collection: 'definitions', id, value: repo.definitions[id] });
+    } else if (repo.usages[id]) {
+      forwardOps.push({ op: 'remove', collection: 'usages', id, oldValue: repo.usages[id] });
+      inverseOps.push({ op: 'add', collection: 'usages', id, value: repo.usages[id] });
+    } else if (repo.connectors[id]) {
+      forwardOps.push({ op: 'remove', collection: 'connectors', id, oldValue: repo.connectors[id] });
+      inverseOps.push({ op: 'add', collection: 'connectors', id, value: repo.connectors[id] });
+    } else if (repo.relationships[id]) {
+      forwardOps.push({ op: 'remove', collection: 'relationships', id, oldValue: repo.relationships[id] });
+      inverseOps.push({ op: 'add', collection: 'relationships', id, value: repo.relationships[id] });
+    } else if (repo.requirements[id]) {
+      forwardOps.push({ op: 'remove', collection: 'requirements', id, oldValue: repo.requirements[id] });
+      inverseOps.push({ op: 'add', collection: 'requirements', id, value: repo.requirements[id] });
+    } else if (repo.verificationCases[id]) {
+      forwardOps.push({ op: 'remove', collection: 'verificationCases', id, oldValue: repo.verificationCases[id] });
+      inverseOps.push({ op: 'add', collection: 'verificationCases', id, value: repo.verificationCases[id] });
+    } else if (repo.evidence[id]) {
+      forwardOps.push({ op: 'remove', collection: 'evidence', id, oldValue: repo.evidence[id] });
+      inverseOps.push({ op: 'add', collection: 'evidence', id, value: repo.evidence[id] });
+    }
+  }
+
   removeFrom(next.definitions, removed);
   removeFrom(next.usages, removed);
   removeFrom(next.connectors, removed);
@@ -121,7 +152,32 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand): Muta
     verificationCase.verifiesRequirementIds = verificationCase.verifiesRequirementIds.filter(id => !removed.has(id));
   }
   next.revision = repo.revision + 1;
-  return { applied: true, repository: next, impact, validation: validateSysmlRepository(next) };
+
+  const forwardPatch = {
+    id: `patch-${next.revision}-delete`,
+    revision: next.revision,
+    timestamp: new Date().toISOString(),
+    forward: forwardOps,
+    inverse: inverseOps,
+    description: 'deleteElements',
+  };
+  const inversePatch = {
+    id: `invert-patch-${next.revision}-delete`,
+    revision: next.revision,
+    timestamp: new Date().toISOString(),
+    forward: inverseOps,
+    inverse: forwardOps,
+    description: 'undo deleteElements',
+  };
+
+  return {
+    applied: true,
+    repository: next,
+    impact,
+    validation: validateSysmlRepository(next),
+    forwardPatch,
+    inversePatch,
+  };
 }
 
 export function createHistory(repository: SysmlRepository): MutationHistory {
