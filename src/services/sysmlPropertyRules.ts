@@ -18,6 +18,8 @@ export function validateLegacyBlockEdit(
   const messages: string[] = [];
   const add = (code: string, message: string) => { codes.push(code); messages.push(message); };
   if (!IDENTIFIER.test(block.name.trim())) add('INVALID_BLOCK_NAME', `Block name "${block.name}" must be a valid SysML identifier`);
+  const duplicateName = blocks.find(item => item.id !== block.id && item.name === block.name && JSON.stringify(item.namespace ?? []) === JSON.stringify(block.namespace ?? []));
+  if (duplicateName) add('DUPLICATE_BLOCK_NAME', `Block name "${block.name}" is already used in this namespace`);
   if ((block.namespace ?? []).some(segment => !IDENTIFIER.test(segment))) add('INVALID_NAMESPACE', 'Namespace segments must be valid SysML identifiers');
   if (block.stereotype === 'requirement') {
     if (!block.reqId || !REQUIREMENT_ID.test(block.reqId)) add('INVALID_REQUIREMENT_ID', `Requirement ID "${block.reqId || ''}" is invalid`);
@@ -50,6 +52,7 @@ export function validateLegacyBlockProperties(
   const names = new Set<string>();
   const inherited = inheritedProperties(blocks, relationships, blockId);
   for (const property of block.properties) {
+    if (!IDENTIFIER.test(property.name.trim())) add('INVALID_PROPERTY_NAME', `Property name "${property.name}" must be a valid SysML identifier`);
     if (names.has(property.name)) add('DUPLICATE_PROPERTY_NAME', `Property name ${property.name} is duplicated`);
     names.add(property.name);
     let parsed: ReturnType<typeof parseMultiplicity> | undefined;

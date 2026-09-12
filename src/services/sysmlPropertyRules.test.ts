@@ -37,6 +37,16 @@ describe('native BDD property rules', () => {
     expect(validateLegacyBlockEdit([candidate, valueType], [], candidate.id).valid).toBe(true);
   });
 
+  it('rejects duplicate block names in the same namespace and empty property names', () => {
+    const first = block('first');
+    first.name = 'Controller';
+    const second = block('second', 'block', [{ id: 'p', name: '', type: 'Real', typeId: 'Real', kind: 'value', multiplicity: '1' }]);
+    second.name = 'Controller';
+    const real = block('Real', 'valueType');
+    const result = validateLegacyBlockEdit([first, second, real], [], second.id);
+    expect(result.codes).toEqual(expect.arrayContaining(['DUPLICATE_BLOCK_NAME', 'INVALID_PROPERTY_NAME']));
+  });
+
   it('validates property kind/type, multiplicity, duplicate names, redefinition, and subsetting', () => {
     const base = block('base', 'block', [property('base-items', 'items', 'part', 'partType', '1..2')]);
     const partType = block('partType');
