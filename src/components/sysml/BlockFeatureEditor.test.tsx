@@ -48,6 +48,9 @@ describe('BlockFeatureEditor', () => {
       />
     );
 
+    // Semantic editor class
+    expect(html).toContain('sysml-editor');
+
     // Property kind selector
     expect(html).toContain('value');
     expect(html).toContain('part');

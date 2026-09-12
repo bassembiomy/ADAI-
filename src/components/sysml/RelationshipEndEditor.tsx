@@ -85,7 +85,7 @@ export function RelationshipEndEditor({
   const hasInheritanceIssues = inheritanceDiagnostics.length > 0 || derivedGuidance.length > 0;
 
   return (
-    <div className="space-y-4 text-xs" aria-label="Relationship End Editor">
+    <div className="sysml-editor space-y-4 text-xs" aria-label="Relationship End Editor">
       {/* Relationship Kind */}
       <div>
         <label className="block text-gray-300 font-semibold mb-1">

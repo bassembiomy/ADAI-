@@ -68,7 +68,7 @@ export function IbdConnectorEditor({
   );
 
   return (
-    <div className="space-y-4 text-xs" aria-label="IBD Connector Inspector">
+    <div className="sysml-editor space-y-4 text-xs" aria-label="IBD Connector Inspector">
       {/* Diagnostics */}
       {connDiagnostics.length > 0 && (
         <div role="alert" className="space-y-1 rounded border border-red-700 bg-red-950/40 p-2 text-red-300">

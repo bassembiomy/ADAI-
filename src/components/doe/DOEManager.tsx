@@ -219,9 +219,9 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
   const hasExportableModel = Boolean(results?.deployment || results?.equation);
 
   return (
-    <div data-testid="doe-manager" className="flex flex-col h-full w-full bg-[#0a0a0c] text-[#e0e0e0] font-sans">
+    <div data-testid="doe-manager" className="doe-workspace flex flex-col h-full w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] font-sans">
       {/* Top Action Bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#222] bg-[#111115]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-default)] bg-[var(--surface-panel)]">
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
@@ -336,8 +336,8 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
       {/* Content Body: Table & Charts */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-6 overflow-hidden">
         {/* Left Column: Experimental Matrix */}
-        <div className="lg:col-span-6 flex flex-col bg-[#141418] border border-[#26262e] rounded-xl overflow-hidden shadow-xl">
-          <div className="px-4 py-3 bg-[#1a1a22] border-b border-[#26262e] flex items-center justify-between">
+        <div className="lg:col-span-6 flex flex-col doe-panel ui-card bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-xl overflow-hidden shadow-xl">
+          <div className="px-4 py-3 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between">
             <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
               Design Matrix ({data.length} Runs × {numFactors} Factors)
             </span>
@@ -345,7 +345,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           </div>
 
           <div className="flex-1 overflow-auto p-2">
-            <table data-testid="doe-matrix-table" className="w-full text-left border-collapse text-xs">
+            <table data-testid="doe-matrix-table" className="engineering-table w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-[#2a2a32] text-gray-400 bg-[#17171e]">
                   <th className="p-2 w-12 text-center text-gray-500">#</th>
@@ -408,9 +408,9 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
         </div>
 
         {/* Right Column: Results & Visualization */}
-        <div className="lg:col-span-6 flex flex-col bg-[#141418] border border-[#26262e] rounded-xl overflow-hidden shadow-xl">
+        <div className="lg:col-span-6 flex flex-col doe-panel ui-card bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-xl overflow-hidden shadow-xl">
           {/* Header Controls for Plot Type */}
-          <div className="px-4 py-3 bg-[#1a1a22] border-b border-[#26262e] flex items-center justify-between">
+          <div className="px-4 py-3 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between">
             <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">Model Analysis & Graphs</span>
             <div className="flex items-center gap-2">
               <label className="text-[11px] text-gray-400">View:</label>

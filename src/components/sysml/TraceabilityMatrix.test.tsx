@@ -15,6 +15,8 @@ function repository() {
 describe('professional traceability matrix workspace', () => {
   it('renders accessible status text, metrics, filters, source cells, and export control', () => {
     const html = renderToStaticMarkup(<TraceabilityMatrix repository={repository()} />);
+    expect(html).toContain('traceability-grid');
+    expect(html).toContain('engineering-table');
     expect(html).toContain('Requirements Traceability Matrix');
     expect(html).toContain('covered');
     expect(html).toContain('Controller');

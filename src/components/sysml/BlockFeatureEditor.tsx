@@ -160,7 +160,7 @@ export function BlockFeatureEditor({
   const diagnosticsFor = (elementId: string) => diagnostics.filter(d => d.elementId === elementId);
 
   return (
-    <div className="space-y-4" aria-label="Block Feature Inspector">
+    <div className="sysml-editor space-y-4" aria-label="Block Feature Inspector">
       <div className="flex gap-4 text-xs">
         <label className="flex items-center gap-1">
           <input

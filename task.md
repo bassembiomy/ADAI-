@@ -32,12 +32,12 @@
   - [x] Step 4: Create `src/styles/workspaces/vlab.css` and theme V-Lab components
   - [x] Step 5: Run V-Lab and TypeScript regressions (`npm run test:vlab && npx tsc --noEmit`)
   - [x] Step 6: Commit `feat(ui): unify diagram workspace light themes`
-- [ ] Task 6: DOE, RTM, SysML Editors, And Utility Dialogs
-  - [ ] Step 1: Add semantic-class assertions to representative DOE and SysML tests
-  - [ ] Step 2: Run focused tests and confirm failures
-  - [ ] Step 3: Create `src/styles/workspaces/doe.css` and theme tables, editors, validation states, and dialogs
-  - [ ] Step 4: Run DOE and SysML release checks (`npm run test:doe && npm run test:sysml:release`)
-  - [ ] Step 5: Commit `feat(ui): theme engineering editors and tables`
+- [x] Task 6: DOE, RTM, SysML Editors, And Utility Dialogs
+  - [x] Step 1: Add semantic-class assertions to representative DOE and SysML tests
+  - [x] Step 2: Run focused tests and confirm failures
+  - [x] Step 3: Create `src/styles/workspaces/doe.css` and theme tables, editors, validation states, and dialogs
+  - [x] Step 4: Run DOE and SysML release checks (`npm run test:doe && npm run test:sysml:release`)
+  - [x] Step 5: Commit `feat(ui): theme engineering editors and tables`
 - [ ] Task 7: Remove Legacy Overrides And Add Static Guardrails
   - [ ] Step 1: Write literal-color guard script `scripts/check_theme_literals.cjs` and add `npm run lint:theme` in `package.json`
   - [ ] Step 2: Run the guard and record remaining literals

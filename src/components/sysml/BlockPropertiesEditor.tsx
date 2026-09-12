@@ -134,7 +134,7 @@ export function BlockPropertiesEditor({
 
   const diagnosticsFor = (elementId: string) => diagnostics.filter(d => d.elementId === elementId);
 
-  return <div className="space-y-3" aria-label="Block properties">
+  return <div className="sysml-editor space-y-3" aria-label="Block properties">
     {properties.map((property, index) => <fieldset key={property.id} className="rounded border border-gray-700 p-2 space-y-2">
       <legend className="px-1 text-xs">Property {index + 1}</legend>
       <label className="block text-xs">Name

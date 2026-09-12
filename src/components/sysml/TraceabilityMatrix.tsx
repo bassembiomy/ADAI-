@@ -68,8 +68,8 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-[#111] text-neutral-100" aria-labelledby="rtm-title">
-      <header className="border-b border-neutral-800 p-3">
+    <section className="traceability-grid flex h-full min-h-0 flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-labelledby="rtm-title">
+      <header className="border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 id="rtm-title" className="text-sm font-semibold">Requirements Traceability Matrix</h2>
@@ -124,9 +124,9 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
             rowHeight={42}
           />
         ) : (
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-neutral-950 text-neutral-400">
-              <tr>{['Requirement', 'Hierarchy & Relations', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-neutral-800 p-2 font-medium">{label}</th>)}</tr>
+          <table className="engineering-table w-full border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-[var(--table-header-bg)] text-[var(--text-secondary)]">
+              <tr>{['Requirement', 'Hierarchy & Relations', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-[var(--border-default)] p-2 font-medium">{label}</th>)}</tr>
             </thead>
             <tbody>
               {matrix.rows.map((row, index) => (
