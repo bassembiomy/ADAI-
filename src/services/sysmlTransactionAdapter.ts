@@ -1,7 +1,9 @@
 import { applyCommand, type MutationImpact } from '../engine/sysml/mutations';
 import { loadRepository } from '../engine/sysml/persistence';
 import type { SysmlRepository } from '../engine/sysml/model';
+import { classifyDeletionTarget, type DeletionDecision } from '../engine/sysml/policy';
 import { synchronizeEvidenceCurrency } from '../engine/sysml/evidence';
+import type { CompactImpactDelta } from '../engine/sysml/workerProtocol';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
 
 export interface LegacySysmlModel {
@@ -137,6 +139,16 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
     parts: model.parts,
     connectors: model.connectors,
   }).repository;
+  // Policy boundary: classify every requested target through the central
+  // deletion policy before running the atomic transaction, so unresolved
+  // (non-composite) impacts are explicit even when the closure itself is
+  // driven by analyzeMutation.
+  const policyUnresolved = new Set<string>();
+  for (const id of new Set(elementIds)) {
+    for (const unresolvedId of classifyDeletionTarget(repository, id).unresolvedUsageIds) {
+      policyUnresolved.add(unresolvedId);
+    }
+  }
   const transaction = applyCommand(repository, { kind: 'deleteElements', elementIds: [...new Set(elementIds)] });
   const deleted = new Set(transaction.impact.deletedElementIds);
 
@@ -173,10 +185,46 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
       ...transaction.impact.removedRelationshipIds,
       ...model.relationships.filter(r => deleted.has(r.id) || deleted.has(r.sourceId) || deleted.has(r.targetId)).map(r => r.id),
     ])].sort(),
+    unresolvedUsageIds: [...new Set([
+      ...transaction.impact.unresolvedUsageIds,
+      ...[...policyUnresolved].filter(id => !deleted.has(id)),
+    ])].sort(),
     affectedDiagramKinds: [...new Set([
       ...transaction.impact.affectedDiagramKinds,
       ...(model.connectors.some(connector => deleted.has(connector.id)) ? ['ibd' as const] : []),
     ])].sort(),
   };
   return { model: next, repository: transaction.repository, impact };
+}
+
+/**
+ * Classifies a legacy-model deletion target through the central typed
+ * deletion policy (composite-only cascade, unresolved impacts).
+ */
+export function classifyLegacyDeletionTarget(model: LegacySysmlModel, elementId: string): DeletionDecision {
+  const repository = loadRepository({
+    blocks: model.blocks,
+    relationships: model.relationships,
+    parts: model.parts,
+    connectors: model.connectors,
+  }).repository;
+  return classifyDeletionTarget(repository, elementId);
+}
+
+/**
+ * Projects a mutation impact to a compact delta (ID lists + summary counts)
+ * without embedding the repository.
+ */
+export function toCompactImpactDelta(impact: MutationImpact): CompactImpactDelta {
+  return {
+    requestedElementIds: [...impact.requestedElementIds],
+    deletedElementIds: [...impact.deletedElementIds],
+    impactSummary: {
+      nestedRequirements: impact.nestedRequirementIds.length,
+      removedRelationships: impact.removedRelationshipIds.length,
+      unresolvedUsages: impact.unresolvedUsageIds.length,
+      invalidatedEvidence: impact.invalidatedEvidenceIds.length,
+    },
+    impact,
+  };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, classifyLegacyDeletionTarget, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation, toCompactImpactDelta } from './sysmlTransactionAdapter';
 import { createEmptyRepository } from '../engine/sysml/model';
 
 const block = (id: string, stereotype = 'block'): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] });
@@ -92,6 +92,39 @@ describe('legacy UI to canonical SysML mutation adapter', () => {
 
     const formatted = formatLegacyDeletionImpact(result.impact);
     expect(formatted).toContain('Nested requirements: c, gc');
+  });
+
+  it('classifies legacy deletion targets through the central policy', () => {
+    const input = {
+      blocks: [block('whole'), block('child')],
+      parts: [part('owned', 'whole', 'child')],
+      relationships: [relation('c1', 'whole', 'child', 'composition')],
+      connectors: [] as ConnectorData[],
+    };
+    const decision = classifyLegacyDeletionTarget(input, 'whole');
+    expect(decision.targetKind).toBe('definition');
+
+    const unknown = classifyLegacyDeletionTarget(input, 'ghost');
+    expect(unknown.targetKind).toBe('unknown');
+    expect(unknown.diagnostics.join('\n')).toMatch('UNKNOWN_ELEMENT');
+  });
+
+  it('projects deletion impact to a compact delta without embedding the repository', () => {
+    const input = {
+      blocks: [block('a'), block('b')],
+      parts: [] as PartData[],
+      relationships: [relation('r', 'a', 'b', 'association')],
+      connectors: [] as ConnectorData[],
+    };
+    const result = applyLegacySysmlDeletion(input, ['r']);
+    const delta = toCompactImpactDelta(result.impact);
+    expect(delta.requestedElementIds).toEqual(['r']);
+    expect(delta.deletedElementIds).toContain('r');
+    expect(delta.impactSummary.removedRelationships).toBe(result.impact.removedRelationshipIds.length);
+    expect(delta.impactSummary.unresolvedUsages).toBe(result.impact.unresolvedUsageIds.length);
+    expect(delta.impact).toEqual(result.impact);
+    expect((delta as unknown as Record<string, unknown>).definitions).toBeUndefined();
+    expect((delta as unknown as Record<string, unknown>).repository).toBeUndefined();
   });
 });
 

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './sysmlCreationRules';
+import {
+  validateCanonicalBlockDefinition,
+  validateCanonicalBlockUpdate,
+  validateCanonicalConnectorCandidate,
+  validateCanonicalRelationshipCandidate,
+} from './sysmlCreationRules';
+import { createEmptyRepository, type BlockDefinition, type ConnectorUsage, type SysmlRelationship } from '../engine/sysml/model';
 
 const block = (id: string, stereotype = 'block', ports: BlockData['ports'] = []): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports });
 const relationship = (id: string, sourceId: string, targetId: string, type: RelationshipData['type']): RelationshipData => ({ id, sourceId, targetId, type, label: '' });
@@ -83,6 +90,118 @@ describe('native SysML creation rules', () => {
     // BDD composition between requirements is rejected
     const compReq = relationship('compReq', 'r1', 'r2', 'composition');
     expect(validateLegacyRelationshipCandidate(model, compReq).codes).toContain('INVALID_COMPOSITION_ENDPOINTS');
+  });
+});
+
+describe('canonical SysML creation rules (Task 2 policy gating)', () => {
+  const one = { lower: 1, upper: 1 as const, ordered: false, unique: true };
+  const defBlock = (id: string, extra: Partial<BlockDefinition> = {}): BlockDefinition => ({
+    id, name: id, kind: 'block', namespace: [], isAbstract: false, isLeaf: false,
+    properties: [], ports: [], operations: [], constraints: [], ...extra,
+  });
+  const rel = (id: string, kind: SysmlRelationship['kind'], sourceId: string, targetId: string): SysmlRelationship => ({
+    id, kind, sourceId, targetId,
+  });
+  const baseRepo = () => {
+    const repo = createEmptyRepository();
+    repo.definitions.a = defBlock('a');
+    repo.definitions.b = defBlock('b');
+    repo.requirements.r1 = {
+      id: 'r1', name: 'r1', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-1', text: 'req', status: 'draft', version: '1.0',
+    };
+    return repo;
+  };
+
+  it('emits typed codes for missing endpoints, self-links, duplicates, and endpoint legality', () => {
+    const repo = baseRepo();
+    expect(validateCanonicalRelationshipCandidate(repo, rel('x', 'association', 'a', 'ghost')).codes)
+      .toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    expect(validateCanonicalRelationshipCandidate(repo, rel('x', 'association', 'a', 'a')).codes)
+      .toContain('SELF_RELATIONSHIP');
+    expect(validateCanonicalRelationshipCandidate(repo, rel('x', 'generalization', 'r1', 'a')).codes)
+      .toContain('INVALID_GENERALIZATION_ENDPOINTS');
+    expect(validateCanonicalRelationshipCandidate(repo, rel('x', 'composition', 'a', 'r1')).codes)
+      .toContain('INVALID_COMPOSITION_ENDPOINTS');
+
+    repo.relationships.r1 = rel('r1', 'association', 'a', 'b');
+    expect(validateCanonicalRelationshipCandidate(repo, rel('r2', 'association', 'a', 'b')).codes)
+      .toContain('DUPLICATE_RELATIONSHIP');
+
+    expect(validateCanonicalRelationshipCandidate(repo, rel('g', 'generalization', 'a', 'b')).valid).toBe(true);
+  });
+
+  it('detects relationship cycles with typed codes', () => {
+    const repo = baseRepo();
+    repo.relationships.g1 = rel('g1', 'generalization', 'a', 'b');
+    expect(validateCanonicalRelationshipCandidate(repo, rel('g2', 'generalization', 'b', 'a')).codes)
+      .toContain('RELATIONSHIP_CYCLE');
+  });
+
+  it('validates canonical connectors through the IBD policy with typed codes', () => {
+    const repo = baseRepo();
+    repo.definitions.if = { id: 'if', name: 'IF', namespace: [], kind: 'interface', features: [] };
+    (repo.definitions.a as BlockDefinition).ports = [
+      { id: 'out-def', name: 'out', kind: 'proxy', typeId: 'if', direction: 'out', isConjugated: false, multiplicity: one },
+    ];
+    (repo.definitions.b as BlockDefinition).ports = [
+      { id: 'in-def', name: 'in', kind: 'proxy', typeId: 'if', direction: 'in', isConjugated: false, multiplicity: one },
+      { id: 'out-def-b', name: 'out', kind: 'proxy', typeId: 'if', direction: 'out', isConjugated: false, multiplicity: one },
+    ];
+    repo.definitions.sys = defBlock('sys');
+    repo.usages.partA = { id: 'partA', name: 'partA', kind: 'part', ownerId: 'sys', typeId: 'a', aggregation: 'composite', multiplicity: one };
+    repo.usages.partB = { id: 'partB', name: 'partB', kind: 'part', ownerId: 'sys', typeId: 'b', aggregation: 'composite', multiplicity: one };
+    repo.usages.aOut = { id: 'aOut', name: 'out', kind: 'port', ownerId: 'partA', definitionId: 'out-def' };
+    repo.usages.bIn = { id: 'bIn', name: 'in', kind: 'port', ownerId: 'partB', definitionId: 'in-def' };
+    repo.usages.bOut = { id: 'bOut', name: 'out', kind: 'port', ownerId: 'partB', definitionId: 'out-def-b' };
+
+    const conn = (id: string, extra: Partial<ConnectorUsage> = {}): ConnectorUsage => ({
+      id, kind: 'assembly', ownerId: 'sys', sourcePortId: 'aOut', targetPortId: 'bIn', ...extra,
+    });
+    expect(validateCanonicalConnectorCandidate(repo, conn('good')).valid).toBe(true);
+    expect(validateCanonicalConnectorCandidate(repo, conn('self', { targetPortId: 'aOut' })).codes)
+      .toContain('SELF_CONNECTOR');
+    expect(validateCanonicalConnectorCandidate(repo, conn('dir', { targetPortId: 'bOut' })).codes)
+      .toContain('INCOMPATIBLE_PORT_DIRECTION');
+    expect(validateCanonicalConnectorCandidate(repo, conn('ctx', { ownerId: 'a' })).codes)
+      .toContain('INVALID_CONNECTOR_CONTEXT');
+    expect(validateCanonicalConnectorCandidate(repo, conn('miss', { targetPortId: 'ghost' })).codes)
+      .toContain('MISSING_CONNECTOR_ENDPOINT');
+
+    repo.connectors.existing = conn('existing');
+    expect(validateCanonicalConnectorCandidate(repo, conn('dupe')).codes)
+      .toContain('DUPLICATE_CONNECTOR');
+  });
+
+  it('validates canonical block definitions for leaf specialization and redefinition', () => {
+    const repo = baseRepo();
+    repo.definitions.leaf = defBlock('leaf', { isLeaf: true });
+    expect(validateCanonicalBlockDefinition(repo, defBlock('child', { supertypeIds: ['leaf'] })).codes)
+      .toContain('LEAF_SPECIALIZATION');
+
+    repo.definitions.base = defBlock('base', {
+      properties: [{ id: 'p1', name: 'p1', kind: 'value', typeId: 'T', multiplicity: one }],
+    });
+    const badRedefine = defBlock('child2', {
+      supertypeIds: ['base'],
+      properties: [{ id: 'p1r', name: 'p1r', kind: 'value', typeId: 'Other', multiplicity: one, redefinesId: 'p1' }],
+    });
+    expect(validateCanonicalBlockDefinition(repo, badRedefine).codes)
+      .toContain('INCOMPATIBLE_REDEFINITION');
+
+    const abstract = validateCanonicalBlockDefinition(repo, defBlock('abs', { isAbstract: true }));
+    expect(abstract.codes).toContain('ABSTRACT_INSTANTIATION');
+    expect(abstract.valid).toBe(true);
+  });
+
+  it('rejects updates that seal a specialized block as leaf', () => {
+    const repo = baseRepo();
+    repo.definitions.base = defBlock('base');
+    repo.definitions.child = defBlock('child', { supertypeIds: ['base'] });
+    const res = validateCanonicalBlockUpdate(repo, 'base', { isLeaf: true });
+    expect(res.valid).toBe(false);
+    expect(res.codes).toContain('LEAF_SPECIALIZATION');
+    expect(validateCanonicalBlockUpdate(repo, 'nope', { name: 'x' }).codes).toContain('ELEMENT_NOT_FOUND');
   });
 });
 

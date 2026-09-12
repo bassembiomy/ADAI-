@@ -29,6 +29,14 @@ import {
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
 import { serializeRepository, loadRepository } from '../engine/sysml/persistence';
 import { requiresDeletionConfirmation } from './sysmlTransactionAdapter';
+import {
+  classifyCanonicalDeletionTarget,
+  validateCanonicalBlockDefinition,
+  validateCanonicalBlockUpdate,
+  validateCanonicalConnectorCandidate,
+  validateCanonicalRelationshipCandidate,
+} from './sysmlCreationRules';
+import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 import {
   type NormalizedSysmlStore,
@@ -553,6 +561,117 @@ function getCollectionFromElement(element: SysmlElement): SysmlEntityCollection 
   return 'definitions';
 }
 
+// ---------------------------------------------------------------------------
+// Task 2 semantic policy gates (gateway boundary, before mutation).
+// Canonical create/update/connect/delete commands are admitted through the
+// central typed policy (policy.ts single source via sysmlCreationRules) so
+// failures carry typed diagnostic codes (INVALID_GENERALIZATION_ENDPOINTS,
+// INVALID_COMPOSITION_ENDPOINTS, MISSING_RELATIONSHIP_ENDPOINT,
+// DUPLICATE_RELATIONSHIP/CONNECTOR, INVALID_CONNECTOR_CONTEXT,
+// INCOMPATIBLE_PORT_DIRECTION, LEAF_SPECIALIZATION, ...) instead of generic
+// invalid-operation / ELEMENT_NOT_FOUND-only errors. Rejection leaves
+// revision, auditTrail, patchHistory, and transaction IDs untouched.
+// ---------------------------------------------------------------------------
+
+function isRelationshipElement(element: SysmlElement): element is SysmlRelationship {
+  return 'sourceId' in element && 'targetId' in element;
+}
+
+function isConnectorElement(element: SysmlElement): element is ConnectorUsage {
+  return 'sourcePortId' in element && 'targetPortId' in element;
+}
+
+function isBlockElement(element: SysmlElement): element is BlockDefinition | ValueTypeDefinition | InterfaceDefinition {
+  return 'kind' in element && (element.kind === 'block' || element.kind === 'valueType' || element.kind === 'interface');
+}
+
+function toGateDiagnostics(elementId: string, codes: readonly string[], subject: string): SysmlDiagnostic[] {
+  return policyDiagnosticsToSysml(elementId, codes).map(diagnostic => ({
+    ...diagnostic,
+    message: `${subject} ${elementId} rejected by semantic policy: ${diagnostic.code}`,
+  }));
+}
+
+function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlDiagnostic[] | null {
+  if (isRelationshipElement(element)) {
+    const verdict = validateCanonicalRelationshipCandidate(repo, element);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId: element.id,
+        message: `Relationship ${element.id} rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  if (isConnectorElement(element)) {
+    const verdict = validateCanonicalConnectorCandidate(repo, element);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId: element.id,
+        message: `Connector ${element.id} rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  if (isBlockElement(element) && element.kind === 'block') {
+    const verdict = validateCanonicalBlockDefinition(repo, element);
+    if (!verdict.valid) {
+      return toGateDiagnostics(element.id, verdict.codes, 'Block');
+    }
+    return null;
+  }
+  return null;
+}
+
+function gateUpdateElement(
+  repo: SysmlRepository, elementId: string, patch: Record<string, unknown>,
+): SysmlDiagnostic[] | null {
+  const definition = repo.definitions[elementId];
+  if (definition && definition.kind === 'block') {
+    const verdict = validateCanonicalBlockUpdate(repo, elementId, patch);
+    if (!verdict.valid) {
+      return toGateDiagnostics(
+        elementId,
+        verdict.codes.filter(code => code !== 'ELEMENT_NOT_FOUND'),
+        'Block',
+      );
+    }
+    return null;
+  }
+  const relationship = repo.relationships[elementId];
+  if (relationship) {
+    const candidate = { ...relationship, ...patch } as SysmlRelationship;
+    const staged: SysmlRepository = {
+      ...repo, relationships: { ...repo.relationships, [elementId]: candidate },
+    };
+    // Re-validate endpoints/direction on the staged candidate, ignoring the
+    // candidate itself for duplicate detection.
+    const { [elementId]: _ignored, ...rest } = staged.relationships;
+    const verdict = validateCanonicalRelationshipCandidate({ ...staged, relationships: rest }, candidate);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId,
+        message: `Relationship ${elementId} update rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  const connector = repo.connectors[elementId];
+  if (connector) {
+    const candidate = { ...connector, ...patch } as ConnectorUsage;
+    const { [elementId]: _ignored, ...rest } = repo.connectors;
+    const verdict = validateCanonicalConnectorCandidate({ ...repo, connectors: rest }, candidate);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId,
+        message: `Connector ${elementId} update rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  return null;
+}
+
 export function executeSysmlCommand(
   state: SysmlGatewayState,
   command: SysmlEditorCommand,
@@ -810,6 +929,24 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'createElement') {
+    const gateDiagnostics = gateCreateElement(state.repository, command.element);
+    if (gateDiagnostics) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: gateDiagnostics,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const collection = getCollectionFromElement(command.element);
     upsertEntity(store, collection, command.element as any);
     if (command.presentation) {
@@ -914,6 +1051,24 @@ export function executeSysmlCommand(
     }
 
     const collection = getCollectionForId(store, command.elementId) ?? getCollectionFromElement(existing);
+    const updateGate = gateUpdateElement(state.repository, command.elementId, command.patch);
+    if (updateGate) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: updateGate,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const nextElement = { ...existing, ...command.patch } as SysmlEntity;
     upsertEntity(store, collection, nextElement);
 
@@ -970,6 +1125,35 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'deleteElements') {
+    // Policy boundary: classify every requested deletion target through the
+    // central policy. Unknown ids are rejected with a typed code before any
+    // impact analysis or mutation; known targets flow into analyzeMutation
+    // (which itself drives its cascade closure through classifyDeletionTarget).
+    const unknownTargets = [...new Set(command.elementIds)].filter(
+      id => classifyCanonicalDeletionTarget(state.repository, id).targetKind === 'unknown',
+    );
+    if (unknownTargets.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: unknownTargets.map(id => ({
+          code: 'ELEMENT_NOT_FOUND',
+          severity: 'error' as const,
+          elementId: id,
+          message: `Element ${id} not found; deletion rejected`,
+        })),
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const impact = analyzeMutation(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
     const needsConfirmation = requiresDeletionConfirmation(impact);
 

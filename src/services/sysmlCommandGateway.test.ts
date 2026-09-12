@@ -8,8 +8,9 @@ import {
   computeImpactHash,
   type SysmlGatewayState,
 } from './sysmlCommandGateway';
-import { createEmptyRepository, type BlockDefinition, type PartUsage, type RequirementDefinition, type SysmlRelationship } from '../engine/sysml/model';
+import { createEmptyRepository, type BlockDefinition, type ConnectorUsage, type PartUsage, type PortDefinition, type PortUsage, type RequirementDefinition, type SysmlRelationship } from '../engine/sysml/model';
 import { serializeRepository } from '../engine/sysml/persistence';
+import type { SysmlElement } from './sysmlCommandGateway';
 
 describe('sysmlCommandGateway', () => {
   it('creates an element in the canonical repository first and derives legacy arrays', () => {
@@ -539,6 +540,201 @@ describe('sysmlCommandGateway', () => {
     // Both patchHistory and legacy MutationHistory are capped to prevent memory leaks!
     expect(state.patchHistory?.past.length).toBeLessThanOrEqual(5);
     expect(state.history.past.length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
+  const one = { lower: 1, upper: 1 as const, ordered: false, unique: true };
+  const defBlock = (id: string, extra: Partial<BlockDefinition> = {}): BlockDefinition => ({
+    id, name: id, kind: 'block', namespace: [], isAbstract: false, isLeaf: false,
+    properties: [], ports: [], operations: [], constraints: [], ...extra,
+  });
+  const requirement = (id: string): RequirementDefinition => ({
+    id, name: id, kind: 'requirement', namespace: [], requirementId: `REQ-${id}`,
+    text: `${id} text`, status: 'draft', version: '1.0',
+  });
+  const rel = (id: string, kind: SysmlRelationship['kind'], sourceId: string, targetId: string): SysmlRelationship => ({
+    id, kind, sourceId, targetId,
+  });
+
+  function commitAll(elements: SysmlElement[]) {
+    let state = createSysmlGatewayState();
+    for (const element of elements) {
+      const r = executeSysmlCommand(state, { type: 'createElement', element });
+      expect(r.committed).toBe(true);
+      state = {
+        ...state, repository: r.repository, history: r.history, store: r.store,
+        patchHistory: r.patchHistory, coordinates: r.coordinates,
+        diagramPresentations: r.diagramPresentations,
+      };
+    }
+    return state;
+  }
+
+  function codesOf(result: { diagnostics: Array<{ code: string }> }): string[] {
+    return result.diagnostics.map(d => d.code);
+  }
+
+  it('rejects generalization with non-block endpoints instead of a generic error', () => {
+    const state = commitAll([defBlock('b1'), requirement('req1')]);
+    const before = { revision: state.repository.revision, audit: state.repository.auditTrail.length, patches: state.patchHistory?.past.length ?? 0 };
+    const result = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('g-bad', 'generalization', 'req1', 'b1'),
+    });
+    expect(result.committed).toBe(false);
+    expect(codesOf(result)).toContain('INVALID_GENERALIZATION_ENDPOINTS');
+    expect(result.repository.revision).toBe(before.revision);
+    expect(result.repository.auditTrail).toHaveLength(before.audit);
+    expect(result.patchHistory?.past.length ?? 0).toBe(before.patches);
+    expect(result.repository.relationships['g-bad']).toBeUndefined();
+  });
+
+  it('rejects composition touching requirement endpoints', () => {
+    const state = commitAll([defBlock('b1'), requirement('req1')]);
+    const result = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('c-bad', 'composition', 'b1', 'req1'),
+    });
+    expect(result.committed).toBe(false);
+    expect(codesOf(result)).toContain('INVALID_COMPOSITION_ENDPOINTS');
+  });
+
+  it('rejects relationships with missing endpoints and duplicates with typed codes', () => {
+    const state = commitAll([defBlock('a'), defBlock('b')]);
+    const missing = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('r-missing', 'association', 'a', 'ghost'),
+    });
+    expect(missing.committed).toBe(false);
+    expect(codesOf(missing)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+    const first = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('r1', 'association', 'a', 'b'),
+    });
+    expect(first.committed).toBe(true);
+    const next = {
+      ...state, repository: first.repository, history: first.history, store: first.store,
+      patchHistory: first.patchHistory, coordinates: first.coordinates,
+      diagramPresentations: first.diagramPresentations,
+    };
+    const dupe = executeSysmlCommand(next, {
+      type: 'createElement', element: rel('r2', 'association', 'a', 'b'),
+    });
+    expect(dupe.committed).toBe(false);
+    expect(codesOf(dupe)).toContain('DUPLICATE_RELATIONSHIP');
+  });
+
+  it('rejects block creation specializing a leaf supertype', () => {
+    const state = commitAll([defBlock('leaf-parent', { isLeaf: true })]);
+    const result = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: defBlock('child', { supertypeIds: ['leaf-parent'] }),
+    });
+    expect(result.committed).toBe(false);
+    expect(codesOf(result)).toContain('LEAF_SPECIALIZATION');
+  });
+
+  it('accepts a valid block-to-block generalization (policy allow path)', () => {
+    const state = commitAll([defBlock('base'), defBlock('sub')]);
+    const result = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('g-ok', 'generalization', 'sub', 'base'),
+    });
+    expect(result.committed).toBe(true);
+    expect(result.repository.relationships['g-ok']).toBeDefined();
+  });
+
+  const portDef = (id: string, direction: PortDefinition['direction'], typeId = 'if'): PortDefinition => ({
+    id, name: id, kind: 'proxy', typeId, direction, isConjugated: false, multiplicity: one,
+  });
+
+  function ibdFixture() {
+    const ifDef = { id: 'if', name: 'IF', namespace: [], kind: 'interface' as const, features: ['signal'] };
+    return commitAll([
+      ifDef as unknown as SysmlElement,
+      defBlock('sys', { ports: [portDef('boundary-def', 'out')] }),
+      defBlock('compA', { ports: [portDef('out-def', 'out')] }),
+      defBlock('compB', { ports: [portDef('in-def', 'in'), portDef('out-def-b', 'out')] }),
+      { id: 'partA', name: 'partA', kind: 'part', ownerId: 'sys', typeId: 'compA', aggregation: 'composite', multiplicity: one } as unknown as SysmlElement,
+      { id: 'partB', name: 'partB', kind: 'part', ownerId: 'sys', typeId: 'compB', aggregation: 'composite', multiplicity: one } as unknown as SysmlElement,
+      { id: 'aOut', name: 'out', kind: 'port', ownerId: 'partA', definitionId: 'out-def' } as unknown as SysmlElement,
+      { id: 'bIn', name: 'in', kind: 'port', ownerId: 'partB', definitionId: 'in-def' } as unknown as SysmlElement,
+      { id: 'bOut', name: 'out', kind: 'port', ownerId: 'partB', definitionId: 'out-def-b' } as unknown as SysmlElement,
+    ]);
+  }
+
+  const connector = (id: string, extra: Partial<ConnectorUsage> = {}): ConnectorUsage => ({
+    id, kind: 'assembly', ownerId: 'sys', sourcePortId: 'aOut', targetPortId: 'bIn', ...extra,
+  });
+
+  it('gates connector creation (connect path) through the IBD policy', () => {
+    const state = ibdFixture();
+    const ok = executeSysmlCommand(state, { type: 'createElement', element: connector('conn-ok') });
+    expect(ok.committed).toBe(true);
+    expect(ok.repository.connectors['conn-ok']).toBeDefined();
+
+    const badDirection = executeSysmlCommand(state, {
+      type: 'createElement', element: connector('conn-dir', { targetPortId: 'bOut' }),
+    });
+    expect(badDirection.committed).toBe(false);
+    expect(codesOf(badDirection)).toContain('INCOMPATIBLE_PORT_DIRECTION');
+
+    const badContext = executeSysmlCommand(state, {
+      type: 'createElement', element: connector('conn-ctx', { ownerId: 'compA' }),
+    });
+    expect(badContext.committed).toBe(false);
+    expect(codesOf(badContext)).toContain('INVALID_CONNECTOR_CONTEXT');
+
+    const afterOk = {
+      ...state, repository: ok.repository, history: ok.history, store: ok.store,
+      patchHistory: ok.patchHistory, coordinates: ok.coordinates,
+      diagramPresentations: ok.diagramPresentations,
+    };
+    const dupe = executeSysmlCommand(afterOk, {
+      type: 'createElement', element: connector('conn-dupe'),
+    });
+    expect(dupe.committed).toBe(false);
+    expect(codesOf(dupe)).toContain('DUPLICATE_CONNECTOR');
+  });
+
+  it('validates updateElement against leaf / redefine policy', () => {
+    const base = defBlock('base', {
+      properties: [{ id: 'p1', name: 'p1', kind: 'value', typeId: 'T', multiplicity: one }],
+    });
+    const leafParent = defBlock('leaf-parent', { isLeaf: true });
+    const state = commitAll([
+      { id: 'T', name: 'T', namespace: [], kind: 'valueType' } as unknown as SysmlElement,
+      base, leafParent, defBlock('child', { supertypeIds: ['base'] }),
+    ]);
+
+    const leafUpdate = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'child', patch: { supertypeIds: ['leaf-parent'] },
+    });
+    expect(leafUpdate.committed).toBe(false);
+    expect(codesOf(leafUpdate)).toContain('LEAF_SPECIALIZATION');
+    expect(leafUpdate.repository.revision).toBe(state.repository.revision);
+
+    const badRedefine = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'child',
+      patch: {
+        properties: [{ id: 'p1r', name: 'p1r', kind: 'value', typeId: 'Other', multiplicity: one, redefinesId: 'p1' }],
+      },
+    });
+    expect(badRedefine.committed).toBe(false);
+    expect(codesOf(badRedefine)).toContain('INCOMPATIBLE_REDEFINITION');
+
+    const sealParent = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'base', patch: { isLeaf: true },
+    });
+    expect(sealParent.committed).toBe(false);
+    expect(codesOf(sealParent)).toContain('LEAF_SPECIALIZATION');
+  });
+
+  it('rejects deletion of unknown elements with a typed code and no state change', () => {
+    const state = commitAll([defBlock('lonely')]);
+    const before = { revision: state.repository.revision, audit: state.repository.auditTrail.length };
+    const result = executeSysmlCommand(state, { type: 'deleteElements', elementIds: ['ghost'] });
+    expect(result.committed).toBe(false);
+    expect(codesOf(result)).toContain('ELEMENT_NOT_FOUND');
+    expect(result.repository.revision).toBe(before.revision);
+    expect(result.repository.auditTrail).toHaveLength(before.audit);
   });
 });
 
