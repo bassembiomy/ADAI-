@@ -6201,7 +6201,7 @@ const ADIA = () => {
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
   const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator' }[]>([]);
-  const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
+  const [factoryIOEnabled, setFactoryIOEnabled] = useState(false);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
   // Multi-File and Tab Management State
@@ -6866,14 +6866,24 @@ const ADIA = () => {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     if (factoryIOEnabled && (window as any).require) {
       const { ipcRenderer } = (window as any).require('electron');
       ipcRenderer.invoke('fetch-factory-io-tags').then((tags: any) => {
+        if (!isMounted) return;
         if (tags && !tags.error) setFactoryIOStatus('connected');
         else setFactoryIOStatus('error');
+      }).catch(() => {
+        if (!isMounted) return;
+        setFactoryIOStatus('error');
       });
+    } else if (!factoryIOEnabled) {
+      setFactoryIOStatus('disconnected');
     }
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [factoryIOEnabled]);
 
   const projectImportRef = useRef<HTMLInputElement>(null);
   const [importValidationError, setImportValidationError] = useState<ValidationResult | null>(null);
