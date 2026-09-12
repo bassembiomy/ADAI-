@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, parseMultiplicity, type SysmlRepository } from './model';
-import { classifyDeletionTarget, resolveInheritance, classifyRelationship } from './policy';
+import { classifyDeletionTarget, resolveInheritance, classifyRelationship, policyDiagnosticsToSysml } from './policy';
 
 const one = parseMultiplicity('1');
 
@@ -192,5 +192,56 @@ describe('typed SysML policy deletion targets', () => {
 
   it('reports unknown deletion targets with diagnostics', () => {
     expect(classifyDeletionTarget(repository(), 'nope').diagnostics.length).toBeGreaterThan(0);
+  });
+});
+
+describe('typed SysML policy deletion single-source (ports as lifetime-owned children)', () => {
+  it('cascades ports owned by a deleted definition while keeping parts composite-only', () => {
+    const repo = repository();
+    repo.usages.ownedPort = { id: 'ownedPort', kind: 'port', name: 'p', ownerId: 'system', definitionId: 'base' };
+    repo.usages.otherPort = { id: 'otherPort', kind: 'port', name: 'q', ownerId: 'child', definitionId: 'base' };
+    const decision = classifyDeletionTarget(repo, 'system');
+    expect(decision.cascadeIds).toEqual(expect.arrayContaining(['composite', 'ownedPort']));
+    expect(decision.cascadeIds).not.toContain('shared');
+    expect(decision.cascadeIds).not.toContain('otherPort');
+    expect(decision.unresolvedUsageIds).not.toContain('ownedPort');
+  });
+
+  it('cascades ports owned by a deleted shared usage without cascading the usage itself', () => {
+    const repo = repository();
+    repo.usages.sharedPort = { id: 'sharedPort', kind: 'port', name: 'sp', ownerId: 'shared', definitionId: 'base' };
+    const decision = classifyDeletionTarget(repo, 'shared');
+    expect(decision.cascadeIds).toEqual(expect.arrayContaining(['sharedPort']));
+    expect(decision.cascadeIds).not.toContain('shared');
+  });
+});
+
+describe('typed SysML policy structured diagnostics (single source)', () => {
+  it('maps CODE:message strings to structured diagnostics with property paths', () => {
+    const repo = repository();
+    repo.definitions.leaf = {
+      id: 'leaf', name: 'Leaf', namespace: [], kind: 'block', isAbstract: false, isLeaf: true,
+      properties: [], ports: [], operations: [], constraints: [],
+    };
+    repo.definitions.sub = {
+      id: 'sub', name: 'Sub', namespace: [], kind: 'block', isAbstract: false, isLeaf: false,
+      supertypeIds: ['leaf'], properties: [], ports: [], operations: [], constraints: [],
+    };
+    const resolution = resolveInheritance(repo, 'sub');
+    expect(resolution.diagnostics.join('\n')).toMatch('LEAF_SPECIALIZATION');
+    const structured = policyDiagnosticsToSysml('sub', resolution.diagnostics);
+    const leaf = structured.find(d => d.code === 'LEAF_SPECIALIZATION');
+    expect(leaf).toMatchObject({ elementId: 'sub', propertyPath: 'supertypeIds', severity: 'error' });
+    expect(leaf?.message.length).toBeGreaterThan(0);
+  });
+
+  it('marks abstract-instantiation guidance as a warning', () => {
+    const repo = repository();
+    repo.definitions.abs = {
+      id: 'abs', name: 'Abs', namespace: [], kind: 'block', isAbstract: true, isLeaf: false,
+      properties: [], ports: [], operations: [], constraints: [],
+    };
+    const structured = policyDiagnosticsToSysml('abs', resolveInheritance(repo, 'abs').diagnostics);
+    expect(structured.find(d => d.code === 'ABSTRACT_INSTANTIATION')?.severity).toBe('warning');
   });
 });

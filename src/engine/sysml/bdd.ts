@@ -7,7 +7,7 @@ import type {
   SysmlRepository,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
-import { resolveInheritance as resolveInheritancePolicy } from './policy';
+import { resolveInheritance as resolveInheritancePolicy, policyDiagnosticsToSysml } from './policy';
 
 export interface ResolvedBlockFeatures {
   properties: PropertyDefinition[];
@@ -115,11 +115,11 @@ export function resolveInheritedFeatures(repo: SysmlRepository, blockId: string)
   // Central policy is the source of truth for inheritance decisions. Merge its
   // typed diagnostics so BDD projections never diverge (OMG SysML 1.6, no v2 claim).
   for (const policyDiagnostic of policyDiagnosticsForBlock(repo, blockId)) {
-    if (!diagnostics.some(d => d.code === policyDiagnostic.code && d.elementId === policyDiagnostic.elementId && d.propertyPath === policyDiagnostic.propertyPath)) {
+    if (!diagnostics.some(d => diagnosticKey(d) === diagnosticKey(policyDiagnostic))) {
       diagnostics.push(policyDiagnostic);
     }
   }
-  diagnostics.sort((a, b) => (a.code + (a.elementId ?? '')).localeCompare(b.code + (b.elementId ?? '')));
+  diagnostics.sort(compareDiagnostics);
   return {
     properties,
     ports,
@@ -292,30 +292,30 @@ function notationFor(kind: SysmlRelationship['kind']): BddRelationshipView['nota
 
 function policyDiagnosticsForBlock(repo: SysmlRepository, blockId: string): SysmlDiagnostic[] {
   const resolution = resolveInheritancePolicy(repo, blockId);
-  return resolution.diagnostics.map(entry => {
-    const separator = entry.indexOf(':');
-    const code = separator >= 0 ? entry.slice(0, separator).trim() : entry;
-    const message = separator >= 0 ? entry.slice(separator + 1).trim() : entry;
-    const propertyPath = code === 'MISSING_SUPERTYPE' || code === 'INHERITANCE_CYCLE' || code === 'LEAF_SPECIALIZATION'
-      ? 'supertypeIds'
-      : code === 'INCOMPATIBLE_REDEFINITION'
-        ? 'redefinesId'
-        : code === 'INVALID_SUBSETTING_MULTIPLICITY'
-          ? 'subsetsId'
-          : undefined;
-    const severity = code === 'ABSTRACT_INSTANTIATION' ? 'warning' : 'error';
-    return { code, severity, elementId: blockId, propertyPath, message } as SysmlDiagnostic;
-  });
+  return policyDiagnosticsToSysml(blockId, resolution.diagnostics);
+}
+
+function diagnosticKey(diagnostic: SysmlDiagnostic): string {
+  return `${diagnostic.code}:${diagnostic.elementId ?? ''}:${diagnostic.propertyPath ?? ''}:${diagnostic.message}`;
+}
+
+function compareDiagnostics(a: SysmlDiagnostic, b: SysmlDiagnostic): number {
+  return a.code.localeCompare(b.code)
+    || (a.elementId ?? '').localeCompare(b.elementId ?? '')
+    || (a.propertyPath ?? '').localeCompare(b.propertyPath ?? '')
+    || a.message.localeCompare(b.message);
 }
 
 function dedupDiagnostics(diagnostics: SysmlDiagnostic[]): SysmlDiagnostic[] {
   const seen = new Set<string>();
-  return diagnostics.filter(d => {
-    const key = `${d.code}:${d.elementId ?? ''}:${d.propertyPath ?? ''}:${d.message}`;
+  const unique = diagnostics.filter(d => {
+    const key = diagnosticKey(d);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  unique.sort(compareDiagnostics);
+  return unique;
 }
 
 function diagnostic(code: string, elementId: string, propertyPath: string | undefined, message: string): SysmlDiagnostic {

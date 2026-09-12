@@ -47,11 +47,12 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     }
   }
 
-  // Central typed policy is the source of truth for deletion cascades.
-  // Cascade only through explicit composite ownership; definition-typed
-  // usages become unresolved impacts, never implicit children.
-  // A composite usage is lifetime-owned by its owner. Shared and reference usages
-  // intentionally do not join this closure.
+  // Central typed policy is the single source of truth for deletion cascades
+  // (composite-owned parts plus lifetime-owned ports, per policy.ts).
+  // Mutations drive the closure purely through classifyDeletionTarget with no
+  // independent port-ownership loop. Definition-typed usages become unresolved
+  // impacts, never implicit children. Shared and reference usages never join
+  // the part closure.
   let changed = true;
   while (changed) {
     changed = false;
@@ -62,14 +63,6 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
           deleted.add(cascadeId);
           changed = true;
         }
-      }
-    }
-    // Port usages are owned by their context; keep in lockstep with the policy
-    // subtree closure for composite owners.
-    for (const usage of Object.values(repo.usages)) {
-      if (usage.kind === 'port' && deleted.has(usage.ownerId) && !deleted.has(usage.id)) {
-        deleted.add(usage.id);
-        changed = true;
       }
     }
   }

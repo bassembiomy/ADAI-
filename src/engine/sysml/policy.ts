@@ -4,6 +4,7 @@ import type {
   SysmlRepository,
   SysmlRelationship,
 } from './model';
+import type { SysmlDiagnostic } from './validation';
 
 export interface InheritedFeature {
   featureId: string;
@@ -28,6 +29,51 @@ export interface DeletionDecision {
   cascadeIds: string[];
   unresolvedUsageIds: string[];
   diagnostics: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Structured diagnostics: single source of truth for CODE:message mapping.
+// resolveInheritance keeps its public string[] signature (backward compat);
+// callers needing SysmlDiagnostic must use policyDiagnosticsToSysml (or
+// resolveInheritanceStructured) instead of re-parsing CODE:message locally.
+// ---------------------------------------------------------------------------
+
+const POLICY_DIAGNOSTIC_PROPERTY_PATHS: Record<string, string | undefined> = {
+  UNKNOWN_DEFINITION: undefined,
+  MISSING_SUPERTYPE: 'supertypeIds',
+  INHERITANCE_CYCLE: 'supertypeIds',
+  LEAF_SPECIALIZATION: 'supertypeIds',
+  ABSTRACT_INSTANTIATION: undefined,
+  INCOMPATIBLE_REDEFINITION: 'redefinesId',
+  INVALID_SUBSETTING_MULTIPLICITY: 'subsetsId',
+};
+
+export function parsePolicyDiagnostic(entry: string): { code: string; message: string } {
+  const separator = entry.indexOf(':');
+  if (separator < 0) return { code: entry.trim(), message: entry.trim() };
+  return { code: entry.slice(0, separator).trim(), message: entry.slice(separator + 1).trim() };
+}
+
+export function policyDiagnosticToSysml(elementId: string, entry: string): SysmlDiagnostic {
+  const { code, message } = parsePolicyDiagnostic(entry);
+  const severity = code === 'ABSTRACT_INSTANTIATION' ? 'warning' : 'error';
+  return { code, severity, elementId, propertyPath: POLICY_DIAGNOSTIC_PROPERTY_PATHS[code], message };
+}
+
+export function policyDiagnosticsToSysml(elementId: string, entries: readonly string[]): SysmlDiagnostic[] {
+  return entries.map(entry => policyDiagnosticToSysml(elementId, entry));
+}
+
+export function resolveInheritanceStructured(
+  repo: SysmlRepository,
+  definitionId: string,
+): { valid: boolean; features: InheritedFeature[]; diagnostics: SysmlDiagnostic[] } {
+  const resolution = resolveInheritance(repo, definitionId);
+  return {
+    valid: resolution.valid,
+    features: resolution.features,
+    diagnostics: policyDiagnosticsToSysml(definitionId, resolution.diagnostics),
+  };
 }
 
 function block(repo: SysmlRepository, id: string): BlockDefinition | undefined {
@@ -233,16 +279,37 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   return { allowed: diagnostics.length === 0, diagram: 'rtm', diagnostics };
 }
 
+function collectOwnedPortIds(repo: SysmlRepository, ownerIds: ReadonlySet<string>): string[] {
+  const owners = new Set(ownerIds);
+  const ports = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const candidate of Object.values(repo.usages)) {
+      if (candidate.kind !== 'port' || ports.has(candidate.id) || !owners.has(candidate.ownerId)) continue;
+      ports.add(candidate.id);
+      owners.add(candidate.id);
+      changed = true;
+    }
+  }
+  return [...ports].sort();
+}
+
 export function classifyDeletionTarget(repo: SysmlRepository, elementId: string): DeletionDecision {
   const definition = repo.definitions[elementId];
   if (definition) {
     // Cascade only through explicit composite ownership. Definition-typed
     // usages (shared/reference, or any typeId match that is not an owned
     // composite child) are unresolved impacts, never implicit children.
-    const cascadeIds = Object.values(repo.usages)
+    // Ports are lifetime-owned children (OMG SysML 1.6: a port usage lives
+    // and dies with its owning context), so ports owned by the deleted
+    // element cascade too. The composite-only rule still applies to parts.
+    const compositeChildren = Object.values(repo.usages)
       .filter(usage => usage.kind === 'part' && usage.ownerId === elementId && usage.aggregation === 'composite')
       .map(usage => usage.id)
       .sort();
+    const ownedPortIds = collectOwnedPortIds(repo, new Set([elementId]));
+    const cascadeIds = [...compositeChildren, ...ownedPortIds].sort();
     const cascadeSet = new Set(cascadeIds);
     const unresolvedUsageIds = Object.values(repo.usages)
       .filter(usage => usage.kind === 'part' && usage.typeId === elementId && !cascadeSet.has(usage.id))
@@ -253,7 +320,10 @@ export function classifyDeletionTarget(repo: SysmlRepository, elementId: string)
   const usage = repo.usages[elementId];
   if (usage) {
     if (usage.kind !== 'part' || usage.aggregation !== 'composite') {
-      return { targetKind: 'usage', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
+      // Non-composite (shared/reference) parts and port usages never cascade
+      // sibling parts, but ports they own are lifetime-owned children and
+      // cascade with their owner.
+      return { targetKind: 'usage', cascadeIds: collectOwnedPortIds(repo, new Set([usage.id])), unresolvedUsageIds: [], diagnostics: [] };
     }
     // Composite usage deletion cascades the subtree: itself plus transitively
     // owned composite parts and owned ports. Shared/reference usages never cascade.

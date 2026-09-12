@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   createEmptyRepository,
@@ -220,6 +221,41 @@ describe('canonical BDD semantics', () => {
     expect(paths).toContain('relationships.badComp.sourceMultiplicity');
     expect(paths).toContain('relationships.badComp.sourceRole');
     expect(paths).toContain('relationships.badComp.navigability');
+  });
+});
+
+describe('BDD policy single-source diagnostics (dedup + deterministic order)', () => {
+  it('keeps distinct messages for the same code (dedup key includes message)', () => {
+    const model = repo();
+    model.definitions.leafA = block('leafA', { isLeaf: true });
+    model.definitions.leafB = block('leafB', { isLeaf: true });
+    model.definitions.multi = block('multi', { supertypeIds: ['leafB', 'leafA'] });
+
+    const leafDiags = resolveInheritedFeatures(model, 'multi').diagnostics
+      .filter(d => d.code === 'LEAF_SPECIALIZATION');
+    expect(leafDiags.length).toBe(2);
+  });
+
+  it('sorts diagnostics deterministically by code, elementId, propertyPath, message', () => {
+    const model = repo();
+    model.definitions.leafA = block('leafA', { isLeaf: true });
+    model.definitions.leafB = block('leafB', { isLeaf: true });
+    model.definitions.multi = block('multi', { supertypeIds: ['leafB', 'leafA'] });
+
+    const diagnostics = resolveInheritedFeatures(model, 'multi').diagnostics;
+    const key = (d: { code: string; elementId?: string; propertyPath?: string; message: string }) =>
+      [d.code, d.elementId ?? '', d.propertyPath ?? '', d.message].join('');
+    expect(diagnostics.map(key)).toEqual([...diagnostics].map(key).sort());
+    // Full ordering (not code+element only): leafA's message sorts before leafB's.
+    const leafMessages = diagnostics.filter(d => d.code === 'LEAF_SPECIALIZATION').map(d => d.message);
+    expect(leafMessages).toEqual([...leafMessages].sort());
+  });
+
+  it('delegates structured mapping to the central policy (no local CODE:message re-derivation)', () => {
+    const source = readFileSync('src/engine/sysml/bdd.ts', 'utf8');
+    expect(source).toMatch('policyDiagnosticsToSysml');
+    expect(source).not.toMatch("indexOf(':')");
+    expect(source).not.toMatch('slice(0, separator)');
   });
 });
 
