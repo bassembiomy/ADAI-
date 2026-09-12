@@ -28,6 +28,12 @@ import {
 } from '../engine/sysml/mutations';
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
 import { serializeRepository, loadRepository } from '../engine/sysml/persistence';
+import {
+  assessLegacyProjectionLoss,
+  assessOpmInterchangeLoss,
+  type InterchangeReport,
+} from '../engine/sysml/interchangeReport';
+import { projectSysmlToOpm } from '../engine/sysml/opmAdapter';
 import { requiresDeletionConfirmation } from './sysmlTransactionAdapter';
 import {
   classifyCanonicalDeletionTarget,
@@ -1377,6 +1383,9 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
   diagramPresentations: Record<string, { elementIds: string[] }>;
   valid: boolean;
   diagnostics: SysmlDiagnostic[];
+  interchangeReport: InterchangeReport;
+  quarantinedRelationshipIds: string[];
+  quarantinedConnectorIds: string[];
 } {
   const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
   const diagramPresentations = (payload.diagramPresentations as Record<string, { elementIds: string[] }>) ?? {};
@@ -1395,6 +1404,9 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
       diagramPresentations,
       valid: loadRes.valid,
       diagnostics: loadRes.diagnostics,
+      interchangeReport: loadRes.interchangeReport,
+      quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
+      quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
     };
   }
 
@@ -1410,5 +1422,35 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
     diagramPresentations,
     valid: loadRes.valid,
     diagnostics: loadRes.diagnostics,
+    interchangeReport: loadRes.interchangeReport,
+    quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
+    quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
   };
+}
+
+/**
+ * Task 7: loss-reporting legacy projection. The view itself is unchanged
+ * (projection-only); the report records every canonical construct that has
+ * no legacy-diagram element so imports/exports never silently drop evidence,
+ * baselines, artifacts, port usages, inheritance, or verification links.
+ */
+export function projectLegacyViewWithInterchangeReport(
+  repository: SysmlRepository,
+  coordinates: Record<string, PresentationCoordinates> = {},
+  diagramPresentations: Record<string, { elementIds: string[] }> = {},
+  diagramId?: string,
+): { view: LegacySysmlView; interchangeReport: InterchangeReport } {
+  return {
+    view: projectLegacyDiagram(repository, coordinates, diagramPresentations, diagramId),
+    interchangeReport: assessLegacyProjectionLoss(repository),
+  };
+}
+
+/**
+ * Task 7: loss-reporting OPM interchange. One-directional SysML -> OPM
+ * projection; the report qualifies every conceptual-only / unsupported
+ * mapping with an explicit loss entry.
+ */
+export function projectOpmWithInterchangeReport(repository: SysmlRepository) {
+  return { projection: projectSysmlToOpm(repository), interchangeReport: assessOpmInterchangeLoss(repository) };
 }

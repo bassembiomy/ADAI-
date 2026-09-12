@@ -269,21 +269,25 @@ export function fromRepository(
 
 /**
  * Export a NormalizedSysmlStore back to a canonical SysmlRepository (schemaVersion: 2).
+ * Keys are emitted in deterministic sorted-id order so serialization is stable
+ * across runs; semantic IDs themselves are never rewritten.
  */
 export function toRepository(store: NormalizedSysmlStore): SysmlRepository {
+  const sortedEntries = <T>(entries: Iterable<[string, T]>): Record<string, T> =>
+    Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b)));
   return {
     schemaVersion: 2,
     profileId: store.profileId,
     revision: store.revision,
-    definitions: Object.fromEntries(store.definitions),
-    usages: Object.fromEntries(store.usages),
-    connectors: Object.fromEntries(store.connectors),
-    relationships: Object.fromEntries(store.relationships),
-    requirements: Object.fromEntries(store.requirements),
-    verificationCases: Object.fromEntries(store.verificationCases),
-    evidence: Object.fromEntries(store.evidence),
-    baselines: Object.fromEntries(store.baselines),
-    artifacts: Object.fromEntries(store.artifacts),
+    definitions: sortedEntries(store.definitions),
+    usages: sortedEntries(store.usages),
+    connectors: sortedEntries(store.connectors),
+    relationships: sortedEntries(store.relationships),
+    requirements: sortedEntries(store.requirements),
+    verificationCases: sortedEntries(store.verificationCases),
+    evidence: sortedEntries(store.evidence),
+    baselines: sortedEntries(store.baselines),
+    artifacts: sortedEntries(store.artifacts),
     auditTrail: [...store.auditTrail],
   };
 }

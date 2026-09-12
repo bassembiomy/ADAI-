@@ -8,6 +8,12 @@ import {
   type SysmlRepository,
 } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic } from './validation';
+import {
+  createEmptyInterchangeReport,
+  mergeInterchangeReports,
+  quarantineUnresolvedEndpoints,
+  type InterchangeReport,
+} from './interchangeReport';
 
 interface PersistenceEnvelope {
   format: 'ADIA-SysML';
@@ -21,43 +27,80 @@ export interface LoadRepositoryResult {
   diagnostics: SysmlDiagnostic[];
   valid: boolean;
   migrated: boolean;
+  interchangeReport: InterchangeReport;
 }
 
 export interface BaselineDiff { added: string[]; removed: string[]; changed: string[]; }
 
+/**
+ * Canonicalize a repository for deterministic serialization: sort every
+ * collection by element id and keep envelope metadata fixed. Semantic IDs
+ * are never rewritten; only key order is normalized.
+ */
+export function canonicalizeRepository(repository: SysmlRepository): SysmlRepository {
+  const sorted = <T extends { id: string }>(record: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(
+      Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
+    );
+  return {
+    ...repository,
+    schemaVersion: 2,
+    profileId: 'OMG-SysML-1.6-ADIA',
+    definitions: sorted(repository.definitions ?? {}),
+    usages: sorted(repository.usages ?? {}),
+    connectors: sorted(repository.connectors ?? {}),
+    relationships: sorted(repository.relationships ?? {}),
+    requirements: sorted(repository.requirements ?? {}),
+    verificationCases: sorted(repository.verificationCases ?? {}),
+    evidence: sorted(repository.evidence ?? {}),
+    baselines: sorted(repository.baselines ?? {}),
+    artifacts: sorted(repository.artifacts ?? {}),
+    auditTrail: [...(repository.auditTrail ?? [])],
+  };
+}
+
 export function serializeRepository(repository: SysmlRepository): string {
-  const canonical = stableStringify(repository);
+  const canonicalRepo = canonicalizeRepository(repository);
+  const canonical = stableStringify(canonicalRepo);
   const envelope: PersistenceEnvelope = {
-    format: 'ADIA-SysML', schemaVersion: 2, checksum: hash(canonical), repository,
+    format: 'ADIA-SysML', schemaVersion: 2, checksum: hash(canonical), repository: canonicalRepo,
   };
   return stableStringify(envelope);
 }
 
 export function loadRepository(input: string | unknown): LoadRepositoryResult {
   const diagnostics: SysmlDiagnostic[] = [];
+  const migrationReport = createEmptyInterchangeReport();
   let raw: unknown;
   try {
     raw = typeof input === 'string' ? JSON.parse(input) : input;
   } catch (cause) {
-    return { repository: createEmptyRepository(), diagnostics: [diag('PERSISTENCE_PARSE_ERROR', `Invalid JSON: ${String(cause)}`)], valid: false, migrated: false };
+    return { repository: createEmptyRepository(), diagnostics: [diag('PERSISTENCE_PARSE_ERROR', `Invalid JSON: ${String(cause)}`)], valid: false, migrated: false, interchangeReport: migrationReport };
   }
 
   let migrated = false;
   let repository: SysmlRepository;
   if (isEnvelope(raw)) {
     repository = hydrateCanonical(raw.repository);
-    if (hash(stableStringify(raw.repository)) !== raw.checksum) diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
+    if (hash(stableStringify(canonicalizeRepository(raw.repository as SysmlRepository))) !== raw.checksum
+      && hash(stableStringify(raw.repository)) !== raw.checksum) diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
   } else if (isCanonical(raw)) {
     repository = hydrateCanonical(raw);
     migrated = !('artifacts' in raw) || !('auditTrail' in raw);
   } else {
-    repository = migrateLegacy(raw, diagnostics);
+    repository = migrateLegacy(raw, diagnostics, migrationReport);
     migrated = true;
   }
+  // Reject-or-quarantine: strip edges with dangling endpoints into an
+  // explicit quarantine list. Never synthesize a generic association.
+  const quarantined = quarantineUnresolvedEndpoints(repository);
+  repository = quarantined.repository;
+  const interchangeReport = mergeInterchangeReports(migrationReport, quarantined.report);
+  diagnostics.push(...quarantined.report.diagnostics);
   freezeBaselines(repository);
   const validation = validateSysmlRepository(repository);
   diagnostics.push(...validation.diagnostics);
-  return { repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated };
+  return { repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated, interchangeReport };
 }
 
 export function createBaseline(
@@ -120,7 +163,7 @@ function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
   };
 }
 
-function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): SysmlRepository {
+function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrationReport = createEmptyInterchangeReport()): SysmlRepository {
   const source = isRecord(raw) ? raw : {};
   const repo = createEmptyRepository();
   for (const legacy of arrayOfRecords(source.blocks)) {
@@ -186,14 +229,44 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
     const targetOwner = text(legacy.targetPartId);
     const sourceDefinition = text(legacy.sourcePortId);
     const targetDefinition = text(legacy.targetPortId);
+    if (!sourceOwner || !targetOwner || !sourceDefinition || !targetDefinition) {
+      const lossEntry = {
+        sourceId: id, sourceKind: 'connector', diagnosticCode: 'LEGACY_CONNECTOR_ENDPOINT_UNRESOLVED',
+        reason: `Legacy connector ${id} has an unresolvable endpoint and is quarantined instead of synthesizing a generic association`,
+        severity: 'warning' as const,
+      };
+      migrationReport.lossEntries.push(lossEntry);
+      migrationReport.unresolvedEndpoints.push({
+        kind: 'connector', id, endpoint: !sourceOwner || !sourceDefinition ? 'sourcePortId' : 'targetPortId',
+        missingId: !sourceOwner || !sourceDefinition ? `${sourceOwner}::${sourceDefinition}` : `${targetOwner}::${targetDefinition}`,
+        code: 'UNRESOLVED_ENDPOINT', message: `Legacy connector ${id} endpoint does not resolve; quarantined`,
+      });
+      const diagnostic = { code: 'LEGACY_CONNECTOR_ENDPOINT_UNRESOLVED', severity: 'warning' as const, elementId: id, message: `Legacy connector ${id} quarantined: unresolved endpoint` };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+      continue;
+    }
     const sourcePortId = `${sourceOwner}::${sourceDefinition}`;
     const targetPortId = `${targetOwner}::${targetDefinition}`;
     if (!repo.usages[sourcePortId]) repo.usages[sourcePortId] = { id: sourcePortId, name: sourceDefinition, kind: 'port', ownerId: sourceOwner, definitionId: sourceDefinition };
     if (!repo.usages[targetPortId]) repo.usages[targetPortId] = { id: targetPortId, name: targetDefinition, kind: 'port', ownerId: targetOwner, definitionId: targetDefinition };
     const inferredOwner = connectorOwner(repo, sourceOwner, targetOwner);
+    const rawKind = text(legacy.kind);
+    const supportedConnector = rawKind === 'binding' || rawKind === 'delegation' || rawKind === 'assembly';
+    if (rawKind && !supportedConnector) {
+      const lossEntry = {
+        sourceId: id, sourceKind: 'connector', diagnosticCode: 'LEGACY_CONNECTOR_KIND_UNSUPPORTED',
+        reason: `Legacy connector ${id} kind '${rawKind}' has no canonical equivalent; defaulted explicitly (not silently)`,
+        severity: 'warning' as const,
+      };
+      migrationReport.lossEntries.push(lossEntry);
+      const diagnostic = { code: 'LEGACY_CONNECTOR_KIND_UNSUPPORTED', severity: 'warning' as const, elementId: id, message: `Legacy connector ${id} kind '${rawKind}' defaulted with explicit loss record` };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+    }
     repo.connectors[id] = {
       id,
-      kind: legacy.kind === 'binding' || legacy.kind === 'delegation' ? legacy.kind : sourceOwner === inferredOwner || targetOwner === inferredOwner ? 'delegation' : 'assembly',
+      kind: rawKind === 'binding' || rawKind === 'delegation' ? rawKind : sourceOwner === inferredOwner || targetOwner === inferredOwner ? 'delegation' : 'assembly',
       ownerId: inferredOwner,
       sourcePortId,
       targetPortId,
@@ -205,14 +278,33 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
     if (!id) continue;
     const sourceId = text(legacy.sourceId);
     const targetId = text(legacy.targetId);
+    const rawKind = text(legacy.type);
     let kind = relationshipKind(legacy.type);
+    if (!isSupportedRelationshipKind(rawKind)) {
+      const lossEntry = {
+        sourceId: id, sourceKind: 'relationship', diagnosticCode: 'LEGACY_RELATIONSHIP_KIND_UNSUPPORTED',
+        reason: `Legacy relationship ${id} kind '${rawKind || '(empty)'}' has no canonical equivalent; carried explicitly as trace`,
+        severity: 'warning' as const,
+      };
+      migrationReport.lossEntries.push(lossEntry);
+      const diagnostic = { code: 'LEGACY_RELATIONSHIP_KIND_UNSUPPORTED', severity: 'warning' as const, elementId: id, message: `Legacy relationship ${id} kind '${rawKind}' mapped to trace with explicit loss record` };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+    }
     if (kind === 'composition' && repo.requirements[sourceId] && repo.requirements[targetId]) {
       kind = 'requirementContainment';
-      diagnostics.push({
+      const diagnostic = {
         code: 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED',
-        severity: 'info',
+        severity: 'info' as const,
         elementId: id,
         message: `Migrated legacy composition ${id} between requirements to requirementContainment`,
+      };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+      migrationReport.lossEntries.push({
+        sourceId: id, sourceKind: 'relationship', diagnosticCode: 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED',
+        reason: `Legacy composition ${id} between requirements carried explicitly as requirementContainment`,
+        severity: 'info',
       });
     }
     repo.relationships[id] = {
@@ -274,6 +366,15 @@ function level(value: unknown): RequirementDefinition['risk'] { const result = t
 function requirementStatus(value: unknown): RequirementDefinition['status'] {
   const status = text(value).toLocaleLowerCase();
   return status === 'approved' || status === 'implemented' || status === 'verified' || status === 'failed' || status === 'stale' || status === 'retired' ? status : 'draft';
+}
+function isSupportedRelationshipKind(value: string): boolean {
+  if (value === 'aggregation' || value === 'derive' || value === 'requirementContainment') return true;
+  const supported: SysmlRelationship['kind'][] = [
+    'association', 'sharedAggregation', 'composition', 'generalization', 'dependency',
+    'allocation', 'binding', 'itemFlow', 'requirementContainment', 'deriveReqt', 'satisfy',
+    'verify', 'refine', 'trace', 'copy',
+  ];
+  return supported.includes(value as SysmlRelationship['kind']);
 }
 function relationshipKind(value: unknown): SysmlRelationship['kind'] {
   const kind = text(value);
@@ -532,14 +633,18 @@ export function hydrateRepositoryFromChunks(
   }
 
   freezeBaselines(repo);
-  const validation = validateSysmlRepository(repo);
+  const quarantined = quarantineUnresolvedEndpoints(repo);
+  diagnostics.push(...quarantined.report.diagnostics);
+  freezeBaselines(quarantined.repository);
+  const validation = validateSysmlRepository(quarantined.repository);
   diagnostics.push(...validation.diagnostics);
 
   return {
-    repository: repo,
+    repository: quarantined.repository,
     diagnostics,
     valid: !diagnostics.some(d => d.severity === 'error'),
     migrated: false,
+    interchangeReport: quarantined.report,
   };
 }
 
@@ -668,6 +773,7 @@ export function hydrateActiveDiagramFromChunks(
     diagnostics,
     valid: !diagnostics.some(d => d.severity === 'error'),
     migrated: false,
+    interchangeReport: createEmptyInterchangeReport(),
     loadedEntityCount: loadedCount,
     deferredChunkCount: deferredCount,
   };
