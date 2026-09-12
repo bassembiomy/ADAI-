@@ -7,6 +7,7 @@ import type {
   SysmlRepository,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { resolveInheritance as resolveInheritancePolicy } from './policy';
 
 export interface ResolvedBlockFeatures {
   properties: PropertyDefinition[];
@@ -111,6 +112,14 @@ export function resolveInheritedFeatures(repo: SysmlRepository, blockId: string)
     visited.add(current.id);
   };
   merge(block);
+  // Central policy is the source of truth for inheritance decisions. Merge its
+  // typed diagnostics so BDD projections never diverge (OMG SysML 1.6, no v2 claim).
+  for (const policyDiagnostic of policyDiagnosticsForBlock(repo, blockId)) {
+    if (!diagnostics.some(d => d.code === policyDiagnostic.code && d.elementId === policyDiagnostic.elementId && d.propertyPath === policyDiagnostic.propertyPath)) {
+      diagnostics.push(policyDiagnostic);
+    }
+  }
+  diagnostics.sort((a, b) => (a.code + (a.elementId ?? '')).localeCompare(b.code + (b.elementId ?? '')));
   return {
     properties,
     ports,
@@ -169,7 +178,9 @@ export function validateBlockDefinition(repo: SysmlRepository, blockId: string):
       }
     }
   }
-  return diagnostics;
+  // resolveInheritedFeatures already merges central policy diagnostics; dedup
+  // the explicit checks above against the policy source of truth.
+  return dedupDiagnostics(diagnostics);
 }
 
 export function validateAssociationEnds(repo: SysmlRepository, relationshipId: string): SysmlDiagnostic[] {
@@ -277,6 +288,34 @@ function notationFor(kind: SysmlRelationship['kind']): BddRelationshipView['nota
   if (kind === 'generalization') return 'hollow-triangle';
   if (kind === 'dependency' || kind === 'allocation') return 'dashed-arrow';
   return 'solid-line';
+}
+
+function policyDiagnosticsForBlock(repo: SysmlRepository, blockId: string): SysmlDiagnostic[] {
+  const resolution = resolveInheritancePolicy(repo, blockId);
+  return resolution.diagnostics.map(entry => {
+    const separator = entry.indexOf(':');
+    const code = separator >= 0 ? entry.slice(0, separator).trim() : entry;
+    const message = separator >= 0 ? entry.slice(separator + 1).trim() : entry;
+    const propertyPath = code === 'MISSING_SUPERTYPE' || code === 'INHERITANCE_CYCLE' || code === 'LEAF_SPECIALIZATION'
+      ? 'supertypeIds'
+      : code === 'INCOMPATIBLE_REDEFINITION'
+        ? 'redefinesId'
+        : code === 'INVALID_SUBSETTING_MULTIPLICITY'
+          ? 'subsetsId'
+          : undefined;
+    const severity = code === 'ABSTRACT_INSTANTIATION' ? 'warning' : 'error';
+    return { code, severity, elementId: blockId, propertyPath, message } as SysmlDiagnostic;
+  });
+}
+
+function dedupDiagnostics(diagnostics: SysmlDiagnostic[]): SysmlDiagnostic[] {
+  const seen = new Set<string>();
+  return diagnostics.filter(d => {
+    const key = `${d.code}:${d.elementId ?? ''}:${d.propertyPath ?? ''}:${d.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function diagnostic(code: string, elementId: string, propertyPath: string | undefined, message: string): SysmlDiagnostic {

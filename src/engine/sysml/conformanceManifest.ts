@@ -279,6 +279,25 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
         'tests/e2e/sysml-deletion-lifecycle.spec.ts',
       ],
     },
+    {
+      id: 'SYSML-031',
+      capability: 'Typed semantic policy decisions',
+      status: 'supported',
+      normativeReference: 'OMG SysML 1.6 / ISO/IEC 19514:2017',
+      implementationEvidence: [
+        'src/engine/sysml/policy.ts',
+        'src/engine/sysml/bdd.ts',
+        'src/engine/sysml/ibd.ts',
+        'src/engine/sysml/mutations.ts',
+      ],
+      automatedEvidence: [
+        'src/engine/sysml/policy.test.ts',
+        'src/engine/sysml/bdd.test.ts',
+        'src/engine/sysml/ibd.test.ts',
+        'src/engine/sysml/validation.test.ts',
+        'src/engine/sysml/mutations.test.ts',
+      ],
+    },
   ],
 };
 

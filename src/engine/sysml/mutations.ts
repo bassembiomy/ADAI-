@@ -1,4 +1,5 @@
 import type { SysmlRepository } from './model';
+import { classifyDeletionTarget } from './policy';
 import { getNestedRequirementIds } from './requirements';
 import { validateSysmlRepository, type SysmlValidationReport } from './validation';
 
@@ -46,16 +47,26 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     }
   }
 
+  // Central typed policy is the source of truth for deletion cascades.
+  // Cascade only through explicit composite ownership; definition-typed
+  // usages become unresolved impacts, never implicit children.
   // A composite usage is lifetime-owned by its owner. Shared and reference usages
   // intentionally do not join this closure.
   let changed = true;
   while (changed) {
     changed = false;
-    for (const usage of Object.values(repo.usages)) {
-      if (usage.kind === 'part' && usage.aggregation === 'composite' && deleted.has(usage.ownerId) && !deleted.has(usage.id)) {
-        deleted.add(usage.id);
-        changed = true;
+    for (const id of [...deleted]) {
+      const decision = classifyDeletionTarget(repo, id);
+      for (const cascadeId of decision.cascadeIds) {
+        if (!deleted.has(cascadeId)) {
+          deleted.add(cascadeId);
+          changed = true;
+        }
       }
+    }
+    // Port usages are owned by their context; keep in lockstep with the policy
+    // subtree closure for composite owners.
+    for (const usage of Object.values(repo.usages)) {
       if (usage.kind === 'port' && deleted.has(usage.ownerId) && !deleted.has(usage.id)) {
         deleted.add(usage.id);
         changed = true;
@@ -84,9 +95,15 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   invalidatedEvidence.forEach(id => deleted.add(id));
 
   const deletedDefinitions = new Set(Object.values(repo.definitions).filter(d => deleted.has(d.id)).map(d => d.id));
-  const unresolvedUsageIds = Object.values(repo.usages)
-    .filter(u => u.kind === 'part' && deletedDefinitions.has(u.typeId) && !deleted.has(u.id))
-    .map(u => u.id).sort();
+  // Unresolved impacts come from the central policy: every definition-typed
+  // usage that is not an owned composite cascade child.
+  const unresolvedFromPolicy = new Set<string>();
+  for (const definitionId of deletedDefinitions) {
+    for (const unresolvedId of classifyDeletionTarget(repo, definitionId).unresolvedUsageIds) {
+      if (!deleted.has(unresolvedId)) unresolvedFromPolicy.add(unresolvedId);
+    }
+  }
+  const unresolvedUsageIds = [...unresolvedFromPolicy].sort();
 
   const diagramKinds = new Set<MutationImpact['affectedDiagramKinds'][number]>();
   if ([...deleted].some(id => repo.definitions[id])) diagramKinds.add('bdd');

@@ -8,6 +8,7 @@ import type {
   SysmlUsage,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { classifyRelationship as classifyRelationshipPolicy } from './policy';
 
 export interface ResolvedPortUsage {
   usage: PortUsage;
@@ -196,6 +197,20 @@ export function deriveIbdView(repo: SysmlRepository, ownerId: string): IbdView {
   const connectors = Object.values(repo.connectors).filter(connector => connector.ownerId === ownerId).sort(byId);
   const diagnostics = connectors.flatMap(connector => validateConnector(repo, connector.id));
   return { ownerId, parts, ports, connectors, diagnostics };
+}
+
+/**
+ * IBD defers BDD-vs-IBD relationship legality to the central typed policy
+ * (src/engine/sysml/policy.ts). Binding/itemFlow relationships must classify
+ * to the `ibd` diagram; BDD kinds must not leak into IBD views.
+ */
+export function classifyIbdRelationship(repo: SysmlRepository, relationshipId: string): { diagram: string; allowed: boolean; diagnostics: string[] } {
+  return classifyRelationshipPolicy(repo, relationshipId);
+}
+
+export function isIbdDiagramRelationship(repo: SysmlRepository, relationshipId: string): boolean {
+  const decision = classifyRelationshipPolicy(repo, relationshipId);
+  return decision.diagram === 'ibd' && decision.allowed;
 }
 
 function findPortDefinition(repo: SysmlRepository, blockId: string, portId: string, visited = new Set<string>()): PortDefinition | undefined {

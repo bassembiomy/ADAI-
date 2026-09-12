@@ -40,6 +40,13 @@ capabilities.push({
   testId: 'SYSML-030',
 });
 
+capabilities.push({
+  id: 'policy.typedDecisions',
+  status: 'supported',
+  normativeReference: 'OMG SysML 1.6 / ISO/IEC 19514:2017',
+  testId: 'SYSML-031',
+});
+
 export const SYSML_PROFILE = Object.freeze({
   id: 'OMG-SysML-1.6-ADIA' as const,
   sysmlVersion: '1.6' as const,
