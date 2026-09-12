@@ -36,6 +36,22 @@ const INHERITANCE_PANEL_CODES = new Set([
 // Deterministic capped render for large inherited-feature lists.
 const DEFAULT_MAX_VISIBLE_INHERITED = 50;
 
+export function createDefaultProperty(typeOptions: Pick<BlockData, 'id' | 'name' | 'stereotype'>[]): ValuePropertyData {
+  const valueType = typeOptions.find(option => option.stereotype === 'valueType' || option.stereotype === 'enumeration');
+  const blockType = typeOptions.find(option => option.stereotype === 'block');
+  const selected = valueType ?? blockType ?? typeOptions[0];
+  const kind: ValuePropertyData['kind'] = valueType ? 'value' : blockType ? 'part' : 'value';
+  return {
+    id: crypto.randomUUID(),
+    name: 'property',
+    type: selected?.name || '',
+    typeId: selected?.id,
+    kind,
+    multiplicity: '1',
+    unique: true,
+  };
+}
+
 type OriginView = ValuePropertyData & { originId: string; originName: string };
 
 function withOrigin(property: ValuePropertyData): OriginView {
@@ -63,15 +79,7 @@ export function BlockPropertiesEditor({
   };
 
   const remove = (index: number) => onChange(properties.filter((_, propertyIndex) => propertyIndex !== index));
-  const add = () => onChange([...properties, {
-    id: crypto.randomUUID(),
-    name: 'property',
-    type: typeOptions[0]?.name || '',
-    typeId: typeOptions[0]?.id,
-    kind: 'value',
-    multiplicity: '1',
-    unique: true,
-  }]);
+  const add = () => onChange([...properties, createDefaultProperty(typeOptions)]);
 
   const handleRedefine = (inherited: ValuePropertyData) => {
     if (onRedefine) {

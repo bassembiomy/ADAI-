@@ -1,9 +1,23 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BlockPropertiesEditor } from './BlockPropertiesEditor';
+import { BlockPropertiesEditor, createDefaultProperty } from './BlockPropertiesEditor';
 
 describe('BlockPropertiesEditor', () => {
+  it('creates a valid default property when the first available type is a block', () => {
+    const created = createDefaultProperty([
+      { id: 'block', name: 'Motor', stereotype: 'block' },
+      { id: 'real', name: 'Real', stereotype: 'valueType' },
+    ]);
+    expect(created.kind).toBe('value');
+    expect(created.typeId).toBe('real');
+  });
+
+  it('creates a part property when only block types are available', () => {
+    const created = createDefaultProperty([{ id: 'block', name: 'Motor', stereotype: 'block' }]);
+    expect(created.kind).toBe('part');
+    expect(created.typeId).toBe('block');
+  });
   it('renders typed property semantics and accessible controls', () => {
     const html = renderToStaticMarkup(<BlockPropertiesEditor properties={[{ id: 'p', name: 'speed', type: 'Velocity', typeId: 'Velocity', kind: 'flow', multiplicity: '0..*', ordered: true, unique: false }]} typeOptions={[{ id: 'Velocity', name: 'Velocity', stereotype: 'valueType' }]} inheritedProperties={[]} onChange={() => {}} />);
     expect(html).toContain('Property kind');
