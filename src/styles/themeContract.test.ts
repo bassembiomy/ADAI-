@@ -10,4 +10,8 @@ describe('theme contract', () => {
   it('provides a visible keyboard focus rule', () => {
     expect(css).toMatch(/:focus-visible[\s\S]*outline:\s*2px/);
   });
+  it('enforces literal color lint across migrated workspace files', () => {
+    const { execSync } = require('node:child_process');
+    expect(() => execSync('node scripts/check_theme_literals.cjs', { stdio: 'pipe' })).not.toThrow();
+  });
 });

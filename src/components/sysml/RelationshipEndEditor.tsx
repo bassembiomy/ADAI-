@@ -94,7 +94,7 @@ export function RelationshipEndEditor({
             aria-label="Relationship kind"
             value={relationship.kind}
             onChange={e => update({ kind: e.target.value as any })}
-            className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1 mt-1 text-gray-200"
+            className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1 mt-1 text-gray-200"
           >
             <option value="association">Association</option>
             <option value="generalization">Generalization</option>
@@ -130,7 +130,7 @@ export function RelationshipEndEditor({
 
       {/* Generalization inheritance guidance */}
       {isGeneralization && (
-        <div className="space-y-2 rounded border border-gray-700 bg-[#141414] p-2" aria-label="Inheritance guidance">
+        <div className="space-y-2 rounded border border-gray-700 bg-[var(--surface-sunken)] p-2" aria-label="Inheritance guidance">
           <h4 className="font-semibold uppercase text-gray-400">Inheritance guidance</h4>
           {generalizationChain.length > 0 && (
             <div aria-label="Parent chain" className="text-gray-300">
@@ -200,7 +200,7 @@ export function RelationshipEndEditor({
             <select
               value={relationship.sourceAggregation || (relationship.kind === 'composition' ? 'composite' : relationship.kind === 'sharedAggregation' ? 'shared' : 'none')}
               onChange={e => update({ sourceAggregation: e.target.value as any })}
-              className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+              className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
             >
               {AGGREGATION_KINDS.map(k => (
                 <option key={k} value={k}>{k}</option>
@@ -251,7 +251,7 @@ export function RelationshipEndEditor({
             <select
               value={relationship.targetAggregation || 'none'}
               onChange={e => update({ targetAggregation: e.target.value as any })}
-              className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+              className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
             >
               {AGGREGATION_KINDS.map(k => (
                 <option key={k} value={k}>{k}</option>

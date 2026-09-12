@@ -197,7 +197,7 @@ export function BlockPropertiesEditor({
     </fieldset>)}
     <button type="button" onClick={add} className="rounded border px-2 py-1 text-xs">Add property</button>
 
-    <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs" aria-label="Inheritance panel">
+    <div className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs" aria-label="Inheritance panel">
       <h4 className="font-semibold uppercase text-gray-400">Inheritance panel</h4>
       <div aria-label="Parent chain" className="text-gray-300">
         {(parentChain ?? []).length > 0
@@ -225,7 +225,7 @@ export function BlockPropertiesEditor({
       )}
     </div>
 
-    <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs">
+    <div className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs">
       <h4 className="font-semibold uppercase text-gray-400">Inherited Features</h4>
       {sortedInherited.length === 0 ? (
         <div className="text-gray-500">No inherited features to display</div>

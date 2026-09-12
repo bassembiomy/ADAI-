@@ -212,7 +212,7 @@ export function BlockFeatureEditor({
                   aria-label={`Property ${index + 1} kind`}
                   value={prop.kind}
                   onChange={e => updateProperty(index, { kind: e.target.value as PropertyDefinition['kind'] })}
-                  className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                  className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
                 >
                   {PROPERTY_KINDS.map(k => (
                     <option key={k} value={k}>{k}</option>
@@ -227,7 +227,7 @@ export function BlockFeatureEditor({
                 aria-label={`Property ${index + 1} type`}
                 value={prop.typeId}
                 onChange={e => updateProperty(index, { typeId: e.target.value })}
-                className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
               >
                 <option value="">Select a classifier</option>
                 {defOptions.map(def => (
@@ -288,7 +288,7 @@ export function BlockFeatureEditor({
                 <select
                   value={prop.redefinesId || ''}
                   onChange={e => updateProperty(index, { redefinesId: e.target.value || undefined })}
-                  className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                  className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
                 >
                   <option value="">None</option>
                   {inheritedProps.map(ip => (
@@ -301,7 +301,7 @@ export function BlockFeatureEditor({
                 <select
                   value={prop.subsetsId || ''}
                   onChange={e => updateProperty(index, { subsetsId: e.target.value || undefined })}
-                  className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                  className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
                 >
                   <option value="">None</option>
                   {inheritedProps.map(ip => (
@@ -364,7 +364,7 @@ export function BlockFeatureEditor({
                   aria-label={`Port ${index + 1} kind`}
                   value={port.kind}
                   onChange={e => updatePort(index, { kind: e.target.value as PortDefinition['kind'] })}
-                  className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                  className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
                 >
                   {PORT_KINDS.map(k => (
                     <option key={k} value={k}>{k}</option>
@@ -377,7 +377,7 @@ export function BlockFeatureEditor({
                   aria-label={`Port ${index + 1} direction`}
                   value={port.direction}
                   onChange={e => updatePort(index, { direction: e.target.value as PortDefinition['direction'] })}
-                  className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                  className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
                 >
                   {PORT_DIRECTIONS.map(d => (
                     <option key={d} value={d}>{d}</option>
@@ -393,7 +393,7 @@ export function BlockFeatureEditor({
                   aria-label={`Port ${index + 1} type`}
                   value={port.typeId}
                   onChange={e => updatePort(index, { typeId: e.target.value })}
-                  className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1"
+                  className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
                 >
                   <option value="">Select an Interface or Block</option>
                   {defOptions.map(def => (
@@ -437,7 +437,7 @@ export function BlockFeatureEditor({
       </div>
 
       {/* Inheritance Panel: parent chain, cycle/leaf diagnostics, abstract guidance */}
-      <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs" aria-label="Inheritance panel">
+      <div className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs" aria-label="Inheritance panel">
         <h4 className="font-semibold uppercase text-gray-400">Inheritance panel</h4>
         <div aria-label="Parent chain" className="text-gray-300">
           {(parentChain ?? []).length > 0
@@ -466,7 +466,7 @@ export function BlockFeatureEditor({
       </div>
 
       {/* Inherited Features Section: read-only rows with annotated origin */}
-      <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs">
+      <div className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs">
         <h4 className="font-semibold uppercase text-gray-400">Inherited Features</h4>
         {sortedInherited.length === 0 ? (
           <div className="text-gray-500">No inherited features to display</div>

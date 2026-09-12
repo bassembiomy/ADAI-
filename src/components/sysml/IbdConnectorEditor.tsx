@@ -100,7 +100,7 @@ export function IbdConnectorEditor({
             aria-label="Connector kind"
             value={connector.kind}
             onChange={e => update({ kind: e.target.value as ConnectorUsage['kind'] })}
-            className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1 mt-1"
+            className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1 mt-1"
           >
             {CONNECTOR_KINDS.map(k => (
               <option key={k} value={k}>{k}</option>
@@ -116,7 +116,7 @@ export function IbdConnectorEditor({
               aria-label="Source port"
               value={connector.sourcePortId}
               onChange={e => update({ sourcePortId: e.target.value })}
-              className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1 mt-1"
+              className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1 mt-1"
             >
               <option value="">Select source port</option>
               {availablePorts.map(p => (
@@ -132,7 +132,7 @@ export function IbdConnectorEditor({
               aria-label="Target port"
               value={connector.targetPortId}
               onChange={e => update({ targetPortId: e.target.value })}
-              className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1 mt-1"
+              className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1 mt-1"
             >
               <option value="">Select target port</option>
               {availablePorts.map(p => (
@@ -189,7 +189,7 @@ export function IbdConnectorEditor({
             aria-label="Conveyed classifier"
             value={connector.itemFlowId || ''}
             onChange={e => update({ itemFlowId: e.target.value || undefined })}
-            className="w-full rounded border border-gray-700 bg-[#1e1e1e] px-2 py-1 mt-1"
+            className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1 mt-1"
           >
             <option value="">None (no item flow)</option>
             {conveyedOptions.map(def => (

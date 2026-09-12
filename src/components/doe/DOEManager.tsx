@@ -232,7 +232,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           </div>
 
           {/* Model Tabs */}
-          <div className="flex bg-[#1a1a20] rounded-lg p-1 border border-[#333] ml-4">
+          <div className="flex bg-[var(--surface-sunken)] rounded-lg p-1 border border-[var(--border-default)] ml-4">
             {(['RSM', 'GMDH', 'Taguchi'] as const).map((m) => (
               <button
                 key={m}
@@ -241,7 +241,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
                   activeModel === m
                     ? 'bg-purple-600 text-white shadow'
-                    : 'text-gray-400 hover:text-white'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 {m}
@@ -255,14 +255,14 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           <button
             data-testid="add-factor-btn"
             onClick={handleAddFactor}
-            className="px-3 py-1.5 text-xs bg-[#222] hover:bg-[#2a2a2a] text-gray-200 border border-[#3a3a3a] rounded-lg font-medium"
+            className="px-3 py-1.5 text-xs bg-[var(--surface-panel)] hover:bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg font-medium"
           >
             + Add Factor
           </button>
           <button
             data-testid="add-run-btn"
             onClick={handleAddRun}
-            className="px-3 py-1.5 text-xs bg-[#222] hover:bg-[#2a2a2a] text-gray-200 border border-[#3a3a3a] rounded-lg font-medium"
+            className="px-3 py-1.5 text-xs bg-[var(--surface-panel)] hover:bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg font-medium"
           >
             + Add Run
           </button>
@@ -279,8 +279,8 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
             onClick={handleExportXBridges}
             className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-all ${
               hasExportableModel
-                ? 'bg-[#182838] border-cyan-700 text-cyan-200 hover:bg-[#1f354a]'
-                : 'bg-[#141414] border-[#252525] text-gray-600 cursor-not-allowed'
+                ? 'bg-cyan-900/30 border-cyan-700 text-cyan-200 hover:bg-cyan-900/50'
+                : 'bg-[var(--surface-panel)] border-[var(--border-subtle)] text-[var(--text-muted)] cursor-not-allowed'
             }`}
           >
             Export to X-Bridges
@@ -291,8 +291,8 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
             onClick={handleExportVLab}
             className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-all ${
               hasExportableModel
-                ? 'bg-[#2b2416] border-amber-700 text-amber-200 hover:bg-[#382f1d]'
-                : 'bg-[#141414] border-[#252525] text-gray-600 cursor-not-allowed'
+                ? 'bg-amber-900/30 border-amber-700 text-amber-200 hover:bg-amber-900/50'
+                : 'bg-[var(--surface-panel)] border-[var(--border-subtle)] text-[var(--text-muted)] cursor-not-allowed'
             }`}
           >
             Export to V-Lab
@@ -300,7 +300,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           {props.onClose && (
             <button
               onClick={props.onClose}
-              className="ml-2 p-1.5 text-gray-400 hover:text-white rounded-lg"
+              className="ml-2 p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg"
             >
               ✕
             </button>
@@ -310,7 +310,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
 
       {/* Diagnostics Alerts */}
       {results?.diagnostics && results.diagnostics.length > 0 && (
-        <div data-testid="doe-diagnostics" className="px-6 py-2 bg-[#16161c] border-b border-[#222] flex flex-wrap gap-2 items-center">
+        <div data-testid="doe-diagnostics" className="px-6 py-2 bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex flex-wrap gap-2 items-center">
           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Diagnostics:</span>
           {results.diagnostics.map((diag: DOEDiagnostic, idx: number) => {
             const colorClass =
@@ -347,19 +347,19 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           <div className="flex-1 overflow-auto p-2">
             <table data-testid="doe-matrix-table" className="engineering-table w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-[#2a2a32] text-gray-400 bg-[#17171e]">
-                  <th className="p-2 w-12 text-center text-gray-500">#</th>
+                <tr className="border-b border-[var(--border-default)] text-[var(--text-secondary)] bg-[var(--table-header-bg)]">
+                  <th className="p-2 w-12 text-center text-[var(--text-muted)]">#</th>
                   {headers.map((h, colIdx) => (
                     <th key={colIdx} className="p-2 font-semibold">
                       <div className="flex items-center justify-between gap-1">
-                        <span className={colIdx === headers.length - 1 ? 'text-amber-400' : 'text-gray-200'}>
+                        <span className={colIdx === headers.length - 1 ? 'text-amber-400' : 'text-[var(--text-primary)]'}>
                           {h}
                         </span>
                         {colIdx < headers.length - 1 && headers.length > 2 && (
                           <button
                             data-testid={`remove-factor-${colIdx}`}
                             onClick={() => handleRemoveFactor(colIdx)}
-                            className="text-gray-500 hover:text-red-400 text-[10px] px-1 rounded"
+                            className="text-[var(--text-muted)] hover:text-red-400 text-[10px] px-1 rounded"
                             title="Remove factor"
                           >
                             ✕
@@ -373,8 +373,8 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
               </thead>
               <tbody>
                 {data.map((row, rowIdx) => (
-                  <tr key={rowIdx} className="border-b border-[#202026] hover:bg-[#1a1a24] transition-colors">
-                    <td className="p-2 text-center text-gray-500 font-mono text-[11px]">{rowIdx + 1}</td>
+                  <tr key={rowIdx} className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)] transition-colors">
+                    <td className="p-2 text-center text-[var(--text-muted)] font-mono text-[11px]">{rowIdx + 1}</td>
                     {row.map((val, colIdx) => (
                       <td key={colIdx} className="p-1">
                         <input
@@ -382,8 +382,8 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
                           type="number"
                           value={val}
                           onChange={(e) => handleCellChange(rowIdx, colIdx, parseFloat(e.target.value) || 0)}
-                          className={`w-full bg-[#0d0d10] border border-[#2a2a34] rounded px-2 py-1 text-xs font-mono focus:border-purple-500 focus:outline-none ${
-                            colIdx === row.length - 1 ? 'text-amber-300' : 'text-gray-200'
+                          className={`w-full bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded px-2 py-1 text-xs font-mono focus:border-purple-500 focus:outline-none ${
+                            colIdx === row.length - 1 ? 'text-amber-400' : 'text-[var(--text-primary)]'
                           }`}
                         />
                       </td>
@@ -393,7 +393,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
                         <button
                           data-testid={`remove-run-${rowIdx}`}
                           onClick={() => handleRemoveRun(rowIdx)}
-                          className="text-gray-600 hover:text-red-400 text-xs px-1"
+                          className="text-[var(--text-muted)] hover:text-red-400 text-xs px-1"
                           title="Remove run"
                         >
                           ✕
@@ -411,14 +411,14 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
         <div className="lg:col-span-6 flex flex-col doe-panel ui-card bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-xl overflow-hidden shadow-xl">
           {/* Header Controls for Plot Type */}
           <div className="px-4 py-3 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">Model Analysis & Graphs</span>
+            <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Model Analysis & Graphs</span>
             <div className="flex items-center gap-2">
-              <label className="text-[11px] text-gray-400">View:</label>
+              <label className="text-[11px] text-[var(--text-muted)]">View:</label>
               <select
                 data-testid="plot-type-select"
                 value={plotType}
                 onChange={(e) => setPlotType(e.target.value as PlotType)}
-                className="bg-[#0e0e12] border border-[#333] text-gray-200 text-xs rounded px-2 py-1 focus:outline-none"
+                className="bg-[var(--surface-sunken)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs rounded px-2 py-1 focus:outline-none"
               >
                 <option value="surface">3D Response Surface</option>
                 <option value="contour">2D Contour Plot</option>
@@ -434,23 +434,23 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
 
           {/* Model Statistics & Equation Summary */}
           {results ? (
-            <div data-testid="doe-results-summary" className="p-4 border-b border-[#26262e] bg-[#16161e]">
+            <div data-testid="doe-results-summary" className="p-4 border-b border-[var(--border-default)] bg-[var(--surface-raised)]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-purple-400">
                   {results.modelType} Model Equation:
                 </span>
-                <span className="text-[11px] font-mono text-gray-400">
-                  R²: <strong className="text-white">{(results.rSquared ?? 0).toFixed(4)}</strong> |
-                  Adj R²: <strong className="text-white">{(results.adjustedRSquared ?? 0).toFixed(4)}</strong> |
-                  RMSE: <strong className="text-white">{(results.rmse ?? 0).toFixed(4)}</strong>
+                <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                  R²: <strong className="text-[var(--text-primary)]">{(results.rSquared ?? 0).toFixed(4)}</strong> |
+                  Adj R²: <strong className="text-[var(--text-primary)]">{(results.adjustedRSquared ?? 0).toFixed(4)}</strong> |
+                  RMSE: <strong className="text-[var(--text-primary)]">{(results.rmse ?? 0).toFixed(4)}</strong>
                 </span>
               </div>
-              <div data-testid="model-equation" className="p-2.5 bg-[#0e0e12] border border-[#2a2a34] rounded-lg font-mono text-xs text-amber-300 overflow-x-auto">
+              <div data-testid="model-equation" className="p-2.5 bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded-lg font-mono text-xs text-amber-400 overflow-x-auto">
                 {results.equation || 'No algebraic equation available.'}
               </div>
             </div>
           ) : (
-            <div data-testid="no-results-placeholder" className="p-4 text-center text-gray-500 text-xs italic bg-[#16161e] border-b border-[#26262e]">
+            <div data-testid="no-results-placeholder" className="p-4 text-center text-[var(--text-muted)] text-xs italic bg-[var(--surface-panel)] border-b border-[var(--border-default)]">
               No model calculated. Click "Analyze / Solve" to fit the {activeModel} model.
             </div>
           )}

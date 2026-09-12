@@ -216,7 +216,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
             onChange={(e) => setLabelDraft(e.target.value)}
             onBlur={handleCommitRename}
             onKeyDown={handleKeyDown}
-            className="bg-[#121217] border border-purple-500 text-purple-200 text-xs px-1.5 py-0.5 rounded outline-none text-center font-mono shadow-lg min-w-[80px]"
+            className="bg-[var(--surface-sunken)] border border-purple-500 text-purple-400 text-xs px-1.5 py-0.5 rounded outline-none text-center font-mono shadow-lg min-w-[80px]"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />

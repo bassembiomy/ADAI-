@@ -38,12 +38,12 @@
   - [x] Step 3: Create `src/styles/workspaces/doe.css` and theme tables, editors, validation states, and dialogs
   - [x] Step 4: Run DOE and SysML release checks (`npm run test:doe && npm run test:sysml:release`)
   - [x] Step 5: Commit `feat(ui): theme engineering editors and tables`
-- [ ] Task 7: Remove Legacy Overrides And Add Static Guardrails
-  - [ ] Step 1: Write literal-color guard script `scripts/check_theme_literals.cjs` and add `npm run lint:theme` in `package.json`
-  - [ ] Step 2: Run the guard and record remaining literals
-  - [ ] Step 3: Remove superseded global compatibility rules in `src/index.css`
-  - [ ] Step 4: Run theme guard and TypeScript (`npm run lint:theme && npx tsc --noEmit`)
-  - [ ] Step 5: Commit `test(ui): prevent dark-only theme regressions`
+- [x] Task 7: Remove Legacy Overrides And Add Static Guardrails
+  - [x] Step 1: Write literal-color guard script `scripts/check_theme_literals.cjs` and add `npm run lint:theme` in `package.json`
+  - [x] Step 2: Run the guard and record remaining literals
+  - [x] Step 3: Remove superseded global compatibility rules in `src/index.css`
+  - [x] Step 4: Run theme guard and TypeScript (`npm run lint:theme && npx tsc --noEmit`)
+  - [x] Step 5: Commit `test(ui): prevent dark-only theme regressions`
 - [ ] Task 8: Cross-Module Visual And Release Verification
   - [ ] Step 1: Add cross-module smoke test `tests/e2e/light-mode-visual.spec.ts`
   - [ ] Step 2: Run the visual smoke test and inspect diffs

@@ -2066,7 +2066,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
     return (
       <div 
         ref={nodeRef}
-        className={`relative rounded-md transition-all duration-500 border-2 p-3 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'}`}
+        className={`relative rounded-md transition-all duration-500 border-2 p-3 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[var(--border-strong)]'}`}
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
           if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
@@ -2122,7 +2122,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
   return (
     <div 
       ref={nodeRef}
-      className={`relative rounded-md transition-all duration-500 border-2 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      className={`relative rounded-md transition-all duration-500 border-2 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[var(--border-strong)]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={(e) => {
         if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
