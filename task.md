@@ -44,10 +44,10 @@
   - [x] Step 3: Remove superseded global compatibility rules in `src/index.css`
   - [x] Step 4: Run theme guard and TypeScript (`npm run lint:theme && npx tsc --noEmit`)
   - [x] Step 5: Commit `test(ui): prevent dark-only theme regressions`
-- [ ] Task 8: Cross-Module Visual And Release Verification
-  - [ ] Step 1: Add cross-module smoke test `tests/e2e/light-mode-visual.spec.ts`
-  - [ ] Step 2: Run the visual smoke test and inspect diffs
-  - [ ] Step 3: Fix visual defects and record audit in `docs/design-audits/light-mode-verification.md`
-  - [ ] Step 4: Run complete release gate (`npm run lint:theme`, tests, Playwright, `npm run build`)
-  - [ ] Step 5: Commit final evidence `test(ui): verify application-wide light mode`
-  - [ ] Step 6: Push and verify synchronization (`git push origin co-work`)
+- [x] Task 8: Cross-Module Visual And Release Verification
+  - [x] Step 1: Add cross-module smoke test `tests/e2e/light-mode-visual.spec.ts`
+  - [x] Step 2: Run the visual smoke test and inspect diffs
+  - [x] Step 3: Fix visual defects and record audit in `docs/design-audits/light-mode-verification.md`
+  - [x] Step 4: Run complete release gate (`npm run lint:theme`, tests, Playwright, `npm run build`)
+  - [x] Step 5: Commit final evidence `test(ui): verify application-wide light mode`
+  - [x] Step 6: Push and verify synchronization (`git push origin co-work`)

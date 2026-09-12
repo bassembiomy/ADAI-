@@ -651,12 +651,12 @@ const FloatingWindow = ({
         height: windowState.size.height,
         zIndex: windowState.zIndex,
       }}
-      className="bg-[#1a1a1a] border border-[#f97316] rounded-lg flex flex-col shadow-2xl overflow-hidden"
+      className="bg-[var(--surface-base)] border border-[var(--border-strong)] rounded-lg flex flex-col shadow-2xl overflow-hidden"
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
       <div
         style={{ userSelect: 'none' }}
-        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 shrink-0 ${
+        className={`h-8 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between px-3 shrink-0 ${
           isMobile || windowState.isMaximized ? '' : 'cursor-move'
         }`}
         onMouseDown={(e) => {
@@ -666,13 +666,13 @@ const FloatingWindow = ({
           setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
         }}
       >
-        <span className="text-xs font-bold text-[#f97316]">{windowState.title}</span>
+        <span className="text-xs font-bold text-orange-500">{windowState.title}</span>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
           {/* Minimize Button */}
           <button
             onClick={() => onUpdate(windowState.id, { isMinimized: !windowState.isMinimized })}
             title={windowState.isMinimized ? "Restore" : "Minimize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMinimized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -692,7 +692,7 @@ const FloatingWindow = ({
           <button
             onClick={() => onUpdate(windowState.id, { isMaximized: !windowState.isMaximized, isMinimized: false })}
             title={windowState.isMaximized ? "Restore Size" : "Maximize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMaximized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -710,7 +710,7 @@ const FloatingWindow = ({
           <button
             onClick={onClose}
             title="Close"
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-white hover:bg-red-600 transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-rose-600 transition-colors"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -2443,24 +2443,24 @@ const DoeWorkspace = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0a0a0c] text-[#e0e0e0] font-sans">
+    <div className="doe-workspace doe-panel flex flex-col h-full w-full bg-[var(--surface-base)] text-[var(--text-primary)] font-sans">
       {/* Top Control Bar */}
-      <div className="h-14 border-b border-[#222228] bg-[#111114] flex items-center justify-between px-5 gap-4 shrink-0">
+      <div className="h-14 border-b border-[var(--border-default)] bg-[var(--surface-raised)] flex items-center justify-between px-5 gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-400">
+            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-500">
               <Layers size={16} />
             </div>
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-white">DOE ANALYZER PRO</h2>
-              <span className="text-[10px] text-zinc-500 font-mono">Response Surface & Optimization</span>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">DOE ANALYZER PRO</h2>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">Response Surface & Optimization</span>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6 bg-[var(--border-default)]" />
 
           {/* Model Switcher Segment */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5">
+          <div className="flex bg-[var(--surface-panel)] rounded-lg border border-[var(--border-default)] p-0.5">
             {[
               { id: 'RSM', label: 'Run RSM', action: calculateRSM },
               { id: 'GMDH', label: 'Run GMDH', action: calculateGMDH },
@@ -2471,8 +2471,8 @@ const DoeWorkspace = ({
                 onClick={m.action}
                 className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   activeModel === m.id
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-raised)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-base)]'
                 }`}
               >
                 {m.label}
@@ -2485,7 +2485,7 @@ const DoeWorkspace = ({
               variant="outline"
               size="sm"
               onClick={() => setShowDesignBuilder(true)}
-              className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 whitespace-nowrap"
+              className="h-7 px-2.5 text-xs font-medium bg-[var(--surface-panel)] border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             >
               Create Taguchi Design
             </Button>
@@ -2493,39 +2493,39 @@ const DoeWorkspace = ({
         </div>
 
         {/* Top Actions Capsule */}
-        <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-1">
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
           <Button
             variant="ghost"
             size="sm"
             onClick={handleExportProject}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             title="Ctrl+S"
           >
-            <Save size={13} className="mr-1.5 text-zinc-400" /> Save
+            <Save size={13} className="mr-1.5 text-[var(--text-muted)]" /> Save
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <Upload size={13} className="mr-1.5 text-zinc-400" /> Upload Data
+            <Upload size={13} className="mr-1.5 text-[var(--text-muted)]" /> Upload Data
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={generateReport}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <FileText size={13} className="mr-1.5 text-zinc-400" /> Report
+            <FileText size={13} className="mr-1.5 text-[var(--text-muted)]" /> Report
           </Button>
-          <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+          <Separator orientation="vertical" className="h-4 bg-[var(--border-default)]" />
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-7 px-2 text-xs text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 whitespace-nowrap"
+            className="h-7 px-2 text-xs text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 whitespace-nowrap"
             title="Close DOE Analyzer"
           >
             <X size={14} className="mr-1" /> Close

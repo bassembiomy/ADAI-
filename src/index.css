@@ -1,13 +1,13 @@
 @import '@xyflow/react/dist/style.css';
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 @import './styles/theme-contract.css';
 @import './styles/workspaces/entropy.css';
 @import './styles/workspaces/hil.css';
 @import './styles/workspaces/xbridges.css';
 @import './styles/workspaces/vlab.css';
 @import './styles/workspaces/doe.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   color-scheme: dark;
