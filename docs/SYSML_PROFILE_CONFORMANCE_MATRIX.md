@@ -42,9 +42,11 @@ SysML v2 semantic equivalence: unsupported; requires a separate versioned adapte
 
 ## Current automated qualification
 
-- `npm run test:sysml`: 162 unit & integration tests passing.
-- `npm run test:sysml:release`: 162 SysML tests, 73 reporting tests, and full TypeScript check passing with zero errors.
-- `npm run test:e2e:sysml`: Playwright real-browser end-to-end qualification across BDD, IBD, Requirements, RTM, and deletion lifecycle passing.
+- `npm run test:sysml`: 357 unit & integration tests passing (39 files).
+- `npm run test:sysml:release`: SysML suite plus reporting qualification and full TypeScript check passing with zero errors.
+- `npm run test:opm:qualification`: 41 runtime-conformance and generator-boundary tests passing.
+- `npm run test:opm:codegen`: 14 host-compilation, golden-execution, and mutation-resistance tests passing (requires the pinned C compiler).
+- `npm run test:e2e:sysml`: Playwright real-browser end-to-end qualification across BDD, IBD, Requirements, RTM, and deletion lifecycle passing (22 passed, 1 skipped).
 - Production `npm run build`: cleanly passes bundle generation.
 
 The machine-readable registry is `src/engine/sysml/profile.ts` and `src/engine/sysml/conformanceManifest.ts`. Every supported row maps to canonical types, fail-closed validation, user interface components, and automated test evidence.

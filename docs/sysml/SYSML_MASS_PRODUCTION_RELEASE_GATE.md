@@ -111,9 +111,25 @@ data-model rollbacks follow the authorized-baseline path, never silent repair.
 ## 6. Reproduce
 
 ```powershell
-$env:PATH = "C:\Users\EL-Dawlia\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:PATH
+# Prefix PATH with a Node 24 runtime (example: a codex-managed Node bin dir).
+# Replace <node-bin-dir> with the Node 24 `bin` directory on your machine, e.g.
+# "C:\Users\<you>\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin".
+$env:PATH = "<node-bin-dir>;" + $env:PATH
 npm run test:sysml:release-gate   # release-gate test + manifest test
 npx tsc --noEmit                  # type gate
 npm run test:sysml:full-release   # full qualification (unit+integration+e2e+build)
 git diff --check                  # hygiene
 ```
+
+Toolchain note: step 1 of `npm run test:sysml:full-release` requires the
+pinned vendor compiler at `toolchains/w64devkit/w64devkit/bin/gcc.exe`
+(SHA-256 verified by `scripts/verify_sysml_release.ts`; `toolchains/` is
+gitignored). Provision it from the pinned archive
+`https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip`
+(extract so the `w64devkit/bin/gcc.exe` layout lands under
+`toolchains/w64devkit/`), as CI does in
+`.github/workflows/sysml-mass-production-gate.yml`. If provisioning is
+impractical, re-run with `$env:ADIA_SYSML_TOOLCHAIN_WAIVER = "1"`: the gate
+records an explicit `[SYSML-RELEASE-WAIVER]` warning and continues, with
+downstream OPM compilation gates still failing closed when no C compiler
+resolves. A waived run is not a fully pinned qualification.

@@ -351,6 +351,15 @@ export type ReleaseEvidenceTier = 'unit' | 'integration' | 'browser' | 'persiste
 
 export const RELEASE_EVIDENCE_TIERS: ReleaseEvidenceTier[] = ['unit', 'integration', 'browser', 'persistence'];
 
+// NOTE: tier classification trusts file-naming/path conventions — it inspects
+// the evidence *path*, never file contents. A path is credited for a tier when
+// it matches that tier's established prefix/pattern (see branches below), and a
+// single path may credit multiple tiers. Consequence for maintainers: new
+// evidence files MUST live under the conventional locations
+// (src/engine|components for unit, src/services|features or the named harness
+// patterns for integration, tests/e2e for browser, persistence/large-model/
+// snapshot/traceability/worker patterns for persistence) or the release gate
+// will report the row as missing that tier even if the test content covers it.
 export function classifyAutomatedEvidence(evidencePath: string): ReleaseEvidenceTier[] {
   const tiers: ReleaseEvidenceTier[] = [];
   const p = evidencePath.replace(/\\/g, '/');
@@ -438,9 +447,11 @@ export function generateConformanceMatrixMarkdown(manifest: ConformanceManifest 
   lines.push('');
   lines.push('## Current automated qualification');
   lines.push('');
-  lines.push('- `npm run test:sysml`: 162 unit & integration tests passing.');
-  lines.push('- `npm run test:sysml:release`: 162 SysML tests, 73 reporting tests, and full TypeScript check passing with zero errors.');
-  lines.push('- `npm run test:e2e:sysml`: Playwright real-browser end-to-end qualification across BDD, IBD, Requirements, RTM, and deletion lifecycle passing.');
+  lines.push('- `npm run test:sysml`: 357 unit & integration tests passing (39 files).');
+  lines.push('- `npm run test:sysml:release`: SysML suite plus reporting qualification and full TypeScript check passing with zero errors.');
+  lines.push('- `npm run test:opm:qualification`: 41 runtime-conformance and generator-boundary tests passing.');
+  lines.push('- `npm run test:opm:codegen`: 14 host-compilation, golden-execution, and mutation-resistance tests passing (requires the pinned C compiler).');
+  lines.push('- `npm run test:e2e:sysml`: Playwright real-browser end-to-end qualification across BDD, IBD, Requirements, RTM, and deletion lifecycle passing (22 passed, 1 skipped).');
   lines.push('- Production `npm run build`: cleanly passes bundle generation.');
   lines.push('');
   lines.push('The machine-readable registry is `src/engine/sysml/profile.ts` and `src/engine/sysml/conformanceManifest.ts`. Every supported row maps to canonical types, fail-closed validation, user interface components, and automated test evidence.');

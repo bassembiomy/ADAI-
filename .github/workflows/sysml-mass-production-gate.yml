@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   mass-production-gate:
-    runs-on: ubuntu-latest
+    # Must run on Windows: the release gate pins the Windows vendor compiler
+    # toolchains/w64devkit/w64devkit/bin/gcc.exe (SHA-256 verified by
+    # scripts/verify_sysml_release.ts step 1), and the OPM host-compilation
+    # gates resolve the bundled compiler on win32.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,8 +23,18 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Provision pinned w64devkit toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'w64devkit-1.23.0.zip'
+          Invoke-WebRequest -Uri 'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip' -OutFile $zip
+          $dest = Join-Path $PWD 'toolchains/w64devkit'
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force
+          & (Join-Path $dest 'w64devkit/bin/gcc.exe') --version
       - name: Install Playwright chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Workspace hygiene
         run: git diff --check
       - name: SysML full release qualification
