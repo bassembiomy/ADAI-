@@ -1,5 +1,6 @@
 import React from 'react';
 import type { BlockDefinition, PropertyDefinition, PortDefinition, SysmlDefinition } from '../../engine/sysml/model';
+import type { SysmlDiagnostic } from '../../engine/sysml/validation';
 
 export interface BlockFeatureEditorProps {
   block: BlockDefinition;
@@ -14,10 +15,25 @@ export interface BlockFeatureEditorProps {
     annotatedOperations?: Array<{ name: string; originId: string; originName: string; isInherited: boolean }>;
     annotatedConstraints?: Array<{ expression: string; originId: string; originName: string; isInherited: boolean }>;
   };
+  parentChain?: Array<{ id: string; name: string }>;
+  diagnostics?: SysmlDiagnostic[];
+  maxVisibleInherited?: number;
   onChange: (block: BlockDefinition) => void;
   onRedefine?: (property: PropertyDefinition) => void;
   onSubset?: (property: PropertyDefinition) => void;
 }
+
+// Canonical inheritance/governance codes surfaced in the inheritance panel
+// (OMG SysML 1.6 ADIA profile; mirrors policy.ts + bdd.ts resolveInheritedFeatures).
+const INHERITANCE_PANEL_CODES = new Set([
+  'INHERITANCE_CYCLE',
+  'LEAF_SPECIALIZATION',
+  'ABSTRACT_INSTANTIATION',
+  'MISSING_SUPERTYPE',
+]);
+
+// Deterministic capped render for large inherited-feature lists.
+const DEFAULT_MAX_VISIBLE_INHERITED = 50;
 
 const PROPERTY_KINDS: NonNullable<PropertyDefinition['kind']>[] = ['value', 'part', 'reference', 'flow'];
 const PORT_KINDS: NonNullable<PortDefinition['kind']>[] = ['proxy', 'full'];
@@ -27,6 +43,9 @@ export function BlockFeatureEditor({
   block,
   definitions,
   inheritedFeatures,
+  parentChain,
+  diagnostics = [],
+  maxVisibleInherited = DEFAULT_MAX_VISIBLE_INHERITED,
   onChange,
   onRedefine,
   onSubset,
@@ -113,6 +132,32 @@ export function BlockFeatureEditor({
 
   const defOptions = Object.values(definitions);
   const inheritedProps = inheritedFeatures?.properties ?? [];
+
+  // Prefer bdd resolveInheritedFeatures annotated origin fields; fall back to
+  // the plain inherited list with its inheritedFromId marker. Deterministic
+  // ordering (name, then id) matches policy resolveInheritance stability.
+  const annotatedSource = inheritedFeatures?.annotatedProperties
+    ?? inheritedProps.map(ip => ({
+      ...ip,
+      originId: ip.inheritedFromId ?? 'Base',
+      originName: ip.inheritedFromId ?? 'Base',
+      isInherited: true,
+    }));
+  const sortedInherited = [...annotatedSource].sort(
+    (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+  );
+  const visibleInherited = sortedInherited.slice(0, maxVisibleInherited);
+  const hiddenInheritedCount = sortedInherited.length - visibleInherited.length;
+
+  const inheritancePanelDiagnostics = diagnostics.filter(d => INHERITANCE_PANEL_CODES.has(d.code));
+  const abstractGuidance = block.isAbstract
+    ? `Block ${block.name} is abstract and cannot be directly instantiated; specialize it with a concrete subtype`
+    : undefined;
+  const hasInheritanceSignal = (parentChain ?? []).length > 0
+    || inheritancePanelDiagnostics.length > 0
+    || abstractGuidance !== undefined;
+
+  const diagnosticsFor = (elementId: string) => diagnostics.filter(d => d.elementId === elementId);
 
   return (
     <div className="space-y-4" aria-label="Block Feature Inspector">
@@ -273,6 +318,16 @@ export function BlockFeatureEditor({
             >
               Remove property
             </button>
+            {diagnosticsFor(prop.id).length > 0 && (
+              <div role="alert" className="space-y-1 rounded border border-red-700 bg-red-950/40 p-1.5 text-red-300">
+                {diagnosticsFor(prop.id).map((d, i) => (
+                  <div key={i} className="flex items-start gap-1">
+                    <span className="font-semibold text-red-400">[{d.code}]</span>
+                    <span>{d.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </fieldset>
         ))}
       </div>
@@ -367,22 +422,75 @@ export function BlockFeatureEditor({
             >
               Remove port
             </button>
+            {diagnosticsFor(port.id).length > 0 && (
+              <div role="alert" className="space-y-1 rounded border border-red-700 bg-red-950/40 p-1.5 text-red-300">
+                {diagnosticsFor(port.id).map((d, i) => (
+                  <div key={i} className="flex items-start gap-1">
+                    <span className="font-semibold text-red-400">[{d.code}]</span>
+                    <span>{d.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </fieldset>
         ))}
       </div>
 
-      {/* Inherited Features Section */}
-      {inheritedProps.length > 0 && (
-        <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs">
-          <h4 className="font-semibold uppercase text-gray-400">Inherited Features</h4>
-          {inheritedProps.map(ip => {
-            const origin = ip.inheritedFromId || 'Base';
-            return (
-              <div key={ip.id} className="flex items-center justify-between border-b border-gray-800 py-1">
+      {/* Inheritance Panel: parent chain, cycle/leaf diagnostics, abstract guidance */}
+      <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs" aria-label="Inheritance panel">
+        <h4 className="font-semibold uppercase text-gray-400">Inheritance panel</h4>
+        <div aria-label="Parent chain" className="text-gray-300">
+          {(parentChain ?? []).length > 0
+            ? parentChain!.map(ancestor => ancestor.name).join(' → ')
+            : 'No supertypes — root block'}
+        </div>
+        {abstractGuidance !== undefined && (
+          <div role="alert" className="flex items-start gap-1 text-amber-300">
+            <span className="font-semibold text-amber-400">[ABSTRACT_INSTANTIATION]</span>
+            <span>{abstractGuidance}</span>
+          </div>
+        )}
+        {inheritancePanelDiagnostics.length > 0 && (
+          <div role="alert" aria-label="Inheritance diagnostics" className="space-y-1 text-red-300">
+            {inheritancePanelDiagnostics.map((d, i) => (
+              <div key={i} className="flex items-start gap-1">
+                <span className="font-semibold text-red-400">[{d.code}]</span>
+                <span>{d.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {!hasInheritanceSignal && (
+          <div className="text-gray-500">No inheritance issues detected</div>
+        )}
+      </div>
+
+      {/* Inherited Features Section: read-only rows with annotated origin */}
+      <div className="space-y-2 rounded border border-gray-800 bg-[#141414] p-2 text-xs">
+        <h4 className="font-semibold uppercase text-gray-400">Inherited Features</h4>
+        {sortedInherited.length === 0 ? (
+          <div className="text-gray-500">No inherited features to display</div>
+        ) : (
+          <div role="list" aria-label="Inherited features">
+            {visibleInherited.map(ip => (
+              <div
+                key={ip.id}
+                role="listitem"
+                aria-readonly="true"
+                tabIndex={0}
+                aria-label={`Inherited feature ${ip.name} from ${ip.originName}`}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleRedefine(ip);
+                  }
+                }}
+                className="flex items-center justify-between border-b border-gray-800 py-1"
+              >
                 <div>
                   <span className="font-mono text-gray-300">{ip.name}</span>
                   <span className="text-gray-500"> : {ip.typeId} [{ip.kind}]</span>
-                  <div className="text-[10px] text-gray-500">Inherited from {origin}</div>
+                  <div className="text-[10px] text-gray-500">Inherited from {ip.originName} ({ip.originId})</div>
                 </div>
                 <div className="flex gap-1">
                   <button
@@ -401,10 +509,15 @@ export function BlockFeatureEditor({
                   </button>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+            {hiddenInheritedCount > 0 && (
+              <div className="pt-1 text-gray-500">
+                + {hiddenInheritedCount} more inherited features ({sortedInherited.length} total)
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

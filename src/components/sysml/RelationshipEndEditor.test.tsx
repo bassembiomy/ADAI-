@@ -96,5 +96,53 @@ describe('RelationshipEndEditor', () => {
 
     expect(htmlDisabled).toMatch(/value="requirementContainment"[^>]*disabled/);
   });
+
+  it('renders generalization inheritance guidance with parent chain, leaf/cycle diagnostics, and abstract guidance', () => {
+    const generalization: SysmlRelationship = {
+      id: 'gen1',
+      kind: 'generalization',
+      sourceId: 'child',
+      targetId: 'parent',
+    };
+    const html = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={generalization}
+        diagnostics={[
+          { code: 'LEAF_SPECIALIZATION', severity: 'error', elementId: 'gen1', propertyPath: 'supertypeIds', message: 'Leaf block parent cannot be specialized' },
+          { code: 'INHERITANCE_CYCLE', severity: 'error', elementId: 'gen1', propertyPath: 'supertypeIds', message: 'Inheritance cycle includes child' },
+        ]}
+        generalizationInfo={{
+          parentChain: [{ id: 'grandparent', name: 'Grandparent' }, { id: 'parent', name: 'Parent' }],
+          targetIsAbstract: true,
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Inheritance guidance');
+    expect(html).toContain('Grandparent');
+    expect(html).toContain('Parent');
+    expect(html).toContain('[LEAF_SPECIALIZATION]');
+    expect(html).toContain('[INHERITANCE_CYCLE]');
+    expect(html).toContain('[ABSTRACT_INSTANTIATION]');
+  });
+
+  it('announces an empty state when a generalization has no inheritance issues', () => {
+    const generalization: SysmlRelationship = {
+      id: 'gen2',
+      kind: 'generalization',
+      sourceId: 'child',
+      targetId: 'parent',
+    };
+    const html = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={generalization}
+        diagnostics={[]}
+        generalizationInfo={{ parentChain: [{ id: 'parent', name: 'Parent' }] }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(html).toContain('No inheritance issues detected');
+  });
 });
 

@@ -2,21 +2,39 @@ import React from 'react';
 import type { Multiplicity, SysmlRelationship } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
 
+export interface GeneralizationInfo {
+  parentChain?: Array<{ id: string; name: string }>;
+  targetIsLeaf?: boolean;
+  targetIsAbstract?: boolean;
+  cycleDetected?: boolean;
+}
+
 export interface RelationshipEndEditorProps {
   relationship: SysmlRelationship;
   diagnostics?: SysmlDiagnostic[];
   sourceIsRequirement?: boolean;
   targetIsRequirement?: boolean;
+  generalizationInfo?: GeneralizationInfo;
   onChange: (relationship: SysmlRelationship) => void;
 }
 
 const AGGREGATION_KINDS: NonNullable<SysmlRelationship['sourceAggregation']>[] = ['none', 'shared', 'composite'];
+
+// Canonical inheritance/governance codes surfaced in the guidance panel
+// (OMG SysML 1.6 ADIA profile; mirrors policy.ts resolveInheritance).
+const INHERITANCE_GUIDANCE_CODES = new Set([
+  'INHERITANCE_CYCLE',
+  'LEAF_SPECIALIZATION',
+  'ABSTRACT_INSTANTIATION',
+  'MISSING_SUPERTYPE',
+]);
 
 export function RelationshipEndEditor({
   relationship,
   diagnostics = [],
   sourceIsRequirement = false,
   targetIsRequirement = false,
+  generalizationInfo,
   onChange,
 }: RelationshipEndEditorProps) {
   const update = (patch: Partial<SysmlRelationship>) => {
@@ -41,6 +59,30 @@ export function RelationshipEndEditor({
   );
 
   const isContainment = relationship.kind === 'requirementContainment';
+  const isGeneralization = relationship.kind === 'generalization';
+
+  const inheritanceDiagnostics = diagnostics.filter(d => INHERITANCE_GUIDANCE_CODES.has(d.code));
+  const derivedGuidance: Array<{ code: string; message: string }> = [];
+  if (generalizationInfo?.targetIsLeaf) {
+    derivedGuidance.push({
+      code: 'LEAF_SPECIALIZATION',
+      message: `Target ${relationship.targetId} is a leaf block and cannot be specialized`,
+    });
+  }
+  if (generalizationInfo?.cycleDetected) {
+    derivedGuidance.push({
+      code: 'INHERITANCE_CYCLE',
+      message: `Inheritance cycle detected involving ${relationship.sourceId}`,
+    });
+  }
+  if (generalizationInfo?.targetIsAbstract) {
+    derivedGuidance.push({
+      code: 'ABSTRACT_INSTANTIATION',
+      message: `Target ${relationship.targetId} is abstract and cannot be directly instantiated; specialize it with a concrete subtype`,
+    });
+  }
+  const generalizationChain = generalizationInfo?.parentChain ?? [];
+  const hasInheritanceIssues = inheritanceDiagnostics.length > 0 || derivedGuidance.length > 0;
 
   return (
     <div className="space-y-4 text-xs" aria-label="Relationship End Editor">
@@ -82,6 +124,37 @@ export function RelationshipEndEditor({
               <span>{d.message}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Generalization inheritance guidance */}
+      {isGeneralization && (
+        <div className="space-y-2 rounded border border-gray-700 bg-[#141414] p-2" aria-label="Inheritance guidance">
+          <h4 className="font-semibold uppercase text-gray-400">Inheritance guidance</h4>
+          {generalizationChain.length > 0 && (
+            <div aria-label="Parent chain" className="text-gray-300">
+              {generalizationChain.map(ancestor => ancestor.name).join(' → ')}
+            </div>
+          )}
+          {inheritanceDiagnostics.length > 0 && (
+            <div role="alert" aria-label="Inheritance diagnostics" className="space-y-1 text-red-300">
+              {inheritanceDiagnostics.map((d, i) => (
+                <div key={i} className="flex items-start gap-1">
+                  <span className="font-semibold text-red-400">[{d.code}]</span>
+                  <span>{d.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {derivedGuidance.map((g, i) => (
+            <div key={i} role="alert" className="flex items-start gap-1 text-amber-300">
+              <span className="font-semibold text-amber-400">[{g.code}]</span>
+              <span>{g.message}</span>
+            </div>
+          ))}
+          {!hasInheritanceIssues && (
+            <div className="text-gray-500">No inheritance issues detected</div>
+          )}
         </div>
       )}
 
