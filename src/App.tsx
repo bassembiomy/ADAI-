@@ -9586,11 +9586,18 @@ const ADIA = () => {
   }, [relationships, blocks, parts, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
-    setRelationships(prev => prev.filter(r => r.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setRelationships(transaction.model.relationships);
+    setBlocks(transaction.model.blocks);
+    setParts(transaction.model.parts);
+    setConnectors(transaction.model.connectors);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', 'Deleted relationship');
-  }, [addError, addToHistory]);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
@@ -9851,11 +9858,18 @@ const ADIA = () => {
   }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
 
   const deleteConnector = useCallback((id: string) => {
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
-    setConnectors(prev => prev.filter(c => c.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    setConnectors(transaction.model.connectors);
+    setRelationships(transaction.model.relationships);
+    setBlocks(transaction.model.blocks);
+    setParts(transaction.model.parts);
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', 'Deleted connector');
-  }, [addError, addToHistory]);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
     const current = connectors.find(connector => connector.id === id);

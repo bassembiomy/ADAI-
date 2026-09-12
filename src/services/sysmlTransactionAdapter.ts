@@ -19,6 +19,31 @@ export interface LegacySysmlDeletionResult {
   impact: MutationImpact;
 }
 
+/**
+ * Projects a legacy editor model into a canonical repository while honoring
+ * the legacy ownership semantics carried by {@link PartData.aggregation}.
+ * The canonical projection defaults every usage to composite; an explicit
+ * legacy shared/reference marker narrows that projection so the central
+ * policy (composite-only cascade, unresolved impacts) sees the same
+ * ownership the editor drew. Parts without a marker keep the legacy
+ * composite default, preserving existing models byte-for-byte.
+ */
+function projectLegacyRepository(model: LegacySysmlModel): SysmlRepository {
+  const repository = loadRepository({
+    blocks: model.blocks,
+    relationships: model.relationships,
+    parts: model.parts,
+    connectors: model.connectors,
+  }).repository;
+  for (const part of model.parts) {
+    const usage = repository.usages[part.id];
+    if (usage && usage.kind === 'part' && (part.aggregation === 'shared' || part.aggregation === 'reference')) {
+      usage.aggregation = part.aggregation;
+    }
+  }
+  return repository;
+}
+
 function isRecordShallowEqual<T extends Record<string, any>>(
   a: Record<string, T>,
   b: Record<string, T>,
@@ -133,23 +158,34 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
 }
 
 export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: readonly string[]): LegacySysmlDeletionResult {
-  const repository = loadRepository({
-    blocks: model.blocks,
-    relationships: model.relationships,
-    parts: model.parts,
-    connectors: model.connectors,
-  }).repository;
+  const repository = projectLegacyRepository(model);
+  const requested = [...new Set(elementIds)];
+  // Legacy BDD editor semantics (adapter-owned): deleting a block definition
+  // deletes its composite-owned typed usages with it — they are drawn as
+  // owned parts of the definition's whole. Shared/reference usages are never
+  // implicit children; the canonical policy below reports them as unresolved
+  // impacts. The expansion only adds explicit targets; the closure itself is
+  // still driven by analyzeMutation through the central policy.
+  const deletedDefinitions = new Set(requested.filter(id => repository.definitions[id]));
+  const expanded = [...requested];
+  if (deletedDefinitions.size > 0) {
+    for (const [usageId, usage] of Object.entries(repository.usages)) {
+      if (usage.kind === 'part' && usage.aggregation === 'composite' && deletedDefinitions.has(usage.typeId) && !expanded.includes(usageId)) {
+        expanded.push(usageId);
+      }
+    }
+  }
   // Policy boundary: classify every requested target through the central
   // deletion policy before running the atomic transaction, so unresolved
   // (non-composite) impacts are explicit even when the closure itself is
   // driven by analyzeMutation.
   const policyUnresolved = new Set<string>();
-  for (const id of new Set(elementIds)) {
+  for (const id of new Set(expanded)) {
     for (const unresolvedId of classifyDeletionTarget(repository, id).unresolvedUsageIds) {
       policyUnresolved.add(unresolvedId);
     }
   }
-  const transaction = applyCommand(repository, { kind: 'deleteElements', elementIds: [...new Set(elementIds)] });
+  const transaction = applyCommand(repository, { kind: 'deleteElements', elementIds: expanded });
   const deleted = new Set(transaction.impact.deletedElementIds);
 
   // Legacy connectors are projected incompletely because their ports are
@@ -180,6 +216,7 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
   };
   const impact: MutationImpact = {
     ...transaction.impact,
+    requestedElementIds: [...requested].sort(),
     deletedElementIds: [...deleted].sort(),
     removedRelationshipIds: [...new Set([
       ...transaction.impact.removedRelationshipIds,
@@ -202,13 +239,7 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
  * deletion policy (composite-only cascade, unresolved impacts).
  */
 export function classifyLegacyDeletionTarget(model: LegacySysmlModel, elementId: string): DeletionDecision {
-  const repository = loadRepository({
-    blocks: model.blocks,
-    relationships: model.relationships,
-    parts: model.parts,
-    connectors: model.connectors,
-  }).repository;
-  return classifyDeletionTarget(repository, elementId);
+  return classifyDeletionTarget(projectLegacyRepository(model), elementId);
 }
 
 /**

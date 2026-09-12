@@ -84,6 +84,13 @@ export interface PartData {
   name: string;
   blockId: string | null;
   typeId?: string | null;
+  /**
+   * Ownership semantics of this typed usage (OMG SysML 1.6 / UML).
+   * Composite usages are lifetime-owned by their whole and cascade on
+   * deletion; shared/reference usages never cascade implicitly and surface
+   * as unresolved impacts instead. Absent means composite (legacy default).
+   */
+  aggregation?: 'composite' | 'shared' | 'reference';
   x: number;
   y: number;
   width: number;
