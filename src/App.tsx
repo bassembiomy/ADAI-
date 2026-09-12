@@ -115,6 +115,7 @@ import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { validateAssociationEnds } from './engine/sysml/bdd';
@@ -14258,8 +14259,7 @@ const ADIA = () => {
 
       const isSelected = selectedIds.includes(block.id);
 
-      const displayWidth = block.width || 150;
-      const displayHeight = block.height || 100;
+      const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
 
       return (
         <g
@@ -14439,10 +14439,12 @@ const ADIA = () => {
         if (!isBlockVisible(source) || !isBlockVisible(target)) return null;
       }
 
-      const srcW = source.width || 150;
-      const srcH = source.height || 100;
-      const tgtW = target.width || 150;
-      const tgtH = target.height || 100;
+      const sourceBounds = computeBlockDisplayBounds(source);
+      const targetBounds = computeBlockDisplayBounds(target);
+      const srcW = sourceBounds.width;
+      const srcH = sourceBounds.height;
+      const tgtW = targetBounds.width;
+      const tgtH = targetBounds.height;
 
       const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
       const group = pairGroups.get(pairKey) || [rel.id];
