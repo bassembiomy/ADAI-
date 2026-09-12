@@ -112,6 +112,15 @@ describe('VLabWorkspace Solver Configuration Inspector', () => {
       const src = fs.readFileSync('src/components/vlab/VLabWorkspace.tsx', 'utf8');
       expect(src).toMatch(/className=.*vlab-workspace/);
     });
+
+    it('uses semantic surfaces for the V-Lab shell instead of hard-coded dark shell colors', async () => {
+      const fs = await import('node:fs');
+      const src = fs.readFileSync('src/components/vlab/VLabWorkspace.tsx', 'utf8');
+      expect(src).toMatch(/className="vlab-workspace[^\"]*bg-\[var\(--surface-canvas\)\]/);
+      expect(src).not.toMatch(/vlab-workspace[^\n]*bg-\[#050505\]/);
+      expect(src).not.toMatch(/\$\{isLibCollapsed[^\n]*bg-\[#0d0d0d\]/);
+      expect(src).not.toMatch(/\$\{isPropsCollapsed[^\n]*bg-\[#0d0d0d\]/);
+    });
   });
 });
 

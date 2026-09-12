@@ -2740,9 +2740,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   return (
-    <div id="vlab-workspace-container" className="vlab-workspace flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
+    <div id="vlab-workspace-container" className="vlab-workspace flex h-full w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] overflow-hidden">
       {/* Top Bar */}
-      <div className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[#0d0d0d] border-b border-[#222] flex items-center justify-between px-4 z-10">
+      <div className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center justify-between px-4 z-10">
         <div className="flex items-center gap-4">
           <button
             onClick={onBack}
@@ -2832,7 +2832,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
       <div className="flex flex-1 mt-12 overflow-hidden">
         {/* Left Sidebar: Block Library / Learning Labs */}
-        <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#0d0d0d] border-r border-[#222] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+        <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} vlab-panel border-r border-[var(--border-default)] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
           {/* Header */}
           <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
             {!isLibCollapsed && (
@@ -3267,7 +3267,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Right Sidebar: Properties & Equations */}
-        <div className={`${isPropsCollapsed ? 'w-12' : 'w-80'} bg-[#0d0d0d] border-l border-[#222] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+        <div className={`${isPropsCollapsed ? 'w-12' : 'w-80'} vlab-panel border-l border-[var(--border-default)] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
           {/* Header */}
           <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
             {!isPropsCollapsed && (

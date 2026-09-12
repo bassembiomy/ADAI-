@@ -57,3 +57,31 @@
   background-color: var(--surface-panel);
   border-color: var(--border-default);
 }
+
+/* V-Lab still contains legacy dark utility classes in its dense inspector UI.
+   Keep those classes for dark mode, but remap their surfaces when the app is light. */
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#0d0d0d"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#111"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#141414"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#151515"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#181818"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#1a1a1a"],
+.light .vlab-workspace [class*="bg-[#0d0d0d"],
+.light .vlab-workspace [class*="bg-[#111"],
+.light .vlab-workspace [class*="bg-[#141414"],
+.light .vlab-workspace [class*="bg-[#151515"],
+.light .vlab-workspace [class*="bg-[#181818"],
+.light .vlab-workspace [class*="bg-[#1a1a1a"] {
+  background-color: var(--surface-panel) !important;
+  color: var(--text-primary);
+  border-color: var(--border-default) !important;
+}
+
+:root[data-theme="light"] .vlab-workspace [class*="border-[#222"],
+:root[data-theme="light"] .vlab-workspace [class*="border-[#2d2d2d"],
+:root[data-theme="light"] .vlab-workspace [class*="border-[#333"],
+.light .vlab-workspace [class*="border-[#222"],
+.light .vlab-workspace [class*="border-[#2d2d2d"],
+.light .vlab-workspace [class*="border-[#333"] {
+  border-color: var(--border-default) !important;
+}

@@ -9,7 +9,9 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme="dark"],
+:root.dark {
   color-scheme: dark;
   --bg-main: #181818;
   --bg-main-rgb: 24, 24, 24;
@@ -47,7 +49,8 @@
   --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
 }
 
-[data-theme="light"], .light {
+:root[data-theme="light"],
+:root.light {
   color-scheme: light;
   --bg-main: #eef3f5;
   --bg-main-rgb: 238, 243, 245;
