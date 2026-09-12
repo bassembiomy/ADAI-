@@ -13863,8 +13863,8 @@ const ADIA = () => {
             width={state.width}
             height={state.height}
             rx={8}
-            fill={state.isActive ? '#2a2a2a' : '#1a1a1a'}
-            stroke={isSelected ? state.color : '#444'}
+            fill={state.isActive ? 'var(--sysml-state-active-fill)' : 'var(--sysml-state-fill)'}
+            stroke={isSelected ? state.color : 'var(--sysml-state-stroke)'}
             strokeWidth={isSelected ? 2 : 1}
           />
 
@@ -13910,7 +13910,7 @@ const ADIA = () => {
             x={8}
             y={17}
             textAnchor="start"
-            fill="#888"
+            fill="var(--sysml-state-subtext)"
             fontSize={9}
             fontFamily="Inter, sans-serif"
           >
@@ -13942,7 +13942,7 @@ const ADIA = () => {
               x={state.width - 8}
               y={state.height - 8}
               textAnchor="end"
-              fill="#888"
+              fill="var(--sysml-state-subtext)"
               fontSize={8}
               fontFamily="Inter, sans-serif"
             >
@@ -13953,9 +13953,9 @@ const ADIA = () => {
           {/* Graphical Representation of Internal Transitions */}
           {state.internalTransitions && (
             <g transform={`translate(8, ${state.height - 15 - (state.internalTransitions.split('\n').length * 10)})`}>
-              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="#444" strokeWidth={1} />
+              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="var(--sysml-block-divider)" strokeWidth={1} />
               {state.internalTransitions.split('\n').slice(0, 3).map((line, i) => (
-                <text key={i} y={i * 10} fill="#aaa" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
+                <text key={i} y={i * 10} fill="var(--sysml-state-subtext)" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
               ))}
             </g>
           )}

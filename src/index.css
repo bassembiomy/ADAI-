@@ -33,6 +33,10 @@
   --sysml-port-fill: #333333;
   --sysml-port-label: #aaaaaa;
   --sysml-relation-cutout: #1a1a1a;
+  --sysml-state-fill: #1a1a1a;
+  --sysml-state-active-fill: #2a2a2a;
+  --sysml-state-stroke: #444444;
+  --sysml-state-subtext: #888888;
   --scrollbar-thumb: rgba(201, 168, 108, 0.5);
   --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
 }
@@ -67,6 +71,10 @@
   --sysml-port-fill: #e7eff1;
   --sysml-port-label: #405661;
   --sysml-relation-cutout: #f6fafb;
+  --sysml-state-fill: #ffffff;
+  --sysml-state-active-fill: #e7f3f1;
+  --sysml-state-stroke: #75919a;
+  --sysml-state-subtext: #536b74;
   --scrollbar-thumb: rgba(8, 127, 115, 0.38);
   --scrollbar-thumb-hover: rgba(8, 127, 115, 0.68);
 }
