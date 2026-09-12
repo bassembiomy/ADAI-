@@ -2,25 +2,61 @@ import React from 'react';
 import type { ConnectorUsage, SysmlDefinition } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
 
+export interface IbdConnectorPortDetail {
+  id: string;
+  name: string;
+  ownerName?: string;
+  direction?: 'in' | 'out' | 'inout';
+  isConjugated?: boolean;
+  typeName?: string;
+}
+
 export interface IbdConnectorEditorProps {
   connector: ConnectorUsage;
   availablePorts: Array<{ id: string; name: string; ownerName?: string }>;
   definitions: Record<string, SysmlDefinition>;
   diagnostics?: SysmlDiagnostic[];
+  /** Owning block context name shown so connectors stay visibly context-bound. */
+  ownerName?: string;
+  /** Effective endpoint direction/typing/conjugation details (optional). */
+  portDetails?: IbdConnectorPortDetail[];
   onChange: (connector: ConnectorUsage) => void;
 }
 
 const CONNECTOR_KINDS: NonNullable<ConnectorUsage['kind']>[] = ['assembly', 'delegation', 'binding'];
+
+/** IBD-only connector notation, disjoint from BDD relation notation. */
+export function ibdConnectorNotationFor(kind: ConnectorUsage['kind']): string {
+  if (kind === 'delegation') return 'delegation-solid';
+  if (kind === 'binding') return 'binding-dashed';
+  return 'assembly-solid';
+}
 
 export function IbdConnectorEditor({
   connector,
   availablePorts,
   definitions,
   diagnostics = [],
+  ownerName,
+  portDetails = [],
   onChange,
 }: IbdConnectorEditorProps) {
   const update = (patch: Partial<ConnectorUsage>) => {
     onChange({ ...connector, ...patch });
+  };
+
+  const notation = ibdConnectorNotationFor(connector.kind);
+  const detailById = new Map(portDetails.map(detail => [detail.id, detail]));
+  const endpointLine = (portId: string): string | undefined => {
+    const detail = detailById.get(portId);
+    if (!detail) return undefined;
+    const segments = [
+      detail.ownerName ? `${detail.ownerName}.${detail.name}` : detail.name,
+      detail.direction ? `direction: ${detail.direction}` : undefined,
+      detail.isConjugated ? 'conjugated' : undefined,
+      detail.typeName ? `type: ${detail.typeName}` : undefined,
+    ].filter((segment): segment is string => Boolean(segment));
+    return segments.join(' · ');
   };
 
   const connDiagnostics = diagnostics.filter(
@@ -48,6 +84,16 @@ export function IbdConnectorEditor({
       {/* Kind */}
       <fieldset className="rounded border border-gray-700 p-2 space-y-2">
         <legend className="px-1 font-semibold text-gray-300">Connector Settings</legend>
+        <div className="flex items-center gap-2 text-gray-400">
+          <span aria-label="Connector notation" title="IBD connector notation (disjoint from BDD relation notation)">
+            notation: {notation}
+          </span>
+          {(ownerName ?? connector.ownerId) && (
+            <span aria-label="Owning context" title="Owning block context: connectors are bound to exactly one context">
+              context: {ownerName ?? connector.ownerId}
+            </span>
+          )}
+        </div>
         <label className="block">
           Connector kind
           <select
@@ -97,6 +143,16 @@ export function IbdConnectorEditor({
             </select>
           </label>
         </div>
+        {(endpointLine(connector.sourcePortId) || endpointLine(connector.targetPortId)) && (
+          <div aria-label="Endpoint details" className="space-y-1 text-gray-400">
+            {endpointLine(connector.sourcePortId) && (
+              <div>source: {endpointLine(connector.sourcePortId)}</div>
+            )}
+            {endpointLine(connector.targetPortId) && (
+              <div>target: {endpointLine(connector.targetPortId)}</div>
+            )}
+          </div>
+        )}
 
         {connector.kind === 'binding' && (
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-700">

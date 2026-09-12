@@ -25,6 +25,33 @@ export interface BddRelationshipView extends SysmlRelationship {
   notation: 'solid-line' | 'filled-diamond' | 'hollow-diamond' | 'hollow-triangle' | 'dashed-arrow';
 }
 
+export type BddRelationKind = 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation';
+
+export type BddEdgeNotation = BddRelationshipView['notation'];
+
+/**
+ * Stable BDD-only edge notation lookup (OMG SysML 1.6, BDD relations only).
+ * IBD connector symbols live in ibd.ts (connectorNotationFor) and are
+ * intentionally disjoint; see VirtualizedDiagram diagramEdgeNotation for the
+ * per-diagram-kind dispatcher.
+ */
+export const BDD_NOTATION_BY_KIND: Record<BddRelationKind, BddEdgeNotation> = {
+  association: 'solid-line',
+  composition: 'filled-diamond',
+  sharedAggregation: 'hollow-diamond',
+  generalization: 'hollow-triangle',
+  dependency: 'dashed-arrow',
+  allocation: 'dashed-arrow',
+};
+
+export function bddNotationForKind(kind: SysmlRelationship['kind']): BddEdgeNotation {
+  if (kind === 'composition') return 'filled-diamond';
+  if (kind === 'sharedAggregation') return 'hollow-diamond';
+  if (kind === 'generalization') return 'hollow-triangle';
+  if (kind === 'dependency' || kind === 'allocation') return 'dashed-arrow';
+  return 'solid-line';
+}
+
 export interface BddView {
   elements: SysmlDefinition[];
   relationships: BddRelationshipView[];
@@ -283,11 +310,7 @@ function asBlock(definition: SysmlDefinition | undefined): BlockDefinition | und
 }
 
 function notationFor(kind: SysmlRelationship['kind']): BddRelationshipView['notation'] {
-  if (kind === 'composition') return 'filled-diamond';
-  if (kind === 'sharedAggregation') return 'hollow-diamond';
-  if (kind === 'generalization') return 'hollow-triangle';
-  if (kind === 'dependency' || kind === 'allocation') return 'dashed-arrow';
-  return 'solid-line';
+  return bddNotationForKind(kind);
 }
 
 function policyDiagnosticsForBlock(repo: SysmlRepository, blockId: string): SysmlDiagnostic[] {

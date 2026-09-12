@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   DiagramSpatialGrid,
+  bddRelationshipNotation,
   computeViewportBounds,
   cullElements,
+  diagramEdgeNotation,
+  ibdConnectorNotation,
   type DiagramViewport,
 } from './VirtualizedDiagram';
 import type { BlockData, RelationshipData, PartData, ConnectorData } from '../../types/sysml_types';
@@ -263,5 +266,39 @@ describe('cullElements', () => {
     expect(res2).toBe(res1);
     expect(res2.visibleBlocks).toBe(res1.visibleBlocks);
     expect(res2.visibleRelationships).toBe(res1.visibleRelationships);
+  });
+});
+
+describe('Task 5 diagram-kind edge notation', () => {
+  it('renders BDD relations with BDD-only notation', () => {
+    expect(bddRelationshipNotation('association')).toBe('solid-line');
+    expect(bddRelationshipNotation('composition')).toBe('filled-diamond');
+    expect(bddRelationshipNotation('sharedAggregation')).toBe('hollow-diamond');
+    expect(bddRelationshipNotation('generalization')).toBe('hollow-triangle');
+    expect(bddRelationshipNotation('dependency')).toBe('dashed-arrow');
+    expect(bddRelationshipNotation('allocation')).toBe('dashed-arrow');
+  });
+
+  it('renders IBD connectors with IBD-only notation', () => {
+    expect(ibdConnectorNotation('assembly')).toBe('assembly-solid');
+    expect(ibdConnectorNotation('delegation')).toBe('delegation-solid');
+    expect(ibdConnectorNotation('binding')).toBe('binding-dashed');
+  });
+
+  it('selects notation by diagram kind so BDD and IBD never share edge symbols', () => {
+    expect(diagramEdgeNotation('bdd', 'composition')).toBe('filled-diamond');
+    expect(diagramEdgeNotation('bdd', 'generalization')).toBe('hollow-triangle');
+    expect(diagramEdgeNotation('ibd', 'assembly')).toBe('assembly-solid');
+    expect(diagramEdgeNotation('ibd', 'delegation')).toBe('delegation-solid');
+    expect(diagramEdgeNotation('ibd', 'binding')).toBe('binding-dashed');
+
+    const bddSymbols = new Set(
+      (['association', 'composition', 'sharedAggregation', 'generalization', 'dependency', 'allocation'] as const).map(
+        kind => diagramEdgeNotation('bdd', kind),
+      ),
+    );
+    for (const kind of ['assembly', 'delegation', 'binding'] as const) {
+      expect(bddSymbols.has(diagramEdgeNotation('ibd', kind))).toBe(false);
+    }
   });
 });

@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type BlockDefinition, type PortDefinition, type SysmlRepository } from './model';
-import { deriveIbdBreadcrumb, deriveIbdView, resolvePortUsage, validateBindingConnector, validateConnector, validateItemFlow } from './ibd';
+import {
+  connectorNotationFor,
+  createIbdConnector,
+  deriveIbdBreadcrumb,
+  deriveIbdView,
+  resolvePortUsage,
+  validateBindingConnector,
+  validateConnector,
+  validateItemFlow,
+} from './ibd';
 
 const one = { lower: 1, upper: 1 as const, ordered: false, unique: true };
 const block = (id: string, ports: PortDefinition[] = [], supertypeIds: string[] = []): BlockDefinition => ({
@@ -148,6 +157,109 @@ describe('canonical IBD semantics', () => {
     // Port resolution fails closed / unresolved
     const portUsage = resolvePortUsage(repo, 'bIn');
     expect(portUsage).toBeUndefined();
+  });
+});
+
+describe('Task 5 typed IBD connection semantics', () => {
+  it('emits INCOMPATIBLE_DIRECTION for out-to-out assembly connectors', () => {
+    const repo = model();
+    repo.definitions.component2 = block('component2', [port('out2-def', 'out')]);
+    repo.usages.c = { id: 'c', name: 'c', kind: 'part', ownerId: 'system', typeId: 'component2', aggregation: 'composite', multiplicity: one };
+    repo.usages.cOut = { id: 'cOut', name: 'out', kind: 'port', ownerId: 'c', definitionId: 'out2-def' };
+    repo.connectors.bad = { id: 'bad', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'cOut' };
+
+    const codes = validateConnector(repo, 'bad').map(d => d.code);
+    expect(codes).toContain('INCOMPATIBLE_DIRECTION');
+    expect(codes).toContain('INCOMPATIBLE_PORT_DIRECTION');
+  });
+
+  it('rejects proxy ports with unresolved interface imports', () => {
+    const repo = model();
+    (repo.definitions.component as BlockDefinition).ports.push(port('ghost-def', 'out', 'missingIf'));
+    repo.usages.bGhost = { id: 'bGhost', name: 'ghost', kind: 'port', ownerId: 'b', definitionId: 'ghost-def' };
+    repo.connectors.c = { id: 'c', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bGhost' };
+
+    const codes = validateConnector(repo, 'c').map(d => d.code);
+    expect(codes).toContain('UNRESOLVED_IMPORT');
+  });
+
+  it('rejects proxy ports typed by a non-interface definition', () => {
+    const repo = model();
+    (repo.definitions.component as BlockDefinition).ports.push(port('block-typed', 'out', 'component'));
+    repo.usages.bBad = { id: 'bBad', name: 'bad', kind: 'port', ownerId: 'b', definitionId: 'block-typed' };
+    repo.connectors.c = { id: 'c', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bBad' };
+
+    const codes = validateConnector(repo, 'c').map(d => d.code);
+    expect(codes).toContain('MISSING_PORT_TYPE');
+  });
+
+  it('applies conjugation when checking connector direction compatibility', () => {
+    const repo = model();
+    // aOut is out; conjugating its definition flips effective direction to in,
+    // so an out-to-in assembly becomes in-to-in and must fail.
+    (repo.definitions.base as BlockDefinition).ports[0].isConjugated = true;
+    expect(resolvePortUsage(repo, 'aOut')?.effectiveDirection).toBe('in');
+
+    repo.connectors.c = { id: 'c', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' };
+    const codes = validateConnector(repo, 'c').map(d => d.code);
+    expect(codes).toContain('INCOMPATIBLE_DIRECTION');
+  });
+
+  it('rejects duplicate connectors regardless of endpoint order', () => {
+    const repo = model();
+    repo.connectors.c1 = { id: 'c1', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' };
+    repo.connectors.c2 = { id: 'c2', kind: 'assembly', ownerId: 'system', sourcePortId: 'bIn', targetPortId: 'aOut' };
+
+    expect(validateConnector(repo, 'c2').map(d => d.code)).toContain('DUPLICATE_CONNECTOR');
+  });
+
+  it('rejects cross-context assembly edges without delegation', () => {
+    const repo = model();
+    repo.connectors.cross = { id: 'cross', kind: 'assembly', ownerId: 'other', sourcePortId: 'aOut', targetPortId: 'bIn' };
+
+    const codes = validateConnector(repo, 'cross').map(d => d.code);
+    expect(codes).toContain('INVALID_CONNECTOR_CONTEXT');
+  });
+
+  it('creates connectors only inside one owning context via the typed factory', () => {
+    const repo = model();
+    const ok = createIbdConnector(repo, { id: 'ok', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' });
+    expect(ok.diagnostics).toEqual([]);
+    expect(ok.connector?.ownerId).toBe('system');
+
+    const cross = createIbdConnector(repo, { id: 'cross', kind: 'assembly', ownerId: 'a', sourcePortId: 'aOut', targetPortId: 'bIn' });
+    expect(cross.connector).toBeUndefined();
+    expect(cross.diagnostics.map(d => d.code)).toContain('INVALID_CONNECTOR_CONTEXT');
+
+    const badDelegation = createIbdConnector(repo, { id: 'bad', kind: 'delegation', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' });
+    expect(badDelegation.connector).toBeUndefined();
+    expect(badDelegation.diagnostics.map(d => d.code)).toContain('INVALID_DELEGATION_ENDPOINTS');
+  });
+
+  it('rejects item flows whose conveyed interface mismatches both endpoint interfaces', () => {
+    const repo = model();
+    repo.definitions.otherIf = { id: 'otherIf', name: 'Other', namespace: [], kind: 'interface', features: [] };
+    repo.connectors.c = { id: 'c', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn', itemFlowId: 'otherIf' };
+
+    const codes = validateItemFlow(repo, 'c').map(d => d.code);
+    expect(codes).toContain('INCOMPATIBLE_INTERFACE');
+  });
+
+  it('rejects item flows that contradict effective conjugated direction', () => {
+    const repo = model();
+    (repo.definitions.base as BlockDefinition).ports[0].isConjugated = true;
+    repo.connectors.c = { id: 'c', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn', itemFlowId: 'signal' };
+
+    const codes = validateItemFlow(repo, 'c').map(d => d.code);
+    expect(codes).toContain('INVALID_ITEM_FLOW_DIRECTION');
+  });
+
+  it('renders distinct IBD connector notations per connector kind', () => {
+    expect(connectorNotationFor('assembly')).toBe('assembly-solid');
+    expect(connectorNotationFor('delegation')).toBe('delegation-solid');
+    expect(connectorNotationFor('binding')).toBe('binding-dashed');
+    const notations = new Set([connectorNotationFor('assembly'), connectorNotationFor('delegation'), connectorNotationFor('binding')]);
+    expect(notations.size).toBe(3);
   });
 });
 
