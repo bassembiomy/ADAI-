@@ -501,10 +501,10 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#070707] text-[#e0e0e0] font-sans overflow-hidden select-none">
+    <div className="hil-workspace flex flex-col h-full bg-[#070707] text-[#e0e0e0] font-sans overflow-hidden select-none">
       
       {/* Header bar */}
-      <header className="h-14 bg-[#0f0f0f] border-b border-[#222] flex items-center justify-between px-4 shrink-0">
+      <header className="hil-header h-14 bg-[#0f0f0f] border-b border-[#222] flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -577,7 +577,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       </header>
 
       {/* Main Tab bar */}
-      <nav className="h-11 bg-[#0c0c0c] border-b border-[#222] flex px-4 gap-2 shrink-0 items-center">
+      <nav className="hil-nav h-11 bg-[#0c0c0c] border-b border-[#222] flex px-4 gap-2 shrink-0 items-center">
         <button
           onClick={() => setActiveMainTab('configure')}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold border transition-all ${
@@ -621,7 +621,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       </nav>
 
       {/* Main Workspace Panels depending on active tab */}
-      <div className="flex-1 overflow-hidden p-4">
+      <div className="hil-main flex-1 overflow-hidden p-4">
         
         {/* Tab 1: Configure */}
         {activeMainTab === 'configure' && (

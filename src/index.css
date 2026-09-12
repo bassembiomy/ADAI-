@@ -217,6 +217,65 @@ pre,
   color: var(--text-primary) !important;
 }
 
+/* HIL is a specialized workspace with its own dense charcoal palette. Keep
+   its hierarchy intact in light mode while moving every surface onto the
+   shared studio tokens. */
+[data-theme="light"] .hil-workspace [class*="bg-[#070707"],
+[data-theme="light"] .hil-workspace [class*="bg-[#0f0f0f"],
+[data-theme="light"] .hil-workspace [class*="bg-[#0c0c0c"],
+[data-theme="light"] .hil-workspace [class*="bg-[#121212"],
+[data-theme="light"] .hil-workspace [class*="bg-[#141414"],
+[data-theme="light"] .hil-workspace [class*="bg-[#1a1a1a"],
+[data-theme="light"] .hil-workspace [class*="bg-[#1f1f1f"],
+[data-theme="light"] .hil-workspace [class*="bg-[#252525"],
+[data-theme="light"] .hil-workspace [class*="bg-[#262626"],
+.light .hil-workspace [class*="bg-[#070707"],
+.light .hil-workspace [class*="bg-[#0f0f0f"],
+.light .hil-workspace [class*="bg-[#0c0c0c"],
+.light .hil-workspace [class*="bg-[#121212"],
+.light .hil-workspace [class*="bg-[#141414"],
+.light .hil-workspace [class*="bg-[#1a1a1a"],
+.light .hil-workspace [class*="bg-[#1f1f1f"],
+.light .hil-workspace [class*="bg-[#252525"],
+.light .hil-workspace [class*="bg-[#262626"] {
+  background-color: var(--bg-panel) !important;
+}
+
+[data-theme="light"] .hil-workspace [class*="border-[#222"],
+[data-theme="light"] .hil-workspace [class*="border-[#262626"],
+[data-theme="light"] .hil-workspace [class*="border-[#2d2d2d"],
+[data-theme="light"] .hil-workspace [class*="border-[#333"],
+.light .hil-workspace [class*="border-[#222"],
+.light .hil-workspace [class*="border-[#262626"],
+.light .hil-workspace [class*="border-[#2d2d2d"],
+.light .hil-workspace [class*="border-[#333"] {
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] .hil-workspace [class*="bg-emerald-950"],
+.light .hil-workspace [class*="bg-emerald-950"] {
+  background-color: rgba(8, 127, 115, 0.1) !important;
+}
+
+[data-theme="light"] .hil-workspace,
+.light .hil-workspace {
+  background: var(--bg-main) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .hil-workspace .hil-header,
+[data-theme="light"] .hil-workspace .hil-nav,
+.light .hil-workspace .hil-header,
+.light .hil-workspace .hil-nav {
+  background: var(--bg-panel) !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] .hil-workspace .hil-main,
+.light .hil-workspace .hil-main {
+  background: var(--bg-main) !important;
+}
+
 /* SysML canvas hierarchy */
 [data-theme="light"] .sysml-diagram-canvas,
 .light .sysml-diagram-canvas {
