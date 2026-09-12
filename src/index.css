@@ -2,6 +2,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import './styles/theme-contract.css';
 
 :root {
   color-scheme: dark;
