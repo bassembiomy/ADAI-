@@ -1,4 +1,7 @@
-import { applyCommand, type MutationImpact } from '../engine/sysml/mutations';
+import { applyCommand, impactSeverity, type ImpactSeverity, type MutationImpact } from '../engine/sysml/mutations';
+
+export { impactSeverity };
+export type { ImpactSeverity };
 import { loadRepository } from '../engine/sysml/persistence';
 import type { SysmlRepository } from '../engine/sysml/model';
 import { classifyDeletionTarget, type DeletionDecision } from '../engine/sysml/policy';
@@ -128,20 +131,26 @@ export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, mo
 
 export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
   const requested = new Set(impact.requestedElementIds);
+  // Bible §7 matrix: leaf/unreferenced targets need no confirmation. Affected
+  // requirement ids only force confirmation when they name bystanders beyond
+  // the request itself.
   return impact.deletedElementIds.some(id => !requested.has(id))
     || impact.nestedRequirementIds.length > 0
     || impact.removedRelationshipIds.some(id => !requested.has(id))
     || impact.unresolvedUsageIds.length > 0
     || impact.invalidatedEvidenceIds.length > 0
-    || impact.affectedRequirementIds.length > 0
+    || impact.affectedRequirementIds.some(id => !requested.has(id))
     || impact.affectedBaselineIds.length > 0;
 }
 
 export function formatLegacyDeletionImpact(impact: MutationImpact): string {
   const requested = new Set(impact.requestedElementIds);
   const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+  const severity = impact.severity ?? impactSeverity(impact);
+  const blocked = impact.blockedBaselineIds ?? [];
   const lines = [
     'SysML deletion impact',
+    `Severity: ${severity}`,
     `Requested: ${impact.requestedElementIds.join(', ') || 'none'}`,
     `Cascade deleted: ${cascade.join(', ') || 'none'}`,
     `Nested requirements: ${impact.nestedRequirementIds.join(', ') || 'none'}`,
@@ -151,6 +160,9 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
     `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
     `Invalidated evidence: ${impact.invalidatedEvidenceIds.join(', ') || 'none'}`,
     `Protected baselines retained: ${impact.affectedBaselineIds.join(', ') || 'none'}`,
+    ...(blocked.length > 0
+      ? [`Blocked: protected baseline ${blocked.join(', ')} requires clone or explicit authorization; deletion refused`]
+      : []),
     '',
     'Continue with this atomic deletion?',
   ];

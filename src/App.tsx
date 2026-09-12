@@ -120,13 +120,14 @@ import { RequirementGovernancePanel } from './components/sysml/RequirementGovern
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
-import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
+import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
+import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
@@ -6207,6 +6208,10 @@ const ADIA = () => {
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
+  // Explicit per-baseline deletion authorizations granted from the governance
+  // panel. Projection-only state: it never mutates semantics by itself; the
+  // gateway still requires a confirmed impact hash for destructive mutations.
+  const [authorizedBaselineIds, setAuthorizedBaselineIds] = useState<string[]>([]);
 
   // The legacy diagram editors still expose array setters. Keep the canonical
   // store current until every editor has been migrated to gateway commands.
@@ -9171,6 +9176,14 @@ const ADIA = () => {
     if (idSet.size === 0) return;
 
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    // Protected-baseline gate (projection-only): never silently delete frozen
+    // content. Refuse here with an explanation; the canonical gateway enforces
+    // the same rule via PROTECTED_BASELINE_REQUIRES_AUTHORIZATION.
+    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+      return;
+    }
     if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
@@ -9187,7 +9200,7 @@ const ADIA = () => {
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-  }, [addToHistory, blocks, relationships, parts, connectors]);
+  }, [addToHistory, blocks, relationships, parts, connectors, authorizedBaselineIds]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9515,6 +9528,11 @@ const ADIA = () => {
     if (!block) return;
     const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+      return;
+    }
     if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -9525,7 +9543,7 @@ const ADIA = () => {
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted ${kind}: ${block.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
 
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
@@ -9587,6 +9605,11 @@ const ADIA = () => {
 
   const deleteRelationship = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+      return;
+    }
     if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -9597,7 +9620,7 @@ const ADIA = () => {
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', 'Deleted relationship');
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
@@ -9626,6 +9649,11 @@ const ADIA = () => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+      return;
+    }
     if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -9635,7 +9663,7 @@ const ADIA = () => {
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', `Deleted part: ${part.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
 
   const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.target === canvasRef.current) {
@@ -9859,6 +9887,11 @@ const ADIA = () => {
 
   const deleteConnector = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+      return;
+    }
     if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -9869,7 +9902,7 @@ const ADIA = () => {
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', 'Deleted connector');
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
     const current = connectors.find(connector => connector.id === id);
@@ -17196,6 +17229,11 @@ const ADIA = () => {
                         const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
                         const suspectLinks = selectSuspectLinks(sysmlStore, selectedBlock.id);
                         const evidenceHistory = selectEvidenceForRequirement(sysmlStore, selectedBlock.id);
+                        // Projection-only deletion preview: analyze without
+                        // mutating, so the panel can show typed severity,
+                        // unresolved usages, evidence fallout, and protected
+                        // baseline blocks before any confirmation dialog.
+                        const deletionPreview = analyzeMutation(canonicalSysmlRepository, { kind: 'deleteElements', elementIds: [selectedBlock.id] });
 
                         return (
                           <RequirementGovernancePanel
@@ -17204,10 +17242,23 @@ const ADIA = () => {
                             baselines={canonicalSysmlRepository.baselines}
                             suspectLinks={suspectLinks}
                             evidenceHistory={evidenceHistory}
+                            deletionSeverity={impactSeverity(deletionPreview, authorizedBaselineIds)}
+                            unresolvedUsageIds={deletionPreview.unresolvedUsageIds}
+                            invalidatedEvidenceIds={deletionPreview.invalidatedEvidenceIds}
+                            blockedBaselineIds={deletionPreview.affectedBaselineIds.filter(id => !authorizedBaselineIds.includes(id))}
                             onCreateBaseline={(name) => {
                               const res = createModelBaseline(canonicalSysmlRepository, name);
                               setCanonicalSysmlRepository(res.repository);
                               addError('info', `Created baseline: ${name}`);
+                            }}
+                            onCloneBaseline={(baselineId) => {
+                              const res = cloneProtectedBaselineAsWorkingCopy(canonicalSysmlRepository, baselineId, `Working copy of ${baselineId}`);
+                              setCanonicalSysmlRepository(res.repository);
+                              addError('info', `Cloned protected baseline ${baselineId} into unprotected working copy ${res.baseline.id}`);
+                            }}
+                            onAuthorizeBaseline={(baselineId) => {
+                              setAuthorizedBaselineIds(prev => prev.includes(baselineId) ? prev : [...prev, baselineId]);
+                              addError('info', `Recorded explicit deletion authorization for protected baseline ${baselineId}`);
                             }}
                             onClearSuspect={(relId) => {
                               const updated = clearSuspectLink(canonicalSysmlRepository, relId);

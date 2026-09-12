@@ -160,7 +160,7 @@ export interface PresentationSnapshot {
 export type SysmlEditorCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
-  | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string }
+  | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
   | { type: 'updatePresentation'; elementId: string; presentation: PresentationCoordinates; coalesceKey?: string }
   | { type: 'undo' }
@@ -236,6 +236,8 @@ export function computeImpactHash(impact: MutationImpact): string {
     inval: [...impact.invalidatedEvidenceIds].sort(),
     affReq: [...impact.affectedRequirementIds].sort(),
     affBase: [...impact.affectedBaselineIds].sort(),
+    blocked: [...(impact.blockedBaselineIds ?? [])].sort(),
+    severity: (impact as { severity?: string }).severity ?? 'review',
   });
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) {
@@ -1155,6 +1157,37 @@ export function executeSysmlCommand(
       };
     }
     const impact = analyzeMutation(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
+    const authorized = new Set(command.authorizedBaselineIds ?? []);
+    const unauthorizedBaselines = impact.affectedBaselineIds.filter(id => !authorized.has(id));
+
+    // Protected-baseline gate: destructive mutations touching frozen baseline
+    // content never proceed silently. The caller must clone the baseline into
+    // an unprotected working copy or present explicit authorization alongside
+    // the confirmed impact hash. Rejection leaves revision, auditTrail,
+    // patchHistory, and transaction IDs untouched.
+    if (unauthorizedBaselines.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: unauthorizedBaselines.map(id => ({
+          code: 'PROTECTED_BASELINE_REQUIRES_AUTHORIZATION',
+          severity: 'error' as const,
+          elementId: id,
+          message: `Protected baseline ${id} forbids deletion of ${command.elementIds.join(', ') || 'none'}; clone the baseline or authorize explicitly before retrying`,
+        })),
+        impact: { ...impact, blockedBaselineIds: unauthorizedBaselines, severity: 'blocked' },
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const needsConfirmation = requiresDeletionConfirmation(impact);
 
     if (needsConfirmation) {
@@ -1179,7 +1212,29 @@ export function executeSysmlCommand(
       }
     }
 
-    const mutationResult = applyCommand(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
+    const mutationResult = applyCommand(
+      state.repository,
+      { kind: 'deleteElements', elementIds: command.elementIds },
+      { authorizedBaselineIds: [...authorized] },
+    );
+    if (!mutationResult.applied) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: (mutationResult.diagnostics ?? []).map(d => ({ ...d, severity: 'error' as const })),
+        impact: mutationResult.impact,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const nextRepo = mutationResult.repository;
 
     const forwardOps = [...(mutationResult.forwardPatch?.forward ?? [])];

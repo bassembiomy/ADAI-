@@ -541,6 +541,56 @@ describe('sysmlCommandGateway', () => {
     expect(state.patchHistory?.past.length).toBeLessThanOrEqual(5);
     expect(state.history.past.length).toBeLessThanOrEqual(20);
   });
+
+  it('Task 6: refuses deletion touching a protected baseline until cloned or explicitly authorized', () => {
+    let state = createSysmlGatewayState();
+    const target: RequirementDefinition = {
+      id: 'req-target', name: 'Target', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-T', text: 'Target', status: 'draft', version: '1.0',
+    };
+    let r = executeSysmlCommand(state, { type: 'createElement', element: target });
+    state = { ...state, repository: r.repository, history: r.history, store: r.store, patchHistory: r.patchHistory, coordinates: r.coordinates, diagramPresentations: r.diagramPresentations };
+    const revisionBefore = state.repository.revision;
+    const auditBefore = state.repository.auditTrail.length;
+    const patchesBefore = state.patchHistory?.past.length ?? 0;
+
+    // Freeze the target inside a protected baseline snapshot.
+    const frozen: typeof state.repository.baselines[string] = {
+      id: 'bl-frozen', name: 'Frozen', revision: state.repository.revision,
+      createdAt: '2026-09-12T00:00:00Z', protected: true,
+      contentHash: 'frozen', elementHashes: { 'req-target': 'h-target' },
+    };
+    state = { ...state, repository: { ...state.repository, baselines: { ...state.repository.baselines, [frozen.id]: frozen } } };
+
+    // 1. Blocked: no silent deletion of protected content.
+    const refused = executeSysmlCommand(state, { type: 'deleteElements', elementIds: ['req-target'] });
+    expect(refused.committed).toBe(false);
+    expect(refused.impact?.severity).toBe('blocked');
+    expect(refused.impact?.blockedBaselineIds).toEqual(['bl-frozen']);
+    expect(refused.diagnostics.map(d => d.code)).toContain('PROTECTED_BASELINE_REQUIRES_AUTHORIZATION');
+    expect(refused.repository.revision).toBe(revisionBefore);
+    expect(refused.repository.auditTrail).toHaveLength(auditBefore);
+    expect(refused.patchHistory?.past.length ?? 0).toBe(patchesBefore);
+    expect(refused.repository.requirements['req-target']).toBeDefined();
+
+    // 2. A confirmed impact hash alone is still not enough without authorization.
+    const impactHash = computeImpactHash(refused.impact!);
+    const hashOnly = executeSysmlCommand(state, { type: 'deleteElements', elementIds: ['req-target'], confirmedImpactHash: impactHash });
+    expect(hashOnly.committed).toBe(false);
+    expect(hashOnly.diagnostics.map(d => d.code)).toContain('PROTECTED_BASELINE_REQUIRES_AUTHORIZATION');
+
+    // 3. Explicit authorization plus the confirmed hash commits atomically.
+    const committed = executeSysmlCommand(state, {
+      type: 'deleteElements',
+      elementIds: ['req-target'],
+      confirmedImpactHash: impactHash,
+      authorizedBaselineIds: ['bl-frozen'],
+    });
+    expect(committed.committed).toBe(true);
+    expect(committed.repository.requirements['req-target']).toBeUndefined();
+    expect(committed.repository.revision).toBe(revisionBefore + 1);
+    expect(committed.repository.auditTrail).toHaveLength(auditBefore + 1);
+  });
 });
 
 describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {

@@ -5,6 +5,20 @@ import { validateSysmlRepository, type SysmlValidationReport } from './validatio
 
 export type SysmlCommand = { kind: 'deleteElements'; elementIds: string[] };
 
+export interface DeletionAuthorization {
+  authorizedBaselineIds?: readonly string[];
+}
+
+export type ImpactSeverity = 'safe' | 'review' | 'blocked';
+
+export type UnresolvedUsageAction = 'keep' | 'retarget' | 'delete';
+
+export interface UnresolvedUsageResolution {
+  usageId: string;
+  action: UnresolvedUsageAction;
+  newTypeId?: string;
+}
+
 export interface MutationImpact {
   requestedElementIds: string[];
   deletedElementIds: string[];
@@ -14,6 +28,8 @@ export interface MutationImpact {
   invalidatedEvidenceIds: string[];
   affectedRequirementIds: string[];
   affectedBaselineIds: string[];
+  blockedBaselineIds: string[];
+  severity: ImpactSeverity;
   affectedDiagramKinds: Array<'bdd' | 'ibd' | 'requirements' | 'rtm'>;
 }
 
@@ -22,6 +38,8 @@ export interface MutationResult {
   repository: SysmlRepository;
   impact: MutationImpact;
   validation: SysmlValidationReport;
+  blockedBaselineIds?: string[];
+  diagnostics?: Array<{ code: string; severity: 'error'; elementId?: string; message: string }>;
   forwardPatch?: import('./patches').SysmlPatch;
   inversePatch?: import('./patches').SysmlPatch;
 }
@@ -30,6 +48,81 @@ export interface MutationHistory {
   past: SysmlRepository[];
   present: SysmlRepository;
   future: SysmlRepository[];
+}
+
+export function computeTouchedProtectedBaselines(
+  repo: SysmlRepository,
+  deletedElementIds: ReadonlySet<string> | readonly string[],
+  affectedRequirementIds: ReadonlySet<string> | readonly string[] = [],
+): string[] {
+  const deleted = deletedElementIds instanceof Set ? deletedElementIds : new Set(deletedElementIds);
+  const affectedReqs = affectedRequirementIds instanceof Set ? affectedRequirementIds : new Set(affectedRequirementIds);
+  const touched = new Set<string>();
+  for (const baseline of Object.values(repo.baselines)) {
+    if (!baseline.protected) continue;
+    if (deleted.has(baseline.id)) {
+      touched.add(baseline.id);
+      continue;
+    }
+    if (baseline.elementHashes && [...deleted].some(id => id in (baseline.elementHashes as Record<string, string>))) {
+      touched.add(baseline.id);
+      continue;
+    }
+    // Baselines without a content snapshot fall back to requirement linkage:
+    // a protected baseline is touched when a baselined requirement is deleted
+    // or otherwise affected by the mutation.
+    if (!baseline.elementHashes) {
+      for (const id of [...deleted, ...affectedReqs]) {
+        if (repo.requirements[id]?.baselineId === baseline.id) {
+          touched.add(baseline.id);
+          break;
+        }
+      }
+    }
+  }
+  return [...touched].sort();
+}
+
+export function impactSeverity(
+  impact: Pick<MutationImpact, 'affectedBaselineIds' | 'deletedElementIds' | 'requestedElementIds' | 'nestedRequirementIds' | 'removedRelationshipIds' | 'unresolvedUsageIds' | 'invalidatedEvidenceIds' | 'affectedRequirementIds'>,
+  authorizedBaselineIds: readonly string[] = [],
+): ImpactSeverity {
+  const authorized = new Set(authorizedBaselineIds);
+  if (impact.affectedBaselineIds.some(id => !authorized.has(id))) return 'blocked';
+  const requested = new Set(impact.requestedElementIds);
+  // Bible §7 matrix: leaf/unreferenced targets (deleted set equals the
+  // request, no nested content, no affected bystanders) are safe. A
+  // requirement only names itself as affected when it is the requested
+  // target, so affected ids beyond the request are what force review.
+  const needsReview =
+    impact.deletedElementIds.some(id => !requested.has(id)) ||
+    impact.nestedRequirementIds.length > 0 ||
+    impact.removedRelationshipIds.some(id => !requested.has(id)) ||
+    impact.unresolvedUsageIds.length > 0 ||
+    impact.invalidatedEvidenceIds.length > 0 ||
+    impact.affectedRequirementIds.some(id => !requested.has(id));
+  return needsReview ? 'review' : 'safe';
+}
+
+export function applyUnresolvedResolutions(
+  repo: SysmlRepository,
+  resolutions: readonly UnresolvedUsageResolution[],
+): SysmlRepository {
+  const next = cloneRepository(repo);
+  for (const resolution of resolutions) {
+    const usage = next.usages[resolution.usageId];
+    if (!usage || usage.kind !== 'part') continue;
+    if (resolution.action === 'keep') continue;
+    if (resolution.action === 'delete') {
+      delete next.usages[resolution.usageId];
+      continue;
+    }
+    if (resolution.action === 'retarget' && resolution.newTypeId && next.definitions[resolution.newTypeId]) {
+      next.usages[resolution.usageId] = { ...usage, typeId: resolution.newTypeId };
+    }
+  }
+  next.revision = repo.revision + 1;
+  return next;
 }
 
 export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): MutationImpact {
@@ -104,7 +197,12 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   if (affectedRequirements.size || [...deleted].some(id => repo.requirements[id])) diagramKinds.add('requirements');
   if (affectedRequirements.size || invalidatedEvidence.length) diagramKinds.add('rtm');
 
-  return {
+  // Protected-baseline touch set: only baselines whose frozen content (or
+  // baselined requirements) intersect this deletion are affected. A protected
+  // baseline never joins the cascade; it blocks the mutation until the caller
+  // clones it or presents explicit authorization.
+  const affectedBaselineIds = computeTouchedProtectedBaselines(repo, deleted, affectedRequirements);
+  const partial: Omit<MutationImpact, 'severity' | 'blockedBaselineIds'> = {
     requestedElementIds: [...requested].sort(),
     deletedElementIds: [...deleted].sort(),
     nestedRequirementIds: [...nestedRequirementIdsSet].sort(),
@@ -112,14 +210,38 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     unresolvedUsageIds,
     invalidatedEvidenceIds: invalidatedEvidence.sort(),
     affectedRequirementIds: [...affectedRequirements].sort(),
-    affectedBaselineIds: Object.values(repo.baselines).filter(b => b.protected).map(b => b.id).sort(),
+    affectedBaselineIds,
     affectedDiagramKinds: [...diagramKinds].sort(),
+  };
+  const severity = impactSeverity(partial);
+  return {
+    ...partial,
+    blockedBaselineIds: [...affectedBaselineIds],
+    severity,
   };
 }
 
-export function applyCommand(repo: SysmlRepository, command: SysmlCommand): MutationResult {
+export function applyCommand(repo: SysmlRepository, command: SysmlCommand, authorization: DeletionAuthorization = {}): MutationResult {
   const impact = analyzeMutation(repo, command);
+  const authorized = new Set(authorization.authorizedBaselineIds ?? []);
+  const unauthorized = impact.affectedBaselineIds.filter(id => !authorized.has(id));
+  if (unauthorized.length > 0) {
+    return {
+      applied: false,
+      repository: repo,
+      impact: { ...impact, blockedBaselineIds: unauthorized, severity: 'blocked' },
+      validation: validateSysmlRepository(repo),
+      blockedBaselineIds: unauthorized,
+      diagnostics: unauthorized.map(id => ({
+        code: 'PROTECTED_BASELINE_REQUIRES_AUTHORIZATION',
+        severity: 'error' as const,
+        elementId: id,
+        message: `Protected baseline ${id} forbids destructive mutation; clone the baseline or authorize explicitly before deleting ${impact.requestedElementIds.join(', ') || 'none'}`,
+      })),
+    };
+  }
   const removed = new Set(impact.deletedElementIds);
+  const authorizedImpact: MutationImpact = { ...impact, blockedBaselineIds: [], severity: impactSeverity(impact, [...authorized]) };
   const next = cloneRepository(repo);
 
   const forwardOps: Array<import('./patches').PatchOperation> = [];
@@ -158,8 +280,19 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand): Muta
   removeFrom(next.verificationCases, removed);
   removeFrom(next.evidence, removed);
 
-  for (const verificationCase of Object.values(next.verificationCases)) {
-    verificationCase.verifiesRequirementIds = verificationCase.verifiesRequirementIds.filter(id => !removed.has(id));
+  // Evidence-invalidation state: filtering verifiesRequirementIds is part of
+  // the atomic deletion, so the inverse patch must restore the exact prior
+  // lists (not just re-add removed entities). Record a replace pair per
+  // touched verification case to keep undo/redo byte-exact.
+  for (const verificationCase of Object.values(repo.verificationCases)) {
+    if (removed.has(verificationCase.id)) continue;
+    const before = verificationCase.verifiesRequirementIds;
+    const after = before.filter(id => !removed.has(id));
+    if (after.length === before.length) continue;
+    const updated = { ...verificationCase, verifiesRequirementIds: after };
+    next.verificationCases[verificationCase.id] = updated;
+    forwardOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['verifiesRequirementIds'], oldValue: before, value: after });
+    inverseOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['verifiesRequirementIds'], oldValue: after, value: before });
   }
   next.revision = repo.revision + 1;
 
@@ -183,7 +316,7 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand): Muta
   return {
     applied: true,
     repository: next,
-    impact,
+    impact: authorizedImpact,
     validation: validateSysmlRepository(next),
     forwardPatch,
     inversePatch,
