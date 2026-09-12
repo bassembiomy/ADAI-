@@ -32,8 +32,19 @@ import {
 } from '../../components/sysml/VirtualizedDiagram';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
 import type { BlockData } from '../../types/sysml_types';
+import { verifyReleaseGateEvidence } from './conformanceManifest';
+import { validateSysmlRepository } from './validation';
 
 describe('SysML Large Model Benchmark Gates', () => {
+  it('mass-production release gate: every supported capability carries unit/integration/browser/persistence evidence', () => {
+    const report = verifyReleaseGateEvidence();
+    expect(report.profileOk).toBe(true);
+    expect(report.unsupportedMarkedSupported).toEqual([]);
+    expect(report.rowsMissingImplementation).toEqual([]);
+    expect(report.rowsMissingTiers).toEqual([]);
+    expect(report.valid).toBe(true);
+  });
+
   it('verifies normalized store projection equivalence with legacy projectLegacyDiagram', () => {
     const model = generate1kModel(42);
     const store = fromRepository(model.repository, model.coordinates, model.diagramPresentations);
@@ -207,5 +218,85 @@ describe('SysML Large Model Benchmark Gates', () => {
       console.log(`  ${k}: ${typeof v === 'number' ? v.toFixed(2) : v}`);
     }
     console.log('==============================\n');
+  });
+
+  it('benchmarks 10k definitions/usages/relationships/connectors with validation and viewport culling thresholds', () => {
+    const model = generate10kModel(702);
+
+    // Recorded generator proportions (seed-independent): 45% definitions
+    // (3500 blocks + 500 value types + 500 interfaces), 25% usages,
+    // 10% relationships, 5% connectors, 12% requirements, 3% verification cases.
+    const definitionCount = Object.keys(model.repository.definitions).length;
+    const usageCount = Object.keys(model.repository.usages).length;
+    const relationshipCount = Object.keys(model.repository.relationships).length;
+    const connectorCount = Object.keys(model.repository.connectors).length;
+    expect(definitionCount).toBe(4500);
+    expect(usageCount).toBe(2500);
+    expect(relationshipCount).toBe(1000);
+    expect(connectorCount).toBe(500);
+    expect(model.stats.totalElements).toBe(10000);
+
+    const thresholds: Record<string, number> = {};
+
+    // Full fail-closed repository validation gate (generous budget: 15s; measured ~65ms).
+    const validation = measureSync(
+      'Validate 10k',
+      () => validateSysmlRepository(model.repository),
+      { trackHeap: true },
+    );
+    expect(validation.result.valid).toBe(true);
+    expect(validation.result.diagnostics).toHaveLength(0);
+    expect(validation.durationMs).toBeLessThan(15000);
+    thresholds['validate_10k_ms'] = validation.durationMs;
+
+    // Viewport culling gate over all 10k definitions (generous budget: 2s; measured single-digit ms).
+    const store = fromRepository(model.repository, model.coordinates, model.diagramPresentations);
+    const grid = new DiagramSpatialGrid(500);
+    const blocks: BlockData[] = [];
+    for (const [id, def] of store.definitions.entries()) {
+      const coord = store.coordinates.get(id);
+      const x = coord?.x ?? 100;
+      const y = coord?.y ?? 100;
+      grid.insert({ id, x, y, width: 150, height: 100 });
+      blocks.push({
+        id,
+        name: def.name,
+        stereotype: 'block',
+        x,
+        y,
+        width: 150,
+        height: 100,
+        properties: [],
+        operations: [],
+        constraints: [],
+        classes: [],
+        ports: [],
+      });
+    }
+    const viewport: DiagramViewport = { x: 0, y: 0, width: 1200, height: 800, scale: 1, overscan: 100 };
+    const cull = measureSync('Cull 10k', () => cullElements(viewport, blocks, [], [], [], grid), { trackHeap: true });
+    expect(cull.durationMs).toBeLessThan(2000);
+    expect(cull.result.visibleBlocks.length).toBeGreaterThan(0);
+    expect(cull.result.visibleBlocks.length).toBeLessThan(blocks.length);
+    thresholds['cull_10k_ms'] = cull.durationMs;
+
+    // Culling must be deterministic across repeated queries.
+    const cullRepeat = cullElements(viewport, blocks, [], [], [], grid);
+    expect(cullRepeat.visibleBlocks.length).toBe(cull.result.visibleBlocks.length);
+
+    // Memory envelope: generous 512 MB heap-delta bound per gate (measured deltas are low single-digit MB).
+    for (const measurement of [validation, cull]) {
+      if (measurement.heapDeltaBytes !== undefined) {
+        expect(Math.abs(measurement.heapDeltaBytes)).toBeLessThan(512 * 1024 * 1024);
+      }
+    }
+
+    console.log('\n=== 10K RELEASE BENCHMARK THRESHOLDS ===');
+    console.log(`  definitions: ${definitionCount}, usages: ${usageCount}, relationships: ${relationshipCount}, connectors: ${connectorCount}`);
+    for (const [k, v] of Object.entries(thresholds)) {
+      console.log(`  ${k}: ${v.toFixed(2)} (budget enforced above)`);
+    }
+    console.log(`  validate heap delta: ${formatBytes(validation.heapDeltaBytes)}, cull heap delta: ${formatBytes(cull.heapDeltaBytes)}`);
+    console.log('========================================\n');
   });
 });

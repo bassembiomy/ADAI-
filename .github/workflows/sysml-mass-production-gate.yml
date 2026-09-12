@@ -1,0 +1,31 @@
+name: SysML mass-production release gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mass-production-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.0'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Workspace hygiene
+        run: git diff --check
+      - name: SysML full release qualification
+        run: npm run test:sysml:full-release
+      - name: SysML real-browser end-to-end
+        run: npm run test:e2e:sysml
+      - name: Production build
+        run: npm run build
