@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Play, Square, Settings, RefreshCcw, Wifi, WifiOff, FileDown, ShieldAlert } from 'lucide-react';
-import Plot from 'react-plotly.js';
+import Plot from '../doe/PlotlyRenderer';
 import { ResizableSplitPaneGroup, PanelMaximizeButton } from '../common/ResizableSplitPane';
 import { DriverChannel, HILSessionState, FaultInjectionConfig, HILMapping } from '../../engine/hil/hilTypes';
 import { decodeTextFrame, encodeTextFrame } from '../../engine/hil/hilProtocol';

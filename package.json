@@ -46,7 +46,7 @@
     "test:sysml:full-release": "tsx scripts/verify_sysml_release.ts",
     "test:sm:verification": "vitest run src/utils/stateMachine/smTestManifest.test.ts src/utils/stateMachine/smTestPlanBuilder.test.ts src/utils/stateMachine/smCTestRuntimeRenderer.test.ts src/utils/stateMachine/smCTestSuiteRenderer.test.ts src/utils/stateMachine/smCHarness.test.ts src/utils/stateMachine/smCoverageRunner.test.ts src/utils/stateMachine/smDifferential.test.ts src/utils/stateMachine/smAnalysisRunner.test.ts src/utils/stateMachine/smTargetCompileRunner.test.ts src/utils/stateMachine/smPipelineOrchestrator.test.ts src/utils/stateMachine/smReports.test.ts",
     "verify:sm:codegen": "tsx scripts/verify_sm_codegen.ts",
-    "audit:prebuild": "npm audit --audit-level=critical || node -e \"console.warn('[WARNING] Unfixable audit vulnerabilities detected (tar, tmp have no upstream fix). Review before production release.')\"",
+    "audit:prebuild": "npm audit --omit=dev --audit-level=high",
     "prebuild": "npm run build:sm-runtime && npm run audit:prebuild"
   },
   "engines": {
@@ -54,6 +54,10 @@
     "npm": ">=10.0.0"
   },
   "overrides": {
+    "external-editor": {
+      "tmp": "^0.2.7"
+    },
+    "extract-zip": "npm:@electron-internal/extract-zip@^1.0.5",
     "tar": ">=6.2.1",
     "brace-expansion": ">=1.1.18",
     "jspdf": {
@@ -95,7 +99,8 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
     "mathjs": "^15.2.0",
-    "plotly.js": "^3.5.0",
+    "plotly.js": "npm:plotly.js-cartesian-dist-min@3.7.0",
+    "plotly.js-gl3d-dist-min": "3.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-plotly.js": "^2.6.0",

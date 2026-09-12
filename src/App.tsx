@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
 import * as math from 'mathjs';
-import Plot from 'react-plotly.js';
+import Plot from './components/doe/PlotlyRenderer';
 import { PlotlyPlots } from './components/doe/PlotlyPlots';
 import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integration';
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
