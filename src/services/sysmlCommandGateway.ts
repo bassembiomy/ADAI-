@@ -97,6 +97,11 @@ export {
 import { SysmlWorkerClient } from './sysmlWorkerClient';
 export { SysmlWorkerClient };
 export * from '../engine/sysml/workerProtocol';
+export {
+  classifyDeletionTarget,
+  classifyRelationship,
+  resolveInheritance,
+} from '../engine/sysml/policy';
 
 let defaultWorkerClient: SysmlWorkerClient | null = null;
 export function getDefaultSysmlWorkerClient(): SysmlWorkerClient {
