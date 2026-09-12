@@ -3,6 +3,7 @@
 @tailwind components;
 @tailwind utilities;
 @import './styles/theme-contract.css';
+@import './styles/workspaces/entropy.css';
 
 :root {
   color-scheme: dark;
