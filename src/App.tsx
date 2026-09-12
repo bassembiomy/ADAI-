@@ -17466,35 +17466,6 @@ const ADIA = () => {
               ) : selectedRelationship ? (
                 <>
                   <div>
-                    <Label>Relationship Type</Label>
-                    <select
-                      value={selectedRelationship.type}
-                      onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      <option value="association">Association</option>
-                      <option value="generalization">Generalization</option>
-                      <option value="composition">Composition</option>
-                      <option value="aggregation">Aggregation</option>
-                      <option value="allocation">Allocation</option>
-                      <option value="derive">Derive</option>
-                      <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
-                      <option value="refine">Refine</option>
-                      <option value="satisfy">Satisfy</option>
-                      <option value="verify">Verify</option>
-                      <option value="trace">Trace</option>
-                      <option value="copy">Copy</option>
-                      <option
-                        value="requirementContainment"
-                        disabled={!(blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement' && blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement')}
-                      >
-                        Requirement Containment (parent → child)
-                      </option>
-                      <option value="binding">Binding</option>
-                      <option value="dependency">Dependency</option>
-                    </select>
-                  </div>
-                  <div>
                     <Label>Label</Label>
                     <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
                   </div>

@@ -107,6 +107,7 @@ export function RelationshipEndEditor({
             <option value="verify">Verify</option>
             <option value="trace">Trace</option>
             <option value="copy">Copy</option>
+            <option value="binding">Binding</option>
             <option value="dependency">Dependency</option>
             <option value="requirementContainment" disabled={!(sourceIsRequirement && targetIsRequirement)}>
               Requirement Containment (parent → child)

@@ -38,6 +38,14 @@ describe('RelationshipEndEditor', () => {
     expect(html).toContain('composite');
   });
 
+  it('exposes one canonical relationship-kind control including binding', () => {
+    const html = renderToStaticMarkup(
+      <RelationshipEndEditor relationship={relationship} diagnostics={[]} onChange={vi.fn()} />
+    );
+    expect((html.match(/aria-label="Relationship kind"/g) ?? [])).toHaveLength(1);
+    expect(html).toContain('value="binding"');
+  });
+
   it('renders diagnostics matching property paths', () => {
     const diagnostics: SysmlDiagnostic[] = [
       { code: 'INVALID_MULTIPLICITY', severity: 'error', elementId: 'rel1', propertyPath: 'relationships.rel1.sourceMultiplicity', message: 'Composition composite end multiplicity upper must be at most 1' },
