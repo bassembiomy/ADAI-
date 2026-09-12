@@ -29,6 +29,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $zip = Join-Path $env:RUNNER_TEMP 'w64devkit-1.23.0.zip'
           Invoke-WebRequest -Uri 'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip' -OutFile $zip
+          $expectedZipSha256 = '5c7dce6762be3e0dba648a9317790444c0e2f1ef3e677315c115727d7a549539'
+          $actualZipSha256 = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualZipSha256 -ne $expectedZipSha256) {
+            throw "Pinned w64devkit archive hash mismatch. Expected $expectedZipSha256, got $actualZipSha256"
+          }
           $dest = Join-Path $PWD 'toolchains/w64devkit'
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force

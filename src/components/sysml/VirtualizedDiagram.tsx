@@ -340,19 +340,24 @@ export function cullElements(
   const visibleCandidateIds = grid.query(queryBox);
   const visibleIds = new Set<string>();
 
+  // Resolve grid candidates through maps instead of rescanning every entity
+  // and checking Set membership. This keeps culling proportional to the
+  // viewport candidate count for large models.
+  const blockById = new Map(blocks.map(block => [block.id, block]));
+  const partById = new Map(parts.map(part => [part.id, part]));
   const visibleBlocks: BlockData[] = [];
-  for (const b of blocks) {
-    if (visibleCandidateIds.has(b.id)) {
-      visibleBlocks.push(b);
-      visibleIds.add(b.id);
-    }
-  }
-
   const visibleParts: PartData[] = [];
-  for (const p of parts) {
-    if (visibleCandidateIds.has(p.id)) {
-      visibleParts.push(p);
-      visibleIds.add(p.id);
+  for (const id of visibleCandidateIds) {
+    const block = blockById.get(id);
+    if (block) {
+      visibleBlocks.push(block);
+      visibleIds.add(id);
+      continue;
+    }
+    const part = partById.get(id);
+    if (part) {
+      visibleParts.push(part);
+      visibleIds.add(id);
     }
   }
 
