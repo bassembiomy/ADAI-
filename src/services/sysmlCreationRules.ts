@@ -58,7 +58,12 @@ export function validateLegacyRelationshipCandidate(
   if (type === 'verify' && (source !== 'verificationCase' || !targetReq)) codes.push('INVALID_VERIFY_DIRECTION');
   if (type === 'refine' && (sourceReq || !targetReq)) codes.push('INVALID_REFINE_DIRECTION');
   if (type === 'trace' && !sourceReq && !targetReq) codes.push('INVALID_TRACE_ENDPOINTS');
-  if (type === 'composition' && (sourceReq || targetReq)) codes.push('INVALID_COMPOSITION_ENDPOINTS');
+  if (type === 'composition') {
+    if (source !== 'block' || target !== 'block') {
+      codes.push('INVALID_COMPOSITION_ENDPOINTS');
+    }
+    if (createsCycle(model.relationships, candidate, 'composition')) codes.push('COMPOSITION_CYCLE');
+  }
   if (type === 'requirementContainment') {
     if (!sourceReq || !targetReq) codes.push('INVALID_REQUIREMENT_CONTAINMENT_ENDPOINT');
     if (candidate.sourceId === candidate.targetId) codes.push('REQUIREMENT_SELF_CONTAINMENT');
@@ -74,7 +79,7 @@ export function validateLegacyRelationshipCandidate(
   }
   if (type === 'generalization' && (source !== 'block' || target !== 'block')) codes.push('INVALID_GENERALIZATION_ENDPOINTS');
 
-  if (['generalization', 'composition', 'deriveReqt', 'copy'].includes(type) && createsCycle(model.relationships, candidate, type)) codes.push('RELATIONSHIP_CYCLE');
+  if (['generalization', 'deriveReqt', 'copy'].includes(type) && createsCycle(model.relationships, candidate, type)) codes.push('RELATIONSHIP_CYCLE');
   return result(codes);
 }
 

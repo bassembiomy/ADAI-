@@ -34,6 +34,22 @@ describe('native SysML creation rules', () => {
     expect(validateLegacyRelationshipCandidate({ blocks, parts: [], relationships: existing }, relationship('h2', 'r2', 'r1', 'deriveReqt')).codes).toContain('RELATIONSHIP_CYCLE');
   });
 
+  it('rejects invalid composition endpoints and cycles while allowing valid block-to-block reuse', () => {
+    const blocks = [block('system'), block('other'), block('partType'), block('req', 'requirement')];
+    const parts: PartData[] = [];
+    const model = { blocks, parts, relationships: [] as RelationshipData[] };
+
+    expect(validateLegacyRelationshipCandidate(model, relationship('valid', 'system', 'partType', 'composition')).valid).toBe(true);
+    expect(validateLegacyRelationshipCandidate(model, relationship('invalid-endpoint', 'system', 'req', 'composition')).codes)
+      .toContain('INVALID_COMPOSITION_ENDPOINTS');
+    const existing = [relationship('valid', 'system', 'partType', 'composition')];
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existing }, relationship('duplicate', 'system', 'partType', 'composition')).codes)
+      .toContain('DUPLICATE_RELATIONSHIP');
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existing }, relationship('cycle', 'partType', 'system', 'composition')).codes)
+      .toContain('COMPOSITION_CYCLE');
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existing }, relationship('reuse', 'other', 'partType', 'composition')).valid).toBe(true);
+  });
+
   it('validates IBD direction, interface type/unit, duplicate, and boundary context', () => {
     const out = { id: 'out', name: 'out', type: 'Power', direction: 'out' as const, unit: 'V' };
     const input = { id: 'in', name: 'in', type: 'Power', direction: 'in' as const, unit: 'V' };
