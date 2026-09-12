@@ -4,6 +4,7 @@
 @tailwind utilities;
 @import './styles/theme-contract.css';
 @import './styles/workspaces/entropy.css';
+@import './styles/workspaces/hil.css';
 
 :root {
   color-scheme: dark;

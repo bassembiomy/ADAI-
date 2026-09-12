@@ -52,7 +52,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
   const sramSizeKb = sramRegion ? Math.round(sramRegion.size / 1024) : 0;
 
   return (
-    <div className="bg-[#121212] border border-[#262626] rounded-xl p-4 text-[#e0e0e0] flex flex-col gap-4 shadow-lg">
+    <div className="hil-panel ui-card bg-[#121212] border border-[#262626] rounded-xl p-4 text-[#e0e0e0] flex flex-col gap-4 shadow-lg">
       {/* Header & Dropdown */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[#222]">
         <div className="flex items-center gap-2.5">
@@ -62,7 +62,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
           <div>
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               Target Pack Registry
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
+              <span className="hil-status inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
                 <Info size={10} /> Pack v{currentManifest.packVersion} · Static analysis only
               </span>
             </h3>
@@ -76,7 +76,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
           <select
             value={currentManifest.targetId}
             onChange={(e) => handleTargetChange(e.target.value)}
-            className="bg-[#1a1a1a] border border-[#333] text-xs font-mono text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#f97316] transition-colors cursor-pointer"
+            className="ui-control ui-focus-ring bg-[#1a1a1a] border border-[#333] text-xs font-mono text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#f97316] transition-colors cursor-pointer"
           >
             {targetIds.map((id) => {
               const pack = registry.getTarget(id);
@@ -94,7 +94,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
       {/* Grid: Device Specs & Driver Modes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
         {/* Core & Clock */}
-        <div className="bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
+        <div className="hil-target-card ui-card bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-[#888] font-medium">
             <span className="flex items-center gap-1.5 text-white">
               <Zap size={14} className="text-amber-400" /> Core & Clock
@@ -111,7 +111,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
         </div>
 
         {/* Memory Profile */}
-        <div className="bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
+        <div className="hil-target-card ui-card bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-[#888] font-medium">
             <span className="flex items-center gap-1.5 text-white">
               <HardDrive size={14} className="text-cyan-400" /> Memory Profile
@@ -133,7 +133,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
         </div>
 
         {/* Driver Mode Selector */}
-        <div className="bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
+        <div className="hil-target-card ui-card bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-[#888] font-medium">
             <span className="flex items-center gap-1.5 text-white">
               <Layers size={14} className="text-[#f97316]" /> Driver Execution Mode
@@ -144,7 +144,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
               <button
                 key={mode}
                 onClick={() => handleDriverModeChange(mode)}
-                className={`flex-1 py-1 px-2 text-[11px] font-mono font-semibold rounded border transition-colors ${
+                className={`ui-control ui-focus-ring flex-1 py-1 px-2 text-[11px] font-mono font-semibold rounded border transition-colors ${
                   activeDriverMode === mode
                     ? 'bg-[#f97316]/20 border-[#f97316] text-[#f97316]'
                     : 'bg-[#222] border-[#333] text-[#aaa] hover:text-white'

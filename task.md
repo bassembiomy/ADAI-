@@ -1,67 +1,53 @@
-# Task: Large-Model Remaining Gaps Implementation Plan
+# Task: Application-Wide Light Mode Implementation Plan
 
-- [x] Task 1: Create and Verify the Real Worker Factory
-  - [x] Step 1: Create `src/services/sysmlWorkerFactory.ts` with `createSysmlWorker()` using `new Worker(new URL('../engine/sysml/sysmlWorker.ts', import.meta.url), { type: 'module' })` and Electron-safe constructor seam
-  - [x] Step 2: Update `src/engine/sysml/workerProtocol.ts` to add protocol `version: '1.0.0'` and validate `requestId`, `revision`, and `taskType`
-  - [x] Step 3: Update `src/services/sysmlWorkerClient.ts` to use default factory when `Worker` is available, allow `workerFactory: null` for tests, and expose `workerAvailable`, `lastWorkerError`, `fallbackReason` in diagnostics
-  - [x] Step 4: Add unit tests in `src/services/sysmlWorkerFactory.test.ts` for factory injection, no-worker fallback, error handling, termination, and stale revision rejection
-  - [x] Step 5: Verify tests with `npm run test:sysml` and verify build bundle with `npm run build`
-- [x] Task 2: Make Worker Payloads Transferable and Safe
-  - [x] Step 1: Define `WorkerStoreSnapshot` using plain objects/arrays in `src/engine/sysml/workerProtocol.ts`
-  - [x] Step 2: Implement `toWorkerSnapshot(store)` and `fromWorkerSnapshot(snapshot)` with schema and revision validation in `src/engine/sysml/normalizedStore.ts`
-  - [x] Step 3: Ensure projection requests transfer only target diagram ID and required element IDs
-  - [x] Step 4: Add cancellation checks inside large loops in `src/engine/sysml/sysmlWorker.ts`
-  - [x] Step 5: Add tests comparing worker and main-thread outputs for validation, projection, impact, and serialization
-- [x] Task 3: Remove Full-Snapshot History from Large-Model Mutations
-  - [x] Step 1: Define `HistoryBudgetOptions` with `maxEntries`, `maxBytes`, `checkpointEvery`, and `maxReplayOperations` in `src/engine/sysml/patches.ts`
-  - [x] Step 2: Make committed mutations produce one forward/inverse patch and eliminate full-repository cloning (`structuredClone`) in `sysmlCommandGateway.ts`
-  - [x] Step 3: Use `applyPatch` against normalized store for undo/redo, materializing repository only when compatibility callers explicitly ask
-  - [x] Step 4: Add periodic checkpoints only after `checkpointEvery` operations or when replay cost exceeds threshold
-  - [x] Step 5: Test memory bound, multi-step undo/redo, cascade-delete restoration, and patch replay from checkpoint
-- [x] Task 4: Make the Normalized Store the Single Source of Truth
-  - [x] Step 1: Initialize gateway state containing normalized store and presentation maps as single semantic truth
-  - [x] Step 2: Remove 150ms `mergeLegacyDiagramIntoRepository` synchronization effect in `App.tsx`
-  - [x] Step 3: Remove full `blocks`, `relationships`, `parts`, and `connectors` copies from App state; retain active visible selector results and transient drag state
-  - [x] Step 4: Expose memoized selectors (`selectVisibleBlocks`, `selectVisibleParts`, `selectRelationshipsForVisibleNodes`, `selectConnectorsForVisibleParts`)
-  - [x] Step 5: Cache `projectLegacyDiagram` with key `{storeRevision, diagramId}` for export/compatibility panels
-- [x] Task 5: Add Indexed Edge Culling
-  - [x] Step 1: Maintain endpoint indexes in `NormalizedSysmlStore`: `relationshipsByEndpoint`, `connectorsByPart`, and diagram membership
-  - [x] Step 2: Update `cullElements` in `VirtualizedDiagram.tsx` to retrieve edges via endpoint indexes rather than scanning all relationships and connectors
-  - [x] Step 3: Return stable arrays when viewport, revision, and visible IDs have not changed
-  - [x] Step 4: Ensure edges connected to the active IBD context block remain visible
-  - [x] Step 5: Add 100k-edge tests validating sub-millisecond culling time and zero missing/extra visible edges
-- [x] Task 6: Integrate Selectors into BDD/IBD Rendering
-  - [x] Step 1: Replace `blocks.find()` in per-node render loops with `getById`/selector maps
-  - [x] Step 2: Memoize node, port, relationship, connector, and label components using entity revision plus presentation revision
-  - [x] Step 3: Render only current diagram/layer IDs and viewport-visible subset
-  - [x] Step 4: Defer labels, route recomputation, and shadows during pan/drag via idle/rAF scheduling
-  - [x] Step 5: Verify selection, hit testing, context block behavior, and Playwright DOM node counts
-- [x] Task 7: Connect Worker Scheduling to Real Application Operations
-  - [x] Step 1: Schedule large validation after edits with cancellation and revision checks
-  - [x] Step 2: Schedule projection only for active diagram (never whole-repo for local update)
-  - [x] Step 3: Schedule deletion-impact analysis before confirmation for large repositories
-  - [x] Step 4: Show visible "main-thread fallback" warning in `LargeModelDiagnostics` if worker unavailable
-  - [x] Step 5: Expose worker queue count, last task duration, fallback reason, and stale-result count
-- [x] Task 8: Add Real Large-Model Performance and Memory Gates
-  - [x] Step 1: Create realistic fixtures (1k, 10k, 50k, 100k) with high relationship/connector density in `src/engine/sysml/largeModelStress.test.ts`
-  - [x] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
-  - [x] Step 3: Enforce gates: no main-thread task > 100ms in performance mode, drag p95 < 50ms, worker cancellation < 100ms
-  - [x] Step 4: Create real UI performance test in `tests/e2e/sysml-large-model-interaction.spec.ts`
-- [x] Task 9: Verify Persistence and Recovery Under Load
-  - [x] Step 1: Test incremental save after one patch without serializing unrelated chunks
-  - [x] Step 2: Test interrupted chunk writes, temporary file cleanup, checksum failure, and recovery from last valid manifest
-  - [x] Step 3: Test lazy loading of inactive diagrams and materialization of active diagram only
-  - [x] Step 4: Test full legacy JSON export/import remains byte-valid semantically
-  - [x] Step 5: Verify save cancellation never leaves store in half-committed revision
-- [x] Task 10: Final Regression and Release Gate
-  - [x] Step 1: Run `npm run test:sysml` (35 test files, 261 tests passed)
-  - [x] Step 2: Run `npm run test:e2e:sysml` (Playwright large-model performance and interaction suites verified)
-  - [x] Step 3: Run `npx tsc --noEmit` and `npm run build` (tsc 0 errors, Vite build successful with 4,073 modules transformed and dedicated worker chunk)
-  - [x] Step 4: Verify 100k stress and Electron performance suites (benchmarks and stress tests pass with sub-millisecond culling and < 50ms latency)
-  - [x] Step 5: Document measured results and machine profile in `docs/performance-baseline.md`
-- [x] Task 11: VLab Block Port Domains and Parameter Definitions
-  - [x] Step 1: Fix Variable Resistor (`variable_resistor`) port domain definitions (p/n: Electrical, r: Physical)
-  - [x] Step 2: Fix Switch (`switch`) parameters (`Roff`, `threshold`) and port domains (p/n: Electrical, v: Physical) with updated equation
-  - [x] Step 3: Fix Translational EM Converter (`translational_electromechanical_converter`) port domains (p/n: Electrical, r/c: Translational)
-  - [x] Step 4: Add umbrella domain compatibility in `VLabWorkspace.tsx` (`Mechanical` <-> `Translational`/`Rotational`)
-  - [x] Step 5: Verify unit tests and full VLab certification suite (`vlab_block_fixes.test.ts`, `vlab_full_certification.test.ts`, `tsc --noEmit`)
+- [x] Task 1: Semantic Theme Contract
+  - [x] Step 1: Write the failing contract tests in `src/styles/themeContract.test.ts`
+  - [x] Step 2: Run the test and confirm the missing file/token failure
+  - [x] Step 3: Implement `src/styles/theme-contract.css` and import it in `src/index.css`
+  - [x] Step 4: Run the contract and existing theme tests
+  - [x] Step 5: Commit `feat(ui): establish semantic theme contract`
+- [x] Task 2: Shared Engineering Primitives And Shell
+  - [x] Step 1: Write interaction-state tests in `src/components/ui/EngineeringPrimitives.test.tsx`
+  - [x] Step 2: Run the test and confirm missing exports
+  - [x] Step 3: Create `src/components/ui/EngineeringPrimitives.tsx`
+  - [x] Step 4: Update shell header, workspace tabs, mobile navigation, and dialogs in `src/App.tsx`
+  - [x] Step 5: Run focused tests and TypeScript (`EngineeringPrimitives.test.tsx`, `themeManager.test.ts`, `tsc --noEmit`)
+  - [x] Step 6: Commit `refactor(ui): theme shared engineering controls`
+- [x] Task 3: Entropy OPM Light Workspace
+  - [x] Step 1: Add failing semantic-root and accessible-control assertions in OPM tests
+  - [x] Step 2: Run the Entropy component tests
+  - [x] Step 3: Create `src/styles/workspaces/entropy.css` and update Entropy components
+  - [x] Step 4: Run OPM regression coverage (`npm run test:opm`)
+  - [x] Step 5: Commit `feat(ui): complete entropy light workspace`
+- [x] Task 4: HIL Workspace And Target Pack Completion
+  - [x] Step 1: Add failing class-contract assertions in `TargetPackSelector.test.tsx`
+  - [x] Step 2: Run the target-pack test
+  - [x] Step 3: Create `src/styles/workspaces/hil.css` and update HIL components
+  - [x] Step 4: Run HIL component, security, and TypeScript checks
+  - [x] Step 5: Commit `feat(ui): finish hil light workspace`
+- [ ] Task 5: X-Bridges And V-Lab Diagram Workspaces
+  - [ ] Step 1: Add failing root/node theme assertions in V-Lab tests
+  - [ ] Step 2: Run the V-Lab focused tests
+  - [ ] Step 3: Create `src/styles/workspaces/xbridges.css` and theme X-Bridges components
+  - [ ] Step 4: Create `src/styles/workspaces/vlab.css` and theme V-Lab components
+  - [ ] Step 5: Run V-Lab and TypeScript regressions (`npm run test:vlab && npx tsc --noEmit`)
+  - [ ] Step 6: Commit `feat(ui): unify diagram workspace light themes`
+- [ ] Task 6: DOE, RTM, SysML Editors, And Utility Dialogs
+  - [ ] Step 1: Add semantic-class assertions to representative DOE and SysML tests
+  - [ ] Step 2: Run focused tests and confirm failures
+  - [ ] Step 3: Create `src/styles/workspaces/doe.css` and theme tables, editors, validation states, and dialogs
+  - [ ] Step 4: Run DOE and SysML release checks (`npm run test:doe && npm run test:sysml:release`)
+  - [ ] Step 5: Commit `feat(ui): theme engineering editors and tables`
+- [ ] Task 7: Remove Legacy Overrides And Add Static Guardrails
+  - [ ] Step 1: Write literal-color guard script `scripts/check_theme_literals.cjs` and add `npm run lint:theme` in `package.json`
+  - [ ] Step 2: Run the guard and record remaining literals
+  - [ ] Step 3: Remove superseded global compatibility rules in `src/index.css`
+  - [ ] Step 4: Run theme guard and TypeScript (`npm run lint:theme && npx tsc --noEmit`)
+  - [ ] Step 5: Commit `test(ui): prevent dark-only theme regressions`
+- [ ] Task 8: Cross-Module Visual And Release Verification
+  - [ ] Step 1: Add cross-module smoke test `tests/e2e/light-mode-visual.spec.ts`
+  - [ ] Step 2: Run the visual smoke test and inspect diffs
+  - [ ] Step 3: Fix visual defects and record audit in `docs/design-audits/light-mode-verification.md`
+  - [ ] Step 4: Run complete release gate (`npm run lint:theme`, tests, Playwright, `npm run build`)
+  - [ ] Step 5: Commit final evidence `test(ui): verify application-wide light mode`
+  - [ ] Step 6: Push and verify synchronization (`git push origin co-work`)

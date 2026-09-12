@@ -393,7 +393,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   }));
 
   return (
-    <div className="bg-[#0e0e0e] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
+    <div className="hil-panel ui-card bg-[#0e0e0e] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
       
       {/* Session toolbar controls (hidden when panel is maximized) */}
       {dashboardMaximized === null && (
@@ -404,7 +404,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
               {sessionState.status === 'connected' ? <Wifi size={20} /> : <WifiOff size={20} />}
             </div>
             <div>
-              <div className="text-[10px] text-[#888] uppercase tracking-wider font-bold">HIL Status</div>
+              <div className="hil-status text-[10px] text-[#888] uppercase tracking-wider font-bold">HIL Status</div>
               <div className="text-xs font-semibold capitalize text-[#e0e0e0]">{sessionState.status}</div>
             </div>
           </div>
@@ -439,7 +439,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                   onChangeCommPort(val);
                 }
               }}
-              className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+              className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               {ports.map(p => (
                 <option key={p} value={p}>{p}</option>
@@ -457,7 +457,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
               value={baudRate}
               disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
               onChange={(e) => onChangeBaudRate(parseInt(e.target.value))}
-              className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+              className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               {[9600, 19200, 38400, 57600, 115200, 230400, 921600].map(rate => (
                 <option key={rate} value={rate}>{rate} bps</option>
@@ -471,14 +471,14 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
               <button
                 onClick={handleConnect}
                 disabled={!commPort || sessionState.status === 'connecting'}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-black font-semibold text-xs rounded transition-colors disabled:opacity-50"
+                className="ui-control ui-focus-ring flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-black font-semibold text-xs rounded transition-colors disabled:opacity-50"
               >
                 <Play size={14} /> Connect
               </button>
             ) : (
               <button
                 onClick={handleDisconnect}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors"
+                className="ui-control ui-focus-ring flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors"
               >
                 <Square size={14} /> Disconnect
               </button>
@@ -519,7 +519,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           onRestore={() => setDashboardMaximized(null)}
         >
           {/* Left Side: Plotly real-time signals */}
-          <div className="bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col h-full overflow-hidden">
+          <div className="hil-panel ui-card bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col h-full overflow-hidden">
             <div className="flex justify-between items-center mb-2 shrink-0">
               <div>
                 <h3 className="text-xs font-bold text-[#e0e0e0]">Real-Time Signal Scope</h3>
@@ -536,7 +536,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                       addLog('success', `Trace complete. Recorded ${recordedData.length} samples.`);
                     }
                   }}
-                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
+                  className={`ui-control ui-focus-ring px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
                     isRecording 
                       ? 'bg-red-950/30 text-red-500 border border-red-900/40' 
                       : 'bg-[#222] hover:bg-[#333] text-gray-400 border border-[#333]'
@@ -547,7 +547,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                 <button
                   disabled={recordedData.length === 0}
                   onClick={handleExportTrace}
-                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#222] hover:bg-[#333] border border-[#333] text-gray-300 rounded transition-colors disabled:opacity-40"
+                  className="ui-control ui-focus-ring flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#222] hover:bg-[#333] border border-[#333] text-gray-300 rounded transition-colors disabled:opacity-40"
                 >
                   <FileDown size={12} /> Export CSV
                 </button>
@@ -558,7 +558,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
               </div>
             </div>
             
-            <div className="flex-1 bg-[#0a0a0a] rounded border border-[#222]/60 overflow-hidden flex items-center justify-center">
+            <div className="hil-terminal ui-terminal flex-1 bg-[#0a0a0a] rounded border border-[#222]/60 overflow-hidden flex items-center justify-center">
               {sessionState.status !== 'connected' ? (
                 <div className="text-center p-6 text-[#444]">
                   <p className="text-sm">Signal scope offline</p>
@@ -589,7 +589,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           <div className="flex flex-col gap-4 h-full overflow-hidden">
             
             {/* Fault injection */}
-            <div className="flex-1 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
+            <div className="hil-panel ui-card flex-1 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
               <div className="flex justify-between items-center mb-2 shrink-0">
                 <h3 className="text-xs font-bold text-[#e0e0e0] flex items-center gap-1.5">
                   <ShieldAlert size={14} className="text-yellow-600" />
@@ -605,12 +605,12 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                 {channels.filter(c => c.direction === 'In').map(ch => {
                   const fault = sessionState.faultInjections[ch.id] || { active: false, value: 0, type: 'override' };
                   return (
-                    <div key={ch.id} className="bg-[#181818] p-2 rounded border border-[#222] text-xs">
+                    <div key={ch.id} className="hil-target-card ui-card bg-[#181818] p-2 rounded border border-[#222] text-xs">
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="font-semibold text-white">{ch.name} <span className="text-[10px] text-[#666]">({ch.pin})</span></span>
                         <button
                           onClick={() => toggleFault(ch.id, 'override', fault.value)}
-                          className={`px-2 py-0.5 text-[9px] rounded font-bold transition-all ${
+                          className={`ui-control ui-focus-ring px-2 py-0.5 text-[9px] rounded font-bold transition-all ${
                             fault.active 
                               ? 'bg-yellow-600 text-black' 
                               : 'bg-[#222] hover:bg-[#333] text-gray-500'
@@ -632,7 +632,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                               const val = parseFloat(e.target.value);
                               toggleFault(ch.id, 'override', val);
                             }}
-                            className="flex-1 h-1 bg-[#333] rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                            className="ui-control ui-focus-ring flex-1 h-1 bg-[#333] rounded-lg appearance-none cursor-pointer accent-yellow-500"
                           />
                           <span className="text-[10px] font-mono text-white w-8 text-right">
                             {fault.value}
@@ -651,9 +651,9 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
             </div>
 
             {/* Session Logs */}
-            <div className="h-44 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden shrink-0">
+            <div className="hil-panel ui-card h-44 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden shrink-0">
               <h3 className="text-xs font-bold text-[#e0e0e0] mb-2 shrink-0">Session Logs</h3>
-              <div className="flex-1 overflow-y-auto no-scrollbar font-mono text-[9px] text-[#888] space-y-1">
+              <div className="hil-terminal ui-terminal flex-1 overflow-y-auto no-scrollbar font-mono text-[9px] text-[#888] space-y-1 p-2 rounded">
                 {sessionState.log.map((lg, i) => {
                   let color = 'text-[#aaa]';
                   if (lg.type === 'success') color = 'text-green-400';
