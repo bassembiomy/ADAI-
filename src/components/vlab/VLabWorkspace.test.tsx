@@ -105,5 +105,13 @@ describe('VLabWorkspace Solver Configuration Inspector', () => {
       expect(currentT).toBe(1.0);
     });
   });
+
+  describe('Theme Contract', () => {
+    it('declares vlab-workspace class on workspace root', async () => {
+      const fs = await import('node:fs');
+      const src = fs.readFileSync('src/components/vlab/VLabWorkspace.tsx', 'utf8');
+      expect(src).toMatch(/className=.*vlab-workspace/);
+    });
+  });
 });
 

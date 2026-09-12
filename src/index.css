@@ -5,6 +5,8 @@
 @import './styles/theme-contract.css';
 @import './styles/workspaces/entropy.css';
 @import './styles/workspaces/hil.css';
+@import './styles/workspaces/xbridges.css';
+@import './styles/workspaces/vlab.css';
 
 :root {
   color-scheme: dark;

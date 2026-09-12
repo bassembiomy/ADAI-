@@ -2740,9 +2740,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   return (
-    <div id="vlab-workspace-container" className="flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
+    <div id="vlab-workspace-container" className="vlab-workspace flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 h-12 bg-[#0d0d0d] border-b border-[#222] flex items-center justify-between px-4 z-10">
+      <div className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[#0d0d0d] border-b border-[#222] flex items-center justify-between px-4 z-10">
         <div className="flex items-center gap-4">
           <button
             onClick={onBack}
@@ -3087,13 +3087,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             connectionLineStyle={{ stroke: '#6c9ac6', strokeWidth: 2 }}
             connectionLineType={ConnectionLineType.Bezier}
             connectionMode={ConnectionMode.Loose}
-            colorMode="dark"
+            className="engineering-canvas"
             fitView
             snapToGrid
             snapGrid={[10, 10]}
           >
-            <Background color="#151515" gap={20} variant={BackgroundVariant.Lines} />
-            <Controls className="bg-[#1a1a1a] border-[#333] fill-white" />
+            <Background color="var(--diagram-grid)" gap={20} variant={BackgroundVariant.Lines} />
+            <Controls className="vlab-panel ui-control" />
 
             {/* Simulink Canvas Zoom HUD */}
             <Panel position="bottom-left" className="m-3 select-none">

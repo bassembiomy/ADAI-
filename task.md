@@ -25,13 +25,13 @@
   - [x] Step 3: Create `src/styles/workspaces/hil.css` and update HIL components
   - [x] Step 4: Run HIL component, security, and TypeScript checks
   - [x] Step 5: Commit `feat(ui): finish hil light workspace`
-- [ ] Task 5: X-Bridges And V-Lab Diagram Workspaces
-  - [ ] Step 1: Add failing root/node theme assertions in V-Lab tests
-  - [ ] Step 2: Run the V-Lab focused tests
-  - [ ] Step 3: Create `src/styles/workspaces/xbridges.css` and theme X-Bridges components
-  - [ ] Step 4: Create `src/styles/workspaces/vlab.css` and theme V-Lab components
-  - [ ] Step 5: Run V-Lab and TypeScript regressions (`npm run test:vlab && npx tsc --noEmit`)
-  - [ ] Step 6: Commit `feat(ui): unify diagram workspace light themes`
+- [x] Task 5: X-Bridges And V-Lab Diagram Workspaces
+  - [x] Step 1: Add failing root/node theme assertions in V-Lab tests
+  - [x] Step 2: Run the V-Lab focused tests
+  - [x] Step 3: Create `src/styles/workspaces/xbridges.css` and theme X-Bridges components
+  - [x] Step 4: Create `src/styles/workspaces/vlab.css` and theme V-Lab components
+  - [x] Step 5: Run V-Lab and TypeScript regressions (`npm run test:vlab && npx tsc --noEmit`)
+  - [x] Step 6: Commit `feat(ui): unify diagram workspace light themes`
 - [ ] Task 6: DOE, RTM, SysML Editors, And Utility Dialogs
   - [ ] Step 1: Add semantic-class assertions to representative DOE and SysML tests
   - [ ] Step 2: Run focused tests and confirm failures

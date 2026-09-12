@@ -69,4 +69,23 @@ describe('VLabNode Schematic Presentation', () => {
     expect(html).toContain('data-id="1-null-hydraulic_ref_1-a-source"');
     expect(html).toContain('data-id="1-null-hydraulic_ref_1-a-target"');
   });
+
+  it('exposes ui-card class on node root for theme contract', () => {
+    const data = {
+      type: 'resistor',
+      label: 'R1',
+      color: '#3b82f6',
+      rotation: 0,
+      ports: []
+    };
+
+    const html = renderToStaticMarkup(
+      <ReactFlowProvider>
+        <VLabNode id="node_theme" data={data} selected={false} />
+      </ReactFlowProvider>
+    );
+
+    expect(html).toContain('vlab-node');
+    expect(html).toContain('ui-card');
+  });
 });

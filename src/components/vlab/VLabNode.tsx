@@ -145,7 +145,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
   return (
     <div
       data-selected={selected ? 'true' : 'false'}
-      className={`vlab-node relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'}`}
+      className={`vlab-node ui-card relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'}`}
       onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
     >
       {/* Symbol & Port Container */}

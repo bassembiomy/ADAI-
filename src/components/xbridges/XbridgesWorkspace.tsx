@@ -2809,7 +2809,7 @@ export const XbridgesWorkspace: React.FC<{
   ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div id="xbridges-workspace-container" className="flex h-full w-full bg-[#111] text-[#e0e0e0] font-sans overflow-hidden select-none relative">
+    <div id="xbridges-workspace-container" className="xbridges-workspace flex h-full w-full bg-[#111] text-[#e0e0e0] font-sans overflow-hidden select-none relative">
       {/* Quick Search Menu */}
       {searchMenuPos && (
         <div
@@ -3347,7 +3347,7 @@ export const XbridgesWorkspace: React.FC<{
               connectionLineComponent={PremiumConnectionLine}
               connectionRadius={30}
               reconnectRadius={30}
-              colorMode="dark"
+              className="engineering-canvas"
               minZoom={0.2}
               maxZoom={2.0}
               snapToGrid
@@ -3367,12 +3367,12 @@ export const XbridgesWorkspace: React.FC<{
               }}
               elevateNodesOnSelect
             >
-              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a2a" />
-              <Controls className="bg-[#1a1a1a] border-[#333] fill-[#e0e0e0] shadow-md [&_button]:bg-[#1a1a1a] [&_button]:border-b-[#333] [&_path]:fill-[#e0e0e0] hover:[&_button]:bg-[#222]" />
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--diagram-grid)" />
+              <Controls className="xbridges-panel ui-control" />
               <MiniMap
-                nodeColor={(n) => n.data.selected ? '#10b981' : '#444'}
+                nodeColor={(n) => n.data.selected ? 'var(--diagram-node-selected)' : 'var(--border-default)'}
                 maskColor="rgba(0, 0, 0, 0.4)"
-                className="bg-[#1a1a1a] border border-[#333] rounded-lg shadow-md"
+                className="xbridges-panel rounded-lg shadow-md"
               />
 
               {activeLabId && (
@@ -3456,7 +3456,7 @@ export const XbridgesWorkspace: React.FC<{
                                     className={`flex items-center gap-2.5 p-2 rounded-xl transition-all duration-300 ${done ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-50 border border-slate-200 text-slate-650'}`}
                                   >
                                     <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${done ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-300'}`}>
-                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-350" />}
+                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]" />}
                                     </div>
                                     <span className={`text-[10px] font-bold ${done ? 'line-through text-emerald-600/80' : 'text-slate-600'}`}>
                                       {obj.label}
