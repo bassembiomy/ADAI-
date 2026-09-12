@@ -47,6 +47,7 @@ describe('native BDD property rules', () => {
     expect(result.codes).toEqual(expect.arrayContaining(['DUPLICATE_BLOCK_NAME', 'INVALID_PROPERTY_NAME']));
   });
 
+
   it('validates property kind/type, multiplicity, duplicate names, redefinition, and subsetting', () => {
     const base = block('base', 'block', [property('base-items', 'items', 'part', 'partType', '1..2')]);
     const partType = block('partType');

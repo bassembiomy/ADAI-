@@ -9524,6 +9524,10 @@ const ADIA = () => {
     const current = blocks.find(block => block.id === id);
     if (!current) return;
     const candidate = { ...current, ...updates };
+    if (current.stereotype === 'requirement' && candidate.stereotype !== 'requirement') {
+      addError('error', 'A SysML requirement cannot be changed to an unrelated stereotype.', 'SysML', id);
+      return;
+    }
     const validation = validateLegacyBlockEdit([...blocks.filter(block => block.id !== id), candidate], relationships, id);
     if (!validation.valid) {
       addError('error', `Invalid SysML attribute: ${validation.messages[0] || validation.codes[0]}`, 'SysML', id);
@@ -16966,26 +16970,29 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Stereotype</Label>
-                    <select
-                      value={selectedBlock.stereotype}
-                      onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      {selectedBlock.stereotype === 'requirement' && (
-                        <option value="requirement">Requirement</option>
-                      )}
-                      <option value="block">Block</option>
-                      <option value="interface">Interface</option>
-                      <option value="interfaceBlock">Interface Block</option>
-                      <option value="valueType">ValueType</option>
-                      <option value="enumeration">Enumeration</option>
-                      <option value="verificationCase">Verification Case</option>
-                      {customStereotypes
-                        ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
-                        .map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    {selectedBlock.stereotype === 'requirement' ? (
+                      <div className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-sm text-[#e0e0e0]" role="status">
+                        Requirement <span className="text-[10px] text-[#888]">(fixed by SysML Requirements semantics)</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedBlock.stereotype}
+                        onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
+                        className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                      >
+                        <option value="block">Block</option>
+                        <option value="interface">Interface</option>
+                        <option value="interfaceBlock">Interface Block</option>
+                        <option value="valueType">ValueType</option>
+                        <option value="enumeration">Enumeration</option>
+                        <option value="verificationCase">Verification Case</option>
+                        {customStereotypes
+                          ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
+                          .map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                   {selectedBlock.stereotype === 'requirement' && (
                     <>
