@@ -182,146 +182,25 @@ export function safeCreateFunction(params: string[], body: string): Function {
 }
 
 // =============================================================================
-// STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
+// SHARED ENGINEERING UI PRIMITIVES
 // =============================================================================
-const Button = ({
-  children,
-  onClick,
-  variant = 'default',
-  size = 'default',
-  className = '',
-  disabled = false,
-  ...props
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'default' | 'outline' | 'destructive' | 'ghost' | 'secondary';
-  size?: 'sm' | 'default' | 'icon';
-  className?: string;
-  disabled?: boolean;
-  [key: string]: any;
-}) => {
-  const base = 'px-3 py-1.5 rounded font-medium transition-colors flex items-center justify-center';
-  const variants = {
-    default: 'bg-[#f97316] text-white hover:bg-[#ea580c]',
-    outline: 'border border-[#333] text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    destructive: 'bg-red-600 hover:bg-red-700 text-white',
-    ghost: 'text-[#a0a0a0] hover:text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    secondary: 'bg-[#1a1a1a] border border-[#333] text-[#e0e0e0] hover:bg-[#222]'
-  };
-  const sizes = {
-    sm: 'text-xs px-2 h-7',
-    default: 'text-sm px-3 h-8',
-    icon: 'h-8 w-8 p-0'
-  };
+import {
+  Button,
+  Input,
+  Label,
+  Badge,
+  Separator,
+  Triangle,
+  Checkbox,
+  Resizer,
+  EngineeringButton,
+  EngineeringInput,
+  EngineeringLabel,
+  EngineeringBadge,
+  EngineeringSeparator,
+  EngineeringCheckbox,
+} from './components/ui/EngineeringPrimitives';
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Input = ({
-  value,
-  onChange,
-  placeholder = '',
-  type = 'text',
-  className = '',
-  ...props
-}: {
-  value: string | number;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  type?: string;
-  className?: string;
-  [key: string]: any;
-}) => (
-  <input
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    type={type}
-    className={`px-2 py-1 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] ${className}`}
-    {...props}
-  />
-);
-
-const Label = ({ children, className = '', ...props }: { children: React.ReactNode; className?: string;[key: string]: any }) => (
-  <label className={`text-xs text-[#888] ${className}`} {...props}>{children}</label>
-);
-
-const Badge = ({ children, variant = 'secondary', className = '' }: {
-  children: React.ReactNode;
-  variant?: 'default' | 'secondary' | 'outline';
-  className?: string;
-}) => (
-  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#f97316] text-[#0a0a0a]'
-    } ${className}`}>
-    {children}
-  </span>
-);
-
-const Separator = ({ orientation = 'horizontal', className = '' }: {
-  orientation?: 'horizontal' | 'vertical';
-  className?: string;
-}) => (
-  <div className={`${orientation === 'vertical' ? 'w-px h-4' : 'h-px w-full'} bg-[#333] ${className}`} />
-);
-
-const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill={fill || "none"}
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3 20h18L12 4z" />
-  </svg>
-);
-
-const Checkbox = ({
-  checked,
-  onCheckedChange,
-  id,
-  className = ''
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  id?: string;
-  className?: string;
-}) => (
-  <input
-    id={id}
-    type="checkbox"
-    checked={checked}
-    onChange={(e) => onCheckedChange(e.target.checked)}
-    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#f97316] focus:ring-[#f97316] ${className}`}
-  />
-);
-
-const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: React.MouseEvent) => void, orientation?: 'vertical' | 'horizontal' }) => (
-  <div
-    onMouseDown={onMouseDown}
-    className={`shrink-0 bg-transparent group transition-colors duration-200 ${orientation === 'vertical' ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
-      }`}
-  >
-    <div className={`bg-[#333] group-hover:bg-[#f97316] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
-  </div>
-);
-
-// WelcomeOverlay has been moved and refactored as a standalone component IntroStandbyOverlay
 
 
 
@@ -4603,7 +4482,7 @@ const WorkspaceTabBar = ({
   ];
 
   return (
-    <div className="workspace-tab-bar h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
+    <div className="workspace-tab-bar ui-surface h-10 bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 justify-between select-none">
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
@@ -4618,8 +4497,8 @@ const WorkspaceTabBar = ({
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
                   isActive 
-                ? 'workspace-tab-active bg-[#1a1a1a] text-white border-t-[#f97316]' 
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#161616] border-t-transparent'
+                ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]' 
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
               }`}
               style={{
                 boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
@@ -4632,7 +4511,7 @@ const WorkspaceTabBar = ({
                   e.stopPropagation();
                   onCloseTab(tabId);
                 }}
-                className="ml-2 w-4 h-4 rounded-full hover:bg-slate-800 hover:text-red-400 flex items-center justify-center text-[8px] text-slate-500 font-normal transition-colors"
+                className="ml-2 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
                 title="Close Tab"
               >
                 ✕
@@ -4643,7 +4522,7 @@ const WorkspaceTabBar = ({
       </div>
       <button 
         onClick={onOpenDialog}
-        className="ml-4 p-1 rounded hover:bg-[#1c1c1c] text-[#f97316] transition-colors flex items-center justify-center"
+        className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
         title="Open Workspace Asset Manager"
       >
         <span className="text-lg font-bold">+</span>
@@ -15133,7 +15012,7 @@ const ADIA = () => {
         </div>
       )}
       <div
-        className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
+        className="flex flex-col ui-surface font-sans overflow-hidden"
         style={{
           zoom: uiZoom,
           width: `${100 / uiZoom}vw`,
@@ -15143,13 +15022,13 @@ const ADIA = () => {
         {/* Hidden input for project import */}
         <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
-        {/* Top Toolbar - Modernized & Unified Dark Header */}
-        <header className="h-14 bg-[#111114] border-b border-[#222228] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
+        {/* Top Toolbar - Modernized & Unified Semantic Header */}
+        <header className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
           {/* Brand & Project Identity Group */}
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={() => setShowWorkspaceFileDialog(true)}
-              className="p-1.5 hover:bg-[#1f1f26] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
+              className="p-1.5 hover:bg-[var(--surface-raised)] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
               title="Create/Open Workspace Asset File"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="group-hover:scale-110 transition-transform">
@@ -15157,24 +15036,24 @@ const ADIA = () => {
               </svg>
             </button>
             <div>
-              <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2">
+              <div className="font-bold text-lg tracking-tight text-[var(--text-primary)] flex items-center gap-2">
                 <span>ADIA</span>
                 <input
                   type="text"
                   value={currentProjectName}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
-                  className="bg-[#18181c] text-zinc-300 hover:text-white focus:text-white text-xs font-medium px-2 py-0.5 rounded border border-[#2e2e38] focus:border-[#f97316]/60 focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
+                  className="bg-[var(--surface-raised)] text-[var(--text-primary)] hover:border-[var(--border-strong)] focus:border-[#f97316] text-xs font-medium px-2 py-0.5 rounded border border-[var(--border-default)] focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
                   title="Click to rename project"
                 />
               </div>
-              <div className="text-[10px] text-zinc-500 font-mono mt-[-2px]">{VERSION}</div>
+              <div className="text-[10px] text-[var(--text-muted)] font-mono mt-[-2px]">{VERSION}</div>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* DIAGRAM MODE SWITCHER */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5 shrink-0">
+          <div className="flex ui-card bg-[var(--surface-raised)] rounded-lg border border-[var(--border-default)] p-0.5 shrink-0">
             {[
               { id: 'statemachine', label: 'State Machine' },
               { id: 'bdd', label: 'SysML BDD' },
@@ -15190,8 +15069,8 @@ const ADIA = () => {
                 onClick={() => setDiagramMode(mode.id as DiagramMode)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
-                    ? mode.id === 'plantuml' ? 'bg-orange-500 text-zinc-950 shadow-sm font-semibold' : 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)]'
                 }`}
               >
                 {mode.label}
@@ -15199,20 +15078,21 @@ const ADIA = () => {
             ))}
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+
+          <Separator orientation="vertical" className="h-6" />
 
           {/* SIMULATION & VALIDATION GROUP */}
-          <div className="flex items-center gap-1.5 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1.5 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Sim tick rate control */}
-            <div className="flex items-center gap-1 px-1.5 text-xs text-zinc-400">
+            <div className="flex items-center gap-1 px-1.5 text-xs text-[var(--text-secondary)]">
               <span className="text-[11px] whitespace-nowrap">Tick:</span>
               <TickRateInput value={tickMs} onChange={setTickMs} />
-              <span className="text-[10px] text-zinc-500">ms</span>
+              <span className="text-[10px] text-[var(--text-muted)]">ms</span>
             </div>
 
             {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
               <>
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
                 <Button
                   size="sm"
@@ -15245,7 +15125,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={stepSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Step single cycle"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15259,7 +15139,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={resetSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Reset simulation"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15269,13 +15149,13 @@ const ADIA = () => {
                   Reset
                 </Button>
 
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Check for errors"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15290,11 +15170,11 @@ const ADIA = () => {
                   size="sm"
                   onClick={validateWithAI}
                   disabled={isAiValidating}
-                  className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
                   title="Validate logic with AI"
                 >
                   {isAiValidating ? (
-                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -15310,32 +15190,32 @@ const ADIA = () => {
               </>
             )}
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <div className="flex items-center gap-1.5 px-1.5 py-0.5">
               <Checkbox
                 checked={safetyMode}
                 onCheckedChange={(c) => setSafetyMode(c as boolean)}
                 id="safety-mode"
-                className="h-3.5 w-3.5 rounded border-zinc-600 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
               />
-              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
+              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-500 font-semibold" : "text-[var(--text-secondary)]"}`}>
                 Safety
               </Label>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* CODE GENERATION & PROJECT I/O GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Generate C/H Button - Primary Accent */}
             <Button
               variant="outline"
               size="sm"
               onClick={generateCode}
               disabled={isGenerating}
-              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 disabled:opacity-50 disabled:cursor-wait"
+              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-500 hover:bg-orange-500/20 hover:text-orange-600 disabled:opacity-50 disabled:cursor-wait"
               title="Generate C/H Embedded Code"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15345,16 +15225,16 @@ const ADIA = () => {
               {isGenerating ? 'Generating...' : 'Generate C/H'}
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project (.adia)"
             >
-              <Save size={13} className="mr-1 text-zinc-400" />
+              <Save size={13} className="mr-1 text-[var(--text-muted)]" />
               Save
             </Button>
 
@@ -15362,7 +15242,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project as new file (.adia)"
             >
               Save As
@@ -15372,10 +15252,10 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleOpenProjectDialog}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open ADIA project (.adia)"
             >
-              <FolderOpen size={13} className="mr-1 text-zinc-400" />
+              <FolderOpen size={13} className="mr-1 text-[var(--text-muted)]" />
               Open
             </Button>
 
@@ -15383,7 +15263,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleExportProject}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Export individual module files (.json)"
             >
               Export
@@ -15393,22 +15273,22 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowReportDialog(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Generate Engineering Report"
             >
               Report
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* ENGINEERING TOOLS & GATEWAYS GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('hmi')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open HMI Dashboard Panel"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-orange-400">
@@ -15423,7 +15303,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('pid')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="PID Controller Tuner"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-sky-400">
@@ -15438,24 +15318,24 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('doe')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Design of Experiments (Response Surface Methodology)"
             >
               DOE (RSM)
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowFactoryIOGateway(true)}
-              className={`h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors ${
+              className={`h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors ${
                 factoryIOEnabled ? 'text-indigo-400 bg-indigo-500/10' : ''
               }`}
               title="Factory I/O Gateway Connection"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-zinc-400'}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`}>
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                 <line x1="12" y1="22.08" x2="12" y2="12" />
@@ -15469,7 +15349,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShow3DXGateway(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Connect to 3DEXPERIENCE Platform"
             >
               <Cloud size={13} className="mr-1 text-cyan-400" />
@@ -15481,7 +15361,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowSysmlDiagnostics(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="SysML Performance Diagnostics & Limits"
             >
               <Gauge size={13} className="mr-1 text-orange-400" />
@@ -15497,7 +15377,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => handleOpenHelp()}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Help & Documentation"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15512,17 +15392,12 @@ const ADIA = () => {
             <button
               id="adia-theme-toggle-btn"
               type="button"
-              title={currentTheme === 'dark' ? 'Switch to Emerald & Champagne Light Mode' : 'Switch to Dark Mode'}
+              title={currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               onClick={() => {
                 const next = toggleTheme();
                 setCurrentTheme(next);
               }}
-              className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border transition-all duration-200 shadow-sm cursor-pointer"
-              style={{
-                backgroundColor: currentTheme === 'light' ? '#E5D5B2' : '#18181c',
-                borderColor: currentTheme === 'light' ? '#C9AF84' : '#27272f',
-                color: currentTheme === 'light' ? '#022C22' : '#F8E7C9',
-              }}
+              className="ui-control ui-focus-ring h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border border-[var(--border-default)] transition-all duration-200 shadow-sm cursor-pointer"
             >
               {currentTheme === 'dark' ? (
                 <>
@@ -15531,35 +15406,36 @@ const ADIA = () => {
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-[#022C22]" />
+                  <Moon className="w-3.5 h-3.5 text-[var(--text-primary)]" />
                   <span className="hidden sm:inline font-mono font-bold">Dark</span>
                 </>
               )}
             </button>
 
             {/* Status indicators */}
-            <div className="flex items-center gap-3 bg-[#18181c] border border-[#27272f] rounded-lg px-2.5 py-1 text-xs">
+            <div className="flex items-center gap-3 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg px-2.5 py-1 text-xs">
               <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-500' : 'text-[var(--text-muted)]'}`}>
                   {isRunning ? 'RUN' : 'STOP'}
                 </span>
               </div>
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
+              <Separator orientation="vertical" className="h-3.5" />
               <LiveFpsMonitor />
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
-              <div className="text-zinc-500 font-mono text-[11px]">
-                T: <span className="text-zinc-300 font-semibold">{simulationTime.toFixed(1)}s</span>
+              <Separator orientation="vertical" className="h-3.5" />
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                T: <span className="text-[var(--text-primary)] font-semibold">{simulationTime.toFixed(1)}s</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                S: <span className="text-zinc-300 font-semibold">{currentStates.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                S: <span className="text-[var(--text-primary)] font-semibold">{currentStates.length}</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                V: <span className="text-zinc-300 font-semibold">{variables.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                V: <span className="text-[var(--text-primary)] font-semibold">{variables.length}</span>
               </div>
             </div>
           </div>
         </header>
+
 
         {/* Workspace Tab Bar */}
         <WorkspaceTabBar
@@ -15575,8 +15451,8 @@ const ADIA = () => {
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
-            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
                   <div className="flex items-center overflow-hidden whitespace-nowrap">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
@@ -15584,12 +15460,12 @@ const ADIA = () => {
                        <path d="M16 17l-3-3 3-3" />
                        <path d="M13 14H3" />
                     </svg>
-                    <span className="text-sm font-medium">Hierarchy</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Hierarchy</span>
                   </div>
                 )}
                 <button
                   onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-                  className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+                  className={`p-1.5 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
                   <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
                 </button>
