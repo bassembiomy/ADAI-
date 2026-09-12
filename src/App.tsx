@@ -14307,16 +14307,16 @@ const ADIA = () => {
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
 
-          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? 'var(--sysml-requirement-fill)' : 'var(--sysml-block-fill)'} stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="var(--sysml-block-meta)" fontSize={10} fontFamily="monospace">
             {block.isAbstract ? `«${block.stereotype}, abstract»` : `«${block.stereotype}»`}
           </text>
-          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
             {block.name}{block.isLeaf ? ' {leaf}' : ''}
           </text>
-          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
+          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="var(--sysml-block-divider)" strokeWidth={1} />
 
           {/* If degraded mode active, skip complex sub-elements for performance */}
           {!isDegraded && (
@@ -16197,7 +16197,7 @@ const ADIA = () => {
                 onWheel={handleWheel}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
+                <svg className="sysml-diagram-canvas" width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>
                     <pattern
                       id="grid"

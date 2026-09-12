@@ -21,30 +21,44 @@
   --node-bg: #242424;
   --wire-color: #444444;
   --canvas-grid-dot: #2a2a2a;
+  --sysml-block-fill: #1a1a1a;
+  --sysml-requirement-fill: #1e1e1e;
+  --sysml-block-stroke: #e0e0e0;
+  --sysml-block-divider: #444444;
+  --sysml-block-text: #e0e0e0;
+  --sysml-block-subtext: #a0a0a0;
+  --sysml-block-meta: #f97316;
   --scrollbar-thumb: rgba(201, 168, 108, 0.5);
   --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
 }
 
 [data-theme="light"], .light {
   color-scheme: light;
-  --bg-main: #F8E7C9;
-  --bg-main-rgb: 248, 231, 201;
-  --bg-panel: #EFE0BF;
-  --bg-panel-rgb: 239, 224, 191;
-  --bg-panel-secondary: #E5D5B2;
-  --text-primary: #022C22;
-  --text-secondary: #064E3B;
-  --text-muted: #1B5E4B;
-  --border-dark: #C9AF84;
-  --border-med: #BBA072;
-  --accent-emerald: #064E3B;
-  --accent-emerald-hover: #022C22;
-  --accent-emerald-glow: rgba(6, 78, 59, 0.2);
-  --node-bg: #FCF8F0;
-  --wire-color: #064E3B;
-  --canvas-grid-dot: rgba(6, 78, 59, 0.2);
-  --scrollbar-thumb: rgba(6, 78, 59, 0.45);
-  --scrollbar-thumb-hover: rgba(6, 78, 59, 0.8);
+  --bg-main: #eef3f5;
+  --bg-main-rgb: 238, 243, 245;
+  --bg-panel: #ffffff;
+  --bg-panel-rgb: 255, 255, 255;
+  --bg-panel-secondary: #f4f7f8;
+  --text-primary: #172a35;
+  --text-secondary: #405661;
+  --text-muted: #6a7d86;
+  --border-dark: #c9d6db;
+  --border-med: #b3c5cc;
+  --accent-emerald: #087f73;
+  --accent-emerald-hover: #05645b;
+  --accent-emerald-glow: rgba(8, 127, 115, 0.16);
+  --node-bg: #ffffff;
+  --wire-color: #3e6871;
+  --canvas-grid-dot: rgba(31, 94, 104, 0.18);
+  --sysml-block-fill: #ffffff;
+  --sysml-requirement-fill: #f3f8f9;
+  --sysml-block-stroke: #75919a;
+  --sysml-block-divider: #c3d1d5;
+  --sysml-block-text: #172a35;
+  --sysml-block-subtext: #405661;
+  --sysml-block-meta: #b45309;
+  --scrollbar-thumb: rgba(8, 127, 115, 0.38);
+  --scrollbar-thumb-hover: rgba(8, 127, 115, 0.68);
 }
 
 body {
@@ -58,6 +72,67 @@ body {
   color: var(--text-primary);
   overflow: hidden;
   transition: background-color 0.25s ease, color 0.2s ease, border-color 0.25s ease;
+}
+
+[data-theme="light"] body,
+.light body {
+  background-image: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55));
+}
+
+/* Legacy utility compatibility: the main editor predates the token system and
+   contains literal dark utility classes. In light mode these selectors keep
+   every surface, border, and text run legible until the components migrate. */
+[data-theme="light"] [class*="bg-[#0a0a0a]"],
+[data-theme="light"] [class*="bg-[#111"],
+[data-theme="light"] [class*="bg-[#1a1a1a]"],
+[data-theme="light"] [class*="bg-[#1a1a20]"],
+[data-theme="light"] [class*="bg-[#18181c]"],
+[data-theme="light"] [class*="bg-[#242424]"],
+.light [class*="bg-[#0a0a0a]"],
+.light [class*="bg-[#111"],
+.light [class*="bg-[#1a1a1a]"],
+.light [class*="bg-[#1a1a20]"],
+.light [class*="bg-[#18181c]"],
+.light [class*="bg-[#242424]"] {
+  background-color: var(--bg-panel) !important;
+}
+
+[data-theme="light"] [class*="text-[#e0e0e0]"],
+[data-theme="light"] [class*="text-white"],
+.light [class*="text-[#e0e0e0]"],
+.light [class*="text-white"] {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] [class*="text-[#888]"],
+[data-theme="light"] [class*="text-[#666]"],
+[data-theme="light"] [class*="text-[#555]"],
+.light [class*="text-[#888]"],
+.light [class*="text-[#666]"],
+.light [class*="text-[#555]"] {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="light"] [class*="border-[#333]"],
+[data-theme="light"] [class*="border-[#222]"],
+.light [class*="border-[#333]"],
+.light [class*="border-[#222]"] {
+  border-color: var(--border-dark) !important;
+}
+
+/* SysML canvas hierarchy */
+[data-theme="light"] .sysml-diagram-canvas,
+.light .sysml-diagram-canvas {
+  background-color: #f6fafb;
+  background-image: radial-gradient(circle, rgba(44, 104, 112, .16) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+[data-theme="light"] .sysml-diagram-canvas text,
+.light .sysml-diagram-canvas text {
+  paint-order: stroke;
+  stroke: rgba(255,255,255,.35);
+  stroke-width: .25px;
 }
 
 * {
