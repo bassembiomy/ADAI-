@@ -4603,7 +4603,7 @@ const WorkspaceTabBar = ({
   ];
 
   return (
-    <div className="h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
+    <div className="workspace-tab-bar h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
@@ -4617,8 +4617,8 @@ const WorkspaceTabBar = ({
               key={tabId}
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
-                isActive 
-                  ? 'bg-[#1a1a1a] text-white border-t-[#f97316]' 
+                  isActive 
+                ? 'workspace-tab-active bg-[#1a1a1a] text-white border-t-[#f97316]' 
                   : 'text-slate-500 hover:text-slate-300 hover:bg-[#161616] border-t-transparent'
               }`}
               style={{

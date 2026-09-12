@@ -74,6 +74,26 @@ body {
   transition: background-color 0.25s ease, color 0.2s ease, border-color 0.25s ease;
 }
 
+:root {
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+}
+
+code,
+pre,
+.font-mono,
+[font-family="monospace"] {
+  font-family: var(--font-mono);
+}
+
 [data-theme="light"] body,
 .light body {
   background-image: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55));
@@ -118,6 +138,65 @@ body {
 .light [class*="border-[#333]"],
 .light [class*="border-[#222]"] {
   border-color: var(--border-dark) !important;
+}
+
+/* Remaining legacy editor chrome: normalize charcoal utilities into the same
+   elevated surfaces used by the new light-mode canvas. */
+[data-theme="light"] [class*="bg-[#222"],
+[data-theme="light"] [class*="bg-[#27272f"],
+[data-theme="light"] [class*="bg-[#18181c"],
+[data-theme="light"] [class*="bg-[#111114"],
+[data-theme="light"] [class*="bg-[#141414"],
+[data-theme="light"] [class*="bg-[#0a0a0c"],
+[data-theme="light"] [class*="bg-[#050505"],
+.light [class*="bg-[#222"],
+.light [class*="bg-[#27272f"],
+.light [class*="bg-[#18181c"],
+.light [class*="bg-[#111114"],
+.light [class*="bg-[#141414"],
+.light [class*="bg-[#0a0a0c"],
+.light [class*="bg-[#050505"] {
+  background-color: var(--bg-panel-secondary) !important;
+}
+
+[data-theme="light"] [class*="border-[#222"],
+[data-theme="light"] [class*="border-[#27272f"],
+[data-theme="light"] [class*="border-[#222228"],
+[data-theme="light"] [class*="border-[#2d2d2d"],
+.light [class*="border-[#222"],
+.light [class*="border-[#27272f"],
+.light [class*="border-[#222228"],
+.light [class*="border-[#2d2d2d"] {
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] [class*="text-[#a0a0a0"],
+[data-theme="light"] [class*="text-[#aaa"],
+[data-theme="light"] [class*="text-[#ccc"],
+[data-theme="light"] [class*="text-zinc-300"],
+.light [class*="text-[#a0a0a0"],
+.light [class*="text-[#aaa"],
+.light [class*="text-[#ccc"],
+.light [class*="text-zinc-300"] {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .workspace-tab-bar,
+.light .workspace-tab-bar {
+  background: var(--bg-panel-secondary) !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] .workspace-tab-bar .workspace-tab-active,
+.light .workspace-tab-bar .workspace-tab-active {
+  background: var(--bg-panel) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .workspace-tab-bar [class*="hover\\:bg-\\[\\#161616\\]"]:hover,
+.light .workspace-tab-bar [class*="hover\\:bg-\\[\\#161616\\]"]:hover {
+  background: rgba(8, 127, 115, 0.08) !important;
+  color: var(--text-primary) !important;
 }
 
 /* SysML canvas hierarchy */
