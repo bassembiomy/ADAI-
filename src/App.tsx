@@ -14601,9 +14601,9 @@ const ADIA = () => {
           {isSelected && (
             <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
-          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#f97316' : '#666'} strokeWidth={1} />
-          <text x={part.width / 2} y={20} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
-          <text x={part.width / 2} y={35} textAnchor="middle" fill="#888" fontSize={10}>: {block?.name || 'Unknown'}</text>
+          <rect width={part.width} height={part.height} fill="var(--sysml-part-fill)" stroke={isSelected ? '#f97316' : 'var(--sysml-part-stroke)'} strokeWidth={1} />
+          <text x={part.width / 2} y={20} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
+          <text x={part.width / 2} y={35} textAnchor="middle" fill="var(--sysml-block-subtext)" fontSize={10}>: {block?.name || 'Unknown'}</text>
 
           {/* Ports - FR-IBD-005: Reflect changes in BDD automatically */}
           {block?.ports?.map((port, i) => {
@@ -14629,7 +14629,7 @@ const ADIA = () => {
                 <rect
                   x={-5} y={-5}
                   width={10} height={10}
-                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : '#333'}
+                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : 'var(--sysml-port-fill)'}
                   stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
                   strokeWidth={1}
                   onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
@@ -14652,7 +14652,7 @@ const ADIA = () => {
                     </g>
                   </>
                 )}
-                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="#aaa" fontSize={9}>{port.name}</text>
+                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="var(--sysml-port-label)" fontSize={9}>{port.name}</text>
               </g>
             );
           })}

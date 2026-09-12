@@ -28,6 +28,11 @@
   --sysml-block-text: #e0e0e0;
   --sysml-block-subtext: #a0a0a0;
   --sysml-block-meta: #f97316;
+  --sysml-part-fill: #1a1a1a;
+  --sysml-part-stroke: #666666;
+  --sysml-port-fill: #333333;
+  --sysml-port-label: #aaaaaa;
+  --sysml-relation-cutout: #1a1a1a;
   --scrollbar-thumb: rgba(201, 168, 108, 0.5);
   --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
 }
@@ -57,6 +62,11 @@
   --sysml-block-text: #172a35;
   --sysml-block-subtext: #405661;
   --sysml-block-meta: #b45309;
+  --sysml-part-fill: #ffffff;
+  --sysml-part-stroke: #75919a;
+  --sysml-port-fill: #e7eff1;
+  --sysml-port-label: #405661;
+  --sysml-relation-cutout: #f6fafb;
   --scrollbar-thumb: rgba(8, 127, 115, 0.38);
   --scrollbar-thumb-hover: rgba(8, 127, 115, 0.68);
 }
