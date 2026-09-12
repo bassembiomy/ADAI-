@@ -1,11 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, RelationshipData, ValuePropertyData } from '../types/sysml_types';
-import { formatLegacyProperty, validateLegacyBlockProperties } from './sysmlPropertyRules';
+import { formatLegacyProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './sysmlPropertyRules';
 
 const block = (id: string, stereotype = 'block', properties: ValuePropertyData[] = []): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties, operations: [], constraints: [], classes: [], ports: [] });
 const property = (id: string, name: string, kind: ValuePropertyData['kind'], typeId: string, multiplicity = '1'): ValuePropertyData => ({ id, name, kind, typeId, type: typeId, multiplicity });
 
 describe('native BDD property rules', () => {
+  it('rejects malformed block attributes with stable diagnostics', () => {
+    const candidate = block('candidate', 'requirement', [
+      { id: 'p1', name: '', type: 'Missing', typeId: 'Missing', kind: 'value', multiplicity: '2..1' },
+      { id: 'p2', name: '', type: 'Missing', typeId: 'Missing', kind: 'value', multiplicity: '1' },
+    ]);
+    candidate.name = 'bad name';
+    candidate.reqId = '???';
+    candidate.status = 'Unknown';
+    candidate.operations = ['9bad()'];
+    candidate.constraints = ['   '];
+    candidate.ports = [{ id: 'p', name: 'bad port', type: '', kind: 'flow', direction: 'sideways' as any }];
+    const result = validateLegacyBlockEdit([candidate], [], candidate.id);
+    expect(result.valid).toBe(false);
+    expect(result.codes).toEqual(expect.arrayContaining([
+      'INVALID_BLOCK_NAME', 'INVALID_REQUIREMENT_ID', 'INVALID_REQUIREMENT_STATUS',
+      'INVALID_OPERATION_SIGNATURE', 'EMPTY_CONSTRAINT', 'INVALID_PORT_NAME',
+      'MISSING_PORT_TYPE', 'INVALID_PORT_DIRECTION', 'DUPLICATE_PROPERTY_NAME',
+      'INVALID_MULTIPLICITY', 'INVALID_PROPERTY_TYPE',
+    ]));
+  });
+
+  it('accepts Cameo-style block attributes', () => {
+    const candidate = block('PowerSubsystem', 'block', [{ id: 'p1', name: 'voltage', type: 'Real', typeId: 'Real', kind: 'value', multiplicity: '1..1' }]);
+    candidate.namespace = ['Vehicle', 'Power'];
+    candidate.operations = ['initializeSystem(): Boolean'];
+    candidate.constraints = ['voltage >= 0'];
+    candidate.ports = [{ id: 'p', name: 'powerIn', type: 'PowerIF', kind: 'proxy', direction: 'in' }];
+    const valueType = block('Real', 'valueType');
+    expect(validateLegacyBlockEdit([candidate, valueType], [], candidate.id).valid).toBe(true);
+  });
+
   it('validates property kind/type, multiplicity, duplicate names, redefinition, and subsetting', () => {
     const base = block('base', 'block', [property('base-items', 'items', 'part', 'partType', '1..2')]);
     const partType = block('partType');

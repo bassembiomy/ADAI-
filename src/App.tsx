@@ -133,7 +133,7 @@ import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, select
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
-import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -9521,8 +9521,16 @@ const ADIA = () => {
   }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  }, []);
+    const current = blocks.find(block => block.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validation = validateLegacyBlockEdit([...blocks.filter(block => block.id !== id), candidate], relationships, id);
+    if (!validation.valid) {
+      addError('error', `Invalid SysML attribute: ${validation.messages[0] || validation.codes[0]}`, 'SysML', id);
+      return;
+    }
+    setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
+  }, [addError, blocks, relationships]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
@@ -9643,8 +9651,23 @@ const ADIA = () => {
   }, [parts.length, currentLayerId, snapEnabled, addError, addToHistory]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
-    setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
+    const current = parts.find(part => part.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validName = /^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate.name.trim());
+    const validType = Boolean(candidate.typeId && blocks.some(block => block.id === candidate.typeId && block.stereotype === 'block'));
+    let validMultiplicity = true;
+    try { parseMultiplicity(candidate.multiplicity || '1'); } catch { validMultiplicity = false; }
+    if (!validName || !validType || !validMultiplicity) {
+      addError('error', !validName
+        ? `Invalid SysML part name "${candidate.name}".`
+        : !validType
+          ? `Part ${candidate.name || id} must reference a block type.`
+          : `Invalid multiplicity "${candidate.multiplicity || ''}" for part ${candidate.name || id}.`, 'SysML', id);
+      return;
+    }
+    setParts(prev => prev.map(p => p.id === id ? candidate : p));
+  }, [addError, blocks, parts]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
