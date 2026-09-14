@@ -133,7 +133,8 @@ import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, impactSeverity, m
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
-import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 
@@ -9460,6 +9461,11 @@ const ADIA = () => {
     const current = blocks.find(block => block.id === id);
     if (!current) return;
     const candidate = { ...current, ...updates };
+    const connectionRejection = rejectBlockConnectionChange({ blocks, parts, relationships }, candidate);
+    if (connectionRejection) {
+      showConnectionPolicyError(connectionRejection, id);
+      return;
+    }
     if (current.stereotype === 'requirement' && candidate.stereotype !== 'requirement') {
       addError('error', 'A SysML requirement cannot be changed to an unrelated stereotype.', 'SysML', id);
       return;
@@ -9470,7 +9476,7 @@ const ADIA = () => {
       return;
     }
     setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
-  }, [addError, blocks, relationships]);
+  }, [addError, blocks, parts, relationships, showConnectionPolicyError]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
@@ -9519,7 +9525,7 @@ const ADIA = () => {
     createBlock(x, y, 'requirement');
   }, [createBlock]);
 
-  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
+  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type']) => {
     const newRel: RelationshipData = {
       id: uuidv4(),
       sourceId,
@@ -9529,28 +9535,28 @@ const ADIA = () => {
       sourceMultiplicity: '1',
       targetMultiplicity: '1'
     };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, newRel);
-    if (!validation.valid) {
-      addError('error', `Invalid ${type}: ${validation.reason}`);
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, newRel, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection);
       return;
     }
     addToHistory();
     setRelationships(prev => [...prev, newRel]);
     setSelectedIds([newRel.id]);
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory, blocks, parts, relationships]);
+  }, [addError, addToHistory, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
     const current = relationships.find(relationship => relationship.id === id);
     if (!current) return;
     const candidate = { ...current, ...updates };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, candidate);
-    if (!validation.valid) {
-      addError('error', `Invalid relationship update: ${validation.reason}`);
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection, id);
       return;
     }
     setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
-  }, [relationships, blocks, parts, addError]);
+  }, [relationships, blocks, parts, diagramMode, showConnectionPolicyError]);
 
   const deleteRelationship = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
@@ -10441,16 +10447,23 @@ const ADIA = () => {
           const source = blocks.find(b => b.id === transitionSourceId);
           const target = blocks.find(b => b.id === blockId);
           if (!source || !target) return;
-          let type: RelationshipData['type'] = 'association';
-
-          if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+          const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+          if (legalKinds.length === 0) {
+            showConnectionPolicyError({
+              relationshipKind: 'relationship',
+              source: classifyLegacyEndpoint(source),
+              target: classifyLegacyEndpoint(target),
+              diagnostic: {
+                code: 'NO_LEGAL_RELATIONSHIP',
+                message: `No available relationship can connect ${source.name} to ${target.name} on this diagram.`,
+                correctiveAction: 'Choose compatible endpoints or the appropriate diagram. Check existing links for duplicate or cyclic relationships.',
+              },
+            });
+          } else if (!legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
-            setIsCreatingTransition(false);
-            setTransitionSourceId(null);
-            return;
+          } else {
+            createRelationship(transitionSourceId, blockId, 'association');
           }
-
-          createRelationship(transitionSourceId, blockId, type);
           setIsCreatingTransition(false);
           setTransitionSourceId(null);
         }
@@ -10496,7 +10509,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks]);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -17458,16 +17471,8 @@ const ADIA = () => {
                     }
                     sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
                     targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
-                    sourceEndpoint={classifyLegacyEndpoint(blocks.find(b => b.id === selectedRelationship.sourceId) ?? {
-                      id: selectedRelationship.sourceId,
-                      name: selectedRelationship.sourceId,
-                      stereotype: 'unknown',
-                    })}
-                    targetEndpoint={classifyLegacyEndpoint(blocks.find(b => b.id === selectedRelationship.targetId) ?? {
-                      id: selectedRelationship.targetId,
-                      name: selectedRelationship.targetId,
-                      stereotype: 'unknown',
-                    })}
+                    sourceEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.sourceId)}
+                    targetEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.targetId)}
                     diagram={diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd'}
                     onInvalidChange={(rejection) => showConnectionPolicyError(rejection, selectedRelationship.id)}
                     onChange={(updatedRel) => {
@@ -18089,7 +18094,7 @@ const ADIA = () => {
           </div>
         )}
 
-        {/* Requirement Connection Picker Modal */}
+        {/* Policy-filtered connection picker */}
         {requirementConnectionPicker && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
@@ -18100,7 +18105,7 @@ const ADIA = () => {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div>
-                <h3 className="text-base font-semibold text-white">Create Requirement Relationship</h3>
+                <h3 className="text-base font-semibold text-white">Create Relationship</h3>
                 <p className="text-xs text-[#888] mt-1">
                   Choose the relationship kind between{' '}
                   <span className="text-[#f97316] font-medium">
@@ -18114,57 +18119,23 @@ const ADIA = () => {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'requirementContainment');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Requirement Containment</div>
-                    <div className="text-xs text-[#aaa] font-normal">Parent contains child (source → target)</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'deriveReqt');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Derive Requirement («deriveReqt»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Derived requirement from source</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'copy');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Copy («copy»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Requirement copy relationship</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'trace');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Trace («trace»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">General traceability relationship</div>
-                  </div>
-                </Button>
+                {getCanvasRelationshipKinds(
+                  { blocks, parts, relationships },
+                  requirementConnectionPicker.sourceId,
+                  requirementConnectionPicker.targetId,
+                  diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd',
+                ).map(kind => (
+                  <Button
+                    key={kind}
+                    onClick={() => {
+                      createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
+                      setRequirementConnectionPicker(null);
+                    }}
+                    className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
+                  >
+                    {kind === 'requirementContainment' ? 'Requirement Containment (parent → child)' : kind.replace(/([A-Z])/g, ' $1').replace(/^./, character => character.toUpperCase())}
+                  </Button>
+                ))}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
