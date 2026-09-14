@@ -2,7 +2,7 @@ import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { UseCaseElementData } from '../../types/usecase_types';
 
-export const UseCaseNodeComponent: React.FC<{ data: UseCaseElementData; selected?: boolean }> = ({ data, selected }) => {
+export const UseCaseNodeComponent: React.FC<any> = ({ data, selected }) => {
   const glowStyle = selected
     ? {
         boxShadow: '0 0 25px rgba(251, 191, 36, 0.65), 0 0 45px rgba(245, 158, 11, 0.35), inset 0 0 10px rgba(251, 191, 36, 0.15)',
@@ -20,12 +20,12 @@ export const UseCaseNodeComponent: React.FC<{ data: UseCaseElementData; selected
       <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
       
       <span className="text-[10px] text-amber-500/90 font-medium tracking-wide">«use case»</span>
-      <span className="text-xs font-semibold text-center leading-tight mt-0.5">{data.label || 'Use Case'}</span>
+      <span className="text-xs font-semibold text-center leading-tight mt-0.5">{data?.label || 'Use Case'}</span>
 
-      {data.extensionPoints && data.extensionPoints.length > 0 && (
+      {data?.extensionPoints && data.extensionPoints.length > 0 && (
         <div className="mt-1 pt-1 border-t border-zinc-700/60 w-full flex flex-col items-center">
           <span className="text-[9px] text-zinc-400">extension points:</span>
-          {data.extensionPoints.map((ep, i) => (
+          {data.extensionPoints.map((ep: string, i: number) => (
             <span key={i} className="text-[9px] text-amber-300 italic">{ep}</span>
           ))}
         </div>
@@ -37,7 +37,7 @@ export const UseCaseNodeComponent: React.FC<{ data: UseCaseElementData; selected
   );
 };
 
-export const ActorNodeComponent: React.FC<{ data: UseCaseElementData; selected?: boolean }> = ({ data, selected }) => {
+export const ActorNodeComponent: React.FC<any> = ({ data, selected }) => {
   const glowStyle = selected
     ? {
         boxShadow: '0 0 25px rgba(251, 191, 36, 0.65), 0 0 45px rgba(245, 158, 11, 0.35)',
@@ -61,7 +61,7 @@ export const ActorNodeComponent: React.FC<{ data: UseCaseElementData; selected?:
       </svg>
 
       <span className="text-[10px] text-amber-500/90 font-medium mt-1">«actor»</span>
-      <span className="text-xs font-semibold text-zinc-100 text-center leading-tight mt-0.5">{data.label || 'Actor'}</span>
+      <span className="text-xs font-semibold text-zinc-100 text-center leading-tight mt-0.5">{data?.label || 'Actor'}</span>
 
       <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
       <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
@@ -69,7 +69,7 @@ export const ActorNodeComponent: React.FC<{ data: UseCaseElementData; selected?:
   );
 };
 
-export const BoundaryNodeComponent: React.FC<{ data: UseCaseElementData; selected?: boolean }> = ({ data, selected }) => {
+export const BoundaryNodeComponent: React.FC<any> = ({ data, selected }) => {
   const glowStyle = selected
     ? {
         boxShadow: '0 0 25px rgba(251, 191, 36, 0.5), inset 0 0 15px rgba(251, 191, 36, 0.1)',

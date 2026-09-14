@@ -34,13 +34,13 @@ interface UseCaseWorkspaceProps {
   onSave?: () => void;
 }
 
-const nodeTypes = {
+const nodeTypes: any = {
   useCase: UseCaseNodeComponent,
   actor: ActorNodeComponent,
   systemBoundary: BoundaryNodeComponent,
 };
 
-const edgeTypes = {
+const edgeTypes: any = {
   useCaseEdge: UseCaseEdgeComponent,
 };
 
@@ -72,7 +72,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
   const handleEdgeTypeChange = useCallback(
     (edgeId: string, newType: UseCaseRelationshipType) => {
       saveHistory();
-      setEdges((eds) =>
+      setEdges((eds: any[]) =>
         eds.map((ed) => {
           if (ed.id === edgeId) {
             return {
@@ -95,7 +95,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
     [saveHistory]
   );
 
-  const [edges, setEdges, onEdgesChange] = useEdgesState(
+  const [edges, setEdges, onEdgesChange] = useEdgesState<any>(
     diagram.edges.map((rel) => ({
       id: rel.id,
       source: rel.source,
@@ -314,9 +314,9 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         e.preventDefault();
         saveHistory();
         const selectedNodes = nodes.filter((n) => n.selected || n.id === selectedNodeId);
-        const selectedEdges = edges.filter((ed) => ed.selected);
+        const selectedEdges = edges.filter((ed: any) => ed.selected);
         const nodeIdsToDelete = new Set(selectedNodes.map((n) => n.id));
-        const edgeIdsToDelete = new Set(selectedEdges.map((e) => e.id));
+        const edgeIdsToDelete = new Set(selectedEdges.map((e: any) => e.id));
 
         if (nodeIdsToDelete.size > 0 || edgeIdsToDelete.size > 0) {
           setNodes((nds) => nds.filter((n) => !nodeIdsToDelete.has(n.id)));

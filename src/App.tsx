@@ -19,6 +19,8 @@ import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlPr
 import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
 import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
+import { UseCaseDiagram } from './types/usecase_types';
+import { UseCaseWorkspace } from './components/usecase/UseCaseWorkspace';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
@@ -223,7 +225,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml' | 'usecase';
 
 type ConnectionErrorItem = ErrorItem & {
   connectionDiagnostic?: ConnectionPolicyDiagnostic;
@@ -6056,6 +6058,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const [useCaseDiagrams, setUseCaseDiagrams] = useState<UseCaseDiagram[]>([]);
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
@@ -15133,6 +15136,7 @@ const ADIA = () => {
               { id: 'vlab', label: 'V-Lab' },
               { id: 'hil', label: 'HIL' },
               { id: 'entropy', label: 'ENTROPY OPM' },
+              { id: 'usecase', label: 'Use Cases' },
             ].map(mode => (
               <button
                 key={mode.id}
@@ -15520,7 +15524,7 @@ const ADIA = () => {
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+          {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
             <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
@@ -15553,10 +15557,10 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
           {/* Left Sidebar - Variables */}
-          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+          {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
             <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
                 {!isVariablesCollapsed && (
@@ -15684,7 +15688,7 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
 
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
@@ -15829,7 +15833,22 @@ const ADIA = () => {
                 />
               )}
 
-              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+              {diagramMode === 'usecase' && (
+                <UseCaseWorkspace
+                  sysmlBlocks={blocks}
+                  diagram={useCaseDiagrams[0] || { id: 'default_usecase', name: 'Main Use Cases', nodes: [], edges: [] }}
+                  onChange={(d: UseCaseDiagram) => {
+                    const newDiagrams = [...useCaseDiagrams];
+                    newDiagrams[0] = d;
+                    setUseCaseDiagrams(newDiagrams);
+                  }}
+                  onSave={() => {
+                    // State is automatically saved via useCaseDiagrams
+                  }}
+                />
+              )}
+
+              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
                 <>
 
               {/* Canvas Toolbar */}
@@ -16251,7 +16270,7 @@ const ADIA = () => {
               )}
             </main>
 
-            {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+            {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
               <>
                 {/* Bottom Panel */}
             {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
@@ -16446,9 +16465,9 @@ const ADIA = () => {
 
               </>
             )}          </div>
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
-          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+          {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
             <>
             {/* Right Dock: Properties */}
           <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
