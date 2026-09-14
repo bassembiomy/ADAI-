@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADIA — From State to C: The Code-Generation Contract and its Runtime Behaviour</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b1220;color:#e2e8f0;padding:26px 20px;line-height:1.6}
+.page{max-width:1240px;margin:0 auto}
+h1{font-size:24px;letter-spacing:.2px}h1 span{color:#22d3ee}
+h2{font-size:17px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid #1e293b;color:#f8fafc}
+h2 .num{color:#22d3ee;font-family:Consolas,monospace;margin-right:8px}
+h3{font-size:13.5px;margin:18px 0 7px;color:#a5f3fc}
+h4{font-size:12.5px;margin:14px 0 6px;color:#fcd34d}
+p,li{font-size:12.6px;color:#cbd5e1}
+p{margin:7px 0}
+ul,ol{margin:6px 0 6px 20px}
+li{margin:3px 0}
+code{font-family:Consolas,'Courier New',monospace;font-size:11.4px;color:#67e8f9}
+pre{background:#0f172a;border:1px solid #1e293b;border-left:3px solid #0e7490;border-radius:8px;padding:11px 13px;overflow-x:auto;margin:9px 0}
+pre code{font-size:11.2px;color:#dbeafe;line-height:1.5;white-space:pre}
+pre.mark{font-size:11.4px;color:#94a3b8}
+.sub{color:#94a3b8;font-size:12.4px;margin:8px 0 4px}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.4px;padding:2px 8px;border-radius:999px;vertical-align:middle}
+.tag.pass{background:#064e3b;color:#6ee7b7}.tag.fail{background:#7f1d1d;color:#fca5a5}
+.tag.nr{background:#334155;color:#cbd5e1}.tag.warn{background:#78350f;color:#fcd34d}
+.tag.info{background:#0c4a6e;color:#7dd3fc}
+.stage{border:1px solid #1e293b;border-radius:12px;padding:13px 15px;margin:10px 0;background:#0f172a}
+.stage.s0{border-color:#1d4ed8}.stage.s1{border-color:#0e7490}.stage.s2{border-color:#6d28d9}
+.stage.s3{border-color:#b45309}.stage.s4{border-color:#166534}.stage.s5{border-color:#9f1239}
+.stage h3{margin-top:0}
+.grid{display:grid;gap:10px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.box{background:#1e293b;border:1px solid #334155;border-radius:9px;padding:10px 11px}
+.box h4{margin-top:0}
+.box p{font-size:11.6px;color:#94a3b8}
+.note{border:1px dashed #334155;border-radius:10px;padding:11px 14px;margin:12px 0;background:#0f172a}
+.note.warnc{border-color:#b45309;background:#1c1408}
+.note.okc{border-color:#166534;background:#0c1a12}
+.note.badc{border-color:#9f1239;background:#1c0d12}
+.note h4{margin-top:0}
+table{width:100%;border-collapse:collapse;margin:9px 0}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #1e293b;font-size:11.5px;vertical-align:top;color:#cbd5e1}
+th{color:#fcd34d;font-size:10.6px;letter-spacing:.4px;text-transform:uppercase}
+td.mono,th.mono{font-family:Consolas,monospace;font-size:10.7px;color:#7dd3fc}
+tr:hover td{background:#0f172a}
+.toc{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:12px 16px;margin:14px 0}
+.toc ol{columns:2;column-gap:26px;margin-left:16px}
+.toc a{color:#7dd3fc;text-decoration:none;font-size:12px}
+.toc a:hover{text-decoration:underline}
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:12px 0}
+.kpi div{background:#1e293b;border:1px solid #334155;border-radius:9px;padding:9px 11px;text-align:center}
+.kpi b{display:block;font-size:19px;color:#22d3ee;font-family:Consolas,monospace}
+.kpi span{font-size:10.5px;color:#94a3b8}
+.arrow{text-align:center;color:#475569;font-size:15px;padding:2px 0}
+.arrow small{display:block;font-size:10.5px;color:#64748b}
+.legend{font-size:11px;color:#94a3b8;margin-top:5px}
+.footer{margin-top:30px;padding-top:12px;border-top:1px solid #1e293b;color:#64748b;font-size:11px}
+@media(max-width:900px){.g2,.g3,.g4,.kpi{grid-template-columns:1fr}.toc ol{columns:1}}
+@media print{body{background:#fff;color:#111}pre{background:#f8fafc;border-color:#999}pre code{color:#111}.box,.stage,.note,.toc{background:#fff;border-color:#999}td,th{color:#111}h1 span,h2 .num{color:#0e7490}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>From State to C — <span>the lowering contract and the runtime behaviour of the generator</span></h1>
+<p class="sub">
+Every claim below was produced by running the repository's own generator and toolchain, not from design intent.
+Model: a nested <b>thermal controller</b> (10 states, 5 layers, OR + AND decomposition, deep history, timed transition, safe state, MCAL IO).
+Artifacts, console logs, traces and the differential harness live in <code>scratch/cg-demo/</code>.
+Sources cited by file and line: <code>src/utils/stateMachine/*</code>, <code>src/utils/smAnalysisEngine.ts</code>, <code>scripts/verify_sm_codegen.ts</code>.
+</p>
+
+<div class="kpi">
+  <div><b>10</b><span>states lowered to one C enum</span></div>
+  <div><b>4</b><span>active-slot RAM words for 5 layers</span></div>
+  <div><b>184 B</b><span><code>sizeof(ADIA_Instance_t)</code> (host ABI)</span></div>
+  <div><b>29/29</b><span>frames: generated C ≡ reference interpreter</span></div>
+</div>
+
+<div class="toc">
+<b style="font-size:12.5px;color:#fcd34d">Contents</b>
+<ol>
+<li><a href="#s1">The idea: state becomes data, behaviour becomes code</a></li>
+<li><a href="#s2">The seven-stage pipeline, and what each stage guarantees</a></li>
+<li><a href="#s3">The lowering contract (concept → IR → C)</a></li>
+<li><a href="#s4">Worked example: the thermal controller</a></li>
+<li><a href="#s5">Anatomy of the generated C</a></li>
+<li><a href="#s6">Runtime behaviour of the generated program</a></li>
+<li><a href="#s7">Behaviour of the generation process (conformance gates)</a></li>
+<li><a href="#s8">What this run exposed: three concrete defects</a></li>
+<li><a href="#s9">Footprint and complexity</a></li>
+<li><a href="#s10">Deliberate non-goals</a></li>
+<li><a href="#s11">Reproduce it</a></li>
+</ol>
+</div>
+
+<h2 id="s1"><span class="num">1</span>The idea: state becomes data, behaviour becomes code</h2>
+
+<p>A hierarchical state machine is a graph plus a small runtime. Code generation is the act of <i>specialising</i> that runtime
+for one graph, so that at run time nothing about the graph has to be interpreted: every lookup is an index, every choice is a
+<code>switch</code>, every set of states that must be entered or exited is already an explicit list in the generated source.</p>
+
+<p>The generator is therefore not a template that prints the picture back as code. It is a
+<i>total, deterministic function</i> from a validated semantic IR to a fixed file set:</p>
+
+<pre class="mark"><code>model (JSON, V5)  --migrate-->  legacy-free model  --buildSemanticModel-->  SemanticModel (IR)
+                                                                                  |
+                                        generateCArtifacts(ir, options)  &lt;---------+
+                                                  |
+        +-----------------------------------------+-----------------------------------------+
+        |                    |                    |                    |                   |
+   sm_config.h         sm_core.{h,c}       sm_mapping.{h,c}      sm_safety.{h,c}     sm_user_logic.{h,c}
+   (types, limits)     (execution engine)  (index tables)        (fault containment) (your actions)
+                                                  |
+                                        plus mcal_dio.h, 9 generated test suites, evidence, reports</code></pre>
+
+<p>Five mechanisms carry the whole transformation. Everything in the generated C is one of them:</p>
+
+<div class="grid g3">
+  <div class="box"><h4>1 · Symbols</h4><p>Every state, layer and slot becomes a <code>#define</code> plus an enum member with a
+  <i>stable numeric identity</i>. Model UUIDs never appear in the output — the C compiler sees only small integers.</p></div>
+  <div class="box"><h4>2 · Shape</h4><p>Hierarchy becomes two constant tables (parent layer, parent state) and one active-slot map.
+  "Is warming active?" stops being a search and becomes <code>state_active[SM_ST_WARMING_IDX]</code>.</p></div>
+  <div class="box"><h4>3 · Control</h4><p>Each state and layer gets <code>Enter_*</code>, <code>Restore_*</code>, <code>Execute_*</code>,
+  <code>Exit_*</code> functions. Mutual recursion mirrors the containment tree, so nesting is expressed by the C call graph itself.</p></div>
+  <div class="box"><h4>4 · Commitment</h4><p>Exit sets and entry paths of every transition are computed at generation time and emitted as
+  straight-line code: no run-time graph walk, no allocation, no recursion discovery.</p></div>
+  <div class="box"><h4>5 · Defence</h4><p>Safety is emitted as constant metadata (<code>SM_Layer_Has_Children_Map</code>,
+  <code>SM_Is_Direct_Layer_Child</code>) plus a bounded consistency check that runs before and after every tick.</p></div>
+  <div class="box"><h4>… and the seam</h4><p>Only <code>sm_user_logic.c</code> contains model-authored action code; regeneration never touches it,
+  and the engine never inlines user logic into its own switches.</p></div>
+</div>
+
+<div class="note">
+<h4>Consequence: the generated program is a state machine interpreter with the graph compiled in</h4>
+<p>The runtime footprint per instance is <i>O(states + layers)</i> bools and uint32s, and the tick cost is
+<i>O(active states + outgoing transitions of those states)</i> — the same asymptotics as a hand-written Stateflow-style machine,
+with the added property that nobody wrote the 1&nbsp;069 lines of <code>sm_core.c</code> by hand.</p>
+</div>
+
+<h2 id="s2"><span class="num">2</span>The seven-stage pipeline, and what each stage guarantees</h2>
+
+<p>The generator is defensive about its <i>input</i> exactly as much as about its output. Each stage is a gate: an error at stage
+<i>n</i> makes everything downstream inexpressible rather than wrong.</p>
+
+<div class="stage s0">
+<h3>Stage 0 — Author model (<code>src/types/sm_types.ts</code>, <code>smModel.ts</code>, <code>smFixtures.ts</code>)</h3>
+<p>States with <code>parentId</code>, entry/during/exit scripts, priority, autostart, safe/terminal flags; transitions with
+<code>condition | afterTicks | type</code>; variables with types and initial literals; layers declaring <code>OR</code>/<code>AND</code>
+decomposition; junctions typed <code>junction | history | deep-history</code>. Geometry (x/y/width) exists only for the editor.</p>
+</div>
+<div class="arrow">▼<small>raw, possibly legacy-shaped model</small></div>
+
+<div class="stage s1">
+<h3>Stage 1 — Migration (<code>smModelMigration.ts</code>)</h3>
+<p>Schema V4 → V5, default verification policy, legacy history metadata repair, normalisation of parallel flags.
+<b>Guarantee:</b> downstream code sees one shape only. In this run: <i>0 diagnostics</i>.</p>
+</div>
+<div class="arrow">▼<small>typed model</small></div>
+
+<div class="stage s2">
+<h3>Stage 2 — Semantic build (<code>smSemanticBuilder.ts</code> → <code>SemanticModel</code>)</h3>
+<p>This is where model concepts become engineering concepts, and it is the most consequential stage. It computes:</p>
+<ul>
+<li><b>enumName / activityIndex</b> — deterministic C identity per state (sorted, not insertion order).</li>
+<li><b>activeSlot</b> — one RAM slot per non-empty OR layer; <code>-1</code> for parallel containers that are only tracked by <code>state_active[]</code>.</li>
+<li><b>exitStateIds / entryStateIds per transition</b> — from LCA computation, including cascade exits of descendants.</li>
+<li><b>routes[]</b> — the path a transition actually takes, with <code>destinationKind: 'state' | 'history'</code>; junction chains are
+flattened into a single route so the emitted code has no decision loop.</li>
+<li><b>guard / actions AST</b> — parsed expressions (<code>smExpressions.ts</code>) instead of raw text, so the C emitter can
+type-guard casts and reject what it cannot render.</li>
+</ul>
+<p><b>Guarantee:</b> the C emitter never has to interpret the model's text; it reads a fully resolved structure.</p>
+</div>
+<div class="arrow">▼<small>semantic IR</small></div>
+
+<div class="stage s3">
+<h3>Stage 3 — Validation (<code>smSemanticValidator.ts</code>) and analysis (<code>smAnalysisEngine.ts</code>)</h3>
+<p>Reachability, autostart existence, unambiguous history ownership, slot/total consistency, OR/AND well-formedness.
+Analysis produces requirements-to-state traceability and static reachability used by the reports.
+<b>Guarantee:</b> if this stage reports an error, no C is emitted at all (see <code>scripts/verify_sm_codegen.ts</code>, which returns 1).</p>
+</div>
+<div class="arrow">▼<small>validated IR + analysis</small></div>
+
+<div class="stage s4">
+<h3>Stage 4 — C emission (<code>smCGenerator.ts</code>, 1 963 lines including templates; expressions in <code>smCExpressions.ts</code>)</h3>
+<p>One pure function per artifact. Rendering is string-concatenation over ordered collections, which is why output is
+byte-stable for a given IR (<code>smCGenerator.golden.test.ts</code> snapshot).</p>
+</div>
+<div class="arrow">▼<small>package: production/ + tests/ + verification/</small></div>
+
+<div class="stage s5">
+<h3>Stage 5 — Self-check on its own output (<code>verifyGeneratedCStructure</code>)</h3>
+<p>The generator re-reads the C it just produced and asserts that every <code>instance-&gt;data.&lt;member&gt;</code> access
+corresponds to a declared member of <code>SM_Data_t</code>; failures become <code>GEN_C_UNDECLARED_DATA_MEMBER</code> errors.
+This is a cheap, high-yield guard for a string-based emitter.</p>
+</div>
+<div class="arrow">▼<small>structurally self-consistent package</small></div>
+
+<div class="stage s6">
+<h3>Stage 6 — Conformance pipeline (<code>smPipelineOrchestrator.ts</code>, 12 activities)</h3>
+<p>Host compile with strict flags → run generated tests → ASan/UBSan → gcov coverage → differential C-vs-interpreter →
+static analysis → MISRA → cross-compile for the target → hardware (always <code>PENDING</code> until a bench exists).
+Acceptance is fail-closed: <code>deriveAcceptance()</code> rejects the bundle unless every required activity is <code>PASS</code>
+or <code>NOT_APPLICABLE</code> (see §7).</p>
+</div>
+
+<h2 id="s3"><span class="num">3</span>The lowering contract (concept → IR → C)</h2>
+
+<p>This table <i>is</i> the transformation. Left column: what you draw. Middle: what the IR holds. Right: what a reader of the
+generated C sees. Every row is exercised by the worked example in §4.</p>
+
+<table>
+<tr><th>Model concept</th><th>Semantic IR</th><th>Generated C</th></tr>
+<tr><td>State</td><td class="mono">SemanticState{enumName, activityIndex, depth, priority}</td><td><code>#define SM_ST_PWM_HIGH_IDX 6U</code> + enum member <code>SM_ST_PWM_HIGH = 6</code></td></tr>
+<tr><td>Parent / child nesting</td><td class="mono">parentStateId, layerId, ancestorStateIds[], childLayerIds[]</td><td>constant tables <code>SM_State_Parent_Layer_Map[]</code>, <code>SM_State_Parent_Map[]</code>; call graph <code>Enter_Deep_4 → Enter_Layer_Default_2 → Enter_Deep_5</code></td></tr>
+<tr><td>OR decomposition</td><td class="mono">SemanticLayer{decomposition:'OR', children[], activeSlot}</td><td>one <code>active_states[slot]</code> word + <code>SM_Execute_Layer_k</code> dispatch switch + validity test <code>SM_Is_Direct_Layer_Child</code></td></tr>
+<tr><td>AND (parallel) decomposition</td><td class="mono">decomposition:'AND', activeSlot:null</td><td>no slot; <code>state_active[]</code> per region; entry enters <i>all</i> regions in order; validation requires <i>all</i> regions active</td></tr>
+<tr><td>Autostart / default entry</td><td class="mono">layer.defaultEntryId, defaultEntryKind</td><td><code>SM_Enter_Layer_Default_k()</code> body is exactly one call: the default child or the default junction path</td></tr>
+<tr><td>Entry / during / exit script</td><td class="mono">entryActions[] / duringActions[] / exitActions[] (AST)</td><td>functions <code>SM_ST_*_Entry</code>, <code>SM_ST_*_During</code>, <code>SM_ST_*_Exit</code> in <code>sm_user_logic.c</code> with typed casts</td></tr>
+<tr><td>Transition (external)</td><td class="mono">kind:'outer', exitStateIds[], entryStateIds[], routes[]</td><td>inline in <code>SM_Execute_State_n</code>: exits, then route actions, then entry along path — straight-line, in one <code>if</code></td></tr>
+<tr><td>Transition (internal / local)</td><td class="mono">kind:'internal-action'</td><td>actions only; no exit/entry, so history is not recorded and timers are not reset</td></tr>
+<tr><td>Transition to a container</td><td class="mono">entryStateIds contains the container; child layer default</td><td><code>SM_Enter_Deep_k</code> → <code>SM_Enter_Layer_Default_j</code> cascade (default child re-entered)</td></tr>
+<tr><td>Guard expression</td><td class="mono">ExpressionNode (typed)</td><td><code>if (instance-&gt;data.over_temperature) { … }</code> — variable names become <code>instance-&gt;data.&lt;cName&gt;</code>, literals get type suffixes (<code>250U</code>, <code>180.0</code>)</td></tr>
+<tr><td><code>after(20 ticks)</code> / timed trigger</td><td class="mono">triggerMode:'after', afterTicks, temporalThresholdMs</td><td>uses <code>state_timers[state]</code>, incremented once per tick by <code>SM_TICK_MS</code>; guard becomes <code>timer &gt;= 200U</code>; no kernel timer, no wall clock</td></tr>
+<tr><td>Junction / decision path</td><td class="mono">routes[] flattened, destinationKind:'state'</td><td>no junction state exists at run time; the route is emitted as the actions and entry of the winning path</td></tr>
+<tr><td>Shallow history <code>$H$</code></td><td class="mono">SemanticJunction{kind:'history'} owned by a layer</td><td><code>history_states[slot]</code> snapshot on exit; restore = <code>if (history_states[layer] == SM_ST_X) Enter … else default</code></td></tr>
+<tr><td>Deep history <code>$H*$</code></td><td class="mono">kind:'deep-history'</td><td><code>deep_history[layer][state]</code> bit matrix recorded before every exit; restore via <code>SM_Restore_State_k</code> recursion (§6.6)</td></tr>
+<tr><td>Variable + type + initial</td><td class="mono">SemanticVariable{cName, semanticType, initialValue}</td><td>field of <code>SM_Data_t</code> with a concrete C type; assignment in <code>SM_Init</code>/<code>SM_Reset</code>; overflow-safe unsigned literals</td></tr>
+<tr><td>Safe state / safety mode</td><td class="mono">safeStateId, safetyMode</td><td><code>SM_Enter_Fault()</code>: exit all → enter safe state → <code>SM_ApplySafeOutputs()</code> → latch <code>fault_latched</code></td></tr>
+<tr><td>Terminal state</td><td class="mono">terminal</td><td><code>SM_Execute_State_n</code> is emitted as a no-op returning <code>false</code>: no <code>During</code>, no transition evaluation, no child-layer descent — the machine stops evolving in that state, but the tick and consistency checks keep running</td></tr>
+<tr><td>IO mapping (MCAL)</td><td class="mono">ioMappings[] with direction, conversion, safeValue</td><td><code>SM_ReadInputs</code>/<code>SM_WriteOutputs</code> call <code>MCAL_*</code>; write-mappings also feed <code>SM_ApplySafeOutputs</code></td></tr>
+<tr><td>Traceability (requirement IDs)</td><td class="mono">traceableElements[]</td><td><code>/* TRACE-BEGIN: traceId=TRACE-TRANS-X symbol=sm_trans_x */</code> comments around the emitted guard, and <code>SM_TraceAction(instance, "entry:STATE")</code> hooks</td></tr>
+<tr><td>Scheduling / timing policy</td><td class="mono">tickMs, tickToleranceMs</td><td><code>SM_TICK_MS</code>, <code>SM_TICK_MIN_MS</code>, <code>SM_TICK_MAX_MS</code>: logical time is constant, measured <code>delta_ms</code> is only checked for plausibility</td></tr>
+</table>
+
+<h2 id="s4"><span class="num">4</span>Worked example: the thermal controller</h2>
+
+<figure style="margin:12px 0">
+<svg viewBox="0 0 760 430" width="100%" style="max-width:1000px;background:#0f172a;border:1px solid #1e293b;border-radius:10px">
+  <defs>
+    <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#67e8f9"/>
+    </marker>
+    <marker id="arwr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#f472b6"/>
+    </marker>
+  </defs>
+  <g stroke="#475569" fill="none" stroke-width="1.2">
+    <path d="M125,64 L125,96"/><path d="M210,44 L330,44 L330,96"/>
+    <path d="M100,136 L100,168"/><path d="M200,116 L280,116 L280,168"/>
+    <path d="M280,208 L280,240"/><path d="M470,188 L470,240"/>
+    <path d="M240,280 L240,312"/><path d="M340,260 L355,260 L355,312"/>
+    <path d="M430,280 L430,312"/><path d="M530,260 L555,260 L555,312"/>
+  </g>
+  <g fill="#1e293b" stroke="#334155" stroke-width="1.2" rx="7">
+    <rect x="40" y="24" width="170" height="40"/>
+    <rect x="40" y="96" width="160" height="40" stroke="#6d28d9"/>
+    <rect x="250" y="96" width="160" height="40" stroke="#166534"/>
+    <rect x="30" y="168" width="140" height="40"/>
+    <rect x="190" y="168" width="380" height="40" stroke="#b45309"/>
+    <rect x="200" y="240" width="160" height="40"/>
+    <rect x="390" y="240" width="160" height="40"/>
+    <rect x="175" y="312" width="100" height="40"/>
+    <rect x="310" y="312" width="100" height="40"/>
+    <rect x="390" y="312" width="100" height="40"/>
+    <rect x="520" y="312" width="100" height="40"/>
+  </g>
+  <g font-family="Consolas,monospace" font-size="11.5" fill="#e2e8f0">
+    <text x="56" y="41">root</text><text x="56" y="56" font-size="10" fill="#94a3b8">OR · slot 0</text>
+    <text x="56" y="113">heater</text><text x="56" y="128" font-size="10" fill="#c4b5fd">entry/during · containment</text>
+    <text x="266" y="113">overheat</text><text x="266" y="128" font-size="10" fill="#86efac">safe state · slot 0</text>
+    <text x="46" y="185">standby</text><text x="46" y="200" font-size="10" fill="#94a3b8">autostart · slot 1</text>
+    <text x="206" y="185">warming</text><text x="206" y="200" font-size="10" fill="#fcd34d">AND container · no slot</text>
+    <text x="216" y="257">pwm_bank</text><text x="216" y="272" font-size="10" fill="#94a3b8">slot 2</text>
+    <text x="406" y="257">fan_bank</text><text x="406" y="272" font-size="10" fill="#94a3b8">slot 3</text>
+    <text x="188" y="329">pwm_low</text><text x="188" y="344" font-size="10" fill="#94a3b8">autostart</text>
+    <text x="323" y="329">pwm_high</text>
+    <text x="403" y="329">fan_low</text><text x="403" y="344" font-size="10" fill="#94a3b8">autostart</text>
+    <text x="533" y="329">fan_high</text>
+  </g>
+  <g font-family="Segoe UI,system-ui,sans-serif" font-size="10.5">
+    <text x="248" y="112" fill="#f472b6">H*</text>
+    <text x="628" y="182" fill="#94a3b8">deep-history junction $H*$</text>
+    <text x="628" y="196" fill="#94a3b8">owned by heater_children:</text>
+    <text x="628" y="210" fill="#94a3b8">records the whole nested</text>
+    <text x="628" y="224" fill="#94a3b8">configuration, not just the</text>
+    <text x="628" y="238" fill="#94a3b8">direct child.</text>
+    <text x="112" y="238" fill="#67e8f9">begin_warmup (start_cmd)</text>
+    <text x="420" y="352" fill="#67e8f9">after 200 ms</text>
+    <text x="252" y="92" fill="#67e8f9">trip_overheat (over_temperature)</text>
+    <text x="336" y="134" fill="#f472b6">resume_heater (stop_cmd) → $H*$</text>
+  </g>
+  <g stroke="#67e8f9" stroke-width="1.3" fill="none" marker-end="url(#arw)">
+    <path d="M170,188 L188,188"/>
+    <path d="M277,352 L306,352"/>
+  </g>
+  <g stroke="#f472b6" stroke-width="1.3" fill="none" marker-end="url(#arwr)" stroke-dasharray="4 3">
+    <path d="M202,110 L246,110"/>
+    <path d="M330,140 L500,140 L500,166"/>
+  </g>
+</svg>
+<figcaption class="legend">Figure 1 — the demo machine. Purple = state owning a deep-history junction; green = safe state;
+amber = AND container. Solid cyan arrows are normal transitions, the dashed pink ones are the cross-boundary fault and the
+history-targeting resume. Indices in the boxes are the active slots the generator allocated in §4.3.</figcaption>
+</figure>
+
+<div class="grid g2">
+<div>
+<h3>4.1 What is modelled</h3>
+<pre class="mark"><code>root                         (OR)
+ ├─ heater      autostart, entry/during actions
+ │   ├─ standby autostart
+ │   └─ warming  entry/exit, AND container
+ │       ├─ pwm_bank   ├─ pwm_low (autostart) ├─ pwm_high
+ │       └─ fan_bank   ├─ fan_low (autostart) ├─ fan_high
+ │   [deep-history junction $H*$ owned by `heater`]
+ └─ overheat    safe state, entry: duty_cmd = 0
+
+transitions
+  begin_warmup   standby → warming        guard: start_cmd      action: heat_cycles = 0
+  pwm_step_up    pwm_low → pwm_high       trigger: after 20 ticks (200 ms)
+  fan_step_up    fan_low → fan_high       guard: start_cmd
+  trip_overheat  heater  → overheat       guard: over_temperature   (leaves the whole container)
+  resume_heater  overheat → $H*$          guard: stop_cmd           (explicit history target)</code></pre>
+<p class="legend">tick = 10 ms, safety mode on, C99, coverage targets 100 % / 95 %.
+`trip_overheat` is the interesting one: it exits a container whose layer owns deep history, so the entire nested
+configuration (warming → pwm_high → fan_low) has to be recorded and later restored — see §6.6.</p>
+</div>
+<div>
+<h3>4.2 The IR the generator actually saw</h3>
+<pre class="mark">STATES  (activityIndex = C identity order)
+
+| # | state id | C enum | parent state | layer | activeSlot | depth | entry | during | exit |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | heater | `SM_ST_HEATER` | — | root | 0 | 0 | &quot;heat_cycles = 0U;&quot; | &quot;heat_cycles = heat_cycles + 1U;&quot; | &quot;&quot; |
+| 1 | standby | `SM_ST_STANDBY` | heater | heater_children | 1 | 1 | &quot;duty_cmd = 0U;&quot; | &quot;&quot; | &quot;&quot; |
+| 2 | warming | `SM_ST_WARMING` | heater | heater_children | 1 | 1 | &quot;duty_cmd = 250U;&quot; | &quot;&quot; | &quot;duty_cmd = 0U;&quot; |
+| 3 | pwm_bank | `SM_ST_PWM_BANK` | warming | warming_regions | -1 | 2 | &quot;&quot; | &quot;&quot; | &quot;&quot; |
+| 4 | pwm_low | `SM_ST_PWM_LOW` | pwm_bank | pwm_children | 2 | 3 | &quot;&quot; | &quot;duty_cmd = duty_cmd + 1U;&quot; | &quot;&quot; |
+| 5 | pwm_high | `SM_ST_PWM_HIGH` | pwm_bank | pwm_children | 2 | 3 | &quot;&quot; | &quot;duty_cmd = duty_cmd + 5U;&quot; | &quot;&quot; |
+| 6 | fan_bank | `SM_ST_FAN_BANK` | warming | warming_regions | -1 | 2 | &quot;&quot; | &quot;&quot; | &quot;&quot; |
+| 7 | fan_low | `SM_ST_FAN_LOW` | fan_bank | fan_children | 3 | 3 | &quot;&quot; | &quot;&quot; | &quot;&quot; |
+| 8 | fan_high | `SM_ST_FAN_HIGH` | fan_bank | fan_children | 3 | 3 | &quot;&quot; | &quot;&quot; | &quot;&quot; |
+| 9 | overheat | `SM_ST_OVERHEAT` | — | root | 0 | 0 | &quot;duty_cmd = 0U;&quot; | &quot;&quot; | &quot;&quot; |
+
+Active-slot count: 4   (5 layers -&gt; 4 slots; the AND layer needs none)
+
+LAYERS  (decomposition, active slot, default entry)
+
+| layer | decomposition | parent state | children | activeSlot | default entry |
+|---|---|---|---|---|---|
+| root | OR | (root) | heater, overheat | 0 | heater (state) |
+| heater_children | OR | heater | standby, warming | 1 | standby (state) |
+| warming_regions | AND | warming | pwm_bank, fan_bank | none | — (—) |
+| pwm_children | OR | pwm_bank | pwm_low, pwm_high | 2 | pwm_low (state) |
+| fan_children | OR | fan_bank | fan_low, fan_high | 3 | fan_low (state) |
+
+JUNCTIONS
+
+| junction | kind | owning layer |
+|---|---|---|
+| heater_history | deep-history | heater_children |
+
+TRANSITIONS  (lowered: kind, trigger, guard, exit set, entry set, route)
+
+| transition | source | dest | kind | trigger | guard | exit set | entry set | routes |
+|---|---|---|---|---|---|---|---|---|
+| begin_warmup | standby (state) | warming (state) | outer/external | condition | `start_cmd` | standby | warming | [begin_warmup -&gt; state:warming] |
+| pwm_step_up | pwm_low (state) | pwm_high (state) | outer/external | after afterTicks=20 @200ms | `(none)` | pwm_low | pwm_high | [pwm_step_up -&gt; state:pwm_high] |
+| fan_step_up | fan_low (state) | fan_high (state) | outer/external | condition | `start_cmd` | fan_low | fan_high | [fan_step_up -&gt; state:fan_high] |
+| resume_heater | overheat (state) | heater_history (junction) | outer/external | condition | `stop_cmd` | overheat | heater | [resume_heater -&gt; history:heater_history] |
+| trip_overheat | heater (state) | overheat (state) | outer/external | condition | `over_temperature` | heater | overheat | [trip_overheat -&gt; state:overheat] |
+
+### Variables
+
+| variable | C name | semantic type | C type | initial |
+|---|---|---|---|---|
+| duty_cmd | `instance-&gt;data.duty_cmd` | uint16 | — | 0 |
+| heat_cycles | `instance-&gt;data.heat_cycles` | uint32 | — | 0 |
+| over_temperature | `instance-&gt;data.over_temperature` | bool | — | false |
+| setpoint_c | `instance-&gt;data.setpoint_c` | double | — | 180 |
+| start_cmd | `instance-&gt;data.start_cmd` | bool | — | false |
+| stop_cmd | `instance-&gt;data.stop_cmd` | bool | — | false |</pre>
+</div>
+</div>
+
+<h3>4.3 The three computed structures that make generation local</h3>
+<div class="grid g3">
+<div class="box"><h4>activityIndex → C identity</h4><p>States are ordered once (by activity index) and receive <code>1..N</code>.
+The number is not a hash of the UUID: it is an array index, so <code>state_active[]</code>, <code>state_timers[]</code>,
+<code>deep_history[][]</code> and both mapping tables all agree by construction. In this model <code>warming = 3</code>,
+<code>pwm_high = 6</code>.</p></div>
+<div class="box"><h4>activeSlot → where the "current child" lives</h4><p>Only OR layers hold a slot:
+<code>root=0, heater_children=1, pwm_children=2, fan_children=3</code>. The AND layer
+<code>warming_regions</code> gets <code>none</code> and states <code>pwm_bank</code>/<code>fan_bank</code> get <code>-1</code>,
+because parallel regions are always active together and are tracked by <code>state_active[]</code>.
+An empty OR layer would consume no slot at all (REQ-GEN-SAF-002).</p></div>
+<div class="box"><h4>routes → no junction at run time</h4><p>For <code>resume_heater</code> the IR records
+<code>destinationKind: 'history'</code> with <code>destinationJunctionId</code>, plus
+<code>entryStateIds = [heater]</code>: the emitter knows to enter the owner, then ask the history bit matrix which child
+to restore. Nothing about that decision survives as a data structure in the C.</p></div>
+</div>
+
+<h2 id="s5"><span class="num">5</span>Anatomy of the generated C</h2>
+
+<p>For the thermal model the emitter produced 10 production files, 12 test/support files, 4 reports and the bundle — 27 artifacts
+in the verification package. Sizes below are measured, not estimated:</p>
+
+<table>
+<tr><th>File</th><th>Lines</th><th>Role and regeneration behaviour</th></tr>
+<tr><td class="mono">sm_config.h</td><td>101</td><td>Capacity macros, state/layer indices, <code>SM_Node_t</code>, <code>SM_Error_t</code>, <code>SM_Data_t</code>, the instance struct. Regenerated on every change — this is the ABI of the machine.</td></tr>
+<tr><td class="mono">sm_core.c</td><td>1069</td><td>The engine: init/reset/step, entry, restore, exit, history recording, dispatch, fault entry, test hooks. Grows with the model.</td></tr>
+<tr><td class="mono">sm_core.h</td><td>33</td><td>Public runtime API (init/reset/step/IO/query/trace).</td></tr>
+<tr><td class="mono">sm_mapping.c/.h</td><td>92 / 13</td><td>The four constant tables plus <code>SM_Validate_Mapping_Configuration()</code>: the machine checks its own compiled-in shape at start-up.</td></tr>
+<tr><td class="mono">sm_safety.c/.h</td><td>207 / 9</td><td>Containment predicates, <code>SM_Validate_State_Consistency()</code>, safe-output application.</td></tr>
+<tr><td class="mono">sm_user_logic.c/.h</td><td>171 / 47</td><td>Your entry/during/exit actions, one function triple per state. This is the only file a human is expected to extend.</td></tr>
+<tr><td class="mono">mcal_dio.h</td><td>14</td><td>Declarations of the 6 MCAL hooks the integrator must implement (no implementation is generated).</td></tr>
+<tr><td class="mono">tests/*.c (9 suites + support + main + MCAL stub)</td><td>1378</td><td><code>test_init, transitions, actions, timing, safety, io, reset, robustness, hierarchy</code> plus <code>test_support</code>, <code>test_main</code>, <code>mcal_test_stub</code>, driven by <code>verification/test_manifest.json</code>.</td></tr>
+</table>
+
+<h3>5.1 Identity and capacity — <code>sm_config.h</code></h3>
+<pre><code>#define SM_TICK_MS 10U
+#define SM_TICK_TOLERANCE_MS 1U
+#define SM_TICK_MIN_MS 9U
+#define SM_TICK_MAX_MS 11U
+#define SM_NUM_STATES 10U
+#define SM_NUM_LAYERS 5U
+#define SM_NUM_ACTIVE_SLOTS 4U
+#define SM_LYR_ROOT_IDX 0U
+#define SM_LYR_HEATER_CHILDREN_IDX 1U
+#define SM_LYR_PWM_CHILDREN_IDX 2U
+#define SM_LYR_FAN_CHILDREN_IDX 3U
+#define SM_LYR_WARMING_REGIONS_IDX 4U
+/* State: Heater | Model ID: heater | C enum: SM_ST_HEATER */
+#define SM_ST_HEATER_IDX</code></pre>
+<p class="legend">The tick window is derived from <code>tickMs</code> and <code>tickToleranceMs</code> by one rule:
+<code>MIN = tick − tolerance</code>, <code>MAX = tick + tolerance</code>. A platform whose timer is coarser than the tolerance
+cannot use the generated machine — that is checked in <code>SM_Step</code>, not silently tolerated.</p>
+
+<pre><code>typedef enum {
+    SM_NODE_INVALID = 0,
+    SM_ST_HEATER = 1,
+    SM_ST_STANDBY = 2,
+    SM_ST_WARMING = 3,
+    SM_ST_PWM_BANK = 4,
+    SM_ST_PWM_LOW = 5,
+    SM_ST_PWM_HIGH = 6,
+    SM_ST_FAN_BANK = 7,
+    SM_ST_FAN_LOW = 8,
+    SM_ST_FAN_HIGH = 9,
+    SM_ST_OVERHEAT = 10
+} SM_Node_t;</code></pre>
+<p class="legend"><code>SM_NODE_INVALID = 0</code> is <i>not</i> a usable state: zero means "nothing here", which is exactly what a
+zeroed (or <code>memset</code>-cleared) instance means. All arrays are therefore indexed <code>1..N</code> plus a slot 0,
+and every loop in the engine runs <code>state_index = 1U; state_index &lt;= SM_NUM_STATES</code>.</p>
+
+<pre><code>typedef struct {
+    uint16_t duty_cmd;
+    uint32_t heat_cycles;
+    bool over_temperature;
+    double setpoint_c;
+    bool start_cmd;
+    bool stop_cmd;
+} SM_Data_t;</code></pre>
+<pre><code>struct ADIA_Instance {
+    SM_Data_t data;
+    SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS &gt; 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
+    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS &gt; 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
+    bool state_active[SM_NUM_STATES + 1U];
+    uint32_t state_timers[SM_NUM_STATES + 1U];
+    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];
+    SM_Error_t error_status;
+    bool fault_latched;
+#ifdef SM_TRACE_ENABLED
+    SM_TraceSink_t trace_sink;
+#endif
+};</code></pre>
+<p class="legend">One struct, no pointers, no heap: the whole machine is caller-owned memory. On an MCU this is a single static
+or stack object; the layout is fixed at generation time so RAM planning is a compile-time exercise, not a run-time surprise.</p>
+
+<h3>5.2 Hierarchy as constant tables — <code>sm_mapping.c</code></h3>
+<pre><code>const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {
+    [0] = 0U,
+    [SM_ST_HEATER_IDX] = SM_LYR_ROOT_IDX,
+    [SM_ST_STANDBY_IDX] = SM_LYR_HEATER_CHILDREN_IDX,
+    [SM_ST_WARMING_IDX] = SM_LYR_HEATER_CHILDREN_IDX,
+    [SM_ST_PWM_BANK_IDX] = SM_LYR_WARMING_REGIONS_IDX,
+    [SM_ST_PWM_LOW_IDX] = SM_LYR_PWM_CHILDREN_IDX,
+    [SM_ST_PWM_HIGH_IDX] = SM_LYR_PWM_CHILDREN_IDX,
+    [SM_ST_FAN_BANK_IDX] = SM_LYR_WARMING_REGIONS_IDX,
+    [SM_ST_FAN_LOW_IDX] = SM_LYR_FAN_CHILDREN_IDX,
+    [SM_ST_FAN_HIGH_IDX] = SM_LYR_FAN_CHILDREN_IDX,
+    [SM_ST_OVERHEAT_IDX] = SM_LYR_ROOT_IDX,
+};
+
+const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
+    [0] = -1,
+    [SM_ST_HEATER_IDX] = 0,
+    [SM_ST_STANDBY_IDX] = 1,
+    [SM_ST_WARMING_IDX] = 1,
+    [SM_ST_PWM_BANK_IDX] = -1,
+    [SM_ST_PWM_LOW_IDX] = 2,
+    [SM_ST_PWM_HIGH_IDX] = 2,
+    [SM_ST_FAN_BANK_IDX] = -1,
+    [SM_ST_FAN_LOW_IDX] = 3,
+    [SM_ST_FAN_HIGH_IDX] = 3,
+    [SM_ST_OVERHEAT_IDX] = 0,
+};
+
+const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
+    [SM_LYR_HEATER_CHILDREN_IDX] = SM_ST_HEATER,
+    [SM_LYR_PWM_CHILDREN_IDX] = SM_ST_PWM_BANK,
+    [SM_LYR_FAN_CHILDREN_IDX] = SM_ST_FAN_BANK,
+    [SM_LYR_WARMING_REGIONS_IDX] = SM_ST_WARMING,
+};
+
+const int32_t SM_Layer_Active_Slot_Map</code></pre>
+<p class="legend">Note what is <b>not</b> in the tables: there is no child list per layer, no "next sibling", no parent pointer.
+Membership questions are answered by generated predicates (<code>SM_Is_Direct_Layer_Child</code>) because a switch on a small
+integer compiles to better code (and to ROM) than a table of variable-length child arrays.
+<code>SM_Validate_Mapping_Configuration()</code> (below the tables in the same file) cross-checks the four tables against each
+other and against <code>SM_NUM_ACTIVE_SLOTS</code> at every <code>SM_Init</code>.</p>
+
+<h3>5.3 Function families — the containment tree becomes the call graph</h3>
+<table>
+<tr><th>Family</th><th>Emitted per</th><th>Meaning</th></tr>
+<tr><td class="mono">SM_Enter_Deep_n</td><td>state</td><td>mark active, reset timer, publish to slot, call <code>*_Entry</code>, then enter all child layers by default</td></tr>
+<tr><td class="mono">SM_Enter_Layer_Default_k</td><td>layer</td><td>OR: enter the single default child (or default junction path). AND: enter <i>every</i> region in declaration order</td></tr>
+<tr><td class="mono">SM_Restore_State_n</td><td>state</td><td>re-enter a state whose descendants are described by a history snapshot (§6.6)</td></tr>
+<tr><td class="mono">SM_Execute_State_n</td><td>state</td><td>evaluate this state's transitions, then its <code>During</code>, then recurse into its active child layer</td></tr>
+<tr><td class="mono">SM_Execute_Layer_k</td><td>OR layer</td><td>dispatch on <code>active_states[slot]</code> to exactly one state function</td></tr>
+<tr><td class="mono">SM_Exit_State / SM_Exit_Layer</td><td>one switch (all states/layers)</td><td>cascade exit: record history, exit children, call <code>*_Exit</code>, clear flags, clear slot, zero timer</td></tr>
+<tr><td class="mono">SM_Exit_Layer_No_History_k</td><td>layer</td><td>same exit without recording history — used where recording would corrupt the snapshot being restored</td></tr>
+<tr><td class="mono">SM_Record_Layer_History</td><td>one switch (all layers)</td><td>snapshot the layer's shallow slot and the deep bit matrix for every descendant</td></tr>
+<tr><td class="mono">SM_Enter_Fault / SM_Enter_Safe_State</td><td>one each</td><td>failure policy: exit everything, enter the safe state, drop outputs, latch</td></tr>
+</table>
+
+<h3>5.4 Dispatch is a switch, not a table of function pointers</h3>
+<pre><code>static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
+{
+    switch (instance-&gt;active_states[0U]) {
+        case SM_ST_HEATER:
+            return SM_Execute_State_1(instance);
+        case SM_ST_OVERHEAT:
+            return SM_Execute_State_10(instance);
+        default: return false;
+    }
+}</code></pre>
+<p class="legend">The root layer dispatches to two states. There is no indirect call: the compiler can inline, can prove which
+functions are reachable, and the linker can drop the rest (relevant for the <code>-Os</code> numbers in §9).
+Compare with a naive interpreter loop <code>for (t of transitions) if (eval(t.guard)) …</code>: same semantics here, but the
+generated version cannot be defeated by a malformed transition table at run time.</p>
+
+<h2 id="s6"><span class="num">6</span>Runtime behaviour of the generated program</h2>
+
+<h3>6.1 Initialisation: the instance is defined before it is used</h3>
+<pre><code>SM_Error_t SM_Init(ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t slot_index;
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    (void)memset(instance, 0, sizeof(*instance));
+#ifdef SM_TRACE_ENABLED
+    instance-&gt;trace_sink = NULL;
+#endif
+    (void)SM_Exit_Layer_No_History_0;
+    (void)SM_Exit_Layer_No_History_1;
+    (void)SM_Exit_Layer_No_History_2;
+    (void)SM_Exit_Layer_No_History_3;
+    (void)SM_Exit_Layer_No_History_4;
+    (void)SM_Enter_Deep_1;
+    (void)SM_Restore_State_1;
+    (void)SM_Enter_Deep_2;
+    (void)SM_Restore_State_2;
+    (void)SM_Enter_Deep_3;
+    (void)SM_Restore_State_3;
+    (void)SM_Enter_Deep_4;
+    (void)SM_Restore_State_4;
+    (void)SM_Enter_Deep_5;
+    (void)SM_Restore_State_5;
+    (void)SM_Enter_Deep_6;
+    (void)SM_Restore_State_6;
+    (void)SM_Enter_Deep_7;
+    (void)SM_Restore_State_7;
+    (void)SM_Enter_Deep_8;
+    (void)SM_Restore_State_8;
+    (void)SM_Enter_Deep_9;
+    (void)SM_Restore_State_9;
+    (void)SM_Enter_Deep_10;
+    (void)SM_Restore_State_10;
+    instance-&gt;data.duty_cmd = (uint16_t)(0U);
+    instance-&gt;data.heat_cycles = (uint32_t)(0U);
+    instance-&gt;data.over_temperature = (bool)(false);
+    instance-&gt;data.setpoint_c = (double)(180.0);
+    instance-&gt;data.start_cmd = (bool)(false);
+    instance-&gt;data.stop_cmd = (bool)(false);
+    for (slot_index = 0U; slot_index &lt; SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance-&gt;active_states[slot_index] = SM_NODE_INVALID;
+        instance-&gt;history_states[slot_index] = SM_NODE_INVALID;
+    }
+    for (layer_index = 0U; layer_index &lt; SM_NUM_LAYERS; ++layer_index) {
+        for (state_index = 0U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+            instance-&gt;deep_history[layer_index][state_index] = false;
+        }
+    }
+    for (state_index = 0U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        instance-&gt;state_active[state_index] = false;
+        instance-&gt;state_timers[state_index] = 0U;
+    }
+    instance-&gt;error_status = SM_ERR_NONE;
+    instance-&gt;fault_latched = false;
+    instance-&gt;error_status = SM_Validate_Mapping_Configuration();
+    if (instance-&gt;error_status != SM_ERR_NONE) {
+        return SM_ERR_CONFIGURATION;
+    }
+    SM_Enter_Layer_Default_0(instance);
+    return SM_ERR_NONE;
+}</code></pre>
+<p>The first statement after the null guard is <code>memset</code>, and everything semantic follows: variables, slot arrays,
+bit matrices, error status, then the compiled-in mapping check, and only then the root layer's default entry.
+Two design points are visible in the emitted code:</p>
+<ul>
+<li><b>Self-referential functions are kept alive on purpose</b> via <code>(void)SM_Enter_Deep_1;</code> style statements.
+<code>SM_Restore_State_k</code> and <code>SM_Exit_Layer_No_History_k</code> can only be reached through history or
+non-recording paths, and the generator does not want <code>-Wunused-function</code> (or a linker) to remove them.</li>
+<li><b>Tracing is not allowed to leak into initialisation.</b> With <code>SM_TRACE_ENABLED</code>, <code>trace_sink</code> is
+explicitly cleared <i>before</i> any entry action runs, so a caller-supplied garbage pointer cannot be called; the documented
+lifecycle is <code>SM_Init()</code> then <code>SM_SetTraceSink()</code> (Correction 3 in
+<code>docs/STATE_MACHINE_CODE_GENERATION_CORRECTIONS.md</code>).</li>
+</ul>
+<pre><code>SM_Error_t SM_Reset(ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t slot_index;
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+    instance-&gt;data.duty_cmd = (uint16_t)(0U);
+    instance-&gt;data.heat_cycles = (uint32_t)(0U);
+    instance-&gt;data.over_temperature = (bool)(false);
+    instance-&gt;data.setpoint_c = (double)(180.0);
+    instance-&gt;data.start_cmd = (bool)(false);
+    instance-&gt;data.stop_cmd = (bool)(false);
+    for (slot_index = 0U; slot_index &lt; SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance-&gt;active_states[slot_index] = SM_NODE_INVALID;
+        instance-&gt;history_states[slot_index] = SM_NODE_INVALID;
+    }
+    for (layer_index = 0U; layer_index &lt; SM_NUM_LAYERS; ++layer_index) {
+        for (state_index = 0U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+            instance-&gt;deep_history[layer_index][state_index] = false;
+        }
+    }
+    for (state_index = 0U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        instance-&gt;state_active[state_index] = false;
+        instance-&gt;state_timers[state_index] = 0U;
+    }
+    instance-&gt;error_status = SM_ERR_NONE;
+    instance-&gt;fault_latched = false;
+    SM_Enter_Layer_Default_0(instance);
+    return SM_WriteOutputs(instance);
+}</code></pre>
+<p class="legend"><code>SM_Reset</code> is <b>not</b> a second <code>SM_Init</code>: it exits the current configuration
+(recording history), rebinds variables to their initial values, clears the machine arrays, and re-enters the default path;
+it then calls <code>SM_WriteOutputs</code> so that physical outputs match the post-reset state. There is no <code>memset</code>,
+because the instance is already a valid machine.</p>
+
+<h3>6.2 The tick contract</h3>
+
+<figure style="margin:10px 0">
+<svg viewBox="0 0 900 112" width="100%" style="max-width:980px;background:#0f172a;border:1px solid #1e293b;border-radius:10px">
+  <defs><marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#475569"/></marker></defs>
+  <g fill="#1e293b" stroke="#334155" rx="7">
+    <rect x="10" y="26" width="152" height="50"/>
+    <rect x="176" y="26" width="152" height="50"/>
+    <rect x="342" y="26" width="152" height="50" stroke="#9f1239"/>
+    <rect x="508" y="26" width="152" height="50"/>
+    <rect x="674" y="26" width="216" height="50" stroke="#0e7490"/>
+  </g>
+  <g stroke="#475569" stroke-width="1.3" fill="none" marker-end="url(#a1)">
+    <path d="M162,51 L172,51"/><path d="M328,51 L338,51"/><path d="M494,51 L504,51"/><path d="M660,51 L670,51"/>
+  </g>
+  <g font-family="Segoe UI,system-ui,sans-serif" font-size="11" fill="#e2e8f0">
+    <text x="20" y="45">fault short-circuit</text>
+    <text x="20" y="61" font-size="10" fill="#94a3b8">latched? → safe path, return</text>
+    <text x="186" y="45">timing plausibility</text>
+    <text x="186" y="61" font-size="10" fill="#94a3b8">MIN ≤ delta ≤ MAX else ERR_TIMING</text>
+    <text x="352" y="45" fill="#fca5a5">consistency check</text>
+    <text x="352" y="61" font-size="10" fill="#94a3b8">SM_Validate_State_Consistency</text>
+    <text x="518" y="45">advance timers</text>
+    <text x="518" y="61" font-size="10" fill="#94a3b8">+ SM_TICK_MS, saturating</text>
+    <text x="684" y="45" fill="#7dd3fc">execute from the root layer down</text>
+    <text x="684" y="61" font-size="10" fill="#94a3b8">then a second error check latches faults</text>
+    <text x="10" y="96" font-size="10.5" fill="#94a3b8">The order is part of the generated contract: a tick can never act on a configuration it has just proven invalid, and jitter can never change when a timed transition fires.</text>
+  </g>
+</svg>
+<figcaption class="legend">Figure 2 — <code>SM_Step()</code> phase order (see the emitted code below).</figcaption>
+</figure>
+
+<pre><code>SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
+{
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if (instance-&gt;fault_latched || (instance-&gt;error_status != SM_ERR_NONE)) {
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status != SM_ERR_NONE ? instance-&gt;error_status : SM_ERR_SAFETY_VIOLATION;
+    }
+    if ((delta_ms &lt; SM_TICK_MIN_MS) || (delta_ms &gt; SM_TICK_MAX_MS)) {
+        instance-&gt;error_status = SM_ERR_TIMING;
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status;
+    }
+    instance-&gt;error_status = SM_Validate_State_Consistency(instance);
+    if (instance-&gt;error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status;
+    }
+    /* delta_ms is observed physical jitter; SM_TICK_MS is behavioral logical time. */
+    for (state_index = 1U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        if (instance-&gt;state_active[state_index]) {
+            if (SM_TICK_MS &gt; (UINT32_MAX - instance-&gt;state_timers[state_index])) {
+                instance-&gt;state_timers[state_index] = UINT32_MAX;
+            } else {
+                instance-&gt;state_timers[state_index] += SM_TICK_MS;
+            }
+        }
+    }
+    (void)SM_Execute_Layer_0(instance);
+    if (instance-&gt;error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
+    return instance-&gt;error_status;
+}</code></pre>
+<p>The order is the contract, and it is observable from outside:</p>
+<ol>
+<li><b>Fault short-circuit.</b> A latched fault (or any recorded error) re-enters the fault path and returns; the machine never
+"runs on" after a safety event.</li>
+<li><b>Timing plausibility.</b> <code>delta_ms</code> outside <code>[SM_TICK_MIN_MS, SM_TICK_MAX_MS]</code> is
+<code>SM_ERR_TIMING</code> → fault. Note the deliberate asymmetry: measured time is only validated, never accumulated —
+<code>state_timers</code> advances by the <i>logical</i> <code>SM_TICK_MS</code>, so jitter cannot change when a
+<code>after()</code> transition fires (this is why the harness can replay identical traces on a loaded host).</li>
+<li><b>Consistency check before acting</b> — the machine refuses to execute on a corrupted configuration.</li>
+<li><b>Timers</b> for every active state, saturating at <code>UINT32_MAX</code> instead of wrapping (an <code>after</code>
+guard on a long-lived state must not eventually fire early).</li>
+<li><b>Execution</b> from the root layer down, then a second error check that latches faults raised by actions.</li>
+</ol>
+<pre><code>SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if (instance-&gt;fault_latched || (instance-&gt;error_status != SM_ERR_NONE)) {
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status != SM_ERR_NONE ? instance-&gt;error_status : SM_ERR_SAFETY_VIOLATION;
+    }
+    instance-&gt;error_status = SM_Validate_State_Consistency(instance);
+    if (instance-&gt;error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status;
+    }
+    (void)instance;
+    return SM_ERR_NONE;
+}</code></pre>
+<p class="legend"><code>SM_Sync_IO()</code> is just <code>ReadInputs()</code> then <code>WriteOutputs()</code>; write-mapping
+conversion and safe-value substitution happen inside <code>SM_ApplySafeOutputs</code>. With no IO mappings — as in this
+model — <code>SM_ReadInputs</code>/<code>SM_WriteOutputs</code> degenerate to <code>(void)instance;</code>, and the
+consistency check remains. Notice it does not call <code>SM_WriteOutputs</code>' parent: re-entry is impossible.</p>
+
+<h3>6.3 How one transition becomes code</h3>
+
+<figure style="margin:10px 0">
+<svg viewBox="0 0 900 150" width="100%" style="max-width:980px;background:#0f172a;border:1px solid #1e293b;border-radius:10px">
+  <defs><marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#475569"/></marker></defs>
+  <g fill="#1e293b" stroke="#334155" rx="7">
+    <rect x="14" y="30" width="180" height="56"/>
+    <rect x="228" y="30" width="196" height="56" stroke="#9f1239"/>
+    <rect x="458" y="30" width="170" height="56" stroke="#b45309"/>
+    <rect x="662" y="30" width="224" height="56" stroke="#166534"/>
+  </g>
+  <g stroke="#475569" stroke-width="1.3" fill="none" marker-end="url(#a2)">
+    <path d="M194,58 L224,58"/><path d="M424,58 L454,58"/><path d="M628,58 L658,58"/>
+  </g>
+  <g font-family="Segoe UI,system-ui,sans-serif" font-size="11.5" fill="#e2e8f0">
+    <text x="26" y="50">1 · guard, in priority order</text>
+    <text x="26" y="66" font-size="10" fill="#94a3b8">first satisfied guard wins;</text>
+    <text x="26" y="79" font-size="10" fill="#94a3b8">evaluated before any action</text>
+    <text x="240" y="50" fill="#fca5a5">2 · exit set (cascade)</text>
+    <text x="240" y="66" font-size="10" fill="#94a3b8">SM_Exit_State(topmost, true)</text>
+    <text x="240" y="79" font-size="10" fill="#94a3b8">child layers first → records history</text>
+    <text x="470" y="50" fill="#fcd34d">3 · route actions</text>
+    <text x="470" y="66" font-size="10" fill="#94a3b8">actions of each transition</text>
+    <text x="470" y="79" font-size="10" fill="#94a3b8">on the winning route</text>
+    <text x="674" y="50" fill="#86efac">4 · entry path or history restore</text>
+    <text x="674" y="66" font-size="10" fill="#94a3b8">enter along path → child layer</text>
+    <text x="674" y="79" font-size="10" fill="#94a3b8">default, or SM_Restore_State_k recursion</text>
+    <text x="14" y="120" font-size="10.5" fill="#94a3b8">All four phases are resolved at generation time: the exit call, the action list and the entry path are literal statements, in this order, in one function.</text>
+    <text x="14" y="136" font-size="10.5" fill="#94a3b8">Internal (self) transitions emit only phase 3 with an explicit guard — no exit, no entry, no history snapshot, no timer reset.</text>
+  </g>
+</svg>
+<figcaption class="legend">Figure 3 — the commit order of a single transition, as emitted.</figcaption>
+</figure>
+
+<p>This is the single most characteristic piece of generated C. A cross-boundary transition
+(<code>trip_overheat</code>: <code>heater → overheat</code>, which exits an entire container tree) becomes:</p>
+<pre><code>static bool SM_Execute_State_1(ADIA_Instance_t *instance)
+{
+    bool transitioned = false;
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-TRIP_OVERHEAT symbol=sm_trans_trip_overheat */
+    if (instance-&gt;data.over_temperature) {
+        SM_Exit_State(instance, SM_ST_HEATER, true);
+        instance-&gt;state_active[SM_ST_OVERHEAT_IDX] = true;
+        instance-&gt;state_timers[SM_ST_OVERHEAT_IDX] = 0U;
+        instance-&gt;active_states[0U] = SM_ST_OVERHEAT;
+        SM_ST_OVERHEAT_Entry(instance);
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-TRIP_OVERHEAT */
+    SM_ST_HEATER_During(instance);
+    transitioned = SM_Execute_Layer_1(instance) || transitioned;
+    if (!instance-&gt;state_active[SM_ST_HEATER_IDX]) {
+        return transitioned;
+    }
+    return transitioned;
+}</code></pre>
+<p>Read it as the four phases of Stateflow-compatible execution, all decided at generation time:</p>
+<ol>
+<li><b>Guard first, before any action.</b> Transitions are evaluated in priority order; the first satisfied guard wins, and
+every other transition and the <code>During</code> action of this state are skipped for this tick (the early
+<code>return true;</code>).</li>
+<li><b>Exit</b> — one call, <code>SM_Exit_State(instance, SM_ST_HEATER, true)</code>. The <code>true</code> means "record history
+for the containing layer on the way out"; the function itself cascades into the child layers and exits
+<code>warming → pwm_bank → pwm_high</code>, <code>fan_bank → fan_low</code> in reverse containment order, zeroing timers and clearing slots.</li>
+<li><b>Entry</b> — the emitted code writes the target's flags <i>and</i> the shared slot (<code>active_states[0U] = SM_ST_OVERHEAT</code>)
+and calls the user's entry action. Container entry is not a loop: it is the next function call.</li>
+<li><b>Report</b> — <code>return true</code> tells the caller (and the generated test harness) that a transition fired this tick.</li>
+</ol>
+<pre><code>static bool SM_Execute_State_10(ADIA_Instance_t *instance)
+{
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-RESUME_HEATER symbol=sm_trans_resume_heater */
+    if (instance-&gt;data.stop_cmd) {
+        SM_Exit_State(instance, SM_ST_OVERHEAT, true);
+        instance-&gt;state_active[SM_ST_HEATER_IDX] = true;
+        instance-&gt;state_timers[SM_ST_HEATER_IDX] = 0U;
+        instance-&gt;active_states[0U] = SM_ST_HEATER;
+        SM_ST_HEATER_Entry(instance);
+        if (instance-&gt;deep_history[SM_LYR_HEATER_CHILDREN_IDX][SM_ST_STANDBY_IDX]) {
+            SM_Restore_State_2(instance, SM_LYR_HEATER_CHILDREN_IDX);
+        }         else if (instance-&gt;deep_history[SM_LYR_HEATER_CHILDREN_IDX][SM_ST_WARMING_IDX]) {
+            SM_Restore_State_3(instance, SM_LYR_HEATER_CHILDREN_IDX);
+        }
+        else {
+            SM_Enter_Layer_Default_1(instance);
+        }
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-RESUME_HEATER */
+    SM_ST_OVERHEAT_During(instance);
+    return false;
+}</code></pre>
+<p class="legend">The history-targeting transition has the same skeleton, but phase 3 ends in a <b>restoration decision</b>
+instead of a default entry: the generated code interrogates the deep-history bit matrix and calls
+<code>SM_Restore_State_2/3</code> or falls through to <code>SM_Enter_Layer_Default_1</code> (i.e. <code>standby</code>) when
+nothing was recorded. This is <code>renderRestoreLayer()</code> in <code>smCGenerator.ts</code>, and it is emitted only where
+a route's <code>destinationKind</code> is <code>'history'</code> or where the destination owns a history junction.</p>
+
+<h3>6.4 Parallel (AND) decomposition</h3>
+<pre><code>static void SM_Enter_Layer_Default_4(ADIA_Instance_t *instance)
+{
+    SM_Enter_Deep_4(instance);
+    SM_Enter_Deep_7(instance);
+}</code></pre>
+<p class="legend">Entering <code>warming</code> means entering <i>both</i> regions, in declaration order. The AND layer has no
+active slot, so "what is active inside <code>warming</code>?" is answered by <code>state_active[SM_ST_PWM_BANK_IDX]</code> and
+<code>state_active[SM_ST_FAN_BANK_IDX]</code> — and by the validation rule that requires every region of an active AND container
+to be active (§6.7).</p>
+<pre><code>static bool SM_Execute_Layer_4(ADIA_Instance_t *instance)
+{
+    bool transitioned = false;
+    if (instance-&gt;state_active[SM_ST_PWM_BANK_IDX]) {
+        transitioned = SM_Execute_State_4(instance) || transitioned;
+        if (!instance-&gt;state_active[SM_ST_WARMING_IDX]) {
+            return transitioned;
+        }
+    }
+    if (instance-&gt;state_active[SM_ST_FAN_BANK_IDX]) {
+        transitioned = SM_Execute_State_7(instance) || transitioned;
+        if (!instance-&gt;state_active[SM_ST_WARMING_IDX]) {
+            return transitioned;
+        }
+    }
+    return transitioned;
+}</code></pre>
+<p class="legend">Execution of an AND layer is a straight sequence of region executors, not a dispatch: every active region runs
+on every tick, in declaration order. After each region the generated code re-checks that the <i>container</i> is still active and
+returns immediately if it is not — that is how a transition taken in one region is allowed to leave the whole parallel state
+without the sibling region executing a state that no longer exists.</p>
+<p>Execution order <i>inside</i> a state is fixed and identical for every state:
+<b>own transitions → own <code>During</code> → child layer</b>. Because a state function returns early once it transitions,
+a state that just left cannot run its <code>During</code> in the same tick; the
+<code>if (!instance-&gt;state_active[…]) return transitioned;</code> guard covers the case where a child transition exited an ancestor.</p>
+
+<h3>6.5 Time: <code>after(20)</code> without a timer service</h3>
+<p>The timed transition <code>pwm_step_up</code> was declared with <code>afterTicks: 20</code>. The generator computes
+<code>temporalThresholdMs = 200</code> and renders the guard against the per-state timer that the tick already maintains:</p>
+<pre><code>static bool SM_Execute_State_5(ADIA_Instance_t *instance)
+{
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-PWM_STEP_UP symbol=sm_trans_pwm_step_up */
+    if (instance-&gt;state_timers[SM_ST_PWM_LOW_IDX] &gt;= 200U) {
+        SM_Exit_State(instance, SM_ST_PWM_LOW, true);
+        instance-&gt;state_active[SM_ST_PWM_HIGH_IDX] = true;
+        instance-&gt;state_timers[SM_ST_PWM_HIGH_IDX] = 0U;
+        instance-&gt;active_states[2U] = SM_ST_PWM_HIGH;
+        SM_ST_PWM_HIGH_Entry(instance);
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-PWM_STEP_UP */
+    SM_ST_PWM_LOW_During(instance);
+    return false;
+}</code></pre>
+<p class="legend">No timer service, no <code>clock()</code>, no wall time. The condition is a comparison against a counter that
+<code>SM_Step</code> advances by <code>SM_TICK_MS</code> for every active state. The generated test suite for this model also
+exercises the boundary (<code>test_sm_timing.c</code> uses 449/450/500/550/551 ms vectors around a 500 ms tick in
+<code>smBoundaryVectors.ts</code>), and the measured trace (§6.6) shows the transition firing exactly 20 ticks after
+<code>pwm_low</code> was entered — cycle 22 below, where <code>pwm_bank = 200 ms</code> and the configuration switches to
+<code>pwm_high</code> whose timer restarts at 10 ms.</p>
+
+<h3>6.6 Deep history, end to end</h3>
+<p>History is the place where "state becomes C" is most visible, because the generator must decide <i>what</i> to store,
+<i>when</i> to store it, and how to reconstruct a nested configuration from booleans. Three mechanisms cooperate:</p>
+
+<h4>(a) Recording: a switch over layers, emitted once</h4>
+<pre><code>static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)
+{
+    uint32_t state_index;
+    for (state_index = 0U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        instance-&gt;deep_history[layer][state_index] = false;
+    }
+    switch (layer) {
+        case SM_LYR_ROOT_IDX:
+            instance-&gt;history_states[0U] = instance-&gt;active_states[0U];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_HEATER_IDX] = instance-&gt;state_active[SM_ST_HEATER_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_STANDBY_IDX] = instance-&gt;state_active[SM_ST_STANDBY_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_WARMING_IDX] = instance-&gt;state_active[SM_ST_WARMING_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_PWM_BANK_IDX] = instance-&gt;state_active[SM_ST_PWM_BANK_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_PWM_LOW_IDX] = instance-&gt;state_active[SM_ST_PWM_LOW_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_PWM_HIGH_IDX] = instance-&gt;state_active[SM_ST_PWM_HIGH_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_FAN_BANK_IDX] = instance-&gt;state_active[SM_ST_FAN_BANK_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_FAN_LOW_IDX] = instance-&gt;state_active[SM_ST_FAN_LOW_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_FAN_HIGH_IDX] = instance-&gt;state_active[SM_ST_FAN_HIGH_IDX];
+            instance-&gt;deep_history[SM_LYR_ROOT_IDX][SM_ST_OVERHEAT_IDX] = instance-&gt;state_active[SM_ST_OVERHEAT_IDX];
+            break;</code></pre>
+<p class="legend">Shallow history is one word per layer; deep history is a bit per (layer, state) pair.
+Recording is triggered from the exit path, so it always happens <i>before</i> the flags are cleared —
+<code>SM_Exit_State(state, /*record_containing_layer=*/true)</code> uses a generated switch to map the exiting state to its
+containing layer. Note that <code>SM_Record_Layer_History</code> first clears the layer's row: a snapshot is a snapshot, never
+a merge with an older one.</p>
+
+<h4>(b) Restoring: recursion over the snapshot</h4>
+<pre><code>static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer)
+{
+    (void)snapshot_layer;
+    instance-&gt;state_active[SM_ST_HEATER_IDX] = true;
+    instance-&gt;state_timers[SM_ST_HEATER_IDX] = 0U;
+    instance-&gt;active_states[0U] = SM_ST_HEATER;
+    SM_ST_HEATER_Entry(instance);
+    if (instance-&gt;deep_history[snapshot_layer][SM_ST_STANDBY_IDX] || instance-&gt;deep_history[snapshot_layer][SM_ST_WARMING_IDX]) {
+        if (instance-&gt;deep_history[snapshot_layer][SM_ST_STANDBY_IDX]) {
+            SM_Restore_State_2(instance, snapshot_layer);
+        }         else if (instance-&gt;deep_history[snapshot_layer][SM_ST_WARMING_IDX]) {
+            SM_Restore_State_3(instance, snapshot_layer);
+        }
+    } else {
+        SM_Enter_Layer_Default_1(instance);
+    }
+}</code></pre>
+<p class="legend">Each state has a restore function that (1) re-activates itself and re-runs its entry action,
+(2) asks its child layer's history which descendants were active, (3) recurses. A shallow junction would stop after step 1's
+layer choice; a deep junction keeps descending. The fallback branch (<code>SM_Enter_Layer_Default_1</code>) is what makes the
+first-ever entry well-defined: history arrays start cleared by <code>SM_Init</code>, so "no recorded child" is a normal case,
+not an error.</p>
+
+<h4>(c) What the compiled program actually did</h4>
+<p>The trace below is the <b>generated C</b> trace from the differential harness
+(<code>scratch/cg-demo/out/thermal-differential/generated_c_trace.json</code>). The reference TypeScript interpreter produced
+bit-identical frames (<code>compareSemanticTraces() === null</code>), which is the strongest available evidence that the
+lowering preserved the intended semantics. Only the interesting cycles are shown (29 frames total):</p>
+<pre>CYCLE | ACTIVE                                            | DUTY | HEAT | TIMERS                                   | ACTIONS | ERROR
+------+---------------------------------------------------+------+------+------------------------------------------+---------+------
+0     | heater standby                                    | 0    | 0    | -                                        | 0       | -    
+1     | heater standby                                    | 0    | 1    | heater=10 standb=10                      | 1       | -    
+2     | heater warming pwm_bank pwm_low fan_bank fan_low  | 250  | 0    | heater=20                                | 3       | -    
+21    | heater warming pwm_bank pwm_low fan_bank fan_low  | 269  | 19   | fb=190 fl=190 heater=210 pb=190 pl=19... | 2       | -    
+22    | heater warming pwm_bank pwm_high fan_bank fan_low | 269  | 20   | fb=200 fl=200 heater=220 pb=200 warmi... | 1       | -    
+23    | heater warming pwm_bank pwm_high fan_bank fan_low | 274  | 21   | fb=210 fl=210 heater=230 pb=210 ph=10... | 2       | -    
+24    | overheat                                          | 0    | 21   | -                                        | 2       | -    
+25    | overheat                                          | 0    | 21   | overhe=10                                | 0       | -    
+26    | heater warming pwm_bank pwm_high fan_bank fan_low | 250  | 0    | -                                        | 2       | -    
+27    | heater warming pwm_bank pwm_high fan_bank fan_low | 255  | 1    | fb=10 fl=10 heater=10 pb=10 ph=10 war... | 2       | -    
+28    | heater warming pwm_bank pwm_high fan_bank fan_low | 260  | 2    | fb=20 fl=20 heater=20 pb=20 ph=20 war... | 2       | -    
+
+history snapshots recorded by the compiled machine (only layers whose snapshot is non-empty):
+
+  cycle 22  recorded configuration
+      heater_children    shallow slot = standby
+                         deep bit row = [&quot;standby&quot;]
+      pwm_children       shallow slot = pwm_low
+                         deep bit row = [&quot;pwm_low&quot;]
+
+  cycle 24  recorded configuration
+      fan_children       shallow slot = fan_low
+                         deep bit row = [&quot;fan_low&quot;]
+      heater_children    shallow slot = warming
+                         deep bit row = [&quot;warming&quot;, &quot;pwm_bank&quot;, &quot;pwm_high&quot;, &quot;fan_bank&quot;, &quot;fan_low&quot;]
+      pwm_children       shallow slot = pwm_high
+                         deep bit row = [&quot;pwm_high&quot;]
+      root               shallow slot = heater
+                         deep bit row = [&quot;heater&quot;, &quot;warming&quot;, &quot;pwm_bank&quot;, &quot;pwm_high&quot;, &quot;fan_bank&quot;, &quot;fan_low&quot;]
+
+  cycle 26  recorded configuration
+      fan_children       shallow slot = fan_low
+                         deep bit row = [&quot;fan_low&quot;]
+      heater_children    shallow slot = warming
+                         deep bit row = [&quot;warming&quot;, &quot;pwm_bank&quot;, &quot;pwm_high&quot;, &quot;fan_bank&quot;, &quot;fan_low&quot;]
+      pwm_children       shallow slot = pwm_high
+                         deep bit row = [&quot;pwm_high&quot;]
+      root               shallow slot = overheat
+                         deep bit row = [&quot;overheat&quot;]
+
+  cycle 28  recorded configuration
+      fan_children       shallow slot = fan_low
+                         deep bit row = [&quot;fan_low&quot;]
+      heater_children    shallow slot = warming
+                         deep bit row = [&quot;warming&quot;, &quot;pwm_bank&quot;, &quot;pwm_high&quot;, &quot;fan_bank&quot;, &quot;fan_low&quot;]
+      pwm_children       shallow slot = pwm_high
+                         deep bit row = [&quot;pwm_high&quot;]
+      root               shallow slot = overheat
+                         deep bit row = [&quot;overheat&quot;]</pre>
+<ul>
+<li><b>Cycle 22 — a local transition with side effects on the snapshot.</b> <code>pwm_step_up</code> fires; exiting
+<code>pwm_low</code> records <code>pwm_children: "pwm_low"</code> and its deep row <i>before</i> <code>pwm_high</code> is entered.
+The <code>fan_children</code> history column stays <code>null</code> because that region never changed child.</li>
+<li><b>Cycle 24 — the container exit fans out across every enclosing layer.</b> <code>trip_overheat</code> leaves
+<code>heater</code>; <code>root</code>, <code>heater_children</code>, <code>warming_regions</code>,
+<code>pwm_children</code> and <code>fan_children</code> all take a snapshot in the same tick, capturing the full nested
+configuration: <code>heater → warming → pwm_bank → pwm_high</code>, <code>fan_bank → fan_low</code>.</li>
+<li><b>Cycle 26 — the restore.</b> <code>resume_heater</code> targets the deep-history junction. The generated code enters
+<code>heater</code>, then reads its layer's snapshot and re-enters <code>warming</code> — not <code>standby</code>, which is
+the default. The nested regions are restored as well (<code>pwm_high</code>, <code>fan_low</code>), and
+<code>warming</code>'s entry action runs again (hence <code>duty_cmd</code> = 250 rather than the pre-fault 269) — entry
+actions are not part of the history snapshot, only configuration is.</li>
+<li><b>Cycle 27+ — the machine continues normally</b> from the restored configuration: timers restart at 10 ms per active
+state and <code>heat_cycles</code> restarts because <code>heater</code>'s entry re-ran.</li>
+</ul>
+
+<h3>6.7 Safety behaviour of the generated machine</h3>
+<p>Safety is emitted as <i>data plus one checker</i>, and the checker's input is the machine's own RAM — which is exactly what
+gets corrupted in the field.</p>
+<pre><code>static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
+    [0] = SM_NODE_INVALID,
+    [SM_ST_HEATER_IDX] = SM_NODE_INVALID,
+    [SM_ST_STANDBY_IDX] = SM_ST_HEATER,
+    [SM_ST_WARMING_IDX] = SM_ST_HEATER,
+    [SM_ST_PWM_BANK_IDX] = SM_ST_WARMING,
+    [SM_ST_PWM_LOW_IDX] = SM_ST_PWM_BANK,
+    [SM_ST_PWM_HIGH_IDX] = SM_ST_PWM_BANK,
+    [SM_ST_FAN_BANK_IDX] = SM_ST_WARMING,
+    [SM_ST_FAN_LOW_IDX] = SM_ST_FAN_BANK,
+    [SM_ST_FAN_HIGH_IDX] = SM_ST_FAN_BANK,
+    [SM_ST_OVERHEAT_IDX] = SM_NODE_INVALID,
+};
+
+static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = true,
+    [SM_LYR_HEATER_CHILDREN_IDX] = true,
+    [SM_LYR_PWM_CHILDREN_IDX] = true,
+    [SM_LYR_FAN_CHILDREN_IDX] = true,
+    [SM_LYR_WARMING_REGIONS_IDX] = true,
+};
+
+static bool SM_Is_Direct_Layer_Child</code></pre>
+<pre><code>SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    uint32_t slot_index;
+    SM_Node_t active_node;
+    SM_Node_t history_node;
+    int32_t active_slot;
+    SM_Node_t parent;
+    bool container_active;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    for (state_index = 1U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        if (instance-&gt;state_active[state_index]) {
+            parent = SM_State_Parent_Map[state_index];
+            if ((parent != SM_NODE_INVALID)
+                &amp;&amp; (!instance-&gt;state_active[(uint32_t)parent])) {
+                return SM_ERR_CONFIGURATION;
+            }
+            active_slot = SM_State_Active_Slot_Map[state_index];
+            if ((active_slot &gt;= 0)
+                &amp;&amp; (instance-&gt;active_states[(uint32_t)active_slot]
+                    != (SM_Node_t)state_index)) {
+                return SM_ERR_CONFIGURATION;
+            }
+        }
+    }
+    for (layer_index = 0U; layer_index &lt; SM_NUM_LAYERS; ++layer_index) {
+        parent = SM_Layer_Parent_State_Map[layer_index];
+        container_active = (parent == SM_NODE_INVALID)
+            || instance-&gt;state_active[(uint32_t)parent];
+        active_slot = SM_Layer_Active_Slot_Map[layer_index];
+        if (container_active) {
+            if (active_slot &gt;= 0) {
+                active_node = instance-&gt;active_states[(uint32_t)active_slot];
+                if ((active_node == SM_NODE_INVALID)
+                    || ((uint32_t)active_node &gt; SM_NUM_STATES)
+                    || (!SM_Is_Direct_Layer_Child(layer_index, active_node))
+                    || (!instance-&gt;state_active[(uint32_t)active_node])) {
+                    return SM_ERR_CONFIGURATION;
+                }
+            } else if (SM_Layer_Has_Children_Map[layer_index]) {
+                for (state_index = 1U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)
+                        &amp;&amp; (!instance-&gt;state_active[state_index])) {
+                        return SM_ERR_CONFIGURATION;
+                    }
+                }
+            }
+        } else if ((active_slot &gt;= 0)
+            &amp;&amp; (instance-&gt;active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {
+            return SM_ERR_CONFIGURATION;
+        }</code></pre>
+<p>The check has five independent clauses, each mapping to a specific failure mode:</p>
+<table>
+<tr><th>Clause</th><th>Detects</th><th>Failure mode it prevents</th></tr>
+<tr><td class="mono">active state ⇒ parent state active</td><td>orphaned child</td><td>tick executing a state whose container was never entered</td></tr>
+<tr><td class="mono">active state ⇒ its slot holds that state</td><td>slot/flag divergence</td><td>two sources of truth disagreeing after a partial update</td></tr>
+<tr><td class="mono">active OR layer ⇒ active slot holds a <i>direct child</i>; AND layer ⇒ every child active</td><td>impossible configuration</td><td>executing a state that does not exist in that layer, or a "half-entered" parallel region</td></tr>
+<tr><td class="mono">inactive container ⇒ slot is SM_NODE_INVALID</td><td>stale slot</td><td>re-entry into a layer that still claims a child</td></tr>
+<tr><td class="mono">history slot/row only names direct children / descendants</td><td>corrupted snapshot</td><td>a restore that would enter a state from another branch of the tree</td></tr>
+</table>
+<p class="legend">The <code>SM_Layer_Has_Children_Map</code> clause is the fix from Correction 2
+(<code>REQ-GEN-SAF-001</code>): leaf states with an empty child layer must not be reported as configuration corruption.</p>
+<pre><code>static void SM_Enter_Fault(ADIA_Instance_t *instance)
+{
+    if (!instance-&gt;fault_latched) {
+        SM_Exit_All(instance);
+        SM_Enter_Safe_State(instance);
+        SM_ApplySafeOutputs(instance);
+        instance-&gt;fault_latched = true;
+    }
+}</code></pre>
+<p class="legend">Failure handling is a one-way door: the first fault exits the entire machine (recording history),
+enters the declared safe state, drops the physical outputs through the MCAL hook, and latches. Subsequent steps take the
+short-circuit at the top of <code>SM_Step</code>.</p>
+<p>Measured behaviour of the compiled package for this model (driver: <code>/tmp/faultdemo.c</code>, output kept in
+<code>scratch/cg-demo/logs/faultdemo.txt</code>):</p>
+<pre><code>after start : err=0 active0=1 warming_active=1
+after corrupt: err=3 (expected 3) fault_latched=1
+after misconfig: err=3 (expected 3) fault_latched=1
+bad delta_ms: err=2 (expected 2)</code></pre>
+
+<h3>6.8 IO mapping and trace instrumentation</h3>
+<pre><code>/* State: Heater | Model ID: heater | C enum: SM_ST_HEATER */
+void SM_ST_HEATER_Entry(ADIA_Instance_t *instance)
+{
+    instance-&gt;data.heat_cycles = (uint32_t)(0U);
+    SM_TraceAction(instance, &quot;entry:HEATER&quot;);
+}
+
+void SM_ST_HEATER_During(ADIA_Instance_t *instance)
+{
+    instance-&gt;data.heat_cycles = (uint32_t)((instance-&gt;data.heat_cycles + 1U));
+    SM_TraceAction(instance, &quot;during:HEATER&quot;);
+}
+
+void SM_ST_HEATER_Exit(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}</code></pre>
+<p>Entry/during/exit actions are ordinary C functions, one triple per state, with the model's script text lowered to typed
+statements (<code>(uint32_t)(0U)</code>, <code>(uint16_t)(250U)</code>) so that the package compiles clean under
+<code>-Wconversion -Wsign-conversion</code>. Each action block is bracketed by a trace hook whose string is derived from the
+state, not from user text; the differential harness collects these strings into the frame's <code>actions[]</code> list,
+which is how the C trace and the interpreter trace prove they ran the <i>same</i> actions in the <i>same</i> order.</p>
+<pre><code>#ifndef MCAL_DIO_H
+#define MCAL_DIO_H
+
+#include &quot;sm_config.h&quot;
+
+
+bool MCAL_Dio_ReadChannel(uint32_t channel);
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level);
+double MCAL_ReadChannelValue(uint32_t channel);
+void MCAL_WriteChannelValue(uint32_t channel, double value);
+void MCAL_ApplySafeOutputs(void);
+void MCAL_Watchdog_Kick(void);
+
+#endif /* MCAL_DIO_H */</code></pre>
+<p class="legend">The generator deliberately does not emit an MCAL. Reads, writes, safe-output application and watchdog kicking are
+integration points; the test package stubs them (<code>tests/mcal_test_stub.c</code>), and the host build in this run needed a
+one-line <code>MCAL_ApplySafeOutputs</code> stub to link the <i>production</i> files alone.</p>
+
+<h2 id="s7"><span class="num">7</span>Behaviour of the generation process (conformance gates)</h2>
+
+<p>Generating C is one thing; demonstrating that the generated C is the machine you specified is another. The pipeline is a
+strictly ordered set of 12 activities, and its status semantics are the interesting part:</p>
+
+<div class="grid g2">
+<div class="box"><h4>Fail-closed ordering</h4><p><code>structural → semantic → test-generation → host-compilation → host-runtime →
+sanitizers → coverage → differential → static-analysis → misra → target-compilation → hardware</code>.
+A failure in host compilation marks <i>all</i> dependent activities <code>NOT_RUN</code> with the reason recorded —
+"we could not measure" is never reported as "we measured and it was fine".</p></div>
+<div class="box"><h4>Truthful statuses</h4><p><code>PASS</code>, <code>FAIL</code>, <code>NOT_RUN</code> (never attempted/unavailable),
+<code>NOT_APPLICABLE</code> (e.g. MC/DC for a non-safety model) and <code>PENDING</code> (hardware, always until a bench exists).
+<code>deriveAcceptance()</code> rejects on any <code>FAIL</code> and additionally requires nine gates to be <code>PASS</code>:
+<code>structural, semantic, test-generation, host-compilation, host-runtime, sanitizers, statement-coverage,
+branch-coverage, differential</code>. MC/DC and target compilation become mandatory only when the model's verification
+policy demands them; static analysis, MISRA and hardware do not block acceptance.</p></div>
+</div>
+
+<h3>7.1 A run that passes: reviewed two-state fixture (<code>tickMs = 500</code>, safety mode, x/y IO mappings)</h3>
+<pre><code>=== reviewed-two-state ===
+overallStatus : PASS | acceptance: true
+  structural           PASS          -       Structural model validation passed: 2 states, 1 layers.
+  semantic             PASS          -       Semantic model validation passed: configuration slots and history mappings validated.
+  test-generation      PASS          -       Generated 27 package artifacts with canonical manifest (28 test cases).
+  host-compilation     PASS          321ms   Host compilation succeeded cleanly with strict flags
+  host-runtime         PASS          7ms     All 25 test cases passed cleanly with zero exit code
+  sanitizers           PASS          18ms    Execution under AddressSanitizer and UndefinedBehaviorSanitizer passed without violations
+  statement-coverage   PASS          -       Statement coverage 100.0% meets target threshold 100%
+  branch-coverage      PASS          -       Branch coverage 100.0% meets target threshold 100%
+  mcdc-coverage        NOT_APPLICABLE -       MC/DC coverage not required for non-safety model
+  differential         PASS          -       Differential equivalence confirmed across 1 cycles
+  static-analysis      NOT_RUN       -       Static analysis not configured in verification settings
+  misra-analysis       NOT_RUN       -       MISRA analysis not configured in verification settings
+  target-compilation   NOT_RUN       -       No target configured for model
+  hardware             PENDING       -       Hardware execution pending physical bench access
+
+=== deep-history ===
+overallStatus : FAIL | acceptance: false
+  structural           PASS          -       Structural model validation passed: 12 states, 6 layers.
+  semantic             PASS          -       Semantic model validation passed: configuration slots and history mappings validated.
+  test-generation      PASS          -       Generated 27 package artifacts with canonical manifest (33 test cases).
+  host-compilation     FAIL          315ms   Host compilation failed with exit code 1
+  host-runtime         NOT_RUN       -       Blocked by host compilation failure
+  sanitizers           NOT_RUN       -       Blocked by host compilation failure
+  statement-coverage   NOT_RUN       -       Blocked by host compilation failure
+  branch-coverage      NOT_RUN       -       Blocked by host compilation failure
+  mcdc-coverage        NOT_RUN       -       Blocked by host compilation failure
+  differential         NOT_RUN       -       Blocked by host compilation failure
+  static-analysis      NOT_RUN       -       Static analysis not configured in verification settings
+  misra-analysis       NOT_RUN       -       MISRA analysis not configured in verification settings
+  target-compilation   NOT_RUN       -       No target configured for model
+  hardware             PENDING       -       Hardware execution pending physical bench access</code></pre>
+<p>What actually happened in that run, from the bundle:</p>
+<ul>
+<li><b>Host compilation:</b> <code>gcc -std=c11 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion
+-Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -I. -Iproduction -Itests …</code> 16 sources → one executable.
+Zero warnings, because warnings are errors here.</li>
+<li><b>Host runtime:</b> 25 generated cases executed, exit code 0, per-case lines in
+<code>[ADIA_TEST] RUN/RESULT</code> format (<code>test_main.c</code> prints them).</li>
+<li><b>Sanitizers:</b> the same suite recompiled under ASan+UBSan and executed clean — the strongest cheap evidence that the
+generated arrays/slots are index-safe, including the <code>state_active[state_index]</code> loops.</li>
+<li><b>Differential:</b> PASS over 1 cycle. (Read §8.3 before trusting this number.)</li>
+<li><b>Hardware:</b> <code>PENDING</code> — the report says so explicitly rather than implying the model is deployable.</li>
+</ul>
+<p class="legend">Report excerpt generated by <code>smReports.ts</code> for that run:
+<code>Execution mode: PASS · Overall acceptance: ACCEPTED (PASS) · Static AST reachability: 100.0%</code> — and a per-state
+traceability table mapping <code>State_1 → SM_ST_STATE_1</code>, so a reviewer can walk from requirement to C symbol.</p>
+
+<h3>7.2 A run that fails: the same pipeline on the thermal model</h3>
+<pre><code>overallStatus : FAIL
+acceptance    : false
+  structural           PASS          -       Structural model validation passed: 10 states, 5 layers.
+  semantic             PASS          -       Semantic model validation passed: configuration slots and history mappings validated.
+  test-generation      PASS          -       Generated 27 package artifacts with canonical manifest (39 test cases).
+  host-compilation     FAIL          318ms   Host compilation failed with exit code 1
+  host-runtime         NOT_RUN       -       Blocked by host compilation failure
+  sanitizers           NOT_RUN       -       Blocked by host compilation failure
+  statement-coverage   NOT_RUN       -       Blocked by host compilation failure
+  branch-coverage      NOT_RUN       -       Blocked by host compilation failure
+  mcdc-coverage        NOT_RUN       -       Blocked by host compilation failure
+  differential         NOT_RUN       -       Blocked by host compilation failure
+  static-analysis      NOT_RUN       -       Static analysis not configured in verification settings
+  misra-analysis       NOT_RUN       -       MISRA analysis not configured in verification settings
+  target-compilation   NOT_RUN       -       No target configured for model
+  hardware             PENDING       -       Hardware execution pending physical bench access</code></pre>
+<pre><code>$ gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion \\
+      -Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -I. -Iproduction -Itests $(find . -name &quot;*.c&quot;) -o host_test_runner.exe
+./tests/test_sm_transitions.c:28:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:51:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:75:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:97:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:120:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:143:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:167:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:190:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;</code></pre>
+<p>The pipeline stopped at step 4 of 12 and reported <code>FAIL</code> with <code>acceptance: false</code>; nothing downstream
+was allowed to claim success. This is the correct behaviour — and it caught a real generator defect, described next.</p>
+
+<h2 id="s8"><span class="num">8</span>What this run exposed: three concrete defects</h2>
+
+<p>Running the generator on an arbitrary model rather than on the fixtures used by the test suite surfaced three issues. They are
+included here because they are part of the honest answer to "what does the code generation actually do?" — and because two of
+them are cases where the <i>verification</i> would have over-claimed had it not been cross-checked by hand.</p>
+
+<div class="note badc">
+<h4>A · <span class="tag fail">BLOCKING</span> Test-plan synthesis hardcodes a variable named <code>x</code></h4>
+<p><b>Symptom.</b> Host compilation fails for any model whose guard variables are not literally named <code>x</code>:</p>
+<pre><code>$ gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion \\
+      -Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -I. -Iproduction -Itests $(find . -name &quot;*.c&quot;) -o host_test_runner.exe
+./tests/test_sm_transitions.c:28:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:51:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:75:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:97:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:120:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:143:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:167:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;
+./tests/test_sm_transitions.c:190:18: error: &#x27;SM_Data_t&#x27; has no member named &#x27;x&#x27;</code></pre>
+<p><b>Cause.</b> <code>src/utils/stateMachine/smTestPlanBuilder.ts</code> emits a witness operation for the "condition true"
+and "condition false" transition cases as a literal constant:</p>
+<pre class="mark"><code>smTestPlanBuilder.ts:192   { kind: 'set-variable', variableId: 'x', value: true }    // transitions, TRUE case
+smTestPlanBuilder.ts:228   { kind: 'set-variable', variableId: 'x', value: false }   // transitions, FALSE case
+smTestPlanBuilder.ts:249   ops.push({ kind: 'set-variable', variableId: 'x', value: true });  // entry-action case</code></pre>
+<p><code>smCTestSuiteRenderer.renderOperation()</code> then renders <code>instance.data.&lt;id&gt;</code>, which does not exist
+in <code>SM_Data_t</code> for this model. The regression suite does not catch it: the fixture used by the pipeline
+(<code>reviewedTwoStateFixture</code>) declares a variable literally named <code>x</code>, and the other fixtures are
+exercised through manifest assertions (<code>smTestPlanBuilder.test.ts</code>) rather than by compiling the generated test
+package. Running the same pipeline on <code>historyFixture('deep')</code> reproduces the identical compile errors, so the
+defect is not specific to the demo model.</p>
+<p><b>Suggested fix (generator-side, per the project rule that generated C is never patched by hand).</b>
+Derive the witness from the transition's guard AST: collect referenced <code>SemanticVariable</code>s; for boolean variables set
+them to the polarity the guard requires; for simple comparisons (<code>var op literal</code>) set the literal. When no witness can
+be derived, emit the case with <code>applicability: { status: 'not-applicable', reason: 'guard witness not derivable' }</code>
+rather than emitting uncompilable C.</p>
+</div>
+
+<div class="note warnc">
+<h4>B · <span class="tag warn">FAIL-OPEN</span> Coverage reports 100 % while measuring nothing</h4>
+<p><b>Symptom.</b> The passing run reports
+<code>Statement coverage 100.0% meets target threshold 100%</code> and <code>Branch coverage 100.0% …</code>, yet the evidence
+in the same bundle says <code>{ measuredPercent: 100, covered: 0, total: 0 }</code>.</p>
+<p><b>Cause.</b> <code>smCoverageRunner.measureCoverage()</code> compiles with <code>--coverage</code> and then runs
+<code>gcov --json-format production/sm_core.c …</code>. The notes files produced by that compile are named
+<code>coverage_test_runner-sm_core.gcno</code> (because <code>-o coverage_test_runner.exe</code> prefixes them), so gcov cannot
+find them; it prints <code>cannot open notes file</code> / <code>No executable lines</code>, <b>exits 0</b>, and writes a
+<code>.gcov.json.gz</code> whose <code>files[]</code> is empty. <code>parseGcovJson()</code> then computes
+<code>totalLines = 0</code> and takes the <code>else</code> branch — <code>percent = 100</code> — and since
+<code>100 &gt;= threshold</code>, the activity is reported as <code>PASS</code>.</p>
+<pre><code>$ gcov --json-format production/sm_core.c        # &lt;- what the coverage adapter runs
+production/sm_core.gcno:cannot open notes file
+production/sm_core.gcda:cannot open data file, assuming not executed
+Creating &#x27;sm_core.gcov.json.gz&#x27;
+No executable lines
+
+--&gt; sm_core.gcov.json.gz now contains {&quot;files&quot;:[]}, exit code 0
+
+$ gcov --json-format coverage_test_runner-sm_core.gcno   # &lt;- notes/data files that actually exist
+File &#x27;production/sm_core.c&#x27;
+Lines executed:62.15% of 251
+
+Creating &#x27;coverage_test_runner-sm_core.gcov.json.gz&#x27;
+File &#x27;production/sm_mapping.c&#x27;
+Lines executed:72.22% of 18
+
+Creating &#x27;coverage_test_runner-sm_mapping.gcov.json.gz&#x27;
+File &#x27;production/sm_safety.c&#x27;
+Lines executed:72.60% of 73
+
+Creating &#x27;coverage_test_runner-sm_safety.gcov.json.gz&#x27;
+File &#x27;production/sm_user_logic.c&#x27;
+Lines executed:69.23% of 13
+
+Creating &#x27;coverage_test_runner-sm_user_logic.gcov.json.gz&#x27;
+Lines executed:65.07% of 355
+
+=&gt; measured production statements : 231/355 = 65.1%
+=&gt; measured production branches   : 0/0 = 0.0%  (no branch records emitted)</code></pre>
+<p><b>Impact.</b> Statement and branch coverage are two of the nine mandatory acceptance gates, so this is the one place where
+the fail-closed design currently leaks: both gates pass unconditionally on GCC. The real measured coverage for the "green" run
+is 65.1 % of 355 instrumented production lines, which would have <i>failed</i> the 100 % target.
+Branch records are not emitted at all in this configuration, so branch coverage is not merely defaulted: it is unmeasurable as
+invoked.</p>
+<p><b>Suggested fix.</b> (1) Pass the actual <code>*.gcno</code> files to gcov (or compile with
+<code>--coverage -fprofile-prefix-path</code> / per-file <code>-o</code> so the conventional names exist);
+(2) treat <code>total === 0</code> as <code>NOT_RUN</code> with the gcov stderr attached, never as 100 %;
+(3) keep the existing stderr guard for the string <code>No executable lines</code>.</p>
+</div>
+
+<div class="note warnc">
+<h4>C · <span class="tag warn">EVIDENCE QUALITY</span> The pipeline's differential gate compares the reference interpreter with itself</h4>
+<p>In <code>smPipelineOrchestrator.ts</code>, Gate 8 builds the reference observations and then calls:</p>
+<pre class="mark"><code>const diffEvidence = compareCycleObservations(
+  refObservations,
+  refObservations,               // &lt;-- "Exact match with verified candidate observations"
+  { modelHash: ir.modelHash ?? 'unknown' },
+);</code></pre>
+<p>There is no candidate trace from the compiled program in that path, so the activity can only ever report
+<code>PASS</code>; when no vectors are supplied it also defaults to a single synthetic vector, yielding the
+"PASS (1 cycles)" line and a zero <code>modelHash</code> visible in the bundle.</p>
+<p>The machinery to do this properly already exists and was exercised for this document:
+<code>smCHarness.compileAndRunCTrace()</code> compiles the generated package with <code>-DSM_TRACE_ENABLED</code>, runs a
+generated differential harness, and parses one frame per cycle; <code>smTrace.compareSemanticTraces()</code> then compares
+frames field by field (<code>activeStateIds</code>, <code>actions</code>, <code>data</code>, <code>stateTimersMs</code>,
+<code>history</code>, <code>mappedOutputs</code>, <code>ioEffects</code>, <code>error</code>). For the thermal model:
+<b>29/29 frames identical</b>, including the deep-history restore at cycle 26. That is the number the gate should be reporting.</p>
+<p><b>Suggested fix.</b> Call <code>compileAndRunCTrace()</code> from Gate 8 (or from a <code>differential</code> adapter),
+compare against the interpreter trace, and report <code>NOT_RUN</code> when no candidate observations could be produced.
+<code>src/utils/stateMachine/smDifferential.test.ts</code> already contains the correct pattern for 17 fixtures in the regression
+suite; the orchestrator simply does not use it yet.</p>
+</div>
+
+<h2 id="s9"><span class="num">9</span>Footprint and complexity</h2>
+
+<p>Measured for the 10-state / 5-layer thermal model (host gcc 12, x86-64, <code>-Os</code>; a 32-bit target shrinks pointers and
+<code>size_t</code>-sized members but the layout rules are unchanged):</p>
+
+<pre><code>sizeof(ADIA_Instance_t)          = 184 bytes
+sizeof(SM_Data_t)                = 32 bytes
+sizeof(active_states)            = 16 bytes
+sizeof(history_states)           = 16 bytes
+sizeof(state_active)             = 11 bytes
+sizeof(state_timers)             = 44 bytes
+sizeof(deep_history)             = 55 bytes
+SM_NUM_STATES=10 SM_NUM_LAYERS=5 SM_NUM_ACTIVE_SLOTS=4 SM_NUM_ACTIVE_SLOTS=4
+
+--- host object sections (-Os, x86-64) ---
+   text	   data	    bss	    dec	    hex	filename
+   2906	      0	      0	   2906	    b5a	sm_core.o
+    328	      0	      0	    328	    148	sm_mapping.o
+    815	      0	      0	    815	    32f	sm_safety.o
+    689	      0	      0	    689	    2b1	sm_user_logic.o</code></pre>
+
+<table>
+<tr><th>Quantity</th><th>Formula in the generated code</th><th>This model</th></tr>
+<tr><td>Instance RAM (per machine)</td><td class="mono">sizeof(SM_Data_t) + 4·SLOTS + 4·SLOTS + (N) + 4·(N+1) + LAYERS·(N+1) + status</td><td>184 B</td></tr>
+<tr><td>Active configuration</td><td class="mono">SM_NUM_ACTIVE_SLOTS</td><td>4 words</td></tr>
+<tr><td>Activity flags</td><td class="mono">SM_NUM_STATES + 1</td><td>11 bools + alignment</td></tr>
+<tr><td>Timers</td><td class="mono">SM_NUM_STATES + 1 (uint32)</td><td>44 B</td></tr>
+<tr><td>Deep-history matrix</td><td class="mono">SM_NUM_LAYERS × (SM_NUM_STATES + 1)</td><td>55 B</td></tr>
+<tr><td>Static ROM for the engine</td><td class="mono">O(states + layers + transitions)</td><td>≈ 4.7 KB of <code>.text</code> on host ABI; <code>.data</code>/<code>.bss</code> = 0 (all tables are <code>const</code>)</td></tr>
+</table>
+
+<p><b>Cost model of one tick.</b> <i>O(active states)</i> for the timer loop and the execution descent, plus <i>O(outgoing
+transitions)</i> for guard evaluation, with guards evaluated in priority order and evaluation stopped at the first satisfied
+guard. There are no writes to ROM, no allocations, and no unbounded loops: the deepest recursion is bounded by the model's
+nesting depth, which is a static property of the generated call graph.</p>
+
+<h2 id="s10"><span class="num">10</span>Deliberate non-goals</h2>
+<div class="grid g2">
+<div class="box"><h4>Not generated</h4>
+<ul>
+<li>No scheduler, RTOS binding or ISR — the integrator calls <code>SM_Step(ms)</code> at the tick rate and must act on the return code.</li>
+<li>No MCAL implementation: <code>mcal_dio.h</code> is an interface only (6 functions).</li>
+<li>No dynamic dispatch and no function pointers: dispatch is <code>switch</code>, so a corrupted instance can change which states
+run, but never which function is called.</li>
+<li>No heap, no <code>malloc</code>, no recursion whose depth depends on data.</li>
+<li>No events/queueing: the model is sampled, not event-driven; conditions are re-evaluated every tick.</li>
+</ul></div>
+<div class="box"><h4>Left to the integrator — and worth knowing</h4>
+<ul>
+<li>Clock accuracy: <code>SM_TICK_MIN/MAX_MS</code> is a plausibility window, not a scheduler. If the platform cannot hit the
+window, the machine faults by design.</li>
+<li>Safe outputs: <code>MCAL_ApplySafeOutputs()</code> must actually de-energise the plant.</li>
+<li>Watchdog: <code>MCAL_Watchdog_Kick()</code> is a hook; the policy
+(<code>watchdogAfterCriticalFault: 'do-not-service'</code>) is a model setting, not generated logic.</li>
+<li>Guards must be side-effect free. The pipeline's regression suite contains models that demonstrate why
+(<code>smDifferential.test.ts</code> covers action ordering across exit/during/entry phases — one action per tick is the contract).</li>
+</ul></div>
+</div>
+
+<h2 id="s11"><span class="num">11</span>Reproduce it</h2>
+
+<p>Everything in this document can be regenerated from the repository without any Ada/ADIA-specific toolchain:</p>
+
+<pre class="mark"><code># 0. the drivers are plain TypeScript with relative imports; any bundler works.
+#    In this sandbox the repo's node_modules was empty, so esbuild was installed separately
+#    (/tmp/tooling) and the drivers were bundled to CommonJS so that the pipeline's tool
+#    runner (which spawns gcc/gcov through eval("require('child_process')")) can work.
+# 1. build the generator drivers
+/tmp/tooling/node_modules/.bin/esbuild scratch/cg-demo/run-ir.ts \
+    --bundle --platform=node --format=cjs --outfile=scratch/cg-demo/run-ir.cjs \
+    --alias:mathjs=/tmp/tooling/node_modules/mathjs/lib/esm/index.js \
+    --external:plotly.js-dist-min --external:electron --external:react --external:react-dom
+
+# 2. model -> IR -> C artefacts (per model: IR.md, flat/, package/, analysis.json)
+node scratch/cg-demo/run-ir.cjs
+
+# 3. the 12-gate conformance pipeline (host compile, tests, sanitizers, coverage, differential)
+node scratch/cg-demo/run-pipeline.cjs            # thermal model      -> FAIL (see §8-A)
+node scratch/cg-demo/run-pipeline-fixture.cjs    # reviewed fixture  -> PASS (see §7.1)
+
+# 4. the real differential gate: interpreter trace vs compiled-C trace
+node scratch/cg-demo/run-differential.cjs        # -> 29/29 frames identical
+
+# 5. production C alone, strict flags, plus the fault-injection demo
+cd scratch/cg-demo/out/thermal/flat
+gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic \
+    -Wconversion -Wsign-conversion -Wshadow -Wvla -I. \
+    /tmp/faultdemo.c /tmp/mcal_stub.c sm_core.c sm_mapping.c sm_safety.c sm_user_logic.c -o /tmp/faultdemo
+/tmp/faultdemo</code></pre>
+
+<table>
+<tr><th>Artifact</th><th>Path</th></tr>
+<tr><td>Semantic IR dump (states, layers, junctions, lowered transitions)</td><td class="mono">scratch/cg-demo/out/thermal/IR.md</td></tr>
+<tr><td>Flat production C (10 files) and full verification package (27 files)</td><td class="mono">scratch/cg-demo/out/thermal/{flat,package}/</td></tr>
+<tr><td>Differential harness + both cycle traces</td><td class="mono">scratch/cg-demo/out/thermal-differential/</td></tr>
+<tr><td>Pipeline bundles, reports, manifests for both runs</td><td class="mono">scratch/cg-demo/out/{thermal-pipeline,pipeline-reviewed-two-state, pipeline-deep-history}/</td></tr>
+<tr><td>Console logs used verbatim in this document</td><td class="mono">scratch/cg-demo/logs/*.txt</td></tr>
+<tr><td>Model sources for both demo machines</td><td class="mono">scratch/cg-demo/build-model.ts</td></tr>
+</table>
+
+<div class="note okc">
+<h4>Summary of the contract</h4>
+<p>A state machine's <i>shape</i> is compiled into constants and switches; its <i>state</i> is a caller-owned struct;
+its <i>behaviour over time</i> is a fixed sequence of phases per tick; its <i>safety</i> is a self-check against the same
+struct; and its <i>equivalence to the specification</i> is asserted by replaying one trace on two implementations
+(TypeScript interpreter and the compiled C) and comparing every frame. Where that chain currently has holes,
+they are enumerated in §8 — and every one of them makes the generator <i>produce</i> something, not become silent.
+</p>
+</div>
+
+<div class="footer">
+Generated from the ADAI repository at commit <code>748e34e</code> (branch <code>arena/01a09f7c-adai</code>), 2026-09-14.
+Code excerpts are verbatim output of <code>generateCArtifacts()</code> for the model in <code>scratch/cg-demo/build-model.ts</code>;
+measurements were taken with gcc 12.2.0 and gcov 12.2.0 on the host. Nothing in <code>src/</code> was modified to produce this document.
+</div>
+
+</div>
+</body>
+</html>
