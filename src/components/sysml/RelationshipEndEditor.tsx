@@ -25,7 +25,14 @@ export interface RelationshipEndEditorProps {
   targetIsRequirement?: boolean;
   generalizationInfo?: GeneralizationInfo;
   onChange: (relationship: SysmlRelationship) => void;
-  onInvalidChange?: (diagnostic: ConnectionPolicyDiagnostic) => void;
+  onInvalidChange?: (rejection: RejectedRelationshipChange) => void;
+}
+
+export interface RejectedRelationshipChange {
+  relationshipKind: SysmlRelationship['kind'];
+  source: ConnectionEndpoint;
+  target: ConnectionEndpoint;
+  diagnostic: ConnectionPolicyDiagnostic;
 }
 
 export type RelationshipDiagramContext = 'bdd' | 'ibd' | 'requirements' | 'rtm';
@@ -72,6 +79,18 @@ export function validateRelationshipKindUpdate(
   return evaluateSysmlConnection({ relationshipKind: kind, source, target, diagram });
 }
 
+/** Creates the callback payload for a rejected stale or programmatic change. */
+export function createRejectedRelationshipChange(
+  relationshipKind: SysmlRelationship['kind'],
+  source: ConnectionEndpoint,
+  target: ConnectionEndpoint,
+  diagram: RelationshipDiagramContext,
+): RejectedRelationshipChange | undefined {
+  const decision = validateRelationshipKindUpdate(relationshipKind, source, target, diagram);
+  const diagnostic = decision.diagnostics[0];
+  return diagnostic ? { relationshipKind, source, target, diagnostic } : undefined;
+}
+
 const AGGREGATION_KINDS: NonNullable<SysmlRelationship['sourceAggregation']>[] = ['none', 'shared', 'composite'];
 
 // Canonical inheritance/governance codes surfaced in the guidance panel
@@ -112,7 +131,8 @@ export function RelationshipEndEditor({
     if (patch.kind) {
       const decision = validateRelationshipKindUpdate(candidate.kind, resolvedSource, resolvedTarget, diagram);
       if (!decision.allowed) {
-        onInvalidChange?.(decision.diagnostics[0]);
+        const rejection = createRejectedRelationshipChange(candidate.kind, resolvedSource, resolvedTarget, diagram);
+        if (rejection) onInvalidChange?.(rejection);
         return;
       }
     }

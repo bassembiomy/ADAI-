@@ -1,9 +1,22 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { filterRelationshipKinds, RelationshipEndEditor, validateRelationshipKindUpdate } from './RelationshipEndEditor';
+import {
+  createRejectedRelationshipChange,
+  filterRelationshipKinds,
+  RelationshipEndEditor,
+  validateRelationshipKindUpdate,
+} from './RelationshipEndEditor';
 import type { SysmlRelationship } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
+
+function findElementByAriaLabel(node: React.ReactNode, label: string): React.ReactElement | undefined {
+  if (!React.isValidElement(node)) return undefined;
+  if (node.props['aria-label'] === label) return node;
+  return React.Children.toArray(node.props.children)
+    .map(child => findElementByAriaLabel(child, label))
+    .find((element): element is React.ReactElement => Boolean(element));
+}
 
 describe('RelationshipEndEditor', () => {
   const relationship: SysmlRelationship = {
@@ -78,6 +91,44 @@ describe('RelationshipEndEditor', () => {
       code: 'INVALID_AGGREGATION_ENDPOINTS',
       correctiveAction: expect.stringContaining('value property'),
     });
+  });
+
+  it('reports the rejected candidate kind and both resolved endpoints to the invalid-update callback', () => {
+    const source = { id: 'blockA', name: 'Engine', family: 'block' as const };
+    const target = { id: 'mass', name: 'Mass', family: 'valueType' as const };
+    const rejected = createRejectedRelationshipChange('composition', source, target, 'bdd');
+
+    expect(rejected).toMatchObject({
+      relationshipKind: 'composition',
+      source,
+      target,
+      diagnostic: { code: 'INVALID_AGGREGATION_ENDPOINTS' },
+    });
+  });
+
+  it('blocks a stale select interaction and sends its candidate kind to onInvalidChange', () => {
+    const onChange = vi.fn();
+    const onInvalidChange = vi.fn();
+    const editor = RelationshipEndEditor({
+      relationship,
+      diagnostics: [],
+      sourceEndpoint: { id: 'blockA', name: 'Engine', family: 'block' },
+      targetEndpoint: { id: 'mass', name: 'Mass', family: 'valueType' },
+      diagram: 'bdd',
+      onChange,
+      onInvalidChange,
+    });
+    const kindSelect = findElementByAriaLabel(editor, 'Relationship kind');
+
+    expect(kindSelect).toBeDefined();
+    kindSelect!.props.onChange({ target: { value: 'composition' } });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onInvalidChange).toHaveBeenCalledWith(expect.objectContaining({
+      relationshipKind: 'composition',
+      source: { id: 'blockA', name: 'Engine', family: 'block' },
+      target: { id: 'mass', name: 'Mass', family: 'valueType' },
+    }));
   });
 
   it('renders diagnostics matching property paths', () => {

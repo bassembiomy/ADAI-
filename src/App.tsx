@@ -115,6 +115,7 @@ import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
 import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
@@ -134,7 +135,7 @@ import { computeViewportBounds, cullElements } from './components/sysml/Virtuali
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
-import { classifyLegacyEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
+import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -226,6 +227,8 @@ type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' 
 type ConnectionErrorItem = ErrorItem & {
   connectionDiagnostic?: ConnectionPolicyDiagnostic;
   relationshipKind?: string;
+  sourceEndpoint?: ConnectionEndpoint;
+  targetEndpoint?: ConnectionEndpoint;
 };
 
 interface WorkspaceFile {
@@ -6939,18 +6942,25 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
-  const showConnectionPolicyError = useCallback((diagnostic: ConnectionPolicyDiagnostic, relationshipKind: string, elementId?: string) => {
+  const showConnectionPolicyError = useCallback((rejection: {
+    diagnostic: ConnectionPolicyDiagnostic;
+    relationshipKind: string;
+    source: ConnectionEndpoint;
+    target: ConnectionEndpoint;
+  }, elementId?: string) => {
     const activeElement = document.activeElement;
     errorDialogTriggerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
     const error: ConnectionErrorItem = {
       id: uuidv4(),
       type: 'error',
-      message: diagnostic.message,
+      message: rejection.diagnostic.message,
       timestamp: new Date(),
       source: 'SysML connection policy',
       elementId,
-      connectionDiagnostic: diagnostic,
-      relationshipKind,
+      connectionDiagnostic: rejection.diagnostic,
+      relationshipKind: rejection.relationshipKind,
+      sourceEndpoint: rejection.source,
+      targetEndpoint: rejection.target,
     };
     setErrors(prev => [error, ...prev].slice(0, 100));
     setCurrentError(error);
@@ -6961,7 +6971,7 @@ const ADIA = () => {
     setShowErrorDialog(false);
     const trigger = errorDialogTriggerRef.current;
     errorDialogTriggerRef.current = null;
-    requestAnimationFrame(() => trigger?.focus());
+    restoreConnectionErrorFocus(trigger);
   }, []);
 
   useEffect(() => {
@@ -14799,7 +14809,7 @@ const ADIA = () => {
       const rect = canvasRef.current.getBoundingClientRect();
       setView({ scale: 1, offsetX: rect.width / 2 - targetX, offsetY: rect.height / 2 - targetY });
     }
-    setShowErrorDialog(false);
+    dismissErrorDialog();
   }, [states, junctions, transitions, layers, currentLayerId]);
 
   const handleAutoFix = useCallback((error: ErrorItem) => {
@@ -14812,7 +14822,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('Duplicate state name')) {
       const state = states.find(s => s.id === error.elementId);
@@ -14826,7 +14836,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed duplicate state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('has no AutoStart')) {
       // REQ-HSM-004 & REQ-HSM-023: Auto-fix by setting first state as autostart
@@ -14858,7 +14868,7 @@ const ADIA = () => {
         updateState(state.id, { autostart: true });
         addError('info', `Auto-fixed: Set '${state.name}' as AutoStart for layer '${layerName}'`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('unguarded and untimed')) {
       const transition = transitions.find(t => t.id === error.elementId);
@@ -14866,7 +14876,7 @@ const ADIA = () => {
         updateTransition(transition.id, { type: 'after', afterTicks: 5 });
         addError('info', `Auto-fixed transition: Added after-timer`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     }
   }, [states, layers, transitions, updateState, updateTransition, addError]);
@@ -14960,7 +14970,7 @@ const ADIA = () => {
         return s;
       }));
       setErrors(prev => prev.filter(e => !e.canAutoFix));
-      setShowErrorDialog(false);
+      dismissErrorDialog();
       addError('info', `Auto-fixed ${updates.size} issues.`);
     }
   }, [errors, states, layers, updateState, addError]);
@@ -17459,7 +17469,7 @@ const ADIA = () => {
                       stereotype: 'unknown',
                     })}
                     diagram={diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd'}
-                    onInvalidChange={(diagnostic) => showConnectionPolicyError(diagnostic, selectedRelationship.type, selectedRelationship.id)}
+                    onInvalidChange={(rejection) => showConnectionPolicyError(rejection, selectedRelationship.id)}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -18198,12 +18208,13 @@ const ADIA = () => {
 
               <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
                 <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
-                {currentError.connectionDiagnostic && (
-                  <div className="mt-3 space-y-2 text-sm" aria-label="Connection error details">
-                    <p className="text-red-200"><span className="font-semibold">Relationship:</span> {currentError.relationshipKind}</p>
-                    <p className="text-red-200"><span className="font-semibold">Reason:</span> {currentError.connectionDiagnostic.message}</p>
-                    <p className="text-amber-200"><span className="font-semibold">How to fix it:</span> {currentError.connectionDiagnostic.correctiveAction}</p>
-                  </div>
+                {currentError.connectionDiagnostic && currentError.relationshipKind && currentError.sourceEndpoint && currentError.targetEndpoint && (
+                  <SysmlConnectionErrorDetails
+                    relationshipKind={currentError.relationshipKind}
+                    source={currentError.sourceEndpoint}
+                    target={currentError.targetEndpoint}
+                    diagnostic={currentError.connectionDiagnostic}
+                  />
                 )}
                 {currentError.source && (
                   <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
@@ -18228,7 +18239,7 @@ const ADIA = () => {
                           updateTransition(currentError.elementId!, { type: 'condition', condition: defaultGuard });
                           addError('info', `Added guard condition: [${defaultGuard}]`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18239,7 +18250,7 @@ const ADIA = () => {
                           updateTransition(currentError.elementId!, { type: 'after', afterTicks: 5 });
                           addError('info', `Added after-timer: after(5)`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18274,7 +18285,7 @@ const ADIA = () => {
                 <Button
                   onClick={() => {
                     clearErrors();
-                    setShowErrorDialog(false);
+                    dismissErrorDialog();
                   }}
                   className="bg-red-600 hover:bg-red-700 text-white px-5"
                 >
