@@ -298,8 +298,12 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
     diagram: relationshipDiagram(relationship.kind),
   });
   diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
-  const check = requirementDirectionValid(repo, relationship);
-  if (!check.valid) diagnostics.push(`${check.code}: ${relationship.kind} ${relationshipId} has invalid SysML endpoint direction`);
+  // Trace endpoint legality is fully owned by the shared connection policy;
+  // do not append the obsolete generic requirement-direction diagnostic.
+  if (relationship.kind !== 'trace') {
+    const check = requirementDirectionValid(repo, relationship);
+    if (!check.valid) diagnostics.push(`${check.code}: ${relationship.kind} ${relationshipId} has invalid SysML endpoint direction`);
+  }
   diagnostics.sort();
   return { allowed: diagnostics.length === 0, diagram: 'rtm', diagnostics };
 }

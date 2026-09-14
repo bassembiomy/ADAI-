@@ -20,12 +20,17 @@ describe('native SysML creation rules', () => {
       { name: 'Block to ValueType generalization', type: 'generalization' as const, source: 'b', target: 'v', expected: 'CROSS_FAMILY_GENERALIZATION' },
       { name: 'ValueType to ValueType generalization', type: 'generalization' as const, source: 'v', target: 'v2', expected: undefined },
       { name: 'Requirement to Block association', type: 'association' as const, source: 'r', target: 'b', expected: 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS' },
+      { name: 'Block to Block trace', type: 'trace' as const, source: 'b', target: 'b2', expected: 'INVALID_TRACE_ENDPOINTS' },
       { name: 'unknown stereotype structural link', type: 'composition' as const, source: 'custom', target: 'b', expected: 'UNKNOWN_STEREOTYPE_FAMILY' },
     ];
-    const legacyBlocks = [block('b'), block('v', 'valueType'), block('v2', 'valueType'), block('r', 'requirement'), block('custom', 'customStereotype')];
+    const legacyBlocks = [block('b'), block('b2'), block('v', 'valueType'), block('v2', 'valueType'), block('r', 'requirement'), block('custom', 'customStereotype')];
     const canonical = createEmptyRepository();
     canonical.definitions.b = {
       id: 'b', name: 'b', kind: 'block', namespace: [], isAbstract: false, isLeaf: false,
+      properties: [], ports: [], operations: [], constraints: [],
+    };
+    canonical.definitions.b2 = {
+      id: 'b2', name: 'b2', kind: 'block', namespace: [], isAbstract: false, isLeaf: false,
       properties: [], ports: [], operations: [], constraints: [],
     };
     canonical.definitions.v = { id: 'v', name: 'v', kind: 'valueType', namespace: [] };
