@@ -1,6 +1,11 @@
 import React from 'react';
 import type { Multiplicity, SysmlRelationship } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
+import {
+  evaluateSysmlConnection,
+  type ConnectionEndpoint,
+  type ConnectionPolicyDiagnostic,
+} from '../../engine/sysml/connectionPolicy';
 
 export interface GeneralizationInfo {
   parentChain?: Array<{ id: string; name: string }>;
@@ -12,10 +17,59 @@ export interface GeneralizationInfo {
 export interface RelationshipEndEditorProps {
   relationship: SysmlRelationship;
   diagnostics?: SysmlDiagnostic[];
+  /** Resolved endpoint families let the editor remove illegal relationship choices. */
+  sourceEndpoint?: ConnectionEndpoint;
+  targetEndpoint?: ConnectionEndpoint;
+  diagram?: RelationshipDiagramContext;
   sourceIsRequirement?: boolean;
   targetIsRequirement?: boolean;
   generalizationInfo?: GeneralizationInfo;
   onChange: (relationship: SysmlRelationship) => void;
+  onInvalidChange?: (diagnostic: ConnectionPolicyDiagnostic) => void;
+}
+
+export type RelationshipDiagramContext = 'bdd' | 'ibd' | 'requirements' | 'rtm';
+
+const RELATIONSHIP_KINDS: Array<{ kind: SysmlRelationship['kind']; label: string }> = [
+  { kind: 'association', label: 'Association' },
+  { kind: 'generalization', label: 'Generalization' },
+  { kind: 'composition', label: 'Composition' },
+  { kind: 'sharedAggregation', label: 'Aggregation' },
+  { kind: 'allocation', label: 'Allocation' },
+  { kind: 'deriveReqt', label: 'Derive Requirement (deriveReqt)' },
+  { kind: 'refine', label: 'Refine' },
+  { kind: 'satisfy', label: 'Satisfy' },
+  { kind: 'verify', label: 'Verify' },
+  { kind: 'trace', label: 'Trace' },
+  { kind: 'copy', label: 'Copy' },
+  { kind: 'binding', label: 'Binding' },
+  { kind: 'dependency', label: 'Dependency' },
+  { kind: 'requirementContainment', label: 'Requirement Containment (parent → child)' },
+];
+
+/**
+ * Returns only relationship kinds legal for resolved endpoint families in the
+ * active diagram.  This is deliberately policy-backed so the dropdown cannot
+ * drift from command validation.
+ */
+export function filterRelationshipKinds(
+  source: ConnectionEndpoint,
+  target: ConnectionEndpoint,
+  diagram: RelationshipDiagramContext,
+): SysmlRelationship['kind'][] {
+  return RELATIONSHIP_KINDS
+    .filter(({ kind }) => evaluateSysmlConnection({ relationshipKind: kind, source, target, diagram }).allowed)
+    .map(({ kind }) => kind);
+}
+
+/** Validates a kind received from a stale control or programmatic update. */
+export function validateRelationshipKindUpdate(
+  kind: SysmlRelationship['kind'],
+  source: ConnectionEndpoint,
+  target: ConnectionEndpoint,
+  diagram: RelationshipDiagramContext,
+) {
+  return evaluateSysmlConnection({ relationshipKind: kind, source, target, diagram });
 }
 
 const AGGREGATION_KINDS: NonNullable<SysmlRelationship['sourceAggregation']>[] = ['none', 'shared', 'composite'];
@@ -32,13 +86,37 @@ const INHERITANCE_GUIDANCE_CODES = new Set([
 export function RelationshipEndEditor({
   relationship,
   diagnostics = [],
+  sourceEndpoint,
+  targetEndpoint,
+  diagram = 'bdd',
   sourceIsRequirement = false,
   targetIsRequirement = false,
   generalizationInfo,
   onChange,
+  onInvalidChange,
 }: RelationshipEndEditorProps) {
+  const resolvedSource: ConnectionEndpoint = sourceEndpoint ?? {
+    id: relationship.sourceId,
+    name: relationship.sourceId,
+    family: sourceIsRequirement ? 'requirement' : 'unknown',
+  };
+  const resolvedTarget: ConnectionEndpoint = targetEndpoint ?? {
+    id: relationship.targetId,
+    name: relationship.targetId,
+    family: targetIsRequirement ? 'requirement' : 'unknown',
+  };
+  const allowedRelationshipKinds = filterRelationshipKinds(resolvedSource, resolvedTarget, diagram);
+
   const update = (patch: Partial<SysmlRelationship>) => {
-    onChange({ ...relationship, ...patch });
+    const candidate = { ...relationship, ...patch };
+    if (patch.kind) {
+      const decision = validateRelationshipKindUpdate(candidate.kind, resolvedSource, resolvedTarget, diagram);
+      if (!decision.allowed) {
+        onInvalidChange?.(decision.diagnostics[0]);
+        return;
+      }
+    }
+    onChange(candidate);
   };
 
   const parseMult = (text: string, current?: Multiplicity): Multiplicity => {
@@ -96,22 +174,9 @@ export function RelationshipEndEditor({
             onChange={e => update({ kind: e.target.value as any })}
             className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1 mt-1 text-gray-200"
           >
-            <option value="association">Association</option>
-            <option value="generalization">Generalization</option>
-            <option value="composition">Composition</option>
-            <option value="sharedAggregation">Aggregation</option>
-            <option value="allocation">Allocation</option>
-            <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
-            <option value="refine">Refine</option>
-            <option value="satisfy">Satisfy</option>
-            <option value="verify">Verify</option>
-            <option value="trace">Trace</option>
-            <option value="copy">Copy</option>
-            <option value="binding">Binding</option>
-            <option value="dependency">Dependency</option>
-            <option value="requirementContainment" disabled={!(sourceIsRequirement && targetIsRequirement)}>
-              Requirement Containment (parent → child)
-            </option>
+            {RELATIONSHIP_KINDS
+              .filter(({ kind }) => allowedRelationshipKinds.includes(kind))
+              .map(({ kind, label }) => <option key={kind} value={kind}>{label}</option>)}
           </select>
         </label>
       </div>

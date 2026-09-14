@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { RelationshipEndEditor } from './RelationshipEndEditor';
+import { filterRelationshipKinds, RelationshipEndEditor, validateRelationshipKindUpdate } from './RelationshipEndEditor';
 import type { SysmlRelationship } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
 
@@ -38,12 +38,46 @@ describe('RelationshipEndEditor', () => {
     expect(html).toContain('composite');
   });
 
-  it('exposes one canonical relationship-kind control including binding', () => {
+  it('hides IBD and requirement relationships from generic BDD choices', () => {
     const html = renderToStaticMarkup(
-      <RelationshipEndEditor relationship={relationship} diagnostics={[]} onChange={vi.fn()} />
+      <RelationshipEndEditor
+        relationship={relationship}
+        diagnostics={[]}
+        sourceEndpoint={{ id: 'blockA', name: 'Engine', family: 'block' }}
+        targetEndpoint={{ id: 'blockB', name: 'Mass', family: 'valueType' }}
+        diagram="bdd"
+        onChange={vi.fn()}
+      />
     );
     expect((html.match(/aria-label="Relationship kind"/g) ?? [])).toHaveLength(1);
-    expect(html).toContain('value="binding"');
+    expect(html).toContain('value="association"');
+    expect(html).not.toContain('value="binding"');
+    expect(html).not.toContain('value="deriveReqt"');
+    expect(html).not.toContain('value="composition"');
+  });
+
+  it('only offers requirement links when their endpoint direction is valid', () => {
+    const block = { id: 'block', name: 'Controller', family: 'block' as const };
+    const requirement = { id: 'req', name: 'Safety', family: 'requirement' as const };
+
+    expect(filterRelationshipKinds(block, requirement, 'rtm')).toContain('satisfy');
+    expect(filterRelationshipKinds(block, requirement, 'rtm')).not.toContain('verify');
+    expect(filterRelationshipKinds(requirement, block, 'rtm')).not.toContain('satisfy');
+  });
+
+  it('rejects a stale invalid kind update with an actionable policy diagnostic', () => {
+    const result = validateRelationshipKindUpdate(
+      'composition',
+      { id: 'blockA', name: 'Engine', family: 'block' },
+      { id: 'mass', name: 'Mass', family: 'valueType' },
+      'bdd',
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.diagnostics[0]).toMatchObject({
+      code: 'INVALID_AGGREGATION_ENDPOINTS',
+      correctiveAction: expect.stringContaining('value property'),
+    });
   });
 
   it('renders diagnostics matching property paths', () => {
@@ -80,6 +114,7 @@ describe('RelationshipEndEditor', () => {
         relationship={containmentRel}
         sourceIsRequirement={true}
         targetIsRequirement={true}
+        diagram="requirements"
         diagnostics={[]}
         onChange={vi.fn()}
       />
@@ -97,12 +132,13 @@ describe('RelationshipEndEditor', () => {
         relationship={containmentRel}
         sourceIsRequirement={false}
         targetIsRequirement={true}
+        diagram="requirements"
         diagnostics={[]}
         onChange={vi.fn()}
       />
     );
 
-    expect(htmlDisabled).toMatch(/value="requirementContainment"[^>]*disabled/);
+    expect(htmlDisabled).not.toContain('value="requirementContainment"');
   });
 
   it('renders generalization inheritance guidance with parent chain, leaf/cycle diagnostics, and abstract guidance', () => {

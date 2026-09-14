@@ -134,6 +134,7 @@ import { computeViewportBounds, cullElements } from './components/sysml/Virtuali
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { classifyLegacyEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -221,6 +222,11 @@ interface Point {
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
 type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
+
+type ConnectionErrorItem = ErrorItem & {
+  connectionDiagnostic?: ConnectionPolicyDiagnostic;
+  relationshipKind?: string;
+};
 
 interface WorkspaceFile {
   id: string;
@@ -5924,7 +5930,9 @@ const ADIA = () => {
 
   const [errors, setErrors] = useState<ErrorItem[]>([]);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const [currentError, setCurrentError] = useState<ErrorItem | null>(null);
+  const [currentError, setCurrentError] = useState<ConnectionErrorItem | null>(null);
+  const errorDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const errorDismissButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showGlobalReportPreview, setShowGlobalReportPreview] = useState(false);
   const [globalReportData, setGlobalReportData] = useState<{ html: string, projectName: string } | null>(null);
@@ -6930,6 +6938,35 @@ const ADIA = () => {
       setIsRunning(false);
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
+
+  const showConnectionPolicyError = useCallback((diagnostic: ConnectionPolicyDiagnostic, relationshipKind: string, elementId?: string) => {
+    const activeElement = document.activeElement;
+    errorDialogTriggerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+    const error: ConnectionErrorItem = {
+      id: uuidv4(),
+      type: 'error',
+      message: diagnostic.message,
+      timestamp: new Date(),
+      source: 'SysML connection policy',
+      elementId,
+      connectionDiagnostic: diagnostic,
+      relationshipKind,
+    };
+    setErrors(prev => [error, ...prev].slice(0, 100));
+    setCurrentError(error);
+    setShowErrorDialog(true);
+  }, []);
+
+  const dismissErrorDialog = useCallback(() => {
+    setShowErrorDialog(false);
+    const trigger = errorDialogTriggerRef.current;
+    errorDialogTriggerRef.current = null;
+    requestAnimationFrame(() => trigger?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (showErrorDialog) errorDismissButtonRef.current?.focus();
+  }, [showErrorDialog]);
 
   const exportPlantUmlSource = useCallback(() => {
     const source = plantUmlDiagram.type === 'sequence'
@@ -17411,6 +17448,18 @@ const ADIA = () => {
                     }
                     sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
                     targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
+                    sourceEndpoint={classifyLegacyEndpoint(blocks.find(b => b.id === selectedRelationship.sourceId) ?? {
+                      id: selectedRelationship.sourceId,
+                      name: selectedRelationship.sourceId,
+                      stereotype: 'unknown',
+                    })}
+                    targetEndpoint={classifyLegacyEndpoint(blocks.find(b => b.id === selectedRelationship.targetId) ?? {
+                      id: selectedRelationship.targetId,
+                      name: selectedRelationship.targetId,
+                      stereotype: 'unknown',
+                    })}
+                    diagram={diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd'}
+                    onInvalidChange={(diagnostic) => showConnectionPolicyError(diagnostic, selectedRelationship.type, selectedRelationship.id)}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -18134,19 +18183,28 @@ const ADIA = () => {
 
         {/* Error Dialog */}
         {showErrorDialog && currentError && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
-            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={dismissErrorDialog}>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <h2 className="text-lg font-bold text-red-400">Error</h2>
+                <h2 id="error-dialog-title" className="text-lg font-bold text-red-400">
+                  {currentError.connectionDiagnostic ? 'SysML Connection Blocked' : 'Error'}
+                </h2>
               </div>
 
               <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
                 <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
+                {currentError.connectionDiagnostic && (
+                  <div className="mt-3 space-y-2 text-sm" aria-label="Connection error details">
+                    <p className="text-red-200"><span className="font-semibold">Relationship:</span> {currentError.relationshipKind}</p>
+                    <p className="text-red-200"><span className="font-semibold">Reason:</span> {currentError.connectionDiagnostic.message}</p>
+                    <p className="text-amber-200"><span className="font-semibold">How to fix it:</span> {currentError.connectionDiagnostic.correctiveAction}</p>
+                  </div>
+                )}
                 {currentError.source && (
                   <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
                 )}
@@ -18207,7 +18265,8 @@ const ADIA = () => {
                 )}
                 <Button
                   variant="outline"
-                  onClick={() => setShowErrorDialog(false)}
+                  ref={errorDismissButtonRef}
+                  onClick={dismissErrorDialog}
                   className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
                 >
                   Dismiss
