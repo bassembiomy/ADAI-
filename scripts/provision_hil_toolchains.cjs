@@ -9,8 +9,9 @@ const {
 } = require('../src/security/toolchainManager.cjs');
 
 async function main() {
+  const json = process.argv.includes('--json');
   const toolchainsDir = path.join(process.cwd(), 'toolchains');
-  console.log(`[PROVISION] Destination: ${toolchainsDir}`);
+  if (!json) console.log(`[PROVISION] Destination: ${toolchainsDir}`);
   await provisionAllRequiredToolchains(toolchainsDir);
 
   const rows = [];
@@ -20,11 +21,10 @@ async function main() {
       rows.push({ target, kind, key, executable: resolved?.executable || null });
     }
   }
-  for (const row of rows) {
-    console.log(`[${row.executable ? ' OK ' : 'MISS'}] ${row.target} ${row.kind} ${row.key}: ${row.executable || 'not found'}`);
-  }
+  if (json) console.log(JSON.stringify({ toolchainsDir, environments: rows }, null, 2));
+  else for (const row of rows) console.log(`[${row.executable ? ' OK ' : 'MISS'}] ${row.target} ${row.kind} ${row.key}: ${row.executable || 'not found'}`);
   if (rows.some(row => !row.executable)) throw new Error('Provisioning completed with missing target tools');
-  console.log('[PROVISION] All supported MCU environments are available locally.');
+  if (!json) console.log('[PROVISION] All supported MCU environments are available locally.');
 }
 
 main().catch(error => {

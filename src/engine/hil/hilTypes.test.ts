@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyLegacyTargetSelection, applyTargetSelection, legacyTargetForTargetId, resolveTargetSelection } from './hilTypes.js';
 import type { HILConfig } from './hilTypes.js';
+import { TARGET_PIN_MAPS } from '../../components/hil/HILDriverPanel.js';
 
 describe('exact HIL target selection', () => {
   it('preserves exact target, pack version, and driver mode', () => {
@@ -89,6 +90,9 @@ describe('exact HIL target selection', () => {
       boardRevision: 'A',
     });
     expect(config.targetSelection?.targetId).toBe('atmega328p');
+    expect(TARGET_PIN_MAPS[updated.target].GPIO).toContain('53');
+    expect(TARGET_PIN_MAPS[updated.target].GPIO).toContain('A15');
+    expect(TARGET_PIN_MAPS.Arduino_Uno.GPIO).not.toContain('53');
   });
 
   it('clears exact metadata when selecting the Generic host', () => {

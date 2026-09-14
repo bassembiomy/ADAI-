@@ -33,6 +33,7 @@ const TOOLCHAINS = Object.freeze({
     url: 'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip',
     zipName: 'w64devkit-1.23.0.zip',
     extractSubdir: 'w64devkit',
+    installRootSegments: ['w64devkit'],
     binPathSegments: ['w64devkit', 'w64devkit', 'bin'],
     checkFile: 'gcc.exe',
   }),
@@ -42,6 +43,7 @@ const TOOLCHAINS = Object.freeze({
     url: 'https://github.com/ZakKemble/avr-gcc-build/releases/download/v15.2.0-1/avr-gcc-15.2.0-x64-windows.zip',
     zipName: 'avr-gcc-15.2.0-x64-windows.zip',
     extractSubdir: 'avr-gcc',
+    installRootSegments: ['avr-gcc'],
     binPathSegments: ['avr-gcc', 'avr-gcc-15.2.0-x64-windows', 'bin'],
     checkFile: 'avr-g++.exe',
     requiredFromBin: [['..', 'libexec', 'gcc', 'avr', '15.2.0', 'cc1plus.exe']],
@@ -52,6 +54,7 @@ const TOOLCHAINS = Object.freeze({
     url: 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-win32.zip',
     zipName: 'gcc-arm-none-eabi-10.3-2021.10-win32.zip',
     extractSubdir: 'arm-gcc',
+    installRootSegments: ['arm-gcc'],
     binPathSegments: ['arm-gcc', 'gcc-arm-none-eabi-10.3-2021.10', 'bin'],
     checkFile: 'arm-none-eabi-gcc.exe',
   }),
@@ -61,6 +64,7 @@ const TOOLCHAINS = Object.freeze({
     url: 'https://github.com/espressif/crosstool-NG/releases/download/esp-13.2.0_20240530/xtensa-esp-elf-13.2.0_20240530-x86_64-w64-mingw32.zip',
     zipName: 'xtensa-esp-elf-13.2.0_20240530-x86_64-w64-mingw32.zip',
     extractSubdir: 'xtensa-esp-elf',
+    installRootSegments: ['xtensa-esp-elf'],
     binPathSegments: ['xtensa-esp-elf', 'xtensa-esp-elf', 'bin'],
     checkFile: 'xtensa-esp32-elf-gcc.exe',
     hashKey: 'esp32-xtensa-gcc-13.2.0-win64',
@@ -75,6 +79,7 @@ const FLASH_TOOLS = Object.freeze({
     url: 'https://github.com/avrdudes/avrdude/releases/download/v8.0/avrdude-v8.0-windows-x64.zip',
     zipName: 'avrdude-v8.0-windows-x64.zip',
     extractSubdir: 'flashers/avrdude',
+    installRootSegments: ['flashers', 'avrdude'],
     binPathSegments: ['flashers', 'avrdude'],
     candidatePathSegments: [
       ['flashers', 'avrdude'],
@@ -89,6 +94,7 @@ const FLASH_TOOLS = Object.freeze({
     url: 'https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-3/xpack-openocd-0.12.0-3-win32-x64.zip',
     zipName: 'xpack-openocd-0.12.0-3-win32-x64.zip',
     extractSubdir: 'flashers',
+    installRootSegments: ['flashers', 'xpack-openocd-0.12.0-3'],
     binPathSegments: ['flashers', 'xpack-openocd-0.12.0-3', 'bin'],
     candidatePathSegments: [
       ['flashers', 'xpack-openocd-0.12.0-3', 'bin'],
@@ -104,6 +110,7 @@ const FLASH_TOOLS = Object.freeze({
     url: 'https://github.com/espressif/esptool/releases/download/v4.8.1/esptool-v4.8.1-win64.zip',
     zipName: 'esptool-v4.8.1-win64.zip',
     extractSubdir: 'flashers',
+    installRootSegments: ['flashers', 'esptool-win64'],
     binPathSegments: ['flashers', 'esptool-win64'],
     candidatePathSegments: [
       ['flashers', 'esptool-win64'],
@@ -301,7 +308,8 @@ function extractZip(zipPath, destDir) {
       // Fallback: PowerShell Expand-Archive
       const ps = spawn('powershell.exe', [
         '-NoProfile', '-Command',
-        `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${destDir}' -Force`,
+        'param($zipPath,$destPath) Expand-Archive -LiteralPath $zipPath -DestinationPath $destPath -Force',
+        zipPath, destDir,
       ], { shell: false });
       ps.on('close', psCode => psCode === 0 ? resolve() : reject(new Error(`Extraction failed: ${stderr}`)));
       ps.on('error', () => reject(new Error(`Extraction failed: ${stderr}`)));
@@ -321,6 +329,8 @@ async function performProvision(key, toolchainsDir = defaultToolchainsDir(), dep
   const suffix = randomUUID();
   const zipPath = path.join(dir, `${spec.zipName}.part-${suffix}`);
   const stagingRoot = path.join(dir, `.staging-${key}-${suffix}`);
+  const finalRoot = path.join(dir, ...spec.installRootSegments);
+  const backupRoot = `${finalRoot}.backup-${suffix}`;
   try {
     const doDownload = deps.downloadFile || downloadFile;
     await doDownload(spec.url, zipPath);
@@ -339,7 +349,18 @@ async function performProvision(key, toolchainsDir = defaultToolchainsDir(), dep
     if (!fs.existsSync(path.join(stagedBinPath, installationMarker(spec)))) {
       throw new Error(`EXTRACT_LAYOUT_UNEXPECTED: ${spec.name} -> ${stagedBinPath}`);
     }
-    fs.cpSync(stagingRoot, dir, { recursive: true, force: true });
+    const stagedRoot = path.join(stagingRoot, ...spec.installRootSegments);
+    if (!fs.existsSync(stagedRoot)) {
+      throw new Error(`EXTRACT_INSTALL_ROOT_MISSING: ${spec.name} -> ${stagedRoot}`);
+    }
+    fs.mkdirSync(path.dirname(finalRoot), { recursive: true });
+    if (fs.existsSync(finalRoot)) fs.renameSync(finalRoot, backupRoot);
+    try {
+      fs.renameSync(stagedRoot, finalRoot);
+    } catch (error) {
+      if (!fs.existsSync(finalRoot) && fs.existsSync(backupRoot)) fs.renameSync(backupRoot, finalRoot);
+      throw error;
+    }
     const resolved = resolveInstalledToolchain(key, {
       toolchainsDir: dir,
       repoRoot: deps.repoRoot || path.join(__dirname, '../..'),
@@ -348,10 +369,43 @@ async function performProvision(key, toolchainsDir = defaultToolchainsDir(), dep
     if (!resolved?.executable) {
       throw new Error(`PROMOTED_LAYOUT_UNEXPECTED: ${spec.name}`);
     }
+    fs.rmSync(backupRoot, { recursive: true, force: true });
     return resolved;
   } finally {
     fs.rmSync(zipPath, { force: true });
     fs.rmSync(stagingRoot, { recursive: true, force: true });
+    if (fs.existsSync(backupRoot) && !fs.existsSync(finalRoot)) fs.renameSync(backupRoot, finalRoot);
+    fs.rmSync(backupRoot, { recursive: true, force: true });
+  }
+}
+
+function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+async function withProvisionLock(key, dir, operation, deps = {}) {
+  const safeKey = key.replace(/[^A-Za-z0-9_.-]/g, '_');
+  const lockPath = path.join(dir, `.provision-${safeKey}.lock`);
+  const timeoutMs = deps.lockTimeoutMs || 120000;
+  const pollMs = deps.lockPollMs || 50;
+  const deadline = Date.now() + timeoutMs;
+  let handle;
+  while (!handle) {
+    try {
+      handle = fs.openSync(lockPath, 'wx');
+      fs.writeFileSync(handle, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const installed = resolveInstalledToolchain(key, { ...deps, toolchainsDir: dir });
+      if (installed?.executable) return installed;
+      if (Date.now() >= deadline) throw new Error(`PROVISION_LOCK_TIMEOUT: ${key} (${lockPath})`);
+      await delay(pollMs);
+    }
+  }
+  try {
+    const installed = resolveInstalledToolchain(key, { ...deps, toolchainsDir: dir });
+    return installed?.executable ? installed : await operation();
+  } finally {
+    fs.closeSync(handle);
+    fs.rmSync(lockPath, { force: true });
   }
 }
 
@@ -360,7 +414,8 @@ function provisionToolchain(key, toolchainsDir = defaultToolchainsDir(), deps = 
   const operationKey = `${dir}\0${key}`;
   const active = activeProvisions.get(operationKey);
   if (active) return active;
-  const operation = performProvision(key, dir, deps)
+  fs.mkdirSync(dir, { recursive: true });
+  const operation = withProvisionLock(key, dir, () => performProvision(key, dir, deps), deps)
     .finally(() => activeProvisions.delete(operationKey));
   activeProvisions.set(operationKey, operation);
   return operation;

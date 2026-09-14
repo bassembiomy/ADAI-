@@ -153,6 +153,74 @@ async function runTests() {
   assert.match(downloadDestinations[0], /\.part-[0-9a-f-]+$/i);
   assert.equal(fs.readdirSync(provisionRoot).some(name => name.includes('.part-') || name.includes('.staging-')), false);
 
+  // Failed extraction leaves no archive, staging directory, lock, or visible final install.
+  const failedRoot = path.join(tmp, 'failed-provision');
+  await assert.rejects(provisionToolchain('Arduino', failedRoot, {
+    downloadFile: async (_url, dest) => fs.writeFileSync(dest, 'fake-archive'),
+    extractZip: async () => { throw new Error('injected extraction failure'); },
+    skipHashVerify: true,
+  }), /injected extraction failure/);
+  assert.equal(fs.existsSync(path.join(failedRoot, 'avr-gcc')), false);
+  assert.equal(fs.readdirSync(failedRoot).some(name => /\.part-|\.staging-|\.lock$/.test(name)), false);
+
+  // The final path is invisible until a complete staged toolchain has been validated.
+  const atomicRoot = path.join(tmp, 'atomic-provision');
+  let visibleDuringExtraction = true;
+  await provisionToolchain('Arduino', atomicRoot, {
+    downloadFile: async (_url, dest) => fs.writeFileSync(dest, 'fake-archive'),
+    extractZip: async (_zip, dest) => {
+      visibleDuringExtraction = fs.existsSync(path.join(atomicRoot, 'avr-gcc'));
+      writeFakeAvrInstall(path.join(dest, 'avr-gcc-15.2.0-x64-windows', 'bin'));
+    },
+    skipHashVerify: true,
+  });
+  assert.equal(visibleDuringExtraction, false);
+  assert.equal(isToolchainLocallyInstalled('Arduino', atomicRoot), true);
+
+  // A second process holding the lock wins; this process waits and reuses its complete result.
+  const lockedRoot = path.join(tmp, 'locked-provision');
+  fs.mkdirSync(lockedRoot, { recursive: true });
+  const externalLock = path.join(lockedRoot, '.provision-Arduino.lock');
+  fs.writeFileSync(externalLock, '{"pid":99999}');
+  let lockedDownloadCount = 0;
+  setTimeout(() => {
+    writeFakeAvrInstall(path.join(lockedRoot, ...TOOLCHAINS.Arduino.binPathSegments));
+    fs.rmSync(externalLock, { force: true });
+  }, 25);
+  const lockedResult = await provisionToolchain('Arduino', lockedRoot, {
+    downloadFile: async () => { lockedDownloadCount += 1; },
+    skipHashVerify: true,
+    lockPollMs: 5,
+  });
+  assert.ok(lockedResult.executable);
+  assert.equal(lockedDownloadCount, 0);
+
+  // Distinct tools sharing the flashers parent can provision concurrently without collisions.
+  const overlappingRoot = path.join(tmp, 'overlapping-provision');
+  await Promise.all([
+    provisionToolchain('openocd', overlappingRoot, {
+      downloadFile: async (_url, dest) => fs.writeFileSync(dest, 'openocd'),
+      extractZip: async (_zip, dest) => {
+        const bin = path.join(dest, 'xpack-openocd-0.12.0-3', 'bin');
+        fs.mkdirSync(bin, { recursive: true });
+        fs.writeFileSync(path.join(bin, 'openocd.exe'), '');
+      },
+      skipHashVerify: true,
+    }),
+    provisionToolchain('esptool', overlappingRoot, {
+      downloadFile: async (_url, dest) => fs.writeFileSync(dest, 'esptool'),
+      extractZip: async (_zip, dest) => {
+        const bin = path.join(dest, 'esptool-win64');
+        fs.mkdirSync(bin, { recursive: true });
+        fs.writeFileSync(path.join(bin, 'esptool.exe'), '');
+      },
+      skipHashVerify: true,
+    }),
+  ]);
+  assert.ok(resolveInstalledToolchain('openocd', { toolchainsDir: overlappingRoot }).executable);
+  assert.ok(resolveInstalledToolchain('esptool', { toolchainsDir: overlappingRoot }).executable);
+  assert.equal(fs.readdirSync(overlappingRoot).some(name => /\.part-|\.staging-|\.lock$/.test(name)), false);
+
   // Test 10: every supported concrete MCU has compiler and flasher coverage
   assert.deepEqual(Object.keys(TARGET_ENVIRONMENTS).sort(), [
     'Arduino_Mega', 'Arduino_Uno', 'ESP32', 'STM32F1', 'STM32F4',

@@ -22,6 +22,7 @@ const {
   configureToolchainPaths,
   isToolchainLocallyInstalled,
   resolveToolExecutable,
+  resolveInstalledToolchain,
 } = require('./security/toolchainManager.cjs');
 
 function getToolchainsDir() {
@@ -840,8 +841,9 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
     // Check if compiler toolchain is available
     const tcKey = getToolchainKeyForTarget(target);
     if (tcKey && !isToolchainAvailable(target)) {
+      const resolution = resolveInstalledToolchain(tcKey, { toolchainsDir: getToolchainsDir() });
       event.sender.send('hil-compiler-log-line', `[SYSTEM] Required compiler toolchain for target '${target}' is missing.\n`);
-      const error = `OFFLINE_TOOLCHAIN_MISSING: ${tcKey}. Run 'npm run provision:hil' before starting ADIA.`;
+      const error = `OFFLINE_TOOLCHAIN_MISSING: ${tcKey} for target '${target}'. Run 'npm run provision:hil' before starting ADIA. Searched: ${(resolution?.searchedPaths || []).join(', ')}`;
       event.sender.send('hil-compiler-log-line', `[ERROR] ${error}\n`);
       resolve({ success: false, error });
     } else {

@@ -13,8 +13,11 @@ assert.equal(pkg.scripts['build:offline'], 'npm run build:sm-runtime && tsc && v
 assert.equal(pkg.scripts['start:prebuilt'], 'electron-forge start');
 assert.equal(pkg.scripts['provision:hil'], 'node scripts/provision_hil_toolchains.cjs');
 assert.equal(pkg.scripts['test:hil:bundle'], 'node scripts/verify_bundled_hil_toolchains.cjs');
+assert.match(pkg.scripts.package, /^npm run test:hil:bundle &&/);
+assert.match(pkg.scripts.make, /^npm run test:hil:bundle &&/);
 assert.match(pkg.scripts['test:hil:env'], /--strict/);
 assert.match(pkg.scripts['test:security'], /offlineToolchainPolicy\.test\.cjs/);
 assert.match(forge, /extraResource:[\s\S]*path\.resolve\(__dirname, 'toolchains'\)/);
+assert.match(forge, /postPackage:[\s\S]*verify_bundled_hil_toolchains\.cjs[\s\S]*--resources-path/);
 
 console.log('package script and bundled resource tests passed!');

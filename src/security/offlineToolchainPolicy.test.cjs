@@ -21,6 +21,7 @@ assert.match(
   /OFFLINE_TOOLCHAIN_MISSING|npm run provision:hil/,
   'missing toolchains must point to explicit offline provisioning',
 );
+assert.match(mainSource, /searchedPaths/, 'missing-toolchain diagnostics must report every searched path');
 assert.match(mainSource, /process\.env\.ADIA_DEV_SERVER_URL/);
 assert.doesNotMatch(
   mainSource,

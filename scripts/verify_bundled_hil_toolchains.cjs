@@ -8,7 +8,12 @@ const {
   resolveInstalledToolchain,
 } = require('../src/security/toolchainManager.cjs');
 
-const resourcesPath = process.cwd();
+function optionValue(name, argv = process.argv.slice(2)) {
+  const index = argv.indexOf(name);
+  return index >= 0 ? argv[index + 1] : null;
+}
+
+const resourcesPath = path.resolve(optionValue('--resources-path') || process.cwd());
 const isolatedFallback = path.join(os.tmpdir(), 'adia-bundle-verifier-no-fallback');
 const keys = ['Generic', ...new Set(Object.values(TARGET_ENVIRONMENTS).flatMap(item => [item.compiler, item.flasher]))];
 let ok = true;
