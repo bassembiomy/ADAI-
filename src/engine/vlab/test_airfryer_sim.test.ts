@@ -16,7 +16,60 @@ const reconstructLabNodes = (nodes: any[]): Node[] => {
   }));
 };
 
+const createAirFryerCalibrationFixture = () => {
+  const lab = {
+    nodes: [
+      { id: 'ac_supply', blockId: 'ac_voltage', position: { x: 0, y: 0 }, label: '230V AC Supply', params: { Vpk: 325, f: 50 } },
+      { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 0, y: 0 }, label: 'Heating Element', params: { Rth: 35 } },
+      { id: 'air_chamber', blockId: 'ma_chamber', position: { x: 0, y: 0 }, label: 'Cooking Basket (Air)', params: { V: 0.005, ambient_temp: 100 } },
+      { id: 'temp_sensor', blockId: 'temp_sensor', position: { x: 0, y: 0 }, label: 'Basket Temp Sensor' },
+      { id: 'thermal_scope', blockId: 'scope', position: { x: 0, y: 0 }, label: 'Temp Monitor' },
+      { id: 'ground', blockId: 'ground', position: { x: 0, y: 0 }, label: 'PE Ground' }
+    ],
+    edges: [
+      { id: 'e1', source: 'ac_supply', target: 'heating_element', sourceHandle: 'p_s', targetHandle: 'a_t' },
+      { id: 'e1_ret', source: 'heating_element', target: 'ground', sourceHandle: 'b_s', targetHandle: 'a_t' },
+      { id: 'e1_gnd', source: 'ac_supply', target: 'ground', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 'e2', source: 'heating_element', target: 'air_chamber', sourceHandle: 'h_s', targetHandle: 'h_t' },
+      { id: 'e3', source: 'air_chamber', target: 'temp_sensor', sourceHandle: 'h_s', targetHandle: 'a_t' },
+      { id: 'e4', source: 'temp_sensor', target: 'thermal_scope', sourceHandle: 't_s', targetHandle: 'in1_t' }
+    ]
+  };
+
+  return { nodes: reconstructLabNodes(lab.nodes), edges: lab.edges as any[] };
+};
+
+const createAirFryerScopeFixture = () => {
+  const lab = {
+    nodes: [
+      { id: 'air_chamber', blockId: 'ma_chamber', position: { x: 0, y: 0 }, label: 'Cooking Basket (Air)', params: { V: 0.005, ambient_temp: 100, k_loss: 0 } },
+      { id: 'thermal_scope', blockId: 'scope', position: { x: 0, y: 0 }, label: 'Temp Monitor' }
+    ],
+    edges: [
+      { id: 'e1', source: 'air_chamber', target: 'thermal_scope', sourceHandle: 'h_s', targetHandle: 'in1_t' }
+    ]
+  };
+
+  return { nodes: reconstructLabNodes(lab.nodes), edges: lab.edges as any[] };
+};
+
 describe('Air Fryer Simulation debug', () => {
+  it('exposes a 373.15 K chamber state as 100 °C at the air-fryer scope', () => {
+    const fixture = createAirFryerScopeFixture();
+    const state = new VLabPhysicsEngine().simulateStep(fixture.nodes, fixture.edges, null, 0.001);
+
+    expect(state.scopeValues).toBeCloseTo(100, 2);
+  });
+
+  it('expects 230 V RMS across 35 ohms to produce about 1511 W average power', () => {
+    const fixture = createAirFryerCalibrationFixture();
+    const state = new VLabPhysicsEngine().simulateStep(fixture.nodes, fixture.edges, null, 0.005);
+    const heatIndex = state.variableNames.indexOf('heating_element_branch_heat_flow');
+
+    expect(heatIndex).toBeGreaterThanOrEqual(0);
+    expect(state.x[heatIndex]).toBeCloseTo((230 ** 2) / 35, 0);
+  });
+
   it('simulates air fryer for 100 steps and prints temperature profile', { timeout: 30000 }, () => {
     const lab = {
       id: 'air_fryer_thermal',
