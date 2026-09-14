@@ -1,0 +1,91 @@
+<h2 id="s4"><span class="num">4</span>Behavioural hooks: entry, exit, history, safety, IO</h2>
+
+<p>The generator deliberately splits the model into two kinds of C: the <b>kernel</b> (<code>sm_core.c</code>, <code>sm_safety.c</code>,
+<code>sm_mapping.c</code>) which is regenerated wholesale, and the <b>hands</b> (<code>sm_user_logic.c</code>) which the kernel calls but
+the generator only scaffolds. This section follows the hook render functions.</p>
+
+<h3>4.1 Entry / during / exit: one function per (state, phase)</h3>
+{{SRC:src/utils/stateMachine/smCGenerator.ts|export const renderUserLogicSource|export const renderMappingSource}}
+{{OUT:docs/codegen-demo/evidence/production/sm_user_logic.c|/* State: PWM low|/* State: Fan bank}}
+
+<p>Reading the emitted file against the model: the <code>during</code> text of a state is parsed by <code>smExpressions</code> and
+re-rendered as C (<code>duty_cmd + 1U</code> → <code>(uint16_t)((instance-&gt;data.duty_cmd + 1U))</code>), while empty phases still get a
+function whose body is <code>(void)instance;</code>. Three points the generator is making with this design:</p>
+<ul>
+<li><b>Stable hook ABI.</b> The signature is always <code>void SM_ST_X_Phase(ADIA_Instance_t *)</code>, so user code can be hand-edited or
+replaced and the regenerated kernel still links. The header <code>sm_user_logic.h</code> is regenerated too (with a
+<code>/* State: … | Model ID: … | C enum: … */</code> comment for each group), but the <i>bodies</i> are plain scaffolding you are
+expected to own.</li>
+<li><b>Conversion at the edge only.</b> Every action assignment is wrapped in the variable's declared C type
+(<code>renderCType</code>) — that is the entire type system of the emitter: names are checked against <code>ir.variables</code>
+(an undeclared target is a build-time throw from <code>renderCAction</code>, not a broken build later), and arithmetic happens in the
+C type of the left-hand side.</li>
+<li><b>Trace calls ride along.</b> Each rendered action block also emits <code>SM_TraceAction(instance, "during:PWM_LOW")</code> when a
+trace label exists, which is how the differential harness (§5.4) can compare interpreter and C traces at action granularity.</li>
+</ul>
+
+<h3>4.2 Exit: the history recorder is the interesting half</h3>
+{{SRC:src/utils/stateMachine/smCGenerator.ts|const renderExitFunctions = (|const renderRestoreLayer = (}}
+{{OUTCUT:docs/codegen-demo/evidence/production/sm_core.c|SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)@2|switch (state) {@2}}
+{{OUTCUT:docs/codegen-demo/evidence/production/sm_core.c|        case SM_ST_HEATER:@2|        case SM_ST_STANDBY:}}
+
+<p>The emitted <code>SM_Exit_State</code> has exactly three jobs, and the first one is the whole history mechanism. It opens with
+<code>if (record_containing_layer) { switch (state) { case SM_ST_X: SM_Record_Layer_History(instance, SM_LYR_…); … } }</code>: the
+flag is passed <code>true</code> only by a transition that is <i>leaving</i> the layer that contains the state, so the recorder writes
+the deep-history bit for the exact set of states that were active at that moment — one boolean per (layer, state) pair, no lists, no
+allocation. Then comes an idempotence guard (<code>if (!state_active[idx]) break;</code>), then the recursive exit of child layers for
+container states, the user <code>_Exit()</code> hook, clearing of the flag and timer, and finally
+<code>if (active_states[slot] == state) active_states[slot] = SM_NODE_INVALID;</code> — compare-before-clear, so exiting an
+already-exited state cannot corrupt the slot used by the parent's <code>switch</code>.</p>
+<p>The companion block in the same slice is the <b>no-history</b> wrapper: <code>SM_Exit_Layer_No_History_&lt;n&gt;</code> exits a
+layer's current occupant with <code>record_containing_layer = false</code>. Those wrappers are never called by the state machine; they
+are referenced by <code>SM_Init</code> with the famous no-op statement form <code>(void)SM_Exit_Layer_No_History_0;</code> (28 such
+lines in <code>SM_Init</code>, one per generated emitter) purely so that <code>-Wunused-function</code> under
+<code>-Werror</code> cannot reject a model whose shape leaves one of the generated helpers unreachable. That is a small but
+characteristic detail of this generator: the strict-warning policy is paid for in emitted bytes.</p>
+
+<h3>4.3 Safety: validate the instance, then fail safe</h3>
+{{SRCUT:src/utils/stateMachine/smCGenerator.ts|export const renderSafetySource|  return lines(}}
+{{OUTCUT:docs/codegen-demo/evidence/production/sm_safety.c|SM_Error_t SM_Validate_State_Consistency|    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {}}
+{{OUT:docs/codegen-demo/evidence/production/sm_safety.c|void SM_ApplySafeOutputs|MCAL_ApplySafeOutputs();}}
+<p>The safety file is generated unconditionally and is the only place that inspects the instance's internal consistency:
+<b>five clauses in <code>SM_Validate_State_Consistency</code></b> — (1) every active state's parent must be active, (2) its
+<code>active_states[slot]</code> word must equal it, (3) every layer whose container is active and that owns a slot must have a valid
+occupant, (4) that occupant must be a child or descendant of the layer, (5) the layer's own slot word must agree. Any violation returns
+<code>SM_ERR_CONFIGURATION</code>, which <code>SM_Step</code> turns into a latched fault. The demo model exercises this path: writing
+an illegal word into <code>active_states[]</code> and stepping once returns <code>SM_ERR_CONFIGURATION</code> (3) and latches the fault,
+as recorded in the differential evidence.</p>
+<p><code>SM_ApplySafeOutputs()</code> here is three lines — <code>(void)instance;</code> plus <code>MCAL_ApplySafeOutputs();</code> — because
+the model sets <code>safetyMode: true</code> (so the MCAL hook is called) but declares no <i>output mappings</i> (so there are no
+per-channel safe values to write first). Add write mappings with <code>safeValue</code> and the same function grows one
+<code>MCAL_Dio_WriteChannel(MCAL_CH_…, false)</code> per channel, in mapping order, before the blanket hook — the emitter's
+<code>mappedOutputs.length === 0 ? … : …</code> ternary is the entire policy switch.</p>
+
+<h3>4.4 IO mapping: one line per channel, with <code>x</code> bound to the raw read</h3>
+{{SRC:src/utils/stateMachine/smCGenerator.ts|const readMappings = ir.ioMappings|const faultEntry = ir.safetyMode}}
+<p>This is the one place where the generator does real expression surgery rather than string building. A mapping's
+<code>conversionExpression</code> (e.g. <code>x * 4095.0 / 100.0</code>) is rendered by <code>renderCExpression</code> with a
+<i>name-binding callback</i>: any identifier named <code>x</code> is substituted by the raw channel access
+(<code>MCAL_ReadChannelValue(MCAL_CH_TEMP_ADC)</code> on read, <code>instance-&gt;data.duty_cmd</code> on write). The whole statement is then
+cast to the variable's C type. Two consequences worth stating plainly:</p>
+<ul>
+<li>Conversion expressions are compiled <b>into the kernel</b>, not into user logic — so the scaling is regenerated from the model and
+cannot drift from it, and it costs no function call.</li>
+<li>Because <code>x</code> is a <i>binding by name</i>, the same expression source works for read and write directions; declaring a model
+variable literally named <code>x</code> in a conversion expression is therefore a name collision to avoid (the callback wins).</li>
+</ul>
+<p>In <code>sm_core.c</code> the loop that consumes these lists is literally <code>readMappings.length === 0 ? '    (void)instance;' :
+…</code>, which is why this model's <code>SM_ReadInputs</code>/<code>SM_WriteOutputs</code> are fault-guarded no-ops: it exercises the
+<i>empty</i> branch of the IO emitter. Channel macros themselves are emitted into <code>mcal_dio.h</code> by
+<code>renderMcalHeader</code> — <code>MCAL_CH_*</code> as sequential integers, sorted by channel id for determinism, with prototypes only
+(the generated header never contains an implementation; the MCAL is firmware you supply).</p>
+
+<h3>4.5 The instance layout: where every byte of RAM is decided</h3>
+{{SRCUT:src/utils/stateMachine/smCGenerator.ts|export const renderConfigHeader|    'typedef enum {'}}
+{{SRCUT:src/utils/stateMachine/smCGenerator.ts|    'typedef uint32_t SM_Group_t;'|    'struct ADIA_Instance {'}}
+{{OUTCUT:docs/codegen-demo/evidence/production/sm_config.h|typedef struct ADIA_Instance|#endif /* SM_CONFIG_H */}}
+<p>Every array in the struct is dimensioned by a macro the same header defines, so the RAM footprint is a direct function of the model's
+shape: states × 1 B (active) + states × 4 B (timers) + slots × 2 × 2 B (active/history words) + layers × (states+1) B (deep history) +
+<code>sizeof(SM_Data_t)</code>. Adding a 30th state to a model is not free RAM — it is 5 bytes plus one more enum member and one more
+<code>_IDX</code> macro, with no code change anywhere else. That property (shape → table sizes, generated once, checked by the mapping
+validator at <code>SM_Init</code>) is what lets the same generator target 32-bit MCUs and a host test build with no configuration.</p>

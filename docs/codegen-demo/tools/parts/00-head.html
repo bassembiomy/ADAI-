@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADAI — Reading the Code Generator: source → emitted C, line by line</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b1220;color:#e2e8f0;padding:26px 20px;line-height:1.62}
+.page{max-width:1180px;margin:0 auto}
+h1{font-size:23px}h1 span{color:#22d3ee}
+h2{font-size:17px;margin:34px 0 6px;padding-bottom:6px;border-bottom:1px solid #1e293b;color:#f8fafc}
+h2 .num{color:#22d3ee;font-family:Consolas,monospace;margin-right:8px}
+h3{font-size:13.5px;margin:22px 0 6px;color:#a5f3fc}
+h4{font-size:12.5px;margin:14px 0 5px;color:#fcd34d}
+p,li{font-size:12.6px;color:#cbd5e1}
+p{margin:8px 0}
+ul,ol{margin:6px 0 6px 20px}
+li{margin:3px 0}
+code{font-family:Consolas,'Courier New',monospace;font-size:11.4px;color:#67e8f9}
+pre{background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px 12px;overflow-x:auto;margin:0}
+pre code{font-size:11.1px;color:#dbeafe;line-height:1.5;display:block;white-space:pre}
+figure.code{margin:10px 0 14px;border-left:3px solid #0e7490;border-radius:8px}
+figure.code.src{border-left-color:#6d28d9}
+figure.code.out{border-left-color:#166534}
+figure.code pre{border-top-left-radius:0;border-bottom-left-radius:0}
+figure.code figcaption{font-family:Consolas,monospace;font-size:10.4px;color:#7dd3fc;background:#0f172a;border:1px solid #1e293b;border-top:none;border-radius:0 0 8px 0;padding:4px 10px}
+figure.code.src figcaption{color:#c4b5fd}
+figure.code.out figcaption{color:#86efac}
+figure.code.run{border-left-color:#b45309}
+figure.code.run figcaption{color:#fcd34d}
+.sub{color:#94a3b8;font-size:12.4px;margin:8px 0}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.4px;padding:2px 8px;border-radius:999px}
+.tag.src{background:#3b0764;color:#e9d5ff}.tag.out{background:#064e3b;color:#a7f3d0}
+.tag.warn{background:#78350f;color:#fcd34d}.tag.note{background:#0c4a6e;color:#7dd3fc}
+.note{border:1px dashed #334155;border-radius:10px;padding:11px 14px;margin:14px 0;background:#0f172a}
+.note.warnc{border-color:#b45309;background:#1c1408}
+.note.okc{border-color:#166534;background:#0c1a12}
+.note h4{margin-top:0}
+table{width:100%;border-collapse:collapse;margin:10px 0}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #1e293b;font-size:11.6px;vertical-align:top;color:#cbd5e1}
+th{color:#fcd34d;font-size:10.6px;letter-spacing:.4px;text-transform:uppercase}
+td.mono{font-family:Consolas,monospace;font-size:10.8px;color:#7dd3fc}
+.toc{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:12px 16px;margin:16px 0}
+.toc ol{columns:2;column-gap:26px}
+.toc a{color:#7dd3fc;text-decoration:none;font-size:12px}
+.lede{background:#0f172a;border:1px solid #1e293b;border-left:3px solid #22d3ee;border-radius:8px;padding:12px 15px;margin:14px 0}
+.lede p{margin:6px 0}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.footer{margin-top:34px;padding-top:12px;border-top:1px solid #1e293b;color:#64748b;font-size:11px}
+.step{display:grid;grid-template-columns:104px 1fr;gap:12px;align-items:start;margin:16px 0}
+.step .n{font-family:Consolas,monospace;font-size:11px;color:#7dd3fc;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px 10px;text-align:center}
+.step .n b{display:block;font-size:16px;color:#22d3ee}
+@media(max-width:900px){.cols2,.toc ol{grid-template-columns:1fr;columns:1}.step{grid-template-columns:1fr}}
+@media print{body{background:#fff;color:#111}pre{background:#f8fafc;border-color:#999}pre code{color:#111}.note,.toc,.lede{background:#fff;border-color:#999}td,th{color:#111}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Reading the code generator — <span>source line → emitted C line</span></h1>
+<p class="sub">
+This is the code-generation process <i>as implemented</i>, read out of the generator itself. Each
+generator excerpt below is sliced from the repository at build time; each emitted-C excerpt is the
+verbatim output of that same code for the demo model. Nothing here was rewritten by hand, and the
+document cannot drift from the source unless the build itself is re-run:
+<code>python3 docs/codegen-demo/tools/build_source_doc.py</code>.
+</p>
+
+<div class="lede">
+<p><b>The whole generator in one sentence.</b> <code>smCGenerator.ts</code> is a set of <i>pure render functions</i>
+(<code>renderConfigHeader</code>, <code>renderMappingSource</code>, <code>renderCoreSource</code>,
+<code>renderSafetySource</code>, <code>renderUserLogicSource</code>, <code>renderMcalHeader</code>, …), each of which walks one
+slice of the semantic IR and returns a string; <code>generateCArtifacts()</code> calls them, adds the generated
+test/manifest package, and returns a file list.</p>
+<p><b>The three techniques it uses, and nothing else.</b></p>
+<ol>
+<li><b>Ordering + indexing</b> — <code>orderedStates()</code>/<code>orderedLayers()</code>/<code>buildIndex()</code> turn model IDs
+into small integers once; every other function then refers to a state as <code>SM_ST_X</code> and to a state's function as
+<code>SM_Enter_Deep_7</code>.</li>
+<li><b>One render function per C construct</b> — <code>renderActions()</code>, <code>renderMarkEntered()</code>,
+<code>renderRouteEnabled()</code>, <code>renderEnterStateAlongPath()</code>, <code>renderRestoreStateBody()</code>,
+<code>renderCommitRoute()</code>, <code>renderTransitionPhase()</code>, <code>renderExecuteFunctions()</code>,
+<code>renderExitFunctions()</code>. Each takes IR objects plus an <code>indent</code> string and returns source text.</li>
+<li><b>Emit when the IR says so</b> — a construct exists in the C output <i>iff</i> a condition on the IR is true:
+<code>state.childLayerIds.length &gt; 0</code>, <code>state.activeSlot &gt;= 0</code>, <code>layer.activeSlot !== null</code>,
+<code>route.destinationKind === 'history'</code>, <code>ir.activeSlotCount &gt; 0</code>, <code>ir.ioMappings.length &gt; 0</code>,
+<code>ir.verification.cStandard === 'c90'</code>. This is why a small model produces a small file.</li>
+</ol>
+<p><b>Why the generated C is deterministic.</b> Every iteration order is defined by an explicit sort
+(<code>activityIndex</code>, <code>activeSlot</code>, <code>priority</code>, <code>localeCompare</code>), every name comes from
+<code>toCIdentifier()</code>, and no render function reads the clock, the environment or a random source — the emitted bytes are a
+function of the IR alone.</p>
+</div>
+
+<div class="toc">
+<b style="font-size:12.5px;color:#fcd34d">Contents</b>
+<ol>
+<li><a href="#s1">Identity: model IDs → C symbols</a></li>
+<li><a href="#s2">Structure: hierarchy → tables and indices</a></li>
+<li><a href="#s3">Control flow: states and transitions → functions and <code>if</code>s</a></li>
+<li><a href="#s4">Behavioural hooks: entry, exit, history, safety, IO</a></li>
+<li><a href="#s5">Delivery: how the file package is assembled and verified</a></li>
+<li><a href="#s6">What the generator does <i>not</i> do</a></li>
+</ol>
+</div>
+
+<p class="sub">
+<b>Demo model</b> (committed at <code>docs/codegen-demo/thermal-model.ts</code>, generated artefacts in
+<code>docs/codegen-demo/evidence/</code>): 10 states, 5 layers — one OR root, one OR container child layer owning a
+deep-history junction, one AND parallel layer, and two OR layers inside the parallel regions. Regenerate with
+<code>npx tsx docs/codegen-demo/generate.ts</code>; the run also replays the model on the compiled C:
+<span class="tag out">29/29 interpreter frames ≡ 29/29 compiled-C frames</span>.
+</p>

@@ -1,0 +1,104 @@
+<h2 id="s1"><span class="num">1</span>Identity: model IDs → C symbols</h2>
+
+<p>Everything downstream depends on this first decision: a state or layer must be addressable by a small integer that is stable for a
+given model and consistent across the four files that reference it. The generator never emits a UUID; it emits names derived from the
+model ID plus an order derived from the IR.</p>
+
+<h3>1.1 The ordering and naming primitives</h3>
+<div class="cols2">
+<div>
+<h4><span class="tag src">generator</span> smCGenerator.ts — ordering</h4>
+{{SRC:src/utils/stateMachine/smCGenerator.ts|const orderedStates|const stateNode = (}}
+</div>
+<div>
+<h4><span class="tag src">generator</span> smCGenerator.ts — name builders</h4>
+{{SRC:src/utils/stateMachine/smCGenerator.ts|const stateNode = (ir: SemanticModel, stateId: string): string =>|const descendantsOfLayer = (}}
+</div>
+</div>
+
+<p>Five one-line functions carry the whole naming policy:</p>
+<table>
+<tr><th>Generator</th><th>Produces</th><th>Used by</th></tr>
+<tr><td class="mono">orderedStates(ir)</td><td>states sorted by <code>activityIndex</code></td><td>every render function that iterates states (and <code>buildIndex</code>)</td></tr>
+<tr><td class="mono">buildIndex(ir)</td><td><code>stateNumber: id→1..N</code>, <code>layerNumber: id→0..L-1</code></td><td>function names, <code>SM_*_IDX</code> macros, the <code>_IDX</code> used in C array subscripts</td></tr>
+<tr><td class="mono">stateNode(ir,id)</td><td>the enum member, e.g. <code>SM_ST_PWM_LOW</code></td><td>all C expressions that name a state</td></tr>
+<tr><td class="mono">stateIndex(ir,id)</td><td><code>&lt;enum&gt;_IDX</code>, e.g. <code>SM_ST_PWM_LOW_IDX</code></td><td>all <code>state_active[]</code>/<code>state_timers[]</code>/<code>deep_history[][]</code> subscripts</td></tr>
+<tr><td class="mono">stateFunction(index,prefix,id)</td><td><code>SM_Enter_Deep_5</code>, <code>SM_Restore_State_5</code>, <code>SM_Execute_State_5</code></td><td>the call graph — <b>numbered, not named after the state</b>, which is why one state id change renumbers functions but never touches user logic</td></tr>
+</table>
+
+<h3>1.2 Where the IR values come from</h3>
+<div class="cols2">
+<div>
+<h4><span class="tag src">builder</span> smSemanticBuilder.ts — state lowering</h4>
+{{SRC:src/utils/stateMachine/smSemanticBuilder.ts|const states: Record|const transitionById = new Map(}}
+</div>
+<div>
+<h4><span class="tag out">generated</span> production/sm_config.h</h4>
+{{OUT:docs/codegen-demo/evidence/production/sm_config.h|#define SM_TICK_MS|SM_ST_OVERHEAT = 10}}
+</div>
+</div>
+
+<p>Read the two sides together: <code>enumName</code> and <code>activityIndex</code> come from the builder, and the header renderer only
+walks <code>states</code>/<code>layers</code> in their sorted order, assigning <code>stateOffset + 1</code> to the enum and
+<code>index.stateNumber</code> to the <code>_IDX</code> macro. Consequences visible in the output:</p>
+<ul>
+<li><b>Zero is reserved.</b> <code>SM_NODE_INVALID = 0</code> and states start at 1, so a zeroed instance means "no state", and
+<code>bool state_active[SM_NUM_STATES + 1U]</code> can be indexed by a raw enum value.</li>
+<li><b>The same number appears twice on purpose</b> — as a macro (<code>#define SM_ST_FAN_LOW_IDX 8U</code>) for compile-time array
+sizing and constant folding, and as an enum member (<code>SM_ST_FAN_LOW = 8</code>) for type-checked comparisons.</li>
+<li><b>Capacity macros are derived, not configured</b>: <code>SM_NUM_STATES</code>, <code>SM_NUM_LAYERS</code> and
+<code>SM_NUM_ACTIVE_SLOTS</code> are <code>states.length</code>, <code>layers.length</code> and <code>ir.activeSlotCount</code>.</li>
+<li><b>The tick window is computed from two model fields</b> by the ternary in <code>renderConfigHeader</code>:
+<code>tolerance = tickToleranceMs &gt; 0 ? tickToleranceMs : max(1, floor(tickMs/10))</code>, giving
+<code>SM_TICK_MIN_MS = tickMs − tolerance</code> and <code>SM_TICK_MAX_MS = tickMs + tolerance</code> (10 ± 1 ms here).</li>
+</ul>
+
+<h3>1.3 Identifiers that must be safe</h3>
+<p>Model IDs are free text (spaces, dashes, unicode, leading digits). Two helpers sanitise them before they reach C:</p>
+{{SRC:src/utils/stateMachine/smExpressions.ts|export const toCIdentifier|const tokenize = (}}
+<p><code>toCIdentifier()</code> replaces every non-<code>[A-Za-z0-9_]</code> character with <code>_</code> and prefixes a leading
+digit — this is the function used for state enums, layer macros, function suffixes and trace IDs. Where a <i>globally visible</i>
+identifier is needed (X-Bridges block symbols, integration symbols), the stricter allocator in
+<code>smCIdentifierPolicy.allocateExternalIdentifiers()</code> adds a deterministic SHA-256 suffix truncated to the platform's
+significant-character limit (default 31) so two long names can never collide after truncation. Internal names can collide only in ways
+the validator has already rejected.</p>
+
+<h2 id="s2"><span class="num">2</span>Structure: hierarchy → tables and indices</h2>
+
+<p>The hierarchy exists in the model as <code>parentId</code> strings. In the C output it becomes: one array slot per OR layer, one
+boolean per state, and two constant tables. The allocation rule is a two-line predicate in the builder — and its
+<code>else</code> branch is meaningful (AND layers and empty layers get <code>null</code>, i.e. no RAM).</p>
+
+<div class="cols2">
+<div>
+<h4><span class="tag src">builder</span> smSemanticBuilder.ts — slot allocation</h4>
+{{SRC:src/utils/stateMachine/smSemanticBuilder.ts|const allocateActiveSlots|const ancestorsFromSelf}}
+</div>
+<div>
+<h4><span class="tag out">generated</span> production/sm_mapping.c</h4>
+{{OUT:docs/codegen-demo/evidence/production/sm_mapping.c|const uint32_t SM_State_Parent_Layer_Map|const int32_t SM_Layer_Active_Slot_Map}}
+</div>
+</div>
+
+<p>Reading the table pair: <code>SM_State_Parent_Layer_Map</code> answers "which layer owns this state" (used by the mapping
+validator), <code>SM_State_Active_Slot_Map</code> answers "which <code>active_states[]</code> word tracks it" (<code>-1</code> = none),
+<code>SM_Layer_Parent_State_Map</code> answers "which state contains this layer" (used by the consistency checker to decide whether a
+container is active), and <code>SM_Layer_Active_Slot_Map</code> is <code>-1</code> exactly for the AND layer. Four tables, one
+question each — no runtime graph traversal anywhere.</p>
+
+<div class="note">
+<h4>The slot test is also a RAM budget</h4>
+<p>Instance RAM is <code>2 × SM_NUM_ACTIVE_SLOTS × sizeof(SM_Node_t)</code> for the active/history words, <code>SM_NUM_STATES + 1</code>
+bools, <code>(SM_NUM_STATES + 1) × 4</code> bytes of timers and <code>SM_NUM_LAYERS × (SM_NUM_STATES + 1)</code> bytes of deep-history
+bits. For this model that is 16 + 16 + 11 + 44 + 55 bytes of machine state on top of <code>SM_Data_t</code> (32 bytes) →
+<code>sizeof(ADIA_Instance_t) = 184</code> bytes on the host ABI.</p>
+</div>
+
+<p>Layers are also where <b>default entry</b> is decided, at generation time: the builder picks the first autostart child, else the
+first autostart junction, and the renderer then hard-codes that decision into a single call.</p>
+{{SRC:src/utils/stateMachine/smCGenerator.ts|const renderEnterFunctions = (|const renderExitFunctions = (}}
+{{OUTCUT:docs/codegen-demo/evidence/production/sm_core.c|static void SM_Enter_Layer_Default_1@2|static void SM_Enter_Layer_Default_3}}
+
+<p>Two layers, three lines of C: the OR layer with two children becomes one call to the chosen default, and the AND layer becomes
+<i>both</i> regions in declaration order. There is no loop and no lookup — the decision that took a priority sort in the builder is now
+a straight-line statement.</p>

@@ -1,0 +1,163 @@
+<h2 id="s5"><span class="num">5</span>Delivery: how the file package is assembled and verified</h2>
+
+<p>Everything so far produced <i>strings</i>. This section is about turning strings into a deliverable: naming the files, deciding
+which ones exist at all, deriving the test plan from the same IR, and then trying to falsify the result.</p>
+
+<h3>5.1 One entry point, two package shapes</h3>
+{{SRCUT:src/utils/stateMachine/smCGenerator.ts|export const generateCArtifacts = (|const analysis = analyzeSemanticModel(ir);}}
+{{SRCUT:src/utils/stateMachine/smCGenerator.ts|    const packageFiles: GeneratedCFile[] = [|  const structCheck = verifyGeneratedCStructure(allFiles);}}
+
+<p>Three structural facts follow from those forty lines, and they are easy to miss when reading the walkthrough of a running app:</p>
+<ol>
+<li><b>The layer is a pure function of the IR plus options.</b> Nothing here touches the filesystem, the editor or the model JSON —
+writing files is the caller's job (in this repo, the workspace writer and the app's export path). That is why the same call can be
+used by the CLI, by tests with an in-memory list, and by this document's evidence driver.</li>
+<li><b>Conditional files exist only when their precondition holds:</b> <code>sm_xbridges.{h,c}</code> only if some state has
+<code>xBridges</code>, <code>mcal_dio_test_stubs.c</code> only with <code>includeTestShims</code>, <code>sm_host_test.c</code> only with
+<code>includeHostHarness</code>. This model gets neither X-Bridges nor shims, which is why its production package is exactly the ten
+files below.</li>
+<li><b>The two shapes differ in more than naming.</b> With <code>includeVerificationPackage: true</code> the function returns at
+<code>files: packageFiles</code> (27 files, <code>production/</code> + <code>tests/</code> + <code>verification/</code>) and
+<i>never runs the structural self-check</i>; the flat shape (12 files) runs <code>verifyGeneratedCStructure()</code> over its own
+output. The 27-artefact deliverable is therefore the one that is <b>not</b> self-checked — see §5.3.</li>
+</ol>
+
+<h4>What each artefact is, and who emits it</h4>
+<table>
+<tr><th>Artefact</th><th>Renderer</th><th>Contents</th></tr>
+<tr><td class="mono">production/sm_config.h</td><td><code>renderConfigHeader</code> :843</td><td>tick macros, <code>SM_NODE_INVALID</code>/<code>SM_Error_t</code>/<code>SM_Node_t</code>, <code>SM_Data_t</code>, <code>ADIA_Instance_t</code></td></tr>
+<tr><td class="mono">production/sm_core.h</td><td><code>renderCoreHeader</code> :949</td><td>the public API: Init/Reset/ReadInputs/Step/WriteOutputs/Sync_IO/Get*, trace hook, <code>ADIA_TESTING</code> setters</td></tr>
+<tr><td class="mono">production/sm_core.c</td><td><code>renderCoreSource</code> :1379</td><td>1,069 lines: trace sink, forward decls, exit/enter/execute functions, fault helpers, public API</td></tr>
+<tr><td class="mono">production/sm_mapping.{h,c}</td><td><code>renderMappingHeader/Source</code> :1046/:1062</td><td>4 relationship tables + <code>SM_Validate_Mapping_Configuration()</code></td></tr>
+<tr><td class="mono">production/sm_safety.{h,c}</td><td><code>renderSafetyHeader/Source</code> :1141/:1153</td><td>parent map, direct/descendant layer switches, 5-clause consistency validator, <code>SM_ApplySafeOutputs()</code></td></tr>
+<tr><td class="mono">production/sm_user_logic.{h,c}</td><td><code>renderUserLogicHeader/Source</code> :985/:1001</td><td>one Entry/During/Exit hook per state — the file you edit</td></tr>
+<tr><td class="mono">production/mcal_dio.h</td><td><code>renderMcalHeader</code> :1317</td><td><code>MCAL_CH_*</code> macros for mapped channels + MCAL prototypes (interface only)</td></tr>
+<tr><td class="mono">tests/test_sm_*.c</td><td><code>renderSMCTestPackage</code> :296</td><td>nine suite files; 39 cases across eight of them — <code>test_sm_io.c</code> is emitted empty because the model declares no IO mappings</td></tr>
+<tr><td class="mono">tests/test_support.{h,c}, test_main.c, mcal_test_stub.{c,h}</td><td><code>renderCTestRuntimeFiles</code> :487</td><td>assert helpers, <code>MCAL_TestReset()</code> and scriptable channel state, suite runner</td></tr>
+<tr><td class="mono">verification/test_manifest.json</td><td><code>buildSMTestManifest</code> :52</td><td>the case list <i>and</i> the traceability matrix (case → requirements → states → transitions → generated functions)</td></tr>
+<tr><td class="mono">verification/*.md</td><td><code>renderSemanticTestingReport</code>, <code>renderStaticMetricsReport</code></td><td>human reports over the analysis pass</td></tr>
+</table>
+
+<h3>5.2 The test package is derived from the same IR that produced the C</h3>
+{{SRC:src/utils/stateMachine/smCTestSuiteRenderer.ts|export const renderSMCTestPackage = (|  return Object.freeze(files);}}
+{{OUT:docs/codegen-demo/evidence/tests/test_sm_initialization.c|    (void)SM_Init(&instance);|    ADIA_AssertBool(false, instance.data.over_temperature, "over_temperature value", __FILE__, (unsigned long)__LINE__);}}
+
+<p>The test generator never parses C and never re-reads the model: <code>buildSMTestManifest()</code> walks the IR — states, layers,
+transitions with their guards and actions, history junctions, <code>verification</code> config — and emits <b>operations</b>
+(<code>init</code>, <code>set-variable</code>, <code>step</code>, <code>sync-io</code>, fault injection) and <b>expectations</b>
+(<code>active-state</code>, <code>inactive-state</code>, <code>variable-value</code>, <code>transition-fired</code>,
+<code>error-code</code>, <code>history</code>). The suite renderer then turns each operation into a call and each expectation into an
+<code>ADIA_Assert*</code> line, with <code>__FILE__</code> and <code>__LINE__</code> captured at the assertion site — so a failing
+generated test points at generated code, not at a helper. The default-initialisation case asserts the four active states the model
+starts in, all six variable defaults, the error code and the fault flag without a single hand-written expectation.</p>
+
+<p>One shape detail worth noticing in that loop: the suite list is hard-coded at nine, and a suite with no cases still gets a file
+with an empty body (<code>int run_suite_io(void) { return 0; }</code>). The generator prefers a stable file set over a minimal one — the
+runner in <code>test_main.c</code> is generated against the same nine names, so the package shape does not change when a model gains or
+loses, say, an IO mapping. The cost is nine translation units even when eight of them are the entire test plan.</p>
+
+<h3>5.3 The self-check, and what it cannot see</h3>
+{{SRCUT:src/utils/stateMachine/smCGenerator.ts|export function verifyGeneratedCStructure(|  if (undeclaredMembers.size > 0) {}}
+<p>The generator does have a semantic self-check: it extracts the <code>SM_Data_t</code> members from the emitted header with a regex
+and cross-checks every <code>…-&gt;data.member</code> access in the emitted sources, reporting
+<code>GEN_C_UNDECLARED_DATA_MEMBER</code> as an error. Run against this model's own package, though, all three of its blind spots line
+up. The driver in <code>docs/codegen-demo/tools/probe_selfcheck.ts</code> prints:</p>
+<figure class="code run"><pre><code>$ node /tmp/probe.cjs
+FLAT files=12 errors=0
+PKG  files=27 errors=0
+RESCAN valid=true diagnostics=0 undeclared=[]
+data.x occurrences in package (-&gt; and .): tests/test_sm_transitions.c:10, tests/test_sm_actions.c:2
+corrected scan: SM_Data_t declares duty_cmd, heat_cycles, over_temperature, setpoint_c, start_cmd, stop_cmd
+corrected scan: undeclared members x in tests/test_sm_transitions.c, tests/test_sm_actions.c</code></pre>
+<figcaption>docs/codegen-demo/tools/probe_selfcheck.ts (executed 2026-09-14, node 22)</figcaption></figure>
+<ul>
+<li><b>It is not run in package mode</b> — the early return at §5.1 means the delivered shape is unchecked.</li>
+<li><b>It only scans the file list it was handed</b> — in flat mode that list is the 10 implementation files, so the test sources are
+never in scope.</li>
+<li><b>Its access regex requires a pointer</b> (<code>\w+-&gt;data\.\w+</code>), but generated tests declare the instance on the stack
+and write <code>instance.data.x</code>. Even re-running the checker over the whole 27-file package returns
+<code>valid=true</code>.</li>
+</ul>
+<p>The <code>x</code> those files reference comes from the plan builder, which hardcodes a variable named <code>x</code> for every
+transition case instead of using the transition's actual guard:</p>
+{{SRC:src/utils/stateMachine/smTestPlanBuilder.ts|        { kind: 'set-variable', variableId: 'x', value: true },|        { kind: 'set-variable', variableId: 'x', value: false },}}
+{{OUT:docs/codegen-demo/evidence/tests/test_sm_transitions.c|static void test_sm_tc_trans_fan_low_fan_high_false(void)|fan_high should be inactive}}
+<p>The emitted test is otherwise exactly right — it inits, steps 10 ms, syncs IO and asserts both states — and it cannot compile,
+because <code>SM_Data_t</code> has no member <code>x</code>. That is the single defect that makes the generated package fail the strict
+host build; compiling the evidence package with the pipeline's own flags shows only these errors:</p>
+<figure class="code run"><pre><code>$ gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion \
+      -Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -Iproduction -Itests \
+      production/*.c tests/*.c -o /tmp/host_test_runner.exe
+tests/test_sm_actions.c:69:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_actions.c:152:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:28:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:51:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:75:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:98:18: error: 'SM_Data_t' has no member named 'x'
+... 6 more in test_sm_transitions.c (12 total)</code></pre>
+<figcaption>gcc 12.2.0 transcript, run against docs/codegen-demo/evidence (2026-09-14)</figcaption></figure>
+<p>The production sources compile clean under those flags; the failure is entirely in the generated tests. The fix is one line per
+site — pass the transition's guard variable id into <code>set-variable</code> (and skip the step when the guard reads an input that the
+test does not drive) — and it is worth doing, because today the only packages that pass are the ones whose fixture happens to declare
+<code>x</code>.</p>
+
+<h3>5.4 The proof that the C behaves like the model</h3>
+{{SRCUT:src/utils/stateMachine/smCHarness.ts|export const compileAndRunCTrace|const findPackageSourceFiles = (}}
+<p><code>compileAndRunCTrace()</code> is the part of the harness that actually closes the loop: it writes the package plus a
+generated scenario harness, compiles it against the host compiler, runs it, and returns one observation frame per tick with the same
+shape the interpreter produces (<code>runInterpreterTrace()</code>). <code>compareSemanticTraces()</code> then diffs the two frame
+arrays field by field. For the 28-step scenario in
+<code class="mono">docs/codegen-demo/generate.ts</code> — idle, start, 20 ticks, over-temperature, resume, stop — both sides produce
+<b>29 frames and <code>divergence: null</code></b>. The frames show the emitted control flow doing exactly what §3 says it should:</p>
+<table>
+<tr><th>tick</th><th>active states</th><th>duty_cmd</th><th>what the generated C just executed</th></tr>
+<tr><td class="mono">0–1</td><td class="mono">heater, standby</td><td class="mono">0</td><td><code>SM_Init</code> → root default (heater) → heater_children default (standby); <code>heat_cycles</code> ticks 0→1</td></tr>
+<tr><td class="mono">2</td><td class="mono">heater, warming, pwm_bank, pwm_low, fan_bank, fan_low</td><td class="mono">250</td><td><code>begin_warmup</code> fires; warming entry sets 250; AND layer enters both regions; deep history records <code>standby</code></td></tr>
+<tr><td class="mono">3–21</td><td class="mono">… pwm_low, fan_low</td><td class="mono">251→269</td><td><code>SM_ST_PWM_LOW_During</code> adds 1 per tick while the state timer climbs to 200 ms</td></tr>
+<tr><td class="mono">22</td><td class="mono">… pwm_high, fan_low</td><td class="mono">269</td><td><code>afterTicks</code> transition fires: exit records <code>pwm_low</code>, slot 2 switches, <code>SM_ST_PWM_HIGH_Entry</code> runs</td></tr>
+<tr><td class="mono">23</td><td class="mono">… pwm_high, fan_low</td><td class="mono">274</td><td><code>SM_ST_PWM_HIGH_During</code> adds 5</td></tr>
+<tr><td class="mono">24–25</td><td class="mono">overheat</td><td class="mono">0</td><td><code>trip_overheat</code> from the root layer: exit the whole <code>heater</code> subtree (recording history at every layer), enter the safe state</td></tr>
+<tr><td class="mono">26</td><td class="mono">heater, warming, pwm_bank, pwm_high, fan_bank, fan_low</td><td class="mono">250</td><td><code>resume_heater</code> to the history junction: root → heater, then the recorded <code>warming</code>, then the recorded <code>pwm_high</code> (duty reset to 250 by warming's entry action) — <b>deep history survived a full subtree exit</b></td></tr>
+<tr><td class="mono">27–28</td><td class="mono">… pwm_high, fan_low</td><td class="mono">255, 260</td><td>back on the normal path, 5 per tick</td></tr>
+</table>
+<p>Everything in that table is a consequence of the emitted statements in §3, including the two subtle ones: at tick 24 the fault-free
+transition still runs through <code>SM_Exit_State</code> for every exited state (that is what fills the history), and at tick 26 the
+restore path reads <code>deep_history[layer][state]</code> rather than re-entering defaults. Nothing in this table required the
+interpreter to be correct — the numbers come from the compiled C's own observations.</p>
+
+<h3>5.5 How the pipeline judges the result — and where it does not</h3>
+{{SRCUT:src/utils/stateMachine/smVerificationAggregator.ts|export function deriveAcceptance(|  for (const gate of mandatoryGates) {}}
+{{SRCUT:src/utils/stateMachine/smPipelineOrchestrator.ts|    const refTrace = runReferenceInterpreter(ir, testVectors);|    activities['differential'] = diffEvidence;}}
+<p><code>deriveAcceptance()</code> is strict in the right way: any <code>FAIL</code> rejects, and nine gates must be
+<code>PASS</code> (structural, semantic, test-generation, host-compilation, host-runtime, sanitizers, statement-coverage,
+branch-coverage, <b>differential</b>). The problem is what the pipeline puts into that ninth gate. Gate 8 computes the reference
+trace, maps it to observations, and then calls
+<code>compareCycleObservations(refObservations, refObservations)</code> — <b>it compares the reference to itself</b> and never compiles
+or runs the generated C. The comment on that line ("Exact match with verified candidate observations") describes the intent; the code
+produces a tautology that can only say PASS, and <code>deriveAcceptance()</code> treats it as one of the mandatory gates. Two
+consequences:</p>
+<ul>
+<li><code>npm run verify:sm:codegen</code> (which drives <code>runVerificationPipeline</code>) can report
+<code>acceptance: true</code> without any behavioural evidence at all — the C package is verified for <i>compilation</i>, not for
+<i>equivalence</i>.</li>
+<li>The real differential exists in this repo, one layer down: <code>compileAndRunCTrace()</code> + <code>compareSemanticTraces()</code>,
+the path used by §5.4 and by the committed evidence. Wiring Gate 8 to that path (candidate = C observations) instead of to
+<code>refObservations</code> would make the ninth gate mean what its name says.</li>
+</ul>
+<p>A related traceability gap: <code>ir.modelHash</code> is a constant. The builder writes <code>modelHash: "0000000000000000"</code>
+(smSemanticBuilder.ts:825), and every consumer — the manifest, the differential context, the reports — carries that literal through, so
+no artefact records <i>which revision</i> of the model it was generated from. Recomputing the hash from the frozen IR at that one site
+would bind the evidence to the model for free.</p>
+
+<div class="note okc">
+<h4>Reproducing everything on this page</h4>
+<pre><code>git clone … &amp;&amp; cd ADAI-
+npm i                       # esbuild + mathjs are enough for this document
+npx tsx docs/codegen-demo/generate.ts --out docs/codegen-demo/evidence
+python3 docs/codegen-demo/tools/build_source_doc.py    # rebuilds this document
+gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion \
+    -Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -Iproduction -Itests \
+    docs/codegen-demo/evidence/production/*.c docs/codegen-demo/evidence/tests/*.c</code></pre>
+<p>The first command regenerates every artefact quoted here and re-runs the differential comparison; the last one reproduces the
+compile failure in §5.3 (a clean build is expected only after the plan-builder fix).</p>
+</div>

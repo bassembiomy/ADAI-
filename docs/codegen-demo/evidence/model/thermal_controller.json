@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 5,
+  "tickMs": 10,
+  "states": [
+    {
+      "id": "heater",
+      "name": "Heater",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "heat_cycles = 0U;",
+      "during": "heat_cycles = heat_cycles + 1U;",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": null,
+      "children": [],
+      "priority": 1,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true
+    },
+    {
+      "id": "overheat",
+      "name": "Overheat",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "duty_cmd = 0U;",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": null,
+      "children": [],
+      "priority": 2,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "isSafeState": true
+    },
+    {
+      "id": "standby",
+      "name": "Standby",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "duty_cmd = 0U;",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "heater",
+      "children": [],
+      "priority": 1,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true
+    },
+    {
+      "id": "warming",
+      "name": "Warming",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "duty_cmd = 250U;",
+      "during": "",
+      "exit": "duty_cmd = 0U;",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "heater",
+      "children": [],
+      "priority": 2,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false
+    },
+    {
+      "id": "pwm_bank",
+      "name": "PWM bank",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "warming",
+      "children": [],
+      "priority": 1,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false
+    },
+    {
+      "id": "fan_bank",
+      "name": "Fan bank",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "warming",
+      "children": [],
+      "priority": 2,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false
+    },
+    {
+      "id": "pwm_low",
+      "name": "PWM low",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "duty_cmd = duty_cmd + 1U;",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "pwm_bank",
+      "children": [],
+      "priority": 1,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true
+    },
+    {
+      "id": "pwm_high",
+      "name": "PWM high",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "duty_cmd = duty_cmd + 5U;",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "pwm_bank",
+      "children": [],
+      "priority": 2,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false
+    },
+    {
+      "id": "fan_low",
+      "name": "Fan low",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "fan_bank",
+      "children": [],
+      "priority": 1,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true
+    },
+    {
+      "id": "fan_high",
+      "name": "Fan high",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": "fan_bank",
+      "children": [],
+      "priority": 2,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false
+    }
+  ],
+  "junctions": [
+    {
+      "id": "heater_history",
+      "x": 0,
+      "y": 0,
+      "name": "H*",
+      "color": "#000000",
+      "parentId": "heater",
+      "type": "deep-history"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "begin_warmup",
+      "sourceId": "standby",
+      "targetId": "warming",
+      "condition": "start_cmd",
+      "action": "heat_cycles = 0U;",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1
+    },
+    {
+      "id": "pwm_step_up",
+      "sourceId": "pwm_low",
+      "targetId": "pwm_high",
+      "condition": "",
+      "action": "",
+      "afterTicks": 20,
+      "type": "after",
+      "hasControlPoint": false,
+      "order": 2
+    },
+    {
+      "id": "fan_step_up",
+      "sourceId": "fan_low",
+      "targetId": "fan_high",
+      "condition": "start_cmd",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 3
+    },
+    {
+      "id": "resume_heater",
+      "sourceId": "overheat",
+      "targetId": "heater_history",
+      "condition": "stop_cmd",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 4
+    },
+    {
+      "id": "trip_overheat",
+      "sourceId": "heater",
+      "targetId": "overheat",
+      "condition": "over_temperature",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 5
+    }
+  ],
+  "variables": [
+    {
+      "id": "start_cmd",
+      "name": "start_cmd",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true
+    },
+    {
+      "id": "stop_cmd",
+      "name": "stop_cmd",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true
+    },
+    {
+      "id": "over_temperature",
+      "name": "over_temperature",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true
+    },
+    {
+      "id": "duty_cmd",
+      "name": "duty_cmd",
+      "type": "uint16",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true
+    },
+    {
+      "id": "heat_cycles",
+      "name": "heat_cycles",
+      "type": "uint32",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true
+    },
+    {
+      "id": "setpoint_c",
+      "name": "setpoint_c",
+      "type": "double",
+      "initialValue": "180.0",
+      "currentValue": 180,
+      "visibleInScope": true
+    }
+  ],
+  "layers": [
+    {
+      "id": "root",
+      "name": "root",
+      "parentStateId": null,
+      "decomposition": "OR",
+      "stateIds": [
+        "heater",
+        "overheat"
+      ],
+      "transitionIds": [
+        "trip_overheat",
+        "resume_heater"
+      ],
+      "junctionIds": []
+    },
+    {
+      "id": "heater_children",
+      "name": "heater_children",
+      "parentStateId": "heater",
+      "decomposition": "OR",
+      "stateIds": [
+        "standby",
+        "warming"
+      ],
+      "transitionIds": [
+        "begin_warmup"
+      ],
+      "junctionIds": [
+        "heater_history"
+      ]
+    },
+    {
+      "id": "warming_regions",
+      "name": "warming_regions",
+      "parentStateId": "warming",
+      "decomposition": "AND",
+      "stateIds": [
+        "pwm_bank",
+        "fan_bank"
+      ],
+      "transitionIds": [],
+      "junctionIds": []
+    },
+    {
+      "id": "pwm_children",
+      "name": "pwm_children",
+      "parentStateId": "pwm_bank",
+      "decomposition": "OR",
+      "stateIds": [
+        "pwm_low",
+        "pwm_high"
+      ],
+      "transitionIds": [
+        "pwm_step_up"
+      ],
+      "junctionIds": []
+    },
+    {
+      "id": "fan_children",
+      "name": "fan_children",
+      "parentStateId": "fan_bank",
+      "decomposition": "OR",
+      "stateIds": [
+        "fan_low",
+        "fan_high"
+      ],
+      "transitionIds": [
+        "fan_step_up"
+      ],
+      "junctionIds": []
+    }
+  ],
+  "safetyMode": true,
+  "verification": {
+    "cStandard": "c99",
+    "tickToleranceMs": 0,
+    "timerPolicy": "logical-tick",
+    "resetPolicy": "always-authorized",
+    "watchdogAfterCriticalFault": "do-not-service",
+    "statementCoverageTarget": 100,
+    "branchCoverageTarget": 95,
+    "requireMcdc": false,
+    "repeatedExecutionCycles": 100000,
+    "staticAnalysisToolId": null,
+    "misraToolId": null,
+    "targetId": null
+  }
+}

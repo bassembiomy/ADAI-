@@ -1,0 +1,1686 @@
+{
+  "schemaVersion": 1,
+  "modelId": "state_machine",
+  "modelHash": "0000000000000000",
+  "verification": {
+    "cStandard": "c99",
+    "tickToleranceMs": 0,
+    "timerPolicy": "logical-tick",
+    "resetPolicy": "always-authorized",
+    "watchdogAfterCriticalFault": "do-not-service",
+    "statementCoverageTarget": 100,
+    "branchCoverageTarget": 95,
+    "requireMcdc": false,
+    "repeatedExecutionCycles": 100000,
+    "staticAnalysisToolId": null,
+    "misraToolId": null,
+    "targetId": null,
+    "invalidInputPolicies": {}
+  },
+  "cases": [
+    {
+      "id": "SM-TC-INIT-DEFAULT",
+      "suite": "initialization",
+      "name": "Default initialization enters initial states and binds variables",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "heater"
+        },
+        {
+          "kind": "active-state",
+          "layerId": "heater_children",
+          "stateId": "standby"
+        },
+        {
+          "kind": "active-state",
+          "layerId": "pwm_children",
+          "stateId": "pwm_low"
+        },
+        {
+          "kind": "active-state",
+          "layerId": "fan_children",
+          "stateId": "fan_low"
+        },
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 0
+        },
+        {
+          "kind": "variable",
+          "variableId": "heat_cycles",
+          "value": 0
+        },
+        {
+          "kind": "variable",
+          "variableId": "over_temperature",
+          "value": false
+        },
+        {
+          "kind": "variable",
+          "variableId": "setpoint_c",
+          "value": 180
+        },
+        {
+          "kind": "variable",
+          "variableId": "start_cmd",
+          "value": false
+        },
+        {
+          "kind": "variable",
+          "variableId": "stop_cmd",
+          "value": false
+        },
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-INIT-002",
+          "TEST-INIT-003"
+        ],
+        "generatedFunctions": [
+          "SM_Init"
+        ],
+        "testCaseId": "SM-TC-INIT-DEFAULT"
+      }
+    },
+    {
+      "id": "SM-TC-INIT-MEMSET-GARBAGE",
+      "suite": "initialization",
+      "name": "Initialization clears instance storage and resets flags from memory prefilled with 0xA5",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-INIT-004"
+        ],
+        "generatedFunctions": [
+          "SM_Init"
+        ],
+        "testCaseId": "SM-TC-INIT-MEMSET-GARBAGE"
+      }
+    },
+    {
+      "id": "SM-TC-INIT-NULL-INSTANCE",
+      "suite": "initialization",
+      "name": "SM_Init handles null instance parameter with error",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_NULL_INSTANCE"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-INIT-001"
+        ],
+        "generatedFunctions": [
+          "SM_Init"
+        ],
+        "testCaseId": "SM-TC-INIT-NULL-INSTANCE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-FAN_LOW-FAN_HIGH-FALSE",
+      "suite": "transitions",
+      "name": "Transition from Fan low to Fan high blocked when condition is false",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": false
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "fan_children",
+          "stateId": "fan_low"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "fan_high"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "fan_low",
+          "fan_high"
+        ],
+        "transitionIds": [
+          "fan_step_up"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-FAN_LOW-FAN_HIGH-FALSE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-FAN_LOW-FAN_HIGH-TRUE",
+      "suite": "transitions",
+      "name": "Transition from Fan low to Fan high fires when condition is met",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "fan_children",
+          "stateId": "fan_high"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "fan_low"
+        },
+        {
+          "kind": "transition-fired",
+          "transitionId": "fan_step_up"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "fan_low",
+          "fan_high"
+        ],
+        "transitionIds": [
+          "fan_step_up"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-001",
+          "TEST-TRANS-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-FAN_LOW-FAN_HIGH-TRUE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-HEATER-OVERHEAT-FALSE",
+      "suite": "transitions",
+      "name": "Transition from Heater to Overheat blocked when condition is false",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": false
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "heater"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "overheat"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater",
+          "overheat"
+        ],
+        "transitionIds": [
+          "trip_overheat"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-HEATER-OVERHEAT-FALSE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-HEATER-OVERHEAT-TRUE",
+      "suite": "transitions",
+      "name": "Transition from Heater to Overheat fires when condition is met",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "overheat"
+        },
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 0
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "heater"
+        },
+        {
+          "kind": "transition-fired",
+          "transitionId": "trip_overheat"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater",
+          "overheat"
+        ],
+        "transitionIds": [
+          "trip_overheat"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-001",
+          "TEST-TRANS-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-HEATER-OVERHEAT-TRUE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-OVERHEAT-HEATER_HISTORY-FALSE",
+      "suite": "transitions",
+      "name": "Transition from Overheat to HEATER_HISTORY blocked when condition is false",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": false
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "root",
+          "stateId": "overheat"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "overheat",
+          "heater_history"
+        ],
+        "transitionIds": [
+          "resume_heater"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-OVERHEAT-HEATER_HISTORY-FALSE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-OVERHEAT-HEATER_HISTORY-TRUE",
+      "suite": "transitions",
+      "name": "Transition from Overheat to HEATER_HISTORY fires when condition is met",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "inactive-state",
+          "stateId": "overheat"
+        },
+        {
+          "kind": "transition-fired",
+          "transitionId": "resume_heater"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "overheat",
+          "heater_history"
+        ],
+        "transitionIds": [
+          "resume_heater"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-001",
+          "TEST-TRANS-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-OVERHEAT-HEATER_HISTORY-TRUE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-PWM_LOW-PWM_HIGH-FALSE",
+      "suite": "transitions",
+      "name": "Transition from PWM low to PWM high blocked when condition is false",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": false
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "pwm_children",
+          "stateId": "pwm_low"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "pwm_high"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "pwm_low",
+          "pwm_high"
+        ],
+        "transitionIds": [
+          "pwm_step_up"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-PWM_LOW-PWM_HIGH-FALSE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-PWM_LOW-PWM_HIGH-TRUE",
+      "suite": "transitions",
+      "name": "Transition from PWM low to PWM high fires when condition is met",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "pwm_children",
+          "stateId": "pwm_high"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "pwm_low"
+        },
+        {
+          "kind": "transition-fired",
+          "transitionId": "pwm_step_up"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "pwm_low",
+          "pwm_high"
+        ],
+        "transitionIds": [
+          "pwm_step_up"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-001",
+          "TEST-TRANS-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-PWM_LOW-PWM_HIGH-TRUE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-STANDBY-WARMING-FALSE",
+      "suite": "transitions",
+      "name": "Transition from Standby to Warming blocked when condition is false",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": false
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "heater_children",
+          "stateId": "standby"
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "warming"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "standby",
+          "warming"
+        ],
+        "transitionIds": [
+          "begin_warmup"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-STANDBY-WARMING-FALSE"
+      }
+    },
+    {
+      "id": "SM-TC-TRANS-STANDBY-WARMING-TRUE",
+      "suite": "transitions",
+      "name": "Transition from Standby to Warming fires when condition is met",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "active-state",
+          "layerId": "heater_children",
+          "stateId": "warming"
+        },
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 250
+        },
+        {
+          "kind": "inactive-state",
+          "stateId": "standby"
+        },
+        {
+          "kind": "transition-fired",
+          "transitionId": "begin_warmup"
+        },
+        {
+          "kind": "variable",
+          "variableId": "heat_cycles",
+          "value": 0
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "standby",
+          "warming"
+        ],
+        "transitionIds": [
+          "begin_warmup"
+        ],
+        "requirementIds": [
+          "TEST-TRANS-001",
+          "TEST-TRANS-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TRANS-STANDBY-WARMING-TRUE"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-HEATER-DURING",
+      "suite": "actions",
+      "name": "During action execution on state Heater",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-HEATER-DURING"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-HEATER-ENTRY",
+      "suite": "actions",
+      "name": "Entry action execution on state Heater",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "variable",
+          "variableId": "heat_cycles",
+          "value": 0
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-HEATER-ENTRY"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-OVERHEAT-ENTRY",
+      "suite": "actions",
+      "name": "Entry action execution on state Overheat",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 0
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "overheat"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-OVERHEAT-ENTRY"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-PWM_HIGH-DURING",
+      "suite": "actions",
+      "name": "During action execution on state PWM high",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "pwm_high"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-PWM_HIGH-DURING"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-PWM_LOW-DURING",
+      "suite": "actions",
+      "name": "During action execution on state PWM low",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "pwm_low"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-PWM_LOW-DURING"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-STANDBY-ENTRY",
+      "suite": "actions",
+      "name": "Entry action execution on state Standby",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 0
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "standby"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-STANDBY-ENTRY"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-WARMING-ENTRY",
+      "suite": "actions",
+      "name": "Entry action execution on state Warming",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-variable",
+          "variableId": "x",
+          "value": true
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 250
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "warming"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-WARMING-ENTRY"
+      }
+    },
+    {
+      "id": "SM-TC-ACT-WARMING-EXIT",
+      "suite": "actions",
+      "name": "Exit action execution on state Warming",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step"
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "variable",
+          "variableId": "duty_cmd",
+          "value": 0
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "warming"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ACT-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ACT-WARMING-EXIT"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-LOWER-10MS",
+      "suite": "timing",
+      "name": "Lower timing boundary of 10ms is accepted",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-LOWER-10MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-NOMINAL-10MS",
+      "suite": "timing",
+      "name": "Nominal step with configured tick interval of 10ms",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-NOMINAL-10MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-REJECT-11MS",
+      "suite": "timing",
+      "name": "Step duration of 11ms above upper threshold is rejected",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 11
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_TIMING"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-005"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-REJECT-11MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-REJECT-9MS",
+      "suite": "timing",
+      "name": "Step duration of 9ms below lower threshold is rejected",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 9
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_TIMING"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-004"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-REJECT-9MS"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-SATURATION",
+      "suite": "timing",
+      "name": "State timers saturate at UINT32_MAX without rollover",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "set-timer",
+          "stateId": "heater",
+          "valueMs": 4294967294
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "timer",
+          "stateId": "heater",
+          "expectedMs": 4294967295
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-006"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-SATURATION"
+      }
+    },
+    {
+      "id": "SM-TC-TIME-UPPER-10MS",
+      "suite": "timing",
+      "name": "Upper timing boundary of 10ms is accepted",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-TIME-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-TIME-UPPER-10MS"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-CORRUPT-SLOT",
+      "suite": "safety",
+      "name": "Corrupted active slot value triggers configuration fault",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "executionSlot",
+          "targetId": "0",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_CONFIGURATION"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-002"
+        ],
+        "generatedFunctions": [
+          "SM_Validate_State_Consistency"
+        ],
+        "testCaseId": "SM-TC-SAFE-CORRUPT-SLOT"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-CORRUPT-STATE",
+      "suite": "safety",
+      "name": "Corrupted active state detects RAM fault and latches configuration error",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_CONFIGURATION"
+        },
+        {
+          "kind": "fault-latched",
+          "latched": true
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-001"
+        ],
+        "generatedFunctions": [
+          "SM_Validate_State_Consistency"
+        ],
+        "testCaseId": "SM-TC-SAFE-CORRUPT-STATE"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-LATCHED-BLOCKING",
+      "suite": "safety",
+      "name": "Latched fault blocks normal state machine execution in subsequent ticks",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "fault-latched",
+          "latched": true
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-SAFE-LATCHED-BLOCKING"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-OUTPUTS-APPLIED",
+      "suite": "safety",
+      "name": "Safety fault immediately writes safe outputs to mapped hardware channels",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "fault-latched",
+          "latched": true
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-004"
+        ],
+        "generatedFunctions": [
+          "SM_Apply_Safe_Outputs"
+        ],
+        "testCaseId": "SM-TC-SAFE-OUTPUTS-APPLIED"
+      }
+    },
+    {
+      "id": "SM-TC-SAFE-WATCHDOG-POLICY",
+      "suite": "safety",
+      "name": "Watchdog policy is strictly enforced during normal execution and after fault",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "watchdog-kicks",
+          "count": 1
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-SAFE-005"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-SAFE-WATCHDOG-POLICY"
+      }
+    },
+    {
+      "id": "SM-TC-RESET-AUTHORIZED",
+      "suite": "reset",
+      "name": "Authorized reset restores initial states, resets timers, and clears error flags",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        },
+        {
+          "kind": "reset",
+          "authorized": true
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-RESET-001"
+        ],
+        "generatedFunctions": [
+          "SM_Reset"
+        ],
+        "testCaseId": "SM-TC-RESET-AUTHORIZED"
+      }
+    },
+    {
+      "id": "SM-TC-RESET-FAULT-RECOVERY",
+      "suite": "reset",
+      "name": "Authorized reset from latched fault clears error latch and recovers normal execution",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "corrupt-field",
+          "field": "activeState",
+          "targetId": "root",
+          "invalidValue": 999
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        },
+        {
+          "kind": "reset",
+          "authorized": true
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        },
+        {
+          "kind": "fault-latched",
+          "latched": false
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-RESET-002"
+        ],
+        "generatedFunctions": [
+          "SM_Reset"
+        ],
+        "testCaseId": "SM-TC-RESET-FAULT-RECOVERY"
+      }
+    },
+    {
+      "id": "SM-TC-RESET-NULL-INSTANCE",
+      "suite": "reset",
+      "name": "SM_Reset returns error when called with null instance pointer",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_NULL_INSTANCE"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-RESET-003"
+        ],
+        "generatedFunctions": [
+          "SM_Reset"
+        ],
+        "testCaseId": "SM-TC-RESET-NULL-INSTANCE"
+      }
+    },
+    {
+      "id": "SM-TC-ROB-NULL-STEP",
+      "suite": "robustness",
+      "name": "SM_Step rejects null instance argument with error",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": "SM_ERR_NULL_INSTANCE"
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ROB-001"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ROB-NULL-STEP"
+      }
+    },
+    {
+      "id": "SM-TC-ROB-REPEATED-CYCLES",
+      "suite": "robustness",
+      "name": "Repeated step execution across 100000 cycles for stability",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "repeat-step",
+          "cycles": 100000,
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [
+          "heater"
+        ],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-ROB-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-ROB-REPEATED-CYCLES"
+      }
+    },
+    {
+      "id": "SM-TC-HIER-DEEP-HISTORY",
+      "suite": "hierarchy",
+      "name": "Deep history restoration across nested composite levels",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-HIER-002"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-HIER-DEEP-HISTORY"
+      }
+    },
+    {
+      "id": "SM-TC-HIER-PARALLEL-REGIONS",
+      "suite": "hierarchy",
+      "name": "Simultaneous activation and synchronization of parallel AND regions",
+      "applicability": {
+        "status": "applicable"
+      },
+      "operations": [
+        {
+          "kind": "init"
+        },
+        {
+          "kind": "step",
+          "deltaMs": 10
+        }
+      ],
+      "expectations": [
+        {
+          "kind": "error",
+          "code": null
+        }
+      ],
+      "traceability": {
+        "modelId": "state_machine",
+        "stateIds": [],
+        "transitionIds": [],
+        "requirementIds": [
+          "TEST-HIER-003"
+        ],
+        "generatedFunctions": [
+          "SM_Step"
+        ],
+        "testCaseId": "SM-TC-HIER-PARALLEL-REGIONS"
+      }
+    }
+  ]
+}

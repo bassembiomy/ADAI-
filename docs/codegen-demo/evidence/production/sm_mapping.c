@@ -1,0 +1,92 @@
+#include "sm_mapping.h"
+
+/*
+ * Active State Mapping
+ *
+ * Layer | Slot
+ * ------------------------------
+ * root | 0
+ * heater_children | 1
+ * pwm_children | 2
+ * fan_children | 3
+ * warming_regions | NONE
+ *
+ * Parallel child states are tracked using state_active[].
+ * Layer IDs, active-slot IDs, and state IDs are distinct.
+ */
+const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {
+    [0] = 0U,
+    [SM_ST_HEATER_IDX] = SM_LYR_ROOT_IDX,
+    [SM_ST_STANDBY_IDX] = SM_LYR_HEATER_CHILDREN_IDX,
+    [SM_ST_WARMING_IDX] = SM_LYR_HEATER_CHILDREN_IDX,
+    [SM_ST_PWM_BANK_IDX] = SM_LYR_WARMING_REGIONS_IDX,
+    [SM_ST_PWM_LOW_IDX] = SM_LYR_PWM_CHILDREN_IDX,
+    [SM_ST_PWM_HIGH_IDX] = SM_LYR_PWM_CHILDREN_IDX,
+    [SM_ST_FAN_BANK_IDX] = SM_LYR_WARMING_REGIONS_IDX,
+    [SM_ST_FAN_LOW_IDX] = SM_LYR_FAN_CHILDREN_IDX,
+    [SM_ST_FAN_HIGH_IDX] = SM_LYR_FAN_CHILDREN_IDX,
+    [SM_ST_OVERHEAT_IDX] = SM_LYR_ROOT_IDX,
+};
+
+const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
+    [0] = -1,
+    [SM_ST_HEATER_IDX] = 0,
+    [SM_ST_STANDBY_IDX] = 1,
+    [SM_ST_WARMING_IDX] = 1,
+    [SM_ST_PWM_BANK_IDX] = -1,
+    [SM_ST_PWM_LOW_IDX] = 2,
+    [SM_ST_PWM_HIGH_IDX] = 2,
+    [SM_ST_FAN_BANK_IDX] = -1,
+    [SM_ST_FAN_LOW_IDX] = 3,
+    [SM_ST_FAN_HIGH_IDX] = 3,
+    [SM_ST_OVERHEAT_IDX] = 0,
+};
+
+const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
+    [SM_LYR_HEATER_CHILDREN_IDX] = SM_ST_HEATER,
+    [SM_LYR_PWM_CHILDREN_IDX] = SM_ST_PWM_BANK,
+    [SM_LYR_FAN_CHILDREN_IDX] = SM_ST_FAN_BANK,
+    [SM_LYR_WARMING_REGIONS_IDX] = SM_ST_WARMING,
+};
+
+const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = 0,
+    [SM_LYR_HEATER_CHILDREN_IDX] = 1,
+    [SM_LYR_PWM_CHILDREN_IDX] = 2,
+    [SM_LYR_FAN_CHILDREN_IDX] = 3,
+    [SM_LYR_WARMING_REGIONS_IDX] = -1,
+};
+
+SM_Error_t SM_Validate_Mapping_Configuration(void)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    uint32_t parent_layer;
+    int32_t slot;
+    SM_Node_t parent_state;
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        slot = SM_Layer_Active_Slot_Map[layer_index];
+        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {
+            return SM_ERR_CONFIGURATION;
+        }
+        parent_state = SM_Layer_Parent_State_Map[layer_index];
+        if ((uint32_t)parent_state > SM_NUM_STATES) {
+            return SM_ERR_CONFIGURATION;
+        }
+    }
+    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+        parent_layer = SM_State_Parent_Layer_Map[state_index];
+        if (parent_layer >= SM_NUM_LAYERS) {
+            return SM_ERR_CONFIGURATION;
+        }
+        slot = SM_State_Active_Slot_Map[state_index];
+        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {
+            return SM_ERR_CONFIGURATION;
+        }
+        if (slot != SM_Layer_Active_Slot_Map[parent_layer]) {
+            return SM_ERR_CONFIGURATION;
+        }
+    }
+    return SM_ERR_NONE;
+}

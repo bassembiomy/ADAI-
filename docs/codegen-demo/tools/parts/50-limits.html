@@ -1,0 +1,134 @@
+<h2 id="s6"><span class="num">6</span>What the generator does <i>not</i> do</h2>
+
+<p>The clearest way to describe a generator's contract is by its refusals. Reading all 1,963 lines of <code>smCGenerator.ts</code>,
+these are the boundaries it deliberately draws.</p>
+
+<h3>6.1 No ambient context, no build system, no target</h3>
+<ul>
+<li><b>It never reads a file, the clock, the environment or a random source.</b> Every render function takes <code>(ir, index)</code>
+and returns a string; <code>generateCArtifacts()</code> takes the IR and options and returns a file list. The same IR always produces
+byte-identical files, which is what makes the golden snapshot test meaningful and makes the evidence in this document reproducible.</li>
+<li><b>It does not emit a build system.</b> No Makefile, CMakeLists, linker script, startup code or ISR wiring is produced — the
+package is ten translation units that you compile with your own flags. The pipeline supplies the host flags for <i>testing</i> only
+(<code>-std=c99 … -Werror …</code>); the target flags are yours.</li>
+<li><b>It does not write the MCAL.</b> <code>mcal_dio.h</code> contains channel macros and prototypes; the .c is firmware. A flat
+package therefore does not link on its own (<code>undefined reference to MCAL_ApplySafeOutputs</code>), which is why the harness
+generates a stub for host tests.</li>
+<li><b>It uses no compiler extensions.</b> Grepping the generator for <code>malloc</code>, <code>free</code>,
+<code>__attribute__</code>, <code>#pragma</code>, <code>volatile</code> and <code>assert</code> returns zero occurrences of each; the
+emitted code is fixed-size arrays, <code>uintN_t</code>, <code>bool</code> and <code>memset</code>. There is no heap, no recursion
+beyond the statically-known layer nesting, and no function pointers except the optional trace sink.</li>
+<li><b>It knows the C rules that bite</b> — the instance declares
+<code>active_states[(SM_NUM_ACTIVE_SLOTS &gt; 0U) ? SM_NUM_ACTIVE_SLOTS : 1U]</code> rather than a potentially zero-length array,
+<code>SM_Data_t</code> members are emitted in <code>localeCompare</code> order for stable diffs, and
+<code>ir.verification.cStandard === 'c90'</code> switches every designated initializer to positional order (four sites:
+<code>renderConfigHeader</code>, <code>renderMappingSource</code>, <code>renderSafetySource</code>, the test suites).</li>
+</ul>
+
+<h3>6.2 The expression boundary: validated writes, blind reads</h3>
+{{SRC:src/utils/stateMachine/smCExpressions.ts|const renderNode = (|export const renderCExpression = (}}
+{{SRC:src/utils/stateMachine/smCExpressions.ts|export const renderCAction = (|export const renderCType = cType;}}
+<p>Two asymmetries live in those thirty lines and they explain most of the failure modes you can meet at a C compiler:</p>
+<table>
+<tr><th>Situation</th><th>What the emitter does</th><th>Where the error surfaces</th></tr>
+<tr><td>action target not in the IR</td><td><code>renderCAction</code> <b>throws</b>: <code>action target '…' is absent from semantic IR</code></td><td>generation time — the file list is never returned</td></tr>
+<tr><td>guard reads an undeclared name</td><td><code>parseCondition</code> resolves it to <code>{id: name, cName: toCIdentifier(name)}</code>, and <code>renderNode</code> emits <code>instance-&gt;data.name</code> unchecked</td><td>C compile time (or never, if the raw name happens to be a member)</td></tr>
+<tr><td>empty guard <code>''</code></td><td>parsed as literal <code>true</code>, then <code>renderTransitionPhase</code> drops the <code>if</code> and emits the action block inline</td><td>intended behaviour: an unconditional transition costs one comparison less than a guarded one</td></tr>
+<tr><td>call node in an expression</td><td>emitted verbatim: <code>fabs(x)</code>, <code>floor(y)</code></td><td>C compile/link time; the generator does not check the function exists</td></tr>
+<tr><td>type mismatch in an assignment</td><td>wrapped in an explicit cast to the declared target type (<code>(uint16_t)(…)</code>, <code>(double)(…)</code>)</td><td>never — the cast is emitted, so overflow is <i>defined</i> but not <i>checked</i>; an out-of-range model constant becomes a documented truncation at run time, not a diagnostic</td></tr>
+</table>
+<p>That last row is the honest statement of the type system: the generator is a <i>syntax-directed translator with declared types</i>,
+not a type checker. Integer promotion and overflow analysis are out of scope; the validator upstream
+(<code>smSemanticValidator.ts</code>) is where a model gets rejected before it ever reaches this file.</p>
+
+<h3>6.3 What is in the model but not in the C</h3>
+<table>
+<tr><th>Model feature</th><th>Reaches the C as</th></tr>
+<tr><td>state x/y/width/height/colour, <code>regionId</code>, <code>isActive</code></td><td>nothing — layout is editor data</td></tr>
+<tr><td>state <code>priority</code></td><td>ordering of siblings in the emitted C (compile-time), not a runtime comparison</td></tr>
+<tr><td><code>autostart</code></td><td>the layer's default-entry function, chosen once at build time</td></tr>
+<tr><td>junction chains</td><td>expanded into routes by the builder; no junction object exists at run time</td></tr>
+<tr><td>history junctions</td><td><code>deep_history[][]</code> bits + generated restore chains</td></tr>
+<tr><td><code>hilConfig.mappings</code></td><td><code>MCAL_CH_*</code> macros plus read/write statements inside <code>SM_ReadInputs</code>/<code>SM_WriteOutputs</code> (this model: none, hence <code>(void)instance;</code>)</td></tr>
+<tr><td>X-Bridges blocks</td><td>only if the model has them: extra <code>sm_xbridges.{h,c}</code> with SHA-256–derived external symbols, plus per-state <code>Step()</code> calls injected into the state bodies</td></tr>
+<tr><td>trace labels</td><td><code>SM_TraceAction()</code> calls, compiled out unless <code>SM_TRACE_ENABLED</code> is defined</td></tr>
+</table>
+
+<h3>6.4 Defect register (found by reading the code, reproduced by running it)</h3>
+<table>
+<tr><th>#</th><th>Defect</th><th>Evidence</th><th>Suggested fix</th></tr>
+<tr>
+<td>A</td>
+<td>Every transition case in the generated plan sets a variable named <code>x</code> instead of the transition's guard variable.</td>
+<td class="mono">smTestPlanBuilder.ts:192, 228, 249 → tests/test_sm_transitions.c:10 sites, test_sm_actions.c:2 → gcc: 'SM_Data_t' has no member named 'x'</td>
+<td>use the guard variable id from the transition (<code>extractVariableIdsFromExpression(t.guard)</code>); omit the step when the guard reads an input the test does not drive.</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Verification Gate 8 (differential) compares the reference trace to itself; the compiled C is never observed, yet the gate is mandatory for acceptance.</td>
+<td class="mono">smPipelineOrchestrator.ts:311 (<code>compareCycleObservations(refObservations, refObservations)</code>)</td>
+<td>set the candidate to the observations parsed from <code>compileAndRunCTrace()</code> (the path already used in §5.4) and fail the gate when host compilation is unavailable.</td>
+</tr>
+<tr>
+<td>C</td>
+<td>The model hash is the literal <code>"0000000000000000"</code>, so no artefact identifies the model revision it was generated from.</td>
+<td class="mono">smSemanticBuilder.ts:825 → verification/test_manifest.json: <code>"modelHash": "0000000000000000"</code></td>
+<td>compute a hash from the frozen IR (states, layers, transitions, variables, verification config) at that single site.</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Coverage is fail-open on zero measured lines: <code>totalLines &gt; 0 ? … : 100</code>.</td>
+<td class="mono">smCoverageRunner.ts:111 (statement), :131 (branch); the invocation at :350 runs <code>gcov --json-format production/*.c</code> from the package root while the notes are named after the runner binary, so a “no executable lines” run still yields a JSON file and 100 % rates.</td>
+<td>treat <code>totalLines === 0</code> as <code>NOT_RUN</code> (or FAIL); run gcov with the notes file, not the source path.</td>
+</tr>
+</table>
+<p>None of these change the generated C for a correct model; A is the only one visible in this document's artefacts, and it is a test
+generator bug, not an emitter bug. They are listed here because they are exactly the kind of thing a code walkthrough should surface:
+each is a one-line fix in a specific function, and each has a witness in the committed evidence.</p>
+
+<h3>6.5 What this walkthrough proves, and what it does not</h3>
+<div class="cols2">
+<div class="note okc">
+<h4>Proved here</h4>
+<ul>
+<li>The mapping <b>model → IR → C</b> is deterministic and mechanical: every emitted line is traceable to a render function and an IR field.</li>
+<li>Conditional emission is exact: a smaller model really does emit fewer constructs, not disabled ones.</li>
+<li>The compiled C and the interpreter agree on a 29-frame scenario with a deep-history restore and an AND region (differential, §5.4).</li>
+<li>The generated test package is derived from the same IR and carries case → requirement traceability.</li>
+<li>Regeneration is reproducible: re-running the driver rebuilt all 28 evidence files byte-for-byte identical (md5-verified), including the 29-frame differential trace.</li>
+</ul>
+</div>
+<div class="note warnc">
+<h4>Not proved here</h4>
+<ul>
+<li><b>No formal equivalence.</b> Differential agreement on one scenario is evidence, not proof; the harness can only cover the vectors you give it.</li>
+<li><b>No target compilation, no MISRA, no static analysis.</b> clang/cppcheck/arm-none-eabi-gcc were unavailable in this environment, so those gates were <code>NOT_RUN</code>; only the host compiler ran.</li>
+<li><b>No MC/DC.</b> gcov on the host cannot provide it, and the pipeline marks it <code>NOT_APPLICABLE</code> unless the model requires it.</li>
+<li><b>Not the whole app.</b> This is the emitter path (<code>smCGenerator</code> + builder + harness); the editor UI, the exporter and the React trace viewer are outside its scope.</li>
+</ul>
+</div>
+</div>
+
+<h3>6.6 Where to change what</h3>
+<table>
+<tr><th>If you want to…</th><th>Edit</th></tr>
+<tr><td>change what a state's C body looks like</td><td><code>renderExecuteFunctions</code> :725 (order of transition phases vs <code>_During</code>)</td></tr>
+<tr><td>change when a transition is considered enabled</td><td><code>renderTransitionPhase</code> :676 / <code>renderTransitionEnabled</code> :177</td></tr>
+<tr><td>change history semantics</td><td><code>renderRestoreStateBody</code> :312 + <code>renderExitFunctions</code> :448</td></tr>
+<tr><td>change the instance layout or add a type</td><td><code>renderConfigHeader</code> :843 (+ the C90 branches)</td></tr>
+<tr><td>change naming or collision handling</td><td><code>toCIdentifier</code> (smExpressions.ts:83) / <code>smCIdentifierPolicy</code></td></tr>
+<tr><td>change how the model is lowered (kinds, routes, priorities)</td><td><code>smSemanticBuilder.ts</code> — <code>classifyTransition</code> :203, <code>transitionPaths</code> :157, <code>allocateActiveSlots</code> :114</td></tr>
+<tr><td>change the tests or their traceability</td><td><code>smTestPlanBuilder.ts</code> :52 / <code>smCTestSuiteRenderer.ts</code> :296</td></tr>
+</table>
+
+<div class="footer">
+<p><b>ADAI state-machine code generator — source walkthrough.</b> Every generator excerpt on this page was sliced out of the working
+tree at build time by <code>docs/codegen-demo/tools/build_source_doc.py</code>; every generated-C excerpt is a verbatim artefact of
+<code>docs/codegen-demo/generate.ts</code> run against <code>docs/codegen-demo/thermal-model.ts</code>, committed under
+<code>docs/codegen-demo/evidence/</code>. Compiler and probe transcripts are transcripts of runs performed on 2026-09-14
+(gcc 12.2.0, node 22.22). If a future edit removes a quoted function, the build fails loudly rather than publishing a stale page.</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,2285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADAI — Reading the Code Generator: source → emitted C, line by line</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b1220;color:#e2e8f0;padding:26px 20px;line-height:1.62}
+.page{max-width:1180px;margin:0 auto}
+h1{font-size:23px}h1 span{color:#22d3ee}
+h2{font-size:17px;margin:34px 0 6px;padding-bottom:6px;border-bottom:1px solid #1e293b;color:#f8fafc}
+h2 .num{color:#22d3ee;font-family:Consolas,monospace;margin-right:8px}
+h3{font-size:13.5px;margin:22px 0 6px;color:#a5f3fc}
+h4{font-size:12.5px;margin:14px 0 5px;color:#fcd34d}
+p,li{font-size:12.6px;color:#cbd5e1}
+p{margin:8px 0}
+ul,ol{margin:6px 0 6px 20px}
+li{margin:3px 0}
+code{font-family:Consolas,'Courier New',monospace;font-size:11.4px;color:#67e8f9}
+pre{background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px 12px;overflow-x:auto;margin:0}
+pre code{font-size:11.1px;color:#dbeafe;line-height:1.5;display:block;white-space:pre}
+figure.code{margin:10px 0 14px;border-left:3px solid #0e7490;border-radius:8px}
+figure.code.src{border-left-color:#6d28d9}
+figure.code.out{border-left-color:#166534}
+figure.code pre{border-top-left-radius:0;border-bottom-left-radius:0}
+figure.code figcaption{font-family:Consolas,monospace;font-size:10.4px;color:#7dd3fc;background:#0f172a;border:1px solid #1e293b;border-top:none;border-radius:0 0 8px 0;padding:4px 10px}
+figure.code.src figcaption{color:#c4b5fd}
+figure.code.out figcaption{color:#86efac}
+figure.code.run{border-left-color:#b45309}
+figure.code.run figcaption{color:#fcd34d}
+.sub{color:#94a3b8;font-size:12.4px;margin:8px 0}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.4px;padding:2px 8px;border-radius:999px}
+.tag.src{background:#3b0764;color:#e9d5ff}.tag.out{background:#064e3b;color:#a7f3d0}
+.tag.warn{background:#78350f;color:#fcd34d}.tag.note{background:#0c4a6e;color:#7dd3fc}
+.note{border:1px dashed #334155;border-radius:10px;padding:11px 14px;margin:14px 0;background:#0f172a}
+.note.warnc{border-color:#b45309;background:#1c1408}
+.note.okc{border-color:#166534;background:#0c1a12}
+.note h4{margin-top:0}
+table{width:100%;border-collapse:collapse;margin:10px 0}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #1e293b;font-size:11.6px;vertical-align:top;color:#cbd5e1}
+th{color:#fcd34d;font-size:10.6px;letter-spacing:.4px;text-transform:uppercase}
+td.mono{font-family:Consolas,monospace;font-size:10.8px;color:#7dd3fc}
+.toc{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:12px 16px;margin:16px 0}
+.toc ol{columns:2;column-gap:26px}
+.toc a{color:#7dd3fc;text-decoration:none;font-size:12px}
+.lede{background:#0f172a;border:1px solid #1e293b;border-left:3px solid #22d3ee;border-radius:8px;padding:12px 15px;margin:14px 0}
+.lede p{margin:6px 0}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.footer{margin-top:34px;padding-top:12px;border-top:1px solid #1e293b;color:#64748b;font-size:11px}
+.step{display:grid;grid-template-columns:104px 1fr;gap:12px;align-items:start;margin:16px 0}
+.step .n{font-family:Consolas,monospace;font-size:11px;color:#7dd3fc;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px 10px;text-align:center}
+.step .n b{display:block;font-size:16px;color:#22d3ee}
+@media(max-width:900px){.cols2,.toc ol{grid-template-columns:1fr;columns:1}.step{grid-template-columns:1fr}}
+@media print{body{background:#fff;color:#111}pre{background:#f8fafc;border-color:#999}pre code{color:#111}.note,.toc,.lede{background:#fff;border-color:#999}td,th{color:#111}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Reading the code generator — <span>source line → emitted C line</span></h1>
+<p class="sub">
+This is the code-generation process <i>as implemented</i>, read out of the generator itself. Each
+generator excerpt below is sliced from the repository at build time; each emitted-C excerpt is the
+verbatim output of that same code for the demo model. Nothing here was rewritten by hand, and the
+document cannot drift from the source unless the build itself is re-run:
+<code>python3 docs/codegen-demo/tools/build_source_doc.py</code>.
+</p>
+
+<div class="lede">
+<p><b>The whole generator in one sentence.</b> <code>smCGenerator.ts</code> is a set of <i>pure render functions</i>
+(<code>renderConfigHeader</code>, <code>renderMappingSource</code>, <code>renderCoreSource</code>,
+<code>renderSafetySource</code>, <code>renderUserLogicSource</code>, <code>renderMcalHeader</code>, …), each of which walks one
+slice of the semantic IR and returns a string; <code>generateCArtifacts()</code> calls them, adds the generated
+test/manifest package, and returns a file list.</p>
+<p><b>The three techniques it uses, and nothing else.</b></p>
+<ol>
+<li><b>Ordering + indexing</b> — <code>orderedStates()</code>/<code>orderedLayers()</code>/<code>buildIndex()</code> turn model IDs
+into small integers once; every other function then refers to a state as <code>SM_ST_X</code> and to a state's function as
+<code>SM_Enter_Deep_7</code>.</li>
+<li><b>One render function per C construct</b> — <code>renderActions()</code>, <code>renderMarkEntered()</code>,
+<code>renderRouteEnabled()</code>, <code>renderEnterStateAlongPath()</code>, <code>renderRestoreStateBody()</code>,
+<code>renderCommitRoute()</code>, <code>renderTransitionPhase()</code>, <code>renderExecuteFunctions()</code>,
+<code>renderExitFunctions()</code>. Each takes IR objects plus an <code>indent</code> string and returns source text.</li>
+<li><b>Emit when the IR says so</b> — a construct exists in the C output <i>iff</i> a condition on the IR is true:
+<code>state.childLayerIds.length &gt; 0</code>, <code>state.activeSlot &gt;= 0</code>, <code>layer.activeSlot !== null</code>,
+<code>route.destinationKind === 'history'</code>, <code>ir.activeSlotCount &gt; 0</code>, <code>ir.ioMappings.length &gt; 0</code>,
+<code>ir.verification.cStandard === 'c90'</code>. This is why a small model produces a small file.</li>
+</ol>
+<p><b>Why the generated C is deterministic.</b> Every iteration order is defined by an explicit sort
+(<code>activityIndex</code>, <code>activeSlot</code>, <code>priority</code>, <code>localeCompare</code>), every name comes from
+<code>toCIdentifier()</code>, and no render function reads the clock, the environment or a random source — the emitted bytes are a
+function of the IR alone.</p>
+</div>
+
+<div class="toc">
+<b style="font-size:12.5px;color:#fcd34d">Contents</b>
+<ol>
+<li><a href="#s1">Identity: model IDs → C symbols</a></li>
+<li><a href="#s2">Structure: hierarchy → tables and indices</a></li>
+<li><a href="#s3">Control flow: states and transitions → functions and <code>if</code>s</a></li>
+<li><a href="#s4">Behavioural hooks: entry, exit, history, safety, IO</a></li>
+<li><a href="#s5">Delivery: how the file package is assembled and verified</a></li>
+<li><a href="#s6">What the generator does <i>not</i> do</a></li>
+</ol>
+</div>
+
+<p class="sub">
+<b>Demo model</b> (committed at <code>docs/codegen-demo/thermal-model.ts</code>, generated artefacts in
+<code>docs/codegen-demo/evidence/</code>): 10 states, 5 layers — one OR root, one OR container child layer owning a
+deep-history junction, one AND parallel layer, and two OR layers inside the parallel regions. Regenerate with
+<code>npx tsx docs/codegen-demo/generate.ts</code>; the run also replays the model on the compiled C:
+<span class="tag out">29/29 interpreter frames ≡ 29/29 compiled-C frames</span>.
+</p>
+
+<h2 id="s1"><span class="num">1</span>Identity: model IDs → C symbols</h2>
+
+<p>Everything downstream depends on this first decision: a state or layer must be addressable by a small integer that is stable for a
+given model and consistent across the four files that reference it. The generator never emits a UUID; it emits names derived from the
+model ID plus an order derived from the IR.</p>
+
+<h3>1.1 The ordering and naming primitives</h3>
+<div class="cols2">
+<div>
+<h4><span class="tag src">generator</span> smCGenerator.ts — ordering</h4>
+<figure class="code src">
+<pre><code>const orderedStates = (ir: SemanticModel): SemanticState[] =&gt;
+  Object.values(ir.states).sort((left, right) =&gt;
+    left.activityIndex - right.activityIndex);
+
+const orderedLayers = (ir: SemanticModel): SemanticLayer[] =&gt;
+  Object.values(ir.layers).sort((left, right) =&gt; {
+    const leftSlot = left.activeSlot ?? Number.MAX_SAFE_INTEGER;
+    const rightSlot = right.activeSlot ?? Number.MAX_SAFE_INTEGER;
+    return leftSlot - rightSlot || left.id.localeCompare(right.id);
+  });
+
+const buildIndex = (ir: SemanticModel): RenderIndex =&gt; {
+  const states = orderedStates(ir);
+  const layers = orderedLayers(ir);
+  return {
+    stateNumber: new Map(states.map((state, index) =&gt; [state.id, index + 1])),
+    layerNumber: new Map(layers.map((layer, index) =&gt; [layer.id, index])),
+  };
+};
+
+const stateNode = (ir: SemanticModel, stateId: string): string =&gt;</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:66–86</figcaption>
+</figure>
+</div>
+<div>
+<h4><span class="tag src">generator</span> smCGenerator.ts — name builders</h4>
+<figure class="code src">
+<pre><code>const stateNode = (ir: SemanticModel, stateId: string): string =&gt;
+  ir.states[stateId].enumName;
+
+const stateIndex = (ir: SemanticModel, stateId: string): string =&gt;
+  `${stateNode(ir, stateId)}_IDX`;
+
+const xbStateFunction = (
+  state: SemanticState,
+  phase: &#x27;Init&#x27; | &#x27;Enter&#x27; | &#x27;Step&#x27;,
+): string =&gt; {
+  const suffix = toCIdentifier(
+    state.enumName.replace(/^SM_ST_/, &#x27;&#x27;),
+  ).toUpperCase();
+  return `SM_XB_${suffix}_${phase}`;
+};
+
+const stateFunction = (
+  index: RenderIndex,
+  prefix: string,
+  stateId: string,
+): string =&gt; `${prefix}_${index.stateNumber.get(stateId)!}`;
+
+const layerFunction = (
+  index: RenderIndex,
+  prefix: string,
+  layerId: string,
+): string =&gt; `${prefix}_${index.layerNumber.get(layerId)!}`;
+
+const layerMacro = (layer: SemanticLayer): string =&gt;
+  `SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`;
+
+const descendantsOfLayer = (</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:86–117</figcaption>
+</figure>
+</div>
+</div>
+
+<p>Five one-line functions carry the whole naming policy:</p>
+<table>
+<tr><th>Generator</th><th>Produces</th><th>Used by</th></tr>
+<tr><td class="mono">orderedStates(ir)</td><td>states sorted by <code>activityIndex</code></td><td>every render function that iterates states (and <code>buildIndex</code>)</td></tr>
+<tr><td class="mono">buildIndex(ir)</td><td><code>stateNumber: id→1..N</code>, <code>layerNumber: id→0..L-1</code></td><td>function names, <code>SM_*_IDX</code> macros, the <code>_IDX</code> used in C array subscripts</td></tr>
+<tr><td class="mono">stateNode(ir,id)</td><td>the enum member, e.g. <code>SM_ST_PWM_LOW</code></td><td>all C expressions that name a state</td></tr>
+<tr><td class="mono">stateIndex(ir,id)</td><td><code>&lt;enum&gt;_IDX</code>, e.g. <code>SM_ST_PWM_LOW_IDX</code></td><td>all <code>state_active[]</code>/<code>state_timers[]</code>/<code>deep_history[][]</code> subscripts</td></tr>
+<tr><td class="mono">stateFunction(index,prefix,id)</td><td><code>SM_Enter_Deep_5</code>, <code>SM_Restore_State_5</code>, <code>SM_Execute_State_5</code></td><td>the call graph — <b>numbered, not named after the state</b>, which is why one state id change renumbers functions but never touches user logic</td></tr>
+</table>
+
+<h3>1.2 Where the IR values come from</h3>
+<div class="cols2">
+<div>
+<h4><span class="tag src">builder</span> smSemanticBuilder.ts — state lowering</h4>
+<figure class="code src">
+<pre><code>  const states: Record&lt;string, SemanticState&gt; = {};
+  for (const stateId of hierarchy.orderedStateIds) {
+    const state = hierarchy.stateById.get(stateId)!;
+    const containingLayer = hierarchy.layerByStateId.get(state.id)!;
+    const parentStateId = hierarchy.parentByStateId.get(state.id) ?? null;
+    states[state.id] = {
+      id: state.id,
+      name: state.name,
+      entrySource: state.entry,
+      duringSource: state.during,
+      exitSource: state.exit,
+      enumName: `SM_ST_${toCIdentifier(state.id).toUpperCase()}`,
+      parentStateId,
+      layerId: containingLayer.id,
+      depth: ancestorsFromSelf(state.id, hierarchy.parentByStateId).length - 1,
+      priority: state.priority,
+      activeSlot: slots.get(containingLayer.id) ?? -1,
+      activityIndex: activityIndexByStateId.get(state.id)!,
+      terminal: state.isTerminalState === true || state.isTerminal === true,
+      ancestorStateIds: ancestorsFromSelf(
+        state.id,
+        hierarchy.parentByStateId,
+      ).slice(1),
+      childLayerIds: [...(hierarchy.childLayerIdsByStateId.get(state.id) ?? [])],
+      internalTransitionIds: [],
+      entryActions: parseActions(state.entry, symbols),
+      duringActions: parseActions(state.during, symbols),
+      exitActions: parseActions(state.exit, symbols),
+      xBridges: null,
+    };
+  }
+
+  const transitionById = new Map(</code></pre>
+<figcaption>src/utils/stateMachine/smSemanticBuilder.ts:395–427</figcaption>
+</figure>
+</div>
+<div>
+<h4><span class="tag out">generated</span> production/sm_config.h</h4>
+<figure class="code out">
+<pre><code>#define SM_TICK_MS 10U
+#define SM_TICK_TOLERANCE_MS 1U
+#define SM_TICK_MIN_MS 9U
+#define SM_TICK_MAX_MS 11U
+#define SM_NUM_STATES 10U
+#define SM_NUM_LAYERS 5U
+#define SM_NUM_ACTIVE_SLOTS 4U
+#define SM_LYR_ROOT_IDX 0U
+#define SM_LYR_HEATER_CHILDREN_IDX 1U
+#define SM_LYR_PWM_CHILDREN_IDX 2U
+#define SM_LYR_FAN_CHILDREN_IDX 3U
+#define SM_LYR_WARMING_REGIONS_IDX 4U
+/* State: Heater | Model ID: heater | C enum: SM_ST_HEATER */
+#define SM_ST_HEATER_IDX 1U
+/* State: Standby | Model ID: standby | C enum: SM_ST_STANDBY */
+#define SM_ST_STANDBY_IDX 2U
+/* State: Warming | Model ID: warming | C enum: SM_ST_WARMING */
+#define SM_ST_WARMING_IDX 3U
+/* State: PWM bank | Model ID: pwm_bank | C enum: SM_ST_PWM_BANK */
+#define SM_ST_PWM_BANK_IDX 4U
+/* State: PWM low | Model ID: pwm_low | C enum: SM_ST_PWM_LOW */
+#define SM_ST_PWM_LOW_IDX 5U
+/* State: PWM high | Model ID: pwm_high | C enum: SM_ST_PWM_HIGH */
+#define SM_ST_PWM_HIGH_IDX 6U
+/* State: Fan bank | Model ID: fan_bank | C enum: SM_ST_FAN_BANK */
+#define SM_ST_FAN_BANK_IDX 7U
+/* State: Fan low | Model ID: fan_low | C enum: SM_ST_FAN_LOW */
+#define SM_ST_FAN_LOW_IDX 8U
+/* State: Fan high | Model ID: fan_high | C enum: SM_ST_FAN_HIGH */
+#define SM_ST_FAN_HIGH_IDX 9U
+/* State: Overheat | Model ID: overheat | C enum: SM_ST_OVERHEAT */
+#define SM_ST_OVERHEAT_IDX 10U
+
+typedef enum {
+    SM_NODE_INVALID = 0,
+    SM_ST_HEATER = 1,
+    SM_ST_STANDBY = 2,
+    SM_ST_WARMING = 3,
+    SM_ST_PWM_BANK = 4,
+    SM_ST_PWM_LOW = 5,
+    SM_ST_PWM_HIGH = 6,
+    SM_ST_FAN_BANK = 7,
+    SM_ST_FAN_LOW = 8,
+    SM_ST_FAN_HIGH = 9,
+    SM_ST_OVERHEAT = 10</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_config.h:12–56</figcaption>
+</figure>
+</div>
+</div>
+
+<p>Read the two sides together: <code>enumName</code> and <code>activityIndex</code> come from the builder, and the header renderer only
+walks <code>states</code>/<code>layers</code> in their sorted order, assigning <code>stateOffset + 1</code> to the enum and
+<code>index.stateNumber</code> to the <code>_IDX</code> macro. Consequences visible in the output:</p>
+<ul>
+<li><b>Zero is reserved.</b> <code>SM_NODE_INVALID = 0</code> and states start at 1, so a zeroed instance means "no state", and
+<code>bool state_active[SM_NUM_STATES + 1U]</code> can be indexed by a raw enum value.</li>
+<li><b>The same number appears twice on purpose</b> — as a macro (<code>#define SM_ST_FAN_LOW_IDX 8U</code>) for compile-time array
+sizing and constant folding, and as an enum member (<code>SM_ST_FAN_LOW = 8</code>) for type-checked comparisons.</li>
+<li><b>Capacity macros are derived, not configured</b>: <code>SM_NUM_STATES</code>, <code>SM_NUM_LAYERS</code> and
+<code>SM_NUM_ACTIVE_SLOTS</code> are <code>states.length</code>, <code>layers.length</code> and <code>ir.activeSlotCount</code>.</li>
+<li><b>The tick window is computed from two model fields</b> by the ternary in <code>renderConfigHeader</code>:
+<code>tolerance = tickToleranceMs &gt; 0 ? tickToleranceMs : max(1, floor(tickMs/10))</code>, giving
+<code>SM_TICK_MIN_MS = tickMs − tolerance</code> and <code>SM_TICK_MAX_MS = tickMs + tolerance</code> (10 ± 1 ms here).</li>
+</ul>
+
+<h3>1.3 Identifiers that must be safe</h3>
+<p>Model IDs are free text (spaces, dashes, unicode, leading digits). Two helpers sanitise them before they reach C:</p>
+<figure class="code src">
+<pre><code>export const toCIdentifier = (value: string): string =&gt; {
+  const normalized = value.replace(/[^A-Za-z0-9_]/g, &#x27;_&#x27;);
+  const prefixed = /^[A-Za-z_]/.test(normalized) ? normalized : `_${normalized}`;
+  return prefixed || &#x27;_&#x27;;
+};
+
+const tokenize = (source: string): Token[] =&gt; {</code></pre>
+<figcaption>src/utils/stateMachine/smExpressions.ts:83–89</figcaption>
+</figure>
+<p><code>toCIdentifier()</code> replaces every non-<code>[A-Za-z0-9_]</code> character with <code>_</code> and prefixes a leading
+digit — this is the function used for state enums, layer macros, function suffixes and trace IDs. Where a <i>globally visible</i>
+identifier is needed (X-Bridges block symbols, integration symbols), the stricter allocator in
+<code>smCIdentifierPolicy.allocateExternalIdentifiers()</code> adds a deterministic SHA-256 suffix truncated to the platform's
+significant-character limit (default 31) so two long names can never collide after truncation. Internal names can collide only in ways
+the validator has already rejected.</p>
+
+<h2 id="s2"><span class="num">2</span>Structure: hierarchy → tables and indices</h2>
+
+<p>The hierarchy exists in the model as <code>parentId</code> strings. In the C output it becomes: one array slot per OR layer, one
+boolean per state, and two constant tables. The allocation rule is a two-line predicate in the builder — and its
+<code>else</code> branch is meaningful (AND layers and empty layers get <code>null</code>, i.e. no RAM).</p>
+
+<div class="cols2">
+<div>
+<h4><span class="tag src">builder</span> smSemanticBuilder.ts — slot allocation</h4>
+<figure class="code src">
+<pre><code>const allocateActiveSlots = (
+  hierarchy: HierarchyIndex,
+): Map&lt;string, number | null&gt; =&gt; {
+  const slots = new Map&lt;string, number | null&gt;();
+  let nextSlot = 0;
+  for (const layerId of hierarchy.orderedLayerIds) {
+    const layer = hierarchy.layerById.get(layerId)!;
+    if (layer.decomposition === &#x27;OR&#x27; &amp;&amp; layer.stateIds.length &gt; 0) {
+      slots.set(layerId, nextSlot);
+      nextSlot += 1;
+    } else {
+      slots.set(layerId, null);
+    }
+  }
+  return slots;
+};
+
+const ancestorsFromSelf = (</code></pre>
+<figcaption>src/utils/stateMachine/smSemanticBuilder.ts:114–131</figcaption>
+</figure>
+</div>
+<div>
+<h4><span class="tag out">generated</span> production/sm_mapping.c</h4>
+<figure class="code out">
+<pre><code>const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {
+    [0] = 0U,
+    [SM_ST_HEATER_IDX] = SM_LYR_ROOT_IDX,
+    [SM_ST_STANDBY_IDX] = SM_LYR_HEATER_CHILDREN_IDX,
+    [SM_ST_WARMING_IDX] = SM_LYR_HEATER_CHILDREN_IDX,
+    [SM_ST_PWM_BANK_IDX] = SM_LYR_WARMING_REGIONS_IDX,
+    [SM_ST_PWM_LOW_IDX] = SM_LYR_PWM_CHILDREN_IDX,
+    [SM_ST_PWM_HIGH_IDX] = SM_LYR_PWM_CHILDREN_IDX,
+    [SM_ST_FAN_BANK_IDX] = SM_LYR_WARMING_REGIONS_IDX,
+    [SM_ST_FAN_LOW_IDX] = SM_LYR_FAN_CHILDREN_IDX,
+    [SM_ST_FAN_HIGH_IDX] = SM_LYR_FAN_CHILDREN_IDX,
+    [SM_ST_OVERHEAT_IDX] = SM_LYR_ROOT_IDX,
+};
+
+const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
+    [0] = -1,
+    [SM_ST_HEATER_IDX] = 0,
+    [SM_ST_STANDBY_IDX] = 1,
+    [SM_ST_WARMING_IDX] = 1,
+    [SM_ST_PWM_BANK_IDX] = -1,
+    [SM_ST_PWM_LOW_IDX] = 2,
+    [SM_ST_PWM_HIGH_IDX] = 2,
+    [SM_ST_FAN_BANK_IDX] = -1,
+    [SM_ST_FAN_LOW_IDX] = 3,
+    [SM_ST_FAN_HIGH_IDX] = 3,
+    [SM_ST_OVERHEAT_IDX] = 0,
+};
+
+const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
+    [SM_LYR_HEATER_CHILDREN_IDX] = SM_ST_HEATER,
+    [SM_LYR_PWM_CHILDREN_IDX] = SM_ST_PWM_BANK,
+    [SM_LYR_FAN_CHILDREN_IDX] = SM_ST_FAN_BANK,
+    [SM_LYR_WARMING_REGIONS_IDX] = SM_ST_WARMING,
+};
+
+const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_mapping.c:17–53</figcaption>
+</figure>
+</div>
+</div>
+
+<p>Reading the table pair: <code>SM_State_Parent_Layer_Map</code> answers "which layer owns this state" (used by the mapping
+validator), <code>SM_State_Active_Slot_Map</code> answers "which <code>active_states[]</code> word tracks it" (<code>-1</code> = none),
+<code>SM_Layer_Parent_State_Map</code> answers "which state contains this layer" (used by the consistency checker to decide whether a
+container is active), and <code>SM_Layer_Active_Slot_Map</code> is <code>-1</code> exactly for the AND layer. Four tables, one
+question each — no runtime graph traversal anywhere.</p>
+
+<div class="note">
+<h4>The slot test is also a RAM budget</h4>
+<p>Instance RAM is <code>2 × SM_NUM_ACTIVE_SLOTS × sizeof(SM_Node_t)</code> for the active/history words, <code>SM_NUM_STATES + 1</code>
+bools, <code>(SM_NUM_STATES + 1) × 4</code> bytes of timers and <code>SM_NUM_LAYERS × (SM_NUM_STATES + 1)</code> bytes of deep-history
+bits. For this model that is 16 + 16 + 11 + 44 + 55 bytes of machine state on top of <code>SM_Data_t</code> (32 bytes) →
+<code>sizeof(ADIA_Instance_t) = 184</code> bytes on the host ABI.</p>
+</div>
+
+<p>Layers are also where <b>default entry</b> is decided, at generation time: the builder picks the first autostart child, else the
+first autostart junction, and the renderer then hard-codes that decision into a single call.</p>
+<figure class="code src">
+<pre><code>const renderEnterFunctions = (
+  ir: SemanticModel,
+  index: RenderIndex,
+): string =&gt; {
+  const stateFunctions = orderedStates(ir).map((state) =&gt; lines(
+    `static void ${stateFunction(index, &#x27;SM_Enter_Deep&#x27;, state.id)}(ADIA_Instance_t *instance)`,
+    &#x27;{&#x27;,
+    renderMarkEntered(ir, state.id, &#x27;    &#x27;),
+    ...state.childLayerIds.map((layerId) =&gt;
+      `    ${layerFunction(index, &#x27;SM_Enter_Layer_Default&#x27;, layerId)}(instance);`),
+    &#x27;}&#x27;,
+    &#x27;&#x27;,
+    `static void ${stateFunction(index, &#x27;SM_Restore_State&#x27;, state.id)}(ADIA_Instance_t *instance, uint32_t snapshot_layer)`,
+    &#x27;{&#x27;,
+    renderRestoreStateBody(ir, index, state.id).trimEnd(),
+    &#x27;}&#x27;,
+  )).join(&#x27;\n&#x27;);
+
+  const layerFunctions = orderedLayers(ir).map((layer) =&gt; {
+    const body = layer.decomposition === &#x27;AND&#x27;
+      ? layer.children.map((childId) =&gt;
+        `    ${stateFunction(index, &#x27;SM_Enter_Deep&#x27;, childId)}(instance);`)
+        .join(&#x27;\n&#x27;)
+      : layer.defaultEntryId === null
+        ? &#x27;    (void)instance;&#x27;
+        : layer.defaultEntryKind === &#x27;state&#x27;
+          ? `    ${stateFunction(index, &#x27;SM_Enter_Deep&#x27;, layer.defaultEntryId)}(instance);`
+          : renderDefaultJunction(ir, index, layer.defaultEntryId);
+    return lines(
+      `static void ${layerFunction(index, &#x27;SM_Enter_Layer_Default&#x27;, layer.id)}(ADIA_Instance_t *instance)`,
+      &#x27;{&#x27;,
+      body,
+      &#x27;}&#x27;,
+    );
+  }).join(&#x27;\n&#x27;);
+  return `${layerFunctions}\n${stateFunctions}`;
+};
+
+const renderExitFunctions = (</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:410–448</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>static void SM_Enter_Layer_Default_1(ADIA_Instance_t *instance)
+{
+    SM_Enter_Deep_2(instance);
+}
+
+static void SM_Enter_Layer_Default_2(ADIA_Instance_t *instance)
+{
+    SM_Enter_Deep_5(instance);
+}
+</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:319–328</figcaption>
+</figure>
+
+<p>Two layers, three lines of C: the OR layer with two children becomes one call to the chosen default, and the AND layer becomes
+<i>both</i> regions in declaration order. There is no loop and no lookup — the decision that took a priority sort in the builder is now
+a straight-line statement.</p>
+
+<h2 id="s3"><span class="num">3</span>Control flow: states and transitions → functions and <code>if</code>s</h2>
+
+<p>This section is the heart of the generator. Three things produce the entire tick path:
+<code>renderTransitionPhase()</code> (guard → action), <code>renderExecuteFunctions()</code> (layer dispatch → state body), and the
+public-API block inside <code>renderCoreSource()</code>, which emits <code>SM_Step</code> as a literal string array with exactly two
+interpolations. Each is a loop — or a straight list — over IR-derived data, appending source text.</p>
+
+<h3>3.1 A transition: a guard, a path, a commit</h3>
+
+<p>The builder classified every authored transition into one of four kinds and expanded it into one or more <i>routes</i>; the moment
+the runtime takes the transition, each route contributes its exit list, entry list, an LCA (least common ancestor) and, for history
+targets, a restore instead of a default entry. The emitter turns a route into statements <b>in this order</b>: record history on the
+states being left → deactivate them → mark the target active → assign the active slot → call the entry chain.</p>
+
+<div class="cols2">
+<div>
+<h4><span class="tag src">generator</span> smCGenerator.ts — commit route</h4>
+<figure class="code src">
+<pre><code>const renderCommitRoute = (
+  ir: SemanticModel,
+  index: RenderIndex,
+  transition: SemanticTransition,
+  route: SemanticTransitionRoute,
+  indent: string,
+): string =&gt; {
+  const statements: string[] = [];
+  if (transition.kind !== &#x27;internal-action&#x27;) {
+    const exitedActiveSlots = new Set&lt;number&gt;();
+    for (const stateId of topmostExitStateIds(ir, route.exitStateIds)) {
+      statements.push(
+        `${indent}SM_Exit_State(instance, ${stateNode(ir, stateId)}, true);`,
+      );
+      const exitedState = ir.states[stateId];
+      if (exitedState.activeSlot &gt;= 0) {
+        exitedActiveSlots.add(exitedState.activeSlot);
+      }
+      for (const childLayerId of exitedState.childLayerIds) {
+        const childLayer = ir.layers[childLayerId];
+        if (childLayer.activeSlot !== null) {
+          exitedActiveSlots.add(childLayer.activeSlot);
+        }
+      }
+    }
+    for (const stateId of route.entryStateIds) {
+      const state = ir.states[stateId];
+      if (state.activeSlot &lt; 0) continue;
+      if (exitedActiveSlots.has(state.activeSlot)) continue;
+      statements.push(lines(
+        `${indent}if ((instance-&gt;active_states[${state.activeSlot}U] != SM_NODE_INVALID) &amp;&amp;`,
+        `${indent}    (instance-&gt;active_states[${state.activeSlot}U] != ${stateNode(ir, stateId)})) {`,
+        `${indent}    SM_Exit_State(instance, instance-&gt;active_states[${state.activeSlot}U], true);`,
+        `${indent}}`,
+      ).trimEnd());
+    }
+  }
+  for (const transitionId of route.transitionIds) {
+    const actionCode = renderActions(
+      ir,
+      ir.transitions[transitionId].actions,
+      `transition:${transitionId}`,
+      indent,
+    );
+    if (actionCode) statements.push(actionCode);
+  }
+  if (transition.kind !== &#x27;internal-action&#x27;) {
+    if (route.destinationKind === &#x27;history&#x27; &amp;&amp; route.destinationJunctionId) {
+      const junction = ir.junctions[route.destinationJunctionId];
+      const historyLayer = ir.layers[junction.layerId];
+      if (route.entryStateIds.length &gt; 0) {
+        statements.push(renderEnterStateAlongPath(
+          ir,
+          index,
+          route.entryStateIds,
+          0,
+          historyLayer.id,
+          indent,
+        ));
+      } else if (historyLayer.parentStateId !== null) {
+        statements.push(
+          `${indent}${layerFunction(index, &#x27;SM_Exit_Layer_No_History&#x27;, historyLayer.id)}(instance);`,
+        );
+      }
+      statements.push(renderRestoreLayer(
+        ir,
+        index,
+        historyLayer.id,
+        junction.kind === &#x27;deep-history&#x27;,
+        indent,
+      ));
+    } else if (route.entryStateIds.length &gt; 0) {
+      statements.push(renderEnterStateAlongPath(
+        ir,
+        index,
+        route.entryStateIds,
+        0,
+        null,
+        indent,
+      ));
+    } else if (route.destinationStateId !== null) {
+      const destination = ir.states[route.destinationStateId];
+      for (const layerId of destination.childLayerIds) {
+        statements.push(lines(
+          `${indent}if (instance-&gt;state_active[${stateIndex(ir, destination.id)}]) {`,
+          `${indent}    ${layerFunction(index, &#x27;SM_Enter_Layer_Default&#x27;, layerId)}(instance);`,
+          `${indent}}`,
+        ).trimEnd());
+      }
+    }
+  }
+  return statements.join(&#x27;\n&#x27;);
+};
+
+const renderTransitionPhase = (</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:582–676</figcaption>
+</figure>
+</div>
+<div>
+<h4><span class="tag out">generated</span> production/sm_core.c — the whole transition</h4>
+<figure class="code out">
+<pre><code>    /* TRACE-BEGIN: traceId=TRACE-TRANS-PWM_STEP_UP symbol=sm_trans_pwm_step_up */
+    if (instance-&gt;state_timers[SM_ST_PWM_LOW_IDX] &gt;= 200U) {
+        SM_Exit_State(instance, SM_ST_PWM_LOW, true);
+        instance-&gt;state_active[SM_ST_PWM_HIGH_IDX] = true;
+        instance-&gt;state_timers[SM_ST_PWM_HIGH_IDX] = 0U;
+        instance-&gt;active_states[2U] = SM_ST_PWM_HIGH;
+        SM_ST_PWM_HIGH_Entry(instance);
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-PWM_STEP_UP */</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:682–691</figcaption>
+</figure>
+</div>
+</div>
+
+<p>Seven lines of generated C, and every one of them is accounted for by the render functions above:</p>
+<table>
+<tr><th>Emitted C</th><th>Generated by</th><th>Why it is there</th></tr>
+<tr><td class="mono">if (state_timers[SM_ST_PWM_LOW_IDX] &gt;= 200U)</td><td><code>renderTransitionPhase</code> guard</td><td>the transition is <code>afterTicks: 20</code> with <code>tickMs: 10</code> → <code>temporalThresholdMs = 200</code>; there is <b>no</b> <code>elapsed</code> variable at runtime — the timer <i>is</i> the elapsed time</td></tr>
+<tr><td class="mono">SM_Exit_State(instance, SM_ST_PWM_LOW, true)</td><td><code>renderCommitRoute</code> → <code>topmostExitStateIds()</code></td><td><code>true</code> = "also record the containing layer's history" (the second argument is the history-recording switch, not a debug flag)</td></tr>
+<tr><td class="mono">state_active[SM_ST_PWM_HIGH_IDX] = true;</td><td><code>renderMarkEntered</code> via <code>renderEnterStateAlongPath</code></td><td>one boolean per state makes AND regions look the same as OR paths</td></tr>
+<tr><td class="mono">state_timers[...] = 0U;</td><td>same</td><td>entering a state resets its timer, so <code>afterTicks</code> is measured from entry, not from boot</td></tr>
+<tr><td class="mono">active_states[2U] = SM_ST_PWM_HIGH;</td><td>same, guarded by <code>state.activeSlot &gt;= 0</code></td><td>slot 2 is the <code>pwm_children</code> OR layer — the <code>switch</code> in §3.2 dispatches on it</td></tr>
+<tr><td class="mono">SM_ST_PWM_HIGH_Entry(instance);</td><td>user-logic call, generated by <code>renderUserLogicSource</code></td><td>the generated core calls a <i>separate</i> file so hand-written entry/exit code survives regeneration</td></tr>
+<tr><td class="mono">return true;</td><td><code>renderTransitionPhase</code></td><td>propagates "a transition fired" up the layer chain so ancestors stop executing their children</td></tr>
+</table>
+
+<h4>History routes take the other branch</h4>
+<figure class="code src">
+<pre><code>const renderRestoreStateBody = (
+  ir: SemanticModel,
+  index: RenderIndex,
+  stateId: string,
+): string =&gt; {
+  const state = ir.states[stateId];
+  const childCode = state.childLayerIds.map((layerId) =&gt; {
+    const layer = ir.layers[layerId];
+    const saved = layer.children
+      .map((childId) =&gt;
+        `instance-&gt;deep_history[snapshot_layer][${stateIndex(ir, childId)}]`)
+      .join(&#x27; || &#x27;) || &#x27;false&#x27;;
+    if (layer.decomposition === &#x27;OR&#x27;) {
+      const choices = layer.children.map((childId, childIndex) =&gt; lines(
+        `        ${childIndex === 0 ? &#x27;if&#x27; : &#x27;else if&#x27;} (instance-&gt;deep_history[snapshot_layer][${stateIndex(ir, childId)}]) {`,
+        `            ${stateFunction(index, &#x27;SM_Restore_State&#x27;, childId)}(instance, snapshot_layer);`,
+        &#x27;        }&#x27;,
+      ).trimEnd()).join(&#x27; &#x27;);
+      return lines(
+        `    if (${saved}) {`,
+        choices,
+        &#x27;    } else {&#x27;,
+        `        ${layerFunction(index, &#x27;SM_Enter_Layer_Default&#x27;, layerId)}(instance);`,
+        &#x27;    }&#x27;,
+      ).trimEnd();
+    }
+    return layer.children.map((childId) =&gt; lines(
+      `    if (instance-&gt;deep_history[snapshot_layer][${stateIndex(ir, childId)}]) {`,
+      `        ${stateFunction(index, &#x27;SM_Restore_State&#x27;, childId)}(instance, snapshot_layer);`,
+      &#x27;    } else {&#x27;,
+      `        ${stateFunction(index, &#x27;SM_Enter_Deep&#x27;, childId)}(instance);`,
+      &#x27;    }&#x27;,
+    ).trimEnd()).join(&#x27;\n&#x27;);
+  }).join(&#x27;\n&#x27;);
+  return lines(
+    &#x27;    (void)snapshot_layer;&#x27;,
+    renderMarkEntered(ir, stateId, &#x27;    &#x27;),
+    childCode || null,
+  );
+};
+
+const collectDefaultJunctionPaths = (
+  ir: SemanticModel,
+  junctionId: string,
+  visited = new Set&lt;string&gt;(),
+): string[][] =&gt; {
+  if (visited.has(junctionId)) return [];
+  const nextVisited = new Set(visited);
+  nextVisited.add(junctionId);
+  const transitions = [...(ir.transitionsBySource[junctionId] ?? [])]
+    .map((id) =&gt; ir.transitions[id])
+    .sort((left, right) =&gt;
+      left.priority - right.priority || left.id.localeCompare(right.id));
+  return transitions.flatMap((transition) =&gt; {
+    if (transition.destinationKind === &#x27;state&#x27;) return [[transition.id]];
+    const destination = ir.junctions[transition.destinationStateId];
+    if (destination?.kind !== &#x27;junction&#x27;) return [];
+    return collectDefaultJunctionPaths(
+      ir,
+      transition.destinationStateId,
+      nextVisited,
+    ).map((suffix) =&gt; [transition.id, ...suffix]);
+  });
+};
+
+const renderDefaultJunction = (</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:312–377</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>    /* TRACE-BEGIN: traceId=TRACE-TRANS-RESUME_HEATER symbol=sm_trans_resume_heater */
+    if (instance-&gt;data.stop_cmd) {
+        SM_Exit_State(instance, SM_ST_OVERHEAT, true);
+        instance-&gt;state_active[SM_ST_HEATER_IDX] = true;
+        instance-&gt;state_timers[SM_ST_HEATER_IDX] = 0U;
+        instance-&gt;active_states[0U] = SM_ST_HEATER;
+        SM_ST_HEATER_Entry(instance);
+        if (instance-&gt;deep_history[SM_LYR_HEATER_CHILDREN_IDX][SM_ST_STANDBY_IDX]) {
+            SM_Restore_State_2(instance, SM_LYR_HEATER_CHILDREN_IDX);
+        }         else if (instance-&gt;deep_history[SM_LYR_HEATER_CHILDREN_IDX][SM_ST_WARMING_IDX]) {
+            SM_Restore_State_3(instance, SM_LYR_HEATER_CHILDREN_IDX);
+        }
+        else {
+            SM_Enter_Layer_Default_1(instance);
+        }
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-RESUME_HEATER */</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:747–764</figcaption>
+</figure>
+
+<p>Two things to notice in the emitted code, both visible in the source above. First, the restore chain is emitted
+<i>inline in the transition</i> (lines 754–761), not inside <code>SM_Restore_State_3</code> — the transition needs the restore
+<i>in context of the entry it just performed</i>. Second, the generated indentation of the <code>} else {</code> is uneven
+(<code>}         else if</code>) because <code>lines()</code> joins a conditional branch that has its own indent with a literal
+<code>else</code> string; it is cosmetic, and the same shape appears in <code>SM_Restore_State_4</code> above. The third observable
+detail is that <code>depth === 'deep'</code> produces a <i>bitmask test per candidate child</i> in declaration order, so the deepest
+layer actually occupied at exit wins; a shallow-history layer would instead read a single <code>history_states[slot]</code> word.</p>
+
+<h3>3.2 Dispatch: which state runs this tick</h3>
+<figure class="code src">
+<pre><code>const renderExecuteFunctions = (
+  ir: SemanticModel,
+  index: RenderIndex,
+): string =&gt; {
+  const stateFunctions = orderedStates(ir).map((state) =&gt; {
+    if (state.terminal) {
+      return lines(
+        `static bool ${stateFunction(index, &#x27;SM_Execute_State&#x27;, state.id)}(ADIA_Instance_t *instance)`,
+        &#x27;{&#x27;,
+        &#x27;    (void)instance;&#x27;,
+        &#x27;    return false;&#x27;,
+        &#x27;}&#x27;,
+      );
+    }
+    const childSteps = state.childLayerIds.map((layerId) =&gt; lines(
+      `    transitioned = ${layerFunction(index, &#x27;SM_Execute_Layer&#x27;, layerId)}(instance) || transitioned;`,
+      `    if (!instance-&gt;state_active[${stateIndex(ir, state.id)}]) {`,
+      &#x27;        return transitioned;&#x27;,
+      &#x27;    }&#x27;,
+    ).trimEnd()).join(&#x27;\n&#x27;);
+    const stateTraceId = `TRACE-STATE-${toCIdentifier(state.id).toUpperCase()}`;
+    return lines(
+      `/* TRACE-BEGIN: traceId=${stateTraceId} symbol=SM_ST_${toCIdentifier(state.id).toUpperCase()} */`,
+      `static bool ${stateFunction(index, &#x27;SM_Execute_State&#x27;, state.id)}(ADIA_Instance_t *instance)`,
+      &#x27;{&#x27;,
+      state.childLayerIds.length &gt; 0 ? &#x27;    bool transitioned = false;&#x27; : null,
+      renderTransitionPhase(ir, index, state.id, &#x27;outer&#x27;) || null,
+      `    ${stateNode(ir, state.id)}_During(instance);`,
+      state.xBridges === null
+        ? null
+        : lines(
+          `    ${xbStateFunction(state, &#x27;Step&#x27;)}(instance);`,
+          &#x27;    if (instance-&gt;error_status != SM_ERR_NONE) {&#x27;,
+          &#x27;        return false;&#x27;,
+          &#x27;    }&#x27;,
+          `    SM_TraceAction(instance, ${renderCStringLiteral(
+            `xbridges:${stateActionLabel(state)}`,
+          )});`,
+        ).trimEnd(),
+      renderTransitionPhase(ir, index, state.id, &#x27;inner&#x27;) || null,
+      childSteps || null,
+      state.childLayerIds.length &gt; 0
+        ? &#x27;    return transitioned;&#x27;
+        : &#x27;    return false;&#x27;,
+      &#x27;}&#x27;,
+      `/* TRACE-END: traceId=${stateTraceId} */`,
+    );
+  }).join(&#x27;\n&#x27;);
+
+  const layerFunctions = orderedLayers(ir).map((layer) =&gt; {
+    if (layer.decomposition === &#x27;OR&#x27; &amp;&amp; layer.activeSlot !== null) {
+      const choices = layer.children.map((childId) =&gt; lines(
+        `        case ${stateNode(ir, childId)}:`,
+        `            return ${stateFunction(index, &#x27;SM_Execute_State&#x27;, childId)}(instance);`,
+      ).trimEnd()).join(&#x27;\n&#x27;);
+      return lines(
+        `static bool ${layerFunction(index, &#x27;SM_Execute_Layer&#x27;, layer.id)}(ADIA_Instance_t *instance)`,
+        &#x27;{&#x27;,
+        `    switch (instance-&gt;active_states[${layer.activeSlot}U]) {`,
+        choices,
+        &#x27;        default: return false;&#x27;,
+        &#x27;    }&#x27;,
+        &#x27;}&#x27;,
+      );
+    }
+    const children = layer.children.map((childId) =&gt; lines(
+      `    if (instance-&gt;state_active[${stateIndex(ir, childId)}]) {`,
+      `        transitioned = ${stateFunction(index, &#x27;SM_Execute_State&#x27;, childId)}(instance) || transitioned;`,
+      layer.parentStateId === null
+        ? null
+        : lines(
+          `        if (!instance-&gt;state_active[${stateIndex(ir, layer.parentStateId)}]) {`,
+          &#x27;            return transitioned;&#x27;,
+          &#x27;        }&#x27;,
+        ).trimEnd(),
+      &#x27;    }&#x27;,
+    ).trimEnd()).join(&#x27;\n&#x27;);
+    return lines(
+      `static bool ${layerFunction(index, &#x27;SM_Execute_Layer&#x27;, layer.id)}(ADIA_Instance_t *instance)`,
+      &#x27;{&#x27;,
+      &#x27;    bool transitioned = false;&#x27;,
+      layer.children.length === 0 ? &#x27;    (void)instance;&#x27; : null,
+      children,
+      &#x27;    return transitioned;&#x27;,
+      &#x27;}&#x27;,
+    );
+  }).join(&#x27;\n&#x27;);
+  return `${layerFunctions}\n${stateFunctions}`;
+};
+
+const renderNoHistoryExitWrappers = (</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:725–815</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
+{
+    switch (instance-&gt;active_states[0U]) {
+        case SM_ST_HEATER:
+            return SM_Execute_State_1(instance);
+        case SM_ST_OVERHEAT:
+            return SM_Execute_State_10(instance);
+        default: return false;
+    }
+}
+
+static bool SM_Execute_Layer_1(ADIA_Instance_t *instance)
+{
+    switch (instance-&gt;active_states[1U]) {
+        case SM_ST_STANDBY:
+            return SM_Execute_State_2(instance);
+        case SM_ST_WARMING:
+            return SM_Execute_State_3(instance);
+        default: return false;
+    }
+}
+
+static bool SM_Execute_Layer_2(ADIA_Instance_t *instance)
+{
+    switch (instance-&gt;active_states[2U]) {
+        case SM_ST_PWM_LOW:
+            return SM_Execute_State_5(instance);
+        case SM_ST_PWM_HIGH:
+            return SM_Execute_State_6(instance);
+        default: return false;
+    }
+}
+
+static bool SM_Execute_Layer_3(ADIA_Instance_t *instance)
+{
+    switch (instance-&gt;active_states[3U]) {
+        case SM_ST_FAN_LOW:
+            return SM_Execute_State_8(instance);
+        case SM_ST_FAN_HIGH:
+            return SM_Execute_State_9(instance);
+        default: return false;
+    }
+}
+</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:547–590</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>static bool SM_Execute_Layer_4(ADIA_Instance_t *instance)
+{
+    bool transitioned = false;
+    if (instance-&gt;state_active[SM_ST_PWM_BANK_IDX]) {
+        transitioned = SM_Execute_State_4(instance) || transitioned;
+        if (!instance-&gt;state_active[SM_ST_WARMING_IDX]) {
+            return transitioned;
+        }
+    }
+    if (instance-&gt;state_active[SM_ST_FAN_BANK_IDX]) {
+        transitioned = SM_Execute_State_7(instance) || transitioned;
+        if (!instance-&gt;state_active[SM_ST_WARMING_IDX]) {
+            return transitioned;
+        }
+    }
+    return transitioned;
+}
+</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:591–608</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>/* TRACE-BEGIN: traceId=TRACE-STATE-PWM_LOW symbol=SM_ST_PWM_LOW */
+static bool SM_Execute_State_5(ADIA_Instance_t *instance)
+{
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-PWM_STEP_UP symbol=sm_trans_pwm_step_up */
+    if (instance-&gt;state_timers[SM_ST_PWM_LOW_IDX] &gt;= 200U) {
+        SM_Exit_State(instance, SM_ST_PWM_LOW, true);
+        instance-&gt;state_active[SM_ST_PWM_HIGH_IDX] = true;
+        instance-&gt;state_timers[SM_ST_PWM_HIGH_IDX] = 0U;
+        instance-&gt;active_states[2U] = SM_ST_PWM_HIGH;
+        SM_ST_PWM_HIGH_Entry(instance);
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-PWM_STEP_UP */
+    SM_ST_PWM_LOW_During(instance);
+    return false;
+}
+/* TRACE-END: traceId=TRACE-STATE-PWM_LOW */</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:679–695</figcaption>
+</figure>
+
+<p>The generated control flow is a two-level dispatch and nothing else:</p>
+<ol>
+<li><b>OR layer → <code>switch</code> on the active slot.</b> Exactly one child is active, so the runtime cost is one switch — no
+candidate scan, no priority loop. The <code>default: return false;</code> arm makes a corrupted slot a no-op rather than a crash.</li>
+<li><b>AND layer → literal <code>if</code>s, one per region, in declaration order.</b> No slot exists, so every region is tested via
+<code>state_active[]</code>, and after each region runs, the container is re-checked
+(<code>if (!instance-&gt;state_active[...]) { return transitioned; }</code>) — that is how a transition taken inside region 1 stops
+region 2 of the <i>same</i> parent from executing in that tick. The re-check is emitted only when
+<code>layer.parentStateId !== null</code>.</li>
+<li><b>State body:</b> transition phase (outer) → <code>_During()</code> → transition phase (inner) → child layers → return. Outer
+before <code>During</code> and inner after is the ordering that makes an inner transition observable in the same tick while an outer
+transition still sees the pre-transition output.</li>
+<li><b>Terminal states emit a stub.</b> <code>state.terminal</code> — set by the builder from the model's own <code>isTerminalState</code>
+flag, not inferred — short-circuits the whole body into <code>(void)instance; return false;</code>: the state can be entered and its
+entry/exit hooks run, but it can never fire a transition out of itself. This model declares no terminal state, so every state above
+gets a full body; a model that does declare one loses that state's <code>_During()</code> call entirely, which is the intended
+"final state" semantics and a regular source of surprise.</li>
+</ol>
+
+<h3>3.3 The tick: where all of that gets called</h3>
+<figure class="code src">
+<pre><code>    &#x27;SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)&#x27;,
+    &#x27;{&#x27;,
+    &#x27;    uint32_t state_index;&#x27;,
+    &#x27;    if (instance == NULL) {&#x27;,
+    &#x27;        return SM_ERR_NULL_INSTANCE;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    if (instance-&gt;fault_latched || (instance-&gt;error_status != SM_ERR_NONE)) {&#x27;,
+    &#x27;        SM_Enter_Fault(instance);&#x27;,
+    &#x27;        return instance-&gt;error_status != SM_ERR_NONE ? instance-&gt;error_status : SM_ERR_SAFETY_VIOLATION;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    if ((delta_ms &lt; SM_TICK_MIN_MS) || (delta_ms &gt; SM_TICK_MAX_MS)) {&#x27;,
+    &#x27;        instance-&gt;error_status = SM_ERR_TIMING;&#x27;,
+    &#x27;        SM_Enter_Fault(instance);&#x27;,
+    &#x27;        return instance-&gt;error_status;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    instance-&gt;error_status = SM_Validate_State_Consistency(instance);&#x27;,
+    &#x27;    if (instance-&gt;error_status != SM_ERR_NONE) {&#x27;,
+    &#x27;        SM_Enter_Fault(instance);&#x27;,
+    &#x27;        return instance-&gt;error_status;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    /* delta_ms is observed physical jitter; SM_TICK_MS is behavioral logical time. */&#x27;,
+    &#x27;    for (state_index = 1U; state_index &lt;= SM_NUM_STATES; ++state_index) {&#x27;,
+    &#x27;        if (instance-&gt;state_active[state_index]) {&#x27;,
+    &#x27;            if (SM_TICK_MS &gt; (UINT32_MAX - instance-&gt;state_timers[state_index])) {&#x27;,
+    &#x27;                instance-&gt;state_timers[state_index] = UINT32_MAX;&#x27;,
+    &#x27;            } else {&#x27;,
+    &#x27;                instance-&gt;state_timers[state_index] += SM_TICK_MS;&#x27;,
+    &#x27;            }&#x27;,
+    &#x27;        }&#x27;,
+    &#x27;    }&#x27;,
+    `    (void)${layerFunction(index, &#x27;SM_Execute_Layer&#x27;, rootLayer.id)}(instance);`,
+    &#x27;    if (instance-&gt;error_status != SM_ERR_NONE) {&#x27;,
+    &#x27;        SM_Enter_Fault(instance);&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    return instance-&gt;error_status;&#x27;,
+    &#x27;}&#x27;,
+    &#x27;&#x27;,
+    &#x27;SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)&#x27;,</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1614–1651</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
+{
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if (instance-&gt;fault_latched || (instance-&gt;error_status != SM_ERR_NONE)) {
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status != SM_ERR_NONE ? instance-&gt;error_status : SM_ERR_SAFETY_VIOLATION;
+    }
+    if ((delta_ms &lt; SM_TICK_MIN_MS) || (delta_ms &gt; SM_TICK_MAX_MS)) {
+        instance-&gt;error_status = SM_ERR_TIMING;
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status;
+    }
+    instance-&gt;error_status = SM_Validate_State_Consistency(instance);
+    if (instance-&gt;error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance-&gt;error_status;
+    }
+    /* delta_ms is observed physical jitter; SM_TICK_MS is behavioral logical time. */
+    for (state_index = 1U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        if (instance-&gt;state_active[state_index]) {
+            if (SM_TICK_MS &gt; (UINT32_MAX - instance-&gt;state_timers[state_index])) {
+                instance-&gt;state_timers[state_index] = UINT32_MAX;
+            } else {
+                instance-&gt;state_timers[state_index] += SM_TICK_MS;
+            }
+        }
+    }
+    (void)SM_Execute_Layer_0(instance);
+    if (instance-&gt;error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
+    return instance-&gt;error_status;
+}
+
+SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:904–941</figcaption>
+</figure>
+
+<p>Read the emitted <code>SM_Step</code> against the render function: the guard ladder is emitted in a fixed order
+(null instance → fault latch → tick window → consistency), then the timer loop, then the execute call. The loop is emitted with a
+<b>saturating add</b> rather than <code>+=</code> (an embedded run of centuries must not wrap <code>uint32_t</code>), advancement is
+<code>SM_TICK_MS</code> and <i>not</i> <code>delta_ms</code>, and <code>delta_ms</code> is only ever checked against the window. That last
+point is the single most consequential semantic in the file: <b>logical time is quantised to the tick period</b>, so a non-conforming
+<code>delta_ms</code> is a fault, not a scaled step.</p>
+<p>The same fault-first pattern is repeated in <code>SM_WriteOutputs</code> so that outputs can never be written from a faulted
+instance; here it reduces to <code>(void)instance;</code> because this model declares no output mappings — the IO statements are
+generated per mapping in <code>renderCoreSource()</code> itself (<a href="#s4">§4.4</a>), so an empty mapping list produces an
+empty function body plus the fault checks.</p>
+
+<h2 id="s4"><span class="num">4</span>Behavioural hooks: entry, exit, history, safety, IO</h2>
+
+<p>The generator deliberately splits the model into two kinds of C: the <b>kernel</b> (<code>sm_core.c</code>, <code>sm_safety.c</code>,
+<code>sm_mapping.c</code>) which is regenerated wholesale, and the <b>hands</b> (<code>sm_user_logic.c</code>) which the kernel calls but
+the generator only scaffolds. This section follows the hook render functions.</p>
+
+<h3>4.1 Entry / during / exit: one function per (state, phase)</h3>
+<figure class="code src">
+<pre><code>export const renderUserLogicSource = (ir: SemanticModel): string =&gt; lines(
+  &#x27;#include &quot;sm_core.h&quot;&#x27;,
+  &#x27;#include &quot;sm_user_logic.h&quot;&#x27;,
+  &#x27;&#x27;,
+  ...orderedStates(ir).flatMap((state) =&gt; [
+    stateTraceComment(state),
+    lines(
+      `void ${stateNode(ir, state.id)}_Entry(ADIA_Instance_t *instance)`,
+      &#x27;{&#x27;,
+      state.entryActions.length === 0
+        ? &#x27;    (void)instance;&#x27;
+        : renderActions(
+          ir,
+          state.entryActions,
+          `entry:${stateActionLabel(state)}`,
+        ),
+      &#x27;}&#x27;,
+    ),
+    lines(
+      `void ${stateNode(ir, state.id)}_During(ADIA_Instance_t *instance)`,
+      &#x27;{&#x27;,
+      state.duringActions.length === 0
+        ? &#x27;    (void)instance;&#x27;
+        : renderActions(
+          ir,
+          state.duringActions,
+          `during:${stateActionLabel(state)}`,
+        ),
+      &#x27;}&#x27;,
+    ),
+    lines(
+      `void ${stateNode(ir, state.id)}_Exit(ADIA_Instance_t *instance)`,
+      &#x27;{&#x27;,
+      state.exitActions.length === 0
+        ? &#x27;    (void)instance;&#x27;
+        : renderActions(
+          ir,
+          state.exitActions,
+          `exit:${stateActionLabel(state)}`,
+        ),
+      &#x27;}&#x27;,
+    ),
+  ]),
+);
+
+export const renderMappingHeader = (): string =&gt; lines(
+  &#x27;#ifndef SM_MAPPING_H&#x27;,
+  &#x27;#define SM_MAPPING_H&#x27;,
+  &#x27;&#x27;,
+  &#x27;#include &quot;sm_config.h&quot;&#x27;,
+  &#x27;&#x27;,
+  &#x27;extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];&#x27;,
+  &#x27;extern const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];&#x27;,
+  &#x27;extern const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];&#x27;,
+  &#x27;extern const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];&#x27;,
+  &#x27;&#x27;,
+  &#x27;SM_Error_t SM_Validate_Mapping_Configuration(void);&#x27;,
+  &#x27;&#x27;,
+  &#x27;#endif /* SM_MAPPING_H */&#x27;,
+);
+
+export const renderMappingSource = (ir: SemanticModel): string =&gt; {</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1001–1062</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>/* State: PWM low | Model ID: pwm_low | C enum: SM_ST_PWM_LOW */
+void SM_ST_PWM_LOW_Entry(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}
+
+void SM_ST_PWM_LOW_During(ADIA_Instance_t *instance)
+{
+    instance-&gt;data.duty_cmd = (uint16_t)((instance-&gt;data.duty_cmd + 1U));
+    SM_TraceAction(instance, &quot;during:PWM_LOW&quot;);
+}
+
+void SM_ST_PWM_LOW_Exit(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}
+
+/* State: PWM high | Model ID: pwm_high | C enum: SM_ST_PWM_HIGH */
+void SM_ST_PWM_HIGH_Entry(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}
+
+void SM_ST_PWM_HIGH_During(ADIA_Instance_t *instance)
+{
+    instance-&gt;data.duty_cmd = (uint16_t)((instance-&gt;data.duty_cmd + 5U));
+    SM_TraceAction(instance, &quot;during:PWM_HIGH&quot;);
+}
+
+void SM_ST_PWM_HIGH_Exit(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}
+
+/* State: Fan bank | Model ID: fan_bank | C enum: SM_ST_FAN_BANK */</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_user_logic.c:73–107</figcaption>
+</figure>
+
+<p>Reading the emitted file against the model: the <code>during</code> text of a state is parsed by <code>smExpressions</code> and
+re-rendered as C (<code>duty_cmd + 1U</code> → <code>(uint16_t)((instance-&gt;data.duty_cmd + 1U))</code>), while empty phases still get a
+function whose body is <code>(void)instance;</code>. Three points the generator is making with this design:</p>
+<ul>
+<li><b>Stable hook ABI.</b> The signature is always <code>void SM_ST_X_Phase(ADIA_Instance_t *)</code>, so user code can be hand-edited or
+replaced and the regenerated kernel still links. The header <code>sm_user_logic.h</code> is regenerated too (with a
+<code>/* State: … | Model ID: … | C enum: … */</code> comment for each group), but the <i>bodies</i> are plain scaffolding you are
+expected to own.</li>
+<li><b>Conversion at the edge only.</b> Every action assignment is wrapped in the variable's declared C type
+(<code>renderCType</code>) — that is the entire type system of the emitter: names are checked against <code>ir.variables</code>
+(an undeclared target is a build-time throw from <code>renderCAction</code>, not a broken build later), and arithmetic happens in the
+C type of the left-hand side.</li>
+<li><b>Trace calls ride along.</b> Each rendered action block also emits <code>SM_TraceAction(instance, "during:PWM_LOW")</code> when a
+trace label exists, which is how the differential harness (§5.4) can compare interpreter and C traces at action granularity.</li>
+</ul>
+
+<h3>4.2 Exit: the history recorder is the interesting half</h3>
+<figure class="code src">
+<pre><code>const renderExitFunctions = (
+  ir: SemanticModel,
+  index: RenderIndex,
+): string =&gt; {
+  const recordCases = orderedLayers(ir).map((layer) =&gt; lines(
+    `        case ${layerMacro(layer)}:`,
+    layer.activeSlot === null
+      ? null
+      : `            instance-&gt;history_states[${layer.activeSlot}U] = instance-&gt;active_states[${layer.activeSlot}U];`,
+    ...descendantsOfLayer(ir, layer.id).map((state) =&gt;
+      `            instance-&gt;deep_history[${layerMacro(layer)}][${stateIndex(ir, state.id)}] = instance-&gt;state_active[${stateIndex(ir, state.id)}];`),
+    &#x27;            break;&#x27;,
+  ).trimEnd()).join(&#x27;\n&#x27;);
+
+  const exitLayerCases = orderedLayers(ir).map((layer) =&gt; {
+    const exitChildren = layer.decomposition === &#x27;OR&#x27; &amp;&amp; layer.activeSlot !== null
+      ? lines(
+        `            if (instance-&gt;active_states[${layer.activeSlot}U] != SM_NODE_INVALID) {`,
+        `                SM_Exit_State(instance, instance-&gt;active_states[${layer.activeSlot}U], false);`,
+        &#x27;            }&#x27;,
+      ).trimEnd()
+      : [...layer.children].reverse().map((childId) =&gt;
+        `            SM_Exit_State(instance, ${stateNode(ir, childId)}, false);`)
+        .join(&#x27;\n&#x27;);
+    return lines(
+      `        case ${layerMacro(layer)}:`,
+      `            SM_Record_Layer_History(instance, ${layerMacro(layer)});`,
+      exitChildren,
+      &#x27;            break;&#x27;,
+    ).trimEnd();
+  }).join(&#x27;\n&#x27;);
+
+  const exitStateCases = orderedStates(ir).map((state) =&gt; lines(
+    `        case ${stateNode(ir, state.id)}:`,
+    `            if (!instance-&gt;state_active[${stateIndex(ir, state.id)}]) { break; }`,
+    ...[...state.childLayerIds].reverse().map((layerId) =&gt;
+      `            SM_Exit_Layer(instance, ${layerMacro(ir.layers[layerId])});`),
+    `            ${stateNode(ir, state.id)}_Exit(instance);`,
+    `            instance-&gt;state_active[${stateIndex(ir, state.id)}] = false;`,
+    `            instance-&gt;state_timers[${stateIndex(ir, state.id)}] = 0U;`,
+    state.activeSlot &gt;= 0
+      ? lines(
+        `            if (instance-&gt;active_states[${state.activeSlot}U] == ${stateNode(ir, state.id)}) {`,
+        `                instance-&gt;active_states[${state.activeSlot}U] = SM_NODE_INVALID;`,
+        &#x27;            }&#x27;,
+      ).trimEnd()
+      : null,
+    &#x27;            break;&#x27;,
+  ).trimEnd()).join(&#x27;\n&#x27;);
+
+  return lines(
+    &#x27;static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)&#x27;,
+    &#x27;{&#x27;,
+    &#x27;    uint32_t state_index;&#x27;,
+    &#x27;    for (state_index = 0U; state_index &lt;= SM_NUM_STATES; ++state_index) {&#x27;,
+    &#x27;        instance-&gt;deep_history[layer][state_index] = false;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    switch (layer) {&#x27;,
+    recordCases,
+    &#x27;        default: break;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;}&#x27;,
+    &#x27;&#x27;,
+    &#x27;static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)&#x27;,
+    &#x27;{&#x27;,
+    &#x27;    switch (layer) {&#x27;,
+    exitLayerCases,
+    &#x27;        default: break;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;}&#x27;,
+    &#x27;&#x27;,
+    &#x27;static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)&#x27;,
+    &#x27;{&#x27;,
+    &#x27;    if (record_containing_layer) {&#x27;,
+    &#x27;        switch (state) {&#x27;,
+    ...orderedStates(ir).map((state) =&gt;
+      `            case ${stateNode(ir, state.id)}: SM_Record_Layer_History(instance, ${layerMacro(ir.layers[state.layerId])}); break;`),
+    &#x27;            default: break;&#x27;,
+    &#x27;        }&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;    switch (state) {&#x27;,
+    exitStateCases,
+    &#x27;        default: break;&#x27;,
+    &#x27;    }&#x27;,
+    &#x27;}&#x27;,
+  );
+};
+
+const renderRestoreLayer = (</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:448–536</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)
+{
+    if (record_containing_layer) {
+        switch (state) {
+            case SM_ST_HEATER: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
+            case SM_ST_STANDBY: SM_Record_Layer_History(instance, SM_LYR_HEATER_CHILDREN_IDX); break;
+            case SM_ST_WARMING: SM_Record_Layer_History(instance, SM_LYR_HEATER_CHILDREN_IDX); break;
+            case SM_ST_PWM_BANK: SM_Record_Layer_History(instance, SM_LYR_WARMING_REGIONS_IDX); break;
+            case SM_ST_PWM_LOW: SM_Record_Layer_History(instance, SM_LYR_PWM_CHILDREN_IDX); break;
+            case SM_ST_PWM_HIGH: SM_Record_Layer_History(instance, SM_LYR_PWM_CHILDREN_IDX); break;
+            case SM_ST_FAN_BANK: SM_Record_Layer_History(instance, SM_LYR_WARMING_REGIONS_IDX); break;
+            case SM_ST_FAN_LOW: SM_Record_Layer_History(instance, SM_LYR_FAN_CHILDREN_IDX); break;
+            case SM_ST_FAN_HIGH: SM_Record_Layer_History(instance, SM_LYR_FAN_CHILDREN_IDX); break;
+            case SM_ST_OVERHEAT: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
+            default: break;
+        }
+    }</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:170–186</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>        case SM_ST_HEATER:
+            if (!instance-&gt;state_active[SM_ST_HEATER_IDX]) { break; }
+            SM_Exit_Layer(instance, SM_LYR_HEATER_CHILDREN_IDX);
+            SM_ST_HEATER_Exit(instance);
+            instance-&gt;state_active[SM_ST_HEATER_IDX] = false;
+            instance-&gt;state_timers[SM_ST_HEATER_IDX] = 0U;
+            if (instance-&gt;active_states[0U] == SM_ST_HEATER) {
+                instance-&gt;active_states[0U] = SM_NODE_INVALID;
+            }
+            break;</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_core.c:188–197</figcaption>
+</figure>
+
+<p>The emitted <code>SM_Exit_State</code> has exactly three jobs, and the first one is the whole history mechanism. It opens with
+<code>if (record_containing_layer) { switch (state) { case SM_ST_X: SM_Record_Layer_History(instance, SM_LYR_…); … } }</code>: the
+flag is passed <code>true</code> only by a transition that is <i>leaving</i> the layer that contains the state, so the recorder writes
+the deep-history bit for the exact set of states that were active at that moment — one boolean per (layer, state) pair, no lists, no
+allocation. Then comes an idempotence guard (<code>if (!state_active[idx]) break;</code>), then the recursive exit of child layers for
+container states, the user <code>_Exit()</code> hook, clearing of the flag and timer, and finally
+<code>if (active_states[slot] == state) active_states[slot] = SM_NODE_INVALID;</code> — compare-before-clear, so exiting an
+already-exited state cannot corrupt the slot used by the parent's <code>switch</code>.</p>
+<p>The companion block in the same slice is the <b>no-history</b> wrapper: <code>SM_Exit_Layer_No_History_&lt;n&gt;</code> exits a
+layer's current occupant with <code>record_containing_layer = false</code>. Those wrappers are never called by the state machine; they
+are referenced by <code>SM_Init</code> with the famous no-op statement form <code>(void)SM_Exit_Layer_No_History_0;</code> (28 such
+lines in <code>SM_Init</code>, one per generated emitter) purely so that <code>-Wunused-function</code> under
+<code>-Werror</code> cannot reject a model whose shape leaves one of the generated helpers unreachable. That is a small but
+characteristic detail of this generator: the strict-warning policy is paid for in emitted bytes.</p>
+
+<h3>4.3 Safety: validate the instance, then fail safe</h3>
+<figure class="code src">
+<pre><code>export const renderSafetySource = (ir: SemanticModel): string =&gt; {
+  const states = orderedStates(ir);
+  const layers = orderedLayers(ir);
+  const mappedOutputs = ir.ioMappings.filter(
+    (mapping) =&gt; mapping.direction === &#x27;write&#x27;,
+  );
+  const directChildCases = layers.map((layer) =&gt; lines(
+    `        case ${layerMacro(layer)}:`,
+    &#x27;            switch (state) {&#x27;,
+    ...layer.children.map((stateId) =&gt;
+      `                case ${stateNode(ir, stateId)}: return true;`),
+    &#x27;                default: return false;&#x27;,
+    &#x27;            }&#x27;,
+  ).trimEnd());
+  const descendantCases = layers.map((layer) =&gt; lines(
+    `        case ${layerMacro(layer)}:`,
+    &#x27;            switch (state) {&#x27;,
+    ...descendantsOfLayer(ir, layer.id).map((state) =&gt;
+      `                case ${stateNode(ir, state.id)}: return true;`),
+    &#x27;                default: return false;&#x27;,
+    &#x27;            }&#x27;,
+  ).trimEnd());</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1153–1174</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    uint32_t slot_index;
+    SM_Node_t active_node;
+    SM_Node_t history_node;
+    int32_t active_slot;
+    SM_Node_t parent;
+    bool container_active;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    for (state_index = 1U; state_index &lt;= SM_NUM_STATES; ++state_index) {
+        if (instance-&gt;state_active[state_index]) {
+            parent = SM_State_Parent_Map[state_index];
+            if ((parent != SM_NODE_INVALID)
+                &amp;&amp; (!instance-&gt;state_active[(uint32_t)parent])) {
+                return SM_ERR_CONFIGURATION;
+            }
+            active_slot = SM_State_Active_Slot_Map[state_index];
+            if ((active_slot &gt;= 0)
+                &amp;&amp; (instance-&gt;active_states[(uint32_t)active_slot]
+                    != (SM_Node_t)state_index)) {
+                return SM_ERR_CONFIGURATION;
+            }
+        }
+    }</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_safety.c:120–147</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>void SM_ApplySafeOutputs(ADIA_Instance_t *instance)
+{
+    (void)instance;
+    MCAL_ApplySafeOutputs();</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_safety.c:203–206</figcaption>
+</figure>
+<p>The safety file is generated unconditionally and is the only place that inspects the instance's internal consistency:
+<b>five clauses in <code>SM_Validate_State_Consistency</code></b> — (1) every active state's parent must be active, (2) its
+<code>active_states[slot]</code> word must equal it, (3) every layer whose container is active and that owns a slot must have a valid
+occupant, (4) that occupant must be a child or descendant of the layer, (5) the layer's own slot word must agree. Any violation returns
+<code>SM_ERR_CONFIGURATION</code>, which <code>SM_Step</code> turns into a latched fault. The demo model exercises this path: writing
+an illegal word into <code>active_states[]</code> and stepping once returns <code>SM_ERR_CONFIGURATION</code> (3) and latches the fault,
+as recorded in the differential evidence.</p>
+<p><code>SM_ApplySafeOutputs()</code> here is three lines — <code>(void)instance;</code> plus <code>MCAL_ApplySafeOutputs();</code> — because
+the model sets <code>safetyMode: true</code> (so the MCAL hook is called) but declares no <i>output mappings</i> (so there are no
+per-channel safe values to write first). Add write mappings with <code>safeValue</code> and the same function grows one
+<code>MCAL_Dio_WriteChannel(MCAL_CH_…, false)</code> per channel, in mapping order, before the blanket hook — the emitter's
+<code>mappedOutputs.length === 0 ? … : …</code> ternary is the entire policy switch.</p>
+
+<h3>4.4 IO mapping: one line per channel, with <code>x</code> bound to the raw read</h3>
+<figure class="code src">
+<pre><code>  const readMappings = ir.ioMappings.filter((mapping) =&gt;
+    mapping.direction === &#x27;read&#x27;).map((mapping) =&gt; {
+    const variable = ir.variables[mapping.variableId];
+    const rawRead = mapping.channelDataType === &#x27;bool&#x27;
+      ? `MCAL_Dio_ReadChannel(${channelMacro(mapping.channelId)})`
+      : `MCAL_ReadChannelValue(${channelMacro(mapping.channelId)})`;
+    const value = mapping.conversionExpression === null
+      ? rawRead
+      : renderCExpression(
+        mapping.conversionExpression,
+        ir.variables,
+        variable.type,
+        (node) =&gt; node.name === &#x27;x&#x27; ? rawRead : undefined,
+      );
+    return `    instance-&gt;data.${variable.cName} = (${renderCType(variable.type)})(${value});`;
+  });
+  const writeMappings = ir.ioMappings.filter((mapping) =&gt;
+    mapping.direction === &#x27;write&#x27;).map((mapping) =&gt; {
+    const variable = ir.variables[mapping.variableId];
+    const rawValue = `instance-&gt;data.${variable.cName}`;
+    const value = mapping.conversionExpression === null
+      ? rawValue
+      : renderCExpression(
+        mapping.conversionExpression,
+        ir.variables,
+        &#x27;bool&#x27;,
+        (node) =&gt; node.name === &#x27;x&#x27; ? rawValue : undefined,
+      );
+    return mapping.channelDataType === &#x27;bool&#x27;
+      ? `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, (bool)(${value}));`
+      : `    MCAL_WriteChannelValue(${channelMacro(mapping.channelId)}, (double)(${value}));`;
+  });
+  const faultEntry = ir.safetyMode &amp;&amp; ir.safeStateId !== null</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1401–1433</figcaption>
+</figure>
+<p>This is the one place where the generator does real expression surgery rather than string building. A mapping's
+<code>conversionExpression</code> (e.g. <code>x * 4095.0 / 100.0</code>) is rendered by <code>renderCExpression</code> with a
+<i>name-binding callback</i>: any identifier named <code>x</code> is substituted by the raw channel access
+(<code>MCAL_ReadChannelValue(MCAL_CH_TEMP_ADC)</code> on read, <code>instance-&gt;data.duty_cmd</code> on write). The whole statement is then
+cast to the variable's C type. Two consequences worth stating plainly:</p>
+<ul>
+<li>Conversion expressions are compiled <b>into the kernel</b>, not into user logic — so the scaling is regenerated from the model and
+cannot drift from it, and it costs no function call.</li>
+<li>Because <code>x</code> is a <i>binding by name</i>, the same expression source works for read and write directions; declaring a model
+variable literally named <code>x</code> in a conversion expression is therefore a name collision to avoid (the callback wins).</li>
+</ul>
+<p>In <code>sm_core.c</code> the loop that consumes these lists is literally <code>readMappings.length === 0 ? '    (void)instance;' :
+…</code>, which is why this model's <code>SM_ReadInputs</code>/<code>SM_WriteOutputs</code> are fault-guarded no-ops: it exercises the
+<i>empty</i> branch of the IO emitter. Channel macros themselves are emitted into <code>mcal_dio.h</code> by
+<code>renderMcalHeader</code> — <code>MCAL_CH_*</code> as sequential integers, sorted by channel id for determinism, with prototypes only
+(the generated header never contains an implementation; the MCAL is firmware you supply).</p>
+
+<h3>4.5 The instance layout: where every byte of RAM is decided</h3>
+<figure class="code src">
+<pre><code>export const renderConfigHeader = (ir: SemanticModel): string =&gt; {
+  const index = buildIndex(ir);
+  const states = orderedStates(ir);
+  const layers = orderedLayers(ir);
+  const variables = Object.values(ir.variables).sort((left, right) =&gt;
+    left.id.localeCompare(right.id));
+  return lines(
+    &#x27;#ifndef SM_CONFIG_H&#x27;,
+    &#x27;#define SM_CONFIG_H&#x27;,
+    &#x27;&#x27;,
+    ir.verification.cStandard === &#x27;c90&#x27;
+      ? lines(
+          &#x27;#if defined(__STDC_VERSION__) &amp;&amp; (__STDC_VERSION__ &gt;= 199901L)&#x27;,
+          &#x27;#include &lt;stdbool.h&gt;&#x27;,
+          &#x27;#include &lt;stdint.h&gt;&#x27;,
+          &#x27;#else&#x27;,
+          &#x27;#ifndef __cplusplus&#x27;,
+          &#x27;typedef unsigned char bool;&#x27;,
+          &#x27;#define true 1&#x27;,
+          &#x27;#define false 0&#x27;,
+          &#x27;#endif&#x27;,
+          &#x27;typedef unsigned char uint8_t;&#x27;,
+          &#x27;typedef signed char int8_t;&#x27;,
+          &#x27;typedef unsigned short uint16_t;&#x27;,
+          &#x27;typedef signed short int16_t;&#x27;,
+          &#x27;typedef unsigned long uint32_t;&#x27;,
+          &#x27;typedef signed long int32_t;&#x27;,
+          &#x27;#endif&#x27;,
+        )
+      : lines(
+          &#x27;#include &lt;stdbool.h&gt;&#x27;,
+          &#x27;#include &lt;stdint.h&gt;&#x27;,
+        ),
+    &#x27;#ifndef SM_ADIA_INSTANCE_FWD&#x27;,
+    &#x27;#define SM_ADIA_INSTANCE_FWD&#x27;,
+    &#x27;typedef struct ADIA_Instance ADIA_Instance_t;&#x27;,
+    &#x27;#endif&#x27;,
+    orderedStates(ir).some((state) =&gt; state.xBridges !== null)
+      ? &#x27;#include &quot;sm_xbridges.h&quot;&#x27;
+      : false,
+    &#x27;&#x27;,
+    `#define SM_TICK_MS ${ir.tickMs}U`,
+    `#define SM_TICK_TOLERANCE_MS ${ir.verification.tickToleranceMs &gt; 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))}U`,
+    `#define SM_TICK_MIN_MS ${Math.max(0, ir.tickMs - (ir.verification.tickToleranceMs &gt; 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))))}U`,
+    `#define SM_TICK_MAX_MS ${ir.tickMs + (ir.verification.tickToleranceMs &gt; 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10)))}U`,
+    `#define SM_NUM_STATES ${states.length}U`,
+    `#define SM_NUM_LAYERS ${layers.length}U`,
+    `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
+    ...layers.map((layer) =&gt;
+      `#define ${layerMacro(layer)} ${index.layerNumber.get(layer.id)!}U`),
+    ...states.flatMap((state) =&gt; [
+      stateTraceComment(state),
+      `#define ${stateNode(ir, state.id)}_IDX ${index.stateNumber.get(state.id)!}U`,
+    ]),
+    &#x27;&#x27;,</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:843–897</figcaption>
+</figure>
+<figure class="code src">
+<pre><code>    &#x27;typedef uint32_t SM_Group_t;&#x27;,
+    &#x27;&#x27;,
+    &#x27;#ifdef SM_TRACE_ENABLED&#x27;,
+    &#x27;typedef struct {&#x27;,
+    &#x27;    const char *action;&#x27;,
+    &#x27;} SM_TraceEvent_t;&#x27;,
+    &#x27;typedef void (*SM_TraceSink_t)(const SM_TraceEvent_t *event);&#x27;,
+    &#x27;#endif&#x27;,
+    &#x27;&#x27;,
+    &#x27;typedef struct {&#x27;,
+    variables.length === 0
+      ? &#x27;    uint8_t reserved;&#x27;
+      : variables.map((variable) =&gt;
+        `    ${renderCType(variable.type)} ${variable.cName};`).join(&#x27;\n&#x27;),
+    &#x27;} SM_Data_t;&#x27;,
+    &#x27;&#x27;,</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:914–929</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>typedef struct ADIA_Instance ADIA_Instance_t;
+#endif
+
+#define SM_TICK_MS 10U
+#define SM_TICK_TOLERANCE_MS 1U
+#define SM_TICK_MIN_MS 9U
+#define SM_TICK_MAX_MS 11U
+#define SM_NUM_STATES 10U
+#define SM_NUM_LAYERS 5U
+#define SM_NUM_ACTIVE_SLOTS 4U
+#define SM_LYR_ROOT_IDX 0U
+#define SM_LYR_HEATER_CHILDREN_IDX 1U
+#define SM_LYR_PWM_CHILDREN_IDX 2U
+#define SM_LYR_FAN_CHILDREN_IDX 3U
+#define SM_LYR_WARMING_REGIONS_IDX 4U
+/* State: Heater | Model ID: heater | C enum: SM_ST_HEATER */
+#define SM_ST_HEATER_IDX 1U
+/* State: Standby | Model ID: standby | C enum: SM_ST_STANDBY */
+#define SM_ST_STANDBY_IDX 2U
+/* State: Warming | Model ID: warming | C enum: SM_ST_WARMING */
+#define SM_ST_WARMING_IDX 3U
+/* State: PWM bank | Model ID: pwm_bank | C enum: SM_ST_PWM_BANK */
+#define SM_ST_PWM_BANK_IDX 4U
+/* State: PWM low | Model ID: pwm_low | C enum: SM_ST_PWM_LOW */
+#define SM_ST_PWM_LOW_IDX 5U
+/* State: PWM high | Model ID: pwm_high | C enum: SM_ST_PWM_HIGH */
+#define SM_ST_PWM_HIGH_IDX 6U
+/* State: Fan bank | Model ID: fan_bank | C enum: SM_ST_FAN_BANK */
+#define SM_ST_FAN_BANK_IDX 7U
+/* State: Fan low | Model ID: fan_low | C enum: SM_ST_FAN_LOW */
+#define SM_ST_FAN_LOW_IDX 8U
+/* State: Fan high | Model ID: fan_high | C enum: SM_ST_FAN_HIGH */
+#define SM_ST_FAN_HIGH_IDX 9U
+/* State: Overheat | Model ID: overheat | C enum: SM_ST_OVERHEAT */
+#define SM_ST_OVERHEAT_IDX 10U
+
+typedef enum {
+    SM_NODE_INVALID = 0,
+    SM_ST_HEATER = 1,
+    SM_ST_STANDBY = 2,
+    SM_ST_WARMING = 3,
+    SM_ST_PWM_BANK = 4,
+    SM_ST_PWM_LOW = 5,
+    SM_ST_PWM_HIGH = 6,
+    SM_ST_FAN_BANK = 7,
+    SM_ST_FAN_LOW = 8,
+    SM_ST_FAN_HIGH = 9,
+    SM_ST_OVERHEAT = 10
+} SM_Node_t;
+
+typedef enum {
+    SM_ERR_NONE = 0,
+    SM_ERR_NULL_INSTANCE,
+    SM_ERR_TIMING,
+    SM_ERR_CONFIGURATION,
+    SM_ERR_SAFETY_VIOLATION,
+    SM_ERR_XBRIDGES_NUMERIC,
+    SM_ERR_INVALID_ARGUMENT
+} SM_Error_t;
+
+typedef uint32_t SM_Group_t;
+
+#ifdef SM_TRACE_ENABLED
+typedef struct {
+    const char *action;
+} SM_TraceEvent_t;
+typedef void (*SM_TraceSink_t)(const SM_TraceEvent_t *event);
+#endif
+
+typedef struct {
+    uint16_t duty_cmd;
+    uint32_t heat_cycles;
+    bool over_temperature;
+    double setpoint_c;
+    bool start_cmd;
+    bool stop_cmd;
+} SM_Data_t;
+
+struct ADIA_Instance {
+    SM_Data_t data;
+    SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS &gt; 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
+    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS &gt; 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
+    bool state_active[SM_NUM_STATES + 1U];
+    uint32_t state_timers[SM_NUM_STATES + 1U];
+    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];
+    SM_Error_t error_status;
+    bool fault_latched;
+#ifdef SM_TRACE_ENABLED
+    SM_TraceSink_t trace_sink;
+#endif
+};
+</code></pre>
+<figcaption>docs/codegen-demo/evidence/production/sm_config.h:9–100</figcaption>
+</figure>
+<p>Every array in the struct is dimensioned by a macro the same header defines, so the RAM footprint is a direct function of the model's
+shape: states × 1 B (active) + states × 4 B (timers) + slots × 2 × 2 B (active/history words) + layers × (states+1) B (deep history) +
+<code>sizeof(SM_Data_t)</code>. Adding a 30th state to a model is not free RAM — it is 5 bytes plus one more enum member and one more
+<code>_IDX</code> macro, with no code change anywhere else. That property (shape → table sizes, generated once, checked by the mapping
+validator at <code>SM_Init</code>) is what lets the same generator target 32-bit MCUs and a host test build with no configuration.</p>
+
+<h2 id="s5"><span class="num">5</span>Delivery: how the file package is assembled and verified</h2>
+
+<p>Everything so far produced <i>strings</i>. This section is about turning strings into a deliverable: naming the files, deciding
+which ones exist at all, deriving the test plan from the same IR, and then trying to falsify the result.</p>
+
+<h3>5.1 One entry point, two package shapes</h3>
+<figure class="code src">
+<pre><code>export const generateCArtifacts = (
+  ir: SemanticModel,
+  options: CGeneratorOptions = {},
+): CGeneratorResult =&gt; {
+  const implementationFiles: GeneratedCFile[] = [
+    { name: &#x27;sm_config.h&#x27;, content: renderConfigHeader(ir) },
+    { name: &#x27;sm_mapping.h&#x27;, content: renderMappingHeader() },
+    { name: &#x27;sm_mapping.c&#x27;, content: renderMappingSource(ir) },
+    { name: &#x27;sm_core.h&#x27;, content: renderCoreHeader() },
+    { name: &#x27;sm_core.c&#x27;, content: renderCoreSource(ir) },
+    { name: &#x27;sm_safety.h&#x27;, content: renderSafetyHeader() },
+    { name: &#x27;sm_safety.c&#x27;, content: renderSafetySource(ir) },
+    { name: &#x27;sm_user_logic.h&#x27;, content: renderUserLogicHeader(ir) },
+    { name: &#x27;sm_user_logic.c&#x27;, content: renderUserLogicSource(ir) },
+    { name: &#x27;mcal_dio.h&#x27;, content: renderMcalHeader(ir, options) },
+    ...(orderedStates(ir).some((state) =&gt; state.xBridges !== null)
+      ? [
+          { name: &#x27;sm_xbridges.h&#x27;, content: renderXBHeader(ir) },
+          { name: &#x27;sm_xbridges.c&#x27;, content: renderXBSource(ir) },
+        ]
+      : []),
+    ...(options.includeTestShims
+      ? [{ name: &#x27;mcal_dio_test_stubs.c&#x27;, content: renderMcalTestStubs() }]
+      : []),
+    ...(options.includeHostHarness
+      ? [{ name: &#x27;sm_host_test.c&#x27;, content: renderHostSmokeHarness(ir, options.vectorCount) }]
+      : []),
+
+  ];</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1797–1825</figcaption>
+</figure>
+<figure class="code src">
+<pre><code>    const packageFiles: GeneratedCFile[] = [
+      ...productionFiles,
+      ...testPackage,
+      ...reportFiles,
+    ];
+
+    return {
+      files: packageFiles,
+      errors: [],
+      warnings: [],
+    };
+  }
+
+  const allFiles = [
+    ...implementationFiles,
+    {
+      name: &#x27;sm_testing_report.md&#x27;,
+      content: renderSemanticTestingReport(
+        analysis,
+        options.verificationEvidence ?? DEFAULT_VERIFICATION_EVIDENCE,
+        ir,
+      ),
+    },
+    {
+      name: &#x27;static_metrics_report.md&#x27;,
+      content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
+    },
+  ];
+</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1858–1886</figcaption>
+</figure>
+
+<p>Three structural facts follow from those forty lines, and they are easy to miss when reading the walkthrough of a running app:</p>
+<ol>
+<li><b>The layer is a pure function of the IR plus options.</b> Nothing here touches the filesystem, the editor or the model JSON —
+writing files is the caller's job (in this repo, the workspace writer and the app's export path). That is why the same call can be
+used by the CLI, by tests with an in-memory list, and by this document's evidence driver.</li>
+<li><b>Conditional files exist only when their precondition holds:</b> <code>sm_xbridges.{h,c}</code> only if some state has
+<code>xBridges</code>, <code>mcal_dio_test_stubs.c</code> only with <code>includeTestShims</code>, <code>sm_host_test.c</code> only with
+<code>includeHostHarness</code>. This model gets neither X-Bridges nor shims, which is why its production package is exactly the ten
+files below.</li>
+<li><b>The two shapes differ in more than naming.</b> With <code>includeVerificationPackage: true</code> the function returns at
+<code>files: packageFiles</code> (27 files, <code>production/</code> + <code>tests/</code> + <code>verification/</code>) and
+<i>never runs the structural self-check</i>; the flat shape (12 files) runs <code>verifyGeneratedCStructure()</code> over its own
+output. The 27-artefact deliverable is therefore the one that is <b>not</b> self-checked — see §5.3.</li>
+</ol>
+
+<h4>What each artefact is, and who emits it</h4>
+<table>
+<tr><th>Artefact</th><th>Renderer</th><th>Contents</th></tr>
+<tr><td class="mono">production/sm_config.h</td><td><code>renderConfigHeader</code> :843</td><td>tick macros, <code>SM_NODE_INVALID</code>/<code>SM_Error_t</code>/<code>SM_Node_t</code>, <code>SM_Data_t</code>, <code>ADIA_Instance_t</code></td></tr>
+<tr><td class="mono">production/sm_core.h</td><td><code>renderCoreHeader</code> :949</td><td>the public API: Init/Reset/ReadInputs/Step/WriteOutputs/Sync_IO/Get*, trace hook, <code>ADIA_TESTING</code> setters</td></tr>
+<tr><td class="mono">production/sm_core.c</td><td><code>renderCoreSource</code> :1379</td><td>1,069 lines: trace sink, forward decls, exit/enter/execute functions, fault helpers, public API</td></tr>
+<tr><td class="mono">production/sm_mapping.{h,c}</td><td><code>renderMappingHeader/Source</code> :1046/:1062</td><td>4 relationship tables + <code>SM_Validate_Mapping_Configuration()</code></td></tr>
+<tr><td class="mono">production/sm_safety.{h,c}</td><td><code>renderSafetyHeader/Source</code> :1141/:1153</td><td>parent map, direct/descendant layer switches, 5-clause consistency validator, <code>SM_ApplySafeOutputs()</code></td></tr>
+<tr><td class="mono">production/sm_user_logic.{h,c}</td><td><code>renderUserLogicHeader/Source</code> :985/:1001</td><td>one Entry/During/Exit hook per state — the file you edit</td></tr>
+<tr><td class="mono">production/mcal_dio.h</td><td><code>renderMcalHeader</code> :1317</td><td><code>MCAL_CH_*</code> macros for mapped channels + MCAL prototypes (interface only)</td></tr>
+<tr><td class="mono">tests/test_sm_*.c</td><td><code>renderSMCTestPackage</code> :296</td><td>nine suite files; 39 cases across eight of them — <code>test_sm_io.c</code> is emitted empty because the model declares no IO mappings</td></tr>
+<tr><td class="mono">tests/test_support.{h,c}, test_main.c, mcal_test_stub.{c,h}</td><td><code>renderCTestRuntimeFiles</code> :487</td><td>assert helpers, <code>MCAL_TestReset()</code> and scriptable channel state, suite runner</td></tr>
+<tr><td class="mono">verification/test_manifest.json</td><td><code>buildSMTestManifest</code> :52</td><td>the case list <i>and</i> the traceability matrix (case → requirements → states → transitions → generated functions)</td></tr>
+<tr><td class="mono">verification/*.md</td><td><code>renderSemanticTestingReport</code>, <code>renderStaticMetricsReport</code></td><td>human reports over the analysis pass</td></tr>
+</table>
+
+<h3>5.2 The test package is derived from the same IR that produced the C</h3>
+<figure class="code src">
+<pre><code>export const renderSMCTestPackage = (
+  ir: SemanticModel,
+  manifest: SMTestManifest,
+  options: CTestSuiteRenderOptions = {},
+): readonly GeneratedCFile[] =&gt; {
+  const standard = options.standard ?? ir.verification.cStandard;
+  const files: GeneratedCFile[] = [];
+
+  // 1. Render test runtime support and MCAL stubs
+  const runtimeFiles = renderCTestRuntimeFiles({
+    standard,
+    mappings: ir.ioMappings,
+  });
+  files.push(...runtimeFiles);
+
+  // 2. Render all 9 suite files (including hierarchy)
+  const suites: readonly SMTestSuite[] = [
+    &#x27;initialization&#x27;,
+    &#x27;transitions&#x27;,
+    &#x27;actions&#x27;,
+    &#x27;timing&#x27;,
+    &#x27;safety&#x27;,
+    &#x27;io&#x27;,
+    &#x27;reset&#x27;,
+    &#x27;robustness&#x27;,
+    &#x27;hierarchy&#x27;,
+  ];
+
+  for (const suite of suites) {
+    files.push({
+      name: `tests/test_sm_${suite}.c`,
+      content: renderCTestSuite(suite, ir, manifest),
+    });
+  }
+
+  // 3. Manifest json
+  files.push({
+    name: &#x27;verification/test_manifest.json&#x27;,
+    content: serializeSMTestManifest(manifest),
+  });
+
+  return Object.freeze(files);</code></pre>
+<figcaption>src/utils/stateMachine/smCTestSuiteRenderer.ts:296–337</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>    (void)SM_Init(&amp;instance);
+
+    ADIA_AssertBool(true, SM_IsStateActive(&amp;instance, SM_ST_HEATER), &quot;heater should be active&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertBool(true, SM_IsStateActive(&amp;instance, SM_ST_STANDBY), &quot;standby should be active&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertBool(true, SM_IsStateActive(&amp;instance, SM_ST_PWM_LOW), &quot;pwm_low should be active&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertBool(true, SM_IsStateActive(&amp;instance, SM_ST_FAN_LOW), &quot;fan_low should be active&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertU32((uint32_t)0, (uint32_t)instance.data.duty_cmd, &quot;duty_cmd value&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertU32((uint32_t)0, (uint32_t)instance.data.heat_cycles, &quot;heat_cycles value&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertBool(false, instance.data.over_temperature, &quot;over_temperature value&quot;, __FILE__, (unsigned long)__LINE__);</code></pre>
+<figcaption>docs/codegen-demo/evidence/tests/test_sm_initialization.c:27–35</figcaption>
+</figure>
+
+<p>The test generator never parses C and never re-reads the model: <code>buildSMTestManifest()</code> walks the IR — states, layers,
+transitions with their guards and actions, history junctions, <code>verification</code> config — and emits <b>operations</b>
+(<code>init</code>, <code>set-variable</code>, <code>step</code>, <code>sync-io</code>, fault injection) and <b>expectations</b>
+(<code>active-state</code>, <code>inactive-state</code>, <code>variable-value</code>, <code>transition-fired</code>,
+<code>error-code</code>, <code>history</code>). The suite renderer then turns each operation into a call and each expectation into an
+<code>ADIA_Assert*</code> line, with <code>__FILE__</code> and <code>__LINE__</code> captured at the assertion site — so a failing
+generated test points at generated code, not at a helper. The default-initialisation case asserts the four active states the model
+starts in, all six variable defaults, the error code and the fault flag without a single hand-written expectation.</p>
+
+<p>One shape detail worth noticing in that loop: the suite list is hard-coded at nine, and a suite with no cases still gets a file
+with an empty body (<code>int run_suite_io(void) { return 0; }</code>). The generator prefers a stable file set over a minimal one — the
+runner in <code>test_main.c</code> is generated against the same nine names, so the package shape does not change when a model gains or
+loses, say, an IO mapping. The cost is nine translation units even when eight of them are the entire test plan.</p>
+
+<h3>5.3 The self-check, and what it cannot see</h3>
+<figure class="code src">
+<pre><code>export function verifyGeneratedCStructure(
+  files: readonly GeneratedCFile[]
+): StructureVerificationResult {
+  const diagnostics: ModelDiagnostic[] = [];
+  const headerFile = files.find((f) =&gt; f.name.endsWith(&#x27;.h&#x27;) &amp;&amp; f.content.includes(&#x27;SM_Data_t&#x27;));
+  const declaredMembers = new Set&lt;string&gt;();
+
+  if (headerFile) {
+    const structMatch = /typedef\s+struct\s*\{([\s\S]*?)\}\s*SM_Data_t;/m.exec(headerFile.content);
+    if (structMatch) {
+      const structBody = structMatch[1];
+      const memberRegex = /\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\[[^\]]+\])*\s*;/g;
+      let match: RegExpExecArray | null;
+      while ((match = memberRegex.exec(structBody)) !== null) {
+        declaredMembers.add(match[1]);
+      }
+    }
+  }
+
+  const usedMembers = new Set&lt;string&gt;();
+  const undeclaredMembers = new Set&lt;string&gt;();
+  const dataAccessRegex = /[a-zA-Z_][a-zA-Z0-9_]*-&gt;data\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+
+  for (const file of files) {
+    if (!file.name.endsWith(&#x27;.c&#x27;) &amp;&amp; !file.name.endsWith(&#x27;.h&#x27;)) continue;
+    let match: RegExpExecArray | null;
+    while ((match = dataAccessRegex.exec(file.content)) !== null) {
+      const member = match[1];
+      usedMembers.add(member);
+      if (headerFile &amp;&amp; !declaredMembers.has(member)) {
+        undeclaredMembers.add(member);
+      }
+    }
+  }
+</code></pre>
+<figcaption>src/utils/stateMachine/smCGenerator.ts:1910–1944</figcaption>
+</figure>
+<p>The generator does have a semantic self-check: it extracts the <code>SM_Data_t</code> members from the emitted header with a regex
+and cross-checks every <code>…-&gt;data.member</code> access in the emitted sources, reporting
+<code>GEN_C_UNDECLARED_DATA_MEMBER</code> as an error. Run against this model's own package, though, all three of its blind spots line
+up. The driver in <code>docs/codegen-demo/tools/probe_selfcheck.ts</code> prints:</p>
+<figure class="code run"><pre><code>$ node /tmp/probe.cjs
+FLAT files=12 errors=0
+PKG  files=27 errors=0
+RESCAN valid=true diagnostics=0 undeclared=[]
+data.x occurrences in package (-&gt; and .): tests/test_sm_transitions.c:10, tests/test_sm_actions.c:2
+corrected scan: SM_Data_t declares duty_cmd, heat_cycles, over_temperature, setpoint_c, start_cmd, stop_cmd
+corrected scan: undeclared members x in tests/test_sm_transitions.c, tests/test_sm_actions.c</code></pre>
+<figcaption>docs/codegen-demo/tools/probe_selfcheck.ts (executed 2026-09-14, node 22)</figcaption></figure>
+<ul>
+<li><b>It is not run in package mode</b> — the early return at §5.1 means the delivered shape is unchecked.</li>
+<li><b>It only scans the file list it was handed</b> — in flat mode that list is the 10 implementation files, so the test sources are
+never in scope.</li>
+<li><b>Its access regex requires a pointer</b> (<code>\w+-&gt;data\.\w+</code>), but generated tests declare the instance on the stack
+and write <code>instance.data.x</code>. Even re-running the checker over the whole 27-file package returns
+<code>valid=true</code>.</li>
+</ul>
+<p>The <code>x</code> those files reference comes from the plan builder, which hardcodes a variable named <code>x</code> for every
+transition case instead of using the transition's actual guard:</p>
+<figure class="code src">
+<pre><code>        { kind: &#x27;set-variable&#x27;, variableId: &#x27;x&#x27;, value: true },
+        { kind: &#x27;step&#x27;, deltaMs: ir.tickMs },
+      ],
+      expectations: trueExpectations,
+      traceability: makeTraceability(
+        `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
+        [t.sourceStateId, t.destinationStateId],
+        [t.id],
+        [&#x27;TEST-TRANS-001&#x27;, &#x27;TEST-TRANS-002&#x27;],
+        [&#x27;SM_Step&#x27;],
+      ),
+    });
+
+    // FALSE case: Transition blocked
+    const falseExpectations: SMTestExpectation[] = [];
+    if (src) {
+      falseExpectations.push({
+        kind: &#x27;active-state&#x27;,
+        layerId: src.layerId,
+        stateId: src.id,
+      });
+    }
+    if (dst) {
+      falseExpectations.push({
+        kind: &#x27;inactive-state&#x27;,
+        stateId: dst.id,
+      });
+    }
+
+    cases.push({
+      id: `SM-TC-TRANS-${srcName}-${dstName}-FALSE`,
+      suite: &#x27;transitions&#x27;,
+      name: `Transition from ${src ? src.name : srcName} to ${dst ? dst.name : dstName} blocked when condition is false`,
+      applicability: { status: &#x27;applicable&#x27; },
+      operations: [
+        { kind: &#x27;init&#x27; },
+        { kind: &#x27;set-variable&#x27;, variableId: &#x27;x&#x27;, value: false },</code></pre>
+<figcaption>src/utils/stateMachine/smTestPlanBuilder.ts:192–228</figcaption>
+</figure>
+<figure class="code out">
+<pre><code>static void test_sm_tc_trans_fan_low_fan_high_false(void)
+{
+    ADIA_Instance_t instance;
+    MCAL_TestReset();
+
+    (void)SM_Init(&amp;instance);
+    instance.data.x = false;
+    (void)SM_Step(&amp;instance, 10);
+    (void)SM_Sync_IO(&amp;instance);
+
+    ADIA_AssertBool(true, SM_IsStateActive(&amp;instance, SM_ST_FAN_LOW), &quot;fan_low should be active&quot;, __FILE__, (unsigned long)__LINE__);
+    ADIA_AssertBool(false, SM_IsStateActive(&amp;instance, SM_ST_FAN_HIGH), &quot;fan_high should be inactive&quot;, __FILE__, (unsigned long)__LINE__);</code></pre>
+<figcaption>docs/codegen-demo/evidence/tests/test_sm_transitions.c:22–33</figcaption>
+</figure>
+<p>The emitted test is otherwise exactly right — it inits, steps 10 ms, syncs IO and asserts both states — and it cannot compile,
+because <code>SM_Data_t</code> has no member <code>x</code>. That is the single defect that makes the generated package fail the strict
+host build; compiling the evidence package with the pipeline's own flags shows only these errors:</p>
+<figure class="code run"><pre><code>$ gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion \
+      -Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -Iproduction -Itests \
+      production/*.c tests/*.c -o /tmp/host_test_runner.exe
+tests/test_sm_actions.c:69:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_actions.c:152:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:28:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:51:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:75:18: error: 'SM_Data_t' has no member named 'x'
+tests/test_sm_transitions.c:98:18: error: 'SM_Data_t' has no member named 'x'
+... 6 more in test_sm_transitions.c (12 total)</code></pre>
+<figcaption>gcc 12.2.0 transcript, run against docs/codegen-demo/evidence (2026-09-14)</figcaption></figure>
+<p>The production sources compile clean under those flags; the failure is entirely in the generated tests. The fix is one line per
+site — pass the transition's guard variable id into <code>set-variable</code> (and skip the step when the guard reads an input that the
+test does not drive) — and it is worth doing, because today the only packages that pass are the ones whose fixture happens to declare
+<code>x</code>.</p>
+
+<h3>5.4 The proof that the C behaves like the model</h3>
+<figure class="code src">
+<pre><code>export const compileAndRunCTrace = (
+  fixture: DifferentialFixture,
+): CTraceFrame[] =&gt; {
+  const ir = buildFixtureIr(fixture);
+  const workspace = createGeneratedCodeTestWorkspace(
+    `differential-${fixture.name}`,
+  );
+  try {
+    const generated = generateCArtifacts(ir, { includeTestShims: true });
+    for (const file of generated.files) {
+      if (file.name.endsWith(&#x27;.c&#x27;) || file.name.endsWith(&#x27;.h&#x27;)) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+    }
+    const output = compileAndRunCProgram({
+      directory: workspace.directory,
+      harnessSource: renderDifferentialHarness(ir, fixture.steps),
+      defines: [&#x27;SM_TRACE_ENABLED&#x27;],
+    });
+    if (output === null) throw new Error(&#x27;host gcc is required&#x27;);
+    return output.trim().split(/\r?\n/).filter(Boolean).map(parseFrame);
+  } catch (error) {
+    const detail = error instanceof Error
+      ? `${error.message}\n${&#x27;stderr&#x27; in error ? String(error.stderr ?? &#x27;&#x27;) : &#x27;&#x27;}`
+      : String(error);
+    throw new Error(
+      `C differential harness failed for &#x27;${fixture.name}&#x27;: ${detail}`,
+    );
+  } finally {
+    workspace.cleanup();
+  }
+};
+
+export interface HostCompileRequest {
+  packageDirectory: string;
+  cStandard?: SMCStandard;
+  compiler?: string;
+  compilerArgs?: readonly string[];
+  defines?: readonly string[];
+  extraFlags?: readonly string[];
+  executableName?: string;
+}
+
+export interface HostTestRunRequest {
+  packageDirectory: string;
+  executablePath?: string;
+  args?: readonly string[];
+  manifest?: SMTestManifest;
+  timeoutMs?: number;
+}
+
+export interface SanitizerRunRequest {
+  packageDirectory: string;
+  cStandard?: SMCStandard;
+  compiler?: string;
+  compilerArgs?: readonly string[];
+  defines?: readonly string[];
+  manifest?: SMTestManifest;
+  timeoutMs?: number;
+  executablePath?: string;
+  args?: readonly string[];
+  extraFlags?: readonly string[];
+}
+</code></pre>
+<figcaption>src/utils/stateMachine/smCHarness.ts:1032–1095</figcaption>
+</figure>
+<p><code>compileAndRunCTrace()</code> is the part of the harness that actually closes the loop: it writes the package plus a
+generated scenario harness, compiles it against the host compiler, runs it, and returns one observation frame per tick with the same
+shape the interpreter produces (<code>runInterpreterTrace()</code>). <code>compareSemanticTraces()</code> then diffs the two frame
+arrays field by field. For the 28-step scenario in
+<code class="mono">docs/codegen-demo/generate.ts</code> — idle, start, 20 ticks, over-temperature, resume, stop — both sides produce
+<b>29 frames and <code>divergence: null</code></b>. The frames show the emitted control flow doing exactly what §3 says it should:</p>
+<table>
+<tr><th>tick</th><th>active states</th><th>duty_cmd</th><th>what the generated C just executed</th></tr>
+<tr><td class="mono">0–1</td><td class="mono">heater, standby</td><td class="mono">0</td><td><code>SM_Init</code> → root default (heater) → heater_children default (standby); <code>heat_cycles</code> ticks 0→1</td></tr>
+<tr><td class="mono">2</td><td class="mono">heater, warming, pwm_bank, pwm_low, fan_bank, fan_low</td><td class="mono">250</td><td><code>begin_warmup</code> fires; warming entry sets 250; AND layer enters both regions; deep history records <code>standby</code></td></tr>
+<tr><td class="mono">3–21</td><td class="mono">… pwm_low, fan_low</td><td class="mono">251→269</td><td><code>SM_ST_PWM_LOW_During</code> adds 1 per tick while the state timer climbs to 200 ms</td></tr>
+<tr><td class="mono">22</td><td class="mono">… pwm_high, fan_low</td><td class="mono">269</td><td><code>afterTicks</code> transition fires: exit records <code>pwm_low</code>, slot 2 switches, <code>SM_ST_PWM_HIGH_Entry</code> runs</td></tr>
+<tr><td class="mono">23</td><td class="mono">… pwm_high, fan_low</td><td class="mono">274</td><td><code>SM_ST_PWM_HIGH_During</code> adds 5</td></tr>
+<tr><td class="mono">24–25</td><td class="mono">overheat</td><td class="mono">0</td><td><code>trip_overheat</code> from the root layer: exit the whole <code>heater</code> subtree (recording history at every layer), enter the safe state</td></tr>
+<tr><td class="mono">26</td><td class="mono">heater, warming, pwm_bank, pwm_high, fan_bank, fan_low</td><td class="mono">250</td><td><code>resume_heater</code> to the history junction: root → heater, then the recorded <code>warming</code>, then the recorded <code>pwm_high</code> (duty reset to 250 by warming's entry action) — <b>deep history survived a full subtree exit</b></td></tr>
+<tr><td class="mono">27–28</td><td class="mono">… pwm_high, fan_low</td><td class="mono">255, 260</td><td>back on the normal path, 5 per tick</td></tr>
+</table>
+<p>Everything in that table is a consequence of the emitted statements in §3, including the two subtle ones: at tick 24 the fault-free
+transition still runs through <code>SM_Exit_State</code> for every exited state (that is what fills the history), and at tick 26 the
+restore path reads <code>deep_history[layer][state]</code> rather than re-entering defaults. Nothing in this table required the
+interpreter to be correct — the numbers come from the compiled C's own observations.</p>
+
+<h3>5.5 How the pipeline judges the result — and where it does not</h3>
+<figure class="code src">
+<pre><code>export function deriveAcceptance(
+  bundle: VerificationBundle,
+  options?: AcceptanceOptions,
+): VerificationBundle {
+  const activities = { ...bundle.activities };
+  let overallStatus: VerificationStatus = &#x27;PASS&#x27;;
+  let accepted = true;
+
+  // 1. Any FAIL across any activity immediately rejects
+  for (const activity of Object.values(activities)) {
+    if (activity.status === &#x27;FAIL&#x27;) {
+      overallStatus = &#x27;FAIL&#x27;;
+      accepted = false;
+      break;
+    }
+  }
+
+  // 2. Mandatory gates that must be PASS
+  const mandatoryGates: VerificationActivity[] = [
+    &#x27;structural&#x27;,
+    &#x27;semantic&#x27;,
+    &#x27;test-generation&#x27;,
+    &#x27;host-compilation&#x27;,
+    &#x27;host-runtime&#x27;,
+    &#x27;sanitizers&#x27;,
+    &#x27;statement-coverage&#x27;,
+    &#x27;branch-coverage&#x27;,
+    &#x27;differential&#x27;,
+  ];
+</code></pre>
+<figcaption>src/utils/stateMachine/smVerificationAggregator.ts:36–65</figcaption>
+</figure>
+<figure class="code src">
+<pre><code>    const refTrace = runReferenceInterpreter(ir, testVectors);
+
+    // Map reference steps to cycle observations
+    const refObservations: SMCycleObservation[] = refTrace.map((step, idx) =&gt; ({
+      cycle: idx,
+      activeStates: [...step.activeStates],
+      variables: { ...step.variables },
+      outputs: {},
+      stateTimers: { ...step.timers },
+      firedTransitions: [...step.transitionIds],
+      executedActions: [...step.transitionActions],
+      errorStatus: step.error,
+      faultLatched: false,
+    }));
+
+    const diffEvidence = compareCycleObservations(
+      refObservations,
+      refObservations, // Exact match with verified candidate observations
+      { modelHash: ir.modelHash ?? &#x27;unknown&#x27; },
+    );</code></pre>
+<figcaption>src/utils/stateMachine/smPipelineOrchestrator.ts:296–315</figcaption>
+</figure>
+<p><code>deriveAcceptance()</code> is strict in the right way: any <code>FAIL</code> rejects, and nine gates must be
+<code>PASS</code> (structural, semantic, test-generation, host-compilation, host-runtime, sanitizers, statement-coverage,
+branch-coverage, <b>differential</b>). The problem is what the pipeline puts into that ninth gate. Gate 8 computes the reference
+trace, maps it to observations, and then calls
+<code>compareCycleObservations(refObservations, refObservations)</code> — <b>it compares the reference to itself</b> and never compiles
+or runs the generated C. The comment on that line ("Exact match with verified candidate observations") describes the intent; the code
+produces a tautology that can only say PASS, and <code>deriveAcceptance()</code> treats it as one of the mandatory gates. Two
+consequences:</p>
+<ul>
+<li><code>npm run verify:sm:codegen</code> (which drives <code>runVerificationPipeline</code>) can report
+<code>acceptance: true</code> without any behavioural evidence at all — the C package is verified for <i>compilation</i>, not for
+<i>equivalence</i>.</li>
+<li>The real differential exists in this repo, one layer down: <code>compileAndRunCTrace()</code> + <code>compareSemanticTraces()</code>,
+the path used by §5.4 and by the committed evidence. Wiring Gate 8 to that path (candidate = C observations) instead of to
+<code>refObservations</code> would make the ninth gate mean what its name says.</li>
+</ul>
+<p>A related traceability gap: <code>ir.modelHash</code> is a constant. The builder writes <code>modelHash: "0000000000000000"</code>
+(smSemanticBuilder.ts:825), and every consumer — the manifest, the differential context, the reports — carries that literal through, so
+no artefact records <i>which revision</i> of the model it was generated from. Recomputing the hash from the frozen IR at that one site
+would bind the evidence to the model for free.</p>
+
+<div class="note okc">
+<h4>Reproducing everything on this page</h4>
+<pre><code>git clone … &amp;&amp; cd ADAI-
+npm i                       # esbuild + mathjs are enough for this document
+npx tsx docs/codegen-demo/generate.ts --out docs/codegen-demo/evidence
+python3 docs/codegen-demo/tools/build_source_doc.py    # rebuilds this document
+gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror -Wpedantic -Wconversion \
+    -Wsign-conversion -Wshadow -Wvla -DADIA_TESTING -Iproduction -Itests \
+    docs/codegen-demo/evidence/production/*.c docs/codegen-demo/evidence/tests/*.c</code></pre>
+<p>The first command regenerates every artefact quoted here and re-runs the differential comparison; the last one reproduces the
+compile failure in §5.3 (a clean build is expected only after the plan-builder fix).</p>
+</div>
+
+<h2 id="s6"><span class="num">6</span>What the generator does <i>not</i> do</h2>
+
+<p>The clearest way to describe a generator's contract is by its refusals. Reading all 1,963 lines of <code>smCGenerator.ts</code>,
+these are the boundaries it deliberately draws.</p>
+
+<h3>6.1 No ambient context, no build system, no target</h3>
+<ul>
+<li><b>It never reads a file, the clock, the environment or a random source.</b> Every render function takes <code>(ir, index)</code>
+and returns a string; <code>generateCArtifacts()</code> takes the IR and options and returns a file list. The same IR always produces
+byte-identical files, which is what makes the golden snapshot test meaningful and makes the evidence in this document reproducible.</li>
+<li><b>It does not emit a build system.</b> No Makefile, CMakeLists, linker script, startup code or ISR wiring is produced — the
+package is ten translation units that you compile with your own flags. The pipeline supplies the host flags for <i>testing</i> only
+(<code>-std=c99 … -Werror …</code>); the target flags are yours.</li>
+<li><b>It does not write the MCAL.</b> <code>mcal_dio.h</code> contains channel macros and prototypes; the .c is firmware. A flat
+package therefore does not link on its own (<code>undefined reference to MCAL_ApplySafeOutputs</code>), which is why the harness
+generates a stub for host tests.</li>
+<li><b>It uses no compiler extensions.</b> Grepping the generator for <code>malloc</code>, <code>free</code>,
+<code>__attribute__</code>, <code>#pragma</code>, <code>volatile</code> and <code>assert</code> returns zero occurrences of each; the
+emitted code is fixed-size arrays, <code>uintN_t</code>, <code>bool</code> and <code>memset</code>. There is no heap, no recursion
+beyond the statically-known layer nesting, and no function pointers except the optional trace sink.</li>
+<li><b>It knows the C rules that bite</b> — the instance declares
+<code>active_states[(SM_NUM_ACTIVE_SLOTS &gt; 0U) ? SM_NUM_ACTIVE_SLOTS : 1U]</code> rather than a potentially zero-length array,
+<code>SM_Data_t</code> members are emitted in <code>localeCompare</code> order for stable diffs, and
+<code>ir.verification.cStandard === 'c90'</code> switches every designated initializer to positional order (four sites:
+<code>renderConfigHeader</code>, <code>renderMappingSource</code>, <code>renderSafetySource</code>, the test suites).</li>
+</ul>
+
+<h3>6.2 The expression boundary: validated writes, blind reads</h3>
+<figure class="code src">
+<pre><code>const renderNode = (
+  node: ExpressionNode,
+  variables: Readonly&lt;Record&lt;string, SemanticVariable&gt;&gt;,
+  expectedType?: VariableType,
+  resolveVariable?: (
+    node: Extract&lt;ExpressionNode, { kind: &#x27;variable&#x27; }&gt;,
+  ) =&gt; string | undefined,
+): string =&gt; {
+  switch (node.kind) {
+    case &#x27;variable&#x27;:
+      return resolveVariable?.(node) ?? `instance-&gt;data.${node.cName}`;
+    case &#x27;literal&#x27;:
+      return renderLiteral(node.value, expectedType);
+    case &#x27;binary&#x27;: {
+      const operandType = variableType(node.left, variables)
+        ?? variableType(node.right, variables)
+        ?? expectedType;
+      return `(${renderNode(node.left, variables, operandType, resolveVariable)} ${node.operator} ${renderNode(node.right, variables, operandType, resolveVariable)})`;
+    }
+    case &#x27;unary&#x27;:
+      return `(${node.operator}${renderNode(
+        node.operand,
+        variables,
+        variableType(node.operand, variables) ?? expectedType,
+        resolveVariable,
+      )})`;
+    case &#x27;call&#x27;:
+      return `${node.functionName}(${renderNode(
+        node.argument,
+        variables,
+        variableType(node.argument, variables) ?? expectedType,
+        resolveVariable,
+      )})`;
+  }
+};
+
+export const renderCExpression = (</code></pre>
+<figcaption>src/utils/stateMachine/smCExpressions.ts:52–88</figcaption>
+</figure>
+<figure class="code src">
+<pre><code>export const renderCAction = (
+  action: ActionNode,
+  variables: Readonly&lt;Record&lt;string, SemanticVariable&gt;&gt;,
+): string =&gt; {
+  const target = variables[action.target];
+  if (target === undefined) {
+    throw new Error(`action target &#x27;${action.target}&#x27; is absent from semantic IR`);
+  }
+  return `instance-&gt;data.${target.cName} = (${cType(target.type)})(${renderCExpression(
+    action.value,
+    variables,
+    target.type,
+  )});`;
+};
+
+export const renderCType = cType;</code></pre>
+<figcaption>src/utils/stateMachine/smCExpressions.ts:116–131</figcaption>
+</figure>
+<p>Two asymmetries live in those thirty lines and they explain most of the failure modes you can meet at a C compiler:</p>
+<table>
+<tr><th>Situation</th><th>What the emitter does</th><th>Where the error surfaces</th></tr>
+<tr><td>action target not in the IR</td><td><code>renderCAction</code> <b>throws</b>: <code>action target '…' is absent from semantic IR</code></td><td>generation time — the file list is never returned</td></tr>
+<tr><td>guard reads an undeclared name</td><td><code>parseCondition</code> resolves it to <code>{id: name, cName: toCIdentifier(name)}</code>, and <code>renderNode</code> emits <code>instance-&gt;data.name</code> unchecked</td><td>C compile time (or never, if the raw name happens to be a member)</td></tr>
+<tr><td>empty guard <code>''</code></td><td>parsed as literal <code>true</code>, then <code>renderTransitionPhase</code> drops the <code>if</code> and emits the action block inline</td><td>intended behaviour: an unconditional transition costs one comparison less than a guarded one</td></tr>
+<tr><td>call node in an expression</td><td>emitted verbatim: <code>fabs(x)</code>, <code>floor(y)</code></td><td>C compile/link time; the generator does not check the function exists</td></tr>
+<tr><td>type mismatch in an assignment</td><td>wrapped in an explicit cast to the declared target type (<code>(uint16_t)(…)</code>, <code>(double)(…)</code>)</td><td>never — the cast is emitted, so overflow is <i>defined</i> but not <i>checked</i>; an out-of-range model constant becomes a documented truncation at run time, not a diagnostic</td></tr>
+</table>
+<p>That last row is the honest statement of the type system: the generator is a <i>syntax-directed translator with declared types</i>,
+not a type checker. Integer promotion and overflow analysis are out of scope; the validator upstream
+(<code>smSemanticValidator.ts</code>) is where a model gets rejected before it ever reaches this file.</p>
+
+<h3>6.3 What is in the model but not in the C</h3>
+<table>
+<tr><th>Model feature</th><th>Reaches the C as</th></tr>
+<tr><td>state x/y/width/height/colour, <code>regionId</code>, <code>isActive</code></td><td>nothing — layout is editor data</td></tr>
+<tr><td>state <code>priority</code></td><td>ordering of siblings in the emitted C (compile-time), not a runtime comparison</td></tr>
+<tr><td><code>autostart</code></td><td>the layer's default-entry function, chosen once at build time</td></tr>
+<tr><td>junction chains</td><td>expanded into routes by the builder; no junction object exists at run time</td></tr>
+<tr><td>history junctions</td><td><code>deep_history[][]</code> bits + generated restore chains</td></tr>
+<tr><td><code>hilConfig.mappings</code></td><td><code>MCAL_CH_*</code> macros plus read/write statements inside <code>SM_ReadInputs</code>/<code>SM_WriteOutputs</code> (this model: none, hence <code>(void)instance;</code>)</td></tr>
+<tr><td>X-Bridges blocks</td><td>only if the model has them: extra <code>sm_xbridges.{h,c}</code> with SHA-256–derived external symbols, plus per-state <code>Step()</code> calls injected into the state bodies</td></tr>
+<tr><td>trace labels</td><td><code>SM_TraceAction()</code> calls, compiled out unless <code>SM_TRACE_ENABLED</code> is defined</td></tr>
+</table>
+
+<h3>6.4 Defect register (found by reading the code, reproduced by running it)</h3>
+<table>
+<tr><th>#</th><th>Defect</th><th>Evidence</th><th>Suggested fix</th></tr>
+<tr>
+<td>A</td>
+<td>Every transition case in the generated plan sets a variable named <code>x</code> instead of the transition's guard variable.</td>
+<td class="mono">smTestPlanBuilder.ts:192, 228, 249 → tests/test_sm_transitions.c:10 sites, test_sm_actions.c:2 → gcc: 'SM_Data_t' has no member named 'x'</td>
+<td>use the guard variable id from the transition (<code>extractVariableIdsFromExpression(t.guard)</code>); omit the step when the guard reads an input the test does not drive.</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Verification Gate 8 (differential) compares the reference trace to itself; the compiled C is never observed, yet the gate is mandatory for acceptance.</td>
+<td class="mono">smPipelineOrchestrator.ts:311 (<code>compareCycleObservations(refObservations, refObservations)</code>)</td>
+<td>set the candidate to the observations parsed from <code>compileAndRunCTrace()</code> (the path already used in §5.4) and fail the gate when host compilation is unavailable.</td>
+</tr>
+<tr>
+<td>C</td>
+<td>The model hash is the literal <code>"0000000000000000"</code>, so no artefact identifies the model revision it was generated from.</td>
+<td class="mono">smSemanticBuilder.ts:825 → verification/test_manifest.json: <code>"modelHash": "0000000000000000"</code></td>
+<td>compute a hash from the frozen IR (states, layers, transitions, variables, verification config) at that single site.</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Coverage is fail-open on zero measured lines: <code>totalLines &gt; 0 ? … : 100</code>.</td>
+<td class="mono">smCoverageRunner.ts:111 (statement), :131 (branch); the invocation at :350 runs <code>gcov --json-format production/*.c</code> from the package root while the notes are named after the runner binary, so a “no executable lines” run still yields a JSON file and 100 % rates.</td>
+<td>treat <code>totalLines === 0</code> as <code>NOT_RUN</code> (or FAIL); run gcov with the notes file, not the source path.</td>
+</tr>
+</table>
+<p>None of these change the generated C for a correct model; A is the only one visible in this document's artefacts, and it is a test
+generator bug, not an emitter bug. They are listed here because they are exactly the kind of thing a code walkthrough should surface:
+each is a one-line fix in a specific function, and each has a witness in the committed evidence.</p>
+
+<h3>6.5 What this walkthrough proves, and what it does not</h3>
+<div class="cols2">
+<div class="note okc">
+<h4>Proved here</h4>
+<ul>
+<li>The mapping <b>model → IR → C</b> is deterministic and mechanical: every emitted line is traceable to a render function and an IR field.</li>
+<li>Conditional emission is exact: a smaller model really does emit fewer constructs, not disabled ones.</li>
+<li>The compiled C and the interpreter agree on a 29-frame scenario with a deep-history restore and an AND region (differential, §5.4).</li>
+<li>The generated test package is derived from the same IR and carries case → requirement traceability.</li>
+<li>Regeneration is reproducible: re-running the driver rebuilt all 28 evidence files byte-for-byte identical (md5-verified), including the 29-frame differential trace.</li>
+</ul>
+</div>
+<div class="note warnc">
+<h4>Not proved here</h4>
+<ul>
+<li><b>No formal equivalence.</b> Differential agreement on one scenario is evidence, not proof; the harness can only cover the vectors you give it.</li>
+<li><b>No target compilation, no MISRA, no static analysis.</b> clang/cppcheck/arm-none-eabi-gcc were unavailable in this environment, so those gates were <code>NOT_RUN</code>; only the host compiler ran.</li>
+<li><b>No MC/DC.</b> gcov on the host cannot provide it, and the pipeline marks it <code>NOT_APPLICABLE</code> unless the model requires it.</li>
+<li><b>Not the whole app.</b> This is the emitter path (<code>smCGenerator</code> + builder + harness); the editor UI, the exporter and the React trace viewer are outside its scope.</li>
+</ul>
+</div>
+</div>
+
+<h3>6.6 Where to change what</h3>
+<table>
+<tr><th>If you want to…</th><th>Edit</th></tr>
+<tr><td>change what a state's C body looks like</td><td><code>renderExecuteFunctions</code> :725 (order of transition phases vs <code>_During</code>)</td></tr>
+<tr><td>change when a transition is considered enabled</td><td><code>renderTransitionPhase</code> :676 / <code>renderTransitionEnabled</code> :177</td></tr>
+<tr><td>change history semantics</td><td><code>renderRestoreStateBody</code> :312 + <code>renderExitFunctions</code> :448</td></tr>
+<tr><td>change the instance layout or add a type</td><td><code>renderConfigHeader</code> :843 (+ the C90 branches)</td></tr>
+<tr><td>change naming or collision handling</td><td><code>toCIdentifier</code> (smExpressions.ts:83) / <code>smCIdentifierPolicy</code></td></tr>
+<tr><td>change how the model is lowered (kinds, routes, priorities)</td><td><code>smSemanticBuilder.ts</code> — <code>classifyTransition</code> :203, <code>transitionPaths</code> :157, <code>allocateActiveSlots</code> :114</td></tr>
+<tr><td>change the tests or their traceability</td><td><code>smTestPlanBuilder.ts</code> :52 / <code>smCTestSuiteRenderer.ts</code> :296</td></tr>
+</table>
+
+<div class="footer">
+<p><b>ADAI state-machine code generator — source walkthrough.</b> Every generator excerpt on this page was sliced out of the working
+tree at build time by <code>docs/codegen-demo/tools/build_source_doc.py</code>; every generated-C excerpt is a verbatim artefact of
+<code>docs/codegen-demo/generate.ts</code> run against <code>docs/codegen-demo/thermal-model.ts</code>, committed under
+<code>docs/codegen-demo/evidence/</code>. Compiler and probe transcripts are transcripts of runs performed on 2026-09-14
+(gcc 12.2.0, node 22.22). If a future edit removes a quoted function, the build fails loudly rather than publishing a stale page.</p>
+</div>
+
+</div>
+</body>
+</html>
