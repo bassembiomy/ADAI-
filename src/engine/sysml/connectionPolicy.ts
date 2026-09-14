@@ -1,4 +1,4 @@
-import type { BlockData, PartData, RelationshipData } from '../../types/sysml_types';
+import type { BlockData, PartData } from '../../types/sysml_types';
 import type { SysmlEntity, SysmlUsage } from './model';
 
 export type SysmlEndpointFamily =
@@ -65,9 +65,11 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
   const normalized = { ...input, relationshipKind: kind };
   const { source, target } = normalized;
   if (!validDiagram(kind, input.diagram)) return reject(normalized, 'INVALID_RELATIONSHIP_DIAGRAM', `This relationship is not valid on the ${input.diagram} diagram.`, 'Choose a relationship supported by the current diagram.');
+  if (!source.id || !target.id) return reject(normalized, 'MISSING_RELATIONSHIP_ENDPOINT', 'Both relationship endpoints must be resolved model elements.', 'Choose existing endpoints before creating the relationship.');
   if (source.id === target.id) return reject(normalized, 'SELF_RELATIONSHIP', 'An endpoint cannot connect to itself.', 'Choose two distinct endpoints.');
 
   if (kind === 'association') {
+    if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Association requires declared classifier endpoint families.', 'Declare a supported stereotype family before using an association.');
     if (!CLASSIFIER_FAMILY.has(source.family) || !CLASSIFIER_FAMILY.has(target.family)) return reject(normalized, 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS', 'Association requires compatible classifier endpoints.', 'Choose two Block, Interface, ValueType, or Enumeration classifiers.');
     return { allowed: true, diagnostics: [] };
   }
@@ -80,6 +82,7 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
   }
   if (kind === 'generalization') {
     const compatible = (BLOCK_FAMILY.has(source.family) && BLOCK_FAMILY.has(target.family)) || source.family === target.family && ['interface', 'valueType', 'enumeration'].includes(source.family);
+    if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Generalization requires declared compatible endpoint families.', 'Declare a supported stereotype family before using generalization.');
     if (!compatible) return reject(normalized, 'CROSS_FAMILY_GENERALIZATION', 'Generalization requires compatible endpoint families.', 'Use the same classifier family, or model the relationship as a dependency.');
     return { allowed: true, diagnostics: [] };
   }
@@ -108,10 +111,12 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'binding') {
+    if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Binding requires declared value-parameter endpoint families.', 'Declare the endpoint stereotype or choose value/constraint parameters.');
     if (source.family !== 'valueParameter' || target.family !== 'valueParameter') return reject(normalized, 'INVALID_BINDING_ENDPOINTS', 'Binding connects compatible value or constraint parameters.', 'Choose two value/constraint parameters in a parametric context.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'assembly' || kind === 'delegation') {
+    if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', `${kind} requires declared port endpoint families.`, 'Declare the endpoint stereotype or choose compatible ports.');
     if (source.family !== 'port' || target.family !== 'port') return reject(normalized, `INVALID_${kind.toUpperCase()}_ENDPOINTS`, `${kind} connects compatible ports.`, 'Choose two compatible ports in the IBD context.');
     return { allowed: true, diagnostics: [] };
   }
