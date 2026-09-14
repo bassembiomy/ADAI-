@@ -1,5 +1,6 @@
 import { qualifiedName, type BlockDefinition, type SysmlRepository } from './model';
 import { validateRequirementContainment } from './requirements';
+import { classifyRelationship, parsePolicyDiagnostic } from './policy';
 
 export { validateRequirementContainment };
 
@@ -81,8 +82,10 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
 
   const compositionOwners = new Map<string, string>();
   for (const relationship of Object.values(repo.relationships)) {
-    if (!ids.has(relationship.sourceId)) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'sourceId', `Source ${relationship.sourceId} does not exist`);
-    if (!ids.has(relationship.targetId)) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'targetId', `Target ${relationship.targetId} does not exist`);
+    const sourceResolved = ids.has(relationship.sourceId);
+    const targetResolved = ids.has(relationship.targetId);
+    if (!sourceResolved) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'sourceId', `Source ${relationship.sourceId} does not exist`);
+    if (!targetResolved) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'targetId', `Target ${relationship.targetId} does not exist`);
     if (relationship.kind === 'composition') {
       const previous = compositionOwners.get(relationship.targetId);
       if (previous && previous !== relationship.sourceId) {
@@ -93,6 +96,19 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
       diagnostics.push(...validateRequirementContainment(repo, relationship.id));
     } else if (!hasValidDirection(relationship.kind, relationship.sourceId, relationship.targetId, repo)) {
       error('INVALID_RELATIONSHIP_DIRECTION', relationship.id, 'kind', `${relationship.kind} has invalid SysML endpoint direction`);
+    }
+
+    // Imported models may contain relationships that are resolvable but no
+    // longer legal under the current SysML 1.6 connection policy. Keep those
+    // records intact for repair in the editor, while surfacing the same typed
+    // policy diagnostics used to block new gateway commands. Missing-endpoint
+    // links are handled by persistence quarantine instead.
+    if (sourceResolved && targetResolved) {
+      const decision = classifyRelationship(repo, relationship.id);
+      for (const entry of decision.diagnostics) {
+        const { code, message } = parsePolicyDiagnostic(entry);
+        error(code, relationship.id, 'kind', message);
+      }
     }
   }
 

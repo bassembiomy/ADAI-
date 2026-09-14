@@ -93,6 +93,32 @@ describe('validateSysmlRepository', () => {
     expect(report.canVerify).toBe(false);
   });
 
+  it('reports central-policy errors for resolvable relationships without removing them', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = block('system');
+    repo.definitions.temperature = {
+      id: 'temperature', name: 'Temperature', namespace: [], kind: 'valueType',
+    };
+    repo.requirements.req = {
+      id: 'req', name: 'Requirement', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'x', status: 'draft', version: '1',
+    };
+    repo.relationships.badAggregation = {
+      id: 'badAggregation', kind: 'sharedAggregation', sourceId: 'system', targetId: 'temperature',
+    };
+    repo.relationships.badAssociation = {
+      id: 'badAssociation', kind: 'association', sourceId: 'req', targetId: 'system',
+    };
+
+    const report = validateSysmlRepository(repo);
+
+    expect(repo.relationships.badAggregation).toBeDefined();
+    expect(repo.relationships.badAssociation).toBeDefined();
+    expect(report.diagnostics.map(d => d.code)).toEqual(expect.arrayContaining([
+      'INVALID_AGGREGATION_ENDPOINTS', 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS',
+    ]));
+  });
+
   it('validates SysML requirement containment rules in repository', () => {
     const repo = createEmptyRepository();
     repo.definitions.b = block('b');

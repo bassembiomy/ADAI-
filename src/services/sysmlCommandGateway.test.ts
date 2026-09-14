@@ -648,6 +648,46 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(codesOf(result)).toContain('INVALID_COMPOSITION_ENDPOINTS');
   });
 
+  it('blocks invalid relationship creates and updates before repository mutation', () => {
+    const valueType = { id: 'temperature', name: 'Temperature', namespace: [], kind: 'valueType' as const };
+    const state = commitAll([defBlock('system'), defBlock('child'), valueType as SysmlElement, requirement('req')]);
+    const before = { revision: state.repository.revision, audit: state.repository.auditTrail.length };
+
+    const aggregation = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('aggregation', 'sharedAggregation', 'system', 'temperature'),
+    });
+    expect(aggregation.committed).toBe(false);
+    expect(codesOf(aggregation)).toContain('INVALID_AGGREGATION_ENDPOINTS');
+    expect(aggregation.repository.relationships.aggregation).toBeUndefined();
+
+    const crossFamily = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('cross-family', 'generalization', 'system', 'temperature'),
+    });
+    expect(crossFamily.committed).toBe(false);
+    expect(codesOf(crossFamily)).toContain('CROSS_FAMILY_GENERALIZATION');
+    expect(crossFamily.repository.relationships['cross-family']).toBeUndefined();
+
+    const structuralRequirement = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('req-structure', 'association', 'req', 'system'),
+    });
+    expect(structuralRequirement.committed).toBe(false);
+    expect(codesOf(structuralRequirement)).toContain('INCOMPATIBLE_RELATIONSHIP_ENDPOINTS');
+    expect(structuralRequirement.repository.relationships['req-structure']).toBeUndefined();
+
+    const valid = executeSysmlCommand(state, {
+      type: 'createElement', element: rel('change-me', 'association', 'system', 'child'),
+    });
+    expect(valid.committed).toBe(true);
+    const update = executeSysmlCommand({ ...state, repository: valid.repository, history: valid.history, store: valid.store, patchHistory: valid.patchHistory }, {
+      type: 'updateElement', elementId: 'change-me', patch: { kind: 'sharedAggregation', targetId: 'temperature' },
+    });
+    expect(update.committed).toBe(false);
+    expect(codesOf(update)).toContain('INVALID_AGGREGATION_ENDPOINTS');
+    expect(update.repository.relationships['change-me']).toEqual(valid.repository.relationships['change-me']);
+    expect(update.repository.revision).toBe(before.revision + 1);
+    expect(update.repository.auditTrail).toHaveLength(before.audit + 1);
+  });
+
   it('rejects relationships with missing endpoints and duplicates with typed codes', () => {
     const state = commitAll([defBlock('a'), defBlock('b')]);
     const missing = executeSysmlCommand(state, {
