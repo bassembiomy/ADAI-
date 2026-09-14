@@ -10,6 +10,7 @@ import { HILSignalMapper } from './HILSignalMapper';
 import { HILDashboard } from './HILDashboard';
 import { TargetPackSelector } from './TargetPackSelector';
 import {
+  applyLegacyTargetSelection,
   applyTargetSelection,
   HILConfig,
   HILSessionState,
@@ -533,7 +534,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
             <span className="text-[10px] text-[#888] font-bold uppercase">MCU Target:</span>
             <select
               value={config.target}
-              onChange={(e) => onChangeConfig({ ...config, target: e.target.value as any })}
+              onChange={(e) => onChangeConfig(applyLegacyTargetSelection(config, e.target.value as HILConfig['target']))}
               className="ui-control ui-focus-ring bg-[#0a0a0a] border border-[#333] rounded px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               <option value="STM32F4">STM32F4xx Series</option>

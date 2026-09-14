@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyTargetSelection, legacyTargetForTargetId, resolveTargetSelection } from './hilTypes.js';
+import { applyLegacyTargetSelection, applyTargetSelection, legacyTargetForTargetId, resolveTargetSelection } from './hilTypes.js';
 import type { HILConfig } from './hilTypes.js';
 
 describe('exact HIL target selection', () => {
@@ -60,5 +60,57 @@ describe('exact HIL target selection', () => {
     expect(updated.target).toBe('Arduino_Mega');
     expect(updated.targetSelection?.driverMode).toBe('bare-metal');
     expect(config.target).toBe('Generic');
+  });
+
+  it('replaces stale exact metadata on the first legacy target switch', () => {
+    const config: HILConfig = {
+      enabled: true,
+      target: 'Arduino_Uno',
+      targetSelection: {
+        targetId: 'atmega328p',
+        packVersion: '1.0.0',
+        driverMode: 'vendor',
+        boardRevision: 'A',
+      },
+      clockSpeed: 16,
+      channels: [],
+      mappings: [],
+      commPort: 'COM3',
+      baudRate: 115200,
+    };
+
+    const updated = applyLegacyTargetSelection(config, 'Arduino_Mega');
+
+    expect(updated.target).toBe('Arduino_Mega');
+    expect(updated.targetSelection).toEqual({
+      targetId: 'atmega2560',
+      packVersion: '1.0.0',
+      driverMode: 'vendor',
+      boardRevision: 'A',
+    });
+    expect(config.targetSelection?.targetId).toBe('atmega328p');
+  });
+
+  it('clears exact metadata when selecting the Generic host', () => {
+    const config: HILConfig = {
+      enabled: true,
+      target: 'Arduino_Mega',
+      targetSelection: {
+        targetId: 'atmega2560',
+        packVersion: '1.0.0',
+        driverMode: 'vendor',
+        boardRevision: 'A',
+      },
+      clockSpeed: 16,
+      channels: [],
+      mappings: [],
+      commPort: 'COM3',
+      baudRate: 115200,
+    };
+
+    const updated = applyLegacyTargetSelection(config, 'Generic');
+
+    expect(updated.target).toBe('Generic');
+    expect(updated.targetSelection).toBeUndefined();
   });
 });
