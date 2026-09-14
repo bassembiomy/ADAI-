@@ -9,8 +9,6 @@ import {
   useNodesState,
   useEdgesState,
   ReactFlowInstance,
-  Edge,
-  Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,6 +24,7 @@ import {
   UseCaseRelationshipType,
   UseCaseNodeType,
 } from '../../types/usecase_types';
+import { serializeUseCaseDiagram, toUseCaseRelationships } from '../../utils/useCasePersistence';
 
 interface UseCaseWorkspaceProps {
   diagram: UseCaseDiagram;
@@ -50,10 +49,20 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
   onChange,
   onSave,
 }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(diagram.nodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(diagram.nodes || []);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<any, any> | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; top: number; left: number } | null>(null);
+
+  // Keep references to latest state & callbacks
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const diagramRef = useRef(diagram);
+  diagramRef.current = diagram;
 
   // Undo / Redo history stacks
   const historyRef = useRef<{ nodes: UseCaseNode[]; edges: UseCaseRelationship[] }[]>([]);
@@ -61,19 +70,17 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
   // Clipboard
   const clipboardRef = useRef<{ nodes: UseCaseNode[]; edges: UseCaseRelationship[] } | null>(null);
 
-  const saveHistory = useCallback(() => {
-    historyRef.current.push({
-      nodes: JSON.parse(JSON.stringify(nodes)),
-      edges: JSON.parse(JSON.stringify(diagram.edges)),
-    });
-    futureRef.current = [];
-  }, [nodes, diagram.edges]);
+  const notifyChange = useCallback((currentNodes: UseCaseNode[], currentEdges: any[]) => {
+    if (!onChangeRef.current) return;
+    const serialized = serializeUseCaseDiagram(diagramRef.current, currentNodes, currentEdges);
+    onChangeRef.current(serialized);
+  }, []);
 
   const handleEdgeTypeChange = useCallback(
     (edgeId: string, newType: UseCaseRelationshipType) => {
       saveHistory();
-      setEdges((eds: any[]) =>
-        eds.map((ed) => {
+      setEdges((eds: any[]) => {
+        const next = eds.map((ed) => {
           if (ed.id === edgeId) {
             return {
               ...ed,
@@ -81,22 +88,28 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
             };
           }
           return ed;
-        })
-      );
+        });
+        notifyChange(nodesRef.current, next);
+        return next;
+      });
     },
-    [saveHistory]
+    [notifyChange]
   );
 
   const handleEdgeDelete = useCallback(
     (edgeId: string) => {
       saveHistory();
-      setEdges((eds) => eds.filter((ed) => ed.id !== edgeId));
+      setEdges((eds) => {
+        const next = eds.filter((ed) => ed.id !== edgeId);
+        notifyChange(nodesRef.current, next);
+        return next;
+      });
     },
-    [saveHistory]
+    [notifyChange]
   );
 
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>(
-    diagram.edges.map((rel) => ({
+    (diagram.edges || []).map((rel) => ({
       id: rel.id,
       source: rel.source,
       target: rel.target,
@@ -109,34 +122,94 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
     }))
   );
 
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
+
+  const saveHistory = useCallback(() => {
+    historyRef.current.push({
+      nodes: JSON.parse(JSON.stringify(nodesRef.current)),
+      edges: toUseCaseRelationships(edgesRef.current),
+    });
+    futureRef.current = [];
+  }, []);
+
+  // Sync state if diagram prop ID or content changes from parent
+  const lastDiagramIdRef = useRef(diagram.id);
+  useEffect(() => {
+    if (lastDiagramIdRef.current !== diagram.id) {
+      lastDiagramIdRef.current = diagram.id;
+      setNodes(diagram.nodes || []);
+      setEdges(
+        (diagram.edges || []).map((rel) => ({
+          id: rel.id,
+          source: rel.source,
+          target: rel.target,
+          type: 'useCaseEdge',
+          data: {
+            type: rel.type,
+            onTypeChange: handleEdgeTypeChange,
+            onDelete: handleEdgeDelete,
+          },
+        }))
+      );
+    }
+  }, [diagram.id, diagram.nodes, diagram.edges, setNodes, setEdges, handleEdgeTypeChange, handleEdgeDelete]);
+
+  // Debounced auto-sync to parent to ensure diagram changes (e.g., node moves, ReactFlow internal edits) are never lost
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      notifyChange(nodes, edges);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [nodes, edges, notifyChange]);
+
+  // Synchronously flush latest diagram state to parent when component unmounts (e.g. user clicks another diagram mode or tab)
+  useEffect(() => {
+    return () => {
+      if (onChangeRef.current) {
+        const latest = serializeUseCaseDiagram(diagramRef.current, nodesRef.current, edgesRef.current);
+        onChangeRef.current(latest);
+      }
+    };
+  }, []);
+
   const onConnect = useCallback(
     (connection: Connection) => {
       saveHistory();
-      setEdges((eds) =>
-        addEdge(
-          {
-            ...connection,
-            id: `edge-${uuidv4()}`,
-            type: 'useCaseEdge',
-            data: {
-              type: 'association',
-              onTypeChange: handleEdgeTypeChange,
-              onDelete: handleEdgeDelete,
-            },
-          },
-          eds
-        )
-      );
+      const newEdge = {
+        ...connection,
+        id: `edge-${uuidv4()}`,
+        type: 'useCaseEdge',
+        data: {
+          type: 'association',
+          onTypeChange: handleEdgeTypeChange,
+          onDelete: handleEdgeDelete,
+        },
+      };
+      setEdges((eds) => {
+        const next = addEdge(newEdge, eds);
+        notifyChange(nodesRef.current, next);
+        return next;
+      });
     },
-    [setEdges, handleEdgeTypeChange, handleEdgeDelete, saveHistory]
+    [setEdges, handleEdgeTypeChange, handleEdgeDelete, saveHistory, notifyChange]
   );
 
   const handleUpdateNodeData = useCallback(
     (nodeId: string, data: any) => {
       saveHistory();
-      setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data } : n)));
+      setNodes((nds) => {
+        const next = nds.map((n) => (n.id === nodeId ? { ...n, data } : n));
+        notifyChange(next, edgesRef.current);
+        return next;
+      });
     },
-    [setNodes, saveHistory]
+    [setNodes, saveHistory, notifyChange]
   );
 
   const handleAddNode = useCallback(
@@ -154,11 +227,15 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         position,
         data: { label: defaultLabels[type] },
       };
-      setNodes((nds) => nds.concat(newNode as any));
+      setNodes((nds) => {
+        const next = nds.concat(newNode as any);
+        notifyChange(next, edgesRef.current);
+        return next;
+      });
       setSelectedNodeId(newNode.id);
       setMenu(null);
     },
-    [reactFlowInstance, saveHistory, setNodes]
+    [reactFlowInstance, saveHistory, setNodes, notifyChange]
   );
 
   const handleAutoLayout = useCallback(() => {
@@ -166,8 +243,8 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
     // Layout: Actors on left column, UseCases in middle/right column
     let actorY = 80;
     let useCaseY = 80;
-    setNodes((nds) =>
-      nds.map((node) => {
+    setNodes((nds) => {
+      const next = nds.map((node) => {
         if (node.type === 'actor') {
           const pos = { x: 80, y: actorY };
           actorY += 140;
@@ -180,12 +257,14 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
           return { ...node, position: { x: 300, y: 40 }, width: 380, height: Math.max(300, useCaseY + 60) };
         }
         return node;
-      })
-    );
+      });
+      notifyChange(next, edgesRef.current);
+      return next;
+    });
     if (reactFlowInstance) {
       setTimeout(() => reactFlowInstance.fitView({ padding: 0.2 }), 50);
     }
-  }, [reactFlowInstance, saveHistory, setNodes]);
+  }, [reactFlowInstance, saveHistory, setNodes, notifyChange]);
 
   // Global Keyboard Shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A, Del, Ctrl+0)
   useEffect(() => {
@@ -213,6 +292,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
       // 1. Save: Ctrl+S
       if (isCtrlOrCmd && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
+        notifyChange(nodesRef.current, edgesRef.current);
         onSave?.();
         return;
       }
@@ -223,10 +303,24 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         const prev = historyRef.current.pop();
         if (prev) {
           futureRef.current.push({
-            nodes: JSON.parse(JSON.stringify(nodes)),
-            edges: JSON.parse(JSON.stringify(edges)),
+            nodes: JSON.parse(JSON.stringify(nodesRef.current)),
+            edges: toUseCaseRelationships(edgesRef.current),
           });
           setNodes(prev.nodes as any);
+          setEdges(
+            prev.edges.map((rel) => ({
+              id: rel.id,
+              source: rel.source,
+              target: rel.target,
+              type: 'useCaseEdge',
+              data: {
+                type: rel.type,
+                onTypeChange: handleEdgeTypeChange,
+                onDelete: handleEdgeDelete,
+              },
+            }))
+          );
+          notifyChange(prev.nodes, prev.edges);
         }
         return;
       }
@@ -237,10 +331,24 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         const next = futureRef.current.pop();
         if (next) {
           historyRef.current.push({
-            nodes: JSON.parse(JSON.stringify(nodes)),
-            edges: JSON.parse(JSON.stringify(edges)),
+            nodes: JSON.parse(JSON.stringify(nodesRef.current)),
+            edges: toUseCaseRelationships(edgesRef.current),
           });
           setNodes(next.nodes as any);
+          setEdges(
+            next.edges.map((rel) => ({
+              id: rel.id,
+              source: rel.source,
+              target: rel.target,
+              type: 'useCaseEdge',
+              data: {
+                type: rel.type,
+                onTypeChange: handleEdgeTypeChange,
+                onDelete: handleEdgeDelete,
+              },
+            }))
+          );
+          notifyChange(next.nodes, next.edges);
         }
         return;
       }
@@ -283,7 +391,11 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
             selected: true,
           }));
 
-          setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...(pastedNodes as any)]);
+          setNodes((nds) => {
+            const next = [...nds.map((n) => ({ ...n, selected: false })), ...(pastedNodes as any)];
+            notifyChange(next, edgesRef.current);
+            return next;
+          });
           if (pastedNodes.length > 0) {
             setSelectedNodeId(pastedNodes[0].id);
           }
@@ -302,8 +414,16 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
             nodes: JSON.parse(JSON.stringify(selectedNodes)) as any,
             edges: JSON.parse(JSON.stringify(edges.filter((ed) => ids.has(ed.source) && ids.has(ed.target)))) as any,
           };
-          setNodes((nds) => nds.filter((n) => !ids.has(n.id)));
-          setEdges((eds) => eds.filter((ed) => !ids.has(ed.source) && !ids.has(ed.target)));
+          setNodes((nds) => {
+            const next = nds.filter((n) => !ids.has(n.id));
+            notifyChange(next, edgesRef.current);
+            return next;
+          });
+          setEdges((eds) => {
+            const next = eds.filter((ed) => !ids.has(ed.source) && !ids.has(ed.target));
+            notifyChange(nodesRef.current, next);
+            return next;
+          });
           setSelectedNodeId(null);
         }
         return;
@@ -319,8 +439,16 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         const edgeIdsToDelete = new Set(selectedEdges.map((e: any) => e.id));
 
         if (nodeIdsToDelete.size > 0 || edgeIdsToDelete.size > 0) {
-          setNodes((nds) => nds.filter((n) => !nodeIdsToDelete.has(n.id)));
-          setEdges((eds) => eds.filter((ed) => !edgeIdsToDelete.has(ed.id) && !nodeIdsToDelete.has(ed.source) && !nodeIdsToDelete.has(ed.target)));
+          setNodes((nds) => {
+            const next = nds.filter((n) => !nodeIdsToDelete.has(n.id));
+            notifyChange(next, edgesRef.current);
+            return next;
+          });
+          setEdges((eds) => {
+            const next = eds.filter((ed) => !edgeIdsToDelete.has(ed.id) && !nodeIdsToDelete.has(ed.source) && !nodeIdsToDelete.has(ed.target));
+            notifyChange(nodesRef.current, next);
+            return next;
+          });
           setSelectedNodeId(null);
         }
         return;
@@ -339,20 +467,22 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         const delta = e.shiftKey ? 10 : 1;
         const dx = e.key === 'ArrowLeft' ? -delta : e.key === 'ArrowRight' ? delta : 0;
         const dy = e.key === 'ArrowUp' ? -delta : e.key === 'ArrowDown' ? delta : 0;
-        setNodes((nds) =>
-          nds.map((n) => {
+        setNodes((nds) => {
+          const next = nds.map((n) => {
             if (n.selected || n.id === selectedNodeId) {
               return { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } };
             }
             return n;
-          })
-        );
+          });
+          notifyChange(next, edgesRef.current);
+          return next;
+        });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [nodes, edges, selectedNodeId, reactFlowInstance, onSave, saveHistory, setNodes, setEdges]);
+  }, [nodes, edges, selectedNodeId, reactFlowInstance, onSave, saveHistory, setNodes, setEdges, notifyChange, handleEdgeTypeChange, handleEdgeDelete]);
 
   // Context Menu
   const onPaneContextMenu = useCallback(
@@ -391,6 +521,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStop={() => notifyChange(nodesRef.current, edgesRef.current)}
           onPaneContextMenu={onPaneContextMenu}
           onPaneClick={() => setMenu(null)}
           onSelectionChange={(params) => {

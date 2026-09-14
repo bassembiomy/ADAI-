@@ -41,3 +41,11 @@
   - [x] Step 2: Run full project tests (`npm run test -- usecase`)
   - [x] Step 3: Run TypeScript compiler (`npx tsc --noEmit`)
   - [x] Step 4: Commit
+- [x] Task 8: Systematic Bugfix: Use-Case Diagram Model Persistence Across Tab/Module Switching
+  - [x] Step 1: Root cause analysis of state loss on unmount/re-entry
+  - [x] Step 2: Write persistence & serialization unit tests (`src/utils/useCasePersistence.test.ts`)
+  - [x] Step 3: Implement real-time `notifyChange`, debounced auto-sync, and synchronous unmount flush in `UseCaseWorkspace.tsx`
+  - [x] Step 4: Wire `getActiveStateData`, `loadStateForFile`, `syncTabWithMode`, and project serialization/import in `src/App.tsx`
+  - [x] Step 5: Verify all tests pass (`npx vitest run`) and zero TypeScript errors (`npx tsc --noEmit`)
+  - [x] Step 6: Commit and push changes
+

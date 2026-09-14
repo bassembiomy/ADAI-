@@ -20,6 +20,7 @@ import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceA
 import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { UseCaseDiagram } from './types/usecase_types';
+import { updateDiagramInList } from './utils/useCasePersistence';
 import { UseCaseWorkspace } from './components/usecase/UseCaseWorkspace';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -4552,7 +4553,7 @@ const SaveSelectionDialog = ({
 }) => {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([
     'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges', 
-    'vlab', 'hmi', 'hil', 'doe', 'entropy', 'unified'
+    'vlab', 'hmi', 'hil', 'doe', 'entropy', 'usecase', 'unified'
   ]);
 
   const modules = [
@@ -4561,6 +4562,7 @@ const SaveSelectionDialog = ({
     { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.json' },
     { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.json' },
     { id: 'requirements', name: 'Requirements Module', desc: 'requirements.json' },
+    { id: 'usecase', name: 'SysML Use Cases Module', desc: 'usecase.json' },
     { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.json' },
     { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.json' },
     { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.json' },
@@ -6264,6 +6266,8 @@ const ADIA = () => {
         return hilConfig;
       case 'entropy':
         return { entropyNodes, entropyEdges, opmSimulationConfig };
+      case 'usecase':
+        return { useCaseDiagrams };
       case 'hmi':
         return { hmiComponents };
       case 'doe':
@@ -6275,7 +6279,7 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results
+    entropyNodes, entropyEdges, opmSimulationConfig, useCaseDiagrams, hmiComponents, headers, data, activeModel, taguchiConfig, results
   ]);
 
   // Helper to save current active file state into workspaceFiles list
@@ -6351,6 +6355,9 @@ const ADIA = () => {
           break;
         case 'entropy':
           setEntropyNodes([]); setEntropyEdges([]); setOpmSimulationConfig(DEFAULT_OPM_SIMULATION_CONFIG);
+          break;
+        case 'usecase':
+          setUseCaseDiagrams([]);
           break;
         case 'hmi':
           setHmiComponents([]);
@@ -6437,6 +6444,9 @@ const ADIA = () => {
         setEntropyEdges(d.entropyEdges || []);
         setOpmSimulationConfig(d.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG);
         break;
+      case 'usecase':
+        setUseCaseDiagrams(d.useCaseDiagrams || []);
+        break;
       case 'hmi':
         setHmiComponents(d.hmiComponents || []);
         break;
@@ -6452,7 +6462,7 @@ const ADIA = () => {
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
-    setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
+    setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setUseCaseDiagrams, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
   ]);
 
@@ -6571,7 +6581,8 @@ const ADIA = () => {
       hil: 'Main HIL',
       entropy: 'Main ENTROPY',
       hmi: 'Main HMI',
-      doe: 'Main DOE'
+      doe: 'Main DOE',
+      usecase: 'Main SysML Use Cases'
     };
     const name = defaultNames[mode] || `Main ${mode}`;
     createNewFile(name, mode);
@@ -6819,6 +6830,7 @@ const ADIA = () => {
         { id: 'default_entropy', name: 'Main ENTROPY', type: 'entropy', data: getActiveStateData('entropy') },
         { id: 'default_hmi', name: 'Main HMI', type: 'hmi', data: getActiveStateData('hmi') },
         { id: 'default_doe', name: 'Main DOE', type: 'doe', data: getActiveStateData('doe') },
+        { id: 'default_usecase', name: 'Main SysML Use Cases', type: 'usecase', data: getActiveStateData('usecase') },
       ];
       setWorkspaceFiles(initialFiles);
       setOpenTabIds(['default_sm', 'default_xbridges', 'default_vlab']);
@@ -7256,6 +7268,9 @@ const ADIA = () => {
     if (selectedKeys.includes('entropy')) {
       projectFiles['entropy.json'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
+    if (selectedKeys.includes('usecase')) {
+      projectFiles['usecase.json'] = { useCaseDiagrams };
+    }
     if (selectedKeys.includes('unified')) {
       projectFiles['adia_project_unified.json'] = {
         version: VERSION,
@@ -7271,6 +7286,7 @@ const ADIA = () => {
         entropyNodes,
         entropyEdges,
         opmSimulationConfig,
+        useCaseDiagrams,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
         activeFileId
@@ -7418,6 +7434,9 @@ const ADIA = () => {
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
 
+      // Use Cases Module
+      if (importedData.useCaseDiagrams) setUseCaseDiagrams(importedData.useCaseDiagrams);
+
       const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
       if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
 
@@ -7559,6 +7578,14 @@ const ADIA = () => {
               activeModel: 'RSM',
               taguchiConfig: { objective: 'larger', targetValue: 10 },
               results: null
+            }
+          },
+          {
+            id: 'default_usecase',
+            name: 'Main SysML Use Cases',
+            type: 'usecase',
+            data: {
+              useCaseDiagrams: importedData.useCaseDiagrams || []
             }
           }
         ];
@@ -15835,15 +15862,14 @@ const ADIA = () => {
 
               {diagramMode === 'usecase' && (
                 <UseCaseWorkspace
+                  key={useCaseDiagrams[0]?.id || 'default_usecase'}
                   sysmlBlocks={blocks}
-                  diagram={useCaseDiagrams[0] || { id: 'default_usecase', name: 'Main Use Cases', nodes: [], edges: [] }}
+                  diagram={useCaseDiagrams[0] || { id: 'default_usecase', name: 'Main SysML Use Cases', nodes: [], edges: [] }}
                   onChange={(d: UseCaseDiagram) => {
-                    const newDiagrams = [...useCaseDiagrams];
-                    newDiagrams[0] = d;
-                    setUseCaseDiagrams(newDiagrams);
+                    setUseCaseDiagrams(prev => updateDiagramInList(prev, d));
                   }}
                   onSave={() => {
-                    // State is automatically saved via useCaseDiagrams
+                    setWorkspaceFiles(prev => saveCurrentFileState(prev, activeFileId));
                   }}
                 />
               )}
