@@ -182,10 +182,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges the Electrical and Translational domains. Models voice coils or solenoids where force is proportional to current.'
   },
   thermal_resistor: {
-    equations: ['Q = (Th - Tc) / Rth'],
-    latex: ['Q = \\frac{\Delta T}{R_{th}}'],
-    across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Bridges Electrical and Thermal domains by modeling heat generation from power dissipation ($P = I^2 R$).'
+    equations: ['V = I * R', 'Q = I^2 * R'],
+    latex: ['V = I \\cdot R', 'Q = I^2 R'],
+    across: 'Voltage (V), Temperature (K)', through: 'Current (A), Heat Flow (W)',
+    description: 'Bridges Electrical and Thermal domains by modeling heat generation from electrical resistance ($P = I^2 R$).'
   },
   v_sensor: {
     equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
@@ -1271,10 +1271,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A heat flow source driven by an external physical signal (PS).'
   },
   ctrl_temp_src: {
-    equations: ['T = S_input'],
-    latex: ['T = f(S_{ctrl})'],
+    equations: ['Ta - Tb = S_input'],
+    latex: ['T_a - T_b = S_{ctrl}'],
     across: 'T', through: 'Q',
-    description: 'A temperature source driven by an external physical signal (PS).'
+    description: 'A temperature source maintaining difference Ta - Tb driven by an external physical signal (PS).'
   },
   solver_config: {
     equations: ['f(x) = 0'],

@@ -808,6 +808,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "thermal_resistor",
         "category": "Thermal",
         "params": {
+          "R": {
+            "value": 10,
+            "unit": "Ω",
+            "label": "Electrical Resistance"
+          },
           "Rth": {
             "value": 10,
             "unit": "K/W",
@@ -834,7 +839,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "V = I * R(T)\nR(T) = R0 * (1 + α * (T - T0))\nQ_gen = I² * R(T)",
+        "equation": "V = I * R\nQ_gen = I² * R",
         "description": "Temperature-dependent electrical resistor dissipating Joule heating into the thermal domain."
       },
       {
@@ -6991,16 +6996,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
-        "equation": "Q = (k * A / L) * (T1 - T2)",
-        "description": "Fourier conductive heat transfer through a solid medium with conductivity k and area A."
+        "equation": "Q = k * (T1 - T2)",
+        "description": "Fourier conductive heat transfer with thermal conductance k."
       },
       {
         "id": "convective_heat",
@@ -7024,12 +7031,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = h * A * (T_solid - T_fluid)",
@@ -7057,12 +7066,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = ε * σ * A * (T1⁴ - T2⁴)",
@@ -7085,7 +7096,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = m * c_p * dT/dt",
@@ -7102,7 +7114,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
         "equation": "T = 293.15 K (20 °C)",
@@ -7119,12 +7132,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "h",
@@ -7147,12 +7162,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "t",
@@ -7181,12 +7198,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Heat Flow Rate Source governing physical equation",
@@ -7209,7 +7228,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
         "equation": "T_node = T_param (or T_cmd)",
@@ -7256,12 +7276,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "s",
