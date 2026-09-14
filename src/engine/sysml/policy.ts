@@ -225,7 +225,7 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
 }
 
 function canonicalConnectionEndpoint(repo: SysmlRepository, id: string) {
-  const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id];
+  const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id] ?? repo.artifacts[id];
   return classifyCanonicalEndpoint(element ?? { id, name: id });
 }
 

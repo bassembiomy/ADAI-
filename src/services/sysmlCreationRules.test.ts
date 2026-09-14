@@ -45,7 +45,7 @@ describe('native SysML creation rules', () => {
       );
       const canonicalResult = validateCanonicalRelationshipCandidate(
         canonical,
-        { id: `canonical-${testCase.name}`, kind: testCase.type === 'aggregation' ? 'sharedAggregation' : testCase.type, sourceId: testCase.source, targetId: testCase.target },
+        { id: `canonical-${testCase.name}`, kind: (testCase.type as string) === 'aggregation' ? 'sharedAggregation' : testCase.type, sourceId: testCase.source, targetId: testCase.target },
       );
       expect({ valid: legacy.valid, code: legacy.codes[0] }).toEqual({ valid: canonicalResult.valid, code: canonicalResult.codes[0] });
       expect(legacy.codes[0]).toBe(testCase.expected);

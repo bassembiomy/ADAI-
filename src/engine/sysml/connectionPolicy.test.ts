@@ -7,15 +7,17 @@ import {
   type SysmlEndpointFamily,
 } from './connectionPolicy';
 
-const endpoint = (family: SysmlEndpointFamily, id = family, name = family): ConnectionEndpoint => ({ id, name, family });
+const endpoint = (family: SysmlEndpointFamily, id: string = family, name: string = family): ConnectionEndpoint => ({ id, name, family });
 
 describe('central SysML connection policy', () => {
   it.each([
     ['association', 'block', 'valueType', true],
     ['composition', 'block', 'valueType', false],
     ['composition', 'block', 'block', true],
+    ['composition', 'block', 'part', true],
     ['sharedAggregation', 'block', 'interface', false],
     ['sharedAggregation', 'block', 'block', true],
+    ['sharedAggregation', 'block', 'part', true],
     ['generalization', 'valueType', 'valueType', true],
     ['generalization', 'block', 'valueType', false],
     ['generalization', 'interface', 'interface', true],

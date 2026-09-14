@@ -74,9 +74,10 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'composition' || kind === 'sharedAggregation') {
-    if (!BLOCK_FAMILY.has(source.family) || !BLOCK_FAMILY.has(target.family)) {
+    const validTarget = BLOCK_FAMILY.has(target.family) || target.family === 'part';
+    if (!BLOCK_FAMILY.has(source.family) || !validTarget) {
       const code = source.family === 'unknown' || target.family === 'unknown' ? 'UNKNOWN_STEREOTYPE_FAMILY' : 'INVALID_AGGREGATION_ENDPOINTS';
-      return reject(normalized, code, `${kind} requires a Block-family whole and a Block-family part type.`, 'Declare a supported Block-family stereotype, or create a value property typed by the ValueType instead.');
+      return reject(normalized, code, `${kind} requires a Block-family whole and a Block-family or Part target.`, 'Declare a supported Block-family stereotype, or create a value property typed by the ValueType instead.');
     }
     return { allowed: true, diagnostics: [] };
   }
@@ -146,7 +147,7 @@ export function classifyLegacyEndpoint(endpoint: unknown): ConnectionEndpoint {
 }
 
 export function classifyCanonicalEndpoint(endpoint: unknown): ConnectionEndpoint {
-  const value = endpoint as Partial<SysmlEntity | SysmlUsage> & { kind?: string; stereotype?: string; ownerId?: string; metaclass?: string };
+  const value = endpoint as Partial<SysmlEntity | SysmlUsage> & { kind?: string; stereotype?: string; ownerId?: string; metaclass?: string; name?: string };
   const family = fromLegacyKind(value.stereotype || value.metaclass || value.kind);
   return { id: String(value.id || ''), name: String(value.name || value.id || ''), family, ownerId: value.ownerId };
 }

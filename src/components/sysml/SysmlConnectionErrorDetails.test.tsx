@@ -31,7 +31,7 @@ describe('SysmlConnectionErrorDetails', () => {
       return 1;
     });
 
-    restoreConnectionErrorFocus({ focus } as HTMLElement, schedule);
+    restoreConnectionErrorFocus({ focus } as unknown as HTMLElement, schedule);
 
     expect(schedule).toHaveBeenCalledOnce();
     expect(focus).toHaveBeenCalledOnce();

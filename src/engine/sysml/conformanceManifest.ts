@@ -76,8 +76,8 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       capability: 'BDD composition',
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.3',
-      implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/engine/sysml/mutations.ts', 'src/services/sysmlTransactionAdapter.ts', 'src/components/sysml/RelationshipEndEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/mutations.test.ts', 'src/services/sysmlTransactionAdapter.test.ts', 'tests/e2e/sysml-deletion-lifecycle.spec.ts', 'src/engine/sysml/patches.test.ts'],
+      implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/engine/sysml/mutations.ts', 'src/services/sysmlTransactionAdapter.ts', 'src/components/sysml/RelationshipEndEditor.tsx', 'src/engine/sysml/connectionPolicy.ts'],
+      automatedEvidence: ['src/engine/sysml/mutations.test.ts', 'src/services/sysmlTransactionAdapter.test.ts', 'tests/e2e/sysml-deletion-lifecycle.spec.ts', 'src/engine/sysml/patches.test.ts', 'src/engine/sysml/connectionPolicy.test.ts', 'tests/e2e/sysml-connection-policy.spec.ts'],
     },
     {
       id: 'SYSML-008',
@@ -290,6 +290,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
         'src/engine/sysml/bdd.ts',
         'src/engine/sysml/ibd.ts',
         'src/engine/sysml/mutations.ts',
+        'src/engine/sysml/connectionPolicy.ts',
       ],
       automatedEvidence: [
         'src/engine/sysml/policy.test.ts',
@@ -300,6 +301,8 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
         'src/services/sysmlTransactionAdapter.test.ts',
         'tests/e2e/sysml-deletion-lifecycle.spec.ts',
         'src/engine/sysml/patches.test.ts',
+        'src/engine/sysml/connectionPolicy.test.ts',
+        'tests/e2e/sysml-connection-policy.spec.ts',
       ],
     },
   ],
