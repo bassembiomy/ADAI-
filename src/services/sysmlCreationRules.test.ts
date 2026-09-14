@@ -14,6 +14,55 @@ const relationship = (id: string, sourceId: string, targetId: string, type: Rela
 const part = (id: string, blockId: string, typeId: string): PartData => ({ id, name: id, blockId, typeId, x: 0, y: 0, width: 80, height: 60 });
 
 describe('native SysML creation rules', () => {
+  it('keeps legacy and canonical endpoint-policy diagnostics in parity', () => {
+    const cases = [
+      { name: 'Block to ValueType composition', type: 'composition' as const, source: 'b', target: 'v', expected: 'INVALID_AGGREGATION_ENDPOINTS' },
+      { name: 'Block to ValueType generalization', type: 'generalization' as const, source: 'b', target: 'v', expected: 'CROSS_FAMILY_GENERALIZATION' },
+      { name: 'ValueType to ValueType generalization', type: 'generalization' as const, source: 'v', target: 'v2', expected: undefined },
+      { name: 'Requirement to Block association', type: 'association' as const, source: 'r', target: 'b', expected: 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS' },
+      { name: 'unknown stereotype structural link', type: 'composition' as const, source: 'custom', target: 'b', expected: 'UNKNOWN_STEREOTYPE_FAMILY' },
+    ];
+    const legacyBlocks = [block('b'), block('v', 'valueType'), block('v2', 'valueType'), block('r', 'requirement'), block('custom', 'customStereotype')];
+    const canonical = createEmptyRepository();
+    canonical.definitions.b = {
+      id: 'b', name: 'b', kind: 'block', namespace: [], isAbstract: false, isLeaf: false,
+      properties: [], ports: [], operations: [], constraints: [],
+    };
+    canonical.definitions.v = { id: 'v', name: 'v', kind: 'valueType', namespace: [] };
+    canonical.definitions.v2 = { id: 'v2', name: 'v2', kind: 'valueType', namespace: [] };
+    canonical.requirements.r = { id: 'r', name: 'r', kind: 'requirement', namespace: [], requirementId: 'R', text: 'r', status: 'draft', version: '1' };
+    canonical.definitions.custom = { id: 'custom', name: 'custom', kind: 'customStereotype' } as never;
+
+    for (const testCase of cases) {
+      const legacy = validateLegacyRelationshipCandidate(
+        { blocks: legacyBlocks, parts: [], relationships: [] },
+        relationship(`legacy-${testCase.name}`, testCase.source, testCase.target, testCase.type),
+      );
+      const canonicalResult = validateCanonicalRelationshipCandidate(
+        canonical,
+        { id: `canonical-${testCase.name}`, kind: testCase.type === 'aggregation' ? 'sharedAggregation' : testCase.type, sourceId: testCase.source, targetId: testCase.target },
+      );
+      expect({ valid: legacy.valid, code: legacy.codes[0] }).toEqual({ valid: canonicalResult.valid, code: canonicalResult.codes[0] });
+      expect(legacy.codes[0]).toBe(testCase.expected);
+    }
+  });
+
+  it.each(['association', 'dependency', 'allocation'] as const)('allows reciprocal %s links', type => {
+    const blocks = [block('a'), block('b')];
+    const existing = [relationship('forward', 'a', 'b', type)];
+    expect(validateLegacyRelationshipCandidate({ blocks, parts: [], relationships: existing }, relationship('reverse', 'b', 'a', type)).valid).toBe(true);
+  });
+
+  it.each(['composition', 'generalization', 'deriveReqt', 'copy', 'requirementContainment'] as const)('rejects reciprocal %s cycles', type => {
+    const blocks = [block('a'), block('b'), block('r1', 'requirement'), block('r2', 'requirement')];
+    const source = ['deriveReqt', 'copy', 'requirementContainment'].includes(type) ? 'r1' : 'a';
+    const target = ['deriveReqt', 'copy', 'requirementContainment'].includes(type) ? 'r2' : 'b';
+    const existing = [relationship('forward', source, target, type)];
+    const result = validateLegacyRelationshipCandidate({ blocks, parts: [], relationships: existing }, relationship('reverse', target, source, type));
+    expect(result.valid).toBe(false);
+    expect(result.codes).toEqual(expect.arrayContaining(type === 'composition' ? ['COMPOSITION_CYCLE'] : type === 'requirementContainment' ? ['REQUIREMENT_CONTAINMENT_CYCLE'] : ['RELATIONSHIP_CYCLE']));
+  });
+
   it('enforces satisfy, deriveReqt, verify, refine, trace, and composition endpoint kinds', () => {
     const blocks = [block('b'), block('r1', 'requirement'), block('r2', 'requirement'), block('v', 'verificationCase')];
     const check = (candidate: RelationshipData) => validateLegacyRelationshipCandidate({ blocks, parts: [], relationships: [] }, candidate);
@@ -152,6 +201,23 @@ describe('canonical SysML creation rules (Task 2 policy gating)', () => {
     repo.relationships.g1 = rel('g1', 'generalization', 'a', 'b');
     expect(validateCanonicalRelationshipCandidate(repo, rel('g2', 'generalization', 'b', 'a')).codes)
       .toContain('RELATIONSHIP_CYCLE');
+  });
+
+  it.each(['association', 'dependency', 'allocation'] as const)('allows reciprocal canonical %s links', kind => {
+    const repo = baseRepo();
+    repo.relationships.forward = rel('forward', kind, 'a', 'b');
+    expect(validateCanonicalRelationshipCandidate(repo, rel('reverse', kind, 'b', 'a')).valid).toBe(true);
+  });
+
+  it.each(['composition', 'generalization', 'deriveReqt', 'copy', 'requirementContainment'] as const)('rejects reciprocal canonical %s cycles', kind => {
+    const repo = baseRepo();
+    repo.requirements.r2 = { id: 'r2', name: 'r2', kind: 'requirement', namespace: [], requirementId: 'REQ-2', text: 'req', status: 'draft', version: '1.0' };
+    const source = ['deriveReqt', 'copy', 'requirementContainment'].includes(kind) ? 'r1' : 'a';
+    const target = ['deriveReqt', 'copy', 'requirementContainment'].includes(kind) ? 'r2' : 'b';
+    repo.relationships.forward = rel('forward', kind, source, target);
+    const result = validateCanonicalRelationshipCandidate(repo, rel('reverse', kind, target, source));
+    expect(result.valid).toBe(false);
+    expect(result.codes).toEqual(expect.arrayContaining(kind === 'requirementContainment' ? ['REQUIREMENT_CONTAINMENT_CYCLE'] : ['RELATIONSHIP_CYCLE']));
   });
 
   it('validates canonical connectors through the IBD policy with typed codes', () => {

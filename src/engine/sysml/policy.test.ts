@@ -21,7 +21,7 @@ function repository(): SysmlRepository {
   };
   repo.usages.composite = { id: 'composite', kind: 'part', name: 'composite', ownerId: 'system', typeId: 'child', aggregation: 'composite', multiplicity: one };
   repo.usages.shared = { id: 'shared', kind: 'part', name: 'shared', ownerId: 'system', typeId: 'child', aggregation: 'shared', multiplicity: one };
-  repo.relationships.comp = { id: 'comp', kind: 'composition', sourceId: 'system', targetId: 'composite' };
+  repo.relationships.comp = { id: 'comp', kind: 'composition', sourceId: 'system', targetId: 'child' };
   repo.relationships.assoc = { id: 'assoc', kind: 'association', sourceId: 'child', targetId: 'system' };
   return repo;
 }

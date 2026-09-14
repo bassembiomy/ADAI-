@@ -5,6 +5,7 @@ import type {
   SysmlRelationship,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { classifyCanonicalEndpoint, evaluateSysmlConnection } from './connectionPolicy';
 
 export interface InheritedFeature {
   featureId: string;
@@ -223,6 +224,18 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
   }
 }
 
+function canonicalConnectionEndpoint(repo: SysmlRepository, id: string) {
+  const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id];
+  return classifyCanonicalEndpoint(element ?? { id, name: id });
+}
+
+function relationshipDiagram(kind: SysmlRelationship['kind']): 'bdd' | 'ibd' | 'requirements' | 'rtm' {
+  if (BDD_KINDS.has(kind)) return 'bdd';
+  if (IBD_KINDS.has(kind)) return 'ibd';
+  if (kind === 'requirementContainment') return 'requirements';
+  return 'rtm';
+}
+
 export function classifyRelationship(repo: SysmlRepository, relationshipId: string): RelationshipDecision {
   const relationship = repo.relationships[relationshipId] as SysmlRelationship | undefined;
   if (!relationship) return { allowed: false, diagram: 'bdd', diagnostics: [`UNKNOWN_RELATIONSHIP: Unknown relationship: ${relationshipId}`] };
@@ -242,19 +255,17 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   // BDD kinds carry ownership; IBD connector-ish kinds carry none.
   if (BDD_KINDS.has(relationship.kind)) {
     const ownership = relationship.kind === 'composition' ? 'composite' : relationship.kind === 'sharedAggregation' ? 'shared' : 'none';
-    if (relationship.kind === 'generalization') {
-      const sourceIsBlock = block(repo, relationship.sourceId) !== undefined;
-      const targetIsBlock = block(repo, relationship.targetId) !== undefined;
-      if (!sourceIsBlock || !targetIsBlock) {
-        diagnostics.push(`INVALID_GENERALIZATION_ENDPOINTS: Generalization ${relationshipId} must connect block to block`);
-      }
-    }
-    if (relationship.kind === 'composition') {
-      const touchesRequirement = Boolean(repo.requirements[relationship.sourceId]) || Boolean(repo.requirements[relationship.targetId]);
-      if (touchesRequirement) {
-        diagnostics.push(`INVALID_COMPOSITION_ENDPOINTS: Composition ${relationshipId} must not touch requirement endpoints`);
-      }
-    }
+    const decision = evaluateSysmlConnection({
+      relationshipKind: relationship.kind,
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId),
+      diagram: relationshipDiagram(relationship.kind),
+    });
+    diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
+    // Preserve older secondary diagnostics consumed by existing repository clients.
+    const primaryCode = decision.diagnostics[0]?.code;
+    if (!decision.allowed && primaryCode !== 'UNKNOWN_STEREOTYPE_FAMILY' && relationship.kind === 'generalization') diagnostics.push(`INVALID_GENERALIZATION_ENDPOINTS: Generalization ${relationshipId} has incompatible endpoint families`);
+    if (!decision.allowed && primaryCode !== 'UNKNOWN_STEREOTYPE_FAMILY' && relationship.kind === 'composition') diagnostics.push(`INVALID_COMPOSITION_ENDPOINTS: Composition ${relationshipId} must connect Block-family endpoints`);
     diagnostics.sort();
     return { allowed: diagnostics.length === 0, diagram: 'bdd', ownership, diagnostics };
   }
@@ -267,12 +278,26 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   // Requirement kinds: containment lives on the requirements diagram, governed
   // trace links (derive/satisfy/verify/refine/trace/copy) belong to the RTM.
   if (relationship.kind === 'requirementContainment') {
+    const decision = evaluateSysmlConnection({
+      relationshipKind: relationship.kind,
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId),
+      diagram: relationshipDiagram(relationship.kind),
+    });
+    diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
     const check = requirementDirectionValid(repo, relationship);
     if (!check.valid) diagnostics.push(`${check.code}: Requirement containment ${relationshipId} must connect requirement to requirement`);
     diagnostics.sort();
     return { allowed: diagnostics.length === 0, diagram: 'requirements', diagnostics };
   }
 
+  const decision = evaluateSysmlConnection({
+    relationshipKind: relationship.kind,
+    source: canonicalConnectionEndpoint(repo, relationship.sourceId),
+    target: canonicalConnectionEndpoint(repo, relationship.targetId),
+    diagram: relationshipDiagram(relationship.kind),
+  });
+  diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
   const check = requirementDirectionValid(repo, relationship);
   if (!check.valid) diagnostics.push(`${check.code}: ${relationship.kind} ${relationshipId} has invalid SysML endpoint direction`);
   diagnostics.sort();
