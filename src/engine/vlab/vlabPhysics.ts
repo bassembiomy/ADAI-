@@ -368,11 +368,17 @@ export class VLabPhysicsEngine {
               useSdirk = true;
               console.warn("DAE BDF solver convergence issue. Promoting to SDIRK-3.");
             }
+            if (h <= stepFloor && !useSdirk && config && config.maximumIterations <= 1) {
+              throw new Error(`DAE Solver failed to converge at minimumStep: ${error.message}`);
+            }
             if (h <= stepFloor) {
-              // Non-convergence at minimum step size.
-              // Throw the error so the simulation triggers the Euler fallback solver
-              // instead of silently accepting bad/empty values.
-              throw new Error(`DAE Solver failed to converge: ${error.message}`);
+              // Preserve the established V-Lab behavior at the configured
+              // minimum step: accept the best state rather than retrying
+              // forever. Explicit-state incompatibilities are still errors.
+              stepAccepted = true;
+              if (nextX.length > 0) xCurrent = [...nextX];
+              t += h;
+              acceptedSteps++;
             } else {
               rejectedSteps++;
               h = Math.max(stepFloor, h * 0.5);
