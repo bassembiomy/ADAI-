@@ -4,6 +4,7 @@ import Plot from '../doe/PlotlyRenderer';
 import { ResizableSplitPaneGroup, PanelMaximizeButton } from '../common/ResizableSplitPane';
 import { DriverChannel, HILSessionState, FaultInjectionConfig, HILMapping } from '../../engine/hil/hilTypes';
 import { decodeTextFrame, encodeTextFrame } from '../../engine/hil/hilProtocol';
+import { HILTelemetryBuffer } from '../../services/hilTelemetryBuffer';
 
 interface HILDashboardProps {
   channels: DriverChannel[];
@@ -44,6 +45,38 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
 
   const samplesCountRef = useRef(0);
   const bytesCountRef = useRef(0);
+  const telemetryBufferRef = useRef<HILTelemetryBuffer | null>(null);
+
+  useEffect(() => {
+    const buffer = new HILTelemetryBuffer({
+      maxDisplayPoints: historyLength,
+      flushIntervalMs: 33, // Bounded at ~30 fps to protect renderer
+      onFlush: (snapshot) => {
+        setTimestamps(snapshot.timestamps);
+        setPlotData(snapshot.plotData);
+        if (snapshot.timestamps.length > 0) {
+          onChangeSessionState((prev) => ({
+            ...prev,
+            lastSyncMs: snapshot.timestamps[snapshot.timestamps.length - 1],
+            channelValues: { ...prev.channelValues, ...snapshot.latestValues },
+          }));
+        }
+        if (isRecording) {
+          setRecordedData([...buffer.getRecordedData()]);
+        }
+      },
+    });
+
+    if (isRecording) {
+      buffer.startRecording();
+    }
+    telemetryBufferRef.current = buffer;
+
+    return () => {
+      buffer.dispose();
+      telemetryBufferRef.current = null;
+    };
+  }, [historyLength, isRecording, onChangeSessionState]);
 
   // List available ports
   useEffect(() => {
@@ -133,30 +166,28 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
     };
   }, [sessionState.status, channels]);
 
-  const handleIncomingValues = (values: Record<string, number>) => {
+  const handleIncomingValues = (values: Record<string, number>, rawByteLength = 0) => {
     const time = Date.now();
-    setTimestamps(prev => [...prev.slice(-historyLength), time]);
-    
-    // Update Plotly chart buffers
-    setPlotData(prev => {
-      const updated = { ...prev };
-      channels.forEach(ch => {
-        const val = values[ch.name] !== undefined ? values[ch.name] : 0;
-        updated[ch.name] = [...(updated[ch.name] || []).slice(-historyLength), val];
+    if (telemetryBufferRef.current) {
+      telemetryBufferRef.current.pushSample({ timestamp: time, values }, rawByteLength);
+    } else {
+      setTimestamps(prev => [...prev.slice(-historyLength), time]);
+      setPlotData(prev => {
+        const updated = { ...prev };
+        channels.forEach(ch => {
+          const val = values[ch.name] !== undefined ? values[ch.name] : 0;
+          updated[ch.name] = [...(updated[ch.name] || []).slice(-historyLength), val];
+        });
+        return updated;
       });
-      return updated;
-    });
-
-    // Save state
-    onChangeSessionState(prev => ({
-      ...prev,
-      lastSyncMs: time,
-      channelValues: { ...prev.channelValues, ...values }
-    }));
-
-    // Save record trace if recording
-    if (isRecording) {
-      setRecordedData(prev => [...prev, { timestamp: time, values }]);
+      onChangeSessionState(prev => ({
+        ...prev,
+        lastSyncMs: time,
+        channelValues: { ...prev.channelValues, ...values }
+      }));
+      if (isRecording) {
+        setRecordedData(prev => [...prev, { timestamp: time, values }]);
+      }
     }
   };
 
@@ -359,13 +390,16 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   };
 
   const handleExportTrace = () => {
-    if (recordedData.length === 0) return;
+    const dataToExport = (telemetryBufferRef.current?.getRecordedData().length ?? 0) > 0
+      ? telemetryBufferRef.current!.getRecordedData()
+      : recordedData;
+    if (dataToExport.length === 0) return;
     
     // Convert trace to CSV
     let csv = 'Timestamp,Elapsed (ms),' + channels.map(c => c.name).join(',') + '\n';
-    const start = recordedData[0].timestamp;
+    const start = dataToExport[0].timestamp;
     
-    recordedData.forEach(row => {
+    dataToExport.forEach(row => {
       const elapsed = row.timestamp - start;
       const lineVals = channels.map(c => row.values[c.name] ?? 0).join(',');
       csv += `${row.timestamp},${elapsed},${lineVals}\n`;

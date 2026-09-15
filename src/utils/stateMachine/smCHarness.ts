@@ -96,6 +96,22 @@ export const compileAndRunCProgram = (
   });
 };
 
+/**
+ * Asynchronous wrapper around compileAndRunCProgram to prevent blocking UI callers.
+ */
+export const compileAndRunCProgramAsync = async (
+  options: CProgramOptions,
+): Promise<string | null> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const res = compileAndRunCProgram(options);
+      resolve(res);
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
 export interface SyntaxCompilationResult {
   success: boolean;
   errors: string[];
