@@ -1,12 +1,112 @@
 // src/components/vlab/VLabWorkspace.test.tsx
 import { describe, it, expect } from 'vitest';
 import { SolverConfiguration } from '../../engine/vlab/kernel/types';
+import { Node, Edge } from '@xyflow/react';
 import {
   createVLabSolverJob,
   refreshVLabSolverJobAtStepBoundary,
   resolveVLabStepBoundary,
   updateVLabSolverJobConfiguration
 } from './VLabWorkspace';
+
+const solverNode = (id: string, params: Record<string, unknown> = {}): Node => ({
+  id, position: { x: 0, y: 0 }, data: { type: 'solver_config', params }
+});
+const plantNode = (id: string, type: string, params = {}): Node => ({
+  id, position: { x: 0, y: 0 }, data: { type, params }
+});
+const dynamics = [plantNode('input', 'ps_constant', { value: 1 }), plantNode('plant', 'ps_transfer_fcn', { T: 1 })];
+const dynamicsEdges: Edge[] = [{ id: 'input-plant', source: 'input', target: 'plant', sourceHandle: 'y', targetHandle: 'u' }];
+const stateValue = (state: ReturnType<ReturnType<typeof createVLabSolverJob>['engine']['simulateStep']>) =>
+  state.x[state.variableNames.indexOf('plant_state_y')];
+
+describe('workspace solver execution', () => {
+  const run = (params: Record<string, unknown>, dt = 0.2) => {
+    const nodes = [...dynamics, solverNode('config', { initialStep: dt, maximumStep: dt, ...params })];
+    const job = createVLabSolverJob(nodes, dynamicsEdges);
+    return job.engine.simulateStep(nodes, dynamicsEdges, null, dt);
+  };
+
+  it('executes Euler, RK4, and BDF with different trajectories; auto selects the DAE strategy', () => {
+    const settings = { relativeTolerance: 1, absoluteTolerance: 1 };
+    expect(stateValue(run({ ...settings, solver: 'euler' }))).toBeCloseTo(0.2, 8);
+    expect(stateValue(run({ ...settings, solver: 'rk4' }))).toBeCloseTo(0.1812666666667, 8);
+    const bdf = run({ ...settings, solver: 'bdf' });
+    expect(stateValue(bdf)).toBeCloseTo(1 / 6, 8);
+    expect(stateValue(run({ ...settings, solver: 'auto' }))).toBeCloseTo(stateValue(bdf), 8);
+  });
+
+  it('switches the actual integrator at the next boundary while preserving state and time', () => {
+    const nodes = [...dynamics, solverNode('config', { solver: 'euler', initialStep: 0.2, maximumStep: 0.2 })];
+    const job = createVLabSolverJob(nodes, dynamicsEdges);
+    const before = job.engine.simulateStep(nodes, dynamicsEdges, null, 0.2);
+    const updatedNodes = [...dynamics, solverNode('config', { solver: 'rk4', maximumStep: 0.2 })];
+    updateVLabSolverJobConfiguration(job, updatedNodes);
+    const after = job.engine.simulateStep(updatedNodes, dynamicsEdges, before, 0.2);
+    expect(stateValue(before)).toBeCloseTo(0.2, 8);
+    expect(stateValue(after)).toBeCloseTo(1 - 0.8 * 0.8187333333333, 8);
+    expect(after.time).toBeCloseTo(0.4, 12);
+  });
+
+  it.each(['relativeTolerance', 'absoluteTolerance'])('uses %s to control BDF error and execution work', field => {
+    const base = { solver: 'bdf', relativeTolerance: 1e-10, absoluteTolerance: 1e-10 };
+    const loose = run({ ...base, [field]: 0.1 });
+    const tight = run({ ...base, [field]: 1e-5 });
+    const exact = 1 - Math.exp(-0.2);
+    expect(Math.abs(stateValue(tight) - exact)).toBeLessThan(Math.abs(stateValue(loose) - exact) / 5);
+    expect(tight.acceptedSteps).toBeGreaterThan(loose.acceptedSteps);
+  });
+
+  it('enforces maximumIterations and nonlinearTolerance without accepting an unconverged step', () => {
+    expect(() => run({ solver: 'bdf', minimumStep: 0.2, maximumIterations: 1, nonlinearTolerance: 1e-12 })).toThrow(/converge/i);
+    expect(stateValue(run({ solver: 'bdf', minimumStep: 0.2, maximumIterations: 10, relativeTolerance: 1, absoluteTolerance: 1 }))).toBeCloseTo(1 / 6, 8);
+    const loose = run({ solver: 'bdf', nonlinearTolerance: 10 });
+    expect(stateValue(loose)).toBe(0);
+  });
+
+  it.each(['euler', 'rk4', 'bdf', 'auto'])('keeps sub-microsecond state advancement and nonzero start time consistent for %s', solver => {
+    const state = run({ solver, startTime: 2, initialStep: 1e-7, minimumStep: 1e-9, maximumStep: 1e-7 }, 1e-7);
+    expect(state.time).toBeCloseTo(2.0000001, 14);
+    expect(stateValue(state)).toBeCloseTo(1e-7, 12);
+    expect(state.prevDt).toBeCloseTo(1e-7, 14);
+  });
+});
+
+describe('workspace solver network selection', () => {
+  const plant = plantNode('resistor', 'resistor');
+  const active = solverNode('active', { solver: 'rk4' });
+  const unrelated = solverNode('unrelated', { solver: 'euler' });
+  const edges: Edge[] = [{ id: 'config-wire', source: 'resistor', target: 'active' }];
+
+  it.each([false, true])('selects a connected configuration independently of node/edge order (reverse=%s)', reverse => {
+    const nodes = [unrelated, plant, active];
+    const job = createVLabSolverJob(reverse ? nodes.reverse() : nodes, reverse ? [...edges].reverse() : edges);
+    expect(job.solverConfiguration.id).toBe('active');
+    const updated = updateVLabSolverJobConfiguration(job, [unrelated, solverNode('active', { solver: 'bdf' }), plant]);
+    expect(updated.id).toBe('active');
+    expect(updated.solver).toBe('bdf');
+  });
+
+  it('does not redirect an active job when only another inspector node is edited', () => {
+    const job = createVLabSolverJob([plant, active, unrelated], edges);
+    expect(updateVLabSolverJobConfiguration(job, [solverNode('unrelated', { solver: 'bdf' })]).id).toBe('active');
+  });
+
+  it('selects and refreshes the configuration of a specified network after rewiring', () => {
+    const otherPlant = plantNode('other', 'resistor');
+    const nodes = [unrelated, plant, active, otherPlant];
+    const bothEdges = [...edges, { id: 'other-wire', source: 'other', target: 'unrelated' }];
+    const job = createVLabSolverJob(nodes, bothEdges, 'resistor');
+    expect(job.solverConfiguration.id).toBe('active');
+    const rewired = [{ id: 'rewired', source: 'resistor', target: 'unrelated' }];
+    expect(updateVLabSolverJobConfiguration(job, nodes, rewired).id).toBe('unrelated');
+  });
+
+  it('rejects ambiguous connected configurations instead of depending on array order', () => {
+    const bothEdges = [...edges, { id: 'duplicate', source: 'resistor', target: 'unrelated' }];
+    expect(() => createVLabSolverJob([plant, active, unrelated], bothEdges)).toThrow(/multiple solver configurations/i);
+  });
+});
 
 describe('VLabWorkspace Solver Configuration Inspector', () => {
   it('passes inspector values through the workspace solver-job boundary for a new run', () => {

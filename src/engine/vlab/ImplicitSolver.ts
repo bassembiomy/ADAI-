@@ -4,6 +4,7 @@ import { SparseLinearSolver } from './SparseLinearSolver';
 export class ImplicitSolver {
   private maxIterations = 50;
   private tolerance = 1e-8;
+  private requireConvergence = false;
 
   configure(options: { maxIterations?: number; tolerance?: number }): void {
     if (Number.isFinite(options.maxIterations) && (options.maxIterations ?? 0) > 0) {
@@ -11,6 +12,7 @@ export class ImplicitSolver {
     }
     if (Number.isFinite(options.tolerance) && (options.tolerance ?? 0) > 0) {
       this.tolerance = options.tolerance!;
+      this.requireConvergence = true;
     }
   }
 
@@ -75,7 +77,10 @@ export class ImplicitSolver {
     
     // If we finished all iterations and didn't converge below tolerance,
     // throw an error so the physics engine can retry with a smaller step size
-    if (minError > 1e-3) {
+    if (this.requireConvergence || minError > 1e-3) {
+      if (this.requireConvergence) {
+        throw new Error(`ImplicitSolver did not converge within ${this.maxIterations} iterations (residual ${minError}, tolerance ${this.tolerance}).`);
+      }
       const finalFx = equations(bestX, ctx);
       console.error('ImplicitSolver Convergence Failure Details:');
       console.error('Best X:', bestX);

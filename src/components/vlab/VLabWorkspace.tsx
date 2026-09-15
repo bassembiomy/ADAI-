@@ -34,6 +34,7 @@ import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../u
 import { VLabSimulinkScope } from './VLabSimulinkScope';
 import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
 import { normalizeSolverConfiguration } from '../../engine/vlab/kernel/PhysicalNetworkExtractor';
+import { selectSolverConfigurationNode } from '../../engine/vlab/kernel/SolverConfigurationSelection';
 
 interface LabNode {
   id: string;
@@ -46,6 +47,7 @@ interface LabNode {
 export interface VLabSolverJob {
   engine: VLabPhysicsEngine;
   solverConfiguration: SolverConfiguration;
+  networkNodeId?: string;
 }
 
 export interface VLabStepBoundary {
@@ -89,29 +91,25 @@ export function resolveVLabStepBoundary(
   };
 }
 
-export function createVLabSolverJob(nodes: Node[], _edges: Edge[]): VLabSolverJob {
-  const solverNode = nodes.find(n => {
-    const type = (n.data as any)?.type || n.type || '';
-    return type === 'solver_config' || type === 'solver_configuration';
-  }) || ({ id: 'solver_config_default', data: { type: 'solver_config', params: {} } } as unknown as Node);
+export function createVLabSolverJob(nodes: Node[], edges: Edge[], networkNodeId?: string): VLabSolverJob {
+  const solverNode = selectSolverConfigurationNode(nodes, edges, networkNodeId)
+    || ({ id: 'solver_config_default', data: { type: 'solver_config', params: {} } } as unknown as Node);
   const candidate = normalizeSolverConfiguration(solverNode);
   const validation = validateSolverConfiguration(candidate);
   if (!validation.valid) throw new Error(validation.errors.join('; '));
-  const solverConfiguration = validation.valid ? candidate : normalizeSolverConfiguration({
-    ...solverNode,
-    data: { ...solverNode.data, params: {} }
-  } as Node);
+  const solverConfiguration = candidate;
   return {
     engine: new VLabPhysicsEngine(solverConfiguration),
-    solverConfiguration
+    solverConfiguration,
+    networkNodeId
   };
 }
 
-export function updateVLabSolverJobConfiguration(job: VLabSolverJob, nodes: Node[]): SolverConfiguration {
-  const solverNode = nodes.find(n => {
-    const type = (n.data as any)?.type || n.type || '';
-    return type === 'solver_config' || type === 'solver_configuration';
-  });
+export function updateVLabSolverJobConfiguration(job: VLabSolverJob, nodes: Node[], edges?: Edge[]): SolverConfiguration {
+  // Node-only inspector updates must retain the job's existing association.
+  const solverNode = edges
+    ? selectSolverConfigurationNode(nodes, edges, job.networkNodeId)
+    : nodes.find(n => n.id === job.solverConfiguration.id);
   if (!solverNode) return job.solverConfiguration;
 
   const candidate = normalizeSolverConfiguration(solverNode);
@@ -128,9 +126,10 @@ export function refreshVLabSolverJobAtStepBoundary(
   job: VLabSolverJob,
   nodes: Node[],
   currentTime: number,
-  isInitialStep: boolean
+  isInitialStep: boolean,
+  edges?: Edge[]
 ): { solverConfiguration: SolverConfiguration; boundary: VLabStepBoundary } {
-  const solverConfiguration = updateVLabSolverJobConfiguration(job, nodes);
+  const solverConfiguration = updateVLabSolverJobConfiguration(job, nodes, edges);
   return {
     solverConfiguration,
     boundary: resolveVLabStepBoundary(solverConfiguration, currentTime, isInitialStep)
@@ -1368,7 +1367,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       ? solverJobRef.current
       : createVLabSolverJob(nodes, edges);
     if (isSimulating) {
-      updateVLabSolverJobConfiguration(solverJob, nodes);
+      updateVLabSolverJobConfiguration(solverJob, nodes, edges);
     }
     solverJobRef.current = solverJob;
     const engine = solverJob.engine;
@@ -1662,6 +1661,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             return result.scopeValues;
           }
         } catch (e) {
+          // A configured solver failure must reach the simulation diagnostic.
+          // Switching to a hardcoded model would discard the user's settings.
+          if (engine.getSolverConfiguration()) throw e;
           console.warn("DAE Physics Engine failed, falling back to Euler model:", e);
           useFallback = true;
         }
@@ -1689,12 +1691,12 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           const currentT = simTimeRef.current;
           const solverJob = solverJobRef.current;
           if (!solverJob) return;
-          const refreshed = refreshVLabSolverJobAtStepBoundary(solverJob, nodes, currentT, !hasSimulatedStepRef.current);
+          const refreshed = refreshVLabSolverJobAtStepBoundary(solverJob, nodes, currentT, !hasSimulatedStepRef.current, edges);
           const { boundary } = refreshed;
           activeSolverConfiguration = refreshed.solverConfiguration;
           const limit = boundary.stopTime;
 
-          if (currentT >= limit - 1e-9) {
+          if (currentT >= limit) {
             setIsSimulating(false);
             clearInterval(interval);
             setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
@@ -1702,12 +1704,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           }
 
           const dt = boundary.dt;
-          if (dt <= 1e-12) {
+          if (dt <= 0) {
             setIsSimulating(false);
             clearInterval(interval);
             setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
             return;
           }
+
+          if (currentT + dt === currentT) throw new Error('Solver step is too small to advance simulation time.');
 
           const val = step(currentT, dt);
           hasSimulatedStepRef.current = true;

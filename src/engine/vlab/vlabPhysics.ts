@@ -3,6 +3,7 @@ import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
 import { SolverConfiguration } from './kernel/types';
+import { explicitSolverStep } from './ExplicitSolverAdapter';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -45,7 +46,7 @@ export class VLabPhysicsEngine {
   private applySolverConfiguration(config: SolverConfiguration): void {
     this.solver.configure({
       maxIterations: config.maximumIterations,
-      tolerance: Math.max(config.absoluteTolerance, config.nonlinearTolerance)
+      tolerance: config.nonlinearTolerance
     });
   }
 
@@ -126,33 +127,42 @@ export class VLabPhysicsEngine {
       });
     }
 
-    let t = prevState?.time || 0;
+    const config = this.solverConfiguration;
+    const method = config?.solver ?? 'auto';
+    const isExplicit = method === 'euler' || method === 'rk4' || method === 'rk_adaptive';
+    const sameMethod = !prevState?.solverMethod || prevState.solverMethod === method;
+    let t = prevState?.time ?? config?.startTime ?? 0;
     const tTarget = t + dt;
     
     let xCurrent = [...x];
-    let prevX = prevState?.prevX ? [...prevState.prevX] : undefined;
-    let lastDt = prevState?.prevDt;
+    let prevX = sameMethod && prevState?.prevX ? [...prevState.prevX] : undefined;
+    let lastDt = sameMethod ? prevState?.prevDt : undefined;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
-    let useSdirk = prevState?.useSdirk || prevState?.solver === 'sdirk3' || false;
+    // Configured auto uses BDF for VLab DAEs. Legacy unconfigured runs retain SDIRK fallback.
+    let useSdirk = !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
+    let acceptedSteps = 0;
+    let rejectedSteps = 0;
+    const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
+    const maxStep = typeof config?.maximumStep === 'number' ? config.maximumStep : Math.max(minStep, 0.05);
     
     // Choose initial step size. Start with last accepted size but never start below 1ms
     // to avoid excessive step count.
-    let h = Math.max(1e-3, lastDt || Math.min(dt, 0.05));
+    const initialStep = typeof config?.initialStep === 'number' ? config.initialStep : Math.min(dt, maxStep);
+    let h = Math.min(maxStep, Math.max(minStep, lastDt || initialStep));
     
-    while (t < tTarget - 1e-12) {
+    while (t < tTarget) {
       // Don't step past target time
-      if (t + h > tTarget + 1e-12) {
-        h = tTarget - t;
-      }
+      const remaining = tTarget - t;
+      const stepFloor = Math.min(minStep, remaining);
+      h = Math.min(h, remaining);
+      if (t + h === t) throw new Error('Solver step is too small to advance simulation time.');
       
       let stepAccepted = false;
       let nextX: number[] = [];
       
       while (!stepAccepted) {
         // Enforce minimum step size to prevent infinite loops
-        if (h < 1e-6) {
-          h = 1e-6;
-        }
+        h = Math.max(stepFloor, h);
         
         try {
           const ctx: EquationContext = {
@@ -164,7 +174,18 @@ export class VLabPhysicsEngine {
             stateDerivatives: new Array(system.systemSize).fill(0)
           };
           
-          if (useSdirk) {
+          let explicitLte = 0;
+          if (isExplicit && config) {
+            const result = explicitSolverStep(system, xCurrent, ctx, config, this.solver);
+            if (!result.accepted) {
+              if (h <= stepFloor) throw new Error('Explicit solver cannot satisfy tolerances at minimumStep.');
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
+              continue;
+            }
+            nextX = result.x;
+            explicitLte = result.lte;
+          } else if (useSdirk) {
             // SDIRK-3 Solve Stage 1
             const ctx1 = {
               dt: h * GAMMA,
@@ -274,25 +295,34 @@ export class VLabPhysicsEngine {
           // --- Zero Crossing & Event Detection ---
           const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
           if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
-            const hEvent = Math.max(1e-6, h * eventInfo.fraction);
+            const hEvent = Math.max(stepFloor, h * eventInfo.fraction);
             throw new EventTriggerError(hEvent);
           }
           
           // --- Local Truncation Error (LTE) Control ---
-          let lte = 0;
-          if (h > 1e-6 && !useSdirk) {
+          let lte = explicitLte;
+          if (!isExplicit && !useSdirk && (config || h > stepFloor)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
               return system.residuals(solveX, dx, solveCtx);
             };
-            const nextX_bdf1 = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            let comparison = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            // BDF1 needs a startup estimate too: compare one full step to two half steps.
+            if (config && ctx.order === 1) {
+              const halfResiduals = (solveX: number[], solveCtx: EquationContext) =>
+                system.residuals(solveX, solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / (h / 2)), solveCtx);
+              const halfContext = { ...ctx, dt: h / 2, time: t + h / 2 };
+              const half = this.solver.solve(halfResiduals, xCurrent, halfContext);
+              comparison = this.solver.solve(halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
+            }
             
             let sumSq = 0;
             let diffCount = 0;
             for (let idx = 0; idx < system.systemSize; idx++) {
-              if (system.isDifferentialState[idx]) {
-                const diff = nextX[idx] - nextX_bdf1[idx];
-                const scale = 1e-3 * Math.abs(nextX[idx]) + 1e-5;
+              if (config || system.isDifferentialState[idx]) {
+                const diff = nextX[idx] - comparison[idx];
+                const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
+                  + (config?.absoluteTolerance ?? 1e-5);
                 sumSq += (diff / scale) * (diff / scale);
                 diffCount++;
               }
@@ -300,47 +330,52 @@ export class VLabPhysicsEngine {
             
             lte = diffCount > 0 ? Math.sqrt(sumSq / diffCount) : 0;
             if (lte > 1.0) {
-              h *= 0.5;
-              bdfOrder = 1;
+              if (h <= stepFloor) throw new Error('BDF solver cannot satisfy tolerances at minimumStep.');
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
+              if (!config) bdfOrder = 1;
               continue;
             }
           }
           
           // Grow step size if error is low or if we are successfully resolving minimum steps
-          if ((lte < 0.1 || h <= 1e-6 || useSdirk) && h < 0.05) {
-            h = Math.min(h * 1.5, 0.05);
-          }
+          const nextH = (lte < 0.1 || useSdirk) ? Math.min(h * 1.5, maxStep) : h;
           
           stepAccepted = true;
+          acceptedSteps++;
           prevX = [...xCurrent];
           lastDt = h;
           xCurrent = [...nextX];
           t += h;
+          h = nextH;
           bdfOrder = 2;
           
         } catch (error: any) {
           if (error instanceof EventTriggerError) {
-            if (error.hEvent >= h || h <= 1e-6) {
+            if (error.hEvent >= h || h <= stepFloor) {
               console.warn("Minimum step size reached during event. Forcing acceptance.");
               stepAccepted = true;
               xCurrent = nextX.length > 0 ? [...nextX] : [...xCurrent];
               t += h;
+              acceptedSteps++;
             } else {
               h = error.hEvent;
               bdfOrder = 1; // force BDF-1 across discontinuity
             }
           } else {
-            if (!useSdirk) {
+            if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;
+            if (!config && !useSdirk) {
               useSdirk = true;
               console.warn("DAE BDF solver convergence issue. Promoting to SDIRK-3.");
             }
-            if (h <= 1e-6) {
+            if (h <= stepFloor) {
               // Non-convergence at minimum step size.
               // Throw the error so the simulation triggers the Euler fallback solver
               // instead of silently accepting bad/empty values.
               throw new Error(`DAE Solver failed to converge: ${error.message}`);
             } else {
-              h *= 0.5;
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
               bdfOrder = 1;
             }
           }
@@ -555,7 +590,10 @@ export class VLabPhysicsEngine {
       variableNames: system.variableNames,
       scopeValues,
       perScopeValues,
-      useSdirk
+      useSdirk,
+      solverMethod: method,
+      acceptedSteps,
+      rejectedSteps
     };
   }
 

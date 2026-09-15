@@ -2,6 +2,7 @@
 import { Node, Edge } from '@xyflow/react';
 import { PhysicalNetwork, PhysicalConnection, Diagnostic, PhysicalDomain, SolverConfiguration, SolverType } from './types';
 import { VLAB_LIBRARY } from '../../../utils/vlabLibrary';
+import { isSolverConfigurationNode } from './SolverConfigurationSelection';
 
 class DisjointSet {
   parent: Record<string, string> = {};
@@ -105,13 +106,10 @@ export class PhysicalNetworkExtractor {
 
     const physicalNodes = nodes.filter(n => {
       const type = (n.data as any)?.type || n.type || '';
-      return type !== 'solver_config' && !type.startsWith('ps_');
+      return !isSolverConfigurationNode(n) && !type.startsWith('ps_');
     });
 
-    const solverConfigs = nodes.filter(n => {
-      const type = (n.data as any)?.type || n.type || '';
-      return type === 'solver_config';
-    });
+    const solverConfigs = nodes.filter(isSolverConfigurationNode);
 
     const connections: PhysicalConnection[] = [];
 
@@ -243,7 +241,9 @@ export class PhysicalNetworkExtractor {
       }
 
       let assignedSolverConfigId: string | undefined;
-      if (solverConfigs.length === 0) {
+      const networkConfigs = solverConfigs.length === 1 ? solverConfigs
+        : solverConfigs.filter(node => ds.find(node.id) === rootKey);
+      if (networkConfigs.length === 0) {
         diagnostics.push({
           id: 'VL-SOLVER-001',
           severity: 'ERROR',
@@ -251,18 +251,17 @@ export class PhysicalNetworkExtractor {
           networkId: netId,
           suggestedAction: 'Add a Solver Configuration block.'
         });
-      } else if (solverConfigs.length > 1) {
+      } else if (networkConfigs.length > 1) {
         diagnostics.push({
           id: 'VL-SOLVER-002',
           severity: 'ERROR',
           message: `Multiple Solver Configurations detected for network "${netId}".`,
           networkId: netId,
-          componentIds: solverConfigs.map(s => s.id),
+          componentIds: networkConfigs.map(s => s.id).sort(),
           suggestedAction: 'Keep exactly one Solver Configuration per network.'
         });
-        assignedSolverConfigId = solverConfigs[0].id;
       } else {
-        assignedSolverConfigId = solverConfigs[0].id;
+        assignedSolverConfigId = networkConfigs[0].id;
       }
 
       networks.push({
