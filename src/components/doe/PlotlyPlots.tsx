@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Plot from './PlotlyRenderer';
 import { tDistCritical } from '../../engine/doe/statistics';
 import type { DOEModelResult } from '../../engine/doe/types';
 import { evaluateDOEModelDetailed } from '../../engine/doe/modelEvaluator';
+import { getSharedDOEWorkerClient } from '../../services/doeWorkerClient';
 
 export type PlotType =
   | 'surface'
@@ -22,6 +23,7 @@ export interface PlotlyPlotsProps {
   headers: string[];
   holdValues: number[];
   modelType?: 'RSM' | 'GMDH' | 'Taguchi';
+  surfaceGrid?: { xRange: number[]; yRange: number[]; zGrid: number[][] };
 }
 
 export interface PreparedPlotlyOutput {
@@ -40,7 +42,8 @@ export function preparePlotlyDataAndLayout({
   factors,
   headers,
   holdValues,
-  modelType = 'RSM'
+  modelType = 'RSM',
+  surfaceGrid,
 }: PlotlyPlotsProps): PreparedPlotlyOutput {
   if (!results || !data || data.length === 0) {
     return {
@@ -390,8 +393,8 @@ export function preparePlotlyDataAndLayout({
   const gridRes = 40;
   const stepX = (maxX - minX) / gridRes;
   const stepY = (maxY - minY) / gridRes;
-  const xRange = Array.from({ length: gridRes + 1 }, (_, i) => minX + i * stepX);
-  const yRange = Array.from({ length: gridRes + 1 }, (_, i) => minY + i * stepY);
+  const xRange = surfaceGrid?.xRange || Array.from({ length: gridRes + 1 }, (_, i) => minX + i * stepX);
+  const yRange = surfaceGrid?.yRange || Array.from({ length: gridRes + 1 }, (_, i) => minY + i * stepY);
 
   const resolvedModelType = modelType || results?.modelType || results?.type || 'RSM';
   const gmdhModel = results?.details?.model || results?.model;
@@ -407,12 +410,13 @@ export function preparePlotlyDataAndLayout({
   }
 
   const k = headers.length - 1;
-  const zGrid: number[][] = [];
+  const zGrid: number[][] = surfaceGrid?.zGrid ? [...surfaceGrid.zGrid] : [];
   const beta = results?.details?.physicalCoefficients || results?.details?.Beta || results?.Beta;
 
-  for (let j = 0; j < yRange.length; j++) {
-    const rowZ: number[] = [];
-    for (let i = 0; i < xRange.length; i++) {
+  if (!surfaceGrid?.zGrid) {
+    for (let j = 0; j < yRange.length; j++) {
+      const rowZ: number[] = [];
+      for (let i = 0; i < xRange.length; i++) {
       const currentFactors = [...holdValues];
       while (currentFactors.length < k) currentFactors.push(0);
       currentFactors[idxX] = xRange[i];
@@ -459,6 +463,7 @@ export function preparePlotlyDataAndLayout({
       rowZ.push(Number.isFinite(z) ? z : NaN);
     }
     zGrid.push(rowZ);
+  }
   }
 
   const hasFiniteZ = zGrid.some(row => row.some(val => Number.isFinite(val)));
@@ -534,7 +539,58 @@ export function preparePlotlyDataAndLayout({
  * PlotlyPlots React Component.
  */
 export const PlotlyPlots: React.FC<PlotlyPlotsProps> = (props) => {
-  const { plotData, layout, diagnosticState } = preparePlotlyDataAndLayout(props);
+  const [asyncGrid, setAsyncGrid] = useState<{ xRange: number[]; yRange: number[]; zGrid: number[][] } | null>(null);
+
+  useEffect(() => {
+    if (props.surfaceGrid || (props.type !== 'surface' && props.type !== 'contour')) {
+      return;
+    }
+    if (!props.results || !props.data || props.data.length === 0) {
+      return;
+    }
+
+    const client = getSharedDOEWorkerClient();
+    let active = true;
+    const { requestId, promise } = client.runTaskWithId('computeSurface', {
+      type: props.type,
+      data: props.data,
+      results: props.results,
+      factors: props.factors,
+      headers: props.headers,
+      holdValues: props.holdValues,
+      modelType: props.modelType,
+      gridRes: 40,
+    });
+
+    promise
+      .then((grid: any) => {
+        if (active) setAsyncGrid(grid);
+      })
+      .catch(() => {
+        // Fallback or cancelled
+      });
+
+    return () => {
+      active = false;
+      client.cancel(requestId);
+    };
+  }, [
+    props.type,
+    props.data,
+    props.results,
+    props.factors,
+    props.headers,
+    props.holdValues,
+    props.modelType,
+    props.surfaceGrid,
+  ]);
+
+  const effectiveProps = {
+    ...props,
+    surfaceGrid: props.surfaceGrid || asyncGrid || undefined,
+  };
+
+  const { plotData, layout, diagnosticState } = preparePlotlyDataAndLayout(effectiveProps);
 
   if (diagnosticState) {
     return (

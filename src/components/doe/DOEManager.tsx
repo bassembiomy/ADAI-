@@ -3,6 +3,7 @@ import { fitRSM, fitGMDH, fitTaguchi } from '../../engine/doe/statistics';
 import { createXBridgesDOEBlock, createVLabDOEBlock } from '../../engine/doe/integration';
 import { PlotlyPlots, PlotType } from './PlotlyPlots';
 import type { DOEModelResult, DOEDiagnostic } from '../../engine/doe/types';
+import { getSharedDOEWorkerClient } from '../../services/doeWorkerClient';
 
 export interface DOEManagerProps {
   initialData?: {
@@ -156,31 +157,55 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
     setData(newData);
   }, [data, setData]);
 
+  const [isSolving, setIsSolving] = useState(false);
+
   // Solve execution
-  const handleSolve = useCallback(() => {
+  const handleSolve = useCallback(async () => {
+    const client = getSharedDOEWorkerClient();
     if (activeModel === 'RSM') {
       if (props.calculateRSM) {
         props.calculateRSM();
       } else {
-        const res = fitRSM({ headers, data });
-        setResults(res);
-        if (res.diagnostics.some((d) => d.severity === 'error')) {
-          props.addError?.('error', res.diagnostics.find((d) => d.severity === 'error')?.message || 'RSM solve failed');
+        setIsSolving(true);
+        try {
+          const res = await client.fitRSM({ headers, data });
+          setResults(res);
+          if (res.diagnostics.some((d) => d.severity === 'error')) {
+            props.addError?.('error', res.diagnostics.find((d) => d.severity === 'error')?.message || 'RSM solve failed');
+          }
+        } catch (err: any) {
+          props.addError?.('error', err?.message || 'RSM solve failed');
+        } finally {
+          setIsSolving(false);
         }
       }
     } else if (activeModel === 'GMDH') {
       if (props.calculateGMDH) {
         props.calculateGMDH();
       } else {
-        const res = fitGMDH({ headers, data });
-        setResults(res);
+        setIsSolving(true);
+        try {
+          const res = await client.fitGMDH({ headers, data });
+          setResults(res);
+        } catch (err: any) {
+          props.addError?.('error', err?.message || 'GMDH solve failed');
+        } finally {
+          setIsSolving(false);
+        }
       }
     } else if (activeModel === 'Taguchi') {
       if (props.calculateTaguchi) {
         props.calculateTaguchi();
       } else {
-        const res = fitTaguchi({ headers, data });
-        setResults(res);
+        setIsSolving(true);
+        try {
+          const res = await client.fitTaguchi({ headers, data });
+          setResults(res);
+        } catch (err: any) {
+          props.addError?.('error', err?.message || 'Taguchi solve failed');
+        } finally {
+          setIsSolving(false);
+        }
       }
     }
   }, [activeModel, data, headers, props, setResults]);
@@ -268,10 +293,13 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           </button>
           <button
             data-testid="solve-btn"
+            disabled={isSolving}
             onClick={handleSolve}
-            className="px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold shadow-lg shadow-purple-900/30 transition-all"
+            className={`px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold shadow-lg shadow-purple-900/30 transition-all ${
+              isSolving ? 'opacity-70 cursor-wait' : ''
+            }`}
           >
-            Analyze / Solve
+            {isSolving ? 'Solving...' : 'Analyze / Solve'}
           </button>
           <button
             data-testid="export-xbridges-btn"
