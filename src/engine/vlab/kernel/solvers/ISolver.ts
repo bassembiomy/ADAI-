@@ -47,5 +47,12 @@ export interface ISolver {
     onProgress?: (progress: number) => void
   ): SimulationResult;
 
+  /**
+   * Invoked by SolverManager only between accepted solver boundaries. Solvers
+   * with cached configuration-dependent data may refresh it here without
+   * replacing the state or its recorded output history.
+   */
+  reconfigure?(state: SolverState, config: SolverConfiguration): void;
+
   terminate(): void;
 }
