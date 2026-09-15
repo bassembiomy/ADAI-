@@ -138,4 +138,71 @@ describe('VirtualizedTraceabilityGrid component', () => {
     expect(html).toContain('«satisfy»');
     expect(html).toContain('SubsystemBlock');
   });
+
+  it('renders deriveReqt, copy, refine, trace, and verify directional badges in grid', () => {
+    const row: RtmRow = {
+      requirement: {
+        id: 'r1',
+        requirementId: 'REQ-100',
+        name: 'Target Req',
+        text: 'Spec',
+        status: 'approved',
+        version: '1.0',
+        kind: 'requirement',
+        namespace: [],
+      },
+      status: 'covered',
+      relationshipIds: [],
+      parents: [],
+      children: [],
+      coveringBlocks: [],
+      requirementRelations: [],
+      containmentParents: [{ id: 'r0', requirementId: 'REQ-099', name: 'Parent', kind: 'requirementContainment' }],
+      containmentChildren: [],
+      derivedFrom: [{ id: 'rSrc', requirementId: 'REQ-050', name: 'Source', kind: 'deriveReqt' }],
+      derivedRequirements: [],
+      copiedFrom: [{ id: 'rMaster', requirementId: 'REQ-010', name: 'Master', kind: 'copy' }],
+      copiedRequirements: [],
+      satisfiedBy: [{ id: 'b1', name: 'ControlBlock', kind: 'satisfy', type: 'block' }],
+      verifiedBy: [{ id: 't1', name: 'PressureTest', kind: 'verificationCase', type: 'verificationCase' }],
+      refinedBy: [{ id: 'b2', name: 'RefiningBlock', kind: 'refine', type: 'block' }],
+      tracedElements: [{ id: 'b3', name: 'TracedBlock', kind: 'trace', type: 'block' }],
+      satisfactionStatus: 'satisfied',
+      verificationStatus: 'not-run',
+      blocks: ['b1'],
+      parts: [],
+      ports: [],
+      connectors: [],
+      behaviors: [],
+      simulations: [],
+      verificationCases: [],
+      evidence: [],
+      artifacts: [],
+      unresolvedEndpointIds: [],
+    };
+
+    const html = renderToStaticMarkup(
+      <VirtualizedTraceabilityGrid
+        rows={[row]}
+        containerHeight={200}
+        rowHeight={40}
+        scrollTop={0}
+      />
+    );
+
+    expect(html).toContain('«containment»');
+    expect(html).toContain('REQ-099');
+    expect(html).toContain('«deriveReqt»');
+    expect(html).toContain('REQ-050');
+    expect(html).toContain('«copy»');
+    expect(html).toContain('REQ-010');
+    expect(html).toContain('«refine»');
+    expect(html).toContain('RefiningBlock');
+    expect(html).toContain('«trace»');
+    expect(html).toContain('TracedBlock');
+    expect(html).toContain('«satisfy»');
+    expect(html).toContain('ControlBlock');
+    expect(html).toContain('«verify»');
+    expect(html).toContain('PressureTest');
+  });
 });
