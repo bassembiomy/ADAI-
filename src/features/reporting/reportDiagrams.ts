@@ -110,7 +110,7 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
   const nodeIds = new Set(allNodes.map(n => n.id));
   const edges: DiagramEdgeInput[] = source.relationships
     .filter(r => (reqIds.has(r.sourceId) || reqIds.has(r.targetId)) && nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
-    .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: `«${r.type}»`, kind: r.type }));
+    .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: r.type === 'requirementContainment' ? '«contains»' : (r.label || `«${r.type}»`), kind: r.type }));
   const pages = connectionPages(allNodes, edges);
   return pages.map((page, pageIndex) => {
     const sized = new Map(page.map(r => [r.id, measureNode(r.id,
