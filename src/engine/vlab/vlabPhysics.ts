@@ -445,15 +445,10 @@ export class VLabPhysicsEngine {
 
     const createSingleScopeValue = (val: number, label: string): any => {
       if (isTest) return val;
-      const obj = new Number(val) as any;
-      obj[label] = val;
-      obj['in1'] = val;
-      Object.defineProperty(obj, 'value', {
-        get() { return val; },
-        enumerable: false,
-        configurable: true
-      });
-      return obj;
+      // Keep scope payloads as plain structured-cloneable data. Number
+      // objects/accessors lose their shape when crossing the Web Worker
+      // boundary and are then rendered as zero/empty scope samples.
+      return { value: val, in1: val, [label]: val };
     };
 
     const createMultiScopeValues = (values: Record<string, number>, aliases: Record<string, string>): any => {
@@ -482,7 +477,16 @@ export class VLabPhysicsEngine {
 
     if (hasAirChamber) {
       // ── Air Fryer Lab ──
-      const indices = system.scopeOutputs.get('thermal_scope') || [];
+      // The learning lab uses `thermal_scope`, but imported/copied models may
+      // have a different scope id. Resolve the connected scope before falling
+      // back to the default ambient temperature; otherwise an unresolved
+      // lookup is rendered as exactly 0 °C.
+      const thermalScopeIds = ['thermal_scope', ...nodes
+        .filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope')
+        .map(n => n.id)];
+      const indices = thermalScopeIds
+        .map(scopeId => system.scopeOutputs.get(scopeId) || [])
+        .find(scopeIndices => scopeIndices.length > 0) || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
       // A temp_sensor outputs Ta-Tb (a temperature difference), while a
       // direct chamber connection outputs absolute Kelvin. Do not subtract
@@ -562,6 +566,17 @@ export class VLabPhysicsEngine {
       const cel = tempK - 273.15;
       perScopeValues['mw_scope'] = createSingleScopeValue(cel, "Cavity Temp (°C)");
     } 
+
+    // Learning-lab aliases are historical. Preserve the value for the actual
+    // connected scope id as well, so renamed/copied scopes do not show zero.
+    for (const scopeNode of nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope')) {
+      if (perScopeValues[scopeNode.id] !== undefined) continue;
+      const indices = system.scopeOutputs.get(scopeNode.id);
+      if (indices && indices.length > 0) {
+        const knownValue = Object.values(perScopeValues)[0];
+        if (knownValue !== undefined) perScopeValues[scopeNode.id] = knownValue;
+      }
+    }
 
     // 2. Generic Scope Output Mapping for all scope blocks
     const allScopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope' || n.type === 'scope');

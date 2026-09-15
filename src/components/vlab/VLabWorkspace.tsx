@@ -35,6 +35,7 @@ import { VLabSimulinkScope } from './VLabSimulinkScope';
 import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
 import { normalizeSolverConfiguration } from '../../engine/vlab/kernel/PhysicalNetworkExtractor';
 import { selectSolverConfigurationNode } from '../../engine/vlab/kernel/SolverConfigurationSelection';
+import { VLabWorkerClient } from '../../services/vlabWorkerClient';
 
 interface LabNode {
   id: string;
@@ -1060,11 +1061,18 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [history, setHistory] = useState<{ nodes: any[], edges: any[] }[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
   const [simTime, setSimTime] = useState(0);
   const simTimeRef = useRef<number>(0);
   const simPhysicsStateRef = useRef<any>(null);
   const hasSimulatedStepRef = useRef(false);
   const solverJobRef = useRef<VLabSolverJob | null>(null);
+  const vlabWorkerRef = useRef<VLabWorkerClient | null>(null);
   const [vlabLimitInput, setVlabLimitInput] = useState('');
   const vlabLimitRef = useRef<number | null>(null);
   const [simSpeed, setSimSpeed] = useState<number>(1);
@@ -1364,7 +1372,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
    * Builds a domain-aware simulation step function from the current node graph.
    * Returns a function: (t, dt) => number  (the signal value at the scope)
    */
-  const buildSimEngine = useCallback(() => {
+  const buildSimEngine = useCallback((useWorker = false) => {
     const solverJob = solverJobRef.current && isSimulating
       ? solverJobRef.current
       : createVLabSolverJob(nodes, edges);
@@ -1647,8 +1655,29 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
     return (t: number, dt: number) => {
       if (!useFallback) {
+        if (useWorker) {
+          if (!vlabWorkerRef.current) vlabWorkerRef.current = new VLabWorkerClient();
+          if (vlabWorkerRef.current.available) {
+            return vlabWorkerRef.current.step(nodesRef.current, edgesRef.current, solverJob.solverConfiguration, simPhysicsStateRef.current, dt)
+              .then((result) => {
+                simPhysicsStateRef.current = result;
+                if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
+                  if (result.perScopeValues) {
+                    const val = result.scopeValues;
+                    if (typeof val === 'object' && val !== null) {
+                      val.__perScope = result.perScopeValues;
+                      return val;
+                    }
+                    return { value: val, in1: val, __perScope: result.perScopeValues };
+                  }
+                  return result.scopeValues;
+                }
+                return null;
+              });
+          }
+        }
         try {
-          const result = engine.simulateStep(nodes, edges, simPhysicsStateRef.current, dt);
+          const result = engine.simulateStep(nodesRef.current, edgesRef.current, simPhysicsStateRef.current, dt);
           simPhysicsStateRef.current = result;
           if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
             if (result.perScopeValues) {
@@ -1680,22 +1709,44 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
     // Build the physics engine once per simulation run. Its configuration is
     // refreshed below at every simulation-step boundary.
-    const step = buildSimEngine();
+    const step = buildSimEngine(true);
 
     let stepCount = 0;
     let lastSampleTime = 0;
     let activeSolverConfiguration: SolverConfiguration | null = solverJobRef.current?.solverConfiguration ?? null;
+    let stepInFlight = false;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      if (isPausedRef.current || stepInFlight) return;
+      stepInFlight = true;
       try {
         const stepsToRun = Math.max(1, Math.min(5, simSpeedRef.current || 1));
         for (let s = 0; s < stepsToRun; s++) {
           const currentT = simTimeRef.current;
           const solverJob = solverJobRef.current;
           if (!solverJob) return;
-          const refreshed = refreshVLabSolverJobAtStepBoundary(solverJob, nodes, currentT, !hasSimulatedStepRef.current, edges);
-          const { boundary } = refreshed;
-          activeSolverConfiguration = refreshed.solverConfiguration;
+          const refreshed = refreshVLabSolverJobAtStepBoundary(
+            solverJob,
+            nodesRef.current,
+            currentT,
+            !hasSimulatedStepRef.current,
+            edgesRef.current,
+          );
+          const toolbarLimit = vlabLimitRef.current;
+          if (toolbarLimit !== null) {
+            const toolbarConfiguration = { ...refreshed.solverConfiguration, stopTime: toolbarLimit };
+            solverJob.engine.updateConfiguration(toolbarConfiguration);
+            solverJob.solverConfiguration = toolbarConfiguration;
+          }
+          const boundary = resolveVLabStepBoundary(
+            solverJob.solverConfiguration,
+            currentT,
+            !hasSimulatedStepRef.current,
+          );
+          activeSolverConfiguration = solverJob.solverConfiguration;
+          // Learning-lab templates may not contain a Solver Configuration
+          // node. In that case the toolbar End Time must override the kernel's
+          // default stopTime instead of being display-only.
           const limit = boundary.stopTime;
 
           if (currentT >= limit) {
@@ -1705,7 +1756,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             return;
           }
 
-          const dt = boundary.dt;
+          const dt = Math.min(boundary.dt, Math.max(0, limit - currentT));
           if (dt <= 0) {
             setIsSimulating(false);
             clearInterval(interval);
@@ -1715,7 +1766,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
           if (currentT + dt === currentT) throw new Error('Solver step is too small to advance simulation time.');
 
-          const val = step(currentT, dt);
+          const val = await step(currentT, dt);
           hasSimulatedStepRef.current = true;
           // Keep simulation time at full precision; round only for display/export.
           const nextT = currentT + dt;
@@ -1838,12 +1889,24 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           console.error("Simulation step failed:", err);
         }
         setIsSimulating(false);
-        setStatus({ message: "Simulation crashed: Numerical instability or invalid configuration.", type: 'error' });
+        setStatus({
+          message: `Simulation crashed: ${err instanceof Error ? err.message : 'Numerical instability or invalid configuration.'}`,
+          type: 'error'
+        });
+      } finally {
+        stepInFlight = false;
       }
     }, 50);
 
-    return () => clearInterval(interval);
-  }, [isSimulating, isPaused, buildSimEngine, nodes]);
+    return () => {
+      clearInterval(interval);
+      vlabWorkerRef.current?.dispose();
+      vlabWorkerRef.current = null;
+    };
+  // The loop reads the latest graph through refs. Do not restart/dispose the
+  // worker on every scope-data/node-state render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSimulating, isPaused]);
 
   // Keyboard Shortcuts
   useEffect(() => {
