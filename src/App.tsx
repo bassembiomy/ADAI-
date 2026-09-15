@@ -869,7 +869,7 @@ const LegacyTraceabilityMatrix = ({
         .join('; ');
 
       const traced = relationships
-        .filter(rel => (rel.type === 'trace' || rel.type === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
+        .filter(rel => (rel.type === 'trace' || (rel.type as string) === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
         .map(rel => {
           const otherId = rel.sourceId === r.id ? rel.targetId : rel.sourceId;
           return blocks.find(b => b.id === otherId)?.name || otherId;

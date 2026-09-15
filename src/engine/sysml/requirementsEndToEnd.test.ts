@@ -11,7 +11,7 @@ import { buildTraceabilityMatrix, exportRtmCsv, computeCoverageMetrics } from '.
 import { renderRequirementsDiagram } from '../../features/reporting/reportDiagrams';
 import { getRelationshipDefinition } from './relationshipDefinitions';
 
-const ep = (family: SysmlEndpointFamily, id = family): ConnectionEndpoint => ({ id, name: id, family });
+const ep = (family: SysmlEndpointFamily, id: string = family): ConnectionEndpoint => ({ id, name: id, family });
 
 describe('Requirements Diagram & RTM End-to-End Integration (Section 15.4)', () => {
   it('implements full lifecycle for all 7 requirement relationship kinds', () => {
@@ -78,7 +78,7 @@ describe('Requirements Diagram & RTM End-to-End Integration (Section 15.4)', () 
       id: 'sm',
       name: 'Thermal State Machine',
       namespace: ['Thermal'],
-      kind: 'stateMachine',
+      kind: 'block',
       isAbstract: false,
       isLeaf: false,
       properties: [],
