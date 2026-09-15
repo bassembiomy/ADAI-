@@ -158,7 +158,9 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
 
   private clampStep(step: number, config = this.configuration): number {
     const minimum = typeof config.minimumStep === 'number' ? config.minimumStep : DEFAULT_MINIMUM_STEP;
-    const maximum = typeof config.maximumStep === 'number' ? config.maximumStep : DEFAULT_MAXIMUM_STEP;
+    const maximum = typeof config.maximumStep === 'number'
+      ? config.maximumStep
+      : Math.max(DEFAULT_MAXIMUM_STEP, minimum);
     return Math.min(maximum, Math.max(minimum, step));
   }
 

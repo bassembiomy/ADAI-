@@ -30,14 +30,23 @@ export class VLabPhysicsEngine {
     this.assembler = new DAEAssembler();
     this.solver = new ImplicitSolver();
     this.solverConfiguration = solverConfiguration;
+    if (solverConfiguration) this.applySolverConfiguration(solverConfiguration);
   }
 
   updateConfiguration(solverConfiguration: SolverConfiguration): void {
     this.solverConfiguration = solverConfiguration;
+    this.applySolverConfiguration(solverConfiguration);
   }
 
   getSolverConfiguration(): SolverConfiguration | null {
     return this.solverConfiguration;
+  }
+
+  private applySolverConfiguration(config: SolverConfiguration): void {
+    this.solver.configure({
+      maxIterations: config.maximumIterations,
+      tolerance: Math.max(config.absoluteTolerance, config.nonlinearTolerance)
+    });
   }
 
   /**
@@ -46,7 +55,8 @@ export class VLabPhysicsEngine {
   private getTopologyHash(nodes: Node[], edges: Edge[]): string {
     const nodeIds = nodes.map(n => n.id).sort().join(',');
     const edgeIds = edges.map(e => `${e.source}_${e.target}`).sort().join(',');
-    return `${nodeIds}|${edgeIds}`;
+    const parameterHash = nodes.map(n => `${n.id}:${JSON.stringify((n.data as any)?.params ?? {})}`).sort().join('|');
+    return `${nodeIds}|${edgeIds}|${parameterHash}`;
   }
 
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {

@@ -1711,7 +1711,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
           const val = step(currentT, dt);
           hasSimulatedStepRef.current = true;
-          const nextT = parseFloat((currentT + dt).toFixed(6));
+          // Keep simulation time at full precision; round only for display/export.
+          const nextT = currentT + dt;
           simTimeRef.current = nextT;
 
           if (val !== null && val !== undefined) {
@@ -2100,9 +2101,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     hasSimulatedStepRef.current = false;
     setIsSimulating(true);
     setIsPaused(false);
-    simTimeRef.current = 0;
+    simTimeRef.current = solverJobRef.current?.solverConfiguration.startTime ?? 0;
     simPhysicsStateRef.current = null;
-    setSimTime(0);
+    setSimTime(simTimeRef.current);
     setScopeData([]);
     setPerScopeData({});
     setStatus({ message: 'Simulation started successfully.', type: 'success' });

@@ -5,6 +5,15 @@ export class ImplicitSolver {
   private maxIterations = 50;
   private tolerance = 1e-8;
 
+  configure(options: { maxIterations?: number; tolerance?: number }): void {
+    if (Number.isFinite(options.maxIterations) && (options.maxIterations ?? 0) > 0) {
+      this.maxIterations = Math.floor(options.maxIterations!);
+    }
+    if (Number.isFinite(options.tolerance) && (options.tolerance ?? 0) > 0) {
+      this.tolerance = options.tolerance!;
+    }
+  }
+
   solve(
     equations: (x: number[], ctx: EquationContext) => number[],
     initialX: number[],
