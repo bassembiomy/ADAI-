@@ -98,10 +98,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
   },
   steam_nozzle: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*(P - P_atm))'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho (P - P_{atm})}'],
+    equations: ['mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho \\max(P_p-P_n,0)}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models steam discharging to atmosphere through a throttled nozzle outlet.'
+    description: 'Models steam flow from upstream pressure Pp to downstream pressure Pn through a throttled two-port nozzle.'
   },
   pressure_sensor: {
     equations: ['S = P'],

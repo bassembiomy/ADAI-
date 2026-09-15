@@ -8270,8 +8270,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Out"
           }
         ],
-        "equation": "mdot = Cd * A_throat * P0 * √(γ/(R*T0)) * (2/(γ+1))^((γ+1)/(2*(γ-1)))",
-        "description": "Convergent-divergent steam expansion nozzle accelerating high-pressure steam into velocity jet."
+        "equation": "mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))",
+        "description": "Two-port steam nozzle whose mass flow is driven by the nonnegative upstream-to-downstream pressure difference."
       },
       {
         "id": "pressure_sensor",
