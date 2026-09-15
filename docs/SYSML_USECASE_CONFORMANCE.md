@@ -22,6 +22,10 @@ This architecture ensures:
 
 ## 2. Metamodel Architecture
 
+### 2.0 Port boundary (normative)
+
+Ports are not use-case elements. The use-case view may reference the realizing subject block, but it must not create, duplicate, rename, or connect `PortDefinition` or `PortUsage` objects. `PortDefinition` belongs to a BDD block definition; `PortUsage` belongs to an IBD part/block usage; connectors belong to IBD and connect compatible port usages. The UI must navigate to those structural diagrams through typed canonical references.
+
 ### 2.1 Canonical Entities
 
 Defined in `src/engine/sysml/model.ts` and validated in `src/engine/sysml/useCases.ts`:
