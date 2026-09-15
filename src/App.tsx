@@ -126,6 +126,7 @@ import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
 import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
+import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
 import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
@@ -6241,6 +6242,11 @@ const ADIA = () => {
     });
   }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
 
+  const requirementsDiagramScope = useMemo(
+    () => getRequirementsDiagramScope(blocks, relationships, currentLayerId),
+    [blocks, relationships, currentLayerId],
+  );
+
   // Schedule large validation asynchronously after edits with revision-based cancellation
   useEffect(() => {
     if (blocks.length === 0 && parts.length === 0) return;
@@ -6308,17 +6314,11 @@ const ADIA = () => {
         };
       case 'bdd':
         return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
-      case 'requirements': {
-        const reqRelEndpoints = new Set(
-          relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'requirementContainment' || r.type === 'copy' || r.type === 'trace')
-            .flatMap(r => [r.sourceId, r.targetId])
-        );
+      case 'requirements':
         return {
-          blocks: blocks.filter(b => b.stereotype === 'requirement' || reqRelEndpoints.has(b.id)),
-          relationships,
+          blocks: blocks.filter(b => requirementsDiagramScope.visibleBlockIds.has(b.id)),
+          relationships: relationships.filter(r => requirementsDiagramScope.visibleRelationshipIds.has(r.id)),
         };
-      }
       case 'ibd':
         return { parts, connectors, interfaceRealizations };
       case 'xbridges':
@@ -6342,7 +6342,8 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, opmSimulationConfig, useCaseDiagrams, hmiComponents, headers, data, activeModel, taguchiConfig, results
+    entropyNodes, entropyEdges, opmSimulationConfig, useCaseDiagrams, hmiComponents, headers, data, activeModel, taguchiConfig, results,
+    requirementsDiagramScope,
   ]);
 
   // Helper to save current active file state into workspaceFiles list
@@ -14338,6 +14339,7 @@ const ADIA = () => {
       if (diagramMode === 'requirements') {
         const allowedStereotypes = ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'];
         if (!allowedStereotypes.includes(block.stereotype)) return null;
+        if (!requirementsDiagramScope.visibleBlockIds.has(block.id)) return null;
         // Use layerId for visibility: show only blocks belonging to the current layer.
         // Blocks without layerId (legacy) default to root.
         const blockLayer = block.layerId ?? 'root';
@@ -14504,7 +14506,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
+  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
@@ -14525,13 +14527,7 @@ const ADIA = () => {
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
       if (diagramMode === 'ibd') return null;
       if (diagramMode === 'bdd' && isReqRel) return null;
-      if (diagramMode === 'requirements' && !isReqRel) return null;
-
-      // Check visibility for requirements: both source and target must be in the current layer
-      if (diagramMode === 'requirements') {
-        const isBlockVisible = (block: BlockData) => (block.layerId ?? 'root') === currentLayerId;
-        if (!isBlockVisible(source) || !isBlockVisible(target)) return null;
-      }
+      if (diagramMode === 'requirements' && !requirementsDiagramScope.visibleRelationshipIds.has(rel.id)) return null;
 
       const sourceBounds = computeBlockDisplayBounds(source);
       const targetBounds = computeBlockDisplayBounds(target);
@@ -14648,7 +14644,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning]);
+  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
