@@ -1,11 +1,16 @@
 // src/components/vlab/VLabWorkspace.test.tsx
 import { describe, it, expect } from 'vitest';
 import { SolverConfiguration } from '../../engine/vlab/kernel/types';
-import { normalizeSolverConfiguration } from '../../engine/vlab/kernel/PhysicalNetworkExtractor';
+import {
+  createVLabSolverJob,
+  refreshVLabSolverJobAtStepBoundary,
+  resolveVLabStepBoundary,
+  updateVLabSolverJobConfiguration
+} from './VLabWorkspace';
 
 describe('VLabWorkspace Solver Configuration Inspector', () => {
-  it('uses the shared solver boundary for inspector-shaped node values', () => {
-    const config = normalizeSolverConfiguration({
+  it('passes inspector values through the workspace solver-job boundary for a new run', () => {
+    const nodes = [{
       id: 'sc_workspace',
       data: {
         type: 'solver_config',
@@ -17,13 +22,34 @@ describe('VLabWorkspace Solver Configuration Inspector', () => {
           enableDiagnostics: { value: 'off' }
         }
       }
-    } as any);
+    }] as any;
+    const job = createVLabSolverJob(nodes, []);
 
-    expect(config.solver).toBe('rk4');
-    expect(config.stopTime).toBe(4);
-    expect(config.maximumStep).toBe(0.01);
-    expect(config.relativeTolerance).toBe(1e-4);
-    expect(config.enableDiagnostics).toBe(false);
+    expect(job.solverConfiguration.solver).toBe('rk4');
+    expect(job.solverConfiguration.stopTime).toBe(4);
+    expect(job.solverConfiguration.maximumStep).toBe(0.01);
+    expect(job.solverConfiguration.relativeTolerance).toBe(1e-4);
+    expect(job.solverConfiguration.enableDiagnostics).toBe(false);
+    expect(job.engine.getSolverConfiguration()).toBe(job.solverConfiguration);
+  });
+
+  it('updates the active solver job through the same normalized workspace boundary', () => {
+    const initialNodes = [{
+      id: 'sc_active',
+      data: { type: 'solver_config', params: { stopTime: { value: 4 }, maximumStep: { value: 0.01 } } }
+    }] as any;
+    const updatedNodes = [{
+      id: 'sc_active',
+      data: { type: 'solver_config', params: { stopTime: { value: Number.NaN }, maximumStep: { value: -1 }, solver: { value: 'bdf' } } }
+    }] as any;
+    const job = createVLabSolverJob(initialNodes, []);
+    const updated = updateVLabSolverJobConfiguration(job, updatedNodes);
+
+    expect(updated).toBe(job.solverConfiguration);
+    expect(job.solverConfiguration.stopTime).toBe(10);
+    expect(job.solverConfiguration.maximumStep).toBe('auto');
+    expect(job.solverConfiguration.solver).toBe('bdf');
+    expect(job.engine.getSolverConfiguration()).toBe(updated);
   });
 
   it('should contain valid default parameters for solver_config block', () => {
@@ -67,65 +93,47 @@ describe('VLabWorkspace Solver Configuration Inspector', () => {
     expect(perScopeData['scope_voltage'][1].in1).not.toEqual(perScopeData['scope_current'][1].in1);
   });
 
-  describe('Simulation End Time & Stepping Limit Resolution', () => {
-    const resolveEffectiveLimit = (
-      topBarLimit: number | null,
-      nodes: Array<{ id: string; data: any }>
-    ): number | null => {
-      if (topBarLimit !== null && !isNaN(topBarLimit) && topBarLimit > 0) {
-        return topBarLimit;
-      }
-      const scNode = nodes.find(n => n.data?.type === 'solver_config' || n.data?.type === 'solver_configuration');
-      if (scNode) {
-        const st = scNode.data?.params?.stopTime?.value ?? scNode.data?.params?.stop_time?.value;
-        const parsed = typeof st === 'number' ? st : parseFloat(st);
-        if (!isNaN(parsed) && parsed > 0) {
-          return parsed;
+  describe('Simulation solver boundaries', () => {
+    it('uses normalized stop and initial step settings at run start', () => {
+      const boundary = resolveVLabStepBoundary({
+        id: 'sc_start', solver: 'auto', startTime: 0, stopTime: 0.08,
+        initialStep: 0.2, minimumStep: 0.01, maximumStep: 0.05,
+        relativeTolerance: 1e-3, absoluteTolerance: 1e-6, maximumIterations: 50,
+        nonlinearTolerance: 1e-8, enableDiagnostics: false, enableLogging: false
+      }, 0, true);
+
+      expect(boundary.stopTime).toBe(0.08);
+      expect(boundary.dt).toBe(0.05);
+      expect(boundary.enableDiagnostics).toBe(false);
+      expect(boundary.enableLogging).toBe(false);
+    });
+
+    it('observes changed stop and step limits at the next step boundary', () => {
+      const job = createVLabSolverJob([{
+        id: 'sc_updated', data: { type: 'solver_config', params: { stopTime: { value: 4 } } }
+      }] as any, []);
+      const { boundary, solverConfiguration } = refreshVLabSolverJobAtStepBoundary(job, [{
+        id: 'sc_updated',
+        data: {
+          type: 'solver_config',
+          params: { stopTime: { value: 0.08 }, minimumStep: { value: 0.02 }, maximumStep: { value: 0.03 } }
         }
-      }
-      return null;
-    };
+      }] as any, 0.05, false);
 
-    it('resolves effective limit from top bar input if specified', () => {
-      const nodes = [
-        { id: 'sc1', data: { type: 'solver_config', params: { stopTime: { value: 10 } } } }
-      ];
-      expect(resolveEffectiveLimit(5.0, nodes)).toBe(5.0);
-      expect(resolveEffectiveLimit(null, nodes)).toBe(10);
-      expect(resolveEffectiveLimit(null, [])).toBeNull();
+      expect(boundary.stopTime).toBe(0.08);
+      expect(boundary.dt).toBe(0.03);
+      expect(job.engine.getSolverConfiguration()).toBe(solverConfiguration);
     });
 
-    it('clamps last simulation step to hit exact end time without overshooting', () => {
-      const DT = 0.05;
-      const limit = 0.08;
-      let currentT = 0;
-      const timeSteps: number[] = [currentT];
+    it('uses a terminal partial step even when it is smaller than minimumStep', () => {
+      const boundary = resolveVLabStepBoundary({
+        id: 'sc_terminal', solver: 'auto', startTime: 0, stopTime: 0.08,
+        initialStep: 'auto', minimumStep: 0.02, maximumStep: 'auto',
+        relativeTolerance: 1e-3, absoluteTolerance: 1e-6, maximumIterations: 50,
+        nonlinearTolerance: 1e-8, enableDiagnostics: true, enableLogging: true
+      }, 0.075, false);
 
-      while (currentT < limit - 1e-9) {
-        const dt = Math.min(DT, Math.max(0, limit - currentT));
-        currentT = parseFloat((currentT + dt).toFixed(6));
-        timeSteps.push(currentT);
-      }
-
-      expect(timeSteps).toEqual([0, 0.05, 0.08]);
-      expect(currentT).toBe(0.08);
-      expect(currentT <= limit).toBe(true);
-    });
-
-    it('terminates immediately once currentT reaches limit', () => {
-      const limit = 1.0;
-      const DT = 0.05;
-      let currentT = 0;
-      let iterations = 0;
-
-      while (currentT < limit - 1e-9 && iterations < 100) {
-        const dt = Math.min(DT, Math.max(0, limit - currentT));
-        currentT = parseFloat((currentT + dt).toFixed(6));
-        iterations++;
-      }
-
-      expect(iterations).toBe(20);
-      expect(currentT).toBe(1.0);
+      expect(boundary.dt).toBeCloseTo(0.005);
     });
   });
 

@@ -2,6 +2,7 @@ import { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
+import { SolverConfiguration } from './kernel/types';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -23,10 +24,20 @@ export class VLabPhysicsEngine {
   private solver: ImplicitSolver;
   private currentSystem: AssembledSystem | null = null;
   private prevTopologyHash: string = '';
+  private solverConfiguration: SolverConfiguration | null;
 
-  constructor() {
+  constructor(solverConfiguration: SolverConfiguration | null = null) {
     this.assembler = new DAEAssembler();
     this.solver = new ImplicitSolver();
+    this.solverConfiguration = solverConfiguration;
+  }
+
+  updateConfiguration(solverConfiguration: SolverConfiguration): void {
+    this.solverConfiguration = solverConfiguration;
+  }
+
+  getSolverConfiguration(): SolverConfiguration | null {
+    return this.solverConfiguration;
   }
 
   /**
