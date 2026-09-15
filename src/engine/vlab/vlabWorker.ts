@@ -4,8 +4,19 @@ import type { VLabWorkerRequest, VLabWorkerResponse } from './vlabWorkerProtocol
 let engine: VLabPhysicsEngine | null = null;
 let configurationId = '';
 
-self.onmessage = (event: MessageEvent<VLabWorkerRequest>) => {
-  const request = event.data;
+self.onmessage = (event: MessageEvent<VLabWorkerRequest | { type: 'cancel' | 'reset'; kind?: string }>) => {
+  const request = event.data as any;
+  if (!request) return;
+
+  if (request.type === 'cancel' || request.kind === 'cancel') {
+    return;
+  }
+  if (request.type === 'reset' || request.kind === 'reset') {
+    engine = null;
+    configurationId = '';
+    return;
+  }
+
   try {
     if (!engine || configurationId !== request.configuration.id) {
       engine = new VLabPhysicsEngine(request.configuration);
