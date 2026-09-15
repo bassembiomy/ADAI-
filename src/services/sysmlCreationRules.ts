@@ -81,6 +81,14 @@ export function validateLegacyRelationshipCandidate(
       codes.push('REQUIREMENT_CONTAINMENT_CYCLE');
     }
   }
+  if (type === 'copy') {
+    const existingMasters = model.relationships.filter(existing =>
+      existing.id !== candidate.id &&
+      normalize(existing.type) === 'copy' &&
+      existing.sourceId === candidate.sourceId
+    );
+    if (existingMasters.length > 0) codes.push('MULTIPLE_MASTERS_FOR_COPY');
+  }
   if (type === 'generalization' && source && target && !['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration'].includes(source.family)) codes.push('INVALID_GENERALIZATION_ENDPOINTS');
 
   if (['generalization', 'deriveReqt', 'copy'].includes(type) && createsCycle(model.relationships, candidate, type)) codes.push('RELATIONSHIP_CYCLE');
@@ -122,8 +130,7 @@ function legacyConnectionEndpoint(blocks: readonly BlockData[], parts: readonly 
 
 function relationshipDiagram(type: string): 'bdd' | 'ibd' | 'requirements' | 'rtm' {
   if (type === 'binding') return 'ibd';
-  if (type === 'requirementContainment') return 'requirements';
-  if (['deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace'].includes(type)) return 'rtm';
+  if (type === 'requirementContainment' || ['deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace'].includes(type)) return 'requirements';
   return 'bdd';
 }
 

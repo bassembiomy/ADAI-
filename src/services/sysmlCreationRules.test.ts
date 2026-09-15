@@ -160,6 +160,14 @@ describe('native SysML creation rules', () => {
     // BDD composition between requirements is rejected
     const compReq = relationship('compReq', 'r1', 'r2', 'composition');
     expect(validateLegacyRelationshipCandidate(model, compReq).codes).toContain('INVALID_COMPOSITION_ENDPOINTS');
+
+    // Independent graphs: r1 contains r2, but r2 deriving from r1 does not create a containment cycle
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existingForCycle }, relationship('d', 'r2', 'r1', 'deriveReqt')).valid).toBe(true);
+
+    // Copy single master validation: r3 already copies r1, attempting to copy r2 is rejected
+    const existingCopy = [relationship('cp1', 'r3', 'r1', 'copy')];
+    const multiCopy = relationship('cp2', 'r3', 'r2', 'copy');
+    expect(validateLegacyRelationshipCandidate({ ...model, relationships: existingCopy }, multiCopy).codes).toContain('MULTIPLE_MASTERS_FOR_COPY');
   });
 });
 

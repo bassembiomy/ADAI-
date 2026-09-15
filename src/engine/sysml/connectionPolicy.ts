@@ -110,7 +110,7 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'trace') {
-    if (input.diagram === 'rtm' && source.family !== 'requirement' && target.family !== 'requirement') return reject(normalized, 'INVALID_TRACE_ENDPOINTS', 'Trace requires at least one Requirement endpoint.', 'Connect one endpoint to a Requirement.');
+    if (source.family !== 'requirement' && target.family !== 'requirement') return reject(normalized, 'INVALID_TRACE_ENDPOINTS', 'Trace requires at least one Requirement endpoint.', 'Connect one endpoint to a Requirement.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'binding') {
