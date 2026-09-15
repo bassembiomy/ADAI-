@@ -6,6 +6,12 @@ import {
   type RequirementDefinition,
   type SysmlRelationship,
   type SysmlRepository,
+  type ActorDefinition,
+  type SubjectDefinition,
+  type UseCaseDefinition,
+  type ExtensionPoint,
+  type DiagramReference,
+  type UseCaseRelationshipKind,
 } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic } from './validation';
 import {
@@ -55,6 +61,11 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
     evidence: sorted(repository.evidence ?? {}),
     baselines: sorted(repository.baselines ?? {}),
     artifacts: sorted(repository.artifacts ?? {}),
+    actors: sorted(repository.actors ?? {}),
+    subjects: sorted(repository.subjects ?? {}),
+    useCases: sorted(repository.useCases ?? {}),
+    extensionPoints: sorted(repository.extensionPoints ?? {}),
+    diagramReferences: sorted(repository.diagramReferences ?? {}),
     auditTrail: [...(repository.auditTrail ?? [])],
   };
 }
@@ -159,6 +170,11 @@ function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
     evidence: structuredClone(raw.evidence ?? {}),
     baselines: structuredClone(raw.baselines ?? {}),
     artifacts: structuredClone(raw.artifacts ?? {}),
+    actors: structuredClone(raw.actors ?? {}),
+    subjects: structuredClone(raw.subjects ?? {}),
+    useCases: structuredClone(raw.useCases ?? {}),
+    extensionPoints: structuredClone(raw.extensionPoints ?? {}),
+    diagramReferences: structuredClone(raw.diagramReferences ?? {}),
     auditTrail: structuredClone(raw.auditTrail ?? []),
   };
 }
@@ -314,12 +330,218 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrat
       repo.verificationCases[sourceId].verifiesRequirementIds.push(targetId);
     }
   }
+
+  // Migrate legacy use case diagrams if present in source
+  const legacyUseCaseDiagrams = arrayOfRecords(source.useCaseDiagrams);
+  for (const diagRecord of legacyUseCaseDiagrams) {
+    const diagId = text(diagRecord.id) || 'default_usecase';
+    const legacyNodeMap = new Map<string, string>(); // rawNodeId -> canonicalId
+
+    // 1. First pass: migrate nodes to actors, subjects, use-cases, and extension points
+    const nodes = arrayOfRecords(diagRecord.nodes);
+    for (const node of nodes) {
+      const rawNodeId = text(node.id);
+      if (!rawNodeId) continue;
+      const data = isRecord(node.data) ? node.data : {};
+      const canonicalId = text(data.canonicalElementId) || `${diagId}_${rawNodeId}`;
+      legacyNodeMap.set(rawNodeId, canonicalId);
+      const nodeType = text(node.type);
+
+      if (nodeType === 'actor') {
+        repo.actors[canonicalId] = {
+          id: canonicalId,
+          name: text(data.label) || rawNodeId,
+          kind: 'actor',
+          namespace: [],
+          isExternal: Boolean(data.isExternal),
+          generalizationIds: [],
+        };
+      } else if (nodeType === 'systemBoundary') {
+        repo.subjects[canonicalId] = {
+          id: canonicalId,
+          name: text(data.label) || rawNodeId,
+          kind: 'subject',
+          namespace: [],
+          realizedByBlockId: optionalText(data.subjectBlockId),
+        };
+      } else if (nodeType === 'useCase') {
+        const epIds: string[] = [];
+        if (Array.isArray(data.extensionPoints)) {
+          data.extensionPoints.forEach((epNameRaw, idx) => {
+            const epName = text(epNameRaw);
+            if (epName) {
+              const epId = `${canonicalId}_ep_${idx + 1}`;
+              epIds.push(epId);
+              repo.extensionPoints[epId] = {
+                id: epId,
+                name: epName,
+                kind: 'extensionPoint',
+                namespace: [],
+                useCaseId: canonicalId,
+              };
+            }
+          });
+        }
+
+        const parentId = text(node.parentId);
+        const subjectId = parentId ? legacyNodeMap.get(parentId) || parentId : undefined;
+
+        repo.useCases[canonicalId] = {
+          id: canonicalId,
+          name: text(data.label) || rawNodeId,
+          kind: 'useCase',
+          namespace: [],
+          subjectId,
+          description: optionalText(data.description),
+          extensionPointIds: epIds,
+          behaviorArtifactIds: [],
+        };
+
+        const elaboratingDiagramId = optionalText(data.elaboratingDiagramId);
+        if (elaboratingDiagramId) {
+          const refId = `ref_${canonicalId}_${elaboratingDiagramId}`;
+          repo.diagramReferences[refId] = {
+            id: refId,
+            diagramId: elaboratingDiagramId,
+            diagramKind: 'activity',
+            role: 'elaborates',
+            sourceElementId: canonicalId,
+          };
+        }
+
+        if (Array.isArray(data.requirementTraces)) {
+          for (const traceRecord of arrayOfRecords(data.requirementTraces)) {
+            const reqId = text(traceRecord.requirementId);
+            const relType = text(traceRecord.relationType) || 'trace';
+            if (reqId) {
+              let mappedKind: UseCaseRelationshipKind = 'useCaseTrace';
+              if (relType === 'refine') mappedKind = 'useCaseRefine';
+              else if (relType === 'satisfy') mappedKind = 'useCaseSatisfy';
+              else if (relType === 'trace' || relType === 'verify') mappedKind = 'useCaseTrace';
+
+              const relId = `trace_${canonicalId}_${reqId}`;
+              repo.relationships[relId] = {
+                id: relId,
+                kind: mappedKind,
+                sourceId: canonicalId,
+                targetId: reqId,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Resolve deferred parent subject references
+    for (const node of nodes) {
+      const rawNodeId = text(node.id);
+      const canonicalId = legacyNodeMap.get(rawNodeId);
+      const parentId = text(node.parentId);
+      if (canonicalId && parentId && repo.useCases[canonicalId]) {
+        const resolvedSubjectId = legacyNodeMap.get(parentId) || parentId;
+        if (repo.subjects[resolvedSubjectId]) {
+          repo.useCases[canonicalId].subjectId = resolvedSubjectId;
+        }
+      }
+    }
+
+    // 2. Second pass: migrate edges
+    const edges = arrayOfRecords(diagRecord.edges);
+    for (const edge of edges) {
+      const edgeId = text(edge.id) || `edge_${Math.random().toString(36).slice(2, 8)}`;
+      const rawSource = text(edge.source);
+      const rawTarget = text(edge.target);
+      const canonicalSource = legacyNodeMap.get(rawSource) || rawSource;
+      const canonicalTarget = legacyNodeMap.get(rawTarget) || rawTarget;
+      const rawType = text(edge.type);
+
+      const sourceExists = repo.actors[canonicalSource] || repo.useCases[canonicalSource] || repo.subjects[canonicalSource] || repo.requirements[canonicalSource] || repo.definitions[canonicalSource];
+      const targetExists = repo.actors[canonicalTarget] || repo.useCases[canonicalTarget] || repo.subjects[canonicalTarget] || repo.requirements[canonicalTarget] || repo.definitions[canonicalTarget];
+
+      if (!sourceExists || !targetExists) {
+        const lossEntry = {
+          sourceId: edgeId,
+          sourceKind: 'useCaseRelationship',
+          diagnosticCode: 'LEGACY_USECASE_RELATIONSHIP_UNRESOLVED',
+          reason: `Legacy use-case relationship ${edgeId} connects missing endpoint (${rawSource} -> ${rawTarget}) and was quarantined`,
+          severity: 'warning' as const,
+        };
+        migrationReport.lossEntries.push(lossEntry);
+        migrationReport.unresolvedEndpoints.push({
+          kind: 'relationship',
+          id: edgeId,
+          endpoint: !sourceExists ? 'source' : 'target',
+          missingId: !sourceExists ? rawSource : rawTarget,
+          code: 'UNRESOLVED_ENDPOINT',
+          message: `Legacy use-case relationship ${edgeId} endpoint does not resolve; quarantined`,
+        });
+        const diagnostic = {
+          code: 'LEGACY_USECASE_RELATIONSHIP_UNRESOLVED',
+          severity: 'warning' as const,
+          elementId: edgeId,
+          message: `Legacy use-case relationship ${edgeId} quarantined: unresolved endpoint`,
+        };
+        diagnostics.push(diagnostic);
+        migrationReport.diagnostics.push(diagnostic);
+        continue;
+      }
+
+      let kind: UseCaseRelationshipKind;
+      switch (rawType) {
+        case 'association':
+          kind = 'useCaseAssociation';
+          break;
+        case 'include':
+          kind = 'include';
+          break;
+        case 'extend':
+          kind = 'extend';
+          break;
+        case 'generalization':
+          kind = 'useCaseGeneralization';
+          break;
+        case 'refine':
+          kind = 'useCaseRefine';
+          break;
+        case 'satisfy':
+          kind = 'useCaseSatisfy';
+          break;
+        case 'trace':
+          kind = 'useCaseTrace';
+          break;
+        default:
+          kind = 'useCaseAssociation';
+      }
+
+      const rel: SysmlRelationship = {
+        id: edgeId,
+        sourceId: canonicalSource,
+        targetId: canonicalTarget,
+        kind,
+      };
+
+      if (kind === 'extend' && repo.useCases[canonicalTarget]) {
+        const targetUc = repo.useCases[canonicalTarget];
+        if (targetUc.extensionPointIds.length > 0) {
+          rel.extensionPointId = targetUc.extensionPointIds[0];
+        }
+      }
+
+      repo.relationships[edgeId] = rel;
+    }
+  }
+
   repo.auditTrail.push({ id: 'change-0-legacy-import', revision: 0, timestamp: new Date(0).toISOString(), command: 'migrateLegacy', elementIds: [] });
   return repo;
 }
 
 function snapshotElementHashes(repo: SysmlRepository): Record<string, string> {
-  const records = [repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements, repo.verificationCases, repo.evidence, repo.artifacts];
+  const records = [
+    repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
+    repo.verificationCases, repo.evidence, repo.artifacts,
+    repo.actors ?? {}, repo.subjects ?? {}, repo.useCases ?? {},
+    repo.extensionPoints ?? {}, repo.diagramReferences ?? {},
+  ];
   return Object.fromEntries(records.flatMap(record => Object.values(record).map(element => [element.id, hash(stableStringify(element))] as const)).sort(([a], [b]) => a.localeCompare(b)));
 }
 

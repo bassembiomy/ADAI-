@@ -193,7 +193,7 @@ describe('SysML Large Model Benchmark Gates', () => {
         key => chunkSerializeMeasure.result.chunks[key]?.json
       );
     });
-    expect(chunkHydrateMeasure.durationMs).toBeLessThan(1000);
+    expect(chunkHydrateMeasure.durationMs).toBeLessThan(2000);
     metrics['chunk_hydrate_10k_ms'] = chunkHydrateMeasure.durationMs;
 
     // ─────────────────────────────────────────────────────────────

@@ -12,6 +12,11 @@ import type {
   VerificationEvidence,
   ModelBaseline,
   TraceArtifact,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
   Multiplicity,
   SysmlEntityCollection,
   SysmlEntity,
@@ -151,7 +156,12 @@ export type SysmlElement =
   | VerificationCase
   | VerificationEvidence
   | ModelBaseline
-  | TraceArtifact;
+  | TraceArtifact
+  | ActorDefinition
+  | SubjectDefinition
+  | UseCaseDefinition
+  | ExtensionPoint
+  | DiagramReference;
 
 export interface DiagramPresentation {
   diagramId: string;
@@ -497,6 +507,26 @@ function storeElementInRepository(repo: SysmlRepository, element: SysmlElement):
       repo.verificationCases[element.id] = element as VerificationCase;
       return;
     }
+    if (element.kind === 'actor') {
+      repo.actors[element.id] = element as ActorDefinition;
+      return;
+    }
+    if (element.kind === 'subject') {
+      repo.subjects[element.id] = element as SubjectDefinition;
+      return;
+    }
+    if (element.kind === 'useCase') {
+      repo.useCases[element.id] = element as UseCaseDefinition;
+      return;
+    }
+    if (element.kind === 'extensionPoint') {
+      repo.extensionPoints[element.id] = element as ExtensionPoint;
+      return;
+    }
+  }
+  if ('sourceElementId' in element && 'diagramId' in element && 'role' in element) {
+    repo.diagramReferences[element.id] = element as DiagramReference;
+    return;
   }
   if ('sourceId' in element && 'targetId' in element) {
     repo.relationships[element.id] = element as SysmlRelationship;
@@ -551,6 +581,26 @@ function findAndPatchElement(repo: SysmlRepository, elementId: string, patch: Re
     repo.baselines[elementId] = { ...repo.baselines[elementId], ...patch } as any;
     return true;
   }
+  if (repo.actors?.[elementId]) {
+    repo.actors[elementId] = { ...repo.actors[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.subjects?.[elementId]) {
+    repo.subjects[elementId] = { ...repo.subjects[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.useCases?.[elementId]) {
+    repo.useCases[elementId] = { ...repo.useCases[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.extensionPoints?.[elementId]) {
+    repo.extensionPoints[elementId] = { ...repo.extensionPoints[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.diagramReferences?.[elementId]) {
+    repo.diagramReferences[elementId] = { ...repo.diagramReferences[elementId], ...patch } as any;
+    return true;
+  }
   return false;
 }
 
@@ -561,7 +611,12 @@ function getCollectionFromElement(element: SysmlElement): SysmlEntityCollection 
     if (element.kind === 'assembly' || element.kind === 'delegation' || element.kind === 'binding') return 'connectors';
     if (element.kind === 'requirement') return 'requirements';
     if (element.kind === 'verificationCase') return 'verificationCases';
+    if (element.kind === 'actor') return 'actors';
+    if (element.kind === 'subject') return 'subjects';
+    if (element.kind === 'useCase') return 'useCases';
+    if (element.kind === 'extensionPoint') return 'extensionPoints';
   }
+  if ('sourceElementId' in element && 'diagramId' in element && 'role' in element) return 'diagramReferences';
   if ('sourceId' in element && 'targetId' in element) return 'relationships';
   if ('verificationCaseId' in element && 'status' in element) return 'evidence';
   if ('protected' in element && 'contentHash' in element) return 'baselines';
@@ -974,6 +1029,11 @@ export function executeSysmlCommand(
       evidence: collection === 'evidence' ? { ...state.repository.evidence, [command.element.id]: command.element as any } : state.repository.evidence,
       baselines: collection === 'baselines' ? { ...state.repository.baselines, [command.element.id]: command.element as any } : state.repository.baselines,
       artifacts: collection === 'artifacts' ? { ...state.repository.artifacts, [command.element.id]: command.element as any } : state.repository.artifacts,
+      actors: collection === 'actors' ? { ...(state.repository.actors || {}), [command.element.id]: command.element as any } : (state.repository.actors || {}),
+      subjects: collection === 'subjects' ? { ...(state.repository.subjects || {}), [command.element.id]: command.element as any } : (state.repository.subjects || {}),
+      useCases: collection === 'useCases' ? { ...(state.repository.useCases || {}), [command.element.id]: command.element as any } : (state.repository.useCases || {}),
+      extensionPoints: collection === 'extensionPoints' ? { ...(state.repository.extensionPoints || {}), [command.element.id]: command.element as any } : (state.repository.extensionPoints || {}),
+      diagramReferences: collection === 'diagramReferences' ? { ...(state.repository.diagramReferences || {}), [command.element.id]: command.element as any } : (state.repository.diagramReferences || {}),
       auditTrail: [
         ...state.repository.auditTrail,
         {

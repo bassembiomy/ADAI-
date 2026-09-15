@@ -133,7 +133,7 @@ import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
@@ -6061,6 +6061,7 @@ const ADIA = () => {
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
   const [useCaseDiagrams, setUseCaseDiagrams] = useState<UseCaseDiagram[]>([]);
+  const [activeUseCaseDiagramId, setActiveUseCaseDiagramId] = useState<string>('default_usecase');
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
@@ -7269,7 +7270,14 @@ const ADIA = () => {
       projectFiles['entropy.json'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('usecase')) {
-      projectFiles['usecase.json'] = { useCaseDiagrams };
+      projectFiles['usecase.json'] = {
+        useCaseDiagrams,
+        activeUseCaseDiagramId,
+        canonicalUseCases: canonicalSysmlRepository.useCases,
+        canonicalActors: canonicalSysmlRepository.actors,
+        canonicalSubjects: canonicalSysmlRepository.subjects,
+        canonicalRelationships: canonicalSysmlRepository.relationships,
+      };
     }
     if (selectedKeys.includes('unified')) {
       projectFiles['adia_project_unified.json'] = {
@@ -7287,6 +7295,8 @@ const ADIA = () => {
         entropyEdges,
         opmSimulationConfig,
         useCaseDiagrams,
+        activeUseCaseDiagramId,
+        canonicalSysmlRepository,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
         activeFileId
@@ -7435,7 +7445,17 @@ const ADIA = () => {
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
 
       // Use Cases Module
-      if (importedData.useCaseDiagrams) setUseCaseDiagrams(importedData.useCaseDiagrams);
+      if (importedData.useCaseDiagrams) {
+        setUseCaseDiagrams(importedData.useCaseDiagrams);
+        if (importedData.activeUseCaseDiagramId) {
+          setActiveUseCaseDiagramId(importedData.activeUseCaseDiagramId);
+        } else if (importedData.useCaseDiagrams.length > 0) {
+          setActiveUseCaseDiagramId(importedData.useCaseDiagrams[0].id);
+        }
+      }
+      if (importedData.canonicalSysmlRepository) {
+        setCanonicalSysmlRepository(importedData.canonicalSysmlRepository);
+      }
 
       const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
       if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
@@ -15862,14 +15882,49 @@ const ADIA = () => {
 
               {diagramMode === 'usecase' && (
                 <UseCaseWorkspace
-                  key={useCaseDiagrams[0]?.id || 'default_usecase'}
+                  key={activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'}
+                  activeDiagramId={activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'}
+                  repository={canonicalSysmlRepository}
+                  availableDiagrams={useCaseDiagrams.map((d) => ({ id: d.id, name: d.name, type: 'useCase' }))}
+                  onSelectDiagram={(id: string) => setActiveUseCaseDiagramId(id)}
+                  onExecuteCommand={(cmd: SysmlEditorCommand) => {
+                    const state = createSysmlGatewayState(
+                      canonicalSysmlRepository,
+                      {},
+                      diagramPresentations
+                    );
+                    const res = executeSysmlCommand(
+                      state,
+                      cmd,
+                      activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'
+                    );
+                    if (res.committed) {
+                      setCanonicalSysmlRepository(res.repository);
+                    }
+                  }}
                   sysmlBlocks={blocks}
-                  diagram={useCaseDiagrams[0] || { id: 'default_usecase', name: 'Main SysML Use Cases', nodes: [], edges: [] }}
+                  diagram={
+                    useCaseDiagrams.find((d) => d.id === activeUseCaseDiagramId) ||
+                    useCaseDiagrams[0] ||
+                    { id: 'default_usecase', name: 'Main SysML Use Cases', nodes: [], edges: [] }
+                  }
                   onChange={(d: UseCaseDiagram) => {
-                    setUseCaseDiagrams(prev => updateDiagramInList(prev, d));
+                    setUseCaseDiagrams((prev) => updateDiagramInList(prev, d));
                   }}
                   onSave={() => {
-                    setWorkspaceFiles(prev => saveCurrentFileState(prev, activeFileId));
+                    setWorkspaceFiles((prev) => saveCurrentFileState(prev, activeFileId));
+                  }}
+                  onNavigateToElement={(elementId: string, diagramKind?: string) => {
+                    if (diagramKind === 'bdd') {
+                      setDiagramMode('bdd');
+                      setSelectedIds([elementId]);
+                    } else if (diagramKind === 'requirements') {
+                      setDiagramMode('requirements');
+                      setSelectedIds([elementId]);
+                    }
+                  }}
+                  onNavigateToDiagram={(diagramId: string) => {
+                    setActiveUseCaseDiagramId(diagramId);
                   }}
                 />
               )}

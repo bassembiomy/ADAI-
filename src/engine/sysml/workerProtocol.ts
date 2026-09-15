@@ -10,6 +10,11 @@ import type {
   ModelBaseline,
   TraceArtifact,
   ModelChangeRecord,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
 } from './model';
 import type { NormalizedSysmlStore } from './normalizedStore';
 import type { SysmlValidationReport } from './validation';
@@ -38,6 +43,11 @@ export interface WorkerStoreSnapshot {
   baselines?: Record<string, ModelBaseline>;
   artifacts?: Record<string, TraceArtifact>;
   auditTrail?: ModelChangeRecord[];
+  actors?: Record<string, ActorDefinition>;
+  subjects?: Record<string, SubjectDefinition>;
+  useCases?: Record<string, UseCaseDefinition>;
+  extensionPoints?: Record<string, ExtensionPoint>;
+  diagramReferences?: Record<string, DiagramReference>;
   coordinates?: Record<string, PresentationCoordinates>;
   diagramPresentations?: Record<string, { elementIds: string[] }>;
   activeDiagramId?: string;

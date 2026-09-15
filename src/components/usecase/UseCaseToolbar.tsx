@@ -1,8 +1,11 @@
 import React from 'react';
 import { User, Circle, Square, Layout, Maximize2, Save } from 'lucide-react';
 
-interface UseCaseToolbarProps {
+export interface UseCaseToolbarProps {
   diagramName: string;
+  availableDiagrams?: readonly { id: string; name: string; type?: string }[];
+  activeDiagramId?: string;
+  onSelectDiagram?: (diagramId: string) => void;
   onAddActor: () => void;
   onAddUseCase: () => void;
   onAddBoundary: () => void;
@@ -13,6 +16,9 @@ interface UseCaseToolbarProps {
 
 export const UseCaseToolbar: React.FC<UseCaseToolbarProps> = ({
   diagramName,
+  availableDiagrams,
+  activeDiagramId,
+  onSelectDiagram,
   onAddActor,
   onAddUseCase,
   onAddBoundary,
@@ -25,7 +31,22 @@ export const UseCaseToolbar: React.FC<UseCaseToolbarProps> = ({
       {/* Breadcrumb / Title */}
       <div className="flex items-center gap-1.5 font-medium text-zinc-300 mr-1">
         <span className="text-zinc-500">SysML /</span>
-        <span className="text-amber-400 font-semibold">{diagramName || 'Use Cases'}</span>
+        {availableDiagrams && availableDiagrams.length > 1 && onSelectDiagram ? (
+          <select
+            value={activeDiagramId || ''}
+            onChange={(e) => onSelectDiagram(e.target.value)}
+            className="bg-[#27272a] text-amber-400 font-semibold border border-[#3f3f46] rounded px-1.5 py-0.5 text-xs focus:outline-none"
+            aria-label="Select Use Case Diagram"
+          >
+            {availableDiagrams.map((diag) => (
+              <option key={diag.id} value={diag.id}>
+                {diag.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-amber-400 font-semibold">{diagramName || 'Use Cases'}</span>
+        )}
       </div>
 
       <div className="h-4 w-[1px] bg-[#333]" />

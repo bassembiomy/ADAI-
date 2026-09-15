@@ -3,7 +3,8 @@ import type { SysmlEntity, SysmlUsage } from './model';
 
 export type SysmlEndpointFamily =
   | 'block' | 'interfaceBlock' | 'interface' | 'valueType' | 'enumeration'
-  | 'requirement' | 'verificationCase' | 'part' | 'port' | 'valueParameter' | 'unknown';
+  | 'requirement' | 'verificationCase' | 'part' | 'port' | 'valueParameter'
+  | 'actor' | 'useCase' | 'subject' | 'unknown';
 
 export interface ConnectionEndpoint {
   id: string;
@@ -27,12 +28,13 @@ export interface ConnectionPolicyInput {
   relationshipKind: string;
   source: ConnectionEndpoint;
   target: ConnectionEndpoint;
-  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm';
+  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase';
 }
 
 const BLOCK_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock']);
 const CLASSIFIER_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration']);
 const REQUIREMENT_KINDS = new Set(['requirementContainment', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace']);
+const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
 function endpointName(endpoint: ConnectionEndpoint): string {
   return endpoint.name || endpoint.id;
@@ -57,6 +59,7 @@ function validDiagram(kind: string, diagram: ConnectionPolicyInput['diagram']): 
   if (['binding', 'assembly', 'delegation'].includes(kind)) return diagram === 'ibd';
   if (kind === 'requirementContainment') return diagram === 'requirements';
   if (REQUIREMENT_KINDS.has(kind)) return diagram === 'rtm';
+  if (USE_CASE_KINDS.has(kind)) return diagram === 'useCase';
   return false;
 }
 
@@ -121,6 +124,49 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     if (source.family !== 'port' || target.family !== 'port') return reject(normalized, `INVALID_${kind.toUpperCase()}_ENDPOINTS`, `${kind} connects compatible ports.`, 'Choose two compatible ports in the IBD context.');
     return { allowed: true, diagnostics: [] };
   }
+  if (kind === 'useCaseAssociation') {
+    const isActorSource = source.family === 'actor';
+    const isUseCaseSource = source.family === 'useCase';
+    const isActorTarget = target.family === 'actor';
+    const isUseCaseTarget = target.family === 'useCase';
+    const valid = (isActorSource && isUseCaseTarget) || (isUseCaseSource && isActorTarget);
+    if (!valid) {
+      return reject(normalized, 'INVALID_USE_CASE_ASSOCIATION_ENDPOINTS', 'Use Case Association requires an Actor and a Use Case.', 'Connect an Actor to a Use Case, or vice versa.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'include') {
+    if (source.family !== 'useCase' || target.family !== 'useCase') {
+      return reject(normalized, 'INVALID_INCLUDE_ENDPOINTS', 'Include requires Use Case to Use Case.', 'Connect an including Use Case to an included Use Case.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'extend') {
+    if (source.family !== 'useCase' || target.family !== 'useCase') {
+      return reject(normalized, 'INVALID_EXTEND_ENDPOINTS', 'Extend requires Use Case to Use Case.', 'Connect an extending Use Case to an extended Use Case.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'useCaseGeneralization') {
+    const valid = (source.family === 'actor' && target.family === 'actor') || (source.family === 'useCase' && target.family === 'useCase');
+    if (!valid) {
+      return reject(normalized, 'INVALID_GENERALIZATION_FAMILY', 'Generalization on Use Case diagram must connect elements of the same family (Actor to Actor, or Use Case to Use Case).', 'Connect two Actors or two Use Cases.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'useCaseSatisfy' || kind === 'useCaseRefine') {
+    if (source.family !== 'useCase' || target.family !== 'requirement') {
+      return reject(normalized, `INVALID_${kind.toUpperCase()}_ENDPOINTS`, `${kind} requires Use Case to Requirement.`, 'Connect a Use Case to a Requirement.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'useCaseTrace') {
+    const valid = (source.family === 'useCase' && target.family === 'requirement') || (source.family === 'requirement' && target.family === 'useCase');
+    if (!valid) {
+      return reject(normalized, 'INVALID_USE_CASE_TRACE_ENDPOINTS', 'Trace requires a Use Case and a Requirement.', 'Connect a Use Case and a Requirement.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
   return reject(normalized, 'UNSUPPORTED_RELATIONSHIP_KIND', `Relationship kind ${kind} is not supported by the SysML 1.6 profile.`, 'Choose a supported SysML relationship.');
 }
 
@@ -136,6 +182,9 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
     case 'part': case 'usage': return 'part';
     case 'port': return 'port';
     case 'valueparameter': case 'value parameter': case 'constraintparameter': return 'valueParameter';
+    case 'actor': return 'actor';
+    case 'usecase': case 'use_case': return 'useCase';
+    case 'subject': return 'subject';
     default: return 'unknown';
   }
 }

@@ -25,4 +25,30 @@ describe('UseCaseToolbar', () => {
     expect(html).toContain('Fit');
     expect(html).toContain('Save');
   });
+
+  it('renders a diagram selector when multiple diagrams are available and onSelectDiagram is passed', () => {
+    const onSelect = vi.fn();
+    const diagrams = [
+      { id: 'diag-1', name: 'Primary Flight Ops' },
+      { id: 'diag-2', name: 'Emergency Landing' },
+    ];
+    const html = renderToStaticMarkup(
+      <UseCaseToolbar
+        diagramName="Primary Flight Ops"
+        availableDiagrams={diagrams}
+        activeDiagramId="diag-1"
+        onSelectDiagram={onSelect}
+        onAddActor={vi.fn()}
+        onAddUseCase={vi.fn()}
+        onAddBoundary={vi.fn()}
+        onAutoLayout={vi.fn()}
+        onFitView={vi.fn()}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Primary Flight Ops');
+    expect(html).toContain('Emergency Landing');
+    expect(html).toContain('Select Use Case Diagram');
+  });
 });

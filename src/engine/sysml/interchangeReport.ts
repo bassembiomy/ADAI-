@@ -158,6 +158,11 @@ export function findUnresolvedEndpoints(repo: SysmlRepository): UnresolvedEndpoi
     ...Object.keys(repo.evidence ?? {}),
     ...Object.keys(repo.baselines ?? {}),
     ...Object.keys(repo.artifacts ?? {}),
+    ...Object.keys(repo.actors ?? {}),
+    ...Object.keys(repo.subjects ?? {}),
+    ...Object.keys(repo.useCases ?? {}),
+    ...Object.keys(repo.extensionPoints ?? {}),
+    ...Object.keys(repo.diagramReferences ?? {}),
   ]);
   // Nested definition features (properties/ports) are addressable endpoints too.
   for (const definition of Object.values(repo.definitions ?? {})) {

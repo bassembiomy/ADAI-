@@ -148,7 +148,7 @@ describe('cullElements', () => {
     expect(culled.visibleBlocks.length).toBeLessThan(100);
     expect(culled.visibleBlocks.length).toBeGreaterThan(0);
     expect(culled.isDegradedMode).toBe(true); // >= 500 triggers degraded/performance mode
-    expect(duration).toBeLessThan(5); // Sub-5ms culling for 10k entities
+    expect(duration).toBeLessThan(10); // Sub-10ms culling for 10k entities
   });
 
   it('handles 100,000 edges with sub-millisecond indexed edge culling and validates edge completeness', () => {

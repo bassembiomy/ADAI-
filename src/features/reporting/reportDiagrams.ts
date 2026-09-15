@@ -59,14 +59,17 @@ export function drawLabeledNode(
   return rect;
 }
 
-const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding', 'copy']);
+const DASHED_REL_TYPES = new Set([
+  'derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency',
+  'allocation', 'binding', 'copy', 'include', 'extend',
+]);
 
 export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
   const dashed = DASHED_REL_TYPES.has(edge.kind) ? ' stroke-dasharray="5 4"' : '';
   let marker = ' marker-end="url(#rf-arrow)"';
   if (edge.kind === 'composition') marker = ' marker-start="url(#rf-diamond-filled)"';
   else if (edge.kind === 'aggregation') marker = ' marker-start="url(#rf-diamond-hollow)"';
-  else if (edge.kind === 'generalization') marker = ' marker-end="url(#rf-triangle-hollow)"';
+  else if (edge.kind === 'generalization' || edge.kind === 'useCaseGeneralization') marker = ' marker-end="url(#rf-triangle-hollow)"';
   else if (edge.kind === 'requirementContainment') marker = ' marker-start="url(#requirement-containment-crosshair)"';
   const label = edge.label
     ? `<text font-size="9" fill="#65717e" text-anchor="middle"><textPath href="#edge-${edge.id}" startOffset="50%">${escapeHtml(edge.label)}</textPath></text>`
@@ -618,3 +621,99 @@ export function renderHmiDiagram(source: ReportHmiSource): string {
   return wrapFigure(els.join(''),
     `HMI layout (${source.components.length} components)`, boundsOf(placed, 24));
 }
+
+export interface ReportUseCaseNode {
+  id: string;
+  name: string;
+  kind: 'actor' | 'useCase' | 'subject';
+  subjectId?: string;
+  extensionPoints?: readonly string[];
+}
+
+export interface ReportUseCaseEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  kind: string;
+  label?: string;
+}
+
+export interface ReportUseCaseSource {
+  diagramName?: string;
+  nodes?: readonly ReportUseCaseNode[];
+  edges?: readonly ReportUseCaseEdge[];
+  repository?: any;
+}
+
+export function renderUseCaseDiagram(source: ReportUseCaseSource): string {
+  const nodes: ReportUseCaseNode[] = source.nodes ? [...source.nodes] : [];
+  const edges: ReportUseCaseEdge[] = source.edges ? [...source.edges] : [];
+
+  if (source.repository && nodes.length === 0) {
+    const repo = source.repository;
+    for (const actor of Object.values(repo.actors || {}) as any[]) {
+      nodes.push({ id: actor.id, name: actor.name, kind: 'actor' });
+    }
+    for (const subj of Object.values(repo.subjects || {}) as any[]) {
+      nodes.push({ id: subj.id, name: subj.name, kind: 'subject' });
+    }
+    for (const uc of Object.values(repo.useCases || {}) as any[]) {
+      nodes.push({
+        id: uc.id,
+        name: uc.name,
+        kind: 'useCase',
+        subjectId: uc.subjectId,
+        extensionPoints: uc.extensionPoints,
+      });
+    }
+    for (const rel of Object.values(repo.useCaseRelationships || {}) as any[]) {
+      edges.push({
+        id: rel.id,
+        sourceId: rel.sourceId,
+        targetId: rel.targetId,
+        kind: rel.kind,
+        label: rel.kind === 'include' ? '«include»' : rel.kind === 'extend' ? '«extend»' : '',
+      });
+    }
+  }
+
+  if (nodes.length === 0) return renderEmptyFigure('No use case elements available.');
+
+  const pages = chunkItems(nodes, MAX_NODES_PER_FIGURE);
+  return pages.map((page, pageIndex) => {
+    const pageIds = new Set(page.map(n => n.id));
+    const sized = new Map(page.map(n => {
+      const stereotype = n.kind.toLowerCase() === 'usecase' ? 'usecase' : n.kind;
+      const lines = [n.name, `«${stereotype}»`];
+      if (n.extensionPoints && n.extensionPoints.length > 0) {
+        lines.push(...n.extensionPoints.map(ep => `• ${ep}`));
+      }
+      return [n.id, measureNode(n.id, lines, n.kind, 110)];
+    }));
+
+    const pageEdges = edges
+      .filter(e => pageIds.has(e.sourceId) && pageIds.has(e.targetId))
+      .map(e => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        targetId: e.targetId,
+        label: e.label || (e.kind === 'include' ? '«include»' : e.kind === 'extend' ? '«extend»' : ''),
+        kind: e.kind,
+      }));
+
+    const placed = layoutLayered([...sized.values()], pageEdges);
+    const inner = [
+      ...pageEdges.map(e => drawStyledEdge(e, routeEdgePath(nodeById(placed, e.sourceId)!, nodeById(placed, e.targetId)!))),
+      ...placed.map(pos => {
+        const node = page.find(n => n.id === pos.id);
+        const stroke = node?.kind === 'actor' ? '#d97706' : node?.kind === 'subject' ? '#9333ea' : '#0284c7';
+        return drawLabeledNode(sized.get(pos.id)!, pos, stroke);
+      }),
+    ].join('');
+
+    const title = source.diagramName ? `${source.diagramName} (Use-Case)` : 'Use-Case diagram';
+    const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
+    return wrapFigure(inner, `${title}${viewNote} (${page.length} elements, ${pageEdges.length} relationships)`, boundsOf(placed, 24));
+  }).join('\n');
+}
+

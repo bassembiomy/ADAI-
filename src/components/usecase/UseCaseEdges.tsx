@@ -40,9 +40,37 @@ export const UseCaseEdgeComponent: React.FC<EdgeProps> = ({
 
   const isDashed = ['include', 'extend', 'refine', 'satisfy', 'trace'].includes(relType);
   const strokeColor = selected ? '#fbbf24' : '#71717a';
+  const markerEnd = relType === 'generalization'
+    ? 'url(#cameo-triangle-closed)'
+    : (relType === 'association' ? undefined : 'url(#cameo-open-arrow)');
 
   return (
     <>
+      <defs>
+        <marker
+          id="cameo-open-arrow"
+          viewBox="0 0 10 10"
+          refX="8"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" />
+        </marker>
+        <marker
+          id="cameo-triangle-closed"
+          viewBox="0 0 12 12"
+          refX="10"
+          refY="6"
+          markerWidth="9"
+          markerHeight="9"
+          orient="auto-start-reverse"
+        >
+          <polygon points="1 1, 11 6, 1 11" fill="#18181b" stroke={strokeColor} strokeWidth="1.5" />
+        </marker>
+      </defs>
+
       {selected && (
         <path
           d={edgePath}
@@ -57,6 +85,7 @@ export const UseCaseEdgeComponent: React.FC<EdgeProps> = ({
 
       <BaseEdge
         path={edgePath}
+        markerEnd={markerEnd}
         style={{
           ...style,
           stroke: strokeColor,

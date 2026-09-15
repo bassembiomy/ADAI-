@@ -32,6 +32,51 @@ export type RequirementRelationshipKind =
   | 'trace'
   | 'copy';
 
+export interface ActorDefinition extends NamedElement {
+  kind: 'actor';
+  isExternal: boolean;
+  generalizationIds: string[];
+}
+
+export interface SubjectDefinition extends NamedElement {
+  kind: 'subject';
+  realizedByBlockId?: string;
+  representedBlockId?: string;
+  classifierId?: string;
+}
+
+export interface UseCaseDefinition extends NamedElement {
+  kind: 'useCase';
+  subjectId?: string;
+  description?: string;
+  extensionPointIds: string[];
+  behaviorArtifactIds: string[];
+}
+
+export interface ExtensionPoint extends NamedElement {
+  kind: 'extensionPoint';
+  useCaseId: string;
+  location?: string;
+}
+
+export type UseCaseRelationshipKind =
+  | 'useCaseAssociation'
+  | 'include'
+  | 'extend'
+  | 'useCaseGeneralization'
+  | 'useCaseRefine'
+  | 'useCaseSatisfy'
+  | 'useCaseTrace';
+
+export interface DiagramReference {
+  id: string;
+  diagramId: string;
+  diagramKind: 'useCase' | 'activity' | 'sequence' | 'stateMachine' | 'bdd' | 'ibd' | 'requirements' | 'rtm';
+  role: 'elaborates' | 'realizes' | 'traces' | 'verifies';
+  sourceElementId?: string;
+  targetElementId?: string;
+}
+
 export interface SysmlRelationship {
   id: string;
   kind:
@@ -43,7 +88,8 @@ export interface SysmlRelationship {
     | 'allocation'
     | 'binding'
     | 'itemFlow'
-    | RequirementRelationshipKind;
+    | RequirementRelationshipKind
+    | UseCaseRelationshipKind;
   sourceId: string;
   targetId: string;
   sourceMultiplicity?: Multiplicity;
@@ -56,6 +102,7 @@ export interface SysmlRelationship {
   targetAggregation?: 'none' | 'shared' | 'composite';
   suspect?: boolean;
   lastValidatedRevision?: number;
+  extensionPointId?: string;
 }
 
 export interface SysmlRepository {
@@ -72,10 +119,34 @@ export interface SysmlRepository {
   baselines: Record<string, ModelBaseline>;
   artifacts: Record<string, TraceArtifact>;
   auditTrail: ModelChangeRecord[];
+  actors: Record<string, ActorDefinition>;
+  subjects: Record<string, SubjectDefinition>;
+  useCases: Record<string, UseCaseDefinition>;
+  extensionPoints: Record<string, ExtensionPoint>;
+  diagramReferences: Record<string, DiagramReference>;
 }
 
 export function createEmptyRepository(): SysmlRepository {
-  return { schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0, definitions: {}, usages: {}, connectors: {}, relationships: {}, requirements: {}, verificationCases: {}, evidence: {}, baselines: {}, artifacts: {}, auditTrail: [] };
+  return {
+    schemaVersion: 2,
+    profileId: 'OMG-SysML-1.6-ADIA',
+    revision: 0,
+    definitions: {},
+    usages: {},
+    connectors: {},
+    relationships: {},
+    requirements: {},
+    verificationCases: {},
+    evidence: {},
+    baselines: {},
+    artifacts: {},
+    auditTrail: [],
+    actors: {},
+    subjects: {},
+    useCases: {},
+    extensionPoints: {},
+    diagramReferences: {},
+  };
 }
 
 export function qualifiedName(namespace: readonly string[], name: string): string {
@@ -103,7 +174,12 @@ export type SysmlEntityCollection =
   | 'verificationCases'
   | 'evidence'
   | 'baselines'
-  | 'artifacts';
+  | 'artifacts'
+  | 'actors'
+  | 'subjects'
+  | 'useCases'
+  | 'extensionPoints'
+  | 'diagramReferences';
 
 export type SysmlEntity =
   | SysmlDefinition
@@ -114,7 +190,12 @@ export type SysmlEntity =
   | VerificationCase
   | VerificationEvidence
   | ModelBaseline
-  | TraceArtifact;
+  | TraceArtifact
+  | ActorDefinition
+  | SubjectDefinition
+  | UseCaseDefinition
+  | ExtensionPoint
+  | DiagramReference;
 
 export interface ModelPersistenceMetadata {
   isChunked?: boolean;

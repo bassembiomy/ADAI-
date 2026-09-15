@@ -17,6 +17,11 @@ import { UseCaseNodeComponent, ActorNodeComponent, BoundaryNodeComponent } from 
 import { UseCaseEdgeComponent, UseCaseEdgeData } from './UseCaseEdges';
 import { UseCaseInspector } from './UseCaseInspector';
 import { UseCaseToolbar } from './UseCaseToolbar';
+import type { SysmlRepository } from '../../engine/sysml/model';
+import type { SysmlEditorCommand, PresentationCoordinates } from '../../services/sysmlCommandGateway';
+import { projectUseCaseDiagram, buildPresentationPatch } from './useCaseProjection';
+import { evaluateSysmlConnection, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from '../../engine/sysml/connectionPolicy';
+import { SysmlConnectionErrorDetails } from '../sysml/SysmlConnectionErrorDetails';
 import {
   UseCaseDiagram,
   UseCaseNode,
@@ -26,9 +31,18 @@ import {
 } from '../../types/usecase_types';
 import { serializeUseCaseDiagram, toUseCaseRelationships } from '../../utils/useCasePersistence';
 
-interface UseCaseWorkspaceProps {
-  diagram: UseCaseDiagram;
+export interface UseCaseWorkspaceProps {
+  diagram?: UseCaseDiagram;
+  repository?: SysmlRepository;
+  activeDiagramId?: string;
+  coordinates?: Record<string, PresentationCoordinates>;
+  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  onExecuteCommand?: (command: SysmlEditorCommand) => void;
   sysmlBlocks?: any[];
+  availableDiagrams?: readonly { id: string; name: string; type?: string }[];
+  onSelectDiagram?: (diagramId: string) => void;
+  onNavigateToElement?: (elementId: string, diagramKind?: string) => void;
+  onNavigateToDiagram?: (diagramId: string) => void;
   onChange?: (diagram: UseCaseDiagram) => void;
   onSave?: () => void;
 }
@@ -44,15 +58,47 @@ const edgeTypes: any = {
 };
 
 export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
-  diagram,
+  diagram: inputDiagram,
+  repository,
+  activeDiagramId,
+  coordinates,
+  diagramPresentations,
+  onExecuteCommand,
   sysmlBlocks = [],
+  availableDiagrams,
+  onSelectDiagram,
+  onNavigateToElement,
+  onNavigateToDiagram,
   onChange,
   onSave,
 }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(diagram.nodes || []);
+  const effectiveDiagram = useMemo(() => {
+    if (repository) {
+      const proj = projectUseCaseDiagram(repository, {
+        coordinates,
+        diagramPresentations,
+        activeDiagramId,
+      });
+      return {
+        id: activeDiagramId || inputDiagram?.id || 'default_usecase',
+        name: inputDiagram?.name || 'Main SysML Use Cases',
+        nodes: proj.nodes,
+        edges: proj.edges,
+      };
+    }
+    return inputDiagram || { id: activeDiagramId || 'default_usecase', name: 'Main SysML Use Cases', nodes: [], edges: [] };
+  }, [repository, coordinates, diagramPresentations, activeDiagramId, inputDiagram]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(effectiveDiagram.nodes || []);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<any, any> | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; top: number; left: number } | null>(null);
+  const [connectionError, setConnectionError] = useState<{
+    relationshipKind: string;
+    source: ConnectionEndpoint;
+    target: ConnectionEndpoint;
+    diagnostic: ConnectionPolicyDiagnostic;
+  } | null>(null);
 
   // Keep references to latest state & callbacks
   const nodesRef = useRef(nodes);
@@ -61,8 +107,8 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const diagramRef = useRef(diagram);
-  diagramRef.current = diagram;
+  const diagramRef = useRef(effectiveDiagram);
+  diagramRef.current = effectiveDiagram;
 
   // Undo / Redo history stacks
   const historyRef = useRef<{ nodes: UseCaseNode[]; edges: UseCaseRelationship[] }[]>([]);
@@ -109,7 +155,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
   );
 
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>(
-    (diagram.edges || []).map((rel) => ({
+    (effectiveDiagram.edges || []).map((rel) => ({
       id: rel.id,
       source: rel.source,
       target: rel.target,
@@ -133,14 +179,14 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
     futureRef.current = [];
   }, []);
 
-  // Sync state if diagram prop ID or content changes from parent
-  const lastDiagramIdRef = useRef(diagram.id);
+  // Sync state if effective diagram content changes
+  const lastEffectiveDiagramRef = useRef(effectiveDiagram);
   useEffect(() => {
-    if (lastDiagramIdRef.current !== diagram.id) {
-      lastDiagramIdRef.current = diagram.id;
-      setNodes(diagram.nodes || []);
+    if (lastEffectiveDiagramRef.current !== effectiveDiagram) {
+      lastEffectiveDiagramRef.current = effectiveDiagram;
+      setNodes(effectiveDiagram.nodes || []);
       setEdges(
-        (diagram.edges || []).map((rel) => ({
+        (effectiveDiagram.edges || []).map((rel) => ({
           id: rel.id,
           source: rel.source,
           target: rel.target,
@@ -153,7 +199,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         }))
       );
     }
-  }, [diagram.id, diagram.nodes, diagram.edges, setNodes, setEdges, handleEdgeTypeChange, handleEdgeDelete]);
+  }, [effectiveDiagram, setNodes, setEdges, handleEdgeTypeChange, handleEdgeDelete]);
 
   // Debounced auto-sync to parent to ensure diagram changes (e.g., node moves, ReactFlow internal edits) are never lost
   const isInitialMount = useRef(true);
@@ -180,24 +226,80 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      saveHistory();
-      const newEdge = {
-        ...connection,
-        id: `edge-${uuidv4()}`,
-        type: 'useCaseEdge',
-        data: {
-          type: 'association',
-          onTypeChange: handleEdgeTypeChange,
-          onDelete: handleEdgeDelete,
-        },
+      if (!connection.source || !connection.target) return;
+      const sourceNode = nodesRef.current.find((n) => n.id === connection.source);
+      const targetNode = nodesRef.current.find((n) => n.id === connection.target);
+      if (!sourceNode || !targetNode) return;
+
+      const sourceFamily = sourceNode.type === 'actor' ? 'actor' as const : sourceNode.type === 'useCase' ? 'useCase' as const : 'subject' as const;
+      const targetFamily = targetNode.type === 'actor' ? 'actor' as const : targetNode.type === 'useCase' ? 'useCase' as const : 'subject' as const;
+
+      const sourceEndpoint: ConnectionEndpoint = {
+        id: sourceNode.id,
+        name: sourceNode.data?.label || sourceNode.id,
+        family: sourceFamily,
       };
-      setEdges((eds) => {
-        const next = addEdge(newEdge, eds);
-        notifyChange(nodesRef.current, next);
-        return next;
+      const targetEndpoint: ConnectionEndpoint = {
+        id: targetNode.id,
+        name: targetNode.data?.label || targetNode.id,
+        family: targetFamily,
+      };
+
+      let relKind = 'useCaseAssociation';
+      if (sourceFamily === 'useCase' && targetFamily === 'useCase') {
+        relKind = 'include';
+      } else if (sourceFamily === 'actor' && targetFamily === 'actor') {
+        relKind = 'useCaseGeneralization';
+      }
+
+      const decision = evaluateSysmlConnection({
+        relationshipKind: relKind,
+        source: sourceEndpoint,
+        target: targetEndpoint,
+        diagram: 'useCase',
       });
+
+      if (!decision.allowed) {
+        setConnectionError({
+          relationshipKind: relKind,
+          source: sourceEndpoint,
+          target: targetEndpoint,
+          diagnostic: decision.diagnostics[0],
+        });
+        return;
+      }
+
+      setConnectionError(null);
+      if (onExecuteCommand) {
+        onExecuteCommand({
+          type: 'createElement',
+          element: {
+            id: `rel-${uuidv4().slice(0, 8)}`,
+            kind: relKind as any,
+            sourceId: sourceNode.id,
+            targetId: targetNode.id,
+          },
+        });
+      } else {
+        saveHistory();
+        const newEdge = {
+          ...connection,
+          id: `edge-${uuidv4()}`,
+          type: 'useCaseEdge',
+          data: {
+            type: relKind === 'useCaseAssociation' ? 'association' : relKind,
+            onTypeChange: handleEdgeTypeChange,
+            onDelete: handleEdgeDelete,
+          },
+        };
+        setEdges((eds) => {
+          const next = addEdge(newEdge, eds);
+          notifyChange(nodesRef.current, next);
+          return next;
+        });
+      }
     },
-    [setEdges, handleEdgeTypeChange, handleEdgeDelete, saveHistory, notifyChange]
+    [setEdges, handleEdgeTypeChange, handleEdgeDelete, saveHistory, notifyChange, onExecuteCommand]
   );
 
   const handleUpdateNodeData = useCallback(
@@ -214,8 +316,58 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
 
   const handleAddNode = useCallback(
     (type: UseCaseNodeType, pos?: { x: number; y: number }) => {
-      saveHistory();
       const position = pos || (reactFlowInstance ? reactFlowInstance.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) : { x: 250, y: 150 });
+
+      if (onExecuteCommand) {
+        if (type === 'actor') {
+          const id = `act-${uuidv4().slice(0, 8)}`;
+          onExecuteCommand({
+            type: 'createElement',
+            element: {
+              id,
+              name: 'New Actor',
+              kind: 'actor',
+              namespace: [],
+              isExternal: false,
+              generalizationIds: [],
+            },
+            presentation: { x: position.x, y: position.y },
+          });
+          setSelectedNodeId(id);
+        } else if (type === 'useCase') {
+          const id = `uc-${uuidv4().slice(0, 8)}`;
+          onExecuteCommand({
+            type: 'createElement',
+            element: {
+              id,
+              name: 'New Use Case',
+              kind: 'useCase',
+              namespace: [],
+              extensionPointIds: [],
+              behaviorArtifactIds: [],
+            },
+            presentation: { x: position.x, y: position.y },
+          });
+          setSelectedNodeId(id);
+        } else if (type === 'systemBoundary') {
+          const id = `sub-${uuidv4().slice(0, 8)}`;
+          onExecuteCommand({
+            type: 'createElement',
+            element: {
+              id,
+              name: 'System Boundary',
+              kind: 'subject',
+              namespace: [],
+            },
+            presentation: { x: position.x, y: position.y, width: 400, height: 350 },
+          });
+          setSelectedNodeId(id);
+        }
+        setMenu(null);
+        return;
+      }
+
+      saveHistory();
       const defaultLabels: Record<UseCaseNodeType, string> = {
         useCase: 'New Use Case',
         actor: 'New Actor',
@@ -235,7 +387,24 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
       setSelectedNodeId(newNode.id);
       setMenu(null);
     },
-    [reactFlowInstance, saveHistory, setNodes, notifyChange]
+    [reactFlowInstance, saveHistory, setNodes, notifyChange, onExecuteCommand]
+  );
+
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, node: any) => {
+      if (onExecuteCommand && node) {
+        onExecuteCommand(
+          buildPresentationPatch(node.id, {
+            x: node.position.x,
+            y: node.position.y,
+            width: node.width,
+            height: node.height,
+          })
+        );
+      }
+      notifyChange(nodesRef.current, edgesRef.current);
+    },
+    [onExecuteCommand, notifyChange]
   );
 
   const handleAutoLayout = useCallback(() => {
@@ -504,7 +673,10 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
     <div className="w-full h-full flex bg-[#121212] relative overflow-hidden">
       {/* Floating Canvas Toolbar */}
       <UseCaseToolbar
-        diagramName={diagram.name}
+        diagramName={effectiveDiagram.name}
+        availableDiagrams={availableDiagrams}
+        activeDiagramId={activeDiagramId}
+        onSelectDiagram={onSelectDiagram}
         onAddActor={() => handleAddNode('actor')}
         onAddUseCase={() => handleAddNode('useCase')}
         onAddBoundary={() => handleAddNode('systemBoundary')}
@@ -514,6 +686,29 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
       />
 
       <div className="flex-1 relative">
+        {connectionError && (
+          <div
+            data-testid="sysml-connection-error-modal"
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-50 max-w-lg w-full bg-red-950/95 border-2 border-red-500 rounded-lg p-4 shadow-2xl backdrop-blur-md text-red-100"
+          >
+            <div className="flex items-center justify-between border-b border-red-800 pb-2">
+              <span className="font-bold text-red-200">Invalid SysML Connection</span>
+              <button
+                onClick={() => setConnectionError(null)}
+                className="text-red-300 hover:text-white text-xs px-2 py-1 rounded bg-red-900/60 hover:bg-red-800"
+              >
+                Dismiss
+              </button>
+            </div>
+            <SysmlConnectionErrorDetails
+              relationshipKind={connectionError.relationshipKind}
+              source={connectionError.source}
+              target={connectionError.target}
+              diagnostic={connectionError.diagnostic}
+            />
+          </div>
+        )}
+
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -521,7 +716,7 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onNodeDragStop={() => notifyChange(nodesRef.current, edgesRef.current)}
+          onNodeDragStop={handleNodeDragStop as any}
           onPaneContextMenu={onPaneContextMenu}
           onPaneClick={() => setMenu(null)}
           onSelectionChange={(params) => {
@@ -554,7 +749,11 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
         <UseCaseInspector
           selectedNode={selectedNode}
           sysmlBlocks={sysmlBlocks}
+          repository={repository}
+          availableDiagrams={availableDiagrams as any}
           onUpdateNodeData={handleUpdateNodeData}
+          onNavigateToElement={onNavigateToElement}
+          onNavigateToDiagram={onNavigateToDiagram}
           onClose={() => setSelectedNodeId(null)}
         />
       )}
@@ -591,3 +790,5 @@ export const UseCaseWorkspace: React.FC<UseCaseWorkspaceProps> = ({
     </div>
   );
 };
+
+export default UseCaseWorkspace;

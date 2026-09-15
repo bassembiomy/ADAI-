@@ -1,18 +1,28 @@
-import React, { useState } from 'react';
-import { X, Info, Type, Tag, Layers, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Info, Type, Tag, Layers, Plus, Trash2, ExternalLink } from 'lucide-react';
 import { UseCaseNode, UseCaseRequirementTrace } from '../../types/usecase_types';
+import type { SysmlRepository } from '../../engine/sysml/model';
+import { UseCaseReferencePicker, type DiagramReferenceItem } from './UseCaseReferencePicker';
 
-interface UseCaseInspectorProps {
+export interface UseCaseInspectorProps {
   selectedNode: UseCaseNode | null;
-  sysmlBlocks: any[];
+  sysmlBlocks?: any[];
+  repository?: SysmlRepository;
+  availableDiagrams?: readonly DiagramReferenceItem[];
   onUpdateNodeData: (nodeId: string, data: any) => void;
+  onNavigateToElement?: (elementId: string, diagramKind?: string) => void;
+  onNavigateToDiagram?: (diagramId: string) => void;
   onClose: () => void;
 }
 
 export const UseCaseInspector: React.FC<UseCaseInspectorProps> = ({
   selectedNode,
-  sysmlBlocks,
+  sysmlBlocks = [],
+  repository,
+  availableDiagrams = [],
   onUpdateNodeData,
+  onNavigateToElement,
+  onNavigateToDiagram,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<'properties' | 'architecture' | 'traceability'>('properties');
@@ -21,8 +31,26 @@ export const UseCaseInspector: React.FC<UseCaseInspectorProps> = ({
   if (!selectedNode) return null;
 
   const data = selectedNode.data;
-  const canonicalBlocks = sysmlBlocks.filter((b) => b.stereotype !== 'requirement');
-  const canonicalReqs = sysmlBlocks.filter((b) => b.stereotype === 'requirement');
+
+  const canonicalBlocks = useMemo(() => {
+    if (repository) {
+      return Object.values(repository.definitions || {})
+        .filter((d) => d.kind === 'block')
+        .map((b) => ({ id: b.id, name: b.name, stereotype: 'block' }));
+    }
+    return sysmlBlocks.filter((b) => b.stereotype !== 'requirement');
+  }, [repository, sysmlBlocks]);
+
+  const canonicalReqs = useMemo(() => {
+    if (repository) {
+      return Object.values(repository.requirements || {}).map((r) => ({
+        id: r.id,
+        name: r.name,
+        stereotype: 'requirement',
+      }));
+    }
+    return sysmlBlocks.filter((b) => b.stereotype === 'requirement');
+  }, [repository, sysmlBlocks]);
 
   const traces: UseCaseRequirementTrace[] = data.requirementTraces || [];
 
@@ -157,21 +185,30 @@ export const UseCaseInspector: React.FC<UseCaseInspectorProps> = ({
                   </option>
                 ))}
               </select>
+              {data.subjectBlockId && onNavigateToElement && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToElement(data.subjectBlockId!, 'bdd')}
+                  className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 mt-1"
+                >
+                  <ExternalLink size={11} />
+                  <span>Open Realizing Block in BDD</span>
+                </button>
+              )}
               <p className="text-[10px] text-zinc-500">
                 Maps this use-case or boundary to its realizing SysML Block in BDD / IBD.
               </p>
             </div>
 
             <div className="space-y-1.5 pt-2 border-t border-[#333]">
-              <label className="text-zinc-400 flex items-center gap-1.5">
+              <label className="text-zinc-400 flex items-center gap-1.5 font-medium">
                 Elaborating Behavior Diagram
               </label>
-              <input
-                type="text"
-                placeholder="e.g. act-engine-start"
-                value={data.elaboratingDiagramId || ''}
-                onChange={(e) => onUpdateNodeData(selectedNode.id, { ...data, elaboratingDiagramId: e.target.value })}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded px-2.5 py-1.5 text-zinc-100 focus:border-amber-500 focus:outline-none"
+              <UseCaseReferencePicker
+                selectedDiagramId={data.elaboratingDiagramId}
+                availableDiagrams={availableDiagrams}
+                onSelectDiagram={(id) => onUpdateNodeData(selectedNode.id, { ...data, elaboratingDiagramId: id })}
+                onNavigate={onNavigateToDiagram}
               />
               <p className="text-[10px] text-zinc-500">
                 Associates an Activity or Sequence diagram detailing this use case's internal interaction scenario.
@@ -218,25 +255,38 @@ export const UseCaseInspector: React.FC<UseCaseInspectorProps> = ({
                         </button>
                       </div>
                       <div className="text-zinc-300 text-[11px]">{req?.name || 'Requirement'}</div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-zinc-500">Relation:</span>
-                        <select
-                          value={trace.relationType}
-                          onChange={(e) => {
-                            const updated = traces.map((t) =>
-                              t.requirementId === trace.requirementId
-                                ? { ...t, relationType: e.target.value as any }
-                                : t
-                            );
-                            onUpdateNodeData(selectedNode.id, { ...data, requirementTraces: updated });
-                          }}
-                          className="bg-[#27272a] text-[10px] text-amber-300 border border-[#3f3f46] rounded px-1 py-0.5"
-                        >
-                          <option value="refine">«refine»</option>
-                          <option value="satisfy">«satisfy»</option>
-                          <option value="verify">«verify»</option>
-                          <option value="trace">«trace»</option>
-                        </select>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-zinc-500">Relation:</span>
+                          <select
+                            value={trace.relationType}
+                            onChange={(e) => {
+                              const updated = traces.map((t) =>
+                                t.requirementId === trace.requirementId
+                                  ? { ...t, relationType: e.target.value as any }
+                                  : t
+                              );
+                              onUpdateNodeData(selectedNode.id, { ...data, requirementTraces: updated });
+                            }}
+                            className="bg-[#27272a] text-[10px] text-amber-300 border border-[#3f3f46] rounded px-1 py-0.5"
+                          >
+                            <option value="refine">«refine»</option>
+                            <option value="satisfy">«satisfy»</option>
+                            <option value="verify">«verify»</option>
+                            <option value="trace">«trace»</option>
+                          </select>
+                        </div>
+                        {onNavigateToElement && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToElement(trace.requirementId, 'requirements')}
+                            className="flex items-center gap-1 text-[10px] text-amber-400/80 hover:text-amber-300"
+                            title="Open in Requirements Diagram"
+                          >
+                            <ExternalLink size={10} />
+                            <span>View</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

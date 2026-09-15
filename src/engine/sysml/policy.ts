@@ -20,13 +20,13 @@ export interface InheritanceResolution {
 
 export interface RelationshipDecision {
   allowed: boolean;
-  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm';
+  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase';
   ownership?: 'composite' | 'shared' | 'none';
   diagnostics: string[];
 }
 
 export interface DeletionDecision {
-  targetKind: 'definition' | 'usage' | 'connector' | 'relationship' | 'requirement' | 'unknown';
+  targetKind: 'definition' | 'usage' | 'connector' | 'relationship' | 'requirement' | 'actor' | 'useCase' | 'subject' | 'extensionPoint' | 'diagramReference' | 'unknown';
   cascadeIds: string[];
   unresolvedUsageIds: string[];
   diagnostics: string[];
@@ -185,11 +185,13 @@ function upperAtMost(candidate: number | '*', original: number | '*'): boolean {
 const BDD_KINDS = new Set(['association', 'sharedAggregation', 'composition', 'generalization', 'dependency', 'allocation']);
 const IBD_KINDS = new Set(['binding', 'itemFlow']);
 const RTM_KINDS = new Set(['deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy']);
+const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
 function elementExists(repo: SysmlRepository, id: string): boolean {
   return Boolean(
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
-    repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id],
+    repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
+    repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id] ?? repo.diagramReferences?.[id],
   );
 }
 
@@ -225,14 +227,16 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
 }
 
 function canonicalConnectionEndpoint(repo: SysmlRepository, id: string) {
-  const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id] ?? repo.artifacts[id];
+  const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id] ?? repo.artifacts[id] ??
+    repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id];
   return classifyCanonicalEndpoint(element ?? { id, name: id });
 }
 
-function relationshipDiagram(kind: SysmlRelationship['kind']): 'bdd' | 'ibd' | 'requirements' | 'rtm' {
+function relationshipDiagram(kind: SysmlRelationship['kind']): 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' {
   if (BDD_KINDS.has(kind)) return 'bdd';
   if (IBD_KINDS.has(kind)) return 'ibd';
   if (kind === 'requirementContainment') return 'requirements';
+  if (USE_CASE_KINDS.has(kind)) return 'useCase';
   return 'rtm';
 }
 
@@ -240,7 +244,7 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   const relationship = repo.relationships[relationshipId] as SysmlRelationship | undefined;
   if (!relationship) return { allowed: false, diagram: 'bdd', diagnostics: [`UNKNOWN_RELATIONSHIP: Unknown relationship: ${relationshipId}`] };
 
-  if (!BDD_KINDS.has(relationship.kind) && !IBD_KINDS.has(relationship.kind) && relationship.kind !== 'requirementContainment' && !RTM_KINDS.has(relationship.kind)) {
+  if (!BDD_KINDS.has(relationship.kind) && !IBD_KINDS.has(relationship.kind) && relationship.kind !== 'requirementContainment' && !RTM_KINDS.has(relationship.kind) && !USE_CASE_KINDS.has(relationship.kind)) {
     return { allowed: false, diagram: 'bdd', diagnostics: [`UNSUPPORTED_RELATIONSHIP_KIND: Unsupported relationship kind: ${relationship.kind}`] };
   }
 
@@ -250,6 +254,18 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   }
   if (!elementExists(repo, relationship.targetId)) {
     diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Target ${relationship.targetId} does not exist`);
+  }
+
+  if (USE_CASE_KINDS.has(relationship.kind)) {
+    const decision = evaluateSysmlConnection({
+      relationshipKind: relationship.kind,
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId),
+      diagram: 'useCase',
+    });
+    diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
+    diagnostics.sort();
+    return { allowed: diagnostics.length === 0, diagram: 'useCase', diagnostics };
   }
 
   // BDD kinds carry ownership; IBD connector-ish kinds carry none.
@@ -376,5 +392,16 @@ export function classifyDeletionTarget(repo: SysmlRepository, elementId: string)
   if (repo.connectors[elementId]) return { targetKind: 'connector', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.relationships[elementId]) return { targetKind: 'relationship', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.requirements[elementId]) return { targetKind: 'requirement', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
+  if (repo.useCases?.[elementId]) {
+    const cascadeIds = Object.values(repo.extensionPoints ?? {})
+      .filter(ep => ep.useCaseId === elementId)
+      .map(ep => ep.id)
+      .sort();
+    return { targetKind: 'useCase', cascadeIds, unresolvedUsageIds: [], diagnostics: [] };
+  }
+  if (repo.actors?.[elementId]) return { targetKind: 'actor', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
+  if (repo.subjects?.[elementId]) return { targetKind: 'subject', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
+  if (repo.extensionPoints?.[elementId]) return { targetKind: 'extensionPoint', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
+  if (repo.diagramReferences?.[elementId]) return { targetKind: 'diagramReference', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   return { targetKind: 'unknown', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [`UNKNOWN_ELEMENT: Unknown element: ${elementId}`] };
 }

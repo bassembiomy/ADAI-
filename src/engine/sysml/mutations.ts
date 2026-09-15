@@ -30,7 +30,7 @@ export interface MutationImpact {
   affectedBaselineIds: string[];
   blockedBaselineIds: string[];
   severity: ImpactSeverity;
-  affectedDiagramKinds: Array<'bdd' | 'ibd' | 'requirements' | 'rtm'>;
+  affectedDiagramKinds: Array<'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase'>;
 }
 
 export interface MutationResult {
@@ -163,6 +163,11 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   for (const connector of Object.values(repo.connectors)) {
     if (deleted.has(connector.ownerId) || deleted.has(connector.sourcePortId) || deleted.has(connector.targetPortId)) deleted.add(connector.id);
   }
+  for (const ref of Object.values(repo.diagramReferences ?? {})) {
+    if (ref.sourceElementId && deleted.has(ref.sourceElementId)) {
+      deleted.add(ref.id);
+    }
+  }
   const removedRelationshipIdsSet = new Set<string>();
   const affectedRequirements = new Set<string>();
   for (const relationship of Object.values(repo.relationships)) {
@@ -196,6 +201,14 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   if ([...deleted].some(id => repo.usages[id] || repo.connectors[id])) diagramKinds.add('ibd');
   if (affectedRequirements.size || [...deleted].some(id => repo.requirements[id])) diagramKinds.add('requirements');
   if (affectedRequirements.size || invalidatedEvidence.length) diagramKinds.add('rtm');
+  const hasUseCaseEntities = [...deleted].some(id =>
+    Boolean(repo.actors?.[id] || repo.subjects?.[id] || repo.useCases?.[id] || repo.extensionPoints?.[id] || repo.diagramReferences?.[id])
+  );
+  const hasUseCaseRel = [...removedRelationshipIdsSet].some(id => {
+    const rel = repo.relationships[id];
+    return rel && ['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace'].includes(rel.kind);
+  });
+  if (hasUseCaseEntities || hasUseCaseRel) diagramKinds.add('useCase');
 
   // Protected-baseline touch set: only baselines whose frozen content (or
   // baselined requirements) intersect this deletion are affected. A protected
@@ -269,6 +282,21 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
     } else if (repo.evidence[id]) {
       forwardOps.push({ op: 'remove', collection: 'evidence', id, oldValue: repo.evidence[id] });
       inverseOps.push({ op: 'add', collection: 'evidence', id, value: repo.evidence[id] });
+    } else if (repo.actors?.[id]) {
+      forwardOps.push({ op: 'remove', collection: 'actors', id, oldValue: repo.actors[id] });
+      inverseOps.push({ op: 'add', collection: 'actors', id, value: repo.actors[id] });
+    } else if (repo.subjects?.[id]) {
+      forwardOps.push({ op: 'remove', collection: 'subjects', id, oldValue: repo.subjects[id] });
+      inverseOps.push({ op: 'add', collection: 'subjects', id, value: repo.subjects[id] });
+    } else if (repo.useCases?.[id]) {
+      forwardOps.push({ op: 'remove', collection: 'useCases', id, oldValue: repo.useCases[id] });
+      inverseOps.push({ op: 'add', collection: 'useCases', id, value: repo.useCases[id] });
+    } else if (repo.extensionPoints?.[id]) {
+      forwardOps.push({ op: 'remove', collection: 'extensionPoints', id, oldValue: repo.extensionPoints[id] });
+      inverseOps.push({ op: 'add', collection: 'extensionPoints', id, value: repo.extensionPoints[id] });
+    } else if (repo.diagramReferences?.[id]) {
+      forwardOps.push({ op: 'remove', collection: 'diagramReferences', id, oldValue: repo.diagramReferences[id] });
+      inverseOps.push({ op: 'add', collection: 'diagramReferences', id, value: repo.diagramReferences[id] });
     }
   }
 
@@ -279,6 +307,11 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
   removeFrom(next.requirements, removed);
   removeFrom(next.verificationCases, removed);
   removeFrom(next.evidence, removed);
+  if (next.actors) removeFrom(next.actors, removed);
+  if (next.subjects) removeFrom(next.subjects, removed);
+  if (next.useCases) removeFrom(next.useCases, removed);
+  if (next.extensionPoints) removeFrom(next.extensionPoints, removed);
+  if (next.diagramReferences) removeFrom(next.diagramReferences, removed);
 
   // Evidence-invalidation state: filtering verifiesRequirementIds is part of
   // the atomic deletion, so the inverse patch must restore the exact prior
@@ -357,6 +390,11 @@ function cloneRepository(repo: SysmlRepository): SysmlRepository {
     evidence: { ...repo.evidence },
     baselines: { ...repo.baselines },
     artifacts: { ...repo.artifacts },
+    actors: { ...(repo.actors || {}) },
+    subjects: { ...(repo.subjects || {}) },
+    useCases: { ...(repo.useCases || {}) },
+    extensionPoints: { ...(repo.extensionPoints || {}) },
+    diagramReferences: { ...(repo.diagramReferences || {}) },
     auditTrail: [...repo.auditTrail],
   };
 }
