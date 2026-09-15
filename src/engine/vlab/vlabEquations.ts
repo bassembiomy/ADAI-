@@ -1748,8 +1748,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [across[0] - P];
   },
 
-  ctrl_pressure_source: ({ across, branch }) => {
-    const P = across[2] !== undefined ? across[2] : 101325;
+  ctrl_pressure_source: ({ across, ports }) => {
+    const ctrlIndex = ports.indexOf('ctrl');
+    const P = ctrlIndex >= 0 && across[ctrlIndex] !== undefined ? across[ctrlIndex] : 101325;
     return [across[0] - P];
   },
 
@@ -1777,10 +1778,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   steam_generator_fluid: ({ across, branch, params }) => {
     const P = across[0];
+    const P_downstream = across[1];
     const T_sat = 100 + (P - 101325) / 3600;
     const h_fg = (2257 - 2.175 * Math.max(0, T_sat - 100)) * 1000;
     const Q_in = across[2] !== undefined ? across[2] : (params.Q || 1000);
     const mdot_steam = Math.max(0, Q_in / h_fg);
+    void P_downstream;
     return [branch[0] - mdot_steam];
   },
 
@@ -1799,10 +1802,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Cd = params.Cd || 0.5;
     const d = params.d || 0.5e-3;
     const A = Math.PI * d * d / 4;
-    const P = across[0];
-    const P_atm = 101325;
+    const P_upstream = across[0];
+    const P_downstream = across[1];
     const rho = 0.6;
-    const dP = Math.max(0, P - P_atm);
+    const dP = Math.max(0, P_upstream - P_downstream);
     const mdot = Cd * A * Math.sqrt(2 * rho * dP);
     return [branch[0] - mdot];
   },

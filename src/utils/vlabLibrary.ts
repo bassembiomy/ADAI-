@@ -8198,6 +8198,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Steam"
           },
           {
+            "id": "n",
+            "pos": "left",
+            "label": "Return"
+          },
+          {
             "id": "q_in",
             "pos": "left",
             "label": "Heat",
@@ -8258,6 +8263,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "p",
             "pos": "left",
             "label": "In"
+          },
+          {
+            "id": "n",
+            "pos": "right",
+            "label": "Out"
           }
         ],
         "equation": "mdot = Cd * A_throat * P0 * √(γ/(R*T0)) * (2/(γ+1))^((γ+1)/(2*(γ-1)))",
