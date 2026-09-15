@@ -63,8 +63,20 @@ describe('SysML connection UI admission', () => {
     expect(rejectUiRelationship(model(), { ...relation(), targetId: 'missing' }, 'bdd')?.diagnostic.code).toBe('MISSING_RELATIONSHIP_ENDPOINT');
   });
 
-  it('limits requirement-canvas choices to legal containment', () => {
+  it('returns all legal requirement-canvas choices between requirements', () => {
     const state = { ...model(), blocks: [block('whole', 'requirement'), block('part', 'requirement')] };
-    expect(getCanvasRelationshipKinds(state, 'whole', 'part', 'requirements')).toEqual(['requirementContainment']);
+    expect(getCanvasRelationshipKinds(state, 'whole', 'part', 'requirements')).toEqual(
+      expect.arrayContaining(['requirementContainment', 'deriveReqt', 'copy', 'refine', 'trace'])
+    );
+  });
+
+  it('returns satisfy, refine, and trace from Block to Requirement', () => {
+    const state = { ...model(), blocks: [block('whole', 'block'), block('part', 'requirement')] };
+    expect(getCanvasRelationshipKinds(state, 'whole', 'part', 'requirements')).toEqual(['satisfy', 'refine', 'trace']);
+  });
+
+  it('returns verify, refine, and trace from TestCase to Requirement', () => {
+    const state = { ...model(), blocks: [block('whole', 'testCase'), block('part', 'requirement')] };
+    expect(getCanvasRelationshipKinds(state, 'whole', 'part', 'requirements')).toEqual(['verify', 'refine', 'trace']);
   });
 });

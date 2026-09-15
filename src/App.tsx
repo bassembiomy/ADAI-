@@ -140,6 +140,7 @@ import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransi
 import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
+import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -6016,7 +6017,7 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
-  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
+  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -10499,17 +10500,22 @@ const ADIA = () => {
           if (!source || !target) return;
           const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
           if (legalKinds.length === 0) {
-            showConnectionPolicyError({
-              relationshipKind: 'relationship',
-              source: classifyLegacyEndpoint(source),
-              target: classifyLegacyEndpoint(target),
-              diagnostic: {
-                code: 'NO_LEGAL_RELATIONSHIP',
-                message: `No available relationship can connect ${source.name} to ${target.name} on this diagram.`,
-                correctiveAction: 'Choose compatible endpoints or the appropriate diagram. Check existing links for duplicate or cyclic relationships.',
-              },
-            });
-          } else if (!legalKinds.includes('association')) {
+            const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+            if (reversedKinds.length > 0) {
+              setRequirementConnectionPicker({ sourceId: blockId, targetId: transitionSourceId, reversedKinds });
+            } else {
+              showConnectionPolicyError({
+                relationshipKind: 'relationship',
+                source: classifyLegacyEndpoint(source),
+                target: classifyLegacyEndpoint(target),
+                diagnostic: {
+                  code: 'NO_LEGAL_RELATIONSHIP',
+                  message: `No available relationship can connect ${source.name} to ${target.name} on this diagram.`,
+                  correctiveAction: 'Choose compatible endpoints or the appropriate diagram. Check existing links for duplicate or cyclic relationships.',
+                },
+              });
+            }
+          } else if (diagramMode === 'requirements' || !legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
           } else {
             createRelationship(transitionSourceId, blockId, 'association');
@@ -18205,13 +18211,20 @@ const ADIA = () => {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div>
-                <h3 className="text-base font-semibold text-white">Create Relationship</h3>
+                <h3 className="text-base font-semibold text-white">
+                  {requirementConnectionPicker.reversedKinds ? 'Reverse Endpoints & Create' : 'Create Relationship'}
+                </h3>
+                {requirementConnectionPicker.reversedKinds && (
+                  <div className="mt-2 p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs">
+                    Direction assistance: SysML requires connections to be created from the dependent/realizing element to the requirement. The endpoints below have been aligned to standard SysML direction.
+                  </div>
+                )}
                 <p className="text-xs text-[#888] mt-1">
-                  Choose the relationship kind between{' '}
+                  Connect{' '}
                   <span className="text-[#f97316] font-medium">
                     {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
                   </span>{' '}
-                  and{' '}
+                  to{' '}
                   <span className="text-[#f97316] font-medium">
                     {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
                   </span>
@@ -18224,18 +18237,36 @@ const ADIA = () => {
                   requirementConnectionPicker.sourceId,
                   requirementConnectionPicker.targetId,
                   diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd',
-                ).map(kind => (
-                  <Button
-                    key={kind}
-                    onClick={() => {
-                      createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
-                      setRequirementConnectionPicker(null);
-                    }}
-                    className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                  >
-                    {kind === 'requirementContainment' ? 'Requirement Containment (parent → child)' : kind.replace(/([A-Z])/g, ' $1').replace(/^./, character => character.toUpperCase())}
-                  </Button>
-                ))}
+                ).map(kind => {
+                  const meta = RELATIONSHIP_DEFINITIONS[kind as RequirementRelationshipKind];
+                  return (
+                    <Button
+                      key={kind}
+                      onClick={() => {
+                        createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
+                        setRequirementConnectionPicker(null);
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      {meta ? (
+                        <>
+                          <span className="font-semibold text-xs text-orange-300">
+                            {meta.displayLabel} — {meta.label}
+                          </span>
+                          <span className="text-[11px] text-neutral-400">
+                            {meta.directionLabel}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {kind === 'requirementContainment'
+                            ? 'Requirement Containment (parent → child)'
+                            : kind.replace(/([A-Z])/g, ' $1').replace(/^./, character => character.toUpperCase())}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">

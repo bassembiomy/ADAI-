@@ -44,8 +44,7 @@ export function rejectUiRelationship(model: UiModel, candidate: RelationshipData
 /** Check semantic validity in the relationship's owning context, even when the block is edited elsewhere. */
 function relationshipContext(type: RelationshipData['type']): Diagram {
   if (type === 'binding') return 'ibd';
-  if (type === 'requirementContainment') return 'requirements';
-  if (['derive', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace'].includes(type)) return 'rtm';
+  if (['requirementContainment', 'derive', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace'].includes(type)) return 'requirements';
   return 'bdd';
 }
 
