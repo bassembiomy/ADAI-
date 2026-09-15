@@ -177,7 +177,7 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
     case 'valuetype': return 'valueType';
     case 'enumeration': case 'enum': return 'enumeration';
     case 'requirement': return 'requirement';
-    case 'verificationcase': case 'verification case': return 'verificationCase';
+    case 'verificationcase': case 'verification case': case 'testcase': case 'test case': return 'verificationCase';
     case 'part': case 'usage': return 'part';
     case 'port': return 'port';
     case 'valueparameter': case 'value parameter': case 'constraintparameter': return 'valueParameter';
