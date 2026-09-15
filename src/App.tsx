@@ -9473,8 +9473,8 @@ const ADIA = () => {
   const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
     addToHistory();
     const newId = uuidv4();
-    // For requirements, store which layer this block was created in
-    const blockLayerId = (stereotype === 'requirement' && diagramMode === 'requirements') ? currentLayerId : undefined;
+    // For requirements diagram, store which layer this block was created in
+    const blockLayerId = (diagramMode === 'requirements') ? currentLayerId : undefined;
     const newBlock: BlockData = {
       id: newId,
       name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
@@ -14275,7 +14275,8 @@ const ADIA = () => {
       }
 
       if (diagramMode === 'requirements') {
-        if (block.stereotype !== 'requirement') return null;
+        const allowedStereotypes = ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'];
+        if (!allowedStereotypes.includes(block.stereotype)) return null;
         // Use layerId for visibility: show only blocks belonging to the current layer.
         // Blocks without layerId (legacy) default to root.
         const blockLayer = block.layerId ?? 'root';
@@ -16068,7 +16069,29 @@ const ADIA = () => {
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
-                      Requirement
+                      + Requirement
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Block
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'testCase');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Test Case
                     </Button>
                     <Button
                       variant="secondary"
