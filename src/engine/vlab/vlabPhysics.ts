@@ -150,7 +150,10 @@ export class VLabPhysicsEngine {
     const initialStep = typeof config?.initialStep === 'number' ? config.initialStep : Math.min(dt, maxStep);
     let h = Math.min(maxStep, Math.max(minStep, lastDt || initialStep));
     
-    while (t < tTarget) {
+    // Keep the legacy epsilon for unconfigured models; configured jobs need
+    // exact boundary handling for sub-microsecond solver settings.
+    const targetEpsilon = config ? 0 : 1e-12;
+    while (t < tTarget - targetEpsilon) {
       // Don't step past target time
       const remaining = tTarget - t;
       const stepFloor = Math.min(minStep, remaining);
@@ -301,7 +304,9 @@ export class VLabPhysicsEngine {
           
           // --- Local Truncation Error (LTE) Control ---
           let lte = explicitLte;
-          if (!isExplicit && !useSdirk && (config || h > stepFloor)) {
+          // Preserve the legacy unconfigured LTE path; configured runs use
+          // their explicit minimum-step boundary for adaptive control.
+          if (!isExplicit && !useSdirk && (config || h > 1e-6)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
               return system.residuals(solveX, dx, solveCtx);
