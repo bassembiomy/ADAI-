@@ -118,11 +118,14 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
     const inner = [
       ...pageEdges.map(e => drawStyledEdge(e, routeEdgePath(nodeById(placed, e.sourceId)!, nodeById(placed, e.targetId)!))),
-      ...placed.map(pos => {
-        const node = allNodes.find(n => n.id === pos.id);
-        const isReq = node?.stereotype === 'requirement';
-        return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
-      }),
+      ...(() => {
+        const allNodesMap = new Map(allNodes.map(n => [n.id, n]));
+        return placed.map(pos => {
+          const node = allNodesMap.get(pos.id);
+          const isReq = node?.stereotype === 'requirement';
+          return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
+        });
+      })(),
     ].join('');
     const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
     const requirementCount = page.filter(n => n.stereotype === 'requirement').length;
@@ -168,10 +171,11 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       ], isReq ? 'req' : 'bdd', 96)];
     }));
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
+    const relMap = new Map(source.relationships.map(r => [r.id, r]));
     const edgeEls = pageEdges.map(e => {
       const src = nodeById(placed, e.sourceId)!;
       const tgt = nodeById(placed, e.targetId)!;
-      const rel = source.relationships.find(r => r.id === e.id);
+      const rel = relMap.get(e.id);
       const sourceRole = (rel as any)?.sourceRole ? `+${(rel as any).sourceRole} ` : '';
       const targetRole = (rel as any)?.targetRole ? `+${(rel as any).targetRole} ` : '';
       const sourceText = `${sourceRole}${rel?.sourceMultiplicity ?? ''}`.trim();

@@ -292,6 +292,8 @@ let lastCullResult: VisibleElementSet | null = null;
  * Cull diagram elements against the active viewport using the spatial index and indexed edge culling.
  * Automatically enables degraded rendering mode for very large models.
  */
+const spatialGridCache = new WeakMap<readonly BlockData[], DiagramSpatialGrid>();
+
 export function cullElements(
   viewport: DiagramViewport,
   blocks: readonly BlockData[],
@@ -313,26 +315,31 @@ export function cullElements(
   const totalEntities = blocks.length + parts.length;
   const isDegradedMode = totalEntities >= performanceModeThreshold;
 
-  // Use provided or transient spatial grid
-  const grid = spatialGrid ?? new DiagramSpatialGrid(500);
-  if (!spatialGrid) {
-    for (const b of blocks) {
-      grid.insert({
-        id: b.id,
-        x: b.x,
-        y: b.y,
-        width: b.width || 150,
-        height: b.height || 100,
-      });
-    }
-    for (const p of parts) {
-      grid.insert({
-        id: p.id,
-        x: p.x,
-        y: p.y,
-        width: p.width || 120,
-        height: p.height || 60,
-      });
+  // Use provided or cached spatial grid to prevent rebuilding on every viewport shift
+  let grid = spatialGrid;
+  if (!grid) {
+    grid = spatialGridCache.get(blocks);
+    if (!grid) {
+      grid = new DiagramSpatialGrid(500);
+      for (const b of blocks) {
+        grid.insert({
+          id: b.id,
+          x: b.x,
+          y: b.y,
+          width: b.width || 150,
+          height: b.height || 100,
+        });
+      }
+      for (const p of parts) {
+        grid.insert({
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          width: p.width || 120,
+          height: p.height || 60,
+        });
+      }
+      spatialGridCache.set(blocks, grid);
     }
   }
 
