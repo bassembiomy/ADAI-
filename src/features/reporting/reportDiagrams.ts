@@ -6,6 +6,7 @@ import {
   boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
 } from './reportDiagramModel';
 import { PositionedNode, layoutGrid, layoutLayered, nodeById, routeEdgePath, routeManhattan } from './reportDiagramLayout';
+import { getRequirementsDiagramScope } from '../../engine/sysml/requirementsDiagramScope';
 
 export interface ReportRequirementSource {
   blocks: readonly BlockData[];
@@ -100,16 +101,12 @@ function layoutPage(
 }
 
 export function renderRequirementsDiagram(source: ReportRequirementSource): string {
-  const reqs = source.blocks.filter(b => b.stereotype === 'requirement');
+  const scope = getRequirementsDiagramScope(source.blocks, source.relationships);
+  const reqs = source.blocks.filter(b => b.stereotype === 'requirement' && scope.visibleBlockIds.has(b.id));
   if (reqs.length === 0) return renderEmptyFigure('No requirements defined.');
-  const reqIds = new Set(reqs.map(r => r.id));
-  const connectedBlockIds = new Set(source.relationships
-    .filter(r => reqIds.has(r.targetId) || reqIds.has(r.sourceId))
-    .flatMap(r => [r.sourceId, r.targetId]));
-  const allNodes = source.blocks.filter(b => reqIds.has(b.id) || connectedBlockIds.has(b.id));
-  const nodeIds = new Set(allNodes.map(n => n.id));
+  const allNodes = source.blocks.filter(b => scope.visibleBlockIds.has(b.id));
   const edges: DiagramEdgeInput[] = source.relationships
-    .filter(r => (reqIds.has(r.sourceId) || reqIds.has(r.targetId)) && nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
+    .filter(r => scope.visibleRelationshipIds.has(r.id))
     .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: r.type === 'requirementContainment' ? '«contains»' : (r.label || `«${r.type}»`), kind: r.type }));
   const pages = connectionPages(allNodes, edges);
   return pages.map((page, pageIndex) => {
