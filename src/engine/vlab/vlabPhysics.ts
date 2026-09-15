@@ -417,7 +417,7 @@ export class VLabPhysicsEngine {
       // ── Air Fryer Lab ──
       const indices = system.scopeOutputs.get('thermal_scope') || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
-      const cel = Math.max(0.0, tempK);
+      const cel = Math.max(0.0, tempK - 273.15);
       perScopeValues['thermal_scope'] = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {

@@ -1191,19 +1191,30 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   ma_chamber: ({ across, branch, state, dState, params }) => {
     // across[0]: P_a (Fluid), across[1]: P_b (Fluid), across[2]: T_h (Thermal)
     // branch[0]: mass_flow at port a, branch[1]: heat_flow at port h
-    const V = params.V || 0.005;
-    const T_amb = 298.15;
+    const getNumber = (value: unknown, fallback: number): number => {
+      const parsed = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const V = getNumber(params.V, 0.005);
+    const T_amb = getNumber(params.ambient_temp, 25) + 273.15;
     const rho = 1.2, Cp = 1005;
-    const C = rho * Cp * V;
+    const airCapacity = rho * Cp * V;
+    const wallCapacity = getNumber(params.wall_mass, 2.0) * getNumber(params.wall_cp, 460);
+    const loadCapacity = getNumber(params.food_mass, 0.5) * getNumber(params.food_cp, 4184);
+    const C = Math.max(1e-6, getNumber(params.heat_capacity, airCapacity + wallCapacity + loadCapacity));
     const temp = state[0] > 1.0 ? state[0] : T_amb;
     
     // Physical heat loss to the ambient environment (convection/conduction through basket walls)
-    const k_loss = params.k_loss !== undefined ? params.k_loss : 8.5; // W/K, realistic overall heat loss coefficient
+    const k_loss = getNumber(params.k_loss, 8.5); // W/K, realistic overall heat loss coefficient
     const heat_loss = k_loss * (temp - T_amb);
+    const maxTempK = getNumber(params.max_temp, 220) + 273.15;
+    const cutoffWidth = 3.0;
+    const cutoff = 0.5 * (1.0 + Math.tanh((maxTempK - temp) / cutoffWidth));
+    const heat_input = branch[1] * cutoff;
     
     return [
       branch[0] - 0.0,
-      branch[1] + C * dState[0] + heat_loss, /* heat entering chamber = C * dT/dt + heat_loss (branch positive leaving chamber) */
+      heat_input + C * dState[0] + heat_loss, /* heat entering chamber = C * dT/dt + heat_loss */
       across[2] - temp
     ];
   },

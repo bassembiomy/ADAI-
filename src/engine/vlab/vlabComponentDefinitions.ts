@@ -599,7 +599,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['dm/dt = f(V, P, T)', 'dQ/dt = f(T, P)'],
     latex: ['\dot{m}, \dot{Q} = f(V, P, T)'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a fixed-volume moist air chamber. Tracks mass, energy, and vapor content over time.'
+    description: 'Models a fixed-volume moist air chamber. Tracks temperature in Kelvin with configurable ambient_temp (°C), heat_capacity (J/K), wall/food thermal mass, k_loss (W/K), and max_temp (°C).'
   },
   ma_pipe: {
     equations: ['Delta P = f(L, m)', 'Delta T = f(h, Q)'],
