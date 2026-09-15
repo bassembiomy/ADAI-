@@ -212,13 +212,15 @@ export function validateSolverConfiguration(config: unknown): SolverConfiguratio
   const candidate = config as Partial<SolverConfiguration>;
   const errors: string[] = [];
   const finiteNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
-  const positiveNumberOrAuto = (value: unknown) => value === 'auto' || (finiteNumber(value) && value > 0);
+  const positiveNumberOrAuto = (value: unknown) => value === 'auto' || (typeof value === 'number' && Number.isFinite(value) && value > 0);
 
   if (typeof candidate.id !== 'string' || candidate.id.length === 0) errors.push('id must be a non-empty string');
   if (!solverTypes.includes(candidate.solver as SolverType)) errors.push('solver must be a supported solver type');
   if (!finiteNumber(candidate.startTime)) errors.push('startTime must be a finite number');
   if (!finiteNumber(candidate.stopTime)) errors.push('stopTime must be a finite number');
-  if (finiteNumber(candidate.startTime) && finiteNumber(candidate.stopTime) && candidate.stopTime < candidate.startTime) {
+  const startTime = candidate.startTime;
+  const stopTime = candidate.stopTime;
+  if (typeof startTime === 'number' && Number.isFinite(startTime) && typeof stopTime === 'number' && Number.isFinite(stopTime) && stopTime < startTime) {
     errors.push('stopTime must be greater than or equal to startTime');
   }
 

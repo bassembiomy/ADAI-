@@ -258,7 +258,7 @@ export class SolverManager {
   }
 
   resolveSolverType(system: PhysicalSystemIR, config: SolverConfiguration): Exclude<SolverType, 'auto'> {
-    if (config.solver === 'auto') return this.recommendSolver(system).recommended;
+    if (config.solver === 'auto') return this.recommendSolver(system).recommended as Exclude<SolverType, 'auto'>;
     return config.solver;
   }
 
@@ -270,6 +270,7 @@ export class SolverManager {
       case 'bdf':
       case 'dae_implicit': return new BDFSolver();
     }
+    throw new Error(`Unsupported solver type: ${type}`);
   }
 
   createInitialConditions(job: SimulationJob) {
