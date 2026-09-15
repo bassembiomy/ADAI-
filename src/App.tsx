@@ -817,12 +817,64 @@ const LegacyTraceabilityMatrix = ({
     const data = orderedReqs.map(({ req: r, level }) => {
       const outgoing = relationships.filter(rel => rel.sourceId === r.id).map(rel => {
         const target = blocks.find(b => b.id === rel.targetId);
-        return `[${rel.type}] ${target?.name}`;
+        return `[${rel.type}] ${target?.name || rel.targetId}`;
       }).join('; ');
+
+      const containedBy = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const contains = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const derivedFrom = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const derivedReqs = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const copiedFrom = relationships
+        .filter(rel => rel.type === 'copy' && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const copies = relationships
+        .filter(rel => rel.type === 'copy' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const satisfiedByRel = relationships
+        .filter(rel => rel.type === 'satisfy' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId);
 
       const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
       const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
-      const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts].join('; ');
+      const satisfiedBy = [...new Set([...satisfiedByRel, ...satisfiedByBlocks, ...satisfiedByParts])].join('; ');
+
+      const verifiedBy = relationships
+        .filter(rel => rel.type === 'verify' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const refinedBy = relationships
+        .filter(rel => rel.type === 'refine' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const traced = relationships
+        .filter(rel => (rel.type === 'trace' || rel.type === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
+        .map(rel => {
+          const otherId = rel.sourceId === r.id ? rel.targetId : rel.sourceId;
+          return blocks.find(b => b.id === otherId)?.name || otherId;
+        })
+        .join('; ');
 
       const prefix = '  '.repeat(level) + (level > 0 ? '└ ' : '');
 
@@ -833,8 +885,17 @@ const LegacyTraceabilityMatrix = ({
         Priority: r.priority || '',
         'Assigned To': r.assignedTo || 'Unassigned',
         Description: r.description || '',
+        'Contained By': containedBy,
+        Contains: contains,
+        'Derived From': derivedFrom,
+        'Derived Requirements': derivedReqs,
+        'Copied From': copiedFrom,
+        'Copied Requirements': copies,
+        'Satisfied By': satisfiedBy,
+        'Verified By': verifiedBy,
+        'Refined By': refinedBy,
+        'Traced Elements': traced,
         Links: outgoing,
-        SatisfiedBy: satisfiedBy
       };
     });
     const ws = XLSX.utils.json_to_sheet(data);
