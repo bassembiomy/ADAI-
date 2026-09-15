@@ -294,6 +294,8 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     const usage = repo.usages[id];
     const artifact = repo.artifacts[id];
     if (definition?.kind === 'block') blocks.push(id);
+    else if (definition?.kind === 'stateMachine' || definition?.kind === 'activity' || definition?.kind === 'interaction') behaviors.push(id);
+    else if (definition) blocks.push(id);
     else if (usage?.kind === 'part') parts.push(id);
     else if (usage?.kind === 'port') ports.push(id);
     else if (repo.connectors[id]) connectors.push(id);
