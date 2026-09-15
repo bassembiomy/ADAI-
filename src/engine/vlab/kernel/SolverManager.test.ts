@@ -139,6 +139,24 @@ describe('SolverManager', () => {
     expect(runtime.getResult().time).toEqual([0, 0.1]);
   });
 
+  it('marks an externally stepped job as failed after a rejection at the minimum step', () => {
+    const runtime = new SolverManager().createRuntimeJob(createJob(createConfiguration({
+      solver: 'rk_adaptive',
+      minimumStep: 0.1,
+      maximumStep: 0.1,
+      relativeTolerance: 1e-15,
+      absoluteTolerance: 1e-15
+    })));
+
+    expect(runtime.step()).toMatchObject({ accepted: false, complete: true, time: 0, dt: 0.1 });
+    expect(runtime.getResult()).toMatchObject({
+      status: 'FAILED',
+      solverStatistics: { convergenceStatus: 'FAILED', rejectedSteps: 1 }
+    });
+    expect(runtime.step()).toMatchObject({ accepted: false, complete: true, time: 0, dt: 0 });
+    expect(runtime.getResult().solverStatistics.rejectedSteps).toBe(1);
+  });
+
   it('keeps the active configuration when an invalid update is rejected', () => {
     const runtime = new SolverManager().createRuntimeJob(createJob());
 

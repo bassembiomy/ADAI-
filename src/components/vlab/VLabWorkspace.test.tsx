@@ -52,6 +52,30 @@ describe('VLabWorkspace Solver Configuration Inspector', () => {
     expect(job.engine.getSolverConfiguration()).toBe(updated);
   });
 
+  it('rejects a normalized configuration whose start time follows its stop time before creating a job', () => {
+    const nodes = [{
+      id: 'sc_invalid_time',
+      data: { type: 'solver_config', params: { startTime: { value: 5 }, stopTime: { value: 4 } } }
+    }] as any;
+
+    expect(() => createVLabSolverJob(nodes, [])).toThrow('stopTime must be greater than or equal to startTime');
+  });
+
+  it('rejects a normalized configuration whose minimum step exceeds its maximum step before updating a job', () => {
+    const job = createVLabSolverJob([{
+      id: 'sc_invalid_steps',
+      data: { type: 'solver_config', params: { minimumStep: { value: 0.01 }, maximumStep: { value: 0.1 } } }
+    }] as any, []);
+    const invalidNodes = [{
+      id: 'sc_invalid_steps',
+      data: { type: 'solver_config', params: { minimumStep: { value: 0.2 }, maximumStep: { value: 0.1 } } }
+    }] as any;
+
+    expect(() => updateVLabSolverJobConfiguration(job, invalidNodes)).toThrow('minimumStep must not exceed maximumStep');
+    expect(job.solverConfiguration.minimumStep).toBe(0.01);
+    expect(job.engine.getSolverConfiguration()).toBe(job.solverConfiguration);
+  });
+
   it('should contain valid default parameters for solver_config block', () => {
     const defaultConfig: SolverConfiguration = {
       id: 'sc_default',

@@ -25,7 +25,7 @@ import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
-import { SolverConfiguration } from '../../engine/vlab/kernel/types';
+import { SolverConfiguration, validateSolverConfiguration } from '../../engine/vlab/kernel/types';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -94,7 +94,13 @@ export function createVLabSolverJob(nodes: Node[], _edges: Edge[]): VLabSolverJo
     const type = (n.data as any)?.type || n.type || '';
     return type === 'solver_config' || type === 'solver_configuration';
   }) || ({ id: 'solver_config_default', data: { type: 'solver_config', params: {} } } as unknown as Node);
-  const solverConfiguration = normalizeSolverConfiguration(solverNode);
+  const candidate = normalizeSolverConfiguration(solverNode);
+  const validation = validateSolverConfiguration(candidate);
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  const solverConfiguration = validation.valid ? candidate : normalizeSolverConfiguration({
+    ...solverNode,
+    data: { ...solverNode.data, params: {} }
+  } as Node);
   return {
     engine: new VLabPhysicsEngine(solverConfiguration),
     solverConfiguration
@@ -108,7 +114,10 @@ export function updateVLabSolverJobConfiguration(job: VLabSolverJob, nodes: Node
   });
   if (!solverNode) return job.solverConfiguration;
 
-  const solverConfiguration = normalizeSolverConfiguration(solverNode);
+  const candidate = normalizeSolverConfiguration(solverNode);
+  const validation = validateSolverConfiguration(candidate);
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  const solverConfiguration = candidate;
   job.engine.updateConfiguration(solverConfiguration);
   job.solverConfiguration = solverConfiguration;
   return solverConfiguration;

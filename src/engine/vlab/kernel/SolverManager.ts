@@ -45,6 +45,7 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
   private maxStepUsed = 0;
   private functionEvaluations = 0;
   private jacobianEvaluations = 0;
+  private failed = false;
 
   constructor(
     private readonly manager: SolverManager,
@@ -95,7 +96,7 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
   }
 
   step(): SimulationRuntimeStepResult {
-    if (this.isComplete()) return this.completeStepResult();
+    if (this.isTerminal()) return this.completeStepResult();
 
     // This is the configuration boundary: state.config is replaced before a
     // solver sees the next step, never while it is calculating a step.
@@ -115,13 +116,18 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
     } else {
       this.rejectedSteps++;
       this.suggestedStep = this.clampStep(result.dt * 0.5);
+      if (this.isAtMinimumStep(result.dt)) this.failed = true;
+      if (this.isAtMinimumStep(result.dt)) {
+        this.failed = true;
+        this.solver.terminate();
+      }
     }
 
     return {
       time: this.state.t,
       dt: result.dt,
       accepted: result.accepted,
-      complete: this.isComplete(),
+      complete: this.isTerminal(),
       lte: result.lte,
       iterations: result.iterations,
       residual: result.residual
@@ -129,27 +135,14 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
   }
 
   runToCompletion(): SimulationResult {
-    while (!this.isComplete()) {
-      const boundary = this.step();
-      if (!boundary.accepted && this.isAtMinimumStep(boundary.dt)) {
-        // Preserve the legacy solvers' escape hatch for a tolerance that can
-        // no longer be met at the configured minimum step.
-        this.commitAcceptedStep(
-          Math.min(this.configuration.stopTime, this.state.t + boundary.dt),
-          this.state.x,
-          this.state.dx,
-          this.state.z,
-          boundary.dt
-        );
-      }
-    }
+    while (!this.isTerminal()) this.step();
     return this.getResult();
   }
 
   getResult(): SimulationResult {
     return {
       jobId: this.resultId,
-      status: this.isComplete() ? 'SUCCESS' : 'WARNING',
+      status: this.failed ? 'FAILED' : this.isComplete() ? 'SUCCESS' : 'WARNING',
       time: [...this.timeHistory],
       states: this.cloneHistory(this.stateHistory),
       algebraicVariables: this.cloneHistory(this.algebraicHistory),
@@ -170,7 +163,11 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
   }
 
   private isComplete(): boolean {
-    return this.state.t >= this.configuration.stopTime - TIME_EPSILON;
+    return this.failed || this.state.t >= this.configuration.stopTime - TIME_EPSILON;
+  }
+
+  private isTerminal(): boolean {
+    return this.failed || this.isComplete();
   }
 
   private isAtMinimumStep(dt: number): boolean {
@@ -235,7 +232,7 @@ class RuntimeSimulationJob implements SimulationRuntimeJob {
       maxStepUsed: this.maxStepUsed,
       functionEvaluations: this.functionEvaluations,
       jacobianEvaluations: this.jacobianEvaluations,
-      convergenceStatus: 'CONVERGED'
+      convergenceStatus: this.failed ? 'FAILED' : 'CONVERGED'
     };
   }
 }
