@@ -1,4 +1,4 @@
-import { buildTraceabilityMatrix, computeCoverageMetrics, type TraceabilityMatrix, type RtmMetrics, type RtmFilterOptions } from './rtm';
+import { buildTraceabilityMatrix, computeCoverageMetrics, type TraceabilityMatrix, type CoverageMetrics, type RtmFilters } from './rtm';
 import type { SysmlRepository } from './model';
 import { renderRequirementsDiagram, renderBddDiagram } from '../../features/reporting/reportDiagrams';
 import type { BlockData, RelationshipData } from '../../types/sysml_types';
@@ -36,7 +36,7 @@ export function handleReportWorkerMessage(request: ReportWorkerRequest): ReportW
   try {
     if (type === 'rtm') {
       const repo = payload as SysmlRepository;
-      const matrix = buildTraceabilityMatrix(repo, options as RtmFilterOptions);
+      const matrix = buildTraceabilityMatrix(repo, options as RtmFilters);
       const metrics = computeCoverageMetrics(matrix);
       return {
         requestId,

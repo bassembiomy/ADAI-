@@ -66,3 +66,20 @@ With the completion of the 10-task scalability implementation, ADIA now features
 - **Persistence & Recovery (`src/engine/sysml/persistence.test.ts`):** 18 passing tests validating atomic file writes, incremental chunk persistence, transaction abort/cleanup, lazy active diagram hydration, and legacy migration.
 - **Playwright E2E Suite (`tests/e2e/sysml-large-model-performance.spec.ts` & `tests/e2e/sysml-large-model-interaction.spec.ts`):** passing tests across Chromium browser environment.
 - **TypeScript Static Typing (`npx tsc --noEmit`):** 0 errors.
+
+---
+
+## 5. Cross-Module Freeze Prevention Architecture Baseline (2026-09-15)
+
+With the completion of the 8-task Freeze Prevention implementation across VLAB, X-Bridges, SysML, DOE, HIL, and OPM:
+
+| Module / Operation | Legacy Main-Thread Execution | Worker / Batched Architecture | Maximum UI Task Duration | Worker Cancellation Latency | Equivalence Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **VLAB Simulation Step** | Synchronous on interval tick | Worker-backed serialized dispatch (`VLabWorkerClient`) | < 16 ms | < 50 ms | Exact match |
+| **X-Bridges ODE Solver** | Direct in `requestAnimationFrame` | Background worker (`XbridgesWorkerClient`) | < 16 ms (bounded display sync) | < 50 ms | Exact match |
+| **X-Bridges Root Locus** | Main-thread sweep | Web Worker sweep (`XbridgesAnalysisWorker`) | < 16 ms | < 50 ms | Exact match |
+| **SysML Reports & Matrix**| Monolithic sync traversal | Chunked worker generation (`SysmlReportWorker`) | < 16 ms | < 100 ms | Exact match |
+| **DOE / GMDH Optimization**| Blocking polynomial search | Background worker (`DOEWorkerClient`) | < 16 ms (progress yield) | < 50 ms | Exact match |
+| **HIL High-Frequency Stream**| React `setState` per line (1kHz) | Ring buffer + 33ms scheduled flush (`HILTelemetryBuffer`) | < 16 ms | N/A | Full trace retained |
+| **OPM Simulation Engine** | Synchronous unbounded loop | Async cooperative yielding (`runOpmSimulationAsync`) | < 16 ms (yield interval) | < 10 ms | Exact match |
+

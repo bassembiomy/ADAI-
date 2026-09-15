@@ -2,21 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { XbridgesWorkerClient } from './xbridgesWorkerClient';
 import type { XbridgesWorkerRequest, XbridgesWorkerResponse } from '../engine/xbridges/xbridgesWorkerProtocol';
 
-class MockWorker implements Partial<Worker> {
-  public onmessage: ((this: Worker, ev: MessageEvent) => any) | null = null;
-  public onerror: ((this: AbstractWorker, ev: ErrorEvent) => any) | null = null;
+class MockWorker {
+  public onmessage: ((this: any, ev: MessageEvent) => any) | null = null;
+  public onerror: ((this: any, ev: ErrorEvent) => any) | null = null;
   public postMessage = vi.fn();
   public terminate = vi.fn();
 
   public simulateMessage(data: any) {
     if (this.onmessage) {
-      this.onmessage({ data } as MessageEvent);
+      this.onmessage.call(this, { data } as MessageEvent);
     }
   }
 
   public simulateError(message: string) {
     if (this.onerror) {
-      this.onerror({ message } as ErrorEvent);
+      this.onerror.call(this, { message } as ErrorEvent);
     }
   }
 }

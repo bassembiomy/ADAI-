@@ -161,9 +161,10 @@ describe('DOEWorkerClient', () => {
     });
 
     const res = await promise;
-    expect(typeof res.details.model.predict).toBe('function');
+    expect(res.details).toBeDefined();
+    expect(typeof res.details!.model.predict).toBe('function');
     // 1 + 2*(1) + 3*(2) = 1 + 2 + 6 = 9
-    const pred = res.details.model.predict([1, 2]);
+    const pred = res.details!.model.predict([1, 2]);
     expect(pred).toBe(9);
   });
 });

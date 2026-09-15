@@ -15,20 +15,29 @@ describe('SysML Report & Analysis Worker', () => {
         name: `Requirement ${i}`,
         text: `Specification text for requirement ${i}`,
         status: 'approved',
+        version: '1.0',
+        namespace: [],
+        kind: 'requirement',
         owner: 'Engineering',
         risk: 'medium',
-        derived: false,
       };
       // Add a block to satisfy it
       repo.definitions[`block-${i}`] = {
         id: `block-${i}`,
         name: `Subsystem ${i}`,
-        stereotype: 'block',
+        kind: 'block',
+        namespace: [],
+        isAbstract: false,
+        isLeaf: true,
+        properties: [],
+        ports: [],
+        operations: [],
+        constraints: [],
       };
       // Add relationship
       repo.relationships[`rel-${i}`] = {
         id: `rel-${i}`,
-        type: 'satisfy',
+        kind: 'satisfy',
         sourceId: `block-${i}`,
         targetId: `req-${i}`,
       };
@@ -50,7 +59,7 @@ describe('SysML Report & Analysis Worker', () => {
     const response = handleReportWorkerMessage(request);
     expect(response.ok).toBe(true);
     expect(response.result.matrix.rows.length).toBe(directMatrix.rows.length);
-    expect(response.result.metrics.totalRequirements).toBe(directMetrics.totalRequirements);
+    expect(response.result.metrics.total).toBe(directMetrics.total);
     expect(response.result.metrics.coveragePercent).toBeCloseTo(directMetrics.coveragePercent, 4);
   });
 
@@ -66,7 +75,7 @@ describe('SysML Report & Analysis Worker', () => {
     ];
 
     // Testing layoutLayered directly with cycle
-    const sizedNodes = cyclicBlocks.map(b => ({ id: b.id, width: 100, height: 50, lines: [b.name] }));
+    const sizedNodes = cyclicBlocks.map(b => ({ id: b.id, width: 100, height: 50, lines: [b.name], kind: 'requirement' }));
     const placed = layoutLayered(sizedNodes, cyclicRels.map(r => ({ sourceId: r.sourceId, targetId: r.targetId })));
     expect(placed).toHaveLength(2);
 
@@ -88,7 +97,7 @@ describe('SysML Report & Analysis Worker', () => {
       id: rel.id,
       sourceId: rel.sourceId,
       targetId: rel.targetId,
-      type: rel.type,
+      type: rel.kind,
     }));
 
     const req: ReportWorkerRequest = {

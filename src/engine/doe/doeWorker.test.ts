@@ -50,7 +50,7 @@ describe('doeWorker message handling', () => {
     expect(response.result.modelType).toBe('RSM');
     expect(response.result.rSquared).toBeCloseTo(directResult.rSquared!, 6);
     expect(response.result.fStatistic).toBeCloseTo(directResult.fStatistic!, 6);
-    expect(response.result.details.physicalCoefficients).toEqual(directResult.details.physicalCoefficients);
+    expect(response.result.details?.physicalCoefficients).toEqual(directResult.details?.physicalCoefficients);
   });
 
   it('computes GMDH equivalence: direct fitGMDH vs worker fitGMDH', async () => {
@@ -66,7 +66,7 @@ describe('doeWorker message handling', () => {
     expect(response.result.modelType).toBe('GMDH');
     expect(response.result.rSquared).toBeCloseTo(directResult.rSquared!, 4);
     expect(response.result.rmse).toBeCloseTo(directResult.rmse!, 4);
-    expect(response.result.deployment.gmdh.layers.length).toBe(directResult.deployment.gmdh.layers.length);
+    expect(response.result.deployment?.gmdh?.layers.length).toBe(directResult.deployment?.gmdh?.layers.length);
   });
 
   it('computes Taguchi equivalence: direct fitTaguchi vs worker fitTaguchi', async () => {
@@ -80,7 +80,7 @@ describe('doeWorker message handling', () => {
     const response = await handleDOEWorkerMessage(request);
     expect(response.ok).toBe(true);
     expect(response.result.modelType).toBe('Taguchi');
-    expect(response.result.details.factorLevels.length).toBe(directResult.details.factorLevels.length);
+    expect(response.result.details?.factorLevels.length).toBe(directResult.details?.factorLevels.length);
   });
 
   it('computes 41x41 surface grid and matches reference calculations', async () => {
@@ -110,7 +110,7 @@ describe('doeWorker message handling', () => {
     expect(response.result.zGrid[0].length).toBe(41);
     // Center point check (0, 0) should equal Beta[0]
     const midIdx = 20; // 0 is in middle of [-1.414, 1.414]
-    expect(response.result.zGrid[midIdx][midIdx]).toBeCloseTo(rsmResult.details.physicalCoefficients[0], 1);
+    expect(response.result.zGrid[midIdx][midIdx]).toBeCloseTo(rsmResult.details!.physicalCoefficients[0], 1);
   });
 
   it('handles cancellation of long-running surface calculation', async () => {
