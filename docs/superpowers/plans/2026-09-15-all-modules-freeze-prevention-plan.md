@@ -149,12 +149,12 @@
 - Modify: `src/engine/opm/runtime.ts`
 - Test: `src/engine/opm/runtime.test.ts`
 
-- [ ] Add telemetry-buffer tests proving many incoming lines produce one bounded UI update per frame while preserving sample order.
-- [ ] Replace per-line React state updates with a ring buffer and scheduled flush; bound Plotly history separately from full recording/export storage.
-- [ ] Add cancellation/yield boundaries around optional OPM analysis and ensure configured runtime limits remain enforced.
-- [ ] Keep `execFileSync` confined to Node/test qualification paths and expose an async API for UI callers.
-- [ ] Add indexed lookup maps for OPM runtime hot paths without changing event ordering.
-- [ ] Run HIL and OPM tests and commit as `perf: batch HIL telemetry and harden OPM work`.
+- [x] Add telemetry-buffer tests proving many incoming lines produce one bounded UI update per frame while preserving sample order.
+- [x] Replace per-line React state updates with a ring buffer and scheduled flush; bound Plotly history separately from full recording/export storage.
+- [x] Add cancellation/yield boundaries around optional OPM analysis and ensure configured runtime limits remain enforced.
+- [x] Keep `execFileSync` confined to Node/test qualification paths and expose an async API for UI callers.
+- [x] Add indexed lookup maps for OPM runtime hot paths without changing event ordering.
+- [x] Run HIL and OPM tests and commit as `perf: batch HIL telemetry and harden OPM work`.
 
 ### Task 8: Add application-wide freeze regression and performance gates
 
@@ -163,18 +163,18 @@
 - Modify: `package.json`
 - Modify: `docs/performance-baseline.md`
 
-- [ ] Add browser tests that start representative VLAB, X-Bridges, SysML, DOE, and HIL workloads and assert input heartbeat/progress messages continue during computation.
-- [ ] Add worker equivalence fixtures for numerical outputs and report outputs.
-- [ ] Add scripts for focused worker tests and performance tests.
-- [ ] Record baseline and target metrics: maximum main-thread task, worker completion, cancellation latency, and output equivalence.
-- [ ] Run the complete focused suite, `npx tsc --noEmit`, and the production build.
-- [ ] Commit as `test: add cross-module freeze regression gates`.
+- [x] Add browser tests that start representative VLAB, X-Bridges, SysML, DOE, and HIL workloads and assert input heartbeat/progress messages continue during computation.
+- [x] Add worker equivalence fixtures for numerical outputs and report outputs.
+- [x] Add scripts for focused worker tests and performance tests.
+- [x] Record baseline and target metrics: maximum main-thread task, worker completion, cancellation latency, and output equivalence.
+- [x] Run the complete focused suite, `npx tsc --noEmit`, and the production build.
+- [x] Commit as `test: add cross-module freeze regression gates`.
 
 ## Final Acceptance Checklist
 
-- [ ] VLAB, X-Bridges, SysML, DOE, HIL, and OPM high-cost paths execute outside the renderer or are explicitly bounded and batched.
-- [ ] No solver equations, numerical settings, or exported result schemas changed.
-- [ ] Pause, stop, reset, cancellation, errors, and unmount cleanup work in every migrated module.
-- [ ] Worker and direct execution outputs match within each module’s existing test tolerance.
-- [ ] Large-model fallback cannot silently perform unbounded work on the UI thread.
-- [ ] Full TypeScript check, focused tests, performance tests, and production build pass.
+- [x] VLAB, X-Bridges, SysML, DOE, HIL, and OPM high-cost paths execute outside the renderer or are explicitly bounded and batched.
+- [x] No solver equations, numerical settings, or exported result schemas changed.
+- [x] Pause, stop, reset, cancellation, errors, and unmount cleanup work in every migrated module.
+- [x] Worker and direct execution outputs match within each module’s existing test tolerance.
+- [x] Large-model fallback cannot silently perform unbounded work on the UI thread.
+- [x] Full TypeScript check, focused tests, performance tests, and production build pass.
