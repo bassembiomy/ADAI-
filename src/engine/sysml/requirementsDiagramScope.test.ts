@@ -36,6 +36,7 @@ describe('getRequirementsDiagramScope', () => {
       block('req-2', 'requirement'),
       block('test-1', 'testCase'),
       block('block-1', 'block'),
+      block('unconnected-same-layer', 'block'),
       block('state-1', 'stateMachine'),
       block('artifact-1', 'artifact'),
       block('copy-1', 'requirement'),
@@ -57,6 +58,7 @@ describe('getRequirementsDiagramScope', () => {
     expect(scope.visibleBlockIds).toEqual(
       new Set(['req-1', 'req-2', 'test-1', 'block-1', 'state-1', 'artifact-1', 'copy-1', 'derived-1']),
     );
+    expect(scope.visibleBlockIds).not.toContain('unconnected-same-layer');
     expect(scope.visibleRelationshipIds).toEqual(
       new Set(['verify-1', 'satisfy-1', 'refine-1', 'trace-1', 'derive-1', 'derive-reqt-1', 'copy-1', 'containment-1']),
     );

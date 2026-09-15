@@ -97,3 +97,29 @@ Error: Cannot find module './requirementsDiagramScope' imported from G:/adia pro
 ```
 
 Exit status: `1` (expected RED state until Task 2 adds the production helper).
+
+## Remaining Task 1 review fix
+
+Added an unconnected same-layer `block` (`unconnected-same-layer`) to the inclusion fixture and asserted that it is absent from `visibleBlockIds`. All existing supported-relationship, unsupported-relationship, cross-layer, and root-layer coverage remains unchanged. No production code was modified.
+
+## Focused Vitest RED output — remaining review fix
+
+The focused test was run again after this fixture-only amendment:
+
+```text
+npx vitest run src/engine/sysml/requirementsDiagramScope.test.ts
+
+ RUN  v4.1.11 G:/adia project
+
+ ❯ src/engine/sysml/requirementsDiagramScope.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/engine/sysml/requirementsDiagramScope.test.ts [ src/engine/sysml/requirementsDiagramScope.test.ts ]
+Error: Cannot find module './requirementsDiagramScope' imported from G:/adia project/src/engine/sysml/requirementsDiagramScope.test.ts
+
+ Test Files  1 failed (1)
+ Tests  no tests
+```
+
+Exit status: `1` (expected RED state because the production scope module is intentionally absent for Task 1).
