@@ -484,7 +484,13 @@ export class VLabPhysicsEngine {
       // ── Air Fryer Lab ──
       const indices = system.scopeOutputs.get('thermal_scope') || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
-      const cel = Math.max(0.0, tempK - 273.15);
+      // A temp_sensor outputs Ta-Tb (a temperature difference), while a
+      // direct chamber connection outputs absolute Kelvin. Do not subtract
+      // 273.15 from the former or a normal room-temperature reading gets
+      // clamped to zero.
+      const signalName = indices.length > 0 ? system.variableNames[indices[0]] ?? '' : '';
+      const isDifferentialSensor = signalName.includes('temp_sensor_branch_signal_t');
+      const cel = isDifferentialSensor ? tempK : tempK - 273.15;
       perScopeValues['thermal_scope'] = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {

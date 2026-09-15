@@ -105,6 +105,7 @@ describe('Air Fryer Simulation debug', () => {
         { id: 'fan_ctrl', blockId: 'ps_constant', position: { x: 650, y: 550 }, label: 'Fan Speed Ctrl', params: { value: 0.8 } },
         { id: 'temp_sensor', blockId: 'temp_sensor', position: { x: 850, y: 200 }, label: 'Basket Temp Sensor' },
         { id: 'thermal_scope', blockId: 'scope', position: { x: 1050, y: 150 }, label: 'Temp Monitor', params: { time_range: 300 } },
+        { id: 'thermal_ref', blockId: 'thermal_ref', position: { x: 850, y: 350 }, label: 'Thermal Reference' },
         { id: 'ground', blockId: 'ground', position: { x: 200, y: 400 }, label: 'PE Ground' }
       ],
       edges: [
@@ -116,6 +117,7 @@ describe('Air Fryer Simulation debug', () => {
         { id: 'e4', source: 'fan_ctrl', target: 'circulation_fan', sourceHandle: 'y_s', targetHandle: 's_t' },
         { id: 'e5', source: 'circulation_fan', target: 'air_chamber', sourceHandle: 'b_s', targetHandle: 'a_t' },
         { id: 'e6', source: 'air_chamber', target: 'temp_sensor', sourceHandle: 'h_s', targetHandle: 'a_t' },
+        { id: 'e6_ref', source: 'temp_sensor', target: 'thermal_ref', sourceHandle: 'b_s', targetHandle: 'a_t' },
         { id: 'e7', source: 'temp_sensor', target: 'thermal_scope', sourceHandle: 't_s', targetHandle: 'in1_t' }
       ]
     };
@@ -134,5 +136,6 @@ describe('Air Fryer Simulation debug', () => {
         console.log(`  Step ${step + 1} (t = ${((step + 1) * dt).toFixed(2)}s): Scope value = ${state.scopeValues} °C`);
       }
     }
+    expect(Number(state.scopeValues)).toBeGreaterThan(0);
   });
 });
