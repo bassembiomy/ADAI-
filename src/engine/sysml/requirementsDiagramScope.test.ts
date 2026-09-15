@@ -66,6 +66,26 @@ describe('getRequirementsDiagramScope', () => {
     );
   });
 
+  it('excludes supported BDD-only edges while retaining each BDD requirement edge', () => {
+    const blocks = [
+      block('req-1', 'requirement'),
+      block('req-2', 'requirement'),
+      block('bdd-1', 'block'),
+      block('bdd-2', 'block'),
+    ];
+    const relationships = [
+      relationship('satisfy-1', 'bdd-1', 'req-1', 'satisfy'),
+      relationship('verify-2', 'bdd-2', 'req-2', 'verify'),
+      relationship('bdd-only-refine', 'bdd-1', 'bdd-2', 'refine'),
+    ];
+
+    const scope = getRequirementsDiagramScope(blocks, relationships);
+
+    expect(scope.visibleBlockIds).toEqual(new Set(['req-1', 'req-2', 'bdd-1', 'bdd-2']));
+    expect(scope.visibleRelationshipIds).toEqual(new Set(['satisfy-1', 'verify-2']));
+    expect(scope.visibleRelationshipIds).not.toContain('bdd-only-refine');
+  });
+
   it.each(['association', 'generalization', 'composition', 'aggregation', 'allocation', 'binding', 'dependency'] as const)(
     'rejects unsupported BDD-only relationship type %s',
     type => {

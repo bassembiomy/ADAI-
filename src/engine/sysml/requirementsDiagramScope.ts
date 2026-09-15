@@ -49,7 +49,9 @@ export function getRequirementsDiagramScope(
       .filter(relationship =>
         REQUIREMENT_DIAGRAM_RELATIONSHIP_TYPES.has(relationship.type) &&
         visibleBlockIds.has(relationship.sourceId) &&
-        visibleBlockIds.has(relationship.targetId),
+        visibleBlockIds.has(relationship.targetId) &&
+        (blocksById.get(relationship.sourceId)?.stereotype === 'requirement' ||
+          blocksById.get(relationship.targetId)?.stereotype === 'requirement'),
       )
       .map(relationship => relationship.id),
   );
