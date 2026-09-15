@@ -542,7 +542,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
               <div className="p-4 rounded-xl border border-white/5 bg-slate-900/40 relative overflow-hidden flex flex-col items-center">
                 <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-1.5">System Stability</span>
                 {stability === 'Stable' && (
-                  <div className="px-4 py-1.5 bg-emerald-500/10 text-emerald-450 border border-emerald-500/20 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse">
+                  <div className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     Asymptotically Stable
                   </div>
@@ -573,7 +573,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
                 
                 {/* Numerator */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-450 uppercase">Numerator Coefficients</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Numerator Coefficients</label>
                   <input 
                     type="text" 
                     value={numInput}
@@ -588,7 +588,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
 
                 {/* Denominator */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-450 uppercase">Denominator Coefficients</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Denominator Coefficients</label>
                   <input 
                     type="text" 
                     value={denInput}
@@ -631,7 +631,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
 
                 {/* Max Gain limit */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-455 uppercase">Max Gain Sweep</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Max Gain Sweep</label>
                   <input 
                     type="number" 
                     value={maxGainInput}
@@ -649,7 +649,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
 
                 {/* Simulation Type selector */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-455 uppercase">Time Response Simulation</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Time Response Simulation</label>
                   <select
                     value={simulationType}
                     onChange={(e) => onUpdate && onUpdate({ ...block.params, simulationType: e.target.value })}
@@ -678,7 +678,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
                       <div key={idx} className="p-2 rounded-lg bg-white/5 border border-white/5 flex flex-col gap-0.5">
                         <div className="flex justify-between font-bold text-slate-300">
                           <span>Pole {idx + 1}:</span>
-                          <span className="text-emerald-450">{p.re.toFixed(3)}{cleanIm}</span>
+                          <span className="text-emerald-400">{p.re.toFixed(3)}{cleanIm}</span>
                         </div>
                         <div className="flex justify-between text-slate-500 text-[9px]">
                           <span>Frequency:</span>
@@ -739,7 +739,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-500">Pole:</span>
-                      <span className="font-bold text-emerald-450">
+                      <span className="font-bold text-emerald-400">
                         {hoveredInfo.re.toFixed(3)}
                         {Math.abs(hoveredInfo.im) > 1e-4 ? `${hoveredInfo.im > 0 ? '+' : '-'}${Math.abs(hoveredInfo.im).toFixed(3)}j` : ''}
                       </span>

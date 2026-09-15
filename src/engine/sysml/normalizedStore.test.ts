@@ -30,7 +30,7 @@ import {
 } from './normalizedStore';
 import { generate1kModel, generate10kModel } from './largeModelGenerator';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
-import type { BlockDefinition, PartUsage, SysmlRelationship, RequirementDefinition } from './model';
+import { createEmptyRepository, type BlockDefinition, type PartUsage, type SysmlRelationship, type RequirementDefinition } from './model';
 
 describe('NormalizedSysmlStore', () => {
   it('creates an empty normalized store with initialized indexes', () => {
@@ -324,5 +324,31 @@ describe('NormalizedSysmlStore', () => {
     expect(updatedTarget?.name).toBe('NewName');
     expect(updatedTarget).not.toBe(targetBlock);
     expect(unchangedOther).toBe(otherBlock);
+  });
+
+  it('stores and indexes use-case entities, extension points, and diagram references', () => {
+    const repo = createEmptyRepository();
+    repo.actors['act_1'] = { id: 'act_1', name: 'Pilot', kind: 'actor', namespace: [], isExternal: true, generalizationIds: [] };
+    repo.subjects['sub_1'] = { id: 'sub_1', name: 'Cockpit', kind: 'subject', namespace: [] };
+    repo.useCases['uc_1'] = { id: 'uc_1', name: 'Fly', kind: 'useCase', namespace: [], subjectId: 'sub_1', extensionPointIds: ['ep_1'], behaviorArtifactIds: [] };
+    repo.extensionPoints['ep_1'] = { id: 'ep_1', name: 'Emergency', kind: 'extensionPoint', namespace: [], useCaseId: 'uc_1' };
+    repo.diagramReferences['ref_1'] = { id: 'ref_1', diagramId: 'act_1', diagramKind: 'activity', role: 'elaborates', sourceElementId: 'uc_1' };
+
+    const store = fromRepository(repo);
+    expect(store.actors.size).toBe(1);
+    expect(store.subjects.size).toBe(1);
+    expect(store.useCases.size).toBe(1);
+    expect(store.extensionPoints.size).toBe(1);
+    expect(store.diagramReferences.size).toBe(1);
+
+    expect(getById(store, 'act_1')).toEqual(repo.actors['act_1']);
+    expect(getById(store, 'uc_1')).toEqual(repo.useCases['uc_1']);
+
+    const back = toRepository(store);
+    expect(back.actors).toEqual(repo.actors);
+    expect(back.subjects).toEqual(repo.subjects);
+    expect(back.useCases).toEqual(repo.useCases);
+    expect(back.extensionPoints).toEqual(repo.extensionPoints);
+    expect(back.diagramReferences).toEqual(repo.diagramReferences);
   });
 });

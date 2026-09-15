@@ -1,9 +1,17 @@
 @import '@xyflow/react/dist/style.css';
+@import './styles/theme-contract.css';
+@import './styles/workspaces/entropy.css';
+@import './styles/workspaces/hil.css';
+@import './styles/workspaces/xbridges.css';
+@import './styles/workspaces/vlab.css';
+@import './styles/workspaces/doe.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme="dark"],
+:root.dark {
   color-scheme: dark;
   --bg-main: #181818;
   --bg-main-rgb: 24, 24, 24;
@@ -21,30 +29,63 @@
   --node-bg: #242424;
   --wire-color: #444444;
   --canvas-grid-dot: #2a2a2a;
+  --sysml-block-fill: #1a1a1a;
+  --sysml-requirement-fill: #1e1e1e;
+  --sysml-block-stroke: #e0e0e0;
+  --sysml-block-divider: #444444;
+  --sysml-block-text: #e0e0e0;
+  --sysml-block-subtext: #a0a0a0;
+  --sysml-block-meta: #f97316;
+  --sysml-part-fill: #1a1a1a;
+  --sysml-part-stroke: #666666;
+  --sysml-port-fill: #333333;
+  --sysml-port-label: #aaaaaa;
+  --sysml-relation-cutout: #1a1a1a;
+  --sysml-state-fill: #1a1a1a;
+  --sysml-state-active-fill: #2a2a2a;
+  --sysml-state-stroke: #444444;
+  --sysml-state-subtext: #888888;
   --scrollbar-thumb: rgba(201, 168, 108, 0.5);
   --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
 }
 
-[data-theme="light"], .light {
+:root[data-theme="light"],
+:root.light {
   color-scheme: light;
-  --bg-main: #F8E7C9;
-  --bg-main-rgb: 248, 231, 201;
-  --bg-panel: #EFE0BF;
-  --bg-panel-rgb: 239, 224, 191;
-  --bg-panel-secondary: #E5D5B2;
-  --text-primary: #022C22;
-  --text-secondary: #064E3B;
-  --text-muted: #1B5E4B;
-  --border-dark: #C9AF84;
-  --border-med: #BBA072;
-  --accent-emerald: #064E3B;
-  --accent-emerald-hover: #022C22;
-  --accent-emerald-glow: rgba(6, 78, 59, 0.2);
-  --node-bg: #FCF8F0;
-  --wire-color: #064E3B;
-  --canvas-grid-dot: rgba(6, 78, 59, 0.2);
-  --scrollbar-thumb: rgba(6, 78, 59, 0.45);
-  --scrollbar-thumb-hover: rgba(6, 78, 59, 0.8);
+  --bg-main: #eef3f5;
+  --bg-main-rgb: 238, 243, 245;
+  --bg-panel: #ffffff;
+  --bg-panel-rgb: 255, 255, 255;
+  --bg-panel-secondary: #f4f7f8;
+  --text-primary: #172a35;
+  --text-secondary: #405661;
+  --text-muted: #6a7d86;
+  --border-dark: #c9d6db;
+  --border-med: #b3c5cc;
+  --accent-emerald: #087f73;
+  --accent-emerald-hover: #05645b;
+  --accent-emerald-glow: rgba(8, 127, 115, 0.16);
+  --node-bg: #ffffff;
+  --wire-color: #3e6871;
+  --canvas-grid-dot: rgba(31, 94, 104, 0.18);
+  --sysml-block-fill: #ffffff;
+  --sysml-requirement-fill: #f3f8f9;
+  --sysml-block-stroke: #75919a;
+  --sysml-block-divider: #c3d1d5;
+  --sysml-block-text: #172a35;
+  --sysml-block-subtext: #405661;
+  --sysml-block-meta: #b45309;
+  --sysml-part-fill: #ffffff;
+  --sysml-part-stroke: #75919a;
+  --sysml-port-fill: #e7eff1;
+  --sysml-port-label: #405661;
+  --sysml-relation-cutout: #f6fafb;
+  --sysml-state-fill: #ffffff;
+  --sysml-state-active-fill: #e7f3f1;
+  --sysml-state-stroke: #75919a;
+  --sysml-state-subtext: #536b74;
+  --scrollbar-thumb: rgba(8, 127, 115, 0.38);
+  --scrollbar-thumb-hover: rgba(8, 127, 115, 0.68);
 }
 
 body {
@@ -58,6 +99,205 @@ body {
   color: var(--text-primary);
   overflow: hidden;
   transition: background-color 0.25s ease, color 0.2s ease, border-color 0.25s ease;
+}
+
+:root {
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+}
+
+code,
+pre,
+.font-mono,
+[font-family="monospace"] {
+  font-family: var(--font-mono);
+}
+
+[data-theme="light"] body,
+.light body {
+  background-image: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55));
+}
+
+/* Legacy utility compatibility: the main editor predates the token system and
+   contains literal dark utility classes. In light mode these selectors keep
+   every surface, border, and text run legible until the components migrate. */
+[data-theme="light"] [class*="bg-[#0a0a0a]"],
+[data-theme="light"] [class*="bg-[#111"],
+[data-theme="light"] [class*="bg-[#1a1a1a]"],
+[data-theme="light"] [class*="bg-[#1a1a20]"],
+[data-theme="light"] [class*="bg-[#18181c]"],
+[data-theme="light"] [class*="bg-[#242424]"],
+.light [class*="bg-[#0a0a0a]"],
+.light [class*="bg-[#111"],
+.light [class*="bg-[#1a1a1a]"],
+.light [class*="bg-[#1a1a20]"],
+.light [class*="bg-[#18181c]"],
+.light [class*="bg-[#242424]"] {
+  background-color: var(--bg-panel) !important;
+}
+
+[data-theme="light"] [class*="text-[#e0e0e0]"],
+[data-theme="light"] [class*="text-white"],
+.light [class*="text-[#e0e0e0]"],
+.light [class*="text-white"] {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] [class*="text-[#888]"],
+[data-theme="light"] [class*="text-[#666]"],
+[data-theme="light"] [class*="text-[#555]"],
+.light [class*="text-[#888]"],
+.light [class*="text-[#666]"],
+.light [class*="text-[#555]"] {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="light"] [class*="border-[#333]"],
+[data-theme="light"] [class*="border-[#222]"],
+.light [class*="border-[#333]"],
+.light [class*="border-[#222]"] {
+  border-color: var(--border-dark) !important;
+}
+
+/* Remaining legacy editor chrome: normalize charcoal utilities into the same
+   elevated surfaces used by the new light-mode canvas. */
+[data-theme="light"] [class*="bg-[#222"],
+[data-theme="light"] [class*="bg-[#27272f"],
+[data-theme="light"] [class*="bg-[#18181c"],
+[data-theme="light"] [class*="bg-[#111114"],
+[data-theme="light"] [class*="bg-[#141414"],
+[data-theme="light"] [class*="bg-[#0a0a0c"],
+[data-theme="light"] [class*="bg-[#050505"],
+.light [class*="bg-[#222"],
+.light [class*="bg-[#27272f"],
+.light [class*="bg-[#18181c"],
+.light [class*="bg-[#111114"],
+.light [class*="bg-[#141414"],
+.light [class*="bg-[#0a0a0c"],
+.light [class*="bg-[#050505"] {
+  background-color: var(--bg-panel-secondary) !important;
+}
+
+[data-theme="light"] [class*="border-[#222"],
+[data-theme="light"] [class*="border-[#27272f"],
+[data-theme="light"] [class*="border-[#222228"],
+[data-theme="light"] [class*="border-[#2d2d2d"],
+.light [class*="border-[#222"],
+.light [class*="border-[#27272f"],
+.light [class*="border-[#222228"],
+.light [class*="border-[#2d2d2d"] {
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] [class*="text-[#a0a0a0"],
+[data-theme="light"] [class*="text-[#aaa"],
+[data-theme="light"] [class*="text-[#ccc"],
+[data-theme="light"] [class*="text-zinc-300"],
+.light [class*="text-[#a0a0a0"],
+.light [class*="text-[#aaa"],
+.light [class*="text-[#ccc"],
+.light [class*="text-zinc-300"] {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .workspace-tab-bar,
+.light .workspace-tab-bar {
+  background: var(--bg-panel-secondary) !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] .workspace-tab-bar .workspace-tab-active,
+.light .workspace-tab-bar .workspace-tab-active {
+  background: var(--bg-panel) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .workspace-tab-bar [class*="hover\\:bg-\\[\\#161616\\]"]:hover,
+.light .workspace-tab-bar [class*="hover\\:bg-\\[\\#161616\\]"]:hover {
+  background: rgba(8, 127, 115, 0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+/* HIL is a specialized workspace with its own dense charcoal palette. Keep
+   its hierarchy intact in light mode while moving every surface onto the
+   shared studio tokens. */
+[data-theme="light"] .hil-workspace [class*="bg-[#070707"],
+[data-theme="light"] .hil-workspace [class*="bg-[#0f0f0f"],
+[data-theme="light"] .hil-workspace [class*="bg-[#0c0c0c"],
+[data-theme="light"] .hil-workspace [class*="bg-[#121212"],
+[data-theme="light"] .hil-workspace [class*="bg-[#141414"],
+[data-theme="light"] .hil-workspace [class*="bg-[#1a1a1a"],
+[data-theme="light"] .hil-workspace [class*="bg-[#1f1f1f"],
+[data-theme="light"] .hil-workspace [class*="bg-[#252525"],
+[data-theme="light"] .hil-workspace [class*="bg-[#262626"],
+.light .hil-workspace [class*="bg-[#070707"],
+.light .hil-workspace [class*="bg-[#0f0f0f"],
+.light .hil-workspace [class*="bg-[#0c0c0c"],
+.light .hil-workspace [class*="bg-[#121212"],
+.light .hil-workspace [class*="bg-[#141414"],
+.light .hil-workspace [class*="bg-[#1a1a1a"],
+.light .hil-workspace [class*="bg-[#1f1f1f"],
+.light .hil-workspace [class*="bg-[#252525"],
+.light .hil-workspace [class*="bg-[#262626"] {
+  background-color: var(--bg-panel) !important;
+}
+
+[data-theme="light"] .hil-workspace [class*="border-[#222"],
+[data-theme="light"] .hil-workspace [class*="border-[#262626"],
+[data-theme="light"] .hil-workspace [class*="border-[#2d2d2d"],
+[data-theme="light"] .hil-workspace [class*="border-[#333"],
+.light .hil-workspace [class*="border-[#222"],
+.light .hil-workspace [class*="border-[#262626"],
+.light .hil-workspace [class*="border-[#2d2d2d"],
+.light .hil-workspace [class*="border-[#333"] {
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] .hil-workspace [class*="bg-emerald-950"],
+.light .hil-workspace [class*="bg-emerald-950"] {
+  background-color: rgba(8, 127, 115, 0.1) !important;
+}
+
+[data-theme="light"] .hil-workspace,
+.light .hil-workspace {
+  background: var(--bg-main) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .hil-workspace .hil-header,
+[data-theme="light"] .hil-workspace .hil-nav,
+.light .hil-workspace .hil-header,
+.light .hil-workspace .hil-nav {
+  background: var(--bg-panel) !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] .hil-workspace .hil-main,
+.light .hil-workspace .hil-main {
+  background: var(--bg-main) !important;
+}
+
+/* SysML canvas hierarchy */
+[data-theme="light"] .sysml-diagram-canvas,
+.light .sysml-diagram-canvas {
+  background-color: #f6fafb;
+  background-image: radial-gradient(circle, rgba(44, 104, 112, .16) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+[data-theme="light"] .sysml-diagram-canvas text,
+.light .sysml-diagram-canvas text {
+  paint-order: stroke;
+  stroke: rgba(255,255,255,.35);
+  stroke-width: .25px;
 }
 
 * {
@@ -336,22 +576,17 @@ input[type=range]::-moz-range-thumb {
   color: var(--text-primary);
 }
 
-/* Text Overrides for High Legibility on Champagne */
+/* Text Overrides for High Legibility on Light */
 [data-theme="light"] .text-white,
 [data-theme="light"] .text-zinc-100,
-[data-theme="light"] .text-zinc-200,
-[data-theme="light"] .text-\[\#e0e0e0\],
-[data-theme="light"] .text-\[\#ffffff\] {
+[data-theme="light"] .text-zinc-200 {
   color: var(--text-primary) !important;
 }
 
 [data-theme="light"] .text-zinc-300,
 [data-theme="light"] .text-zinc-400,
 [data-theme="light"] .text-gray-300,
-[data-theme="light"] .text-gray-400,
-[data-theme="light"] .text-\[\#aaa\],
-[data-theme="light"] .text-\[\#888\],
-[data-theme="light"] .text-\[\#a0a0a0\] {
+[data-theme="light"] .text-gray-400 {
   color: var(--text-secondary) !important;
 }
 
@@ -359,19 +594,16 @@ input[type=range]::-moz-range-thumb {
 [data-theme="light"] .text-zinc-600,
 [data-theme="light"] .text-gray-500,
 [data-theme="light"] .text-gray-600,
-[data-theme="light"] .text-gray-700,
-[data-theme="light"] .text-\[\#666\],
-[data-theme="light"] .text-\[\#777\] {
+[data-theme="light"] .text-gray-700 {
   color: var(--text-muted) !important;
 }
 
-/* Color Accents Adaptation for Optimal Contrast on Champagne */
+/* Color Accents Adaptation for Optimal Contrast */
 [data-theme="light"] .text-emerald-400,
 [data-theme="light"] .text-emerald-300,
 [data-theme="light"] .text-emerald-500,
 [data-theme="light"] .text-green-400,
-[data-theme="light"] .text-green-500,
-[data-theme="light"] .text-\[\#4caf50\] {
+[data-theme="light"] .text-green-500 {
   color: #064E3B !important;
 }
 
@@ -383,16 +615,13 @@ input[type=range]::-moz-range-thumb {
 }
 
 [data-theme="light"] .text-orange-400,
-[data-theme="light"] .text-orange-500,
-[data-theme="light"] .text-\[\#f97316\] {
+[data-theme="light"] .text-orange-500 {
   color: #B45309 !important;
 }
 
 [data-theme="light"] .text-sky-400,
 [data-theme="light"] .text-cyan-400,
-[data-theme="light"] .text-blue-400,
-[data-theme="light"] .text-\[\#6c9ac6\],
-[data-theme="light"] .text-\[\#4da6ff\] {
+[data-theme="light"] .text-blue-400 {
   color: #0369A1 !important;
 }
 
@@ -404,27 +633,18 @@ input[type=range]::-moz-range-thumb {
 
 [data-theme="light"] .text-rose-400,
 [data-theme="light"] .text-red-400,
-[data-theme="light"] .text-red-500,
-[data-theme="light"] .text-\[\#c96c8a\] {
+[data-theme="light"] .text-red-500 {
   color: #B91C1C !important;
 }
 
 /* Backgrounds for Panels, Secondary Containers, and Form Controls */
 [data-theme="light"] .bg-zinc-800,
 [data-theme="light"] .bg-zinc-800\/60,
-[data-theme="light"] .bg-zinc-800\/40,
-[data-theme="light"] .bg-\[\#1f1f1f\],
-[data-theme="light"] .bg-\[\#242424\],
-[data-theme="light"] .bg-\[\#1f1f26\] {
+[data-theme="light"] .bg-zinc-800\/40 {
   background-color: var(--bg-panel-secondary) !important;
 }
 
-[data-theme="light"] .bg-black,
-[data-theme="light"] .bg-\[\#000000\],
-[data-theme="light"] .bg-\[\#0d0d0d\],
-[data-theme="light"] .bg-\[\#0d0d10\],
-[data-theme="light"] .bg-\[\#111114\],
-[data-theme="light"] .bg-\[\#111\] {
+[data-theme="light"] .bg-black {
   background-color: var(--bg-panel) !important;
 }
 
@@ -452,9 +672,6 @@ input[type=range]::-moz-range-thumb {
 [data-theme="light"] .hover\:bg-zinc-800:hover,
 [data-theme="light"] .hover\:bg-zinc-800\/60:hover,
 [data-theme="light"] .hover\:bg-zinc-700:hover,
-[data-theme="light"] .hover\:bg-\[\#1a1a1a\]:hover,
-[data-theme="light"] .hover\:bg-\[\#222\]:hover,
-[data-theme="light"] .hover\:bg-\[\#1f1f26\]:hover,
 [data-theme="light"] .hover\:bg-white\/5:hover,
 [data-theme="light"] .hover\:bg-white\/10:hover {
   background-color: rgba(6, 78, 59, 0.12) !important;

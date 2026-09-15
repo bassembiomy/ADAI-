@@ -1,6 +1,53 @@
 import React, { memo, useMemo } from 'react';
 import type { BlockData, RelationshipData, PartData, ConnectorData } from '../../types/sysml_types';
 
+export type BddDiagramEdgeNotation =
+  | 'solid-line'
+  | 'filled-diamond'
+  | 'hollow-diamond'
+  | 'hollow-triangle'
+  | 'dashed-arrow';
+
+export type IbdDiagramEdgeNotation = 'assembly-solid' | 'delegation-solid' | 'binding-dashed';
+
+export type DiagramEdgeNotation = BddDiagramEdgeNotation | IbdDiagramEdgeNotation;
+
+export type BddRelationshipKind = 'association' | 'composition' | 'sharedAggregation' | 'generalization' | 'dependency' | 'allocation';
+
+export type IbdConnectorKind = 'assembly' | 'delegation' | 'binding';
+
+/**
+ * BDD-only relation notation (OMG SysML 1.6). Mirrors the canonical lookup in
+ * src/engine/sysml/bdd.ts without importing engine code into the component
+ * layer, so BDD symbols stay disjoint from IBD connector symbols.
+ */
+export function bddRelationshipNotation(kind: BddRelationshipKind | string): BddDiagramEdgeNotation {
+  if (kind === 'composition') return 'filled-diamond';
+  if (kind === 'sharedAggregation') return 'hollow-diamond';
+  if (kind === 'generalization') return 'hollow-triangle';
+  if (kind === 'dependency' || kind === 'allocation') return 'dashed-arrow';
+  return 'solid-line';
+}
+
+/**
+ * IBD-only connector notation (OMG SysML 1.6). Mirrors connectorNotationFor
+ * in src/engine/sysml/ibd.ts; intentionally disjoint from BDD notations.
+ */
+export function ibdConnectorNotation(kind: IbdConnectorKind | string): IbdDiagramEdgeNotation {
+  if (kind === 'delegation') return 'delegation-solid';
+  if (kind === 'binding') return 'binding-dashed';
+  return 'assembly-solid';
+}
+
+/**
+ * Select edge notation by diagram kind so BDD relations and IBD connectors
+ * can never share symbols: 'bdd' always yields a BDD relation notation,
+ * 'ibd' always yields an IBD connector notation.
+ */
+export function diagramEdgeNotation(diagram: 'bdd' | 'ibd', kind: string): DiagramEdgeNotation {
+  return diagram === 'ibd' ? ibdConnectorNotation(kind) : bddRelationshipNotation(kind as BddRelationshipKind);
+}
+
 export interface DiagramViewport {
   x: number;
   y: number;
@@ -293,19 +340,26 @@ export function cullElements(
   const visibleCandidateIds = grid.query(queryBox);
   const visibleIds = new Set<string>();
 
+  // Resolve grid candidates through maps instead of rescanning every entity
+  // and checking Set membership. This keeps culling proportional to the
+  // viewport candidate count for large models.
+  const entityById = new Map<string, BlockData | PartData>();
+  for (const block of blocks) entityById.set(block.id, block);
+  for (const part of parts) entityById.set(part.id, part);
   const visibleBlocks: BlockData[] = [];
-  for (const b of blocks) {
-    if (visibleCandidateIds.has(b.id)) {
-      visibleBlocks.push(b);
-      visibleIds.add(b.id);
-    }
-  }
-
   const visibleParts: PartData[] = [];
-  for (const p of parts) {
-    if (visibleCandidateIds.has(p.id)) {
-      visibleParts.push(p);
-      visibleIds.add(p.id);
+  for (const id of visibleCandidateIds) {
+    const entity = entityById.get(id);
+    if (entity && 'stereotype' in entity) {
+      const block = entity as BlockData;
+      visibleBlocks.push(block);
+      visibleIds.add(id);
+      continue;
+    }
+    if (entity) {
+      const part = entity as PartData;
+      visibleParts.push(part);
+      visibleIds.add(id);
     }
   }
 

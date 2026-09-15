@@ -8,6 +8,46 @@ import type {
   SysmlUsage,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { classifyRelationship as classifyRelationshipPolicy } from './policy';
+
+export type IbdConnectorKind = ConnectorUsage['kind'];
+
+export type IbdConnectorNotation = 'assembly-solid' | 'delegation-solid' | 'binding-dashed';
+
+/**
+ * Stable IBD-only connector notation lookup (OMG SysML 1.6, IBD connectors
+ * only). Deliberately disjoint from the BDD relation notations in bdd.ts
+ * (solid-line/filled-diamond/hollow-diamond/hollow-triangle/dashed-arrow);
+ * VirtualizedDiagram diagramEdgeNotation dispatches per diagram kind so BDD
+ * and IBD edge symbols can never leak across diagram kinds.
+ */
+export const IBD_CONNECTOR_NOTATIONS: Record<IbdConnectorKind, IbdConnectorNotation> = {
+  assembly: 'assembly-solid',
+  delegation: 'delegation-solid',
+  binding: 'binding-dashed',
+};
+
+export function connectorNotationFor(kind: ConnectorUsage['kind']): IbdConnectorNotation {
+  return IBD_CONNECTOR_NOTATIONS[kind];
+}
+
+export interface CreateIbdConnectorInput {
+  id: string;
+  kind: ConnectorUsage['kind'];
+  ownerId: string;
+  sourcePortId: string;
+  targetPortId: string;
+  itemFlowId?: string;
+  sourceParameterId?: string;
+  targetParameterId?: string;
+  itemProperty?: string;
+  itemUnit?: string;
+}
+
+export interface CreateIbdConnectorResult {
+  connector?: ConnectorUsage;
+  diagnostics: SysmlDiagnostic[];
+}
 
 export interface ResolvedPortUsage {
   usage: PortUsage;
@@ -42,6 +82,42 @@ export function resolvePortUsage(repo: SysmlRepository, portUsageId: string): Re
 export function validateConnector(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {
   const connector = repo.connectors[connectorId];
   if (!connector) return [diag('CONNECTOR_NOT_FOUND', connectorId, undefined, `Connector ${connectorId} does not exist`)];
+  return validateConnectorCandidate(repo, connector);
+}
+
+/**
+ * Context-bound connector creation (OMG SysML 1.6). A connector is owned by
+ * exactly one block context: assembly/binding endpoints must both be roles
+ * in the owning context, delegation requires one boundary port plus one
+ * internal role port. Cross-context edges without delegation are rejected
+ * with INVALID_CONNECTOR_CONTEXT / INVALID_DELEGATION_ENDPOINTS and no
+ * connector is returned.
+ */
+export function createIbdConnector(repo: SysmlRepository, input: CreateIbdConnectorInput): CreateIbdConnectorResult {
+  const candidate: ConnectorUsage = {
+    id: input.id,
+    kind: input.kind,
+    ownerId: input.ownerId,
+    sourcePortId: input.sourcePortId,
+    targetPortId: input.targetPortId,
+    itemFlowId: input.itemFlowId,
+    sourceParameterId: input.sourceParameterId,
+    targetParameterId: input.targetParameterId,
+    itemProperty: input.itemProperty,
+    itemUnit: input.itemUnit,
+  };
+  const blocking = validateConnectorCandidate(repo, candidate).filter(diagnostic =>
+    diagnostic.code === 'MISSING_CONNECTOR_ENDPOINT'
+    || diagnostic.code === 'INVALID_CONNECTOR_CONTEXT'
+    || diagnostic.code === 'INVALID_DELEGATION_ENDPOINTS'
+    || diagnostic.code === 'DUPLICATE_CONNECTOR'
+    || diagnostic.code === 'SELF_CONNECTOR',
+  );
+  if (blocking.length > 0) return { diagnostics: blocking };
+  return { connector: candidate, diagnostics: [] };
+}
+
+function validateConnectorCandidate(repo: SysmlRepository, connector: ConnectorUsage): SysmlDiagnostic[] {
   const diagnostics: SysmlDiagnostic[] = [];
   const source = resolvePortUsage(repo, connector.sourcePortId);
   const target = resolvePortUsage(repo, connector.targetPortId);
@@ -65,8 +141,12 @@ export function validateConnector(repo: SysmlRepository, connectorId: string): S
   }
 
   if (!directionsCompatible(source.effectiveDirection, target.effectiveDirection)) {
-    diagnostics.push(diag('INCOMPATIBLE_PORT_DIRECTION', connector.id, 'targetPortId', `${source.effectiveDirection} cannot connect to ${target.effectiveDirection}`));
+    const message = `${source.effectiveDirection} cannot connect to ${target.effectiveDirection}`;
+    diagnostics.push(diag('INCOMPATIBLE_DIRECTION', connector.id, 'targetPortId', message));
+    diagnostics.push(diag('INCOMPATIBLE_PORT_DIRECTION', connector.id, 'targetPortId', message));
   }
+  diagnostics.push(...validatePortTyping(repo, connector, source, 'sourcePortId'));
+  diagnostics.push(...validatePortTyping(repo, connector, target, 'targetPortId'));
   if (source.definition.typeId !== target.definition.typeId) {
     diagnostics.push(diag('INCOMPATIBLE_INTERFACE', connector.id, 'targetPortId', `Port interfaces ${source.definition.typeId} and ${target.definition.typeId} differ`));
   }
@@ -75,18 +155,22 @@ export function validateConnector(repo: SysmlRepository, connectorId: string): S
     (other.sourcePortId === connector.targetPortId && other.targetPortId === connector.sourcePortId)
   ));
   if (duplicate) diagnostics.push(diag('DUPLICATE_CONNECTOR', connector.id, undefined, `Connector duplicates ${duplicate.id}`));
-  diagnostics.push(...validateItemFlow(repo, connectorId));
+  diagnostics.push(...validateItemFlowCandidate(repo, connector));
   if (connector.kind === 'binding') {
-    diagnostics.push(...validateBindingConnector(repo, connectorId));
+    diagnostics.push(...validateBindingConnectorCandidate(repo, connector));
   }
   return uniqueDiagnostics(diagnostics);
 }
 
 export function validateBindingConnector(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {
   const connector = repo.connectors[connectorId];
-  if (!connector || connector.kind !== 'binding') return [];
-  const diagnostics: SysmlDiagnostic[] = [];
+  if (!connector) return [diag('CONNECTOR_NOT_FOUND', connectorId, undefined, `Connector ${connectorId} does not exist`)];
+  return validateBindingConnectorCandidate(repo, connector);
+}
 
+function validateBindingConnectorCandidate(repo: SysmlRepository, connector: ConnectorUsage): SysmlDiagnostic[] {
+  if (connector.kind !== 'binding') return [];
+  const diagnostics: SysmlDiagnostic[] = [];
   if (connector.sourceParameterId && connector.targetParameterId) {
     const sourceOwner = repo.usages[connector.sourcePortId];
     const targetOwner = repo.usages[connector.targetPortId];
@@ -159,18 +243,61 @@ export function deriveIbdBreadcrumb(repo: SysmlRepository, contextId: string): I
 
 export function validateItemFlow(repo: SysmlRepository, connectorId: string): SysmlDiagnostic[] {
   const connector = repo.connectors[connectorId];
+  if (!connector) return [diag('CONNECTOR_NOT_FOUND', connectorId, undefined, `Connector ${connectorId} does not exist`)];
+  return validateItemFlowCandidate(repo, connector);
+}
+
+function validateItemFlowCandidate(repo: SysmlRepository, connector: ConnectorUsage): SysmlDiagnostic[] {
   if (!connector?.itemFlowId) return [];
+  const diagnostics: SysmlDiagnostic[] = [];
   const conveyed = repo.definitions[connector.itemFlowId];
   if (!conveyed || (conveyed.kind !== 'valueType' && conveyed.kind !== 'interface')) {
-    return [diag('MISSING_ITEM_FLOW_TYPE', connector.id, 'itemFlowId', `Conveyed type ${connector.itemFlowId} does not exist`)];
+    diagnostics.push(diag('MISSING_ITEM_FLOW_TYPE', connector.id, 'itemFlowId', `Conveyed type ${connector.itemFlowId} does not exist`));
+    return diagnostics;
   }
   const source = resolvePortUsage(repo, connector.sourcePortId);
   const target = resolvePortUsage(repo, connector.targetPortId);
-  if (!source || !target) return [];
+  if (!source || !target) return diagnostics;
   if (!directionsCompatible(source.effectiveDirection, target.effectiveDirection)) {
-    return [diag('INVALID_ITEM_FLOW_DIRECTION', connector.id, 'itemFlowId', 'Item flow contradicts effective port direction')];
+    diagnostics.push(diag('INVALID_ITEM_FLOW_DIRECTION', connector.id, 'itemFlowId', 'Item flow contradicts effective port direction'));
+    return diagnostics;
   }
-  return [];
+  // Item-flow compatibility: a conveyed interface must match at least one
+  // endpoint interface; valueType signals may flow over any interface.
+  if (conveyed.kind === 'interface'
+    && source.definition.typeId !== conveyed.id
+    && target.definition.typeId !== conveyed.id) {
+    diagnostics.push(diag('INCOMPATIBLE_INTERFACE', connector.id, 'itemFlowId', `Conveyed interface ${conveyed.id} matches neither endpoint interface ${source.definition.typeId} nor ${target.definition.typeId}`));
+  }
+  return diagnostics;
+}
+
+/**
+ * Port typing for connector endpoints (OMG SysML 1.6): proxy ports must be
+ * typed by an interface definition, full ports by a block, interface, or
+ * valueType. References to missing definitions are surfaced explicitly as
+ * UNRESOLVED_IMPORT so unresolved imports never validate silently.
+ */
+function validatePortTyping(
+  repo: SysmlRepository,
+  connector: ConnectorUsage,
+  resolved: ResolvedPortUsage,
+  propertyPath: 'sourcePortId' | 'targetPortId',
+): SysmlDiagnostic[] {
+  const diagnostics: SysmlDiagnostic[] = [];
+  const type = repo.definitions[resolved.definition.typeId];
+  if (!type) {
+    diagnostics.push(diag('UNRESOLVED_IMPORT', connector.id, propertyPath, `Port type ${resolved.definition.typeId} cannot be resolved`));
+    return diagnostics;
+  }
+  // Widened so future definition kinds stay diagnosable instead of narrowing to never.
+  const typeKind: string = type.kind;
+  if (resolved.definition.kind === 'proxy' && typeKind !== 'interface') {
+    diagnostics.push(diag('MISSING_PORT_TYPE', connector.id, propertyPath, `Proxy port ${resolved.usage.id} must be typed by an InterfaceDefinition, found ${typeKind} ${type.id}`));
+  } else if (resolved.definition.kind === 'full' && typeKind !== 'block' && typeKind !== 'interface' && typeKind !== 'valueType') {
+    diagnostics.push(diag('MISSING_PORT_TYPE', connector.id, propertyPath, `Full port ${resolved.usage.id} must resolve to a block, interface, or valueType, found ${typeKind} ${type.id}`));
+  }
+  return diagnostics;
 }
 
 export function deriveIbdView(repo: SysmlRepository, ownerId: string): IbdView {
@@ -196,6 +323,20 @@ export function deriveIbdView(repo: SysmlRepository, ownerId: string): IbdView {
   const connectors = Object.values(repo.connectors).filter(connector => connector.ownerId === ownerId).sort(byId);
   const diagnostics = connectors.flatMap(connector => validateConnector(repo, connector.id));
   return { ownerId, parts, ports, connectors, diagnostics };
+}
+
+/**
+ * IBD defers BDD-vs-IBD relationship legality to the central typed policy
+ * (src/engine/sysml/policy.ts). Binding/itemFlow relationships must classify
+ * to the `ibd` diagram; BDD kinds must not leak into IBD views.
+ */
+export function classifyIbdRelationship(repo: SysmlRepository, relationshipId: string): { diagram: string; allowed: boolean; diagnostics: string[] } {
+  return classifyRelationshipPolicy(repo, relationshipId);
+}
+
+export function isIbdDiagramRelationship(repo: SysmlRepository, relationshipId: string): boolean {
+  const decision = classifyRelationshipPolicy(repo, relationshipId);
+  return decision.diagram === 'ibd' && decision.allowed;
 }
 
 function findPortDefinition(repo: SysmlRepository, blockId: string, portId: string, visited = new Set<string>()): PortDefinition | undefined {

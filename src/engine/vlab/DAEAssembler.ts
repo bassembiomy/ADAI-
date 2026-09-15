@@ -470,11 +470,17 @@ export class DAEAssembler {
           break;
 
         case 'thermal_mass':
-        case 'heat_src':
         case 'temp_src':
+          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          break;
+        case 'heat_src':
         case 'ctrl_heat_src':
         case 'ctrl_temp_src':
-          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          if (ports.includes('b')) {
+            branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          } else {
+            branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          }
           break;
         case 'magnetron':
         case 'upper_heater':

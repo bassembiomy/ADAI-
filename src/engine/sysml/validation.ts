@@ -1,5 +1,11 @@
 import { qualifiedName, type BlockDefinition, type SysmlRepository } from './model';
 import { validateRequirementContainment } from './requirements';
+import { classifyRelationship, parsePolicyDiagnostic } from './policy';
+import {
+  validateUseCaseElement,
+  validateUseCaseRelationship,
+  isUseCaseRelationshipKind,
+} from './useCases';
 
 export { validateRequirementContainment };
 
@@ -28,6 +34,8 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
   const collections = [
     repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
     repo.verificationCases, repo.evidence, repo.baselines, repo.artifacts,
+    repo.actors ?? {}, repo.subjects ?? {}, repo.useCases ?? {},
+    repo.extensionPoints ?? {}, repo.diagramReferences ?? {},
   ] as const;
   const nestedFeatures = Object.values(repo.definitions).flatMap(definition => definition.kind === 'block' ? [...definition.properties, ...definition.ports] : []);
   const all = [...collections.flatMap(collection => Object.values(collection)), ...nestedFeatures] as Array<{ id: string }>;
@@ -79,10 +87,24 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
   const compositeParts = Object.values(repo.usages).filter(u => u.kind === 'part' && u.aggregation === 'composite');
   detectCycles(compositeParts, p => [p.ownerId], 'COMPOSITE_CONTAINMENT_CYCLE', 'ownerId', error);
 
+  // Validate UseCase canonical elements
+  for (const act of Object.values(repo.actors ?? {})) diagnostics.push(...validateUseCaseElement(repo, act.id));
+  for (const sub of Object.values(repo.subjects ?? {})) diagnostics.push(...validateUseCaseElement(repo, sub.id));
+  for (const uc of Object.values(repo.useCases ?? {})) diagnostics.push(...validateUseCaseElement(repo, uc.id));
+  for (const ep of Object.values(repo.extensionPoints ?? {})) diagnostics.push(...validateUseCaseElement(repo, ep.id));
+
   const compositionOwners = new Map<string, string>();
   for (const relationship of Object.values(repo.relationships)) {
-    if (!ids.has(relationship.sourceId)) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'sourceId', `Source ${relationship.sourceId} does not exist`);
-    if (!ids.has(relationship.targetId)) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'targetId', `Target ${relationship.targetId} does not exist`);
+    const sourceResolved = ids.has(relationship.sourceId);
+    const targetResolved = ids.has(relationship.targetId);
+    if (!sourceResolved) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'sourceId', `Source ${relationship.sourceId} does not exist`);
+    if (!targetResolved) error('MISSING_RELATIONSHIP_ENDPOINT', relationship.id, 'targetId', `Target ${relationship.targetId} does not exist`);
+
+    if (isUseCaseRelationshipKind(relationship.kind)) {
+      diagnostics.push(...validateUseCaseRelationship(repo, relationship));
+      continue;
+    }
+
     if (relationship.kind === 'composition') {
       const previous = compositionOwners.get(relationship.targetId);
       if (previous && previous !== relationship.sourceId) {
@@ -93,6 +115,19 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
       diagnostics.push(...validateRequirementContainment(repo, relationship.id));
     } else if (!hasValidDirection(relationship.kind, relationship.sourceId, relationship.targetId, repo)) {
       error('INVALID_RELATIONSHIP_DIRECTION', relationship.id, 'kind', `${relationship.kind} has invalid SysML endpoint direction`);
+    }
+
+    // Imported models may contain relationships that are resolvable but no
+    // longer legal under the current SysML 1.6 connection policy. Keep those
+    // records intact for repair in the editor, while surfacing the same typed
+    // policy diagnostics used to block new gateway commands. Missing-endpoint
+    // links are handled by persistence quarantine instead.
+    if (sourceResolved && targetResolved) {
+      const decision = classifyRelationship(repo, relationship.id);
+      for (const entry of decision.diagnostics) {
+        const { code, message } = parsePolicyDiagnostic(entry);
+        error(code, relationship.id, 'kind', message);
+      }
     }
   }
 

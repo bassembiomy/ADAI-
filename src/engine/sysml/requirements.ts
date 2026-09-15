@@ -358,6 +358,38 @@ function diag(code: string, elementId: string, propertyPath: string | undefined,
   return { code, severity: 'error', elementId, propertyPath, message };
 }
 
+export function cloneProtectedBaselineAsWorkingCopy(
+  repo: SysmlRepository,
+  baselineId: string,
+  name: string,
+): { repository: SysmlRepository; baseline: ModelBaseline; diagnostics: SysmlDiagnostic[] } {
+  const source = repo.baselines[baselineId];
+  if (!source) {
+    return { repository: repo, baseline: source as unknown as ModelBaseline, diagnostics: [diag('BASELINE_NOT_FOUND', baselineId, undefined, `Baseline ${baselineId} does not exist`)] };
+  }
+  const next = structuredClone(repo);
+  const id = `baseline-${next.revision}-clone-${Object.keys(next.baselines).length + 1}`;
+  const baseline: ModelBaseline = {
+    id,
+    name,
+    revision: next.revision,
+    createdAt: new Date().toISOString(),
+    protected: false,
+    contentHash: source.contentHash,
+    elementHashes: source.elementHashes ? { ...source.elementHashes } : undefined,
+  };
+  next.baselines[id] = baseline;
+  next.revision += 1;
+  next.auditTrail.push({
+    id: `change-${next.revision}-clone-baseline-${id}`,
+    revision: next.revision,
+    timestamp: baseline.createdAt,
+    command: 'cloneBaselineAsWorkingCopy',
+    elementIds: [baselineId, id],
+  });
+  return { repository: next, baseline, diagnostics: [] };
+}
+
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   if (value && typeof value === 'object') {

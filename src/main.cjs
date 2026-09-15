@@ -1,19 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
+const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName } = require('./security/inputValidator.cjs');
 const { evaluateBuildRequest } = require('./security/hilBuildPolicy.cjs');
 const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const { inspectElf } = require('./security/elfInspector.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
-const { verifyToolchainHash } = require('./security/toolchainVerifier.cjs');
-
-// Allowlist of trusted hosts for toolchain download redirects
-const ALLOWED_DOWNLOAD_HOSTS = [
-  'github.com', 'objects.githubusercontent.com', 'releases.githubusercontent.com',
-  'release-assets.githubusercontent.com', 'raw.githubusercontent.com',
-  'codeload.github.com', 'developer.arm.com'
-];
 
 // High-performance GPU & high-refresh rate rendering switches
 app.commandLine.appendSwitch('disable-frame-rate-limit');
@@ -29,9 +21,8 @@ const {
   FLASH_TOOLS,
   configureToolchainPaths,
   isToolchainLocallyInstalled,
-  downloadAndExtractToolchain,
-  ensureToolchain,
   resolveToolExecutable,
+  resolveInstalledToolchain,
 } = require('./security/toolchainManager.cjs');
 
 function getToolchainsDir() {
@@ -80,19 +71,19 @@ function isToolchainAvailable(target) {
   return false;
 }
 
-async function verifyAndPreInstallToolchains() {
+function verifyOfflineToolchains() {
   configureToolchainPaths(getToolchainsDir());
-  
+
   for (const key of Object.keys(TOOLCHAINS)) {
     const tc = TOOLCHAINS[key];
     const inPath = isCommandInPath(tc.cmd);
     const inLocal = isToolchainLocallyInstalled(key, getToolchainsDir());
-    
     if (!inPath && !inLocal) {
-      console.log('[STARTUP] Background installing missing toolchain for \'%s\'...', key);
-      downloadAndExtractToolchain(key, getToolchainsDir()).catch((err) => {
-        console.error('[STARTUP] Background toolchain install for \'%s\' failed: %s', key, err ? err.message : 'Unknown error');
-      });
+      console.error(
+        '[STARTUP] OFFLINE_TOOLCHAIN_MISSING: %s (%s). Run "npm run provision:hil" before starting ADIA.',
+        key,
+        tc.checkFile || tc.cmd,
+      );
     }
   }
 }
@@ -173,26 +164,21 @@ function createWindow() {
     icon: appIconPath,
   });
 
-  // In production, we load the bundled index.html from the dist folder
-  // In development, we could load from localhost:3000 if vite is running
+  // Load a dev server only when explicitly requested. The default `npm start`
+  // path has just rebuilt dist and must load that exact bundle.
+  const devServerUrl = process.env.ADIA_DEV_SERVER_URL;
   if (app.isPackaged) {
     win.webContents.on('devtools-opened', () => {
       win.webContents.closeDevTools();
     });
-    win.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
-      console.error('Failed to load file:', err);
+  }
+  if (!app.isPackaged && devServerUrl) {
+    win.loadURL(devServerUrl).catch(err => {
+      console.error(`[ADIA] Failed to load explicit development server ${devServerUrl}:`, err);
     });
   } else {
-    win.loadURL('http://localhost:3000').catch(err => {
-      console.warn('[ADIA] Vite dev server not detected on http://localhost:3000. Attempting fallback to dist/index.html...');
-      const distIndexPath = path.join(__dirname, '../dist/index.html');
-      if (fs.existsSync(distIndexPath)) {
-        win.loadFile(distIndexPath).catch(fileErr => {
-          console.error('[ADIA] Failed to load fallback dist/index.html:', fileErr);
-        });
-      } else {
-        console.error('[ADIA] Failed to load http://localhost:3000 and no build found in dist/index.html. Run "npm run dev" or "npm run build" first.', err);
-      }
+    win.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
+      console.error('[ADIA] Failed to load current dist/index.html:', err);
     });
   }
 
@@ -322,11 +308,7 @@ if (hasSingleInstanceLock) {
     }
 
     createWindow();
-    setTimeout(() => {
-      verifyAndPreInstallToolchains().catch(err => {
-        console.error('Failed to preinstall toolchains:', err);
-      });
-    }, 5000);
+    verifyOfflineToolchains();
   }).catch(err => {
     console.error('App startup failed:', err);
   });
@@ -859,18 +841,11 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
     // Check if compiler toolchain is available
     const tcKey = getToolchainKeyForTarget(target);
     if (tcKey && !isToolchainAvailable(target)) {
+      const resolution = resolveInstalledToolchain(tcKey, { toolchainsDir: getToolchainsDir() });
       event.sender.send('hil-compiler-log-line', `[SYSTEM] Required compiler toolchain for target '${target}' is missing.\n`);
-      event.sender.send('hil-compiler-log-line', `[SYSTEM] Initiating automatic toolchain installation in background...\n`);
-      
-      downloadAndExtractToolchain(tcKey, getToolchainsDir())
-        .then(() => {
-          broadcastLog(`[SYSTEM] Compiler toolchain for '${target}' ready. Resuming compilation.`);
-          runCompilation();
-        })
-        .catch((err) => {
-          event.sender.send('hil-compiler-log-line', `[ERROR] Automatic toolchain installation failed: ${err.message}\n`);
-          resolve({ success: false, error: `Missing toolchain and auto-installation failed: ${err.message}` });
-        });
+      const error = `OFFLINE_TOOLCHAIN_MISSING: ${tcKey} for target '${target}'. Run 'npm run provision:hil' before starting ADIA. Searched: ${(resolution?.searchedPaths || []).join(', ')}`;
+      event.sender.send('hil-compiler-log-line', `[ERROR] ${error}\n`);
+      resolve({ success: false, error });
     } else {
       configureToolchainPaths(getToolchainsDir());
       runCompilation();

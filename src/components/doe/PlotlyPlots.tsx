@@ -1,5 +1,5 @@
 import React from 'react';
-import Plot from 'react-plotly.js';
+import Plot from './PlotlyRenderer';
 import { tDistCritical } from '../../engine/doe/statistics';
 import type { DOEModelResult } from '../../engine/doe/types';
 import { evaluateDOEModelDetailed } from '../../engine/doe/modelEvaluator';

@@ -151,6 +151,34 @@ describe('versioned SysML persistence and baselines', () => {
     expect(loaded.diagnostics.some(d => d.code === 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED')).toBe(true);
   });
 
+  it('preserves resolvable policy-invalid relationships while reporting their diagnostic', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = block('system');
+    repo.definitions.temperature = { id: 'temperature', name: 'Temperature', namespace: [], kind: 'valueType' } as any;
+    repo.relationships.invalid = {
+      id: 'invalid', kind: 'sharedAggregation', sourceId: 'system', targetId: 'temperature',
+    };
+
+    const loaded = loadRepository(serializeRepository(repo));
+
+    expect(loaded.repository.relationships.invalid).toEqual(repo.relationships.invalid);
+    expect(loaded.interchangeReport.quarantinedRelationshipIds).not.toContain('invalid');
+    expect(loaded.diagnostics.map(d => d.code)).toContain('INVALID_AGGREGATION_ENDPOINTS');
+  });
+
+  it('quarantines only relationships with unresolved endpoints', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = block('system');
+    repo.relationships.missing = {
+      id: 'missing', kind: 'association', sourceId: 'system', targetId: 'not-present',
+    };
+
+    const loaded = loadRepository(serializeRepository(repo));
+
+    expect(loaded.repository.relationships.missing).toBeUndefined();
+    expect(loaded.interchangeReport.quarantinedRelationshipIds).toContain('missing');
+  });
+
   describe('chunked and incremental persistence', () => {
     it('serializes to chunks with manifest and rehydrates round-trip cleanly', () => {
       const repo = createEmptyRepository();

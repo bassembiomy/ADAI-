@@ -98,10 +98,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
   },
   steam_nozzle: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*(P - P_atm))'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho (P - P_{atm})}'],
+    equations: ['mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho \\max(P_p-P_n,0)}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models steam discharging to atmosphere through a throttled nozzle outlet.'
+    description: 'Models steam flow from upstream pressure Pp to downstream pressure Pn through a throttled two-port nozzle.'
   },
   pressure_sensor: {
     equations: ['S = P'],
@@ -182,10 +182,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges the Electrical and Translational domains. Models voice coils or solenoids where force is proportional to current.'
   },
   thermal_resistor: {
-    equations: ['Q = (Th - Tc) / Rth'],
-    latex: ['Q = \\frac{\Delta T}{R_{th}}'],
-    across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Bridges Electrical and Thermal domains by modeling heat generation from power dissipation ($P = I^2 R$).'
+    equations: ['V = I * R', 'Q = I^2 * R'],
+    latex: ['V = I \\cdot R', 'Q = I^2 R'],
+    across: 'Voltage (V), Temperature (K)', through: 'Current (A), Heat Flow (W)',
+    description: 'Bridges Electrical and Thermal domains by modeling heat generation from electrical resistance ($P = I^2 R$).'
   },
   v_sensor: {
     equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
@@ -599,7 +599,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['dm/dt = f(V, P, T)', 'dQ/dt = f(T, P)'],
     latex: ['\dot{m}, \dot{Q} = f(V, P, T)'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a fixed-volume moist air chamber. Tracks mass, energy, and vapor content over time.'
+    description: 'Models a fixed-volume moist air chamber. Tracks temperature in Kelvin with configurable ambient_temp (°C), heat_capacity (J/K), wall/food thermal mass, k_loss (W/K), and max_temp (°C).'
   },
   ma_pipe: {
     equations: ['Delta P = f(L, m)', 'Delta T = f(h, Q)'],
@@ -1271,10 +1271,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A heat flow source driven by an external physical signal (PS).'
   },
   ctrl_temp_src: {
-    equations: ['T = S_input'],
-    latex: ['T = f(S_{ctrl})'],
+    equations: ['Ta - Tb = S_input'],
+    latex: ['T_a - T_b = S_{ctrl}'],
     across: 'T', through: 'Q',
-    description: 'A temperature source driven by an external physical signal (PS).'
+    description: 'A temperature source maintaining difference Ta - Tb driven by an external physical signal (PS).'
   },
   solver_config: {
     equations: ['f(x) = 0'],

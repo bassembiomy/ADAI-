@@ -52,17 +52,17 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
   const sramSizeKb = sramRegion ? Math.round(sramRegion.size / 1024) : 0;
 
   return (
-    <div className="bg-[#121212] border border-[#262626] rounded-xl p-4 text-[#e0e0e0] flex flex-col gap-4 shadow-lg">
+    <div className="hil-panel ui-card rounded-xl p-4 flex flex-col gap-4 shadow-lg">
       {/* Header & Dropdown */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[#222]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[var(--border-subtle)]">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-[#f97316]/10 border border-[#f97316]/30 rounded-lg text-[#f97316]">
+          <div className="p-2 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-500">
             <Cpu size={20} />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               Target Pack Registry
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
+              <span className="hil-status inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
                 <Info size={10} /> Pack v{currentManifest.packVersion} · Static analysis only
               </span>
             </h3>
@@ -76,7 +76,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
           <select
             value={currentManifest.targetId}
             onChange={(e) => handleTargetChange(e.target.value)}
-            className="bg-[#1a1a1a] border border-[#333] text-xs font-mono text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#f97316] transition-colors cursor-pointer"
+            className="ui-control ui-focus-ring bg-[#1a1a1a] border border-[#333] text-xs font-mono text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#f97316] transition-colors cursor-pointer"
           >
             {targetIds.map((id) => {
               const pack = registry.getTarget(id);
@@ -94,49 +94,49 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
       {/* Grid: Device Specs & Driver Modes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
         {/* Core & Clock */}
-        <div className="bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-[#888] font-medium">
-            <span className="flex items-center gap-1.5 text-white">
+        <div className="hil-target-card ui-card border border-[var(--border-default)] rounded-lg p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[var(--text-secondary)] font-medium">
+            <span className="flex items-center gap-1.5 text-[var(--text-primary)]">
               <Zap size={14} className="text-amber-400" /> Core & Clock
             </span>
-            <span className="font-mono text-[10px] bg-[#222] px-1.5 py-0.5 rounded text-[#aaa]">
+            <span className="font-mono text-[10px] bg-[var(--surface-sunken)] px-1.5 py-0.5 rounded text-[var(--text-secondary)]">
               {currentManifest.device.architecture}
             </span>
           </div>
-          <div className="text-sm font-bold text-white font-mono">{currentManifest.displayName}</div>
-          <div className="flex items-center justify-between text-[11px] text-[#aaa]">
-            <span>Architecture: <strong className="text-white">{currentManifest.device.core}</strong></span>
-            <span>Clock: <strong className="text-amber-400 font-mono">{(currentManifest.device.maxCpuClockHz / 1e6).toFixed(0)} MHz</strong></span>
+          <div className="text-sm font-bold text-[var(--text-primary)] font-mono">{currentManifest.displayName}</div>
+          <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
+            <span>Architecture: <strong className="text-[var(--text-primary)]">{currentManifest.device.core}</strong></span>
+            <span>Clock: <strong className="text-amber-500 font-mono">{(currentManifest.device.maxCpuClockHz / 1e6).toFixed(0)} MHz</strong></span>
           </div>
         </div>
 
         {/* Memory Profile */}
-        <div className="bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-[#888] font-medium">
-            <span className="flex items-center gap-1.5 text-white">
+        <div className="hil-target-card ui-card border border-[var(--border-default)] rounded-lg p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[var(--text-secondary)] font-medium">
+            <span className="flex items-center gap-1.5 text-[var(--text-primary)]">
               <HardDrive size={14} className="text-cyan-400" /> Memory Profile
             </span>
-            <span className="font-mono text-[10px] text-[#888]">
+            <span className="font-mono text-[10px] text-[var(--text-muted)]">
               Hash: {currentManifest.contentHash.slice(0, 8)}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <div>
-              <div className="text-[#888] text-[10px]">FLASH Memory</div>
-              <div className="font-mono font-semibold text-cyan-400">{flashSizeKb} KB</div>
+              <div className="text-[var(--text-muted)] text-[10px]">FLASH Memory</div>
+              <div className="font-mono font-semibold text-cyan-500">{flashSizeKb} KB</div>
             </div>
             <div>
-              <div className="text-[#888] text-[10px]">SRAM Capacity</div>
-              <div className="font-mono font-semibold text-purple-400">{sramSizeKb} KB</div>
+              <div className="text-[var(--text-muted)] text-[10px]">SRAM Capacity</div>
+              <div className="font-mono font-semibold text-purple-500">{sramSizeKb} KB</div>
             </div>
           </div>
         </div>
 
         {/* Driver Mode Selector */}
-        <div className="bg-[#181818] border border-[#262626] rounded-lg p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-[#888] font-medium">
-            <span className="flex items-center gap-1.5 text-white">
-              <Layers size={14} className="text-[#f97316]" /> Driver Execution Mode
+        <div className="hil-target-card ui-card border border-[var(--border-default)] rounded-lg p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[var(--text-secondary)] font-medium">
+            <span className="flex items-center gap-1.5 text-[var(--text-primary)]">
+              <Layers size={14} className="text-orange-500" /> Driver Execution Mode
             </span>
           </div>
           <div className="flex gap-1.5 mt-1">
@@ -144,7 +144,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
               <button
                 key={mode}
                 onClick={() => handleDriverModeChange(mode)}
-                className={`flex-1 py-1 px-2 text-[11px] font-mono font-semibold rounded border transition-colors ${
+                className={`ui-control ui-focus-ring flex-1 py-1 px-2 text-[11px] font-mono font-semibold rounded border transition-colors ${
                   activeDriverMode === mode
                     ? 'bg-[#f97316]/20 border-[#f97316] text-[#f97316]'
                     : 'bg-[#222] border-[#333] text-[#aaa] hover:text-white'

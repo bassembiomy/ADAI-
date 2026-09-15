@@ -150,7 +150,75 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
           }
         }
         else if (domain === 'thermal') {
-          if (['a', 'h'].includes(portId)) {
+          if (block.id === 'thermal_ref') {
+            const srcId = 'src_thermal_ref_driver';
+            const condId = 'cond_thermal_ref_driver';
+            if (!nodes.some(n => n.id === srcId)) {
+              nodes.push({
+                id: srcId,
+                type: 'default',
+                position: { x: 50, y: 100 },
+                data: { type: 'temp_src', params: { T: 350 } }
+              } as any);
+              nodes.push({
+                id: condId,
+                type: 'default',
+                position: { x: 150, y: 100 },
+                data: { type: 'conductive_heat', params: { k: 2 } }
+              } as any);
+              edges.push({ id: 'e_ref_src_cond', source: srcId, target: condId, sourceHandle: 'a_s', targetHandle: 'a_t' });
+              edges.push({ id: 'e_ref_cond_dut', source: condId, target: 'dut', sourceHandle: 'b_s', targetHandle: 'a_t' });
+            }
+          } else if (block.id === 'temp_src') {
+            const condId = 'cond_temp_src_load';
+            if (!nodes.some(n => n.id === condId)) {
+              nodes.push({
+                id: condId,
+                type: 'default',
+                position: { x: 150, y: 100 },
+                data: { type: 'conductive_heat', params: { k: 2 } }
+              } as any);
+              if (!nodes.some(n => n.id === 'ref_thermal')) {
+                nodes.push({
+                  id: 'ref_thermal',
+                  type: 'default',
+                  position: { x: 50, y: 700 },
+                  data: { type: 'thermal_ref' }
+                } as any);
+              }
+              edges.push({ id: 'e_ts_dut_cond', source: 'dut', target: condId, sourceHandle: 'a_s', targetHandle: 'a_t' });
+              edges.push({ id: 'e_ts_cond_ref', source: condId, target: 'ref_thermal', sourceHandle: 'b_s', targetHandle: 'a_t' });
+            }
+          } else if (block.id === 'heat_flow_sensor' || block.id === 'ctrl_temp_src') {
+            if (portId === 'a') {
+              const srcId = `src_thermal_${portId}`;
+              nodes.push({
+                id: srcId,
+                type: 'default',
+                position: { x: 50, y: 100 * idx },
+                data: { type: 'temp_src', params: { T: 350 } }
+              } as any);
+              edges.push({ id: `e_thermal_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'a_s', targetHandle: 'a_t' });
+            } else if (portId === 'b') {
+              const condId = `cond_link_${portId}`;
+              nodes.push({
+                id: condId,
+                type: 'default',
+                position: { x: 150, y: 100 * idx },
+                data: { type: 'conductive_heat', params: { k: 2 } }
+              } as any);
+              if (!nodes.some(n => n.id === 'ref_thermal')) {
+                nodes.push({
+                  id: 'ref_thermal',
+                  type: 'default',
+                  position: { x: 50, y: 700 },
+                  data: { type: 'thermal_ref' }
+                } as any);
+              }
+              edges.push({ id: `e_sensor_to_cond`, source: 'dut', target: condId, sourceHandle: 'b_s', targetHandle: 'a_t' });
+              edges.push({ id: `e_cond_to_ref`, source: condId, target: 'ref_thermal', sourceHandle: 'b_s', targetHandle: 'a_t' });
+            }
+          } else if (['a', 'h'].includes(portId)) {
             const srcId = `src_thermal_${portId}`;
             nodes.push({
               id: srcId,
@@ -172,7 +240,7 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
           }
         }
         else if (domain === 'physical') {
-          const isInput = ['u', 'u1', 'u2', 'e', 'ref', 'ctrl', 'in', 'in1', 'in2', 'in3', 'vgs', 'vds', 'vge', 'vce', 'wr_ref', 'target_rpm', 'x1', 'x2', 'target', 'lr', 'error', 'reward', 'reset', 'w_ref', 'tl'].includes(portId.toLowerCase());
+          const isInput = ['u', 'u1', 'u2', 'e', 'ref', 'ctrl', 'in', 'in1', 'in2', 'in3', 'vgs', 'vds', 'vge', 'vce', 'wr_ref', 'target_rpm', 'x1', 'x2', 'target', 'lr', 'error', 'reward', 'reset', 'w_ref', 'tl', 's'].includes(portId.toLowerCase());
           
           if (isInput) {
             const srcId = `src_ps_${portId}`;

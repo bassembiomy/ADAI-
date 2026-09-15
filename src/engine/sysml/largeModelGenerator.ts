@@ -331,6 +331,11 @@ export function generateSysmlModel(options: GeneratorOptions): LargeModelResult 
     baselines: {},
     artifacts: {},
     auditTrail: [],
+    actors: {},
+    subjects: {},
+    useCases: {},
+    extensionPoints: {},
+    diagramReferences: {},
   };
 
   return {

@@ -1,67 +1,38 @@
-# Task: Large-Model Remaining Gaps Implementation Plan
+# Task Checklist: SysML Use-Case Module Conformance Implementation
 
-- [x] Task 1: Create and Verify the Real Worker Factory
-  - [x] Step 1: Create `src/services/sysmlWorkerFactory.ts` with `createSysmlWorker()` using `new Worker(new URL('../engine/sysml/sysmlWorker.ts', import.meta.url), { type: 'module' })` and Electron-safe constructor seam
-  - [x] Step 2: Update `src/engine/sysml/workerProtocol.ts` to add protocol `version: '1.0.0'` and validate `requestId`, `revision`, and `taskType`
-  - [x] Step 3: Update `src/services/sysmlWorkerClient.ts` to use default factory when `Worker` is available, allow `workerFactory: null` for tests, and expose `workerAvailable`, `lastWorkerError`, `fallbackReason` in diagnostics
-  - [x] Step 4: Add unit tests in `src/services/sysmlWorkerFactory.test.ts` for factory injection, no-worker fallback, error handling, termination, and stale revision rejection
-  - [x] Step 5: Verify tests with `npm run test:sysml` and verify build bundle with `npm run build`
-- [x] Task 2: Make Worker Payloads Transferable and Safe
-  - [x] Step 1: Define `WorkerStoreSnapshot` using plain objects/arrays in `src/engine/sysml/workerProtocol.ts`
-  - [x] Step 2: Implement `toWorkerSnapshot(store)` and `fromWorkerSnapshot(snapshot)` with schema and revision validation in `src/engine/sysml/normalizedStore.ts`
-  - [x] Step 3: Ensure projection requests transfer only target diagram ID and required element IDs
-  - [x] Step 4: Add cancellation checks inside large loops in `src/engine/sysml/sysmlWorker.ts`
-  - [x] Step 5: Add tests comparing worker and main-thread outputs for validation, projection, impact, and serialization
-- [x] Task 3: Remove Full-Snapshot History from Large-Model Mutations
-  - [x] Step 1: Define `HistoryBudgetOptions` with `maxEntries`, `maxBytes`, `checkpointEvery`, and `maxReplayOperations` in `src/engine/sysml/patches.ts`
-  - [x] Step 2: Make committed mutations produce one forward/inverse patch and eliminate full-repository cloning (`structuredClone`) in `sysmlCommandGateway.ts`
-  - [x] Step 3: Use `applyPatch` against normalized store for undo/redo, materializing repository only when compatibility callers explicitly ask
-  - [x] Step 4: Add periodic checkpoints only after `checkpointEvery` operations or when replay cost exceeds threshold
-  - [x] Step 5: Test memory bound, multi-step undo/redo, cascade-delete restoration, and patch replay from checkpoint
-- [x] Task 4: Make the Normalized Store the Single Source of Truth
-  - [x] Step 1: Initialize gateway state containing normalized store and presentation maps as single semantic truth
-  - [x] Step 2: Remove 150ms `mergeLegacyDiagramIntoRepository` synchronization effect in `App.tsx`
-  - [x] Step 3: Remove full `blocks`, `relationships`, `parts`, and `connectors` copies from App state; retain active visible selector results and transient drag state
-  - [x] Step 4: Expose memoized selectors (`selectVisibleBlocks`, `selectVisibleParts`, `selectRelationshipsForVisibleNodes`, `selectConnectorsForVisibleParts`)
-  - [x] Step 5: Cache `projectLegacyDiagram` with key `{storeRevision, diagramId}` for export/compatibility panels
-- [x] Task 5: Add Indexed Edge Culling
-  - [x] Step 1: Maintain endpoint indexes in `NormalizedSysmlStore`: `relationshipsByEndpoint`, `connectorsByPart`, and diagram membership
-  - [x] Step 2: Update `cullElements` in `VirtualizedDiagram.tsx` to retrieve edges via endpoint indexes rather than scanning all relationships and connectors
-  - [x] Step 3: Return stable arrays when viewport, revision, and visible IDs have not changed
-  - [x] Step 4: Ensure edges connected to the active IBD context block remain visible
-  - [x] Step 5: Add 100k-edge tests validating sub-millisecond culling time and zero missing/extra visible edges
-- [x] Task 6: Integrate Selectors into BDD/IBD Rendering
-  - [x] Step 1: Replace `blocks.find()` in per-node render loops with `getById`/selector maps
-  - [x] Step 2: Memoize node, port, relationship, connector, and label components using entity revision plus presentation revision
-  - [x] Step 3: Render only current diagram/layer IDs and viewport-visible subset
-  - [x] Step 4: Defer labels, route recomputation, and shadows during pan/drag via idle/rAF scheduling
-  - [x] Step 5: Verify selection, hit testing, context block behavior, and Playwright DOM node counts
-- [x] Task 7: Connect Worker Scheduling to Real Application Operations
-  - [x] Step 1: Schedule large validation after edits with cancellation and revision checks
-  - [x] Step 2: Schedule projection only for active diagram (never whole-repo for local update)
-  - [x] Step 3: Schedule deletion-impact analysis before confirmation for large repositories
-  - [x] Step 4: Show visible "main-thread fallback" warning in `LargeModelDiagnostics` if worker unavailable
-  - [x] Step 5: Expose worker queue count, last task duration, fallback reason, and stale-result count
-- [x] Task 8: Add Real Large-Model Performance and Memory Gates
-  - [x] Step 1: Create realistic fixtures (1k, 10k, 50k, 100k) with high relationship/connector density in `src/engine/sysml/largeModelStress.test.ts`
-  - [x] Step 2: Measure real operations: open, first paint, edit, drag, pan, zoom, validation, deletion preview, undo/redo, save, reopen
-  - [x] Step 3: Enforce gates: no main-thread task > 100ms in performance mode, drag p95 < 50ms, worker cancellation < 100ms
-  - [x] Step 4: Create real UI performance test in `tests/e2e/sysml-large-model-interaction.spec.ts`
-- [x] Task 9: Verify Persistence and Recovery Under Load
-  - [x] Step 1: Test incremental save after one patch without serializing unrelated chunks
-  - [x] Step 2: Test interrupted chunk writes, temporary file cleanup, checksum failure, and recovery from last valid manifest
-  - [x] Step 3: Test lazy loading of inactive diagrams and materialization of active diagram only
-  - [x] Step 4: Test full legacy JSON export/import remains byte-valid semantically
-  - [x] Step 5: Verify save cancellation never leaves store in half-committed revision
-- [x] Task 10: Final Regression and Release Gate
-  - [x] Step 1: Run `npm run test:sysml` (35 test files, 261 tests passed)
-  - [x] Step 2: Run `npm run test:e2e:sysml` (Playwright large-model performance and interaction suites verified)
-  - [x] Step 3: Run `npx tsc --noEmit` and `npm run build` (tsc 0 errors, Vite build successful with 4,073 modules transformed and dedicated worker chunk)
-  - [x] Step 4: Verify 100k stress and Electron performance suites (benchmarks and stress tests pass with sub-millisecond culling and < 50ms latency)
-  - [x] Step 5: Document measured results and machine profile in `docs/performance-baseline.md`
-- [x] Task 11: VLab Block Port Domains and Parameter Definitions
-  - [x] Step 1: Fix Variable Resistor (`variable_resistor`) port domain definitions (p/n: Electrical, r: Physical)
-  - [x] Step 2: Fix Switch (`switch`) parameters (`Roff`, `threshold`) and port domains (p/n: Electrical, v: Physical) with updated equation
-  - [x] Step 3: Fix Translational EM Converter (`translational_electromechanical_converter`) port domains (p/n: Electrical, r/c: Translational)
-  - [x] Step 4: Add umbrella domain compatibility in `VLabWorkspace.tsx` (`Mechanical` <-> `Translational`/`Rotational`)
-  - [x] Step 5: Verify unit tests and full VLab certification suite (`vlab_block_fixes.test.ts`, `vlab_full_certification.test.ts`, `tsc --noEmit`)
+- [x] Task 1: Define the canonical use-case metamodel and migration boundary
+  - [x] Step 1.1: Write failing tests in `src/engine/sysml/useCases.test.ts` for actor, subject, use-case, extension-point, diagram-reference validation and relationship legality
+  - [x] Step 1.2: Implement `src/engine/sysml/useCases.ts` with metamodel types, validation functions (`validateUseCaseElement`, `validateUseCaseRelationship`), projection helper (`deriveUseCaseView`), and relationship classifier
+  - [x] Step 1.3: Update `src/engine/sysml/model.ts` to extend `SysmlRepository` with use-case collections/entities without breaking BDD/IBD semantics
+  - [x] Step 1.4: Update `src/engine/sysml/workerProtocol.ts`, `src/engine/sysml/profile.ts`, and `src/engine/sysml/conformanceManifest.ts` (mark use-case capabilities as partial)
+  - [x] Step 1.5: Run `src/engine/sysml/useCases.test.ts` and `npm run test:sysml` to verify all pass
+- [x] Task 2: Add normalized-store, persistence, migration, and identity support
+  - [x] Step 2.1: Write failing tests in `src/engine/sysml/useCaseMigration.test.ts`, `src/engine/sysml/normalizedStore.test.ts`, and `src/engine/sysml/persistence.test.ts`
+  - [x] Step 2.2: Update `src/engine/sysml/normalizedStore.ts` with store maps/indexes for use cases, actors, subjects, extension points, diagram references, and relationships
+  - [x] Step 2.3: Update `src/engine/sysml/persistence.ts` to serialize/deserialize use-case entities deterministically and migrate legacy `useCaseDiagrams` arrays
+  - [x] Step 2.4: Verify tests pass for round-trip persistence, legacy migration, and deterministic checksums
+- [x] Task 3: Integrate command gateway, validation, deletion, undo/redo, and connection policy
+  - [x] Step 3.1: Write failing tests in `src/engine/sysml/useCaseLifecycle.test.ts`
+  - [x] Step 3.2: Extend `src/engine/sysml/connectionPolicy.ts` and `src/engine/sysml/policy.ts` with `useCase` diagram kind and connection legality rules
+  - [x] Step 3.3: Extend `src/engine/sysml/mutations.ts`, `src/services/sysmlCommandGateway.ts`, `src/services/sysmlTransactionAdapter.ts`, and `src/engine/sysml/validation.ts`
+  - [x] Step 3.4: Verify lifecycle tests pass (create, rename, reconnect, delete, undo, redo)
+- [x] Task 4: Replace the React Flow-owned model with a canonical use-case projection
+  - [x] Step 4.1: Write failing tests in `src/components/usecase/useCaseProjection.test.ts`
+  - [x] Step 4.2: Implement `src/components/usecase/useCaseProjection.ts` and update `src/types/usecase_types.ts` & `src/utils/useCasePersistence.ts`
+  - [x] Step 4.3: Refactor `src/components/usecase/UseCaseWorkspace.tsx`, `UseCaseNodes.tsx`, and `UseCaseEdges.tsx` to project canonical state and route edits through the gateway
+  - [x] Step 4.4: Verify projection tests and workspace interaction tests pass
+- [x] Task 5: Build a typed inspector and cross-diagram navigation workflow
+  - [x] Step 5.1: Write failing tests in `src/components/usecase/UseCaseInspector.test.tsx` and `src/components/usecase/UseCaseReferencePicker.test.tsx`
+  - [x] Step 5.2: Implement `src/components/usecase/UseCaseRelationshipEditor.tsx` and `src/components/usecase/UseCaseReferencePicker.tsx`
+  - [x] Step 5.3: Update `src/components/usecase/UseCaseInspector.tsx` and `UseCaseToolbar.tsx` with typed selectors and navigation actions
+  - [x] Step 5.4: Verify inspector and reference picker tests pass
+- [x] Task 6: Integrate App state, project files, import/export, reports, and PlantUML
+  - [x] Step 6.1: Write failing tests in `src/features/reporting/reportDiagrams.usecase.test.ts` and update `src/features/plantuml/adapters/useCaseAdapter.test.ts`
+  - [x] Step 6.2: Update `src/features/plantuml/adapters/useCaseAdapter.ts`, `src/features/reporting/reportDiagrams.ts`, and `reportDiagramModel.ts`
+  - [x] Step 6.3: Update `src/App.tsx` and project serialization/import handling
+  - [x] Step 6.4: Verify report and PlantUML tests pass
+- [x] Task 7: Add end-to-end conformance, performance, and release-gate evidence
+  - [x] Step 7.1: Implement `src/engine/sysml/useCaseLargeModel.test.ts` and verify performance metrics
+  - [x] Step 7.2: Implement `tests/e2e/sysml-usecase-conformance.spec.ts` and update `tests/e2e/sysml-persistence-report.spec.ts`
+  - [x] Step 7.3: Update `src/engine/sysml/conformanceManifest.ts`, `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md`, and create `docs/SYSML_USECASE_CONFORMANCE.md`
+  - [x] Step 7.4: Run full verification suite (`npm run test:sysml`, `npm run test:sysml:release`, `npx tsc --noEmit`)

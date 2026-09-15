@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 
 const localTmp = path.resolve(path.parse(__dirname).root, 'tmp');
 if (!fs.existsSync(localTmp)) {
@@ -63,16 +64,20 @@ module.exports = {
   rebuildConfig: {},
   hooks: {
     postPackage: async (forgeConfig, options) => {
-      if (process.platform !== 'win32' || !options || !Array.isArray(options.outputPaths)) return;
+      if (!options || !Array.isArray(options.outputPaths)) return;
       const rceditPath = path.resolve(__dirname, 'node_modules/electron-winstaller/vendor/rcedit.exe');
       const iconPath = path.resolve(__dirname, 'icon.ico');
       for (const rawOutDir of options.outputPaths) {
         if (typeof rawOutDir !== 'string' || !rawOutDir.trim()) continue;
         const baseName = path.basename(rawOutDir);
         if (!baseName || baseName === '.' || baseName === '..') continue;
-        const targetExe = path.join(__dirname, 'out', baseName, 'ADIA.exe');
-        if (fs.existsSync(rceditPath) && fs.existsSync(targetExe) && fs.existsSync(iconPath)) {
-          const { execFileSync } = require('child_process');
+        const targetExe = path.join(rawOutDir, 'ADIA.exe');
+        const packagedResources = path.join(rawOutDir, 'resources');
+        execFileSync(process.execPath, [
+          path.resolve(__dirname, 'scripts/verify_bundled_hil_toolchains.cjs'),
+          '--resources-path', packagedResources,
+        ], { stdio: 'inherit' });
+        if (process.platform === 'win32' && fs.existsSync(rceditPath) && fs.existsSync(targetExe) && fs.existsSync(iconPath)) {
           try {
             execFileSync(rceditPath, [targetExe, '--set-icon', iconPath]);
             console.log(`[Forge Hook] Successfully injected custom icon into: ${targetExe}`);
