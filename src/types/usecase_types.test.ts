@@ -33,4 +33,14 @@ describe('UseCase Types', () => {
     };
     expect(edge.type).toBe('include');
   });
+
+  it('supports verify as a first-class use-case traceability relationship', () => {
+    const edge: UseCaseRelationship = {
+      id: 'e-verify',
+      source: 'uc-1',
+      target: 'req-1',
+      type: 'verify',
+    };
+    expect(edge.type).toBe('verify');
+  });
 });

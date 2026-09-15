@@ -57,8 +57,7 @@ function reject(input: ConnectionPolicyInput, code: string, reason: string, corr
 function validDiagram(kind: string, diagram: ConnectionPolicyInput['diagram']): boolean {
   if (['association', 'composition', 'sharedAggregation', 'aggregation', 'generalization', 'dependency', 'allocation'].includes(kind)) return diagram === 'bdd';
   if (['binding', 'assembly', 'delegation'].includes(kind)) return diagram === 'ibd';
-  if (kind === 'requirementContainment') return diagram === 'requirements';
-  if (REQUIREMENT_KINDS.has(kind)) return diagram === 'rtm';
+  if (REQUIREMENT_KINDS.has(kind)) return diagram === 'requirements' || diagram === 'rtm';
   if (USE_CASE_KINDS.has(kind)) return diagram === 'useCase';
   return false;
 }
@@ -107,11 +106,11 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'refine') {
-    if (source.family === 'requirement' || target.family !== 'requirement') return reject(normalized, 'INVALID_REFINE_DIRECTION', 'Refine requires a non-Requirement model element to a Requirement.', 'Connect a model element to the Requirement it refines.');
+    if (target.family !== 'requirement' || (input.diagram === 'rtm' && source.family === 'requirement')) return reject(normalized, 'INVALID_REFINE_DIRECTION', 'Refine requires a target Requirement endpoint; RTM refinement must originate from a model element.', 'Connect a model element to the Requirement it refines.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'trace') {
-    if (source.family !== 'requirement' && target.family !== 'requirement') return reject(normalized, 'INVALID_TRACE_ENDPOINTS', 'Trace requires at least one Requirement endpoint.', 'Connect one endpoint to a Requirement.');
+    if (input.diagram === 'rtm' && source.family !== 'requirement' && target.family !== 'requirement') return reject(normalized, 'INVALID_TRACE_ENDPOINTS', 'Trace requires at least one Requirement endpoint.', 'Connect one endpoint to a Requirement.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'binding') {

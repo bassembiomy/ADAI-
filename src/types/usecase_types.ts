@@ -7,6 +7,7 @@ export type UseCaseRelationshipType =
   | 'generalization' 
   | 'refine' 
   | 'satisfy' 
+  | 'verify'
   | 'trace';
 
 export interface UseCaseRequirementTrace {

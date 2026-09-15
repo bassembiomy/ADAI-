@@ -90,7 +90,7 @@ describe('central SysML connection policy', () => {
     ['generalization', 'unknown', 'block', 'UNKNOWN_STEREOTYPE_FAMILY'],
     ['satisfy', 'requirement', 'requirement', 'INVALID_SATISFY_DIRECTION'],
     ['verify', 'block', 'requirement', 'INVALID_VERIFY_DIRECTION'],
-    ['refine', 'requirement', 'requirement', 'INVALID_REFINE_DIRECTION'],
+    ['refine', 'requirement', 'block', 'INVALID_REFINE_DIRECTION'],
     ['trace', 'block', 'valueType', 'INVALID_TRACE_ENDPOINTS'],
   ] as const)('returns exact primary diagnostic for %s', (kind, source, target, code) => {
     const result = evaluateSysmlConnection({ relationshipKind: kind, source: endpoint(source, 'source'), target: endpoint(target, 'target'), diagram: kind === 'trace' || kind === 'satisfy' || kind === 'verify' || kind === 'refine' ? 'rtm' : 'bdd' });
@@ -102,5 +102,53 @@ describe('central SysML connection policy', () => {
     expect(classifyLegacyEndpoint({ id: 'v', name: 'Temperature', stereotype: 'valueType' })).toMatchObject({ id: 'v', family: 'valueType' });
     expect(classifyLegacyEndpoint({ id: 'p', name: 'p', kind: 'part' })).toMatchObject({ id: 'p', family: 'part' });
     expect(classifyCanonicalEndpoint({ id: 'b', name: 'B', kind: 'block', properties: [], ports: [], operations: [], constraints: [], isAbstract: false, isLeaf: false, namespace: [] })).toMatchObject({ id: 'b', family: 'block' });
+  });
+
+  describe('SysML Requirements Connection Policy on Requirements Diagram', () => {
+    const req1 = endpoint('requirement', 'r1', 'Safety Requirement');
+    const req2 = endpoint('requirement', 'r2', 'Temp Limit Requirement');
+    const block = endpoint('block', 'b1', 'Heater Controller');
+    const testCase = endpoint('verificationCase', 'tc1', 'Temp Test');
+
+    it('permits all 7 requirement relationship kinds on requirements diagram', () => {
+      const kinds = ['requirementContainment', 'deriveReqt', 'copy', 'refine', 'trace', 'satisfy', 'verify'];
+      for (const kind of kinds) {
+        const source = (kind === 'satisfy' ? block : kind === 'verify' ? testCase : req1);
+        const res = evaluateSysmlConnection({
+          relationshipKind: kind,
+          source,
+          target: req2,
+          diagram: 'requirements',
+        });
+        expect(res.allowed).toBe(true);
+      }
+    });
+
+    it('rejects reversed satisfy (Requirement -> Block) on requirements diagram', () => {
+      const res = evaluateSysmlConnection({
+        relationshipKind: 'satisfy',
+        source: req1,
+        target: block,
+        diagram: 'requirements',
+      });
+      expect(res.allowed).toBe(false);
+      expect(res.diagnostics[0].code).toBe('INVALID_SATISFY_DIRECTION');
+    });
+
+    it('rejects reversed verify (Requirement -> Test Case) on requirements diagram', () => {
+      const res = evaluateSysmlConnection({
+        relationshipKind: 'verify',
+        source: req1,
+        target: testCase,
+        diagram: 'requirements',
+      });
+      expect(res.allowed).toBe(false);
+      expect(res.diagnostics[0].code).toBe('INVALID_VERIFY_DIRECTION');
+    });
+
+    it('allows refine from both model elements and requirements to requirement', () => {
+      expect(evaluateSysmlConnection({ relationshipKind: 'refine', source: block, target: req1, diagram: 'requirements' }).allowed).toBe(true);
+      expect(evaluateSysmlConnection({ relationshipKind: 'refine', source: req1, target: req2, diagram: 'requirements' }).allowed).toBe(true);
+    });
   });
 });

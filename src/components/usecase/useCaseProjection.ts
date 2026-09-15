@@ -35,6 +35,8 @@ function mapRelationshipKindToEdgeType(kind: string): UseCaseRelationshipType {
       return 'extend';
     case 'useCaseSatisfy':
       return 'satisfy';
+    case 'verify':
+      return 'verify';
     case 'useCaseRefine':
       return 'refine';
     case 'useCaseTrace':

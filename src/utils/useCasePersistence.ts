@@ -15,7 +15,7 @@ export function toUseCaseRelationships(rawEdges: any[]): UseCaseRelationship[] {
     id: e.id,
     source: e.source,
     target: e.target,
-    type: (e.data?.type || (['association', 'include', 'extend', 'generalization', 'refine', 'satisfy', 'trace'].includes(e.type) ? e.type : 'association')) as UseCaseRelationshipType,
+    type: (e.data?.type || (['association', 'include', 'extend', 'generalization', 'refine', 'satisfy', 'verify', 'trace'].includes(e.type) ? e.type : 'association')) as UseCaseRelationshipType,
     label: e.label || e.data?.label || '',
     selected: Boolean(e.selected),
   }));
