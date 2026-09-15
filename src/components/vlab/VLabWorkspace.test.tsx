@@ -1,8 +1,31 @@
 // src/components/vlab/VLabWorkspace.test.tsx
 import { describe, it, expect } from 'vitest';
 import { SolverConfiguration } from '../../engine/vlab/kernel/types';
+import { normalizeSolverConfiguration } from '../../engine/vlab/kernel/PhysicalNetworkExtractor';
 
 describe('VLabWorkspace Solver Configuration Inspector', () => {
+  it('uses the shared solver boundary for inspector-shaped node values', () => {
+    const config = normalizeSolverConfiguration({
+      id: 'sc_workspace',
+      data: {
+        type: 'solver_config',
+        params: {
+          solver: { value: 'rk4' },
+          stopTime: { value: 4 },
+          maximumStep: { value: 0.01 },
+          relativeTolerance: { value: 1e-4 },
+          enableDiagnostics: { value: 'off' }
+        }
+      }
+    } as any);
+
+    expect(config.solver).toBe('rk4');
+    expect(config.stopTime).toBe(4);
+    expect(config.maximumStep).toBe(0.01);
+    expect(config.relativeTolerance).toBe(1e-4);
+    expect(config.enableDiagnostics).toBe(false);
+  });
+
   it('should contain valid default parameters for solver_config block', () => {
     const defaultConfig: SolverConfiguration = {
       id: 'sc_default',

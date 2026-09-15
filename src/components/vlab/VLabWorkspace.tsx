@@ -32,6 +32,7 @@ import { isInputFocused } from '../../utils/domUtils';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
 import { VLabSimulinkScope } from './VLabSimulinkScope';
 import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
+import { normalizeSolverConfiguration } from '../../engine/vlab/kernel/PhysicalNetworkExtractor';
 
 interface LabNode {
   id: string;
@@ -986,11 +987,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }
     const scNode = nodes.find(n => (n.data as any)?.type === 'solver_config' || (n.data as any)?.type === 'solver_configuration');
     if (scNode) {
-      const st = (scNode.data as any)?.params?.stopTime?.value ?? (scNode.data as any)?.params?.stop_time?.value;
-      const parsed = typeof st === 'number' ? st : parseFloat(st);
-      if (!isNaN(parsed) && parsed > 0) {
-        return parsed;
-      }
+      return normalizeSolverConfiguration(scNode).stopTime;
     }
     return null;
   }, [nodes]);
