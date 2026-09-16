@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { runFreezeWorkload, type FreezeWorkload } from './freeze-workloads';
 
 test.describe('Freeze Prevention & Non-Blocking Renderer Gate', () => {
@@ -20,12 +20,12 @@ test.describe('Freeze Prevention & Non-Blocking Renderer Gate', () => {
     await expect(page).toHaveTitle(/./);
   });
 
-  async function assertHeartbeatDuringWorkload(page: any, workload: FreezeWorkload) {
+  async function assertHeartbeatDuringWorkload(page: Page, workload: FreezeWorkload) {
     // Ensure the page bundle and freeze workloads are mounted
     await page.waitForFunction(() => Boolean((window as any).__adia_freeze_workloads), { timeout: 10000 });
 
     // Execute workload while recording heartbeat in browser context
-    const stats = await page.evaluate(async (w) => {
+    const stats = await page.evaluate(async (w: FreezeWorkload) => {
       (window as any).__adia_workload_markers = (window as any).__adia_workload_markers || [];
       (window as any).__adia_workload_markers.push({ workload: w, status: 'started', timestamp: performance.now() });
 
