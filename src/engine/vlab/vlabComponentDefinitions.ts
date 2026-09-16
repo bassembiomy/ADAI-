@@ -403,6 +403,18 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a pump or compressor that maintains a constant pressure difference between ports.'
   },
+  gas_pressure_sensor: {
+    equations: ['mass_flow = 0', 'out = P(p)'],
+    latex: ['\dot{m} = 0', 'y = P'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas pressure without drawing mass flow.'
+  },
+  gas_flow_sensor: {
+    equations: ['P(p) = P(n)', 'out = mdot'],
+    latex: ['P_p = P_n', 'y = \dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas mass flow through an ideal zero-pressure-loss pass-through.'
+  },
   gas_properties: {
     equations: ['P = rho * R * T'],
     latex: ['P = \rho R T'],

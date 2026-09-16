@@ -1467,7 +1467,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = 0 kg/s",
@@ -1518,12 +1519,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "s",
             "pos": "left",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical"
           }
         ],
         "equation": "P_node = P_param (or P_ctrl)",
@@ -1546,12 +1549,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = k * (Pa - Pb)",
@@ -1596,17 +1601,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "ar",
             "pos": "top",
-            "label": "AR"
+            "label": "AR",
+            "domain": "Physical"
           }
         ],
         "equation": "mdot = Cd * A * √(2*ρ*|ΔP|) * sign(ΔP)",
@@ -1641,14 +1649,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "right",
             "label": "B"
           },
-          {
-            "id": "h",
-            "pos": "top",
-            "label": "H"
-          }
         ],
         "equation": "ΔP = f * (L/D) * (ρv²/2)",
-        "description": "Models gas flow through a cylindrical conduit, accounting for friction-induced pressure drop and heat transfer."
+        "description": "Models gas flow through a cylindrical conduit with friction-induced pressure drop. Heat transfer is not represented."
       },
       {
         "id": "gas_fixed_res",
@@ -1690,22 +1693,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Gas"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           }
         ],
         "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Pb)",
@@ -1728,26 +1735,59 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Gas"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Translational"
           }
         ],
         "equation": "mdot = A * v * ρ\nF = A * (Pa - Pb)",
         "description": "Pneumatic cylinder converting differential gas pressure into translational piston force."
+      },
+      {
+        "id": "gas_pressure_sensor",
+        "name": "Pressure Sensor (G)",
+        "color": "#f59e0b",
+        "icon": "gas_pressure_sensor",
+        "category": "Sensors",
+        "params": {},
+        "ports": [
+          { "id": "p", "pos": "left", "label": "P", "domain": "Gas" },
+          { "id": "out", "pos": "right", "label": "OUT", "domain": "Physical" }
+        ],
+        "equation": "mass_flow = 0\nout = P(p)",
+        "description": "Measures gas pressure at a node without drawing mass flow; connect OUT to a Scope for Pa."
+      },
+      {
+        "id": "gas_flow_sensor",
+        "name": "Flow Sensor (G)",
+        "color": "#f59e0b",
+        "icon": "gas_flow_sensor",
+        "category": "Sensors",
+        "params": {},
+        "ports": [
+          { "id": "p", "pos": "left", "label": "P", "domain": "Gas" },
+          { "id": "n", "pos": "left", "label": "N", "domain": "Gas" },
+          { "id": "out", "pos": "right", "label": "OUT", "domain": "Physical" }
+        ],
+        "equation": "P(p) = P(n)\nout = mdot",
+        "description": "Ideal gas flow sensor that passes the line without pressure loss; connect OUT to a Scope for kg/s."
       },
       {
         "id": "gas_flow_source",
@@ -1766,17 +1806,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "m",
             "pos": "top",
-            "label": "M"
+            "label": "M",
+            "domain": "Physical"
           }
         ],
         "equation": "mdot = mdot_cmd",
@@ -1799,44 +1842,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "p",
             "pos": "top",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical"
           }
         ],
         "equation": "Pb - Pa = P_source",
         "description": "Ideal pneumatic pressure source maintaining a specified pressure differential across ports."
       },
-      {
-        "id": "gas_properties",
-        "name": "Gas Properties (G)",
-        "color": "#d946ef",
-        "icon": "gas_props",
-        "category": "Utilities",
-        "params": {
-          "R": {
-            "value": 287,
-            "unit": "J/kg/K",
-            "label": "Gas Constant"
-          },
-          "gamma": {
-            "value": 1.4,
-            "unit": "1",
-            "label": "Specific Heat Ratio"
-          }
-        },
-        "ports": [],
-        "equation": "P = ρ * R * T\\nγ = Cp / Cv",
-        "description": "Defines working gas thermodynamic parameters including specific gas constant R and specific heat ratio γ."
-      }
     ]
   },
   {

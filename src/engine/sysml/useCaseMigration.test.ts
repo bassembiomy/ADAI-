@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { loadRepository, serializeRepository } from './persistence';
-import type { UseCaseDiagram } from '../../types/usecase_types';
+interface LegacyUseCaseDiagram {
+  id: string;
+  name: string;
+  nodes: any[];
+  edges: any[];
+}
 
 describe('SysML Use-Case Legacy Migration & Persistence', () => {
-  const legacyDiagram: UseCaseDiagram = {
+  const legacyDiagram: LegacyUseCaseDiagram = {
     id: 'uc-diag-1',
     name: 'Vehicle Use Cases',
     nodes: [

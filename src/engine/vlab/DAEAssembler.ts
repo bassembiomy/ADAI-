@@ -308,6 +308,12 @@ export class DAEAssembler {
       case 'gas_pressure_source':
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
         break;
+      case 'gas_pressure_sensor':
+        branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: 1 }] });
+        break;
+      case 'gas_flow_sensor':
+        branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+        break;
       case 'gas_rotational_conv':
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });

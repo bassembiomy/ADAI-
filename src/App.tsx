@@ -17,11 +17,7 @@ import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
 import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
-import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
-import { UseCaseDiagram } from './types/usecase_types';
-import { updateDiagramInList } from './utils/useCasePersistence';
-import { UseCaseWorkspace } from './components/usecase/UseCaseWorkspace';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
@@ -228,7 +224,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml' | 'usecase';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
 
 type ConnectionErrorItem = ErrorItem & {
   connectionDiagnostic?: ConnectionPolicyDiagnostic;
@@ -4616,7 +4612,7 @@ const SaveSelectionDialog = ({
 }) => {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([
     'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges', 
-    'vlab', 'hmi', 'hil', 'doe', 'entropy', 'usecase', 'unified'
+    'vlab', 'hmi', 'hil', 'doe', 'entropy', 'unified'
   ]);
 
   const modules = [
@@ -4625,7 +4621,6 @@ const SaveSelectionDialog = ({
     { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.json' },
     { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.json' },
     { id: 'requirements', name: 'Requirements Module', desc: 'requirements.json' },
-    { id: 'usecase', name: 'SysML Use Cases Module', desc: 'usecase.json' },
     { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.json' },
     { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.json' },
     { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.json' },
@@ -6123,9 +6118,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
-  const [useCaseDiagrams, setUseCaseDiagrams] = useState<UseCaseDiagram[]>([]);
-  const [activeUseCaseDiagramId, setActiveUseCaseDiagramId] = useState<string>('default_usecase');
-  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
@@ -6337,8 +6330,6 @@ const ADIA = () => {
         return hilConfig;
       case 'entropy':
         return { entropyNodes, entropyEdges, opmSimulationConfig };
-      case 'usecase':
-        return { useCaseDiagrams };
       case 'hmi':
         return { hmiComponents };
       case 'doe':
@@ -6350,7 +6341,7 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, opmSimulationConfig, useCaseDiagrams, hmiComponents, headers, data, activeModel, taguchiConfig, results,
+    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
     requirementsDiagramScope,
   ]);
 
@@ -6427,9 +6418,6 @@ const ADIA = () => {
           break;
         case 'entropy':
           setEntropyNodes([]); setEntropyEdges([]); setOpmSimulationConfig(DEFAULT_OPM_SIMULATION_CONFIG);
-          break;
-        case 'usecase':
-          setUseCaseDiagrams([]);
           break;
         case 'hmi':
           setHmiComponents([]);
@@ -6516,9 +6504,6 @@ const ADIA = () => {
         setEntropyEdges(d.entropyEdges || []);
         setOpmSimulationConfig(d.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG);
         break;
-      case 'usecase':
-        setUseCaseDiagrams(d.useCaseDiagrams || []);
-        break;
       case 'hmi':
         setHmiComponents(d.hmiComponents || []);
         break;
@@ -6534,7 +6519,7 @@ const ADIA = () => {
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
-    setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setUseCaseDiagrams, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
+    setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
   ]);
 
@@ -6653,8 +6638,7 @@ const ADIA = () => {
       hil: 'Main HIL',
       entropy: 'Main ENTROPY',
       hmi: 'Main HMI',
-      doe: 'Main DOE',
-      usecase: 'Main SysML Use Cases'
+      doe: 'Main DOE'
     };
     const name = defaultNames[mode] || `Main ${mode}`;
     createNewFile(name, mode);
@@ -6902,7 +6886,6 @@ const ADIA = () => {
         { id: 'default_entropy', name: 'Main ENTROPY', type: 'entropy', data: getActiveStateData('entropy') },
         { id: 'default_hmi', name: 'Main HMI', type: 'hmi', data: getActiveStateData('hmi') },
         { id: 'default_doe', name: 'Main DOE', type: 'doe', data: getActiveStateData('doe') },
-        { id: 'default_usecase', name: 'Main SysML Use Cases', type: 'usecase', data: getActiveStateData('usecase') },
       ];
       setWorkspaceFiles(initialFiles);
       setOpenTabIds(['default_sm', 'default_xbridges', 'default_vlab']);
@@ -7067,9 +7050,7 @@ const ADIA = () => {
   }, [showErrorDialog]);
 
   const exportPlantUmlSource = useCallback(() => {
-    const source = plantUmlDiagram.type === 'sequence'
-      ? generateSequencePlantUml(plantUmlDiagram)
-      : generateUseCasePlantUml(plantUmlDiagram);
+    const source = generateSequencePlantUml(plantUmlDiagram);
     const blob = new Blob([source], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -7340,16 +7321,6 @@ const ADIA = () => {
     if (selectedKeys.includes('entropy')) {
       projectFiles['entropy.json'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
-    if (selectedKeys.includes('usecase')) {
-      projectFiles['usecase.json'] = {
-        useCaseDiagrams,
-        activeUseCaseDiagramId,
-        canonicalUseCases: canonicalSysmlRepository.useCases,
-        canonicalActors: canonicalSysmlRepository.actors,
-        canonicalSubjects: canonicalSysmlRepository.subjects,
-        canonicalRelationships: canonicalSysmlRepository.relationships,
-      };
-    }
     if (selectedKeys.includes('unified')) {
       projectFiles['adia_project_unified.json'] = {
         version: VERSION,
@@ -7365,8 +7336,6 @@ const ADIA = () => {
         entropyNodes,
         entropyEdges,
         opmSimulationConfig,
-        useCaseDiagrams,
-        activeUseCaseDiagramId,
         canonicalSysmlRepository,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
@@ -7515,15 +7484,6 @@ const ADIA = () => {
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
 
-      // Use Cases Module
-      if (importedData.useCaseDiagrams) {
-        setUseCaseDiagrams(importedData.useCaseDiagrams);
-        if (importedData.activeUseCaseDiagramId) {
-          setActiveUseCaseDiagramId(importedData.activeUseCaseDiagramId);
-        } else if (importedData.useCaseDiagrams.length > 0) {
-          setActiveUseCaseDiagramId(importedData.useCaseDiagrams[0].id);
-        }
-      }
       if (importedData.canonicalSysmlRepository) {
         setCanonicalSysmlRepository(importedData.canonicalSysmlRepository);
       }
@@ -7669,14 +7629,6 @@ const ADIA = () => {
               activeModel: 'RSM',
               taguchiConfig: { objective: 'larger', targetValue: 10 },
               results: null
-            }
-          },
-          {
-            id: 'default_usecase',
-            name: 'Main SysML Use Cases',
-            type: 'usecase',
-            data: {
-              useCaseDiagrams: importedData.useCaseDiagrams || []
             }
           }
         ];
@@ -15255,7 +15207,6 @@ const ADIA = () => {
               { id: 'vlab', label: 'V-Lab' },
               { id: 'hil', label: 'HIL' },
               { id: 'entropy', label: 'ENTROPY OPM' },
-              { id: 'usecase', label: 'Use Cases' },
             ].map(mode => (
               <button
                 key={mode.id}
@@ -15643,7 +15594,7 @@ const ADIA = () => {
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
+          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
@@ -15676,10 +15627,10 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
           {/* Left Sidebar - Variables */}
-          {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
+          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
                 {!isVariablesCollapsed && (
@@ -15807,7 +15758,7 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
 
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
@@ -15952,59 +15903,7 @@ const ADIA = () => {
                 />
               )}
 
-              {diagramMode === 'usecase' && (
-                <UseCaseWorkspace
-                  key={activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'}
-                  activeDiagramId={activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'}
-                  repository={canonicalSysmlRepository}
-                  coordinates={sysmlCoordinates}
-                  diagramPresentations={sysmlDiagramPresentations}
-                  availableDiagrams={useCaseDiagrams.map((d) => ({ id: d.id, name: d.name, type: 'useCase' }))}
-                  onSelectDiagram={(id: string) => setActiveUseCaseDiagramId(id)}
-                  onExecuteCommand={(cmd: SysmlEditorCommand) => {
-                    const state = createSysmlGatewayState(
-                      canonicalSysmlRepository,
-                      sysmlCoordinates,
-                      sysmlDiagramPresentations
-                    );
-                    const res = executeSysmlCommand(
-                      state,
-                      cmd,
-                      activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'
-                    );
-                    if (res.committed) {
-                      setCanonicalSysmlRepository(res.repository);
-                      if (res.store) setSysmlStore(res.store);
-                    }
-                  }}
-                  sysmlBlocks={blocks}
-                  diagram={
-                    useCaseDiagrams.find((d) => d.id === activeUseCaseDiagramId) ||
-                    useCaseDiagrams[0] ||
-                    { id: 'default_usecase', name: 'Main SysML Use Cases', nodes: [], edges: [] }
-                  }
-                  onChange={(d: UseCaseDiagram) => {
-                    setUseCaseDiagrams((prev) => updateDiagramInList(prev, d));
-                  }}
-                  onSave={() => {
-                    setWorkspaceFiles((prev) => saveCurrentFileState(prev, activeFileId));
-                  }}
-                  onNavigateToElement={(elementId: string, diagramKind?: string) => {
-                    if (diagramKind === 'bdd') {
-                      setDiagramMode('bdd');
-                      setSelectedIds([elementId]);
-                    } else if (diagramKind === 'requirements') {
-                      setDiagramMode('requirements');
-                      setSelectedIds([elementId]);
-                    }
-                  }}
-                  onNavigateToDiagram={(diagramId: string) => {
-                    setActiveUseCaseDiagramId(diagramId);
-                  }}
-                />
-              )}
-
-              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
+              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
                 <>
 
               {/* Canvas Toolbar */}
@@ -16448,7 +16347,7 @@ const ADIA = () => {
               )}
             </main>
 
-            {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
+            {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
               <>
                 {/* Bottom Panel */}
             {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
@@ -16643,9 +16542,9 @@ const ADIA = () => {
 
               </>
             )}          </div>
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
-          {!['xbridges', 'vlab', 'hil', 'entropy', 'usecase'].includes(diagramMode) && (
+          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <>
             {/* Right Dock: Properties */}
           <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">

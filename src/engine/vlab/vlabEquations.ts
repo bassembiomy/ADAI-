@@ -1519,6 +1519,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const P = params.P !== undefined ? params.P : (across[2] !== undefined && across[2] !== 0 ? across[2] : 200000);
     return [(across[1] - across[0]) - P];
   },
+  gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
+  gas_flow_sensor: ({ across, branch }) => [across[0] - across[1], branch[1] + branch[0]],
   gas_properties: () => [],
 
   // ── MAGNETIC DOMAIN ────────────────────────────────────────────────────────

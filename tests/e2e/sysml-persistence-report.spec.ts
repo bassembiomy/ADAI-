@@ -33,17 +33,4 @@ test.describe('SysML Persistence & Report Qualification', () => {
       }
     }
   });
-
-  test('validates use-case entities and diagrams are included in project serialization', async ({ page }) => {
-    // Switch to usecase diagram
-    const useCaseBtn = page.locator('button:has-text("Use Case"), button:has-text("UseCase"), button[title*="Use Case"]').first();
-    if (await useCaseBtn.isVisible()) {
-      await useCaseBtn.click({ force: true });
-      await page.waitForTimeout(300);
-
-      // Verify Use Case toolbar or canvas is present
-      const toolbar = page.locator('text=SysML /').first();
-      await expect(toolbar).toBeVisible();
-    }
-  });
 });

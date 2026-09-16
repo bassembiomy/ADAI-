@@ -19,4 +19,32 @@ describe('Pressure sensor output', () => {
 
     expect(state.perScopeValues.scope).toBeCloseTo(250000, 6);
   });
+
+  it('forwards gas pressure without drawing mass flow', () => {
+    const nodes: Node[] = [
+      { id: 'source', data: { type: 'gas_fixed_res', params: { P: 180000 } } } as any,
+      { id: 'sensor', data: { type: 'gas_pressure_sensor', params: {} } } as any,
+      { id: 'scope', data: { type: 'scope', params: { numSignals: { value: 1 } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'source', target: 'sensor', sourceHandle: 'a_s', targetHandle: 'p_t' },
+      { id: 'e2', source: 'sensor', target: 'scope', sourceHandle: 'out_s', targetHandle: 'in1_t' },
+    ];
+    const state = new VLabPhysicsEngine().simulateStep(nodes, edges, null, 0.05);
+    expect(state.perScopeValues.scope).toBeCloseTo(180000, 6);
+  });
+
+  it('forwards gas mass flow through an ideal zero-drop sensor', () => {
+    const nodes: Node[] = [
+      { id: 'source', data: { type: 'gas_flow_source', params: { mdot: 0.2 } } } as any,
+      { id: 'sensor', data: { type: 'gas_flow_sensor', params: {} } } as any,
+      { id: 'scope', data: { type: 'scope', params: { numSignals: { value: 1 } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'source', target: 'sensor', sourceHandle: 'a_s', targetHandle: 'p_t' },
+      { id: 'e2', source: 'sensor', target: 'scope', sourceHandle: 'out_s', targetHandle: 'in1_t' },
+    ];
+    const state = new VLabPhysicsEngine().simulateStep(nodes, edges, null, 0.05);
+    expect(state.perScopeValues.scope).toBeCloseTo(0.2, 6);
+  });
 });

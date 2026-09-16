@@ -1,38 +1,11 @@
-# Task Checklist: SysML Use-Case Module Conformance Implementation
+# Task: Delete Use Case Module from Application
 
-- [x] Task 1: Define the canonical use-case metamodel and migration boundary
-  - [x] Step 1.1: Write failing tests in `src/engine/sysml/useCases.test.ts` for actor, subject, use-case, extension-point, diagram-reference validation and relationship legality
-  - [x] Step 1.2: Implement `src/engine/sysml/useCases.ts` with metamodel types, validation functions (`validateUseCaseElement`, `validateUseCaseRelationship`), projection helper (`deriveUseCaseView`), and relationship classifier
-  - [x] Step 1.3: Update `src/engine/sysml/model.ts` to extend `SysmlRepository` with use-case collections/entities without breaking BDD/IBD semantics
-  - [x] Step 1.4: Update `src/engine/sysml/workerProtocol.ts`, `src/engine/sysml/profile.ts`, and `src/engine/sysml/conformanceManifest.ts` (mark use-case capabilities as partial)
-  - [x] Step 1.5: Run `src/engine/sysml/useCases.test.ts` and `npm run test:sysml` to verify all pass
-- [x] Task 2: Add normalized-store, persistence, migration, and identity support
-  - [x] Step 2.1: Write failing tests in `src/engine/sysml/useCaseMigration.test.ts`, `src/engine/sysml/normalizedStore.test.ts`, and `src/engine/sysml/persistence.test.ts`
-  - [x] Step 2.2: Update `src/engine/sysml/normalizedStore.ts` with store maps/indexes for use cases, actors, subjects, extension points, diagram references, and relationships
-  - [x] Step 2.3: Update `src/engine/sysml/persistence.ts` to serialize/deserialize use-case entities deterministically and migrate legacy `useCaseDiagrams` arrays
-  - [x] Step 2.4: Verify tests pass for round-trip persistence, legacy migration, and deterministic checksums
-- [x] Task 3: Integrate command gateway, validation, deletion, undo/redo, and connection policy
-  - [x] Step 3.1: Write failing tests in `src/engine/sysml/useCaseLifecycle.test.ts`
-  - [x] Step 3.2: Extend `src/engine/sysml/connectionPolicy.ts` and `src/engine/sysml/policy.ts` with `useCase` diagram kind and connection legality rules
-  - [x] Step 3.3: Extend `src/engine/sysml/mutations.ts`, `src/services/sysmlCommandGateway.ts`, `src/services/sysmlTransactionAdapter.ts`, and `src/engine/sysml/validation.ts`
-  - [x] Step 3.4: Verify lifecycle tests pass (create, rename, reconnect, delete, undo, redo)
-- [x] Task 4: Replace the React Flow-owned model with a canonical use-case projection
-  - [x] Step 4.1: Write failing tests in `src/components/usecase/useCaseProjection.test.ts`
-  - [x] Step 4.2: Implement `src/components/usecase/useCaseProjection.ts` and update `src/types/usecase_types.ts` & `src/utils/useCasePersistence.ts`
-  - [x] Step 4.3: Refactor `src/components/usecase/UseCaseWorkspace.tsx`, `UseCaseNodes.tsx`, and `UseCaseEdges.tsx` to project canonical state and route edits through the gateway
-  - [x] Step 4.4: Verify projection tests and workspace interaction tests pass
-- [x] Task 5: Build a typed inspector and cross-diagram navigation workflow
-  - [x] Step 5.1: Write failing tests in `src/components/usecase/UseCaseInspector.test.tsx` and `src/components/usecase/UseCaseReferencePicker.test.tsx`
-  - [x] Step 5.2: Implement `src/components/usecase/UseCaseRelationshipEditor.tsx` and `src/components/usecase/UseCaseReferencePicker.tsx`
-  - [x] Step 5.3: Update `src/components/usecase/UseCaseInspector.tsx` and `UseCaseToolbar.tsx` with typed selectors and navigation actions
-  - [x] Step 5.4: Verify inspector and reference picker tests pass
-- [x] Task 6: Integrate App state, project files, import/export, reports, and PlantUML
-  - [x] Step 6.1: Write failing tests in `src/features/reporting/reportDiagrams.usecase.test.ts` and update `src/features/plantuml/adapters/useCaseAdapter.test.ts`
-  - [x] Step 6.2: Update `src/features/plantuml/adapters/useCaseAdapter.ts`, `src/features/reporting/reportDiagrams.ts`, and `reportDiagramModel.ts`
-  - [x] Step 6.3: Update `src/App.tsx` and project serialization/import handling
-  - [x] Step 6.4: Verify report and PlantUML tests pass
-- [x] Task 7: Add end-to-end conformance, performance, and release-gate evidence
-  - [x] Step 7.1: Implement `src/engine/sysml/useCaseLargeModel.test.ts` and verify performance metrics
-  - [x] Step 7.2: Implement `tests/e2e/sysml-usecase-conformance.spec.ts` and update `tests/e2e/sysml-persistence-report.spec.ts`
-  - [x] Step 7.3: Update `src/engine/sysml/conformanceManifest.ts`, `docs/SYSML_PROFILE_CONFORMANCE_MATRIX.md`, and create `docs/SYSML_USECASE_CONFORMANCE.md`
-  - [x] Step 7.4: Run full verification suite (`npm run test:sysml`, `npm run test:sysml:release`, `npx tsc --noEmit`)
+- [x] 1. Delete Use Case UI components (`src/components/usecase/*`) <!-- id: 0 -->
+- [x] 2. Delete types and persistence utilities (`src/types/usecase_types.*`, `src/utils/useCasePersistence.*`) <!-- id: 1 -->
+- [x] 3. Delete PlantUML/Reporting Use Case adapters and tests (`useCaseAdapter.*`, `reportDiagrams.usecase.test.ts`) <!-- id: 2 -->
+- [x] 4. Update PlantUML components and visual diagram models <!-- id: 3 -->
+- [x] 5. Update reporting module to remove Use Case diagram rendering <!-- id: 4 -->
+- [x] 6. Update `src/App.tsx` (remove Use Case mode, imports, state, ribbon tab, and rendering) <!-- id: 5 -->
+- [x] 7. Update engine/conformance tests and manifest (`useCaseMigration.test.ts`, `conformanceManifest.ts`, docs) <!-- id: 6 -->
+- [x] 8. Update/delete E2E tests (`sysml-usecase-conformance.spec.ts`, `sysml-persistence-report.spec.ts`) <!-- id: 7 -->
+- [x] 9. Verify with test suites and TypeScript build <!-- id: 8 -->
