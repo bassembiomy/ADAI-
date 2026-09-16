@@ -29,10 +29,11 @@ if (typeof window !== 'undefined') {
         ];
         const config: any = { id: 'test_cfg', solver: 'auto', maximumIterations: 50, nonlinearTolerance: 1e-6 };
         let state: any = null;
-        for (let i = 0; i < 5; i++) {
+        const steps = 5;
+        for (let i = 0; i < steps; i++) {
           state = await client.step(nodes, edges, config, state, 0.01);
         }
-        return { completed: true, state };
+        return { workload: 'vlab' as const, operations: steps, state };
       } finally {
         client.dispose();
       }
@@ -49,14 +50,15 @@ if (typeof window !== 'undefined') {
             { sourceBlock: 'src', sourcePort: 'out', targetBlock: 'integ', targetPort: 'u' },
           ],
         };
+        const batchSize = 5;
         const res = await client.step({
           model,
           solverType: 'rk4',
           dt: 0.01,
           time: 0,
-          batchSize: 5,
+          batchSize,
         });
-        return { completed: true, result: res };
+        return { workload: 'xbridges' as const, operations: batchSize, result: res };
       } finally {
         client.dispose();
       }
@@ -68,10 +70,13 @@ if (typeof window !== 'undefined') {
         revision: 1,
         definitions: {
           b1: { id: 'b1', name: 'Block1', kind: 'block', namespace: [], isAbstract: false, isLeaf: true, properties: [], ports: [], operations: [], constraints: [] },
+          b2: { id: 'b2', name: 'Block2', kind: 'block', namespace: [], isAbstract: false, isLeaf: true, properties: [], ports: [], operations: [], constraints: [] },
         },
         usages: {},
         connectors: {},
-        relationships: {},
+        relationships: {
+          rel1: { id: 'rel1', sourceId: 'b1', targetId: 'b2', kind: 'dependency', stereotype: null },
+        },
         requirements: {
           r1: { id: 'r1', requirementId: 'REQ-1', name: 'Req 1', text: 'Text', status: 'approved', version: '1.0', namespace: [], kind: 'requirement' },
         },
@@ -80,8 +85,18 @@ if (typeof window !== 'undefined') {
         baselines: {},
         artifacts: {},
       };
-      const res = await client.validate(mockSnapshot, 1);
-      return { completed: true, result: res };
+      // Run validate in a loop with explicit macrotask yields so
+      // setInterval/rAF heartbeat monitors fire between iterations.
+      const rounds = 10;
+      let ops = 0;
+      for (let i = 0; i < rounds; i++) {
+        mockSnapshot.revision = i + 1;
+        await client.validate(mockSnapshot, i + 1);
+        ops++;
+        // Yield to macrotask queue — 10ms pacing allows setInterval/rAF callbacks to run
+        await new Promise(r => setTimeout(r, 10));
+      }
+      return { workload: 'sysml' as const, operations: ops };
     },
     async doe() {
       const client = getSharedDOEWorkerClient();
@@ -96,26 +111,36 @@ if (typeof window !== 'undefined') {
         ],
       };
       const res = await client.fitRSM(sampleData);
-      return { completed: true, result: res };
+      return { workload: 'doe' as const, operations: sampleData.data.length, result: res };
     },
     async hil() {
-      return new Promise<any>((resolve) => {
-        let flushes = 0;
-        const buffer = new HILTelemetryBuffer({
-          maxDisplayPoints: 100,
-          flushIntervalMs: 20,
-          onFlush: (snapshot) => {
-            flushes++;
-            if (flushes >= 1) {
-              buffer.dispose();
-              resolve({ completed: true, flushes, sampleCount: snapshot.timestamps.length });
-            }
-          },
-        });
-        for (let i = 0; i < 50; i++) {
-          buffer.pushSample({ timestamp: Date.now() + i, values: { ch1: Math.sin(i * 0.1) } });
-        }
+      const sampleCount = 200;
+      const batches = 4;
+      const perBatch = sampleCount / batches;
+      let totalFlushes = 0;
+      let lastSnapshot: any = null;
+      const buffer = new HILTelemetryBuffer({
+        maxDisplayPoints: 100,
+        flushIntervalMs: 20,
+        onFlush: (snapshot) => {
+          totalFlushes++;
+          lastSnapshot = snapshot;
+        },
       });
+      // Push samples in batches with explicit yields and manual flushes
+      // between batches — avoids reliance on throttled internal timers.
+      for (let batch = 0; batch < batches; batch++) {
+        for (let i = 0; i < perBatch; i++) {
+          const idx = batch * perBatch + i;
+          buffer.pushSample({ timestamp: Date.now() + idx, values: { ch1: Math.sin(idx * 0.1) } });
+        }
+        // Manually flush after each batch to trigger onFlush
+        buffer.flush();
+        // Yield to macrotask queue — 10ms pacing between batches
+        await new Promise(r => setTimeout(r, 10));
+      }
+      buffer.dispose();
+      return { workload: 'hil' as const, operations: sampleCount, flushes: totalFlushes, sampleCount: lastSnapshot?.timestamps?.length ?? 0 };
     },
   };
 }
