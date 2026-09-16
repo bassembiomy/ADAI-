@@ -18,7 +18,17 @@ export default defineConfig({
   },
   projects: [
     {
+      // Default project: normal browser scheduling — this is the regression gate
       name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    },
+    {
+      // Supplementary benchmark project: disables Chromium background throttling
+      // for deterministic timer fidelity in CI environments.
+      // This is NOT the default regression gate — use explicitly via --project=chromium-benchmark.
+      name: 'chromium-benchmark',
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
