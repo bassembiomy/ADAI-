@@ -16,8 +16,8 @@ export const UseCaseNodeComponent: React.FC<any> = ({ data, selected }) => {
         selected ? 'border-amber-400 text-amber-200' : 'border-zinc-600 hover:border-zinc-400 text-zinc-100'
       }`}
     >
-      <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
-      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
+      {/* Relationships connect to the element boundary, not a semantic port. */}
+      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !min-w-0 !min-h-0 !bg-transparent !border-0 opacity-0" />
       
       <span className="text-[10px] text-amber-500/90 font-medium tracking-wide">«use case»</span>
       <span className="text-xs font-semibold text-center leading-tight mt-0.5">{data?.label || 'Use Case'}</span>
@@ -31,8 +31,7 @@ export const UseCaseNodeComponent: React.FC<any> = ({ data, selected }) => {
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
-      <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
+      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !min-w-0 !min-h-0 !bg-transparent !border-0 opacity-0" />
     </div>
   );
 };
@@ -48,8 +47,8 @@ export const ActorNodeComponent: React.FC<any> = ({ data, selected }) => {
 
   return (
     <div style={glowStyle} className={`flex flex-col items-center p-2 rounded-lg transition-all duration-200 ${selected ? 'border border-amber-400 bg-amber-400/5' : ''}`}>
-      <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
-      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
+      {/* Relationships connect to the element boundary, not a semantic port. */}
+      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !min-w-0 !min-h-0 !bg-transparent !border-0 opacity-0" />
 
       {/* SysML Vector Stick Figure */}
       <svg width="40" height="56" viewBox="0 0 40 56" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -63,8 +62,7 @@ export const ActorNodeComponent: React.FC<any> = ({ data, selected }) => {
       <span className="text-[10px] text-amber-500/90 font-medium mt-1">«actor»</span>
       <span className="text-xs font-semibold text-zinc-100 text-center leading-tight mt-0.5">{data?.label || 'Actor'}</span>
 
-      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
-      <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-amber-500 !border-2 !border-zinc-900" />
+      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !min-w-0 !min-h-0 !bg-transparent !border-0 opacity-0" />
     </div>
   );
 };

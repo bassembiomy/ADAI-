@@ -20,7 +20,7 @@
 
 - Modify `tests/performance/no-renderer-blocking.spec.ts`: measure heartbeats strictly inside workload execution, validate results, remove dead imports, and strengthen setup assertions.
 - Modify `tests/performance/freeze-workloads.ts`: define the runtime result contract and expose bounded workload execution consistently.
-- Modify `src/index.tsx` only if a stable test hook or deterministic overlay bypass is not already available; expose the minimal test-only hook needed by the spec.
+- Modify `src/index.tsx`: return the runtime result contract from each registered handler and expose the minimal test-only hook needed by the spec.
 - Modify `playwright.config.ts`: separate normal freeze-gate execution from any explicitly benchmark-only Chromium flags.
 - Add or modify `tests/performance/no-renderer-blocking.spec.ts` tests as the regression coverage; no new production test framework is needed.
 
@@ -34,7 +34,11 @@
 - `assertHeartbeatDuringWorkload(page: Page, workload: FreezeWorkload): Promise<void>` remains the test helper.
 - Browser evaluation returns `{ workloadDuration, intervalTicks, rafTicks, maxIntervalGap, maxRafGap, result }`.
 
-- [ ] **Step 1: Write the failing assertions**
+- [ ] **Step 1: Add a deterministic measurement-window regression fixture**
+
+Add a test-only browser handler, `__adia_freeze_workloads.__heartbeat_fixture`, that busy-loops synchronously for 250 ms and returns `{ workload: '__heartbeat_fixture', operations: 1 }`. Add a focused assertion requiring the active heartbeat threshold; it must fail against the current implementation because warm-up ticks are currently counted.
+
+- [ ] **Step 2: Write the corrected assertions**
 
 Change the browser callback to record `workloadStart` immediately before `await workloads[w]()` and `workloadEnd` immediately after it. Filter both interval and rAF timestamps to `[workloadStart, workloadEnd]`. Add assertions for:
 
@@ -45,23 +49,23 @@ expect(stats.maxIntervalGap).toBeLessThan(150);
 expect(stats.maxRafGap).toBeLessThan(150);
 ```
 
-- [ ] **Step 2: Run the focused test and confirm the new assertions execute**
+- [ ] **Step 3: Run the focused test and confirm the regression fails**
 
 Run: `npx playwright test tests/performance/no-renderer-blocking.spec.ts --project=chromium`
 
-Expected: the suite runs; if a workload is shorter than the minimum sampling window, at least one test may fail, identifying the threshold that needs a deterministic workload duration.
+Expected: the heartbeat fixture fails, proving the gate detects a blocked renderer.
 
-- [ ] **Step 3: Implement the measurement window**
+- [ ] **Step 4: Implement the measurement window**
 
-Use separate arrays for interval and rAF timestamps, stop both monitors in a `finally` block, and compute gaps only from timestamps collected between the workload start and end. Do not use warm-up ticks in the active-workload counts.
+Use separate arrays for interval and rAF timestamps. Record start/end immediately around the handler. In `finally`, stop both monitors even when the handler rejects. Compute gaps only from timestamps in that window. Make each production driver run for at least 250 ms by repeating its bounded operation and accumulating the real operation count.
 
-- [ ] **Step 4: Run the focused suite**
+- [ ] **Step 5: Run the focused suite**
 
 Run: `npx playwright test tests/performance/no-renderer-blocking.spec.ts --project=chromium`
 
 Expected: all freeze-gate tests pass with nonzero active interval and rAF ticks.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tests/performance/no-renderer-blocking.spec.ts
@@ -83,7 +87,11 @@ git commit -m "test: measure freeze heartbeat during workload execution"
 
 Run: `rg -n "__adia_freeze_workloads|return \{" src/index.tsx tests/performance/freeze-workloads.ts`
 
-Record the current result shapes and identify any handler that returns `undefined`, an empty object, or no operation count.
+Inspect the registrations in `src/index.tsx`. Require this exact result type:
+
+```ts
+type FreezeWorkloadResult = { workload: FreezeWorkload; operations: number };
+```
 
 - [ ] **Step 2: Add result-contract assertions to the test**
 
@@ -94,9 +102,9 @@ expect(result).toMatchObject({ workload });
 expect(result.operations).toBeGreaterThan(0);
 ```
 
-- [ ] **Step 3: Adapt handlers to return the contract**
+- [ ] **Step 3: Adapt the five handlers in `src/index.tsx` to return the contract**
 
-Wrap each existing workload result without changing its underlying operation. Use the actual number of simulation steps, validations, solver evaluations, or telemetry samples performed; do not use a constant unrelated to the work.
+Wrap each handler without changing its operation. Count actual VLAB/X-Bridges steps, SysML validation/matrix operations, DOE evaluations, and HIL samples flushed; the repeated driver accumulates `operations`.
 
 - [ ] **Step 4: Run the focused suite**
 
@@ -118,12 +126,12 @@ git commit -m "test: assert freeze workloads perform real operations"
 - Modify: `src/index.tsx` only if needed for a stable hook
 
 **Interfaces:**
-- The test setup uses one canonical URL and a stable selector such as `[data-testid="welcome-overlay"]`.
+- The test setup uses one canonical URL and the stable selector `[data-testid="welcome-overlay"]`.
 - The discovery test verifies `window.__adia_freeze_workloads` instead of only checking a non-empty title.
 
 - [ ] **Step 1: Replace the generic overlay selector**
 
-Use an existing stable selector if present. Otherwise add `data-testid="welcome-overlay"` to the welcome overlay and dismiss it with:
+Add `data-testid="welcome-overlay"` to the actual welcome overlay and dismiss it with:
 
 ```ts
 const intro = page.getByTestId('welcome-overlay');
@@ -173,16 +181,15 @@ Keep a Chromium project without background-throttling flags and run the freeze g
 
 If timing variance requires the existing flags, create a separate project such as `chromium-benchmark` with those flags and document that it is supplementary, not the regression gate.
 
-- [ ] **Step 3: Run both configurations**
+- [ ] **Step 3: Run the normal configuration**
 
 Run:
 
 ```bash
 npx playwright test tests/performance/no-renderer-blocking.spec.ts --project=chromium
-npx playwright test tests/performance/no-renderer-blocking.spec.ts --project=chromium-benchmark
 ```
 
-Expected: the default gate passes under normal scheduling; the benchmark project passes only when present and is not required for the default command.
+Expected: the default gate passes under normal scheduling. Run the benchmark project only if it was explicitly added in the preceding step.
 
 - [ ] **Step 4: Commit**
 
@@ -210,11 +217,10 @@ Expected: both exit with code 0.
 
 - [ ] **Step 3: Inspect the final diff**
 
-Run: `git diff HEAD~4..HEAD --check` and `git status --short`
+Run: `git diff --check` and `git status --short`
 
 Expected: no whitespace errors and only intended files are modified.
 
 - [ ] **Step 4: Request code review**
 
 Provide the reviewer the final commit range, the measured active-workload heartbeat behavior, and the exact verification outputs. Resolve all P1/P2 findings before merging.
-

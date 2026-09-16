@@ -6169,6 +6169,14 @@ const ADIA = () => {
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
+  const sysmlCoordinates = useMemo(
+    () => Object.fromEntries(sysmlStore.coordinates.entries()),
+    [sysmlStore],
+  );
+  const sysmlDiagramPresentations = useMemo(
+    () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    [sysmlStore],
+  );
   // Explicit per-baseline deletion authorizations granted from the governance
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
@@ -15949,13 +15957,15 @@ const ADIA = () => {
                   key={activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'}
                   activeDiagramId={activeUseCaseDiagramId || useCaseDiagrams[0]?.id || 'default_usecase'}
                   repository={canonicalSysmlRepository}
+                  coordinates={sysmlCoordinates}
+                  diagramPresentations={sysmlDiagramPresentations}
                   availableDiagrams={useCaseDiagrams.map((d) => ({ id: d.id, name: d.name, type: 'useCase' }))}
                   onSelectDiagram={(id: string) => setActiveUseCaseDiagramId(id)}
                   onExecuteCommand={(cmd: SysmlEditorCommand) => {
                     const state = createSysmlGatewayState(
                       canonicalSysmlRepository,
-                      {},
-                      diagramPresentations
+                      sysmlCoordinates,
+                      sysmlDiagramPresentations
                     );
                     const res = executeSysmlCommand(
                       state,
@@ -15964,6 +15974,7 @@ const ADIA = () => {
                     );
                     if (res.committed) {
                       setCanonicalSysmlRepository(res.repository);
+                      if (res.store) setSysmlStore(res.store);
                     }
                   }}
                   sysmlBlocks={blocks}

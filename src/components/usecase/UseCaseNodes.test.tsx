@@ -20,6 +20,7 @@ describe('UseCase Nodes with Warm Light Selection', () => {
     expect(html).toContain('«use case»');
     expect(html).toContain('BrakeApplied');
     expect(html).toContain('border-amber-400');
+    expect(html).not.toContain('!bg-amber-500');
   });
 
   it('renders actor with «actor» stereotype and warm light', () => {
@@ -36,6 +37,7 @@ describe('UseCase Nodes with Warm Light Selection', () => {
     expect(html).toContain('Vehicle Operator');
     expect(html).toContain('«actor»');
     expect(html).toContain('border-amber-400');
+    expect(html).not.toContain('!bg-amber-500');
   });
 
   it('renders system boundary with subject label', () => {
