@@ -38,11 +38,11 @@
 - Produce `BackgroundResponse<R> { requestId: number; ok: boolean; result?: R; error?: { message: string; stack?: string } }`.
 - Produce `BackgroundWorkerClient<TRequest, TResult>.run(payload): Promise<TResult>`, `cancel(requestId): void`, `dispose(): void`, and `available: boolean`.
 
-- [ ] Write tests for request-ID matching, stale response rejection, worker error propagation, cancellation, and disposal.
-- [ ] Run `npx vitest run src/services/backgroundWorkerClient.test.ts`; verify the tests fail before implementation.
-- [ ] Implement the typed client and protocol without domain imports.
-- [ ] Run the focused test and verify all cases pass.
-- [ ] Commit as `feat: add shared background task runtime`.
+- [x] Write tests for request-ID matching, stale response rejection, worker error propagation, cancellation, and disposal.
+- [x] Run `npx vitest run src/services/backgroundWorkerClient.test.ts`; verify the tests fail before implementation.
+- [x] Implement the typed client and protocol without domain imports.
+- [x] Run the focused test and verify all cases pass.
+- [x] Commit as `feat: add shared background task runtime`.
 
 ### Task 2: Harden and complete the VLAB worker runtime
 
@@ -57,12 +57,12 @@
 - Keep `VLabWorkerClient.step(nodes, edges, configuration, previousState, dt): Promise<any>`.
 - Add serialized configuration-change handling and a single in-flight step guard so overlapping interval ticks cannot reuse stale state.
 
-- [ ] Add a failing test proving a second step is queued or skipped while the first step is pending.
-- [ ] Add a failing test proving worker errors stop the run with the existing diagnostic path.
-- [ ] Implement serialized step dispatch, cancellation on pause/stop/unmount, and stale-result rejection.
-- [ ] Verify identical state/output against direct `VLabPhysicsEngine.simulateStep` for representative PID, thermal, and electrical fixtures.
-- [ ] Run `npx vitest run src/services/vlabWorkerClient.test.ts src/components/vlab/VLabWorkspace.test.tsx`.
-- [ ] Commit as `fix: isolate VLAB simulation from renderer`.
+- [x] Add a failing test proving a second step is queued or skipped while the first step is pending.
+- [x] Add a failing test proving worker errors stop the run with the existing diagnostic path.
+- [x] Implement serialized step dispatch, cancellation on pause/stop/unmount, and stale-result rejection.
+- [x] Verify identical state/output against direct `VLabPhysicsEngine.simulateStep` for representative PID, thermal, and electrical fixtures.
+- [x] Run `npx vitest run src/services/vlabWorkerClient.test.ts src/components/vlab/VLabWorkspace.test.tsx`.
+- [x] Commit as `fix: isolate VLAB simulation from renderer`.
 
 ### Task 3: Move X-Bridges simulation off the renderer
 
@@ -78,13 +78,13 @@
 - Worker request: model snapshot, solver options, current engine snapshot, and requested step/batch size.
 - Worker response: engine snapshot, output values, simulation time, diagnostics, and optional progress.
 
-- [ ] Add an equivalence test comparing worker and direct `XbridgesEngine` one-step outputs for PID, integrator, and coupled models.
-- [ ] Add a cancellation test for an adaptive-solver request.
-- [ ] Implement worker-side engine creation/reuse and state serialization.
-- [ ] Replace synchronous solver calls in the animation callback with worker requests; allow only one in-flight request and apply the latest completed state.
-- [ ] Throttle ReactFlow node synchronization to a bounded display rate while keeping worker simulation steps unchanged.
-- [ ] Run X-Bridges engine tests and worker tests.
-- [ ] Commit as `fix: isolate X-Bridges simulation from renderer`.
+- [x] Add an equivalence test comparing worker and direct `XbridgesEngine` one-step outputs for PID, integrator, and coupled models.
+- [x] Add a cancellation test for an adaptive-solver request.
+- [x] Implement worker-side engine creation/reuse and state serialization.
+- [x] Replace synchronous solver calls in the animation callback with worker requests; allow only one in-flight request and apply the latest completed state.
+- [x] Throttle ReactFlow node synchronization to a bounded display rate while keeping worker simulation steps unchanged.
+- [x] Run X-Bridges engine tests and worker tests.
+- [x] Commit as `fix: isolate X-Bridges simulation from renderer`.
 
 ### Task 4: Protect X-Bridges analysis and rendering paths
 
@@ -95,12 +95,12 @@
 - Modify: `src/components/xbridges/XBlockNode.tsx`
 - Test: `src/components/xbridges/XbridgesRootLocusWindow.test.tsx`
 
-- [ ] Add a failing test that root-locus calculation is deferred and stale calculations cannot replace newer parameters.
-- [ ] Move root-locus sweeps and high-order root matching to a worker.
-- [ ] Cap canvas history used for drawing with a configurable display window while preserving full export history.
-- [ ] Memoize static geometry and redraw only when geometry or sampled state changes.
-- [ ] Verify animation cleanup cancels every `requestAnimationFrame` on unmount.
-- [ ] Run focused X-Bridges UI tests and commit as `perf: isolate X-Bridges analysis and rendering`.
+- [x] Add a failing test that root-locus calculation is deferred and stale calculations cannot replace newer parameters.
+- [x] Move root-locus sweeps and high-order root matching to a worker.
+- [x] Cap canvas history used for drawing with a configurable display window while preserving full export history.
+- [x] Memoize static geometry and redraw only when geometry or sampled state changes.
+- [x] Verify animation cleanup cancels every `requestAnimationFrame` on unmount.
+- [x] Run focused X-Bridges UI tests and commit as `perf: isolate X-Bridges analysis and rendering`.
 
 ### Task 5: Make SysML large-model and reporting work non-blocking
 
@@ -113,13 +113,13 @@
 - Modify: `src/App.tsx`
 - Create/Test: `src/engine/sysml/reportWorker.ts`, `src/engine/sysml/reportWorker.test.ts`
 
-- [ ] Add tests for large report generation, RTM equivalence, cyclic requirement graphs, and stale report responses.
-- [ ] Remove synchronous large-work fallback for payloads above the existing worker threshold; return a clear recoverable diagnostic when no worker exists.
-- [ ] Route report snapshot/index/matrix/diagram generation through the worker.
-- [ ] Add visited-set and depth protection to recursive requirement rendering.
-- [ ] Build reusable maps for relationship/node lookup instead of repeated `find()` scans.
-- [ ] Reuse spatial indexes during viewport culling instead of rebuilding them on every revision.
-- [ ] Run SysML worker, reporting, and large-model tests; commit as `fix: isolate SysML analysis and reports`.
+- [x] Add tests for large report generation, RTM equivalence, cyclic requirement graphs, and stale report responses.
+- [x] Remove synchronous large-work fallback for payloads above the existing worker threshold; return a clear recoverable diagnostic when no worker exists.
+- [x] Route report snapshot/index/matrix/diagram generation through the worker.
+- [x] Add visited-set and depth protection to recursive requirement rendering.
+- [x] Build reusable maps for relationship/node lookup instead of repeated `find()` scans.
+- [x] Reuse spatial indexes during viewport culling instead of rebuilding them on every revision.
+- [x] Run SysML worker, reporting, and large-model tests; commit as `fix: isolate SysML analysis and reports`.
 
 ### Task 6: Move DOE/GMDH and surface evaluation to workers
 
@@ -132,12 +132,12 @@
 - Test: `src/services/doeWorkerClient.test.ts`
 - Test: `src/engine/doe/doeWorker.test.ts`
 
-- [ ] Add equivalence tests for RSM, GMDH, Taguchi, and 41×41 surface results.
-- [ ] Add cancellation/progress tests for GMDH layer and cross-validation work.
-- [ ] Run training and surface prediction in the worker; keep Plotly updates on the UI thread.
-- [ ] Batch surface points and publish progress so cancellation remains responsive.
-- [ ] Preserve existing model objects, diagnostics, and exports exactly.
-- [ ] Run DOE tests and commit as `fix: isolate DOE and GMDH computation`.
+- [x] Add equivalence tests for RSM, GMDH, Taguchi, and 41×41 surface results.
+- [x] Add cancellation/progress tests for GMDH layer and cross-validation work.
+- [x] Run training and surface prediction in the worker; keep Plotly updates on the UI thread.
+- [x] Batch surface points and publish progress so cancellation remains responsive.
+- [x] Preserve existing model objects, diagnostics, and exports exactly.
+- [x] Run DOE tests and commit as `fix: isolate DOE and GMDH computation`.
 
 ### Task 7: Batch HIL telemetry and protect OPM heavy operations
 

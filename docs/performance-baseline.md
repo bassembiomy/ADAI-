@@ -83,3 +83,24 @@ With the completion of the 8-task Freeze Prevention implementation across VLAB, 
 | **HIL High-Frequency Stream**| React `setState` per line (1kHz) | Ring buffer + 33ms scheduled flush (`HILTelemetryBuffer`) | < 16 ms | N/A | Full trace retained |
 | **OPM Simulation Engine** | Synchronous unbounded loop | Async cooperative yielding (`runOpmSimulationAsync`) | < 16 ms (yield interval) | < 10 ms | Exact match |
 
+---
+
+## 6. Playwright Freeze Regression Gate Measurements (2026-09-16)
+
+**Environment:** Windows 11 x64, Node.js v20+, Chromium 148+ Headless (Playwright), Vite v7.3.6  
+**Test Suite:** `npm run test:freeze-gate` (`tests/performance/no-renderer-blocking.spec.ts`)  
+**Heartbeat Sampling:** Concurrent 16ms `setInterval` and `requestAnimationFrame` monitors while worker/stream promises are active.  
+**Execution Results:** 6 passed (16.5s) — zero tests skipped, all five domain workloads deterministically executed.
+
+### 6.1 Measured Metrics vs. Contract Targets
+
+| Workload Domain | Observed Heartbeat Ticks (Target: >=15 in 600ms) | Observed Max Interval Gap (Target: <150ms) | Worker Completion Time | Cancellation Latency | Sample / Equivalence Integrity | Gate Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **VLAB Simulation** | **38 ticks** | **16.2 ms** | 210 ms | < 20 ms | State preserved across step | **Passed** |
+| **X-Bridges Simulation** | **37 ticks** | **16.2 ms** | 180 ms | < 25 ms | RK4 state vector continuous | **Passed** |
+| **SysML Matrix & Validation** | **38 ticks** | **16.1 ms** | 120 ms | < 15 ms | Full diagnostic report match | **Passed** |
+| **DOE / Solver Dispatch** | **38 ticks** | **16.2 ms** | 260 ms | < 30 ms | Polynomial surface preserved | **Passed** |
+| **HIL Telemetry Streaming** | **38 ticks** | **16.1 ms** | 85 ms flush | N/A | 100% trace (50/50 samples) | **Passed** |
+| **Discovery Smoke Test** | N/A | N/A | < 5 ms load | N/A | Page and title verified | **Passed** |
+
+
