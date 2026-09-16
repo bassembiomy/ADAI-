@@ -13,6 +13,11 @@ test.describe('Freeze Prevention & Non-Blocking Renderer Gate', () => {
     }
   });
 
+  test('freeze gate suite is loaded from the performance test directory', async ({ page }) => {
+    await page.goto('/');
+    await expect(page).toHaveTitle(/./);
+  });
+
   test('main thread heartbeat continues during simulated intensive workload', async ({ page }) => {
     // Inject a heartbeat counter on requestAnimationFrame and setInterval to prove the event loop does not freeze
     const heartbeatStats = await page.evaluate(async () => {
