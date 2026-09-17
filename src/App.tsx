@@ -28,7 +28,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
+  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen, ShieldAlert,
   Sun, Moon, Gauge
 } from 'lucide-react';
 import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
@@ -129,7 +129,7 @@ import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
@@ -6061,6 +6061,16 @@ const ADIA = () => {
     otherDeletedIds?: string[];
   } | null>(null);
 
+  // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
+  const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
+    impact: import('./engine/sysml/mutations').MutationImpact;
+    transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
+    elementName: string;
+    elementKind: string;
+    severity: import('./services/sysmlTransactionAdapter').ImpactSeverity;
+    onConfirm: () => void;
+  } | null>(null);
+
   const [states, setStates] = useState<StateData[]>([]);
   const [junctions, setJunctions] = useState<JunctionData[]>([]);
   const [transitions, setTransitions] = useState<TransitionData[]>([]);
@@ -9182,20 +9192,8 @@ const ADIA = () => {
     }
   }, [layers, states]);
 
-  const deleteNonStateElements = useCallback((ids: string[]) => {
+  const applyNonStateTransaction = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, ids: string[]) => {
     const idSet = new Set(ids);
-    if (idSet.size === 0) return;
-
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
-    // Protected-baseline gate (projection-only): never silently delete frozen
-    // content. Refuse here with an explanation; the canonical gateway enforces
-    // the same rule via PROTECTED_BASELINE_REQUIRES_AUTHORIZATION.
-    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
-      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
-      return;
-    }
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
     setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
@@ -9211,7 +9209,41 @@ const ADIA = () => {
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-  }, [addToHistory, blocks, relationships, parts, connectors, authorizedBaselineIds]);
+  }, [addToHistory]);
+
+  const deleteNonStateElements = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {},
+      });
+      return;
+    }
+    if (requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {
+          applyNonStateTransaction(transaction, ids);
+        },
+      });
+      return;
+    }
+    applyNonStateTransaction(transaction, ids);
+  }, [blocks, relationships, parts, connectors, authorizedBaselineIds, applyNonStateTransaction]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9551,17 +9583,7 @@ const ADIA = () => {
     setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
   }, [addError, blocks, parts, relationships, showConnectionPolicyError]);
 
-  const deleteBlock = useCallback((id: string) => {
-    const block = blocks.find(b => b.id === id);
-    if (!block) return;
-    const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
-      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
-      return;
-    }
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
+  const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
     setBlocks(transaction.model.blocks);
@@ -9570,8 +9592,30 @@ const ADIA = () => {
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted ${kind}: ${block.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
+    addError('info', msg);
+  }, [addToHistory, addError]);
+
+  const deleteBlock = useCallback((id: string) => {
+    const block = blocks.find(b => b.id === id);
+    if (!block) return;
+    const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: block.name,
+        elementKind: kind,
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
@@ -9633,22 +9677,23 @@ const ADIA = () => {
 
   const deleteRelationship = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
-      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      const rel = relationships.find(r => r.id === id);
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: rel?.label || id,
+        elementKind: 'relationship',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted relationship');
+        },
+      });
       return;
     }
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setRelationships(transaction.model.relationships);
-    setBlocks(transaction.model.blocks);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', 'Deleted relationship');
-  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
+    applySysmlDeletion(transaction, 'Deleted relationship');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
@@ -9692,21 +9737,22 @@ const ADIA = () => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
-      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: part.name,
+        elementKind: 'part',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+        },
+      });
       return;
     }
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setRelationships(transaction.model.relationships);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted part: ${part.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
+    applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.target === canvasRef.current) {
@@ -9930,22 +9976,22 @@ const ADIA = () => {
 
   const deleteConnector = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (impactSeverity(transaction.impact, authorizedBaselineIds) === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
-      window.alert(`Protected baseline ${blocked.join(', ') || 'unknown'} forbids this deletion. Clone the baseline or authorize explicitly before retrying.`);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: id,
+        elementKind: 'connector',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted connector');
+        },
+      });
       return;
     }
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setConnectors(transaction.model.connectors);
-    setRelationships(transaction.model.relationships);
-    setBlocks(transaction.model.blocks);
-    setParts(transaction.model.parts);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', 'Deleted connector');
-  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds]);
+    applySysmlDeletion(transaction, 'Deleted connector');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
     const current = connectors.find(connector => connector.id === id);
@@ -18185,6 +18231,104 @@ const ADIA = () => {
                   <Trash2 className="w-3.5 h-3.5" />
                   {deleteConfirmState.totalStates > 1 ? `Delete ${deleteConfirmState.totalStates} States` : 'Delete State'}
                 </Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* SysML Deletion Confirmation Modal (BDD / Requirements / IBD) */}
+        {sysmlDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setSysmlDeleteConfirm(null)}>
+            <div className="bg-[#1a1a1a] border border-red-900/60 rounded-xl w-[520px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
+                <AlertTriangle className={`w-5 h-5 ${sysmlDeleteConfirm.severity === 'blocked' ? 'text-red-500' : 'text-[#f97316]'} mr-3 shrink-0`} />
+                <h2 className="text-base font-bold text-[#e0e0e0]">
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Deletion Blocked' : `Confirm Delete ${sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}`}
+                </h2>
+                <button
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 overflow-y-auto">
+                {sysmlDeleteConfirm.severity === 'blocked' ? (
+                  <div className="p-3.5 bg-red-950/40 rounded-lg border border-red-800/60 flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-300 leading-relaxed">
+                      Protected baseline <span className="font-semibold text-white">{(sysmlDeleteConfirm.impact.blockedBaselineIds ?? sysmlDeleteConfirm.impact.affectedBaselineIds).join(', ') || 'unknown'}</span> forbids this deletion. Clone the baseline or authorize explicitly before retrying.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#cccccc] leading-relaxed">
+                      Are you sure you want to delete <span className="font-semibold text-[#f97316]">{sysmlDeleteConfirm.elementName}</span>?
+                    </p>
+
+                    {/* Impact Details */}
+                    <div className="space-y-2">
+                      {(() => {
+                        const { impact } = sysmlDeleteConfirm;
+                        const requested = new Set(impact.requestedElementIds);
+                        const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+                        const items: { label: string; value: string; color: string }[] = [];
+                        if (cascade.length > 0) items.push({ label: 'Cascade deleted', value: `${cascade.length} element(s)`, color: 'text-red-300' });
+                        if (impact.nestedRequirementIds.length > 0) items.push({ label: 'Nested requirements', value: `${impact.nestedRequirementIds.length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.removedRelationshipIds.length > 0) items.push({ label: 'Removed relationships', value: `${impact.removedRelationshipIds.length} relationship(s)`, color: 'text-amber-300' });
+                        if (impact.unresolvedUsageIds.length > 0) items.push({ label: 'Unresolved usages', value: impact.unresolvedUsageIds.join(', '), color: 'text-amber-300' });
+                        if (impact.affectedRequirementIds.filter(id => !requested.has(id)).length > 0) items.push({ label: 'Affected requirements', value: `${impact.affectedRequirementIds.filter(id => !requested.has(id)).length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.invalidatedEvidenceIds.length > 0) items.push({ label: 'Invalidated evidence', value: `${impact.invalidatedEvidenceIds.length} record(s)`, color: 'text-amber-300' });
+                        if (impact.affectedDiagramKinds.length > 0) items.push({ label: 'Affected diagrams', value: impact.affectedDiagramKinds.join(', ').toUpperCase(), color: 'text-sky-300' });
+                        if (impact.affectedBaselineIds.length > 0) items.push({ label: 'Affected baselines', value: impact.affectedBaselineIds.join(', '), color: 'text-amber-300' });
+
+                        return items.length > 0 && (
+                          <div className="p-3.5 bg-[#2a1a14] rounded-lg border border-[#f97316]/30">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <AlertTriangle className="w-4 h-4 text-[#f97316]" />
+                              <span className="text-xs font-bold text-[#f97316]">Deletion Impact</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {items.map((item, i) => (
+                                <div key={i} className="flex items-baseline justify-between text-xs">
+                                  <span className="text-[#999]">{item.label}</span>
+                                  <span className={`font-mono ${item.color}`}>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <p className="text-[11px] text-[#777] leading-relaxed">
+                      This action is irreversible. All cascaded elements, relationships, and evidence will be permanently removed.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
+                >
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Dismiss' : 'Cancel'}
+                </Button>
+                {sysmlDeleteConfirm.severity !== 'blocked' && (
+                  <Button
+                    onClick={() => {
+                      const fn = sysmlDeleteConfirm.onConfirm;
+                      setSysmlDeleteConfirm(null);
+                      fn();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete {sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

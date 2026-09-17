@@ -1458,7 +1458,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   gas_reservoir: ({ across, branch }) => {
-    const P_ctrl = across[1] !== undefined ? across[1] : 101325;
+    const P_ctrl = across[1] === undefined ? 101325 : across[1];
     return [across[0] - P_ctrl];
   },
   gas_resistance: ({ across, branch, params }) => {
@@ -1467,7 +1467,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   gas_restriction: ({ across, branch, params }) => {
     const Cd = params.Cd || 0.62;
-    const A = across[2] !== undefined ? across[2] : (params.area || 1e-4);
+    const A = across[2] === undefined ? (params.area ?? 1e-4) : across[2];
     const T = params.T || 293.15;
     const k = Cd * A / Math.sqrt(T);
     return [branch[0] - k * (across[0] - across[1])];
@@ -1512,11 +1512,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   gas_flow_source: ({ across, branch, params }) => {
-    const mdot = across[2] !== undefined ? across[2] : (params.mdot || 0.1);
+    const mdot = across[2] === undefined ? (params.mdot ?? 0.1) : across[2];
     return [branch[0] - mdot];
   },
   gas_pressure_source: ({ across, branch, params }) => {
-    const P = params.P !== undefined ? params.P : (across[2] !== undefined && across[2] !== 0 ? across[2] : 200000);
+    const P = across[2] === undefined ? (params.P ?? 200000) : across[2];
     return [(across[1] - across[0]) - P];
   },
   gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
