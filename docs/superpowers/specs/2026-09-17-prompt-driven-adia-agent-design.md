@@ -23,6 +23,12 @@ Example request: “Make an X-BRIDGES model for a BLDC motor with inverter.” T
 
 ## Architecture
 
+### Offline LLM runtime
+
+The baseline deployment targets normal office computers with approximately 8–16 GB RAM and CPU-focused execution. The agent uses a local 7B–8B instruction-tuned model in 4-bit quantized form, served through Ollama or `llama.cpp`. The exact model remains configurable and must be selected through local benchmark testing rather than hard-coded into the application. A model-provider interface keeps the agent compatible with another local model or an optional online provider later.
+
+The LLM performs language understanding, clarification, structured requirement drafting, proposals, and explanations. Deterministic ADIA logic, schemas, tool contracts, and validators remain responsible for block availability, model integrity, compilation, simulation checks, and engineering verification. If the local model is unavailable, the application may still inspect projects and run deterministic validators, but natural-language orchestration is limited.
+
 ### Central ADIA Agent
 
 The single coordinating agent interprets user intent, maintains context, selects the next question or action, and explains decisions in concise natural language. Its personality may be JARVIS-like, but its engineering behavior remains explicit, traceable, and conservative.
@@ -78,4 +84,3 @@ The first end-to-end workflow is an air fryer. It covers product requirements, s
 ## Success criteria
 
 The design succeeds when a user can submit an air-fryer idea or existing project, answer the agent’s focused questions, approve a complete specification and plan, approve each proposed change, and receive a validated ADIA engineering package with traceable evidence—without the agent creating any new ADIA blocks or silently making engineering decisions.
-
