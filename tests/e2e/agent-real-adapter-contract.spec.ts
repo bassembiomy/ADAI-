@@ -2,14 +2,16 @@ import { test, expect } from '@playwright/test';
 
 test.describe('ADIA Agent Real Adapter Contract & Safety Gate E2E', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?projectName=adia');
     await page.waitForLoadState('domcontentloaded');
 
-    // Dismiss intro overlay if present
-    const intro = page.locator('.fixed.inset-0.z-\\[9999\\]');
-    if (await intro.isVisible()) {
-      await intro.click();
-      await page.waitForTimeout(600);
+    // Dismiss intro/welcome overlay if present
+    const overlay = page.locator('[data-testid="welcome-overlay"], .fixed.inset-0.z-\\[9999\\]');
+    if (await overlay.count() > 0) {
+      await page.keyboard.press('Escape');
+      await overlay.first().click({ position: { x: 10, y: 10 }, force: true }).catch(() => {});
+      await overlay.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(400);
     }
   });
 
@@ -52,7 +54,7 @@ test.describe('ADIA Agent Real Adapter Contract & Safety Gate E2E', () => {
     // Verify catalog renders only verified blocks
     await expect(page.locator('.adia-agent-body')).toContainText('Existing Catalog Blocks');
     await expect(page.locator('.adia-agent-body')).toContainText('bldc_motor');
-    await expect(page.locator('.adia-agent-body')).toContainText('three_phase_inverter');
+    await expect(page.locator('.adia-agent-body')).toContainText('three_phase_source');
 
     // Verify non-existent blocks are not present in verified list
     await expect(page.locator('.adia-agent-body')).not.toContainText('quantum_flux_capacitor');
@@ -70,7 +72,7 @@ test.describe('ADIA Agent Real Adapter Contract & Safety Gate E2E', () => {
 
     const testBtn = page.locator('.adia-agent-test-btn');
     await expect(testBtn).toBeVisible();
-    await expect(testBtn).toHaveText('Test Ollama');
+    await expect(testBtn).toHaveText('Test Ollama connection');
 
     // Click test button
     await testBtn.click();
