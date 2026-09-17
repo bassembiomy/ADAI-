@@ -1457,8 +1457,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       dP - (R * T / V) * (mdot_a + mdot_b)
     ];
   },
-  gas_reservoir: ({ across, branch }) => {
-    const P_ctrl = across[1] === undefined ? 101325 : across[1];
+  gas_reservoir: ({ across, branch, params }) => {
+    const P_ctrl = across[1] === undefined ? (params.P ?? 101325) : across[1];
     return [across[0] - P_ctrl];
   },
   gas_resistance: ({ across, branch, params }) => {

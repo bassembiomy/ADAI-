@@ -3,7 +3,8 @@ import { blockEquations } from './vlabEquations';
 
 describe('Gas component control-port fallbacks', () => {
   it('uses atmospheric pressure only when reservoir control port is unconnected', () => {
-    expect(blockEquations.gas_reservoir({ across: [120000, undefined], branch: [0] } as any)).toEqual([120000 - 101325]);
+    expect(blockEquations.gas_reservoir({ across: [120000, undefined], branch: [0], params: { P: 95000 } } as any)).toEqual([25000]);
+    expect(blockEquations.gas_reservoir({ across: [120000, undefined], branch: [0], params: {} } as any)).toEqual([120000 - 101325]);
     expect(blockEquations.gas_reservoir({ across: [120000, 90000], branch: [0] } as any)).toEqual([30000]);
   });
 
