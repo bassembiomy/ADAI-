@@ -132,7 +132,8 @@ import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapsho
 import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
-import type { SysmlApplicationDelegate } from './agent/applicationDelegates';
+import { createReportDelegate } from './agent/toolAdapters/adiaProjectAdapter';
+import type { SysmlApplicationDelegate, ReportApplicationDelegate } from './agent/applicationDelegates';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
@@ -6211,6 +6212,19 @@ const ADIA = () => {
       },
     });
   }, [canonicalSysmlRepository, sysmlStore]);
+
+  // Report Application Delegate connected to the real report export pipeline
+  const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
+    return createReportDelegate({
+      getProjectData: () => ({
+        projectId: 'ADIA_Project',
+        modelRevision: canonicalSysmlRepository.revision,
+        blocks,
+        relationships,
+      }),
+      outputDir: './reports',
+    });
+  }, [canonicalSysmlRepository.revision, blocks, relationships]);
 
   // The legacy diagram editors still expose array setters. Keep the canonical
   // store current until every editor has been migrated to gateway commands.

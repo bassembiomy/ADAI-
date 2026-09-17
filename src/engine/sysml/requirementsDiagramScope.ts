@@ -30,11 +30,14 @@ export function getRequirementsDiagramScope(
   );
 
   for (const relationship of relationships) {
-    if (!REQUIREMENT_DIAGRAM_RELATIONSHIP_TYPES.has(relationship.type)) continue;
-
     const source = blocksById.get(relationship.sourceId);
     const target = blocksById.get(relationship.targetId);
     if (!source || !target || layerIdOf(source) !== selectedLayerId || layerIdOf(target) !== selectedLayerId) continue;
+
+    const isRelAllowed =
+      REQUIREMENT_DIAGRAM_RELATIONSHIP_TYPES.has(relationship.type) ||
+      (relationship.type === 'composition' && source.stereotype === 'requirement' && target.stereotype === 'requirement');
+    if (!isRelAllowed) continue;
 
     if (source.stereotype === 'requirement' && visibleBlockIds.has(source.id) && target.stereotype !== 'requirement') {
       visibleBlockIds.add(target.id);
@@ -46,13 +49,20 @@ export function getRequirementsDiagramScope(
 
   const visibleRelationshipIds = new Set(
     relationships
-      .filter(relationship =>
-        REQUIREMENT_DIAGRAM_RELATIONSHIP_TYPES.has(relationship.type) &&
-        visibleBlockIds.has(relationship.sourceId) &&
-        visibleBlockIds.has(relationship.targetId) &&
-        (blocksById.get(relationship.sourceId)?.stereotype === 'requirement' ||
-          blocksById.get(relationship.targetId)?.stereotype === 'requirement'),
-      )
+      .filter(relationship => {
+        const source = blocksById.get(relationship.sourceId);
+        const target = blocksById.get(relationship.targetId);
+        const isRelAllowed =
+          REQUIREMENT_DIAGRAM_RELATIONSHIP_TYPES.has(relationship.type) ||
+          (relationship.type === 'composition' && source?.stereotype === 'requirement' && target?.stereotype === 'requirement');
+
+        return (
+          isRelAllowed &&
+          visibleBlockIds.has(relationship.sourceId) &&
+          visibleBlockIds.has(relationship.targetId) &&
+          (source?.stereotype === 'requirement' || target?.stereotype === 'requirement')
+        );
+      })
       .map(relationship => relationship.id),
   );
 
