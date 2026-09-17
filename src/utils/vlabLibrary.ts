@@ -1715,7 +1715,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Pb)",
+        "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Ph)",
         "description": "Pneumatic rotary motor/compressor converting gas pressure differentials into shaft torque."
       },
       {
@@ -1757,7 +1757,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "mdot = A * v * ρ\nF = A * (Pa - Pb)",
+        "equation": "mdot = A * v * ρ\nF = A * (Pa - Ph)",
         "description": "Pneumatic cylinder converting differential gas pressure into translational piston force."
       },
       {

@@ -26,4 +26,11 @@ describe('Gas component control-port fallbacks', () => {
   it('reports gas flow in the positive p-to-n direction', () => {
     expect(blockEquations.gas_flow_sensor({ across: [100000, 100000], branch: [-0.2, 0] } as any)).toEqual([0, -0.2]);
   });
+
+  it('keeps converter torque and force signs as pressure difference from a to h', () => {
+    const torque = blockEquations.gas_rotational_conv({ across: [200000, 150000, 0, 0], branch: [0, 0], params: { D: 0.01 } } as any);
+    const force = blockEquations.gas_translational_conv({ across: [200000, 150000, 0, 0], branch: [0, 0], params: { A: 0.001 } } as any);
+    expect(torque[1]).toBe(-500);
+    expect(force[1]).toBe(-50);
+  });
 });

@@ -315,10 +315,12 @@ export class DAEAssembler {
         branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
         break;
       case 'gas_rotational_conv':
+        // Positive torque is defined from gas port a toward h when Pa > Ph.
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
       case 'gas_translational_conv':
+        // Positive force is defined from gas port a toward h when Pa > Ph.
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
@@ -749,7 +751,9 @@ export class DAEAssembler {
       if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
         const ports = nodePorts.get(node.id) || [];
         let targetVal = 0;
-        if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
+        if (type === 'gas_ref') {
+          targetVal = 101325;
+        } else if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
           const params = (node.data as any)?.params || {};
           const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
           const pRefUnit = (params?.referencePressure?.unit || 'Pa');

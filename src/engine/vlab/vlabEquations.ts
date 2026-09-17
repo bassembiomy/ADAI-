@@ -1492,9 +1492,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const omega = across[2] - (across[3] || 0);
     const mdot = branch[0];
     const torque = branch[1];
+    const deltaP = P_a - P_h;
     return [
       mdot - (P_a * D / (R * T)) * omega,
-      torque - D * (P_a - P_h)
+      torque - D * deltaP
     ];
   },
   gas_translational_conv: ({ across, branch, params }) => {
@@ -1506,9 +1507,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const v = across[2] - (across[3] || 0);
     const mdot = branch[0];
     const force = branch[1];
+    const deltaP = P_a - P_h;
     return [
       mdot - (P_a * A / (R * T)) * v,
-      force - A * (P_a - P_h)
+      force - A * deltaP
     ];
   },
   gas_flow_source: ({ across, branch, params }) => {
