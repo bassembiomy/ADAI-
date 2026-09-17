@@ -237,11 +237,11 @@ describe('updateParameters', () => {
     const updated = await delegate.updateParameters('gain-1', { gain: 99 });
 
     expect(updated.id).toBe('gain-1');
-    expect(updated.data.params?.gain).toBe(99);
+    expect((updated.data.params as Record<string, unknown>)?.gain).toBe(99);
 
     // Verify the node in the store is also updated.
     const { nodes } = store.snapshot();
-    expect(nodes[0].data.params.gain).toBe(99);
+    expect((nodes[0].data.params as Record<string, unknown>).gain).toBe(99);
     // Other data fields must remain intact.
     expect(nodes[0].data.inputs).toEqual(originalInputs);
   });
@@ -256,8 +256,8 @@ describe('updateParameters', () => {
     await delegate.updateParameters('gain-1', { gain: 20 });
 
     const { nodes } = store.snapshot();
-    expect(nodes[0].data.params.gain).toBe(20);
-    expect(nodes[0].data.params.someOtherKey).toBe('preserve-me');
+    expect((nodes[0].data.params as Record<string, unknown>).gain).toBe(20);
+    expect((nodes[0].data.params as Record<string, unknown>).someOtherKey).toBe('preserve-me');
   });
 
   it('does not modify other nodes', async () => {

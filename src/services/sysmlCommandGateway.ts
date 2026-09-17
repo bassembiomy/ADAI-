@@ -655,7 +655,34 @@ function toGateDiagnostics(elementId: string, codes: readonly string[], subject:
   }));
 }
 
+function elementExistsInRepository(repo: SysmlRepository, id: string): boolean {
+  return Boolean(
+    repo.definitions[id] ||
+    repo.usages[id] ||
+    repo.connectors[id] ||
+    repo.relationships[id] ||
+    repo.requirements[id] ||
+    repo.verificationCases[id] ||
+    repo.evidence[id] ||
+    repo.baselines[id] ||
+    repo.artifacts[id] ||
+    repo.actors?.[id] ||
+    repo.subjects?.[id] ||
+    repo.useCases?.[id] ||
+    repo.extensionPoints?.[id] ||
+    repo.diagramReferences?.[id]
+  );
+}
+
 function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlDiagnostic[] | null {
+  if (elementExistsInRepository(repo, element.id)) {
+    return [{
+      code: 'DUPLICATE_ELEMENT_ID',
+      severity: 'error' as const,
+      elementId: element.id,
+      message: `Element ${element.id} rejected: DUPLICATE_ELEMENT_ID (already exists)`,
+    }];
+  }
   if (isRelationshipElement(element)) {
     const verdict = validateCanonicalRelationshipCandidate(repo, element);
     if (!verdict.valid) {

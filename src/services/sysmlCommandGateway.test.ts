@@ -826,6 +826,19 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(result.repository.revision).toBe(before.revision);
     expect(result.repository.auditTrail).toHaveLength(before.audit);
   });
+
+  it('rejects creation of element with duplicate ID with DUPLICATE_ELEMENT_ID and preserves state', () => {
+    const state = commitAll([defBlock('block-existing')]);
+    const before = { revision: state.repository.revision, audit: state.repository.auditTrail.length };
+    const result = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: defBlock('block-existing'),
+    });
+    expect(result.committed).toBe(false);
+    expect(codesOf(result)).toContain('DUPLICATE_ELEMENT_ID');
+    expect(result.repository.revision).toBe(before.revision);
+    expect(result.repository.auditTrail).toHaveLength(before.audit);
+  });
 });
 
 

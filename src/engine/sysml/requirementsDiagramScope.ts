@@ -9,7 +9,6 @@ export const REQUIREMENT_DIAGRAM_RELATIONSHIP_TYPES: ReadonlySet<RelationshipDat
   'deriveReqt',
   'copy',
   'requirementContainment',
-  'composition',
 ]);
 
 export interface RequirementsDiagramScope {

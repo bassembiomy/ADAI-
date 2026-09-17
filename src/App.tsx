@@ -123,7 +123,7 @@ import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
 import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
 import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
-import { analyzeMutation } from './engine/sysml/mutations';
+import { analyzeMutation, createHistory } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
@@ -131,6 +131,8 @@ import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
+import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
+import type { SysmlApplicationDelegate } from './agent/applicationDelegates';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
@@ -6184,6 +6186,31 @@ const ADIA = () => {
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
   const [authorizedBaselineIds, setAuthorizedBaselineIds] = useState<string[]>([]);
+
+  // SysML Application Delegate connected to the canonical command gateway
+  const sysmlApplicationDelegate = useMemo<SysmlApplicationDelegate>(() => {
+    return createSysmlDelegate({
+      getState: () => ({
+        repository: canonicalSysmlRepository,
+        history: createHistory(canonicalSysmlRepository),
+        store: sysmlStore,
+        coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
+        diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+      }),
+      setState: (nextState) => {
+        setCanonicalSysmlRepository(nextState.repository);
+        if (nextState.store) {
+          setSysmlStore(nextState.store);
+        }
+      },
+      onStateChange: (result) => {
+        setBlocks(result.view.blocks);
+        setRelationships(result.view.relationships);
+        setParts(result.view.parts);
+        setConnectors(result.view.connectors);
+      },
+    });
+  }, [canonicalSysmlRepository, sysmlStore]);
 
   // The legacy diagram editors still expose array setters. Keep the canonical
   // store current until every editor has been migrated to gateway commands.
