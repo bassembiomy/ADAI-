@@ -347,7 +347,11 @@ export class AgentOrchestrator {
 
       // Propose first executable change
       const firstAction = this.executionPlan.actions[0];
-      const changeApprovalReq = createChangeApprovalRequest(this.executionPlan, firstAction.id);
+      const changeApprovalReq = createChangeApprovalRequest(
+        this.executionPlan,
+        firstAction.id,
+        this.projectContext.revision
+      );
 
       this.pendingApproval = changeApprovalReq;
       this.taskState = {
@@ -357,7 +361,8 @@ export class AgentOrchestrator {
 
       this.appendAudit('CHANGE_APPROVAL_REQUESTED', {
         actionId: firstAction.id,
-        approvalId: changeApprovalReq.id
+        approvalId: changeApprovalReq.id,
+        revision: this.projectContext.revision
       });
 
       return {
@@ -387,6 +392,26 @@ export class AgentOrchestrator {
       }
       if (approvedReq.payload['params'] && JSON.stringify(approvedReq.payload['params']) !== JSON.stringify(action.params)) {
         throw new Error(`Action parameters mismatch for action '${action.id}'`);
+      }
+
+      // Verify revision: reject stale action approvals
+      const approvedRevision = approvedReq.payload['projectRevision'] as number | undefined;
+      if (approvedRevision !== undefined && approvedRevision !== this.projectContext.revision) {
+        this.taskState = transitionState(
+          this.taskState,
+          'failed',
+          `Stale approval: action revision (${approvedRevision}) does not match current project revision (${this.projectContext.revision})`
+        );
+        this.appendAudit('ACTION_REJECTED_STALE', {
+          actionId: action.id,
+          approvedRevision,
+          currentRevision: this.projectContext.revision,
+        });
+        return {
+          status: 'failed',
+          message: `Stale approval: execution rejected because approval was granted for project revision ${approvedRevision}, but current revision is ${this.projectContext.revision}.`,
+          taskState: this.taskState,
+        };
       }
 
       this.taskState = transitionState(
@@ -440,6 +465,86 @@ export class AgentOrchestrator {
         };
       }
 
+      // Post-action integrity validations
+      const delegates = this.tools.getDelegates();
+
+      // 1. X-BRIDGES topology check
+      if (
+        (action.type === 'instantiate_block' || action.type === 'connect_ports' || action.type === 'configure_parameters') &&
+        delegates?.xbridges
+      ) {
+        const nodes = await delegates.xbridges.getNodes();
+        const edges = await delegates.xbridges.getEdges();
+        const nodeIds = new Set(nodes.map(n => n.id));
+
+        for (const edge of edges) {
+          if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+            this.taskState = transitionState(
+              this.taskState,
+              'failed',
+              `X-BRIDGES topology validation failed: dangling edge '${edge.id}' references non-existent node.`
+            );
+            this.appendAudit('TOPOLOGY_VALIDATION_FAILED', {
+              actionId: action.id,
+              edgeId: edge.id,
+              source: edge.source,
+              target: edge.target,
+            });
+            return {
+              status: 'failed',
+              message: `Validation failed: X-BRIDGES topology contains a dangling edge (${edge.id}).`,
+              taskState: this.taskState,
+            };
+          }
+        }
+      }
+
+      // 2. SysML integrity check
+      if (delegates?.sysml && (action.type === 'create_block' as any || action.type === 'sysml_command' as any || action.type === 'create_requirement' as any || action.type === 'create_relationship' as any)) {
+        const sysmlVal = await delegates.sysml.validate();
+        if (!sysmlVal.valid) {
+          this.taskState = transitionState(
+            this.taskState,
+            'failed',
+            `SysML integrity validation failed: ${sysmlVal.diagnostics.join('; ')}`
+          );
+          this.appendAudit('SYSML_VALIDATION_FAILED', {
+            actionId: action.id,
+            diagnostics: sysmlVal.diagnostics,
+          });
+          return {
+            status: 'failed',
+            message: `Validation failed: SysML model integrity violated (${sysmlVal.diagnostics.join('; ')}).`,
+            taskState: this.taskState,
+          };
+        }
+      }
+
+      // 3. Report artifact integrity check
+      if (action.type === 'generate_report') {
+        const reportPath =
+          (toolResult.evidence?.path as string | undefined) ||
+          (toolResult.changedArtifacts && toolResult.changedArtifacts.length > 0 ? toolResult.changedArtifacts[0] : undefined);
+        const sizeBytes = toolResult.evidence?.sizeBytes as number | undefined;
+        if (!reportPath || (sizeBytes !== undefined && sizeBytes <= 0)) {
+          this.taskState = transitionState(
+            this.taskState,
+            'failed',
+            'Report artifact validation failed: report file was not created or has 0 bytes.'
+          );
+          this.appendAudit('REPORT_VALIDATION_FAILED', {
+            actionId: action.id,
+            reportPath,
+            sizeBytes,
+          });
+          return {
+            status: 'failed',
+            message: 'Validation failed: generated report artifact is missing or empty.',
+            taskState: this.taskState,
+          };
+        }
+      }
+
       // Check if this action required validation (e.g. simulation)
       let validationResult: ValidationCheckResult | undefined;
       if (action.type === 'run_simulation') {
@@ -487,7 +592,11 @@ export class AgentOrchestrator {
       const nextIndex = actionIndex + 1;
       if (nextIndex < this.executionPlan.actions.length) {
         const nextAction = this.executionPlan.actions[nextIndex];
-        const nextChangeReq = createChangeApprovalRequest(this.executionPlan, nextAction.id);
+        const nextChangeReq = createChangeApprovalRequest(
+          this.executionPlan,
+          nextAction.id,
+          this.projectContext.revision
+        );
 
         this.pendingApproval = nextChangeReq;
         this.taskState = {

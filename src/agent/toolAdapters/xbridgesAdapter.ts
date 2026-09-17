@@ -145,7 +145,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         );
       }
 
-      const id = `${type}-${uuidv4()}`;
+      const id = (params?.id as string) || (params?.instanceName as string) || `${type}-${uuidv4()}`;
       const blockDef = factory(id, params);
 
       const newNode: ReactFlowXbridgesNode = {
@@ -154,6 +154,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         position: { x: 200, y: 200 }, // default position; caller may later move it
         data: {
           ...blockDef,
+          instanceName: (params?.instanceName as string) || id,
           selected: false,
         } as ReactFlowXbridgesNode['data'],
       };
@@ -175,12 +176,16 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     ): Promise<XbridgesEdge> {
       const nodes = getNodes();
 
-      const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+      const sourceNode = nodes.find(
+        (n) => n.id === sourceNodeId || (n.data as any)?.instanceName === sourceNodeId || (n.data as any)?.id === sourceNodeId
+      );
       if (!sourceNode) {
         throw new XbridgesAdapterError(`Source node "${sourceNodeId}" not found.`);
       }
 
-      const targetNode = nodes.find((n) => n.id === targetNodeId);
+      const targetNode = nodes.find(
+        (n) => n.id === targetNodeId || (n.data as any)?.instanceName === targetNodeId || (n.data as any)?.id === targetNodeId
+      );
       if (!targetNode) {
         throw new XbridgesAdapterError(`Target node "${targetNodeId}" not found.`);
       }
@@ -205,13 +210,13 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         );
       }
 
-      const edgeId = `e-${sourceNodeId}-${sourcePortId}-${targetNodeId}-${targetPortId}`;
+      const edgeId = `e-${sourceNode.id}-${sourcePortId}-${targetNode.id}-${targetPortId}`;
 
       const newEdge: ReactFlowXbridgesEdge = {
         id: edgeId,
-        source: sourceNodeId,
+        source: sourceNode.id,
         sourceHandle: sourcePortId,
-        target: targetNodeId,
+        target: targetNode.id,
         targetHandle: targetPortId,
         type: 'default',
         style: { stroke: '#4caf50', strokeWidth: 3 },
@@ -228,7 +233,9 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       params: Record<string, unknown>,
     ): Promise<XbridgesNode> {
       const nodes = getNodes();
-      const existing = nodes.find((n) => n.id === nodeId);
+      const existing = nodes.find(
+        (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
+      );
       if (!existing) {
         throw new XbridgesAdapterError(`Node "${nodeId}" not found.`);
       }
@@ -237,7 +244,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
 
       setNodes((prev) =>
         prev.map((n) => {
-          if (n.id !== nodeId) return n;
+          if (n.id !== existing.id) return n;
           const merged: ReactFlowXbridgesNode = {
             ...n,
             data: {
@@ -337,7 +344,8 @@ export class XbridgesAdapter implements ToolAdapter {
     try {
       if (action.kind === 'instantiate_block') {
         const blockType = (payload.blockType ?? payload.type) as string;
-        const params = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
+        const nestedParams = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
+        const params = { ...payload, ...nestedParams };
 
         if (!blockType) {
           return {
@@ -363,10 +371,10 @@ export class XbridgesAdapter implements ToolAdapter {
       }
 
       if (action.kind === 'connect_ports') {
-        const sourceNodeId = payload.sourceNodeId as string;
-        const sourcePortId = payload.sourcePortId as string;
-        const targetNodeId = payload.targetNodeId as string;
-        const targetPortId = payload.targetPortId as string;
+        const sourceNodeId = (payload.sourceNodeId ?? payload.sourceNode) as string;
+        const sourcePortId = (payload.sourcePortId ?? payload.sourcePort) as string;
+        const targetNodeId = (payload.targetNodeId ?? payload.targetNode) as string;
+        const targetPortId = (payload.targetPortId ?? payload.targetPort) as string;
 
         if (!sourceNodeId || !sourcePortId || !targetNodeId || !targetPortId) {
           return {
@@ -394,7 +402,7 @@ export class XbridgesAdapter implements ToolAdapter {
       }
 
       if (action.kind === 'configure_parameters') {
-        const nodeId = (payload.nodeId ?? payload.blockId) as string;
+        const nodeId = (payload.nodeId ?? payload.blockId ?? payload.instanceName) as string;
         const params = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
 
         if (!nodeId) {

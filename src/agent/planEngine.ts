@@ -49,107 +49,213 @@ export function buildExecutionPlan(specification: EngineeringSpecification): Exe
   const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const actions: PlanAction[] = [];
 
-  // Action 1: Instantiate Heating Element (resistor)
-  validateBlockProposal('resistor');
-  const act1: PlanAction = {
-    id: `${planId}-act-1`,
-    order: 1,
-    type: 'instantiate_block',
-    title: 'Instantiate Heating Resistor Block',
-    description: 'Place electrical heating resistor block into model canvas',
-    blockId: 'resistor',
-    params: { blockId: 'resistor', blockType: 'resistor', instanceName: 'MainHeatingElement' },
-    dependencies: [],
-    affectedArtifacts: ['model_blocks.json'],
-    expectedEvidence: 'Block instantiation token and layout ID',
-    rollbackMetadata: { action: 'delete_block', params: { instanceName: 'MainHeatingElement' } }
-  };
-  actions.push(act1);
+  const isXBridges = specification.targetSystem.toLowerCase().includes('xbridges');
 
-  // Action 2: Instantiate Sensing Element (variable_resistor)
-  validateBlockProposal('variable_resistor');
-  const act2: PlanAction = {
-    id: `${planId}-act-2`,
-    order: 2,
-    type: 'instantiate_block',
-    title: 'Instantiate Temperature Sensor Block',
-    description: 'Place variable resistance thermal transducer block for temperature sensing',
-    blockId: 'variable_resistor',
-    params: { blockId: 'variable_resistor', blockType: 'variable_resistor', instanceName: 'ChamberTempSensor' },
-    dependencies: [act1.id],
-    affectedArtifacts: ['model_blocks.json'],
-    expectedEvidence: 'Sensor block token with input and output terminals',
-    rollbackMetadata: { action: 'delete_block', params: { instanceName: 'ChamberTempSensor' } }
-  };
-  actions.push(act2);
+  if (isXBridges) {
+    // Action 1: Instantiate GAIN Block
+    validateBlockProposal('GAIN');
+    const act1: PlanAction = {
+      id: `${planId}-act-1`,
+      order: 1,
+      type: 'instantiate_block',
+      title: 'Instantiate Gain Block',
+      description: 'Place GAIN block into X-BRIDGES workspace canvas',
+      blockId: 'GAIN',
+      params: { blockId: 'GAIN', blockType: 'GAIN', instanceName: 'MainGain' },
+      dependencies: [],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Block instantiation token and layout ID',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'MainGain' } }
+    };
+    actions.push(act1);
 
-  // Action 3: Connect Ports
-  const act3: PlanAction = {
-    id: `${planId}-act-3`,
-    order: 3,
-    type: 'connect_ports',
-    title: 'Connect Heater and Sensor Ports',
-    description: 'Connect electrical and thermal terminals between heater and sensor feedback',
-    params: {
-      sourceNode: 'MainHeatingElement',
-      sourcePort: 'p',
-      targetNode: 'ChamberTempSensor',
-      targetPort: 't_in'
-    },
-    dependencies: [act2.id],
-    affectedArtifacts: ['model_connections.json'],
-    expectedEvidence: 'Connection line registered between nodes',
-    rollbackMetadata: { action: 'disconnect', params: {} }
-  };
-  actions.push(act3);
+    // Action 2: Instantiate Scope Block
+    validateBlockProposal('Scope');
+    const act2: PlanAction = {
+      id: `${planId}-act-2`,
+      order: 2,
+      type: 'instantiate_block',
+      title: 'Instantiate Scope Block',
+      description: 'Place Scope block into X-BRIDGES workspace canvas',
+      blockId: 'Scope',
+      params: { blockId: 'Scope', blockType: 'Scope', instanceName: 'MainScope' },
+      dependencies: [act1.id],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Scope block token with input ports',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'MainScope' } }
+    };
+    actions.push(act2);
 
-  // Action 4: Configure Parameters
-  const act4: PlanAction = {
-    id: `${planId}-act-4`,
-    order: 4,
-    type: 'configure_parameters',
-    title: 'Configure Component Parameters',
-    description: 'Assign approved power, resistance, and sensor rating parameters to placed blocks',
-    params: {
-      nodeId: 'MainHeatingElement',
-      parameters: { R: 28.8, P_rated: 1800 }
-    },
-    dependencies: [act3.id],
-    affectedArtifacts: ['model_parameters.json'],
-    expectedEvidence: 'Parameter validation report matching specification',
-    rollbackMetadata: { action: 'reset_parameters', params: {} }
-  };
-  actions.push(act4);
+    // Action 3: Connect Ports
+    const act3: PlanAction = {
+      id: `${planId}-act-3`,
+      order: 3,
+      type: 'connect_ports',
+      title: 'Connect Gain to Scope',
+      description: 'Connect Gain output port y to Scope input port in1',
+      params: {
+        sourceNodeId: 'MainGain',
+        sourcePortId: 'y',
+        targetNodeId: 'MainScope',
+        targetPortId: 'in1'
+      },
+      dependencies: [act2.id],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Connection registered between nodes',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    };
+    actions.push(act3);
 
-  // Action 5: Run Verification Simulation
-  const act5: PlanAction = {
-    id: `${planId}-act-5`,
-    order: 5,
-    type: 'run_simulation',
-    title: 'Run Thermal Closed-Loop Simulation',
-    description: 'Execute local solver simulation to verify rise time and temperature overshoot limits',
-    params: { durationSeconds: 300, timeStep: 0.01 },
-    dependencies: [act4.id],
-    affectedArtifacts: ['simulation_results.json'],
-    expectedEvidence: 'Simulation trace curves and performance metrics JSON',
-    rollbackMetadata: { action: 'purge_simulation_cache', params: {} }
-  };
-  actions.push(act5);
+    // Action 4: Configure Parameters
+    const act4: PlanAction = {
+      id: `${planId}-act-4`,
+      order: 4,
+      type: 'configure_parameters',
+      title: 'Configure Gain Parameter',
+      description: 'Set Gain value parameter to 5',
+      params: {
+        nodeId: 'MainGain',
+        parameters: { gain: 5 }
+      },
+      dependencies: [act3.id],
+      affectedArtifacts: ['model_parameters.json'],
+      expectedEvidence: 'Parameter validation report matching specification',
+      rollbackMetadata: { action: 'reset_parameters', params: {} }
+    };
+    actions.push(act4);
 
-  // Action 6: Generate Engineering Report
-  const act6: PlanAction = {
-    id: `${planId}-act-6`,
-    order: 6,
-    type: 'generate_report',
-    title: 'Generate Verification Engineering Report',
-    description: 'Assemble complete verification evidence, parameters, and simulation charts into report',
-    params: { format: 'docx', template: 'engineering_report' },
-    dependencies: [act5.id],
-    affectedArtifacts: ['reports/air_fryer_report.docx'],
-    expectedEvidence: 'Cryptographically hashed engineering report file',
-    rollbackMetadata: { action: 'remove_generated_report', params: {} }
-  };
-  actions.push(act6);
+    // Action 5: Run Verification Simulation
+    const act5: PlanAction = {
+      id: `${planId}-act-5`,
+      order: 5,
+      type: 'run_simulation',
+      title: 'Run Signal Closed-Loop Simulation',
+      description: 'Execute solver simulation to verify transient behavior',
+      params: { durationSeconds: 10, timeStep: 0.001 },
+      dependencies: [act4.id],
+      affectedArtifacts: ['simulation_results.json'],
+      expectedEvidence: 'Simulation trace curves and metrics JSON',
+      rollbackMetadata: { action: 'purge_simulation_cache', params: {} }
+    };
+    actions.push(act5);
+
+    // Action 6: Generate Engineering Report
+    const act6: PlanAction = {
+      id: `${planId}-act-6`,
+      order: 6,
+      type: 'generate_report',
+      title: 'Generate Verification Engineering Report',
+      description: 'Assemble complete verification evidence into report artifact',
+      params: { format: 'docx', template: 'engineering_report' },
+      dependencies: [act5.id],
+      affectedArtifacts: ['reports/xbridges_verification_report.docx'],
+      expectedEvidence: 'Cryptographically hashed engineering report file',
+      rollbackMetadata: { action: 'remove_generated_report', params: {} }
+    };
+    actions.push(act6);
+  } else {
+    // Action 1: Instantiate Heating Element (resistor)
+    validateBlockProposal('resistor');
+    const act1: PlanAction = {
+      id: `${planId}-act-1`,
+      order: 1,
+      type: 'instantiate_block',
+      title: 'Instantiate Heating Resistor Block',
+      description: 'Place electrical heating resistor block into model canvas',
+      blockId: 'resistor',
+      params: { blockId: 'resistor', blockType: 'resistor', instanceName: 'MainHeatingElement' },
+      dependencies: [],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Block instantiation token and layout ID',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'MainHeatingElement' } }
+    };
+    actions.push(act1);
+
+    // Action 2: Instantiate Sensing Element (variable_resistor)
+    validateBlockProposal('variable_resistor');
+    const act2: PlanAction = {
+      id: `${planId}-act-2`,
+      order: 2,
+      type: 'instantiate_block',
+      title: 'Instantiate Temperature Sensor Block',
+      description: 'Place variable resistance thermal transducer block for temperature sensing',
+      blockId: 'variable_resistor',
+      params: { blockId: 'variable_resistor', blockType: 'variable_resistor', instanceName: 'ChamberTempSensor' },
+      dependencies: [act1.id],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Sensor block token with input and output terminals',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'ChamberTempSensor' } }
+    };
+    actions.push(act2);
+
+    // Action 3: Connect Ports
+    const act3: PlanAction = {
+      id: `${planId}-act-3`,
+      order: 3,
+      type: 'connect_ports',
+      title: 'Connect Heater and Sensor Ports',
+      description: 'Connect electrical and thermal terminals between heater and sensor feedback',
+      params: {
+        sourceNode: 'MainHeatingElement',
+        sourcePort: 'p',
+        targetNode: 'ChamberTempSensor',
+        targetPort: 't_in'
+      },
+      dependencies: [act2.id],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Connection line registered between nodes',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    };
+    actions.push(act3);
+
+    // Action 4: Configure Parameters
+    const act4: PlanAction = {
+      id: `${planId}-act-4`,
+      order: 4,
+      type: 'configure_parameters',
+      title: 'Configure Component Parameters',
+      description: 'Assign approved power, resistance, and sensor rating parameters to placed blocks',
+      params: {
+        nodeId: 'MainHeatingElement',
+        parameters: { R: 28.8, P_rated: 1800 }
+      },
+      dependencies: [act3.id],
+      affectedArtifacts: ['model_parameters.json'],
+      expectedEvidence: 'Parameter validation report matching specification',
+      rollbackMetadata: { action: 'reset_parameters', params: {} }
+    };
+    actions.push(act4);
+
+    // Action 5: Run Verification Simulation
+    const act5: PlanAction = {
+      id: `${planId}-act-5`,
+      order: 5,
+      type: 'run_simulation',
+      title: 'Run Thermal Closed-Loop Simulation',
+      description: 'Execute local solver simulation to verify rise time and temperature overshoot limits',
+      params: { durationSeconds: 300, timeStep: 0.01 },
+      dependencies: [act4.id],
+      affectedArtifacts: ['simulation_results.json'],
+      expectedEvidence: 'Simulation trace curves and performance metrics JSON',
+      rollbackMetadata: { action: 'purge_simulation_cache', params: {} }
+    };
+    actions.push(act5);
+
+    // Action 6: Generate Engineering Report
+    const act6: PlanAction = {
+      id: `${planId}-act-6`,
+      order: 6,
+      type: 'generate_report',
+      title: 'Generate Verification Engineering Report',
+      description: 'Assemble complete verification evidence, parameters, and simulation charts into report',
+      params: { format: 'docx', template: 'engineering_report' },
+      dependencies: [act5.id],
+      affectedArtifacts: ['reports/air_fryer_report.docx'],
+      expectedEvidence: 'Cryptographically hashed engineering report file',
+      rollbackMetadata: { action: 'remove_generated_report', params: {} }
+    };
+    actions.push(act6);
+  }
 
   return {
     id: planId,
@@ -169,7 +275,8 @@ export function buildExecutionPlan(specification: EngineeringSpecification): Exe
  */
 export function createChangeApprovalRequest(
   plan: ExecutionPlan,
-  actionId: string
+  actionId: string,
+  projectRevision: number = 0
 ): ExtendedApprovalRequest {
   if (!plan.approved) {
     throw new Error(`Cannot create change approval: plan '${plan.id}' must be approved first`);
@@ -190,7 +297,9 @@ export function createChangeApprovalRequest(
       actionType: action.type,
       blockId: action.blockId,
       params: action.params,
-      affectedArtifacts: action.affectedArtifacts
+      affectedArtifacts: action.affectedArtifacts,
+      expectedEvidence: action.expectedEvidence,
+      projectRevision
     }
   );
 }

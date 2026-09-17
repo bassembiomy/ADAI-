@@ -19,6 +19,7 @@ export interface ToolExecutionResult<T = unknown> {
   data?: T;
   error?: string;
   evidence?: Record<string, unknown>;
+  changedArtifacts?: string[];
   auditRecord: AuditRecord;
   isDryRun?: boolean;
 }
@@ -348,6 +349,7 @@ export class ToolGateway {
         success: toolResult.success,
         data: toolResult.evidence,
         evidence: toolResult.evidence,
+        changedArtifacts: toolResult.changedArtifacts,
         error: toolResult.error,
         auditRecord: audit
       };
