@@ -1,0 +1,302 @@
+/* Isolated styling for Prompt-Driven ADIA Engineering Agent Panel */
+
+.adia-agent-panel-container {
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  width: 440px;
+  background-color: #12141a;
+  border-left: 1px solid #232733;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.adia-agent-panel-container.closed {
+  transform: translateX(100%);
+}
+
+.adia-agent-toggle-tab {
+  position: fixed;
+  right: 0;
+  top: 40%;
+  transform: translateY(-50%);
+  background: #1e222d;
+  color: #38bdf8;
+  border: 1px solid #334155;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  padding: 10px 8px;
+  cursor: pointer;
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: -4px 4px 12px rgba(0, 0, 0, 0.4);
+  transition: background 0.2s, color 0.2s;
+}
+
+.adia-agent-toggle-tab:hover {
+  background: #282e3e;
+  color: #7dd3fc;
+}
+
+.adia-agent-toggle-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.adia-agent-header {
+  padding: 14px 18px;
+  background: #181b23;
+  border-bottom: 1px solid #282d3b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.adia-agent-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adia-agent-badge-offline {
+  font-size: 10px;
+  font-weight: 600;
+  background: #064e3b;
+  color: #34d399;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #059669;
+}
+
+.adia-agent-meta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.adia-agent-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.adia-agent-close-btn:hover {
+  color: #f8fafc;
+  background: #232733;
+}
+
+.adia-agent-tabs {
+  display: flex;
+  border-bottom: 1px solid #282d3b;
+  background: #151820;
+}
+
+.adia-agent-tab-btn {
+  flex: 1;
+  padding: 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.adia-agent-tab-btn.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+  background: #1a1e28;
+}
+
+.adia-agent-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adia-agent-msg {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.adia-agent-msg.user {
+  background: #1e293b;
+  color: #f1f5f9;
+  align-self: flex-end;
+  max-width: 85%;
+  border-bottom-right-radius: 2px;
+}
+
+.adia-agent-msg.agent {
+  background: #1e222d;
+  color: #e2e8f0;
+  align-self: flex-start;
+  max-width: 90%;
+  border-left: 3px solid #38bdf8;
+  border-bottom-left-radius: 2px;
+}
+
+.adia-agent-approval-card {
+  background: #1a202c;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adia-agent-approval-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.adia-agent-approval-desc {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.adia-agent-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.adia-agent-btn-approve {
+  flex: 1;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.adia-agent-btn-approve:hover {
+  background: #1d4ed8;
+}
+
+.adia-agent-btn-reject {
+  background: #334155;
+  color: #f87171;
+  border: 1px solid #475569;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.adia-agent-btn-reject:hover {
+  background: #475569;
+}
+
+.adia-agent-status-banner {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  text-align: center;
+}
+
+.adia-agent-status-banner.blocked {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border: 1px solid #ef4444;
+}
+
+.adia-agent-status-banner.completed {
+  background: #064e3b;
+  color: #6ee7b7;
+  border: 1px solid #10b981;
+}
+
+.adia-agent-input-container {
+  padding: 12px;
+  background: #151820;
+  border-top: 1px solid #282d3b;
+  display: flex;
+  gap: 8px;
+}
+
+.adia-agent-input {
+  flex: 1;
+  background: #0d0f14;
+  border: 1px solid #2b3140;
+  color: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+.adia-agent-input:focus {
+  border-color: #38bdf8;
+}
+
+.adia-agent-send-btn {
+  background: #0284c7;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.adia-agent-send-btn:hover {
+  background: #0369a1;
+}
+
+.adia-agent-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.adia-agent-audit-item {
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #181b23;
+  border-left: 2px solid #475569;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+

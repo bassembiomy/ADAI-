@@ -132,8 +132,17 @@ import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapsho
 import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
-import { createReportDelegate } from './agent/toolAdapters/adiaProjectAdapter';
-import type { SysmlApplicationDelegate, ReportApplicationDelegate } from './agent/applicationDelegates';
+import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
+import { createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
+import { ToolGateway } from './agent/toolGateway';
+import { AgentOrchestrator } from './agent/agentOrchestrator';
+import { AgentPanel } from './components/agent/AgentPanel';
+import type {
+  SysmlApplicationDelegate,
+  ReportApplicationDelegate,
+  XbridgesApplicationDelegate,
+  ProjectApplicationDelegate,
+} from './agent/applicationDelegates';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
@@ -6995,8 +7004,9 @@ const ADIA = () => {
 
 
 
-  // AI SIDEBAR STATE
+  // AI SIDEBAR & AGENT PANEL STATE
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -7469,6 +7479,7 @@ const ADIA = () => {
     }
   }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
 
+
   const hydrateProject = useCallback((importedData: any) => {
     try {
       let sysmlLoadedView: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] } | null = null;
@@ -7898,6 +7909,64 @@ const ADIA = () => {
       addError('error', `Failed to save project: ${err?.message || String(err)}`);
     }
   }, [buildUnifiedProjectPayload, currentProjectName, addError]);
+
+  // X-BRIDGES Application Delegate connected to live React Flow state
+  const xbridgesApplicationDelegate = useMemo<XbridgesApplicationDelegate | undefined>(() => {
+    if (diagramMode !== 'xbridges') return undefined;
+    return createXbridgesDelegate({
+      getNodes: () => globalXBridgesNodes,
+      getEdges: () => globalXBridgesEdges,
+      setNodes: setGlobalXBridgesNodes,
+      setEdges: setGlobalXBridgesEdges,
+      onSave: (nodes, edges) => handleXBridgesSave(nodes, edges, []),
+    });
+  }, [diagramMode, globalXBridgesNodes, globalXBridgesEdges, handleXBridgesSave]);
+
+  // Project Application Delegate for project identity, active workspace, and persistence
+  const projectApplicationDelegate = useMemo<ProjectApplicationDelegate>(() => {
+    return createProjectDelegate({
+      getProjectId: () => currentProjectName || 'ADIA_Project',
+      getActiveWorkspace: () => diagramMode,
+      getRevision: () => canonicalSysmlRepository.revision,
+      onRefreshPersistence: async () => {
+        await saveUnifiedProject(false);
+      },
+    });
+  }, [currentProjectName, diagramMode, canonicalSysmlRepository.revision, saveUnifiedProject]);
+
+  // ToolGateway constructed with live application delegates
+  const agentToolGateway = useMemo<ToolGateway>(() => {
+    return new ToolGateway({
+      project: projectApplicationDelegate,
+      xbridges: xbridgesApplicationDelegate,
+      sysml: sysmlApplicationDelegate,
+      report: reportApplicationDelegate,
+    });
+  }, [projectApplicationDelegate, xbridgesApplicationDelegate, sysmlApplicationDelegate, reportApplicationDelegate]);
+
+  // Single active AgentOrchestrator instance for the project
+  const agentOrchestrator = useMemo<AgentOrchestrator>(() => {
+    const orchestrator = new AgentOrchestrator(undefined, agentToolGateway);
+    orchestrator.updateProjectContext({
+      projectId: currentProjectName || 'ADIA_Project',
+      workspace: diagramMode,
+      revision: canonicalSysmlRepository.revision,
+      nodes: globalXBridgesNodes,
+      edges: globalXBridgesEdges,
+    });
+    return orchestrator;
+  }, [currentProjectName, diagramMode, canonicalSysmlRepository.revision, globalXBridgesNodes, globalXBridgesEdges, agentToolGateway]);
+
+  // Update orchestrator project context whenever project properties change
+  useEffect(() => {
+    agentOrchestrator.updateProjectContext({
+      projectId: currentProjectName || 'ADIA_Project',
+      workspace: diagramMode,
+      revision: canonicalSysmlRepository.revision,
+      nodes: globalXBridgesNodes,
+      edges: globalXBridgesEdges,
+    });
+  }, [agentOrchestrator, currentProjectName, diagramMode, canonicalSysmlRepository.revision, globalXBridgesNodes, globalXBridgesEdges]);
 
   const confirmProjectReplacementIfDirty = useCallback((): boolean => {
     const currentPayload = buildUnifiedProjectPayload();
@@ -15178,6 +15247,23 @@ const ADIA = () => {
         onToggle={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
         currentContext={{ states, variables, transitions, junctions, layers, blocks }}
         onExecuteActions={handleExecuteAiActions}
+      />
+      <AgentPanel
+        isOpen={isAgentPanelOpen}
+        onToggle={() => setIsAgentPanelOpen(prev => !prev)}
+        onClose={() => setIsAgentPanelOpen(false)}
+        orchestrator={agentOrchestrator}
+        projectContext={{
+          projectName: currentProjectName,
+          activeWorkspace: diagramMode,
+          blocksCount: blocks.length,
+          nodesCount: (diagramMode === 'xbridges' ? globalXBridgesNodes.length : diagramMode === 'vlab' ? vlabNodes.length : blocks.length),
+          connectionsCount: (diagramMode === 'xbridges' ? globalXBridgesEdges.length : relationships.length),
+          refreshProject: () => {
+            agentOrchestrator.refreshProjectContext();
+          },
+          delegateReadiness: agentToolGateway.getDelegateReadiness(),
+        }}
       />
       <GlobalReportPreviewModal
         isOpen={showGlobalReportPreview}

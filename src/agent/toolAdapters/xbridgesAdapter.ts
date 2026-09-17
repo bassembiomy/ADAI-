@@ -18,6 +18,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import type {
+  ApprovedAction,
+  ToolAdapter,
+  ToolResult,
+  InspectionResult,
+} from '../actionContracts';
+import type {
   XbridgesApplicationDelegate,
   XbridgesNode,
   XbridgesEdge,
@@ -257,4 +263,177 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       onSave(nodes, edges, []);
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// ToolAdapter implementation for Agent ToolGateway
+// ---------------------------------------------------------------------------
+
+export type XbridgesToolResult = ToolResult;
+export type XbridgesInspectionResult = InspectionResult;
+
+export interface XbridgesApprovedAction {
+  kind: string;
+  projectId?: string;
+  payload?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+}
+
+export class XbridgesAdapter implements ToolAdapter {
+  constructor(private delegate?: XbridgesApplicationDelegate) {}
+
+  public isAvailable(): boolean {
+    return Boolean(this.delegate);
+  }
+
+  public async inspect(params: Record<string, unknown> = {}): Promise<InspectionResult> {
+    if (!this.delegate) {
+      return {
+        success: false,
+        data: {},
+        error: 'X-BRIDGES delegate is unavailable; workspace is not connected.',
+      };
+    }
+
+    try {
+      const nodes = await this.delegate.getNodes();
+      const edges = await this.delegate.getEdges();
+      return {
+        success: true,
+        data: {
+          workspace: 'xbridges',
+          nodeCount: nodes.length,
+          edgeCount: edges.length,
+          nodes,
+          edges,
+          params,
+        },
+      };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        data: {},
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  public async execute(action: ApprovedAction | XbridgesApprovedAction): Promise<ToolResult> {
+    const startTime = Date.now();
+
+    if (!this.delegate) {
+      return {
+        success: false,
+        changedArtifacts: [],
+        evidence: {},
+        durationMs: Date.now() - startTime,
+        error: 'X-BRIDGES delegate is not connected; no model change was made.',
+      };
+    }
+
+    const rawPayload = 'payload' in action ? action.payload : undefined;
+    const payload = (rawPayload ?? action.params ?? {}) as Record<string, unknown>;
+
+    try {
+      if (action.kind === 'instantiate_block') {
+        const blockType = (payload.blockType ?? payload.type) as string;
+        const params = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
+
+        if (!blockType) {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'Missing required blockType in instantiate_block action params',
+          };
+        }
+
+        const node = await this.delegate.addBlock(blockType, params);
+        return {
+          success: true,
+          changedArtifacts: [node.id],
+          evidence: {
+            nodeId: node.id,
+            blockType: node.type,
+            data: node.data,
+          },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'connect_ports') {
+        const sourceNodeId = payload.sourceNodeId as string;
+        const sourcePortId = payload.sourcePortId as string;
+        const targetNodeId = payload.targetNodeId as string;
+        const targetPortId = payload.targetPortId as string;
+
+        if (!sourceNodeId || !sourcePortId || !targetNodeId || !targetPortId) {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'connect_ports requires sourceNodeId, sourcePortId, targetNodeId, and targetPortId',
+          };
+        }
+
+        const edge = await this.delegate.connectPorts(sourceNodeId, sourcePortId, targetNodeId, targetPortId);
+        return {
+          success: true,
+          changedArtifacts: [edge.id],
+          evidence: {
+            edgeId: edge.id,
+            source: edge.source,
+            sourceHandle: edge.sourceHandle,
+            target: edge.target,
+            targetHandle: edge.targetHandle,
+          },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'configure_parameters') {
+        const nodeId = (payload.nodeId ?? payload.blockId) as string;
+        const params = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
+
+        if (!nodeId) {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'configure_parameters requires nodeId or blockId',
+          };
+        }
+
+        const updated = await this.delegate.updateParameters(nodeId, params);
+        return {
+          success: true,
+          changedArtifacts: [updated.id],
+          evidence: {
+            nodeId: updated.id,
+            params: updated.data.params,
+          },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      return {
+        success: false,
+        changedArtifacts: [],
+        evidence: {},
+        durationMs: Date.now() - startTime,
+        error: `Unsupported X-BRIDGES action kind: "${action.kind}"`,
+      };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        changedArtifacts: [],
+        evidence: {},
+        durationMs: Date.now() - startTime,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
 }
