@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
 import * as math from 'mathjs';
-import Plot from 'react-plotly.js';
+import Plot from './components/doe/PlotlyRenderer';
 import { PlotlyPlots } from './components/doe/PlotlyPlots';
 import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integration';
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
@@ -17,7 +17,6 @@ import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
 import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
-import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -29,7 +28,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
+  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen, ShieldAlert,
   Sun, Moon, Gauge
 } from 'lucide-react';
 import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
@@ -115,23 +114,30 @@ import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
+import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
-import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
+import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
+import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
+import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
+import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
-import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
-import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
+import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
+import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -180,146 +186,25 @@ export function safeCreateFunction(params: string[], body: string): Function {
 }
 
 // =============================================================================
-// STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
+// SHARED ENGINEERING UI PRIMITIVES
 // =============================================================================
-const Button = ({
-  children,
-  onClick,
-  variant = 'default',
-  size = 'default',
-  className = '',
-  disabled = false,
-  ...props
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'default' | 'outline' | 'destructive' | 'ghost' | 'secondary';
-  size?: 'sm' | 'default' | 'icon';
-  className?: string;
-  disabled?: boolean;
-  [key: string]: any;
-}) => {
-  const base = 'px-3 py-1.5 rounded font-medium transition-colors flex items-center justify-center';
-  const variants = {
-    default: 'bg-[#f97316] text-white hover:bg-[#ea580c]',
-    outline: 'border border-[#333] text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    destructive: 'bg-red-600 hover:bg-red-700 text-white',
-    ghost: 'text-[#a0a0a0] hover:text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    secondary: 'bg-[#1a1a1a] border border-[#333] text-[#e0e0e0] hover:bg-[#222]'
-  };
-  const sizes = {
-    sm: 'text-xs px-2 h-7',
-    default: 'text-sm px-3 h-8',
-    icon: 'h-8 w-8 p-0'
-  };
+import {
+  Button,
+  Input,
+  Label,
+  Badge,
+  Separator,
+  Triangle,
+  Checkbox,
+  Resizer,
+  EngineeringButton,
+  EngineeringInput,
+  EngineeringLabel,
+  EngineeringBadge,
+  EngineeringSeparator,
+  EngineeringCheckbox,
+} from './components/ui/EngineeringPrimitives';
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Input = ({
-  value,
-  onChange,
-  placeholder = '',
-  type = 'text',
-  className = '',
-  ...props
-}: {
-  value: string | number;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  type?: string;
-  className?: string;
-  [key: string]: any;
-}) => (
-  <input
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    type={type}
-    className={`px-2 py-1 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] ${className}`}
-    {...props}
-  />
-);
-
-const Label = ({ children, className = '', ...props }: { children: React.ReactNode; className?: string;[key: string]: any }) => (
-  <label className={`text-xs text-[#888] ${className}`} {...props}>{children}</label>
-);
-
-const Badge = ({ children, variant = 'secondary', className = '' }: {
-  children: React.ReactNode;
-  variant?: 'default' | 'secondary' | 'outline';
-  className?: string;
-}) => (
-  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#f97316] text-[#0a0a0a]'
-    } ${className}`}>
-    {children}
-  </span>
-);
-
-const Separator = ({ orientation = 'horizontal', className = '' }: {
-  orientation?: 'horizontal' | 'vertical';
-  className?: string;
-}) => (
-  <div className={`${orientation === 'vertical' ? 'w-px h-4' : 'h-px w-full'} bg-[#333] ${className}`} />
-);
-
-const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill={fill || "none"}
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3 20h18L12 4z" />
-  </svg>
-);
-
-const Checkbox = ({
-  checked,
-  onCheckedChange,
-  id,
-  className = ''
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  id?: string;
-  className?: string;
-}) => (
-  <input
-    id={id}
-    type="checkbox"
-    checked={checked}
-    onChange={(e) => onCheckedChange(e.target.checked)}
-    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#f97316] focus:ring-[#f97316] ${className}`}
-  />
-);
-
-const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: React.MouseEvent) => void, orientation?: 'vertical' | 'horizontal' }) => (
-  <div
-    onMouseDown={onMouseDown}
-    className={`shrink-0 bg-transparent group transition-colors duration-200 ${orientation === 'vertical' ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
-      }`}
-  >
-    <div className={`bg-[#333] group-hover:bg-[#f97316] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
-  </div>
-);
-
-// WelcomeOverlay has been moved and refactored as a standalone component IntroStandbyOverlay
 
 
 
@@ -340,6 +225,13 @@ interface Point {
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
 type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
+
+type ConnectionErrorItem = ErrorItem & {
+  connectionDiagnostic?: ConnectionPolicyDiagnostic;
+  relationshipKind?: string;
+  sourceEndpoint?: ConnectionEndpoint;
+  targetEndpoint?: ConnectionEndpoint;
+};
 
 interface WorkspaceFile {
   id: string;
@@ -770,12 +662,12 @@ const FloatingWindow = ({
         height: windowState.size.height,
         zIndex: windowState.zIndex,
       }}
-      className="bg-[#1a1a1a] border border-[#f97316] rounded-lg flex flex-col shadow-2xl overflow-hidden"
+      className="bg-[var(--surface-base)] border border-[var(--border-strong)] rounded-lg flex flex-col shadow-2xl overflow-hidden"
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
       <div
         style={{ userSelect: 'none' }}
-        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 shrink-0 ${
+        className={`h-8 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between px-3 shrink-0 ${
           isMobile || windowState.isMaximized ? '' : 'cursor-move'
         }`}
         onMouseDown={(e) => {
@@ -785,13 +677,13 @@ const FloatingWindow = ({
           setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
         }}
       >
-        <span className="text-xs font-bold text-[#f97316]">{windowState.title}</span>
+        <span className="text-xs font-bold text-orange-500">{windowState.title}</span>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
           {/* Minimize Button */}
           <button
             onClick={() => onUpdate(windowState.id, { isMinimized: !windowState.isMinimized })}
             title={windowState.isMinimized ? "Restore" : "Minimize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMinimized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -811,7 +703,7 @@ const FloatingWindow = ({
           <button
             onClick={() => onUpdate(windowState.id, { isMaximized: !windowState.isMaximized, isMinimized: false })}
             title={windowState.isMaximized ? "Restore Size" : "Maximize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMaximized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -829,7 +721,7 @@ const FloatingWindow = ({
           <button
             onClick={onClose}
             title="Close"
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-white hover:bg-red-600 transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-rose-600 transition-colors"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -922,12 +814,64 @@ const LegacyTraceabilityMatrix = ({
     const data = orderedReqs.map(({ req: r, level }) => {
       const outgoing = relationships.filter(rel => rel.sourceId === r.id).map(rel => {
         const target = blocks.find(b => b.id === rel.targetId);
-        return `[${rel.type}] ${target?.name}`;
+        return `[${rel.type}] ${target?.name || rel.targetId}`;
       }).join('; ');
+
+      const containedBy = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const contains = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const derivedFrom = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const derivedReqs = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const copiedFrom = relationships
+        .filter(rel => rel.type === 'copy' && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const copies = relationships
+        .filter(rel => rel.type === 'copy' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const satisfiedByRel = relationships
+        .filter(rel => rel.type === 'satisfy' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId);
 
       const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
       const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
-      const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts].join('; ');
+      const satisfiedBy = [...new Set([...satisfiedByRel, ...satisfiedByBlocks, ...satisfiedByParts])].join('; ');
+
+      const verifiedBy = relationships
+        .filter(rel => rel.type === 'verify' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const refinedBy = relationships
+        .filter(rel => rel.type === 'refine' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const traced = relationships
+        .filter(rel => (rel.type === 'trace' || (rel.type as string) === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
+        .map(rel => {
+          const otherId = rel.sourceId === r.id ? rel.targetId : rel.sourceId;
+          return blocks.find(b => b.id === otherId)?.name || otherId;
+        })
+        .join('; ');
 
       const prefix = '  '.repeat(level) + (level > 0 ? '└ ' : '');
 
@@ -938,8 +882,17 @@ const LegacyTraceabilityMatrix = ({
         Priority: r.priority || '',
         'Assigned To': r.assignedTo || 'Unassigned',
         Description: r.description || '',
+        'Contained By': containedBy,
+        Contains: contains,
+        'Derived From': derivedFrom,
+        'Derived Requirements': derivedReqs,
+        'Copied From': copiedFrom,
+        'Copied Requirements': copies,
+        'Satisfied By': satisfiedBy,
+        'Verified By': verifiedBy,
+        'Refined By': refinedBy,
+        'Traced Elements': traced,
         Links: outgoing,
-        SatisfiedBy: satisfiedBy
       };
     });
     const ws = XLSX.utils.json_to_sheet(data);
@@ -2562,24 +2515,24 @@ const DoeWorkspace = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0a0a0c] text-[#e0e0e0] font-sans">
+    <div className="doe-workspace doe-panel flex flex-col h-full w-full bg-[var(--surface-base)] text-[var(--text-primary)] font-sans">
       {/* Top Control Bar */}
-      <div className="h-14 border-b border-[#222228] bg-[#111114] flex items-center justify-between px-5 gap-4 shrink-0">
+      <div className="h-14 border-b border-[var(--border-default)] bg-[var(--surface-raised)] flex items-center justify-between px-5 gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-400">
+            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-500">
               <Layers size={16} />
             </div>
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-white">DOE ANALYZER PRO</h2>
-              <span className="text-[10px] text-zinc-500 font-mono">Response Surface & Optimization</span>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">DOE ANALYZER PRO</h2>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">Response Surface & Optimization</span>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6 bg-[var(--border-default)]" />
 
           {/* Model Switcher Segment */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5">
+          <div className="flex bg-[var(--surface-panel)] rounded-lg border border-[var(--border-default)] p-0.5">
             {[
               { id: 'RSM', label: 'Run RSM', action: calculateRSM },
               { id: 'GMDH', label: 'Run GMDH', action: calculateGMDH },
@@ -2590,8 +2543,8 @@ const DoeWorkspace = ({
                 onClick={m.action}
                 className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   activeModel === m.id
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-raised)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-base)]'
                 }`}
               >
                 {m.label}
@@ -2604,7 +2557,7 @@ const DoeWorkspace = ({
               variant="outline"
               size="sm"
               onClick={() => setShowDesignBuilder(true)}
-              className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 whitespace-nowrap"
+              className="h-7 px-2.5 text-xs font-medium bg-[var(--surface-panel)] border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             >
               Create Taguchi Design
             </Button>
@@ -2612,39 +2565,39 @@ const DoeWorkspace = ({
         </div>
 
         {/* Top Actions Capsule */}
-        <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-1">
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
           <Button
             variant="ghost"
             size="sm"
             onClick={handleExportProject}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             title="Ctrl+S"
           >
-            <Save size={13} className="mr-1.5 text-zinc-400" /> Save
+            <Save size={13} className="mr-1.5 text-[var(--text-muted)]" /> Save
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <Upload size={13} className="mr-1.5 text-zinc-400" /> Upload Data
+            <Upload size={13} className="mr-1.5 text-[var(--text-muted)]" /> Upload Data
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={generateReport}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <FileText size={13} className="mr-1.5 text-zinc-400" /> Report
+            <FileText size={13} className="mr-1.5 text-[var(--text-muted)]" /> Report
           </Button>
-          <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+          <Separator orientation="vertical" className="h-4 bg-[var(--border-default)]" />
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-7 px-2 text-xs text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 whitespace-nowrap"
+            className="h-7 px-2 text-xs text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 whitespace-nowrap"
             title="Close DOE Analyzer"
           >
             <X size={14} className="mr-1" /> Close
@@ -4601,7 +4554,7 @@ const WorkspaceTabBar = ({
   ];
 
   return (
-    <div className="h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
+    <div className="workspace-tab-bar ui-surface h-10 bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 justify-between select-none">
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
@@ -4615,9 +4568,9 @@ const WorkspaceTabBar = ({
               key={tabId}
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
-                isActive 
-                  ? 'bg-[#1a1a1a] text-white border-t-[#f97316]' 
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#161616] border-t-transparent'
+                  isActive 
+                ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]' 
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
               }`}
               style={{
                 boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
@@ -4630,7 +4583,7 @@ const WorkspaceTabBar = ({
                   e.stopPropagation();
                   onCloseTab(tabId);
                 }}
-                className="ml-2 w-4 h-4 rounded-full hover:bg-slate-800 hover:text-red-400 flex items-center justify-center text-[8px] text-slate-500 font-normal transition-colors"
+                className="ml-2 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
                 title="Close Tab"
               >
                 ✕
@@ -4641,7 +4594,7 @@ const WorkspaceTabBar = ({
       </div>
       <button 
         onClick={onOpenDialog}
-        className="ml-4 p-1 rounded hover:bg-[#1c1c1c] text-[#f97316] transition-colors flex items-center justify-center"
+        className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
         title="Open Workspace Asset Manager"
       >
         <span className="text-lg font-bold">+</span>
@@ -6043,7 +5996,9 @@ const ADIA = () => {
 
   const [errors, setErrors] = useState<ErrorItem[]>([]);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const [currentError, setCurrentError] = useState<ErrorItem | null>(null);
+  const [currentError, setCurrentError] = useState<ConnectionErrorItem | null>(null);
+  const errorDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const errorDismissButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showGlobalReportPreview, setShowGlobalReportPreview] = useState(false);
   const [globalReportData, setGlobalReportData] = useState<{ html: string, projectName: string } | null>(null);
@@ -6106,6 +6061,16 @@ const ADIA = () => {
     otherDeletedIds?: string[];
   } | null>(null);
 
+  // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
+  const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
+    impact: import('./engine/sysml/mutations').MutationImpact;
+    transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
+    elementName: string;
+    elementKind: string;
+    severity: import('./services/sysmlTransactionAdapter').ImpactSeverity;
+    onConfirm: () => void;
+  } | null>(null);
+
   const [states, setStates] = useState<StateData[]>([]);
   const [junctions, setJunctions] = useState<JunctionData[]>([]);
   const [transitions, setTransitions] = useState<TransitionData[]>([]);
@@ -6119,7 +6084,7 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
-  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
+  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -6163,7 +6128,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
-  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
@@ -6207,6 +6172,18 @@ const ADIA = () => {
   const [connectors, setConnectors] = useState<ConnectorData[]>([]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
+  const sysmlCoordinates = useMemo(
+    () => Object.fromEntries(sysmlStore.coordinates.entries()),
+    [sysmlStore],
+  );
+  const sysmlDiagramPresentations = useMemo(
+    () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    [sysmlStore],
+  );
+  // Explicit per-baseline deletion authorizations granted from the governance
+  // panel. Projection-only state: it never mutates semantics by itself; the
+  // gateway still requires a confirmed impact hash for destructive mutations.
+  const [authorizedBaselineIds, setAuthorizedBaselineIds] = useState<string[]>([]);
 
   // The legacy diagram editors still expose array setters. Keep the canonical
   // store current until every editor has been migrated to gateway commands.
@@ -6276,6 +6253,11 @@ const ADIA = () => {
     });
   }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
 
+  const requirementsDiagramScope = useMemo(
+    () => getRequirementsDiagramScope(blocks, relationships, currentLayerId),
+    [blocks, relationships, currentLayerId],
+  );
+
   // Schedule large validation asynchronously after edits with revision-based cancellation
   useEffect(() => {
     if (blocks.length === 0 && parts.length === 0) return;
@@ -6316,7 +6298,7 @@ const ADIA = () => {
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
   const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator' }[]>([]);
-  const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
+  const [factoryIOEnabled, setFactoryIOEnabled] = useState(false);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
   // Multi-File and Tab Management State
@@ -6343,17 +6325,11 @@ const ADIA = () => {
         };
       case 'bdd':
         return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
-      case 'requirements': {
-        const reqRelEndpoints = new Set(
-          relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'requirementContainment' || r.type === 'copy' || r.type === 'trace')
-            .flatMap(r => [r.sourceId, r.targetId])
-        );
+      case 'requirements':
         return {
-          blocks: blocks.filter(b => b.stereotype === 'requirement' || reqRelEndpoints.has(b.id)),
-          relationships,
+          blocks: blocks.filter(b => requirementsDiagramScope.visibleBlockIds.has(b.id)),
+          relationships: relationships.filter(r => requirementsDiagramScope.visibleRelationshipIds.has(r.id)),
         };
-      }
       case 'ibd':
         return { parts, connectors, interfaceRealizations };
       case 'xbridges':
@@ -6375,7 +6351,8 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results
+    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
+    requirementsDiagramScope,
   ]);
 
   // Helper to save current active file state into workspaceFiles list
@@ -6981,14 +6958,24 @@ const ADIA = () => {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     if (factoryIOEnabled && (window as any).require) {
       const { ipcRenderer } = (window as any).require('electron');
       ipcRenderer.invoke('fetch-factory-io-tags').then((tags: any) => {
+        if (!isMounted) return;
         if (tags && !tags.error) setFactoryIOStatus('connected');
         else setFactoryIOStatus('error');
+      }).catch(() => {
+        if (!isMounted) return;
+        setFactoryIOStatus('error');
       });
+    } else if (!factoryIOEnabled) {
+      setFactoryIOStatus('disconnected');
     }
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [factoryIOEnabled]);
 
   const projectImportRef = useRef<HTMLInputElement>(null);
   const [importValidationError, setImportValidationError] = useState<ValidationResult | null>(null);
@@ -7036,10 +7023,44 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
+  const showConnectionPolicyError = useCallback((rejection: {
+    diagnostic: ConnectionPolicyDiagnostic;
+    relationshipKind: string;
+    source: ConnectionEndpoint;
+    target: ConnectionEndpoint;
+  }, elementId?: string) => {
+    const activeElement = document.activeElement;
+    errorDialogTriggerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+    const error: ConnectionErrorItem = {
+      id: uuidv4(),
+      type: 'error',
+      message: rejection.diagnostic.message,
+      timestamp: new Date(),
+      source: 'SysML connection policy',
+      elementId,
+      connectionDiagnostic: rejection.diagnostic,
+      relationshipKind: rejection.relationshipKind,
+      sourceEndpoint: rejection.source,
+      targetEndpoint: rejection.target,
+    };
+    setErrors(prev => [error, ...prev].slice(0, 100));
+    setCurrentError(error);
+    setShowErrorDialog(true);
+  }, []);
+
+  const dismissErrorDialog = useCallback(() => {
+    setShowErrorDialog(false);
+    const trigger = errorDialogTriggerRef.current;
+    errorDialogTriggerRef.current = null;
+    restoreConnectionErrorFocus(trigger);
+  }, []);
+
+  useEffect(() => {
+    if (showErrorDialog) errorDismissButtonRef.current?.focus();
+  }, [showErrorDialog]);
+
   const exportPlantUmlSource = useCallback(() => {
-    const source = plantUmlDiagram.type === 'sequence'
-      ? generateSequencePlantUml(plantUmlDiagram)
-      : generateUseCasePlantUml(plantUmlDiagram);
+    const source = generateSequencePlantUml(plantUmlDiagram);
     const blob = new Blob([source], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -7325,6 +7346,7 @@ const ADIA = () => {
         entropyNodes,
         entropyEdges,
         opmSimulationConfig,
+        canonicalSysmlRepository,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
         activeFileId
@@ -7471,6 +7493,10 @@ const ADIA = () => {
 
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
+
+      if (importedData.canonicalSysmlRepository) {
+        setCanonicalSysmlRepository(importedData.canonicalSysmlRepository);
+      }
 
       const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
       if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
@@ -9166,12 +9192,8 @@ const ADIA = () => {
     }
   }, [layers, states]);
 
-  const deleteNonStateElements = useCallback((ids: string[]) => {
+  const applyNonStateTransaction = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, ids: string[]) => {
     const idSet = new Set(ids);
-    if (idSet.size === 0) return;
-
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
     setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
@@ -9187,7 +9209,41 @@ const ADIA = () => {
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-  }, [addToHistory, blocks, relationships, parts, connectors]);
+  }, [addToHistory]);
+
+  const deleteNonStateElements = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {},
+      });
+      return;
+    }
+    if (requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {
+          applyNonStateTransaction(transaction, ids);
+        },
+      });
+      return;
+    }
+    applyNonStateTransaction(transaction, ids);
+  }, [blocks, relationships, parts, connectors, authorizedBaselineIds, applyNonStateTransaction]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9471,8 +9527,8 @@ const ADIA = () => {
   const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
     addToHistory();
     const newId = uuidv4();
-    // For requirements, store which layer this block was created in
-    const blockLayerId = (stereotype === 'requirement' && diagramMode === 'requirements') ? currentLayerId : undefined;
+    // For requirements diagram, store which layer this block was created in
+    const blockLayerId = (diagramMode === 'requirements') ? currentLayerId : undefined;
     const newBlock: BlockData = {
       id: newId,
       name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
@@ -9507,15 +9563,27 @@ const ADIA = () => {
   }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  }, []);
+    const current = blocks.find(block => block.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const connectionRejection = rejectBlockConnectionChange({ blocks, parts, relationships }, candidate);
+    if (connectionRejection) {
+      showConnectionPolicyError(connectionRejection, id);
+      return;
+    }
+    if (current.stereotype === 'requirement' && candidate.stereotype !== 'requirement') {
+      addError('error', 'A SysML requirement cannot be changed to an unrelated stereotype.', 'SysML', id);
+      return;
+    }
+    const validation = validateLegacyBlockEdit([...blocks.filter(block => block.id !== id), candidate], relationships, id);
+    if (!validation.valid) {
+      addError('error', `Invalid SysML attribute: ${validation.messages[0] || validation.codes[0]}`, 'SysML', id);
+      return;
+    }
+    setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
+  }, [addError, blocks, parts, relationships, showConnectionPolicyError]);
 
-  const deleteBlock = useCallback((id: string) => {
-    const block = blocks.find(b => b.id === id);
-    if (!block) return;
-    const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
+  const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
     setBlocks(transaction.model.blocks);
@@ -9524,8 +9592,30 @@ const ADIA = () => {
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted ${kind}: ${block.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+    addError('info', msg);
+  }, [addToHistory, addError]);
+
+  const deleteBlock = useCallback((id: string) => {
+    const block = blocks.find(b => b.id === id);
+    if (!block) return;
+    const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: block.name,
+        elementKind: kind,
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
@@ -9552,7 +9642,7 @@ const ADIA = () => {
     createBlock(x, y, 'requirement');
   }, [createBlock]);
 
-  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
+  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type']) => {
     const newRel: RelationshipData = {
       id: uuidv4(),
       sourceId,
@@ -9562,35 +9652,48 @@ const ADIA = () => {
       sourceMultiplicity: '1',
       targetMultiplicity: '1'
     };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, newRel);
-    if (!validation.valid) {
-      addError('error', `Invalid ${type}: ${validation.reason}`);
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, newRel, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection);
       return;
     }
     addToHistory();
     setRelationships(prev => [...prev, newRel]);
     setSelectedIds([newRel.id]);
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory, blocks, parts, relationships]);
+  }, [addError, addToHistory, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
     const current = relationships.find(relationship => relationship.id === id);
     if (!current) return;
     const candidate = { ...current, ...updates };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, candidate);
-    if (!validation.valid) {
-      addError('error', `Invalid relationship update: ${validation.reason}`);
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection, id);
       return;
     }
     setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
-  }, [relationships, blocks, parts, addError]);
+  }, [relationships, blocks, parts, diagramMode, showConnectionPolicyError]);
 
   const deleteRelationship = useCallback((id: string) => {
-    addToHistory();
-    setRelationships(prev => prev.filter(r => r.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted relationship');
-  }, [addError, addToHistory]);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      const rel = relationships.find(r => r.id === id);
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: rel?.label || id,
+        elementKind: 'relationship',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted relationship');
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, 'Deleted relationship');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
@@ -9612,23 +9715,44 @@ const ADIA = () => {
   }, [parts.length, currentLayerId, snapEnabled, addError, addToHistory]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
-    setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
+    const current = parts.find(part => part.id === id);
+    if (!current) return;
+    const candidate = { ...current, ...updates };
+    const validName = /^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate.name.trim());
+    const validType = Boolean(candidate.typeId && blocks.some(block => block.id === candidate.typeId && block.stereotype === 'block'));
+    let validMultiplicity = true;
+    try { parseMultiplicity(candidate.multiplicity || '1'); } catch { validMultiplicity = false; }
+    if (!validName || !validType || !validMultiplicity) {
+      addError('error', !validName
+        ? `Invalid SysML part name "${candidate.name}".`
+        : !validType
+          ? `Part ${candidate.name || id} must reference a block type.`
+          : `Invalid multiplicity "${candidate.multiplicity || ''}" for part ${candidate.name || id}.`, 'SysML', id);
+      return;
+    }
+    setParts(prev => prev.map(p => p.id === id ? candidate : p));
+  }, [addError, blocks, parts]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setRelationships(transaction.model.relationships);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted part: ${part.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: part.name,
+        elementKind: 'part',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.target === canvasRef.current) {
@@ -9851,11 +9975,23 @@ const ADIA = () => {
   }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
 
   const deleteConnector = useCallback((id: string) => {
-    addToHistory();
-    setConnectors(prev => prev.filter(c => c.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted connector');
-  }, [addError, addToHistory]);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: id,
+        elementKind: 'connector',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted connector');
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, 'Deleted connector');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
     const current = connectors.find(connector => connector.id === id);
@@ -10430,16 +10566,28 @@ const ADIA = () => {
           const source = blocks.find(b => b.id === transitionSourceId);
           const target = blocks.find(b => b.id === blockId);
           if (!source || !target) return;
-          let type: RelationshipData['type'] = 'association';
-
-          if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+          const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+          if (legalKinds.length === 0) {
+            const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+            if (reversedKinds.length > 0) {
+              setRequirementConnectionPicker({ sourceId: blockId, targetId: transitionSourceId, reversedKinds });
+            } else {
+              showConnectionPolicyError({
+                relationshipKind: 'relationship',
+                source: classifyLegacyEndpoint(source),
+                target: classifyLegacyEndpoint(target),
+                diagnostic: {
+                  code: 'NO_LEGAL_RELATIONSHIP',
+                  message: `No available relationship can connect ${source.name} to ${target.name} on this diagram.`,
+                  correctiveAction: 'Choose compatible endpoints or the appropriate diagram. Check existing links for duplicate or cyclic relationships.',
+                },
+              });
+            }
+          } else if (diagramMode === 'requirements' || !legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
-            setIsCreatingTransition(false);
-            setTransitionSourceId(null);
-            return;
+          } else {
+            createRelationship(transitionSourceId, blockId, 'association');
           }
-
-          createRelationship(transitionSourceId, blockId, type);
           setIsCreatingTransition(false);
           setTransitionSourceId(null);
         }
@@ -10485,7 +10633,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks]);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -13788,8 +13936,8 @@ const ADIA = () => {
             width={state.width}
             height={state.height}
             rx={8}
-            fill={state.isActive ? '#2a2a2a' : '#1a1a1a'}
-            stroke={isSelected ? state.color : '#444'}
+            fill={state.isActive ? 'var(--sysml-state-active-fill)' : 'var(--sysml-state-fill)'}
+            stroke={isSelected ? state.color : 'var(--sysml-state-stroke)'}
             strokeWidth={isSelected ? 2 : 1}
           />
 
@@ -13835,7 +13983,7 @@ const ADIA = () => {
             x={8}
             y={17}
             textAnchor="start"
-            fill="#888"
+            fill="var(--sysml-state-subtext)"
             fontSize={9}
             fontFamily="Inter, sans-serif"
           >
@@ -13867,7 +14015,7 @@ const ADIA = () => {
               x={state.width - 8}
               y={state.height - 8}
               textAnchor="end"
-              fill="#888"
+              fill="var(--sysml-state-subtext)"
               fontSize={8}
               fontFamily="Inter, sans-serif"
             >
@@ -13878,9 +14026,9 @@ const ADIA = () => {
           {/* Graphical Representation of Internal Transitions */}
           {state.internalTransitions && (
             <g transform={`translate(8, ${state.height - 15 - (state.internalTransitions.split('\n').length * 10)})`}>
-              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="#444" strokeWidth={1} />
+              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="var(--sysml-block-divider)" strokeWidth={1} />
               {state.internalTransitions.split('\n').slice(0, 3).map((line, i) => (
-                <text key={i} y={i * 10} fill="#aaa" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
+                <text key={i} y={i * 10} fill="var(--sysml-state-subtext)" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
               ))}
             </g>
           )}
@@ -14195,7 +14343,9 @@ const ADIA = () => {
       }
 
       if (diagramMode === 'requirements') {
-        if (block.stereotype !== 'requirement') return null;
+        const allowedStereotypes = ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'];
+        if (!allowedStereotypes.includes(block.stereotype)) return null;
+        if (!requirementsDiagramScope.visibleBlockIds.has(block.id)) return null;
         // Use layerId for visibility: show only blocks belonging to the current layer.
         // Blocks without layerId (legacy) default to root.
         const blockLayer = block.layerId ?? 'root';
@@ -14211,8 +14361,7 @@ const ADIA = () => {
 
       const isSelected = selectedIds.includes(block.id);
 
-      const displayWidth = block.width || 150;
-      const displayHeight = block.height || 100;
+      const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
 
       return (
         <g
@@ -14233,16 +14382,16 @@ const ADIA = () => {
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
 
-          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? 'var(--sysml-requirement-fill)' : 'var(--sysml-block-fill)'} stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="var(--sysml-block-meta)" fontSize={10} fontFamily="monospace">
             {block.isAbstract ? `«${block.stereotype}, abstract»` : `«${block.stereotype}»`}
           </text>
-          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
             {block.name}{block.isLeaf ? ' {leaf}' : ''}
           </text>
-          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
+          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="var(--sysml-block-divider)" strokeWidth={1} />
 
           {/* If degraded mode active, skip complex sub-elements for performance */}
           {!isDegraded && (
@@ -14363,7 +14512,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
+  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
@@ -14384,18 +14533,14 @@ const ADIA = () => {
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
       if (diagramMode === 'ibd') return null;
       if (diagramMode === 'bdd' && isReqRel) return null;
-      if (diagramMode === 'requirements' && !isReqRel) return null;
+      if (diagramMode === 'requirements' && !requirementsDiagramScope.visibleRelationshipIds.has(rel.id)) return null;
 
-      // Check visibility for requirements: both source and target must be in the current layer
-      if (diagramMode === 'requirements') {
-        const isBlockVisible = (block: BlockData) => (block.layerId ?? 'root') === currentLayerId;
-        if (!isBlockVisible(source) || !isBlockVisible(target)) return null;
-      }
-
-      const srcW = source.width || 150;
-      const srcH = source.height || 100;
-      const tgtW = target.width || 150;
-      const tgtH = target.height || 100;
+      const sourceBounds = computeBlockDisplayBounds(source);
+      const targetBounds = computeBlockDisplayBounds(target);
+      const srcW = sourceBounds.width;
+      const srcH = sourceBounds.height;
+      const tgtW = targetBounds.width;
+      const tgtH = targetBounds.height;
 
       const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
       const group = pairGroups.get(pairKey) || [rel.id];
@@ -14505,7 +14650,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning]);
+  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
@@ -14525,9 +14670,9 @@ const ADIA = () => {
           {isSelected && (
             <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
-          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#f97316' : '#666'} strokeWidth={1} />
-          <text x={part.width / 2} y={20} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
-          <text x={part.width / 2} y={35} textAnchor="middle" fill="#888" fontSize={10}>: {block?.name || 'Unknown'}</text>
+          <rect width={part.width} height={part.height} fill="var(--sysml-part-fill)" stroke={isSelected ? '#f97316' : 'var(--sysml-part-stroke)'} strokeWidth={1} />
+          <text x={part.width / 2} y={20} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
+          <text x={part.width / 2} y={35} textAnchor="middle" fill="var(--sysml-block-subtext)" fontSize={10}>: {block?.name || 'Unknown'}</text>
 
           {/* Ports - FR-IBD-005: Reflect changes in BDD automatically */}
           {block?.ports?.map((port, i) => {
@@ -14553,7 +14698,7 @@ const ADIA = () => {
                 <rect
                   x={-5} y={-5}
                   width={10} height={10}
-                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : '#333'}
+                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : 'var(--sysml-port-fill)'}
                   stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
                   strokeWidth={1}
                   onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
@@ -14576,7 +14721,7 @@ const ADIA = () => {
                     </g>
                   </>
                 )}
-                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="#aaa" fontSize={9}>{port.name}</text>
+                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="var(--sysml-port-label)" fontSize={9}>{port.name}</text>
               </g>
             );
           })}
@@ -14797,7 +14942,7 @@ const ADIA = () => {
       const rect = canvasRef.current.getBoundingClientRect();
       setView({ scale: 1, offsetX: rect.width / 2 - targetX, offsetY: rect.height / 2 - targetY });
     }
-    setShowErrorDialog(false);
+    dismissErrorDialog();
   }, [states, junctions, transitions, layers, currentLayerId]);
 
   const handleAutoFix = useCallback((error: ErrorItem) => {
@@ -14810,7 +14955,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('Duplicate state name')) {
       const state = states.find(s => s.id === error.elementId);
@@ -14824,7 +14969,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed duplicate state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('has no AutoStart')) {
       // REQ-HSM-004 & REQ-HSM-023: Auto-fix by setting first state as autostart
@@ -14856,7 +15001,7 @@ const ADIA = () => {
         updateState(state.id, { autostart: true });
         addError('info', `Auto-fixed: Set '${state.name}' as AutoStart for layer '${layerName}'`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('unguarded and untimed')) {
       const transition = transitions.find(t => t.id === error.elementId);
@@ -14864,7 +15009,7 @@ const ADIA = () => {
         updateTransition(transition.id, { type: 'after', afterTicks: 5 });
         addError('info', `Auto-fixed transition: Added after-timer`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     }
   }, [states, layers, transitions, updateState, updateTransition, addError]);
@@ -14958,7 +15103,7 @@ const ADIA = () => {
         return s;
       }));
       setErrors(prev => prev.filter(e => !e.canAutoFix));
-      setShowErrorDialog(false);
+      dismissErrorDialog();
       addError('info', `Auto-fixed ${updates.size} issues.`);
     }
   }, [errors, states, layers, updateState, addError]);
@@ -15057,7 +15202,7 @@ const ADIA = () => {
         </div>
       )}
       <div
-        className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
+        className="flex flex-col ui-surface font-sans overflow-hidden"
         style={{
           zoom: uiZoom,
           width: `${100 / uiZoom}vw`,
@@ -15067,13 +15212,13 @@ const ADIA = () => {
         {/* Hidden input for project import */}
         <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
-        {/* Top Toolbar - Modernized & Unified Dark Header */}
-        <header className="h-14 bg-[#111114] border-b border-[#222228] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
+        {/* Top Toolbar - Modernized & Unified Semantic Header */}
+        <header className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
           {/* Brand & Project Identity Group */}
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={() => setShowWorkspaceFileDialog(true)}
-              className="p-1.5 hover:bg-[#1f1f26] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
+              className="p-1.5 hover:bg-[var(--surface-raised)] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
               title="Create/Open Workspace Asset File"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="group-hover:scale-110 transition-transform">
@@ -15081,24 +15226,24 @@ const ADIA = () => {
               </svg>
             </button>
             <div>
-              <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2">
+              <div className="font-bold text-lg tracking-tight text-[var(--text-primary)] flex items-center gap-2">
                 <span>ADIA</span>
                 <input
                   type="text"
                   value={currentProjectName}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
-                  className="bg-[#18181c] text-zinc-300 hover:text-white focus:text-white text-xs font-medium px-2 py-0.5 rounded border border-[#2e2e38] focus:border-[#f97316]/60 focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
+                  className="bg-[var(--surface-raised)] text-[var(--text-primary)] hover:border-[var(--border-strong)] focus:border-[#f97316] text-xs font-medium px-2 py-0.5 rounded border border-[var(--border-default)] focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
                   title="Click to rename project"
                 />
               </div>
-              <div className="text-[10px] text-zinc-500 font-mono mt-[-2px]">{VERSION}</div>
+              <div className="text-[10px] text-[var(--text-muted)] font-mono mt-[-2px]">{VERSION}</div>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* DIAGRAM MODE SWITCHER */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5 shrink-0">
+          <div className="flex ui-card bg-[var(--surface-raised)] rounded-lg border border-[var(--border-default)] p-0.5 shrink-0">
             {[
               { id: 'statemachine', label: 'State Machine' },
               { id: 'bdd', label: 'SysML BDD' },
@@ -15114,8 +15259,8 @@ const ADIA = () => {
                 onClick={() => setDiagramMode(mode.id as DiagramMode)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
-                    ? mode.id === 'plantuml' ? 'bg-orange-500 text-zinc-950 shadow-sm font-semibold' : 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)]'
                 }`}
               >
                 {mode.label}
@@ -15123,20 +15268,21 @@ const ADIA = () => {
             ))}
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+
+          <Separator orientation="vertical" className="h-6" />
 
           {/* SIMULATION & VALIDATION GROUP */}
-          <div className="flex items-center gap-1.5 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1.5 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Sim tick rate control */}
-            <div className="flex items-center gap-1 px-1.5 text-xs text-zinc-400">
+            <div className="flex items-center gap-1 px-1.5 text-xs text-[var(--text-secondary)]">
               <span className="text-[11px] whitespace-nowrap">Tick:</span>
               <TickRateInput value={tickMs} onChange={setTickMs} />
-              <span className="text-[10px] text-zinc-500">ms</span>
+              <span className="text-[10px] text-[var(--text-muted)]">ms</span>
             </div>
 
             {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
               <>
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
                 <Button
                   size="sm"
@@ -15169,7 +15315,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={stepSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Step single cycle"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15183,7 +15329,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={resetSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Reset simulation"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15193,13 +15339,13 @@ const ADIA = () => {
                   Reset
                 </Button>
 
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Check for errors"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15214,11 +15360,11 @@ const ADIA = () => {
                   size="sm"
                   onClick={validateWithAI}
                   disabled={isAiValidating}
-                  className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
                   title="Validate logic with AI"
                 >
                   {isAiValidating ? (
-                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -15234,32 +15380,32 @@ const ADIA = () => {
               </>
             )}
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <div className="flex items-center gap-1.5 px-1.5 py-0.5">
               <Checkbox
                 checked={safetyMode}
                 onCheckedChange={(c) => setSafetyMode(c as boolean)}
                 id="safety-mode"
-                className="h-3.5 w-3.5 rounded border-zinc-600 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
               />
-              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
+              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-500 font-semibold" : "text-[var(--text-secondary)]"}`}>
                 Safety
               </Label>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* CODE GENERATION & PROJECT I/O GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Generate C/H Button - Primary Accent */}
             <Button
               variant="outline"
               size="sm"
               onClick={generateCode}
               disabled={isGenerating}
-              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 disabled:opacity-50 disabled:cursor-wait"
+              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-500 hover:bg-orange-500/20 hover:text-orange-600 disabled:opacity-50 disabled:cursor-wait"
               title="Generate C/H Embedded Code"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15269,16 +15415,16 @@ const ADIA = () => {
               {isGenerating ? 'Generating...' : 'Generate C/H'}
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project (.adia)"
             >
-              <Save size={13} className="mr-1 text-zinc-400" />
+              <Save size={13} className="mr-1 text-[var(--text-muted)]" />
               Save
             </Button>
 
@@ -15286,7 +15432,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project as new file (.adia)"
             >
               Save As
@@ -15296,10 +15442,10 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleOpenProjectDialog}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open ADIA project (.adia)"
             >
-              <FolderOpen size={13} className="mr-1 text-zinc-400" />
+              <FolderOpen size={13} className="mr-1 text-[var(--text-muted)]" />
               Open
             </Button>
 
@@ -15307,7 +15453,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleExportProject}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Export individual module files (.json)"
             >
               Export
@@ -15317,22 +15463,22 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowReportDialog(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Generate Engineering Report"
             >
               Report
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* ENGINEERING TOOLS & GATEWAYS GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('hmi')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open HMI Dashboard Panel"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-orange-400">
@@ -15347,7 +15493,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('pid')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="PID Controller Tuner"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-sky-400">
@@ -15362,24 +15508,24 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('doe')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Design of Experiments (Response Surface Methodology)"
             >
               DOE (RSM)
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowFactoryIOGateway(true)}
-              className={`h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors ${
+              className={`h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors ${
                 factoryIOEnabled ? 'text-indigo-400 bg-indigo-500/10' : ''
               }`}
               title="Factory I/O Gateway Connection"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-zinc-400'}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`}>
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                 <line x1="12" y1="22.08" x2="12" y2="12" />
@@ -15393,7 +15539,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShow3DXGateway(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Connect to 3DEXPERIENCE Platform"
             >
               <Cloud size={13} className="mr-1 text-cyan-400" />
@@ -15405,7 +15551,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowSysmlDiagnostics(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="SysML Performance Diagnostics & Limits"
             >
               <Gauge size={13} className="mr-1 text-orange-400" />
@@ -15421,7 +15567,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => handleOpenHelp()}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Help & Documentation"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15436,17 +15582,12 @@ const ADIA = () => {
             <button
               id="adia-theme-toggle-btn"
               type="button"
-              title={currentTheme === 'dark' ? 'Switch to Emerald & Champagne Light Mode' : 'Switch to Dark Mode'}
+              title={currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               onClick={() => {
                 const next = toggleTheme();
                 setCurrentTheme(next);
               }}
-              className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border transition-all duration-200 shadow-sm cursor-pointer"
-              style={{
-                backgroundColor: currentTheme === 'light' ? '#E5D5B2' : '#18181c',
-                borderColor: currentTheme === 'light' ? '#C9AF84' : '#27272f',
-                color: currentTheme === 'light' ? '#022C22' : '#F8E7C9',
-              }}
+              className="ui-control ui-focus-ring h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border border-[var(--border-default)] transition-all duration-200 shadow-sm cursor-pointer"
             >
               {currentTheme === 'dark' ? (
                 <>
@@ -15455,35 +15596,36 @@ const ADIA = () => {
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-[#022C22]" />
+                  <Moon className="w-3.5 h-3.5 text-[var(--text-primary)]" />
                   <span className="hidden sm:inline font-mono font-bold">Dark</span>
                 </>
               )}
             </button>
 
             {/* Status indicators */}
-            <div className="flex items-center gap-3 bg-[#18181c] border border-[#27272f] rounded-lg px-2.5 py-1 text-xs">
+            <div className="flex items-center gap-3 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg px-2.5 py-1 text-xs">
               <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-500' : 'text-[var(--text-muted)]'}`}>
                   {isRunning ? 'RUN' : 'STOP'}
                 </span>
               </div>
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
+              <Separator orientation="vertical" className="h-3.5" />
               <LiveFpsMonitor />
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
-              <div className="text-zinc-500 font-mono text-[11px]">
-                T: <span className="text-zinc-300 font-semibold">{simulationTime.toFixed(1)}s</span>
+              <Separator orientation="vertical" className="h-3.5" />
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                T: <span className="text-[var(--text-primary)] font-semibold">{simulationTime.toFixed(1)}s</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                S: <span className="text-zinc-300 font-semibold">{currentStates.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                S: <span className="text-[var(--text-primary)] font-semibold">{currentStates.length}</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                V: <span className="text-zinc-300 font-semibold">{variables.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                V: <span className="text-[var(--text-primary)] font-semibold">{variables.length}</span>
               </div>
             </div>
           </div>
         </header>
+
 
         {/* Workspace Tab Bar */}
         <WorkspaceTabBar
@@ -15499,8 +15641,8 @@ const ADIA = () => {
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
-            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
                   <div className="flex items-center overflow-hidden whitespace-nowrap">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
@@ -15508,12 +15650,12 @@ const ADIA = () => {
                        <path d="M16 17l-3-3 3-3" />
                        <path d="M13 14H3" />
                     </svg>
-                    <span className="text-sm font-medium">Hierarchy</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Hierarchy</span>
                   </div>
                 )}
                 <button
                   onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-                  className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+                  className={`p-1.5 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
                   <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
                 </button>
@@ -15940,7 +16082,29 @@ const ADIA = () => {
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
-                      Requirement
+                      + Requirement
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Block
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'testCase');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Test Case
                     </Button>
                     <Button
                       variant="secondary"
@@ -16121,7 +16285,7 @@ const ADIA = () => {
                 onWheel={handleWheel}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
+                <svg className="sysml-diagram-canvas" width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>
                     <pattern
                       id="grid"
@@ -16894,26 +17058,29 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Stereotype</Label>
-                    <select
-                      value={selectedBlock.stereotype}
-                      onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      {selectedBlock.stereotype === 'requirement' && (
-                        <option value="requirement">Requirement</option>
-                      )}
-                      <option value="block">Block</option>
-                      <option value="interface">Interface</option>
-                      <option value="interfaceBlock">Interface Block</option>
-                      <option value="valueType">ValueType</option>
-                      <option value="enumeration">Enumeration</option>
-                      <option value="verificationCase">Verification Case</option>
-                      {customStereotypes
-                        ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
-                        .map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    {selectedBlock.stereotype === 'requirement' ? (
+                      <div className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-sm text-[#e0e0e0]" role="status">
+                        Requirement <span className="text-[10px] text-[#888]">(fixed by SysML Requirements semantics)</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedBlock.stereotype}
+                        onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
+                        className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                      >
+                        <option value="block">Block</option>
+                        <option value="interface">Interface</option>
+                        <option value="interfaceBlock">Interface Block</option>
+                        <option value="valueType">ValueType</option>
+                        <option value="enumeration">Enumeration</option>
+                        <option value="verificationCase">Verification Case</option>
+                        {customStereotypes
+                          ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
+                          .map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                   {selectedBlock.stereotype === 'requirement' && (
                     <>
@@ -17182,6 +17349,11 @@ const ADIA = () => {
                         const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
                         const suspectLinks = selectSuspectLinks(sysmlStore, selectedBlock.id);
                         const evidenceHistory = selectEvidenceForRequirement(sysmlStore, selectedBlock.id);
+                        // Projection-only deletion preview: analyze without
+                        // mutating, so the panel can show typed severity,
+                        // unresolved usages, evidence fallout, and protected
+                        // baseline blocks before any confirmation dialog.
+                        const deletionPreview = analyzeMutation(canonicalSysmlRepository, { kind: 'deleteElements', elementIds: [selectedBlock.id] });
 
                         return (
                           <RequirementGovernancePanel
@@ -17190,10 +17362,23 @@ const ADIA = () => {
                             baselines={canonicalSysmlRepository.baselines}
                             suspectLinks={suspectLinks}
                             evidenceHistory={evidenceHistory}
+                            deletionSeverity={impactSeverity(deletionPreview, authorizedBaselineIds)}
+                            unresolvedUsageIds={deletionPreview.unresolvedUsageIds}
+                            invalidatedEvidenceIds={deletionPreview.invalidatedEvidenceIds}
+                            blockedBaselineIds={deletionPreview.affectedBaselineIds.filter(id => !authorizedBaselineIds.includes(id))}
                             onCreateBaseline={(name) => {
                               const res = createModelBaseline(canonicalSysmlRepository, name);
                               setCanonicalSysmlRepository(res.repository);
                               addError('info', `Created baseline: ${name}`);
+                            }}
+                            onCloneBaseline={(baselineId) => {
+                              const res = cloneProtectedBaselineAsWorkingCopy(canonicalSysmlRepository, baselineId, `Working copy of ${baselineId}`);
+                              setCanonicalSysmlRepository(res.repository);
+                              addError('info', `Cloned protected baseline ${baselineId} into unprotected working copy ${res.baseline.id}`);
+                            }}
+                            onAuthorizeBaseline={(baselineId) => {
+                              setAuthorizedBaselineIds(prev => prev.includes(baselineId) ? prev : [...prev, baselineId]);
+                              addError('info', `Recorded explicit deletion authorization for protected baseline ${baselineId}`);
                             }}
                             onClearSuspect={(relId) => {
                               const updated = clearSuspectLink(canonicalSysmlRepository, relId);
@@ -17401,35 +17586,6 @@ const ADIA = () => {
               ) : selectedRelationship ? (
                 <>
                   <div>
-                    <Label>Relationship Type</Label>
-                    <select
-                      value={selectedRelationship.type}
-                      onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      <option value="association">Association</option>
-                      <option value="generalization">Generalization</option>
-                      <option value="composition">Composition</option>
-                      <option value="aggregation">Aggregation</option>
-                      <option value="allocation">Allocation</option>
-                      <option value="derive">Derive</option>
-                      <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
-                      <option value="refine">Refine</option>
-                      <option value="satisfy">Satisfy</option>
-                      <option value="verify">Verify</option>
-                      <option value="trace">Trace</option>
-                      <option value="copy">Copy</option>
-                      <option
-                        value="requirementContainment"
-                        disabled={!(blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement' && blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement')}
-                      >
-                        Requirement Containment (parent → child)
-                      </option>
-                      <option value="binding">Binding</option>
-                      <option value="dependency">Dependency</option>
-                    </select>
-                  </div>
-                  <div>
                     <Label>Label</Label>
                     <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
                   </div>
@@ -17457,6 +17613,10 @@ const ADIA = () => {
                     }
                     sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
                     targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
+                    sourceEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.sourceId)}
+                    targetEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.targetId)}
+                    diagram={diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd'}
+                    onInvalidChange={(rejection) => showConnectionPolicyError(rejection, selectedRelationship.id)}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -18075,8 +18235,106 @@ const ADIA = () => {
             </div>
           </div>
         )}
+        {/* SysML Deletion Confirmation Modal (BDD / Requirements / IBD) */}
+        {sysmlDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setSysmlDeleteConfirm(null)}>
+            <div className="bg-[#1a1a1a] border border-red-900/60 rounded-xl w-[520px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
+                <AlertTriangle className={`w-5 h-5 ${sysmlDeleteConfirm.severity === 'blocked' ? 'text-red-500' : 'text-[#f97316]'} mr-3 shrink-0`} />
+                <h2 className="text-base font-bold text-[#e0e0e0]">
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Deletion Blocked' : `Confirm Delete ${sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}`}
+                </h2>
+                <button
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-        {/* Requirement Connection Picker Modal */}
+              <div className="p-6 space-y-4 overflow-y-auto">
+                {sysmlDeleteConfirm.severity === 'blocked' ? (
+                  <div className="p-3.5 bg-red-950/40 rounded-lg border border-red-800/60 flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-300 leading-relaxed">
+                      Protected baseline <span className="font-semibold text-white">{(sysmlDeleteConfirm.impact.blockedBaselineIds ?? sysmlDeleteConfirm.impact.affectedBaselineIds).join(', ') || 'unknown'}</span> forbids this deletion. Clone the baseline or authorize explicitly before retrying.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#cccccc] leading-relaxed">
+                      Are you sure you want to delete <span className="font-semibold text-[#f97316]">{sysmlDeleteConfirm.elementName}</span>?
+                    </p>
+
+                    {/* Impact Details */}
+                    <div className="space-y-2">
+                      {(() => {
+                        const { impact } = sysmlDeleteConfirm;
+                        const requested = new Set(impact.requestedElementIds);
+                        const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+                        const items: { label: string; value: string; color: string }[] = [];
+                        if (cascade.length > 0) items.push({ label: 'Cascade deleted', value: `${cascade.length} element(s)`, color: 'text-red-300' });
+                        if (impact.nestedRequirementIds.length > 0) items.push({ label: 'Nested requirements', value: `${impact.nestedRequirementIds.length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.removedRelationshipIds.length > 0) items.push({ label: 'Removed relationships', value: `${impact.removedRelationshipIds.length} relationship(s)`, color: 'text-amber-300' });
+                        if (impact.unresolvedUsageIds.length > 0) items.push({ label: 'Unresolved usages', value: impact.unresolvedUsageIds.join(', '), color: 'text-amber-300' });
+                        if (impact.affectedRequirementIds.filter(id => !requested.has(id)).length > 0) items.push({ label: 'Affected requirements', value: `${impact.affectedRequirementIds.filter(id => !requested.has(id)).length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.invalidatedEvidenceIds.length > 0) items.push({ label: 'Invalidated evidence', value: `${impact.invalidatedEvidenceIds.length} record(s)`, color: 'text-amber-300' });
+                        if (impact.affectedDiagramKinds.length > 0) items.push({ label: 'Affected diagrams', value: impact.affectedDiagramKinds.join(', ').toUpperCase(), color: 'text-sky-300' });
+                        if (impact.affectedBaselineIds.length > 0) items.push({ label: 'Affected baselines', value: impact.affectedBaselineIds.join(', '), color: 'text-amber-300' });
+
+                        return items.length > 0 && (
+                          <div className="p-3.5 bg-[#2a1a14] rounded-lg border border-[#f97316]/30">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <AlertTriangle className="w-4 h-4 text-[#f97316]" />
+                              <span className="text-xs font-bold text-[#f97316]">Deletion Impact</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {items.map((item, i) => (
+                                <div key={i} className="flex items-baseline justify-between text-xs">
+                                  <span className="text-[#999]">{item.label}</span>
+                                  <span className={`font-mono ${item.color}`}>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <p className="text-[11px] text-[#777] leading-relaxed">
+                      This action is irreversible. All cascaded elements, relationships, and evidence will be permanently removed.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
+                >
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Dismiss' : 'Cancel'}
+                </Button>
+                {sysmlDeleteConfirm.severity !== 'blocked' && (
+                  <Button
+                    onClick={() => {
+                      const fn = sysmlDeleteConfirm.onConfirm;
+                      setSysmlDeleteConfirm(null);
+                      fn();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete {sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Policy-filtered connection picker */}
         {requirementConnectionPicker && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
@@ -18087,13 +18345,20 @@ const ADIA = () => {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div>
-                <h3 className="text-base font-semibold text-white">Create Requirement Relationship</h3>
+                <h3 className="text-base font-semibold text-white">
+                  {requirementConnectionPicker.reversedKinds ? 'Reverse Endpoints & Create' : 'Create Relationship'}
+                </h3>
+                {requirementConnectionPicker.reversedKinds && (
+                  <div className="mt-2 p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs">
+                    Direction assistance: SysML requires connections to be created from the dependent/realizing element to the requirement. The endpoints below have been aligned to standard SysML direction.
+                  </div>
+                )}
                 <p className="text-xs text-[#888] mt-1">
-                  Choose the relationship kind between{' '}
+                  Connect{' '}
                   <span className="text-[#f97316] font-medium">
                     {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
                   </span>{' '}
-                  and{' '}
+                  to{' '}
                   <span className="text-[#f97316] font-medium">
                     {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
                   </span>
@@ -18101,57 +18366,41 @@ const ADIA = () => {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'requirementContainment');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Requirement Containment</div>
-                    <div className="text-xs text-[#aaa] font-normal">Parent contains child (source → target)</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'deriveReqt');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Derive Requirement («deriveReqt»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Derived requirement from source</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'copy');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Copy («copy»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Requirement copy relationship</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'trace');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Trace («trace»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">General traceability relationship</div>
-                  </div>
-                </Button>
+                {getCanvasRelationshipKinds(
+                  { blocks, parts, relationships },
+                  requirementConnectionPicker.sourceId,
+                  requirementConnectionPicker.targetId,
+                  diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd',
+                ).map(kind => {
+                  const meta = RELATIONSHIP_DEFINITIONS[kind as RequirementRelationshipKind];
+                  return (
+                    <Button
+                      key={kind}
+                      onClick={() => {
+                        createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
+                        setRequirementConnectionPicker(null);
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      {meta ? (
+                        <>
+                          <span className="font-semibold text-xs text-orange-300">
+                            {meta.displayLabel} — {meta.label}
+                          </span>
+                          <span className="text-[11px] text-neutral-400">
+                            {meta.directionLabel}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {kind === 'requirementContainment'
+                            ? 'Requirement Containment (parent → child)'
+                            : kind.replace(/([A-Z])/g, ' $1').replace(/^./, character => character.toUpperCase())}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
@@ -18180,19 +18429,29 @@ const ADIA = () => {
 
         {/* Error Dialog */}
         {showErrorDialog && currentError && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
-            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={dismissErrorDialog}>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <h2 className="text-lg font-bold text-red-400">Error</h2>
+                <h2 id="error-dialog-title" className="text-lg font-bold text-red-400">
+                  {currentError.connectionDiagnostic ? 'SysML Connection Blocked' : 'Error'}
+                </h2>
               </div>
 
               <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
                 <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
+                {currentError.connectionDiagnostic && currentError.relationshipKind && currentError.sourceEndpoint && currentError.targetEndpoint && (
+                  <SysmlConnectionErrorDetails
+                    relationshipKind={currentError.relationshipKind}
+                    source={currentError.sourceEndpoint}
+                    target={currentError.targetEndpoint}
+                    diagnostic={currentError.connectionDiagnostic}
+                  />
+                )}
                 {currentError.source && (
                   <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
                 )}
@@ -18216,7 +18475,7 @@ const ADIA = () => {
                           updateTransition(currentError.elementId!, { type: 'condition', condition: defaultGuard });
                           addError('info', `Added guard condition: [${defaultGuard}]`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18227,7 +18486,7 @@ const ADIA = () => {
                           updateTransition(currentError.elementId!, { type: 'after', afterTicks: 5 });
                           addError('info', `Added after-timer: after(5)`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18253,7 +18512,8 @@ const ADIA = () => {
                 )}
                 <Button
                   variant="outline"
-                  onClick={() => setShowErrorDialog(false)}
+                  ref={errorDismissButtonRef}
+                  onClick={dismissErrorDialog}
                   className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
                 >
                   Dismiss
@@ -18261,7 +18521,7 @@ const ADIA = () => {
                 <Button
                   onClick={() => {
                     clearErrors();
-                    setShowErrorDialog(false);
+                    dismissErrorDialog();
                   }}
                   className="bg-red-600 hover:bg-red-700 text-white px-5"
                 >

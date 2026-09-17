@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   createEmptyRepository,
@@ -5,7 +6,7 @@ import {
   type PropertyDefinition,
   type SysmlRepository,
 } from './model';
-import { deriveBddView, resolveInheritedFeatures, validateBlockDefinition, validateAssociationEnds } from './bdd';
+import { deriveBddView, resolveInheritedFeatures, validateBlockDefinition, validateAssociationEnds, bddNotationForKind, BDD_NOTATION_BY_KIND } from './bdd';
 
 const multiplicity = (lower = 1, upper: number | '*' = 1) => ({ lower, upper, ordered: false, unique: true });
 const property = (
@@ -220,6 +221,86 @@ describe('canonical BDD semantics', () => {
     expect(paths).toContain('relationships.badComp.sourceMultiplicity');
     expect(paths).toContain('relationships.badComp.sourceRole');
     expect(paths).toContain('relationships.badComp.navigability');
+  });
+});
+
+describe('BDD policy single-source diagnostics (dedup + deterministic order)', () => {
+  it('keeps distinct messages for the same code (dedup key includes message)', () => {
+    const model = repo();
+    model.definitions.leafA = block('leafA', { isLeaf: true });
+    model.definitions.leafB = block('leafB', { isLeaf: true });
+    model.definitions.multi = block('multi', { supertypeIds: ['leafB', 'leafA'] });
+
+    const leafDiags = resolveInheritedFeatures(model, 'multi').diagnostics
+      .filter(d => d.code === 'LEAF_SPECIALIZATION');
+    expect(leafDiags.length).toBe(2);
+  });
+
+  it('sorts diagnostics deterministically by code, elementId, propertyPath, message', () => {
+    const model = repo();
+    model.definitions.leafA = block('leafA', { isLeaf: true });
+    model.definitions.leafB = block('leafB', { isLeaf: true });
+    model.definitions.multi = block('multi', { supertypeIds: ['leafB', 'leafA'] });
+
+    const diagnostics = resolveInheritedFeatures(model, 'multi').diagnostics;
+    const key = (d: { code: string; elementId?: string; propertyPath?: string; message: string }) =>
+      [d.code, d.elementId ?? '', d.propertyPath ?? '', d.message].join('');
+    expect(diagnostics.map(key)).toEqual([...diagnostics].map(key).sort());
+    // Full ordering (not code+element only): leafA's message sorts before leafB's.
+    const leafMessages = diagnostics.filter(d => d.code === 'LEAF_SPECIALIZATION').map(d => d.message);
+    expect(leafMessages).toEqual([...leafMessages].sort());
+  });
+
+  it('delegates structured mapping to the central policy (no local CODE:message re-derivation)', () => {
+    const source = readFileSync('src/engine/sysml/bdd.ts', 'utf8');
+    expect(source).toMatch('policyDiagnosticsToSysml');
+    expect(source).not.toMatch("indexOf(':')");
+    expect(source).not.toMatch('slice(0, separator)');
+  });
+});
+
+describe('Task 5 BDD relation notation (OMG SysML 1.6)', () => {
+  it('maps every BDD relation kind to its own notation', () => {
+    expect(bddNotationForKind('association')).toBe('solid-line');
+    expect(bddNotationForKind('composition')).toBe('filled-diamond');
+    expect(bddNotationForKind('sharedAggregation')).toBe('hollow-diamond');
+    expect(bddNotationForKind('generalization')).toBe('hollow-triangle');
+    expect(bddNotationForKind('dependency')).toBe('dashed-arrow');
+    expect(bddNotationForKind('allocation')).toBe('dashed-arrow');
+  });
+
+  it('exposes a stable notation lookup covering all BDD kinds', () => {
+    expect(BDD_NOTATION_BY_KIND.association).toBe('solid-line');
+    expect(BDD_NOTATION_BY_KIND.composition).toBe('filled-diamond');
+    expect(BDD_NOTATION_BY_KIND.sharedAggregation).toBe('hollow-diamond');
+    expect(BDD_NOTATION_BY_KIND.generalization).toBe('hollow-triangle');
+    expect(BDD_NOTATION_BY_KIND.dependency).toBe('dashed-arrow');
+    expect(BDD_NOTATION_BY_KIND.allocation).toBe('dashed-arrow');
+  });
+
+  it('keeps BDD relation notations disjoint from IBD connector notations', async () => {
+    const { connectorNotationFor } = await import('./ibd');
+    const bddNotations = new Set<string>(Object.values(BDD_NOTATION_BY_KIND));
+    for (const kind of ['assembly', 'delegation', 'binding'] as const) {
+      expect(bddNotations.has(connectorNotationFor(kind) as string)).toBe(false);
+    }
+  });
+
+  it('projects BDD-only relationships with per-kind notation metadata', () => {
+    const model = repo();
+    model.definitions.a = block('a');
+    model.definitions.b = block('b');
+    model.relationships.assoc = { id: 'assoc', kind: 'association', sourceId: 'a', targetId: 'b' };
+    model.relationships.shared = { id: 'shared', kind: 'sharedAggregation', sourceId: 'a', targetId: 'b' };
+    model.relationships.dep = { id: 'dep', kind: 'dependency', sourceId: 'a', targetId: 'b' };
+    model.relationships.alloc = { id: 'alloc', kind: 'allocation', sourceId: 'a', targetId: 'b' };
+
+    const view = deriveBddView(model);
+    const notationById = new Map(view.relationships.map(r => [r.id, r.notation]));
+    expect(notationById.get('assoc')).toBe('solid-line');
+    expect(notationById.get('shared')).toBe('hollow-diamond');
+    expect(notationById.get('dep')).toBe('dashed-arrow');
+    expect(notationById.get('alloc')).toBe('dashed-arrow');
   });
 });
 

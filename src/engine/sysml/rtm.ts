@@ -41,6 +41,16 @@ export interface RtmRequirementRelation {
   otherRequirementName: string;
 }
 
+export type CoverageStatus = 'not-satisfied' | 'satisfied';
+export type VerificationStatus = 'not-verified' | 'not-run' | 'passed' | 'failed';
+
+export interface RtmReference {
+  id: string;
+  name: string;
+  kind?: string;
+  type?: string;
+}
+
 export interface RtmRow {
   requirement: RequirementDefinition;
   status: RtmStatus;
@@ -50,6 +60,18 @@ export interface RtmRow {
   children: RtmRequirementRef[];
   coveringBlocks: RtmCoveringElement[];
   requirementRelations: RtmRequirementRelation[];
+  containmentParents: RtmRequirementRef[];
+  containmentChildren: RtmRequirementRef[];
+  derivedFrom: RtmRequirementRef[];
+  derivedRequirements: RtmRequirementRef[];
+  copiedFrom: RtmRequirementRef[];
+  copiedRequirements: RtmRequirementRef[];
+  satisfiedBy: RtmCoveringElement[];
+  verifiedBy: RtmReference[];
+  refinedBy: RtmReference[];
+  tracedElements: RtmReference[];
+  satisfactionStatus: CoverageStatus;
+  verificationStatus: VerificationStatus;
   blocks: string[];
   parts: string[];
   ports: string[];
@@ -128,13 +150,16 @@ export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetr
 }
 
 export function exportRtmCsv(matrix: TraceabilityMatrix): string {
-  const csv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const csv = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`;
   const hasChange = Boolean(matrix.filters.compareBaselineId || matrix.rows.some(r => r.changeKind !== undefined));
   const headers = [
     'Requirement ID', 'Name', 'Text', 'Status',
     ...(hasChange ? ['Change'] : []),
     'Owner', 'Risk', 'Version', 'Baseline',
     'Parents', 'Children', 'Covering Blocks',
+    'Contained By', 'Contains', 'Derived From', 'Derived Requirements', 'Copied From', 'Copied Requirements',
+    'Satisfied By', 'Verified By', 'Refined By', 'Traced Elements',
+    'Satisfaction Status', 'Verification Status',
     'Blocks', 'Parts', 'Ports', 'Connectors', 'Behaviors', 'Simulations', 'Verification Cases',
     'Evidence', 'Artifacts', 'Relationships', 'Unresolved Endpoints',
   ];
@@ -145,6 +170,18 @@ export function exportRtmCsv(matrix: TraceabilityMatrix): string {
     row.parents.map(p => `[${p.kind}] ${p.requirementId} ${p.name}`).join(';'),
     row.children.map(c => `[${c.kind}] ${c.requirementId} ${c.name}`).join(';'),
     row.coveringBlocks.map(b => `[${b.kind}] ${b.name}`).join(';'),
+    row.containmentParents.map(p => `${p.requirementId} ${p.name}`).join(';'),
+    row.containmentChildren.map(c => `${c.requirementId} ${c.name}`).join(';'),
+    row.derivedFrom.map(d => `${d.requirementId} ${d.name}`).join(';'),
+    row.derivedRequirements.map(d => `${d.requirementId} ${d.name}`).join(';'),
+    row.copiedFrom.map(c => `${c.requirementId} ${c.name}`).join(';'),
+    row.copiedRequirements.map(c => `${c.requirementId} ${c.name}`).join(';'),
+    row.satisfiedBy.map(s => s.name).join(';'),
+    row.verifiedBy.map(v => v.name).join(';'),
+    row.refinedBy.map(r => r.name).join(';'),
+    row.tracedElements.map(t => t.name).join(';'),
+    row.satisfactionStatus,
+    row.verificationStatus,
     row.blocks.join(';'), row.parts.join(';'), row.ports.join(';'), row.connectors.join(';'),
     row.behaviors.join(';'), row.simulations.join(';'), row.verificationCases.join(';'), row.evidence.join(';'),
     row.artifacts.join(';'), row.relationshipIds.join(';'), row.unresolvedEndpointIds.join(';'),
@@ -168,8 +205,20 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
   const coveringBlocks: RtmCoveringElement[] = [];
   const requirementRelations: RtmRequirementRelation[] = [];
 
+  const containmentParents: RtmRequirementRef[] = [];
+  const containmentChildren: RtmRequirementRef[] = [];
+  const derivedFrom: RtmRequirementRef[] = [];
+  const derivedRequirements: RtmRequirementRef[] = [];
+  const copiedFrom: RtmRequirementRef[] = [];
+  const copiedRequirements: RtmRequirementRef[] = [];
+  const satisfiedBy: RtmCoveringElement[] = [];
+  const verifiedBy: RtmReference[] = [];
+  const refinedBy: RtmReference[] = [];
+  const tracedElements: RtmReference[] = [];
+
   for (const r of relationships) {
     const isSource = r.sourceId === requirement.id;
+    const isTarget = r.targetId === requirement.id;
     const otherId = isSource ? r.targetId : r.sourceId;
 
     const otherReq = repo.requirements[otherId];
@@ -186,26 +235,57 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
       if (r.kind === 'requirementContainment') {
         if (!isSource) {
           parents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          containmentParents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         } else {
           children.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          containmentChildren.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         }
       } else if (r.kind === 'deriveReqt') {
         if (isSource) {
           parents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          derivedFrom.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         } else {
           children.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          derivedRequirements.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        }
+      } else if (r.kind === 'copy') {
+        if (isSource) {
+          copiedFrom.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        } else {
+          copiedRequirements.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         }
       }
     }
 
-    if (r.kind === 'satisfy') {
+    if (r.kind === 'satisfy' && isTarget) {
       const def = repo.definitions[otherId];
       const usage = repo.usages[otherId];
       if (def?.kind === 'block') {
-        coveringBlocks.push({ id: def.id, name: def.name, kind: r.kind, type: 'block' });
+        const item: RtmCoveringElement = { id: def.id, name: def.name, kind: r.kind, type: 'block' };
+        coveringBlocks.push(item);
+        satisfiedBy.push(item);
       } else if (usage?.kind === 'part') {
-        coveringBlocks.push({ id: usage.id, name: usage.name, kind: r.kind, type: 'part' });
+        const item: RtmCoveringElement = { id: usage.id, name: usage.name, kind: r.kind, type: 'part' };
+        coveringBlocks.push(item);
+        satisfiedBy.push(item);
+      } else {
+        const ref = resolveRef(repo, otherId);
+        const item: RtmCoveringElement = { id: otherId, name: ref.name, kind: r.kind, type: 'block' };
+        coveringBlocks.push(item);
+        satisfiedBy.push(item);
       }
+    }
+
+    if (r.kind === 'verify' && isTarget) {
+      verifiedBy.push(resolveRef(repo, otherId));
+    }
+
+    if (r.kind === 'refine' && isTarget) {
+      refinedBy.push(resolveRef(repo, otherId));
+    }
+
+    if (r.kind === 'trace') {
+      tracedElements.push(resolveRef(repo, otherId));
     }
   }
 
@@ -214,6 +294,7 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     const usage = repo.usages[id];
     const artifact = repo.artifacts[id];
     if (definition?.kind === 'block') blocks.push(id);
+    else if (definition) blocks.push(id);
     else if (usage?.kind === 'part') parts.push(id);
     else if (usage?.kind === 'port') ports.push(id);
     else if (repo.connectors[id]) connectors.push(id);
@@ -249,14 +330,45 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     }
   }
 
+  const satisfactionStatus: CoverageStatus = (satisfiedBy.length > 0 || coveringBlocks.length > 0)
+    ? 'satisfied'
+    : 'not-satisfied';
+
+  const allVerificationIds = sortedUnique([
+    ...verificationCases,
+    ...verifiedBy.map(v => v.id),
+  ]);
+
+  let verificationStatus: VerificationStatus = 'not-verified';
+  const evidenceItems = evidence.map(id => repo.evidence[id]).filter(Boolean);
+  if (evidenceItems.some(item => item.result === 'failed')) {
+    verificationStatus = 'failed';
+  } else if (evidenceItems.some(item => item.result === 'passed')) {
+    verificationStatus = 'passed';
+  } else if (allVerificationIds.length > 0) {
+    verificationStatus = 'not-run';
+  }
+
   const row: Omit<RtmRow, 'status'> = {
     requirement,
     changeKind,
     relationshipIds: relationships.map(item => item.id).sort(),
-    parents,
-    children,
-    coveringBlocks,
+    parents: dedupeRefs(parents),
+    children: dedupeRefs(children),
+    coveringBlocks: dedupeRefs(coveringBlocks),
     requirementRelations,
+    containmentParents: dedupeRefs(containmentParents),
+    containmentChildren: dedupeRefs(containmentChildren),
+    derivedFrom: dedupeRefs(derivedFrom),
+    derivedRequirements: dedupeRefs(derivedRequirements),
+    copiedFrom: dedupeRefs(copiedFrom),
+    copiedRequirements: dedupeRefs(copiedRequirements),
+    satisfiedBy: dedupeRefs(satisfiedBy),
+    verifiedBy: dedupeRefs(verifiedBy),
+    refinedBy: dedupeRefs(refinedBy),
+    tracedElements: dedupeRefs(tracedElements),
+    satisfactionStatus,
+    verificationStatus,
     blocks: sortedUnique(blocks), parts: sortedUnique(parts), ports: sortedUnique(ports), connectors: sortedUnique(connectors),
     behaviors: sortedUnique(behaviors), simulations: sortedUnique(simulations), verificationCases: sortedUnique(verificationCases),
     evidence: sortedUnique(evidence), artifacts: sortedUnique(artifacts), unresolvedEndpointIds: sortedUnique(unresolvedEndpointIds),
@@ -310,4 +422,30 @@ function sortedUnique(values: string[]): string[] { return [...new Set(values)].
 function csv(value: unknown): string {
   const text = String(value ?? '');
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function resolveRef(repo: SysmlRepository, id: string): RtmReference {
+  const req = repo.requirements[id];
+  if (req) return { id, name: req.name || req.requirementId, kind: 'requirement', type: 'requirement' };
+  const def = repo.definitions[id];
+  if (def) return { id, name: def.name, kind: def.kind, type: def.kind };
+  const usage = repo.usages[id];
+  if (usage) return { id, name: usage.name, kind: usage.kind, type: usage.kind };
+  const vc = repo.verificationCases[id];
+  if (vc) return { id, name: vc.name, kind: 'verificationCase', type: 'verificationCase' };
+  const art = repo.artifacts[id];
+  if (art) return { id, name: art.name, kind: art.kind, type: art.kind };
+  return { id, name: id, kind: 'unknown', type: 'unknown' };
+}
+
+function dedupeRefs<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      result.push(item);
+    }
+  }
+  return result;
 }

@@ -12,6 +12,11 @@ import type {
   VerificationEvidence,
   ModelBaseline,
   TraceArtifact,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
   Multiplicity,
   SysmlEntityCollection,
   SysmlEntity,
@@ -28,7 +33,21 @@ import {
 } from '../engine/sysml/mutations';
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
 import { serializeRepository, loadRepository } from '../engine/sysml/persistence';
+import {
+  assessLegacyProjectionLoss,
+  assessOpmInterchangeLoss,
+  type InterchangeReport,
+} from '../engine/sysml/interchangeReport';
+import { projectSysmlToOpm } from '../engine/sysml/opmAdapter';
 import { requiresDeletionConfirmation } from './sysmlTransactionAdapter';
+import {
+  classifyCanonicalDeletionTarget,
+  validateCanonicalBlockDefinition,
+  validateCanonicalBlockUpdate,
+  validateCanonicalConnectorCandidate,
+  validateCanonicalRelationshipCandidate,
+} from './sysmlCreationRules';
+import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 import {
   type NormalizedSysmlStore,
@@ -97,6 +116,11 @@ export {
 import { SysmlWorkerClient } from './sysmlWorkerClient';
 export { SysmlWorkerClient };
 export * from '../engine/sysml/workerProtocol';
+export {
+  classifyDeletionTarget,
+  classifyRelationship,
+  resolveInheritance,
+} from '../engine/sysml/policy';
 
 let defaultWorkerClient: SysmlWorkerClient | null = null;
 export function getDefaultSysmlWorkerClient(): SysmlWorkerClient {
@@ -132,7 +156,12 @@ export type SysmlElement =
   | VerificationCase
   | VerificationEvidence
   | ModelBaseline
-  | TraceArtifact;
+  | TraceArtifact
+  | ActorDefinition
+  | SubjectDefinition
+  | UseCaseDefinition
+  | ExtensionPoint
+  | DiagramReference;
 
 export interface DiagramPresentation {
   diagramId: string;
@@ -147,7 +176,7 @@ export interface PresentationSnapshot {
 export type SysmlEditorCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
-  | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string }
+  | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
   | { type: 'updatePresentation'; elementId: string; presentation: PresentationCoordinates; coalesceKey?: string }
   | { type: 'undo' }
@@ -223,6 +252,8 @@ export function computeImpactHash(impact: MutationImpact): string {
     inval: [...impact.invalidatedEvidenceIds].sort(),
     affReq: [...impact.affectedRequirementIds].sort(),
     affBase: [...impact.affectedBaselineIds].sort(),
+    blocked: [...(impact.blockedBaselineIds ?? [])].sort(),
+    severity: (impact as { severity?: string }).severity ?? 'review',
   });
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) {
@@ -476,6 +507,26 @@ function storeElementInRepository(repo: SysmlRepository, element: SysmlElement):
       repo.verificationCases[element.id] = element as VerificationCase;
       return;
     }
+    if (element.kind === 'actor') {
+      repo.actors[element.id] = element as ActorDefinition;
+      return;
+    }
+    if (element.kind === 'subject') {
+      repo.subjects[element.id] = element as SubjectDefinition;
+      return;
+    }
+    if (element.kind === 'useCase') {
+      repo.useCases[element.id] = element as UseCaseDefinition;
+      return;
+    }
+    if (element.kind === 'extensionPoint') {
+      repo.extensionPoints[element.id] = element as ExtensionPoint;
+      return;
+    }
+  }
+  if ('sourceElementId' in element && 'diagramId' in element && 'role' in element) {
+    repo.diagramReferences[element.id] = element as DiagramReference;
+    return;
   }
   if ('sourceId' in element && 'targetId' in element) {
     repo.relationships[element.id] = element as SysmlRelationship;
@@ -530,6 +581,26 @@ function findAndPatchElement(repo: SysmlRepository, elementId: string, patch: Re
     repo.baselines[elementId] = { ...repo.baselines[elementId], ...patch } as any;
     return true;
   }
+  if (repo.actors?.[elementId]) {
+    repo.actors[elementId] = { ...repo.actors[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.subjects?.[elementId]) {
+    repo.subjects[elementId] = { ...repo.subjects[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.useCases?.[elementId]) {
+    repo.useCases[elementId] = { ...repo.useCases[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.extensionPoints?.[elementId]) {
+    repo.extensionPoints[elementId] = { ...repo.extensionPoints[elementId], ...patch } as any;
+    return true;
+  }
+  if (repo.diagramReferences?.[elementId]) {
+    repo.diagramReferences[elementId] = { ...repo.diagramReferences[elementId], ...patch } as any;
+    return true;
+  }
   return false;
 }
 
@@ -540,12 +611,128 @@ function getCollectionFromElement(element: SysmlElement): SysmlEntityCollection 
     if (element.kind === 'assembly' || element.kind === 'delegation' || element.kind === 'binding') return 'connectors';
     if (element.kind === 'requirement') return 'requirements';
     if (element.kind === 'verificationCase') return 'verificationCases';
+    if (element.kind === 'actor') return 'actors';
+    if (element.kind === 'subject') return 'subjects';
+    if (element.kind === 'useCase') return 'useCases';
+    if (element.kind === 'extensionPoint') return 'extensionPoints';
   }
+  if ('sourceElementId' in element && 'diagramId' in element && 'role' in element) return 'diagramReferences';
   if ('sourceId' in element && 'targetId' in element) return 'relationships';
   if ('verificationCaseId' in element && 'status' in element) return 'evidence';
   if ('protected' in element && 'contentHash' in element) return 'baselines';
   if ('uri' in element && 'kind' in element) return 'artifacts';
   return 'definitions';
+}
+
+// ---------------------------------------------------------------------------
+// Task 2 semantic policy gates (gateway boundary, before mutation).
+// Canonical create/update/connect/delete commands are admitted through the
+// central typed policy (policy.ts single source via sysmlCreationRules) so
+// failures carry typed diagnostic codes (INVALID_GENERALIZATION_ENDPOINTS,
+// INVALID_COMPOSITION_ENDPOINTS, MISSING_RELATIONSHIP_ENDPOINT,
+// DUPLICATE_RELATIONSHIP/CONNECTOR, INVALID_CONNECTOR_CONTEXT,
+// INCOMPATIBLE_PORT_DIRECTION, LEAF_SPECIALIZATION, ...) instead of generic
+// invalid-operation / ELEMENT_NOT_FOUND-only errors. Rejection leaves
+// revision, auditTrail, patchHistory, and transaction IDs untouched.
+// ---------------------------------------------------------------------------
+
+function isRelationshipElement(element: SysmlElement): element is SysmlRelationship {
+  return 'sourceId' in element && 'targetId' in element;
+}
+
+function isConnectorElement(element: SysmlElement): element is ConnectorUsage {
+  return 'sourcePortId' in element && 'targetPortId' in element;
+}
+
+function isBlockElement(element: SysmlElement): element is BlockDefinition | ValueTypeDefinition | InterfaceDefinition {
+  return 'kind' in element && (element.kind === 'block' || element.kind === 'valueType' || element.kind === 'interface');
+}
+
+function toGateDiagnostics(elementId: string, codes: readonly string[], subject: string): SysmlDiagnostic[] {
+  return policyDiagnosticsToSysml(elementId, codes).map(diagnostic => ({
+    ...diagnostic,
+    message: `${subject} ${elementId} rejected by semantic policy: ${diagnostic.code}`,
+  }));
+}
+
+function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlDiagnostic[] | null {
+  if (isRelationshipElement(element)) {
+    const verdict = validateCanonicalRelationshipCandidate(repo, element);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId: element.id,
+        message: `Relationship ${element.id} rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  if (isConnectorElement(element)) {
+    const verdict = validateCanonicalConnectorCandidate(repo, element);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId: element.id,
+        message: `Connector ${element.id} rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  if (isBlockElement(element) && element.kind === 'block') {
+    const verdict = validateCanonicalBlockDefinition(repo, element);
+    if (!verdict.valid) {
+      return toGateDiagnostics(element.id, verdict.codes, 'Block');
+    }
+    return null;
+  }
+  return null;
+}
+
+function gateUpdateElement(
+  repo: SysmlRepository, elementId: string, patch: Record<string, unknown>,
+): SysmlDiagnostic[] | null {
+  const definition = repo.definitions[elementId];
+  if (definition && definition.kind === 'block') {
+    const verdict = validateCanonicalBlockUpdate(repo, elementId, patch);
+    if (!verdict.valid) {
+      return toGateDiagnostics(
+        elementId,
+        verdict.codes.filter(code => code !== 'ELEMENT_NOT_FOUND'),
+        'Block',
+      );
+    }
+    return null;
+  }
+  const relationship = repo.relationships[elementId];
+  if (relationship) {
+    const candidate = { ...relationship, ...patch } as SysmlRelationship;
+    const staged: SysmlRepository = {
+      ...repo, relationships: { ...repo.relationships, [elementId]: candidate },
+    };
+    // Re-validate endpoints/direction on the staged candidate, ignoring the
+    // candidate itself for duplicate detection.
+    const { [elementId]: _ignored, ...rest } = staged.relationships;
+    const verdict = validateCanonicalRelationshipCandidate({ ...staged, relationships: rest }, candidate);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId,
+        message: `Relationship ${elementId} update rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  const connector = repo.connectors[elementId];
+  if (connector) {
+    const candidate = { ...connector, ...patch } as ConnectorUsage;
+    const { [elementId]: _ignored, ...rest } = repo.connectors;
+    const verdict = validateCanonicalConnectorCandidate({ ...repo, connectors: rest }, candidate);
+    if (!verdict.valid) {
+      return verdict.codes.map(code => ({
+        code, severity: 'error' as const, elementId,
+        message: `Connector ${elementId} update rejected: ${code}`,
+      }));
+    }
+    return null;
+  }
+  return null;
 }
 
 export function executeSysmlCommand(
@@ -805,6 +992,24 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'createElement') {
+    const gateDiagnostics = gateCreateElement(state.repository, command.element);
+    if (gateDiagnostics) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: gateDiagnostics,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const collection = getCollectionFromElement(command.element);
     upsertEntity(store, collection, command.element as any);
     if (command.presentation) {
@@ -824,6 +1029,11 @@ export function executeSysmlCommand(
       evidence: collection === 'evidence' ? { ...state.repository.evidence, [command.element.id]: command.element as any } : state.repository.evidence,
       baselines: collection === 'baselines' ? { ...state.repository.baselines, [command.element.id]: command.element as any } : state.repository.baselines,
       artifacts: collection === 'artifacts' ? { ...state.repository.artifacts, [command.element.id]: command.element as any } : state.repository.artifacts,
+      actors: collection === 'actors' ? { ...(state.repository.actors || {}), [command.element.id]: command.element as any } : (state.repository.actors || {}),
+      subjects: collection === 'subjects' ? { ...(state.repository.subjects || {}), [command.element.id]: command.element as any } : (state.repository.subjects || {}),
+      useCases: collection === 'useCases' ? { ...(state.repository.useCases || {}), [command.element.id]: command.element as any } : (state.repository.useCases || {}),
+      extensionPoints: collection === 'extensionPoints' ? { ...(state.repository.extensionPoints || {}), [command.element.id]: command.element as any } : (state.repository.extensionPoints || {}),
+      diagramReferences: collection === 'diagramReferences' ? { ...(state.repository.diagramReferences || {}), [command.element.id]: command.element as any } : (state.repository.diagramReferences || {}),
       auditTrail: [
         ...state.repository.auditTrail,
         {
@@ -909,6 +1119,24 @@ export function executeSysmlCommand(
     }
 
     const collection = getCollectionForId(store, command.elementId) ?? getCollectionFromElement(existing);
+    const updateGate = gateUpdateElement(state.repository, command.elementId, command.patch);
+    if (updateGate) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: updateGate,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const nextElement = { ...existing, ...command.patch } as SysmlEntity;
     upsertEntity(store, collection, nextElement);
 
@@ -965,7 +1193,67 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'deleteElements') {
+    // Policy boundary: classify every requested deletion target through the
+    // central policy. Unknown ids are rejected with a typed code before any
+    // impact analysis or mutation; known targets flow into analyzeMutation
+    // (which itself drives its cascade closure through classifyDeletionTarget).
+    const unknownTargets = [...new Set(command.elementIds)].filter(
+      id => classifyCanonicalDeletionTarget(state.repository, id).targetKind === 'unknown',
+    );
+    if (unknownTargets.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: unknownTargets.map(id => ({
+          code: 'ELEMENT_NOT_FOUND',
+          severity: 'error' as const,
+          elementId: id,
+          message: `Element ${id} not found; deletion rejected`,
+        })),
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const impact = analyzeMutation(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
+    const authorized = new Set(command.authorizedBaselineIds ?? []);
+    const unauthorizedBaselines = impact.affectedBaselineIds.filter(id => !authorized.has(id));
+
+    // Protected-baseline gate: destructive mutations touching frozen baseline
+    // content never proceed silently. The caller must clone the baseline into
+    // an unprotected working copy or present explicit authorization alongside
+    // the confirmed impact hash. Rejection leaves revision, auditTrail,
+    // patchHistory, and transaction IDs untouched.
+    if (unauthorizedBaselines.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: unauthorizedBaselines.map(id => ({
+          code: 'PROTECTED_BASELINE_REQUIRES_AUTHORIZATION',
+          severity: 'error' as const,
+          elementId: id,
+          message: `Protected baseline ${id} forbids deletion of ${command.elementIds.join(', ') || 'none'}; clone the baseline or authorize explicitly before retrying`,
+        })),
+        impact: { ...impact, blockedBaselineIds: unauthorizedBaselines, severity: 'blocked' },
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const needsConfirmation = requiresDeletionConfirmation(impact);
 
     if (needsConfirmation) {
@@ -990,7 +1278,29 @@ export function executeSysmlCommand(
       }
     }
 
-    const mutationResult = applyCommand(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
+    const mutationResult = applyCommand(
+      state.repository,
+      { kind: 'deleteElements', elementIds: command.elementIds },
+      { authorizedBaselineIds: [...authorized] },
+    );
+    if (!mutationResult.applied) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: (mutationResult.diagnostics ?? []).map(d => ({ ...d, severity: 'error' as const })),
+        impact: mutationResult.impact,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     const nextRepo = mutationResult.repository;
 
     const forwardOps = [...(mutationResult.forwardPatch?.forward ?? [])];
@@ -1133,6 +1443,9 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
   diagramPresentations: Record<string, { elementIds: string[] }>;
   valid: boolean;
   diagnostics: SysmlDiagnostic[];
+  interchangeReport: InterchangeReport;
+  quarantinedRelationshipIds: string[];
+  quarantinedConnectorIds: string[];
 } {
   const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
   const diagramPresentations = (payload.diagramPresentations as Record<string, { elementIds: string[] }>) ?? {};
@@ -1151,6 +1464,9 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
       diagramPresentations,
       valid: loadRes.valid,
       diagnostics: loadRes.diagnostics,
+      interchangeReport: loadRes.interchangeReport,
+      quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
+      quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
     };
   }
 
@@ -1166,5 +1482,35 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
     diagramPresentations,
     valid: loadRes.valid,
     diagnostics: loadRes.diagnostics,
+    interchangeReport: loadRes.interchangeReport,
+    quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
+    quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
   };
+}
+
+/**
+ * Task 7: loss-reporting legacy projection. The view itself is unchanged
+ * (projection-only); the report records every canonical construct that has
+ * no legacy-diagram element so imports/exports never silently drop evidence,
+ * baselines, artifacts, port usages, inheritance, or verification links.
+ */
+export function projectLegacyViewWithInterchangeReport(
+  repository: SysmlRepository,
+  coordinates: Record<string, PresentationCoordinates> = {},
+  diagramPresentations: Record<string, { elementIds: string[] }> = {},
+  diagramId?: string,
+): { view: LegacySysmlView; interchangeReport: InterchangeReport } {
+  return {
+    view: projectLegacyDiagram(repository, coordinates, diagramPresentations, diagramId),
+    interchangeReport: assessLegacyProjectionLoss(repository),
+  };
+}
+
+/**
+ * Task 7: loss-reporting OPM interchange. One-directional SysML -> OPM
+ * projection; the report qualifies every conceptual-only / unsupported
+ * mapping with an explicit loss entry.
+ */
+export function projectOpmWithInterchangeReport(repository: SysmlRepository) {
+  return { projection: projectSysmlToOpm(repository), interchangeReport: assessOpmInterchangeLoss(repository) };
 }

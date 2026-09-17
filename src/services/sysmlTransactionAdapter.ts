@@ -1,7 +1,12 @@
-import { applyCommand, type MutationImpact } from '../engine/sysml/mutations';
+import { applyCommand, impactSeverity, type ImpactSeverity, type MutationImpact } from '../engine/sysml/mutations';
+
+export { impactSeverity };
+export type { ImpactSeverity };
 import { loadRepository } from '../engine/sysml/persistence';
 import type { SysmlRepository } from '../engine/sysml/model';
+import { classifyDeletionTarget, type DeletionDecision } from '../engine/sysml/policy';
 import { synchronizeEvidenceCurrency } from '../engine/sysml/evidence';
+import type { CompactImpactDelta } from '../engine/sysml/workerProtocol';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
 
 export interface LegacySysmlModel {
@@ -15,6 +20,31 @@ export interface LegacySysmlDeletionResult {
   model: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] };
   repository: SysmlRepository;
   impact: MutationImpact;
+}
+
+/**
+ * Projects a legacy editor model into a canonical repository while honoring
+ * the legacy ownership semantics carried by {@link PartData.aggregation}.
+ * The canonical projection defaults every usage to composite; an explicit
+ * legacy shared/reference marker narrows that projection so the central
+ * policy (composite-only cascade, unresolved impacts) sees the same
+ * ownership the editor drew. Parts without a marker keep the legacy
+ * composite default, preserving existing models byte-for-byte.
+ */
+function projectLegacyRepository(model: LegacySysmlModel): SysmlRepository {
+  const repository = loadRepository({
+    blocks: model.blocks,
+    relationships: model.relationships,
+    parts: model.parts,
+    connectors: model.connectors,
+  }).repository;
+  for (const part of model.parts) {
+    const usage = repository.usages[part.id];
+    if (usage && usage.kind === 'part' && (part.aggregation === 'shared' || part.aggregation === 'reference')) {
+      usage.aggregation = part.aggregation;
+    }
+  }
+  return repository;
 }
 
 function isRecordShallowEqual<T extends Record<string, any>>(
@@ -101,20 +131,26 @@ export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, mo
 
 export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
   const requested = new Set(impact.requestedElementIds);
+  // Bible §7 matrix: leaf/unreferenced targets need no confirmation. Affected
+  // requirement ids only force confirmation when they name bystanders beyond
+  // the request itself.
   return impact.deletedElementIds.some(id => !requested.has(id))
     || impact.nestedRequirementIds.length > 0
     || impact.removedRelationshipIds.some(id => !requested.has(id))
     || impact.unresolvedUsageIds.length > 0
     || impact.invalidatedEvidenceIds.length > 0
-    || impact.affectedRequirementIds.length > 0
+    || impact.affectedRequirementIds.some(id => !requested.has(id))
     || impact.affectedBaselineIds.length > 0;
 }
 
 export function formatLegacyDeletionImpact(impact: MutationImpact): string {
   const requested = new Set(impact.requestedElementIds);
   const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+  const severity = impact.severity ?? impactSeverity(impact);
+  const blocked = impact.blockedBaselineIds ?? [];
   const lines = [
     'SysML deletion impact',
+    `Severity: ${severity}`,
     `Requested: ${impact.requestedElementIds.join(', ') || 'none'}`,
     `Cascade deleted: ${cascade.join(', ') || 'none'}`,
     `Nested requirements: ${impact.nestedRequirementIds.join(', ') || 'none'}`,
@@ -124,6 +160,9 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
     `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
     `Invalidated evidence: ${impact.invalidatedEvidenceIds.join(', ') || 'none'}`,
     `Protected baselines retained: ${impact.affectedBaselineIds.join(', ') || 'none'}`,
+    ...(blocked.length > 0
+      ? [`Blocked: protected baseline ${blocked.join(', ')} requires clone or explicit authorization; deletion refused`]
+      : []),
     '',
     'Continue with this atomic deletion?',
   ];
@@ -131,13 +170,34 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
 }
 
 export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: readonly string[]): LegacySysmlDeletionResult {
-  const repository = loadRepository({
-    blocks: model.blocks,
-    relationships: model.relationships,
-    parts: model.parts,
-    connectors: model.connectors,
-  }).repository;
-  const transaction = applyCommand(repository, { kind: 'deleteElements', elementIds: [...new Set(elementIds)] });
+  const repository = projectLegacyRepository(model);
+  const requested = [...new Set(elementIds)];
+  // Legacy BDD editor semantics (adapter-owned): deleting a block definition
+  // deletes its composite-owned typed usages with it — they are drawn as
+  // owned parts of the definition's whole. Shared/reference usages are never
+  // implicit children; the canonical policy below reports them as unresolved
+  // impacts. The expansion only adds explicit targets; the closure itself is
+  // still driven by analyzeMutation through the central policy.
+  const deletedDefinitions = new Set(requested.filter(id => repository.definitions[id]));
+  const expanded = [...requested];
+  if (deletedDefinitions.size > 0) {
+    for (const [usageId, usage] of Object.entries(repository.usages)) {
+      if (usage.kind === 'part' && usage.aggregation === 'composite' && deletedDefinitions.has(usage.typeId) && !expanded.includes(usageId)) {
+        expanded.push(usageId);
+      }
+    }
+  }
+  // Policy boundary: classify every requested target through the central
+  // deletion policy before running the atomic transaction, so unresolved
+  // (non-composite) impacts are explicit even when the closure itself is
+  // driven by analyzeMutation.
+  const policyUnresolved = new Set<string>();
+  for (const id of new Set(expanded)) {
+    for (const unresolvedId of classifyDeletionTarget(repository, id).unresolvedUsageIds) {
+      policyUnresolved.add(unresolvedId);
+    }
+  }
+  const transaction = applyCommand(repository, { kind: 'deleteElements', elementIds: expanded });
   const deleted = new Set(transaction.impact.deletedElementIds);
 
   // Legacy connectors are projected incompletely because their ports are
@@ -168,10 +228,15 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
   };
   const impact: MutationImpact = {
     ...transaction.impact,
+    requestedElementIds: [...requested].sort(),
     deletedElementIds: [...deleted].sort(),
     removedRelationshipIds: [...new Set([
       ...transaction.impact.removedRelationshipIds,
       ...model.relationships.filter(r => deleted.has(r.id) || deleted.has(r.sourceId) || deleted.has(r.targetId)).map(r => r.id),
+    ])].sort(),
+    unresolvedUsageIds: [...new Set([
+      ...transaction.impact.unresolvedUsageIds,
+      ...[...policyUnresolved].filter(id => !deleted.has(id)),
     ])].sort(),
     affectedDiagramKinds: [...new Set([
       ...transaction.impact.affectedDiagramKinds,
@@ -179,4 +244,30 @@ export function applyLegacySysmlDeletion(model: LegacySysmlModel, elementIds: re
     ])].sort(),
   };
   return { model: next, repository: transaction.repository, impact };
+}
+
+/**
+ * Classifies a legacy-model deletion target through the central typed
+ * deletion policy (composite-only cascade, unresolved impacts).
+ */
+export function classifyLegacyDeletionTarget(model: LegacySysmlModel, elementId: string): DeletionDecision {
+  return classifyDeletionTarget(projectLegacyRepository(model), elementId);
+}
+
+/**
+ * Projects a mutation impact to a compact delta (ID lists + summary counts)
+ * without embedding the repository.
+ */
+export function toCompactImpactDelta(impact: MutationImpact): CompactImpactDelta {
+  return {
+    requestedElementIds: [...impact.requestedElementIds],
+    deletedElementIds: [...impact.deletedElementIds],
+    impactSummary: {
+      nestedRequirements: impact.nestedRequirementIds.length,
+      removedRelationships: impact.removedRelationshipIds.length,
+      unresolvedUsages: impact.unresolvedUsageIds.length,
+      invalidatedEvidence: impact.invalidatedEvidenceIds.length,
+    },
+    impact,
+  };
 }

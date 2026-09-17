@@ -15,11 +15,11 @@ describe('visual diagram model', () => {
 
   it('migrates legacy payloads with missing canvas fields', () => {
     const migrated = migrateVisualDiagram({
-      id: 'legacy', type: 'use-case', title: 'System', version: 0,
+      id: 'legacy', type: 'sequence', title: 'System', version: 0,
       elements: [], relationships: [],
     });
     expect(migrated).toMatchObject({
-      id: 'legacy', version: 1, type: 'use-case',
+      id: 'legacy', version: 1, type: 'sequence',
       canvas: { zoom: 1, pan: { x: 0, y: 0 } },
     });
   });

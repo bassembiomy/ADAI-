@@ -3,11 +3,19 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyConformanceManifest } from '../src/engine/sysml/conformanceManifest';
+import { verifyConformanceManifest, verifyReleaseGateEvidence } from '../src/engine/sysml/conformanceManifest';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const EXPECTED_GCC_SHA256 = 'aebe586bbc45e6b46c8388a55fe5eb00a2314d6f474ca8aedec4176246568935';
+// Pinned toolchain source of truth (mirrors TOOLCHAINS.Generic in
+// src/security/toolchainManager.cjs). `toolchains/` is gitignored, so CI and
+// fresh checkouts must provision it (see .github/workflows/sysml-mass-production-gate.yml).
+const PINNED_W64DEVKIT_URL =
+  'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip';
+// Kept as a diagnostic switch so the error can explain how to provision the
+// compiler. It never turns a release qualification into a passing run.
+const TOOLCHAIN_WAIVER_ENV = 'ADIA_SYSML_TOOLCHAIN_WAIVER';
 
 function log(section: string, msg: string) {
   console.log(`\x1b[36m[SYSML-RELEASE]\x1b[0m \x1b[1m${section}\x1b[0m: ${msg}`);
@@ -37,11 +45,18 @@ async function verifyRelease() {
   console.log('       ADIA SysML Full Conformance Release Qualification Gate    ');
   console.log('================================================================\n');
 
-  // 1. Pinned compiler verification
+  // 1. Pinned compiler verification (fail-closed; explicit waiver only)
   log('TOOLCHAIN', 'Verifying pinned w64devkit GCC compiler...');
   const gccPath = resolve(repoRoot, 'toolchains/w64devkit/w64devkit/bin/gcc.exe');
   if (!existsSync(gccPath)) {
-    fail(`Pinned GCC compiler not found at: ${gccPath}`);
+    const waiverHint = process.env[TOOLCHAIN_WAIVER_ENV] === '1'
+      ? ` ${TOOLCHAIN_WAIVER_ENV}=1 is diagnostic-only and cannot qualify a release.`
+      : '';
+    fail(
+      `Pinned GCC compiler not found at: ${gccPath}. ` +
+        `Provision it (pinned archive: ${PINNED_W64DEVKIT_URL}, extract so that ` +
+        `toolchains/w64devkit/w64devkit/bin/gcc.exe has SHA-256 ${EXPECTED_GCC_SHA256}).${waiverHint}`
+    );
   }
   const gccBuf = readFileSync(gccPath);
   const gccSha256 = createHash('sha256').update(gccBuf).digest('hex').toLowerCase();
@@ -62,6 +77,19 @@ async function verifyRelease() {
     'MANIFEST',
     `Manifest verified: ${manifestReport.totalRows} rows (${manifestReport.supportedRows} supported, ${manifestReport.unsupportedRows} unsupported), zero missing evidence files.`
   );
+
+  const evidenceReport = verifyReleaseGateEvidence();
+  if (!evidenceReport.valid) {
+    fail(
+      `Release evidence gate failed: ${[
+        evidenceReport.profileOk ? '' : 'profile mismatch',
+        evidenceReport.unsupportedMarkedSupported.length ? `unsupported marked supported: ${evidenceReport.unsupportedMarkedSupported.join(', ')}` : '',
+        evidenceReport.rowsMissingImplementation.length ? `missing implementation evidence: ${evidenceReport.rowsMissingImplementation.join(', ')}` : '',
+        evidenceReport.rowsMissingTiers.length ? `rows missing evidence tiers: ${evidenceReport.rowsMissingTiers.map(row => `${row.id} (${row.missing.join(', ')})`).join('; ')}` : '',
+      ].filter(Boolean).join('; ')}`
+    );
+  }
+  log('EVIDENCE', 'Release evidence tiers verified for every supported manifest row.');
 
   // 3. SysML Unit & Integration Gate
   log('TEST:SYSML', 'Executing unit and integration suites...');

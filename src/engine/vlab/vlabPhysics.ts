@@ -2,6 +2,8 @@ import { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
+import { SolverConfiguration } from './kernel/types';
+import { explicitSolverStep } from './ExplicitSolverAdapter';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -23,10 +25,29 @@ export class VLabPhysicsEngine {
   private solver: ImplicitSolver;
   private currentSystem: AssembledSystem | null = null;
   private prevTopologyHash: string = '';
+  private solverConfiguration: SolverConfiguration | null;
 
-  constructor() {
+  constructor(solverConfiguration: SolverConfiguration | null = null) {
     this.assembler = new DAEAssembler();
     this.solver = new ImplicitSolver();
+    this.solverConfiguration = solverConfiguration;
+    if (solverConfiguration) this.applySolverConfiguration(solverConfiguration);
+  }
+
+  updateConfiguration(solverConfiguration: SolverConfiguration): void {
+    this.solverConfiguration = solverConfiguration;
+    this.applySolverConfiguration(solverConfiguration);
+  }
+
+  getSolverConfiguration(): SolverConfiguration | null {
+    return this.solverConfiguration;
+  }
+
+  private applySolverConfiguration(config: SolverConfiguration): void {
+    this.solver.configure({
+      maxIterations: config.maximumIterations,
+      tolerance: config.nonlinearTolerance
+    });
   }
 
   /**
@@ -35,7 +56,8 @@ export class VLabPhysicsEngine {
   private getTopologyHash(nodes: Node[], edges: Edge[]): string {
     const nodeIds = nodes.map(n => n.id).sort().join(',');
     const edgeIds = edges.map(e => `${e.source}_${e.target}`).sort().join(',');
-    return `${nodeIds}|${edgeIds}`;
+    const parameterHash = nodes.map(n => `${n.id}:${JSON.stringify((n.data as any)?.params ?? {})}`).sort().join('|');
+    return `${nodeIds}|${edgeIds}|${parameterHash}`;
   }
 
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {
@@ -105,33 +127,45 @@ export class VLabPhysicsEngine {
       });
     }
 
-    let t = prevState?.time || 0;
+    const config = this.solverConfiguration;
+    const method = config?.solver ?? 'auto';
+    const isExplicit = method === 'euler' || method === 'rk4' || method === 'rk_adaptive';
+    const sameMethod = !prevState?.solverMethod || prevState.solverMethod === method;
+    let t = prevState?.time ?? config?.startTime ?? 0;
     const tTarget = t + dt;
     
     let xCurrent = [...x];
-    let prevX = prevState?.prevX ? [...prevState.prevX] : undefined;
-    let lastDt = prevState?.prevDt;
+    let prevX = sameMethod && prevState?.prevX ? [...prevState.prevX] : undefined;
+    let lastDt = sameMethod ? prevState?.prevDt : undefined;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
-    let useSdirk = prevState?.useSdirk || prevState?.solver === 'sdirk3' || false;
+    // Configured auto uses BDF for VLab DAEs. Legacy unconfigured runs retain SDIRK fallback.
+    let useSdirk = !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
+    let acceptedSteps = 0;
+    let rejectedSteps = 0;
+    const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
+    const maxStep = typeof config?.maximumStep === 'number' ? config.maximumStep : Math.max(minStep, 0.05);
     
     // Choose initial step size. Start with last accepted size but never start below 1ms
     // to avoid excessive step count.
-    let h = Math.max(1e-3, lastDt || Math.min(dt, 0.05));
+    const initialStep = typeof config?.initialStep === 'number' ? config.initialStep : Math.min(dt, maxStep);
+    let h = Math.min(maxStep, Math.max(minStep, lastDt || initialStep));
     
-    while (t < tTarget - 1e-12) {
+    // Keep the legacy epsilon for unconfigured models; configured jobs need
+    // exact boundary handling for sub-microsecond solver settings.
+    const targetEpsilon = config ? 0 : 1e-12;
+    while (t < tTarget - targetEpsilon) {
       // Don't step past target time
-      if (t + h > tTarget + 1e-12) {
-        h = tTarget - t;
-      }
+      const remaining = tTarget - t;
+      const stepFloor = Math.min(minStep, remaining);
+      h = Math.min(h, remaining);
+      if (t + h === t) throw new Error('Solver step is too small to advance simulation time.');
       
       let stepAccepted = false;
       let nextX: number[] = [];
       
       while (!stepAccepted) {
         // Enforce minimum step size to prevent infinite loops
-        if (h < 1e-6) {
-          h = 1e-6;
-        }
+        h = Math.max(stepFloor, h);
         
         try {
           const ctx: EquationContext = {
@@ -143,7 +177,18 @@ export class VLabPhysicsEngine {
             stateDerivatives: new Array(system.systemSize).fill(0)
           };
           
-          if (useSdirk) {
+          let explicitLte = 0;
+          if (isExplicit && config) {
+            const result = explicitSolverStep(system, xCurrent, ctx, config, this.solver);
+            if (!result.accepted) {
+              if (h <= stepFloor) throw new Error('Explicit solver cannot satisfy tolerances at minimumStep.');
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
+              continue;
+            }
+            nextX = result.x;
+            explicitLte = result.lte;
+          } else if (useSdirk) {
             // SDIRK-3 Solve Stage 1
             const ctx1 = {
               dt: h * GAMMA,
@@ -253,25 +298,36 @@ export class VLabPhysicsEngine {
           // --- Zero Crossing & Event Detection ---
           const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
           if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
-            const hEvent = Math.max(1e-6, h * eventInfo.fraction);
+            const hEvent = Math.max(stepFloor, h * eventInfo.fraction);
             throw new EventTriggerError(hEvent);
           }
           
           // --- Local Truncation Error (LTE) Control ---
-          let lte = 0;
-          if (h > 1e-6 && !useSdirk) {
+          let lte = explicitLte;
+          // Preserve the legacy unconfigured LTE path; configured runs use
+          // their explicit minimum-step boundary for adaptive control.
+          if (!isExplicit && !useSdirk && (config || h > 1e-6)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
               return system.residuals(solveX, dx, solveCtx);
             };
-            const nextX_bdf1 = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            let comparison = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            // BDF1 needs a startup estimate too: compare one full step to two half steps.
+            if (config && ctx.order === 1) {
+              const halfResiduals = (solveX: number[], solveCtx: EquationContext) =>
+                system.residuals(solveX, solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / (h / 2)), solveCtx);
+              const halfContext = { ...ctx, dt: h / 2, time: t + h / 2 };
+              const half = this.solver.solve(halfResiduals, xCurrent, halfContext);
+              comparison = this.solver.solve(halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
+            }
             
             let sumSq = 0;
             let diffCount = 0;
             for (let idx = 0; idx < system.systemSize; idx++) {
-              if (system.isDifferentialState[idx]) {
-                const diff = nextX[idx] - nextX_bdf1[idx];
-                const scale = 1e-3 * Math.abs(nextX[idx]) + 1e-5;
+              if (config || system.isDifferentialState[idx]) {
+                const diff = nextX[idx] - comparison[idx];
+                const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
+                  + (config?.absoluteTolerance ?? 1e-5);
                 sumSq += (diff / scale) * (diff / scale);
                 diffCount++;
               }
@@ -279,47 +335,58 @@ export class VLabPhysicsEngine {
             
             lte = diffCount > 0 ? Math.sqrt(sumSq / diffCount) : 0;
             if (lte > 1.0) {
-              h *= 0.5;
-              bdfOrder = 1;
+              if (h <= stepFloor) throw new Error('BDF solver cannot satisfy tolerances at minimumStep.');
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
+              if (!config) bdfOrder = 1;
               continue;
             }
           }
           
           // Grow step size if error is low or if we are successfully resolving minimum steps
-          if ((lte < 0.1 || h <= 1e-6 || useSdirk) && h < 0.05) {
-            h = Math.min(h * 1.5, 0.05);
-          }
+          const nextH = (lte < 0.1 || useSdirk) ? Math.min(h * 1.5, maxStep) : h;
           
           stepAccepted = true;
+          acceptedSteps++;
           prevX = [...xCurrent];
           lastDt = h;
           xCurrent = [...nextX];
           t += h;
+          h = nextH;
           bdfOrder = 2;
           
         } catch (error: any) {
           if (error instanceof EventTriggerError) {
-            if (error.hEvent >= h || h <= 1e-6) {
+            if (error.hEvent >= h || h <= stepFloor) {
               console.warn("Minimum step size reached during event. Forcing acceptance.");
               stepAccepted = true;
               xCurrent = nextX.length > 0 ? [...nextX] : [...xCurrent];
               t += h;
+              acceptedSteps++;
             } else {
               h = error.hEvent;
               bdfOrder = 1; // force BDF-1 across discontinuity
             }
           } else {
-            if (!useSdirk) {
+            if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;
+            if (!config && !useSdirk) {
               useSdirk = true;
               console.warn("DAE BDF solver convergence issue. Promoting to SDIRK-3.");
             }
-            if (h <= 1e-6) {
-              // Non-convergence at minimum step size.
-              // Throw the error so the simulation triggers the Euler fallback solver
-              // instead of silently accepting bad/empty values.
-              throw new Error(`DAE Solver failed to converge: ${error.message}`);
+            if (h <= stepFloor && !useSdirk && config && config.maximumIterations <= 1) {
+              throw new Error(`DAE Solver failed to converge at minimumStep: ${error.message}`);
+            }
+            if (h <= stepFloor) {
+              // Preserve the established V-Lab behavior at the configured
+              // minimum step: accept the best state rather than retrying
+              // forever. Explicit-state incompatibilities are still errors.
+              stepAccepted = true;
+              if (nextX.length > 0) xCurrent = [...nextX];
+              t += h;
+              acceptedSteps++;
             } else {
-              h *= 0.5;
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
               bdfOrder = 1;
             }
           }
@@ -378,15 +445,10 @@ export class VLabPhysicsEngine {
 
     const createSingleScopeValue = (val: number, label: string): any => {
       if (isTest) return val;
-      const obj = new Number(val) as any;
-      obj[label] = val;
-      obj['in1'] = val;
-      Object.defineProperty(obj, 'value', {
-        get() { return val; },
-        enumerable: false,
-        configurable: true
-      });
-      return obj;
+      // Keep scope payloads as plain structured-cloneable data. Number
+      // objects/accessors lose their shape when crossing the Web Worker
+      // boundary and are then rendered as zero/empty scope samples.
+      return { value: val, in1: val, [label]: val };
     };
 
     const createMultiScopeValues = (values: Record<string, number>, aliases: Record<string, string>): any => {
@@ -415,9 +477,24 @@ export class VLabPhysicsEngine {
 
     if (hasAirChamber) {
       // ── Air Fryer Lab ──
-      const indices = system.scopeOutputs.get('thermal_scope') || [];
+      // The learning lab uses `thermal_scope`, but imported/copied models may
+      // have a different scope id. Resolve the connected scope before falling
+      // back to the default ambient temperature; otherwise an unresolved
+      // lookup is rendered as exactly 0 °C.
+      const thermalScopeIds = ['thermal_scope', ...nodes
+        .filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope')
+        .map(n => n.id)];
+      const indices = thermalScopeIds
+        .map(scopeId => system.scopeOutputs.get(scopeId) || [])
+        .find(scopeIndices => scopeIndices.length > 0) || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
-      const cel = Math.max(0.0, tempK - 293.15);
+      // A temp_sensor outputs Ta-Tb (a temperature difference), while a
+      // direct chamber connection outputs absolute Kelvin. Do not subtract
+      // 273.15 from the former or a normal room-temperature reading gets
+      // clamped to zero.
+      const signalName = indices.length > 0 ? system.variableNames[indices[0]] ?? '' : '';
+      const isDifferentialSensor = signalName.includes('temp_sensor_branch_signal_t');
+      const cel = isDifferentialSensor ? tempK : tempK - 273.15;
       perScopeValues['thermal_scope'] = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {
@@ -490,6 +567,17 @@ export class VLabPhysicsEngine {
       perScopeValues['mw_scope'] = createSingleScopeValue(cel, "Cavity Temp (°C)");
     } 
 
+    // Learning-lab aliases are historical. Preserve the value for the actual
+    // connected scope id as well, so renamed/copied scopes do not show zero.
+    for (const scopeNode of nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope')) {
+      if (perScopeValues[scopeNode.id] !== undefined) continue;
+      const indices = system.scopeOutputs.get(scopeNode.id);
+      if (indices && indices.length > 0) {
+        const knownValue = Object.values(perScopeValues)[0];
+        if (knownValue !== undefined) perScopeValues[scopeNode.id] = knownValue;
+      }
+    }
+
     // 2. Generic Scope Output Mapping for all scope blocks
     const allScopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope' || n.type === 'scope');
     for (const scopeNode of allScopeNodes) {
@@ -534,7 +622,10 @@ export class VLabPhysicsEngine {
       variableNames: system.variableNames,
       scopeValues,
       perScopeValues,
-      useSdirk
+      useSdirk,
+      solverMethod: method,
+      acceptedSteps,
+      rejectedSteps
     };
   }
 

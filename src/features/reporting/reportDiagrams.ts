@@ -6,6 +6,7 @@ import {
   boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
 } from './reportDiagramModel';
 import { PositionedNode, layoutGrid, layoutLayered, nodeById, routeEdgePath, routeManhattan } from './reportDiagramLayout';
+import { getRequirementsDiagramScope } from '../../engine/sysml/requirementsDiagramScope';
 
 export interface ReportRequirementSource {
   blocks: readonly BlockData[];
@@ -59,14 +60,17 @@ export function drawLabeledNode(
   return rect;
 }
 
-const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding', 'copy']);
+const DASHED_REL_TYPES = new Set([
+  'derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency',
+  'allocation', 'binding', 'copy', 'include', 'extend',
+]);
 
 export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
   const dashed = DASHED_REL_TYPES.has(edge.kind) ? ' stroke-dasharray="5 4"' : '';
   let marker = ' marker-end="url(#rf-arrow)"';
   if (edge.kind === 'composition') marker = ' marker-start="url(#rf-diamond-filled)"';
   else if (edge.kind === 'aggregation') marker = ' marker-start="url(#rf-diamond-hollow)"';
-  else if (edge.kind === 'generalization') marker = ' marker-end="url(#rf-triangle-hollow)"';
+  else if (edge.kind === 'generalization' || edge.kind === 'useCaseGeneralization') marker = ' marker-end="url(#rf-triangle-hollow)"';
   else if (edge.kind === 'requirementContainment') marker = ' marker-start="url(#requirement-containment-crosshair)"';
   const label = edge.label
     ? `<text font-size="9" fill="#65717e" text-anchor="middle"><textPath href="#edge-${edge.id}" startOffset="50%">${escapeHtml(edge.label)}</textPath></text>`
@@ -97,17 +101,13 @@ function layoutPage(
 }
 
 export function renderRequirementsDiagram(source: ReportRequirementSource): string {
-  const reqs = source.blocks.filter(b => b.stereotype === 'requirement');
+  const scope = getRequirementsDiagramScope(source.blocks, source.relationships);
+  const reqs = source.blocks.filter(b => b.stereotype === 'requirement' && scope.visibleBlockIds.has(b.id));
   if (reqs.length === 0) return renderEmptyFigure('No requirements defined.');
-  const reqIds = new Set(reqs.map(r => r.id));
-  const connectedBlockIds = new Set(source.relationships
-    .filter(r => reqIds.has(r.targetId) || reqIds.has(r.sourceId))
-    .flatMap(r => [r.sourceId, r.targetId]));
-  const allNodes = source.blocks.filter(b => reqIds.has(b.id) || connectedBlockIds.has(b.id));
-  const nodeIds = new Set(allNodes.map(n => n.id));
+  const allNodes = source.blocks.filter(b => scope.visibleBlockIds.has(b.id));
   const edges: DiagramEdgeInput[] = source.relationships
-    .filter(r => (reqIds.has(r.sourceId) || reqIds.has(r.targetId)) && nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
-    .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: `«${r.type}»`, kind: r.type }));
+    .filter(r => scope.visibleRelationshipIds.has(r.id))
+    .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: r.type === 'requirementContainment' ? '«contains»' : (r.label || `«${r.type}»`), kind: r.type }));
   const pages = connectionPages(allNodes, edges);
   return pages.map((page, pageIndex) => {
     const sized = new Map(page.map(r => [r.id, measureNode(r.id,
@@ -118,11 +118,14 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
     const inner = [
       ...pageEdges.map(e => drawStyledEdge(e, routeEdgePath(nodeById(placed, e.sourceId)!, nodeById(placed, e.targetId)!))),
-      ...placed.map(pos => {
-        const node = allNodes.find(n => n.id === pos.id);
-        const isReq = node?.stereotype === 'requirement';
-        return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
-      }),
+      ...(() => {
+        const allNodesMap = new Map(allNodes.map(n => [n.id, n]));
+        return placed.map(pos => {
+          const node = allNodesMap.get(pos.id);
+          const isReq = node?.stereotype === 'requirement';
+          return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
+        });
+      })(),
     ].join('');
     const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
     const requirementCount = page.filter(n => n.stereotype === 'requirement').length;
@@ -168,10 +171,11 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       ], isReq ? 'req' : 'bdd', 96)];
     }));
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
+    const relMap = new Map(source.relationships.map(r => [r.id, r]));
     const edgeEls = pageEdges.map(e => {
       const src = nodeById(placed, e.sourceId)!;
       const tgt = nodeById(placed, e.targetId)!;
-      const rel = source.relationships.find(r => r.id === e.id);
+      const rel = relMap.get(e.id);
       const sourceRole = (rel as any)?.sourceRole ? `+${(rel as any).sourceRole} ` : '';
       const targetRole = (rel as any)?.targetRole ? `+${(rel as any).targetRole} ` : '';
       const sourceText = `${sourceRole}${rel?.sourceMultiplicity ?? ''}`.trim();
@@ -618,3 +622,4 @@ export function renderHmiDiagram(source: ReportHmiSource): string {
   return wrapFigure(els.join(''),
     `HMI layout (${source.components.length} components)`, boundsOf(placed, 24));
 }
+

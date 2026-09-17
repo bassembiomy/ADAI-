@@ -479,24 +479,27 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   thermal_ref: () => [],
   
   conductive_heat: ({ across, branch, params }) => {
-    // Q = k * (Ta - Tb)
-    const k = params.k || params.conductivity || 1.0;
+    // Q = k * (Ta - Tb) or (k * A / L) * (Ta - Tb)
+    const rawK = params.k ?? params.conductivity ?? 1.0;
+    const k = (params.A !== undefined && params.L !== undefined && Number(params.L) !== 0)
+      ? (Number(rawK) * Number(params.A) / Number(params.L))
+      : Number(rawK);
     const dT = across[0] - across[1];
     return [branch[0] - k * dT];
   },
   
   convective_heat: ({ across, branch, params }) => {
     // Q = h * A * (Ta - Tb)
-    const h = params.h || 10.0;
-    const A = params.A || 0.1;
+    const h = params.h ?? 10.0;
+    const A = params.A ?? 0.1;
     const dT = across[0] - across[1];
     return [branch[0] - h * A * dT];
   },
   
   radiative_heat: ({ across, branch, params }) => {
     // Q = eps * sigma * A * (Ta^4 - Tb^4)
-    const eps = params.eps || 0.9;
-    const A = params.A || 0.1;
+    const eps = params.eps ?? 0.9;
+    const A = params.A ?? 0.1;
     const sigma = 5.67e-8; // Stefan-Boltzmann
     const Ta = across[0];
     const Tb = across[1];
@@ -511,35 +514,41 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - C * dAcross[0]];
   },
   
-  temp_sensor: ({ across, branch }) => {
+  temp_sensor: ({ across, branch, ports }) => {
     // across[0]: T_a, across[1]: T_b
     // branch[0]: heat_flow through sensor, branch[1]: output signal
+    const Ta = across[0] ?? 0;
+    const Tb = across[1] ?? 0;
     return [
       branch[0],             // zero heat flow
-      branch[1] - across[0]  // output signal = T_a
+      branch[1] - (Ta - Tb)  // output signal = Ta - Tb
     ];
   },
   
   heat_sensor: (args) => blockEquations.heat_flow_sensor(args),
   
   heat_src: ({ branch, params }) => {
-    const Q = params.Q || params.Q_const || 100;
+    const Q = params.Q ?? params.Q_const ?? 100;
     return [branch[0] - Q];
   },
   
   temp_src: ({ across, branch, params }) => {
-    const T = params.T || params.T_const || 293.15;
+    const T = params.T ?? params.T_const ?? 293.15;
     return [across[0] - T];
   },
   
-  ctrl_heat_src: ({ across, branch }) => {
-    const Q = across[1] !== undefined ? across[1] : 0;
+  ctrl_heat_src: ({ across, branch, ports }) => {
+    const sIdx = ports ? ports.indexOf('s') : -1;
+    const Q = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[2] !== undefined ? across[2] : (across[1] ?? 0));
     return [branch[0] - Q];
   },
   
-  ctrl_temp_src: ({ across, branch }) => {
-    const T = across[1] !== undefined ? across[1] : 293.15;
-    return [across[0] - T];
+  ctrl_temp_src: ({ across, branch, ports }) => {
+    const sIdx = ports ? ports.indexOf('s') : -1;
+    const S = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[2] !== undefined ? across[2] : 293.15);
+    const Ta = across[0] ?? 0;
+    const Tb = (ports && ports.includes('b') && across[1] !== undefined) ? across[1] : 0;
+    return [(Ta - Tb) - S];
   },
 
   // ── COUPLINGS ──────────────────────────────────────────────────────────────
@@ -576,7 +585,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   thermal_resistor: ({ across, branch, params }) => {
     // V = I * R => (Vp-Vn) - I*R = 0
     // Q_heat = I^2 * R (flows OUT of the component into the thermal node)
-    const R = params.R || params.resistance || params.Rth || 10.0;
+    const R = params.R ?? params.resistance ?? params.Rth ?? 10.0;
     const V = across[0] - across[1];
     const I = branch[0];
     const Q = branch[1];
@@ -1182,19 +1191,30 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   ma_chamber: ({ across, branch, state, dState, params }) => {
     // across[0]: P_a (Fluid), across[1]: P_b (Fluid), across[2]: T_h (Thermal)
     // branch[0]: mass_flow at port a, branch[1]: heat_flow at port h
-    const V = params.V || 0.005;
-    const T_amb = 298.15;
+    const getNumber = (value: unknown, fallback: number): number => {
+      const parsed = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const V = getNumber(params.V, 0.005);
+    const T_amb = getNumber(params.ambient_temp, 25) + 273.15;
     const rho = 1.2, Cp = 1005;
-    const C = rho * Cp * V;
+    const airCapacity = rho * Cp * V;
+    const wallCapacity = getNumber(params.wall_mass, 2.0) * getNumber(params.wall_cp, 460);
+    const loadCapacity = getNumber(params.food_mass, 0.5) * getNumber(params.food_cp, 4184);
+    const C = Math.max(1e-6, getNumber(params.heat_capacity, airCapacity + wallCapacity + loadCapacity));
     const temp = state[0] > 1.0 ? state[0] : T_amb;
     
     // Physical heat loss to the ambient environment (convection/conduction through basket walls)
-    const k_loss = params.k_loss !== undefined ? params.k_loss : 8.5; // W/K, realistic overall heat loss coefficient
+    const k_loss = getNumber(params.k_loss, 8.5); // W/K, realistic overall heat loss coefficient
     const heat_loss = k_loss * (temp - T_amb);
+    const maxTempK = getNumber(params.max_temp, 220) + 273.15;
+    const cutoffWidth = 3.0;
+    const cutoff = 0.5 * (1.0 + Math.tanh((maxTempK - temp) / cutoffWidth));
+    const heat_input = branch[1] * cutoff;
     
     return [
       branch[0] - 0.0,
-      branch[1] + C * dState[0] + heat_loss, /* heat entering chamber = C * dT/dt + heat_loss (branch positive leaving chamber) */
+      heat_input + C * dState[0] + heat_loss, /* heat entering chamber = C * dT/dt + heat_loss */
       across[2] - temp
     ];
   },
@@ -1437,8 +1457,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       dP - (R * T / V) * (mdot_a + mdot_b)
     ];
   },
-  gas_reservoir: ({ across, branch }) => {
-    const P_ctrl = across[1] !== undefined ? across[1] : 101325;
+  gas_reservoir: ({ across, branch, params }) => {
+    const P_ctrl = across[1] === undefined ? (params.P ?? 101325) : across[1];
     return [across[0] - P_ctrl];
   },
   gas_resistance: ({ across, branch, params }) => {
@@ -1447,7 +1467,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   gas_restriction: ({ across, branch, params }) => {
     const Cd = params.Cd || 0.62;
-    const A = across[2] !== undefined ? across[2] : (params.area || 1e-4);
+    const A = across[2] === undefined ? (params.area ?? 1e-4) : across[2];
     const T = params.T || 293.15;
     const k = Cd * A / Math.sqrt(T);
     return [branch[0] - k * (across[0] - across[1])];
@@ -1472,9 +1492,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const omega = across[2] - (across[3] || 0);
     const mdot = branch[0];
     const torque = branch[1];
+    const deltaP = P_a - P_h;
     return [
       mdot - (P_a * D / (R * T)) * omega,
-      torque - D * (P_a - P_h)
+      torque - D * deltaP
     ];
   },
   gas_translational_conv: ({ across, branch, params }) => {
@@ -1486,19 +1507,22 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const v = across[2] - (across[3] || 0);
     const mdot = branch[0];
     const force = branch[1];
+    const deltaP = P_a - P_h;
     return [
       mdot - (P_a * A / (R * T)) * v,
-      force - A * (P_a - P_h)
+      force - A * deltaP
     ];
   },
   gas_flow_source: ({ across, branch, params }) => {
-    const mdot = across[2] !== undefined ? across[2] : (params.mdot || 0.1);
+    const mdot = across[2] === undefined ? (params.mdot ?? 0.1) : across[2];
     return [branch[0] - mdot];
   },
   gas_pressure_source: ({ across, branch, params }) => {
-    const P = params.P !== undefined ? params.P : (across[2] !== undefined && across[2] !== 0 ? across[2] : 200000);
+    const P = across[2] === undefined ? (params.P ?? 200000) : across[2];
     return [(across[1] - across[0]) - P];
   },
+  gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
+  gas_flow_sensor: ({ across, branch }) => [across[0] - across[1], branch[1] + branch[0]],
   gas_properties: () => [],
 
   // ── MAGNETIC DOMAIN ────────────────────────────────────────────────────────
@@ -1728,8 +1752,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [across[0] - P];
   },
 
-  ctrl_pressure_source: ({ across, branch }) => {
-    const P = across[2] !== undefined ? across[2] : 101325;
+  ctrl_pressure_source: ({ across, ports }) => {
+    const ctrlIndex = ports.indexOf('ctrl');
+    const P = ctrlIndex >= 0 && across[ctrlIndex] !== undefined ? across[ctrlIndex] : 101325;
     return [across[0] - P];
   },
 
@@ -1779,10 +1804,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Cd = params.Cd || 0.5;
     const d = params.d || 0.5e-3;
     const A = Math.PI * d * d / 4;
-    const P = across[0];
-    const P_atm = 101325;
+    const P_upstream = across[0];
+    const P_downstream = across[1];
     const rho = 0.6;
-    const dP = Math.max(0, P - P_atm);
+    const dP = Math.max(0, P_upstream - P_downstream);
     const mdot = Cd * A * Math.sqrt(2 * rho * dP);
     return [branch[0] - mdot];
   },

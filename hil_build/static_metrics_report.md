@@ -17,7 +17,7 @@
 ## Shared behavioral analysis
 
 - State reachability: 100.0%
-- Reachable state IDs: 535ddd5a-c012-46ce-b23c-9a6ce8d81df6, 979256a5-9d43-41f5-929f-5b27ad7deb22
+- Reachable state IDs: c00e5706-9069-434b-abe0-239fb4101411, c10ea879-22fb-4440-9bc7-5c73603d14f8
 - Unreachable state IDs: None
 - Terminal state IDs: None
 - Enumerated paths: 1
@@ -31,8 +31,8 @@
 | Metric | Value |
 |---|---:|
 | Files measured | 26 |
-| Total lines | 1777 |
-| Functional lines | 1470 |
+| Total lines | 1778 |
+| Functional lines | 1471 |
 | Comment/blank density | 17.3% |
 
 ## X-Bridges static code-generation metrics

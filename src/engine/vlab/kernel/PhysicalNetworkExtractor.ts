@@ -1,7 +1,8 @@
 // src/engine/vlab/kernel/PhysicalNetworkExtractor.ts
 import { Node, Edge } from '@xyflow/react';
-import { PhysicalNetwork, PhysicalConnection, Diagnostic, PhysicalDomain } from './types';
+import { PhysicalNetwork, PhysicalConnection, Diagnostic, PhysicalDomain, SolverConfiguration, SolverType } from './types';
 import { VLAB_LIBRARY } from '../../../utils/vlabLibrary';
+import { isSolverConfigurationNode } from './SolverConfigurationSelection';
 
 class DisjointSet {
   parent: Record<string, string> = {};
@@ -22,6 +23,82 @@ class DisjointSet {
   }
 }
 
+const DEFAULT_SOLVER_CONFIGURATION: Omit<SolverConfiguration, 'id'> = {
+  solver: 'auto',
+  startTime: 0,
+  stopTime: 10,
+  initialStep: 'auto',
+  minimumStep: 1e-6,
+  maximumStep: 'auto',
+  relativeTolerance: 1e-3,
+  absoluteTolerance: 1e-6,
+  maximumIterations: 50,
+  nonlinearTolerance: 1e-8,
+  enableDiagnostics: true,
+  enableLogging: true
+};
+
+const SOLVER_TYPES: readonly SolverType[] = ['auto', 'euler', 'rk4', 'rk_adaptive', 'bdf', 'dae_implicit'];
+
+function parameterValue(params: Record<string, unknown>, key: string, fallbackKey?: string): unknown {
+  const raw = params[key] ?? (fallbackKey ? params[fallbackKey] : undefined);
+  if (raw && typeof raw === 'object' && 'value' in raw) {
+    return (raw as { value?: unknown }).value;
+  }
+  return raw;
+}
+
+function positiveNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function nonNegativeNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function positiveOrAuto(value: unknown, fallback: number | 'auto'): number | 'auto' {
+  if (value === 'auto') return 'auto';
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function booleanParameter(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'on' || value.toLowerCase() === 'true') return true;
+    if (value.toLowerCase() === 'off' || value.toLowerCase() === 'false') return false;
+  }
+  return fallback;
+}
+
+/** Normalize persisted solver_config parameters before they reach solver/runtime code. */
+export function normalizeSolverConfiguration(node: Node): SolverConfiguration {
+  const params = ((node.data as any)?.params || {}) as Record<string, unknown>;
+  const solverValue = parameterValue(params, 'solver');
+  const solver = typeof solverValue === 'string' && SOLVER_TYPES.includes(solverValue as SolverType)
+    ? solverValue as SolverType
+    : DEFAULT_SOLVER_CONFIGURATION.solver;
+  const maxIterations = Number(parameterValue(params, 'maximumIterations', 'maxIterations'));
+
+  return {
+    id: node.id,
+    solver,
+    startTime: nonNegativeNumber(parameterValue(params, 'startTime', 'start_time'), DEFAULT_SOLVER_CONFIGURATION.startTime),
+    stopTime: positiveNumber(parameterValue(params, 'stopTime', 'stop_time'), DEFAULT_SOLVER_CONFIGURATION.stopTime),
+    initialStep: positiveOrAuto(parameterValue(params, 'initialStep', 'initial_step'), DEFAULT_SOLVER_CONFIGURATION.initialStep),
+    minimumStep: positiveOrAuto(parameterValue(params, 'minimumStep', 'minimum_step'), DEFAULT_SOLVER_CONFIGURATION.minimumStep),
+    maximumStep: positiveOrAuto(parameterValue(params, 'maximumStep', 'maximum_step'), DEFAULT_SOLVER_CONFIGURATION.maximumStep),
+    relativeTolerance: positiveNumber(parameterValue(params, 'relativeTolerance', 'relative_tolerance'), DEFAULT_SOLVER_CONFIGURATION.relativeTolerance),
+    absoluteTolerance: positiveNumber(parameterValue(params, 'absoluteTolerance', 'absolute_tolerance'), DEFAULT_SOLVER_CONFIGURATION.absoluteTolerance),
+    maximumIterations: Number.isInteger(maxIterations) && maxIterations > 0 ? maxIterations : DEFAULT_SOLVER_CONFIGURATION.maximumIterations,
+    nonlinearTolerance: positiveNumber(parameterValue(params, 'nonlinearTolerance', 'nonlinear_tolerance'), DEFAULT_SOLVER_CONFIGURATION.nonlinearTolerance),
+    enableDiagnostics: booleanParameter(parameterValue(params, 'enableDiagnostics', 'diagnostics'), DEFAULT_SOLVER_CONFIGURATION.enableDiagnostics),
+    enableLogging: booleanParameter(parameterValue(params, 'enableLogging', 'logging'), DEFAULT_SOLVER_CONFIGURATION.enableLogging)
+  };
+}
+
 export class PhysicalNetworkExtractor {
   extract(nodes: Node[], edges: Edge[]): { networks: PhysicalNetwork[]; diagnostics: Diagnostic[] } {
     const diagnostics: Diagnostic[] = [];
@@ -29,13 +106,10 @@ export class PhysicalNetworkExtractor {
 
     const physicalNodes = nodes.filter(n => {
       const type = (n.data as any)?.type || n.type || '';
-      return type !== 'solver_config' && !type.startsWith('ps_');
+      return !isSolverConfigurationNode(n) && !type.startsWith('ps_');
     });
 
-    const solverConfigs = nodes.filter(n => {
-      const type = (n.data as any)?.type || n.type || '';
-      return type === 'solver_config';
-    });
+    const solverConfigs = nodes.filter(isSolverConfigurationNode);
 
     const connections: PhysicalConnection[] = [];
 
@@ -167,7 +241,9 @@ export class PhysicalNetworkExtractor {
       }
 
       let assignedSolverConfigId: string | undefined;
-      if (solverConfigs.length === 0) {
+      const networkConfigs = solverConfigs.length === 1 ? solverConfigs
+        : solverConfigs.filter(node => ds.find(node.id) === rootKey);
+      if (networkConfigs.length === 0) {
         diagnostics.push({
           id: 'VL-SOLVER-001',
           severity: 'ERROR',
@@ -175,18 +251,17 @@ export class PhysicalNetworkExtractor {
           networkId: netId,
           suggestedAction: 'Add a Solver Configuration block.'
         });
-      } else if (solverConfigs.length > 1) {
+      } else if (networkConfigs.length > 1) {
         diagnostics.push({
           id: 'VL-SOLVER-002',
           severity: 'ERROR',
           message: `Multiple Solver Configurations detected for network "${netId}".`,
           networkId: netId,
-          componentIds: solverConfigs.map(s => s.id),
+          componentIds: networkConfigs.map(s => s.id).sort(),
           suggestedAction: 'Keep exactly one Solver Configuration per network.'
         });
-        assignedSolverConfigId = solverConfigs[0].id;
       } else {
-        assignedSolverConfigId = solverConfigs[0].id;
+        assignedSolverConfigId = networkConfigs[0].id;
       }
 
       networks.push({

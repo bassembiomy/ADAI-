@@ -15,6 +15,11 @@ import type {
   PartUsage,
   SysmlEntity,
   SysmlEntityCollection,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
 } from './model';
 import type {
   PresentationCoordinates,
@@ -36,6 +41,8 @@ export interface StoreIndexes {
   targetId: Map<string, Set<string>>;
   diagramId: Map<string, Set<string>>;
   requirementId: Map<string, Set<string>>;
+  subjectId: Map<string, Set<string>>;
+  useCaseId: Map<string, Set<string>>;
   kind: Map<string, Set<string>>;
   byId: Map<string, { collection: SysmlEntityCollection; id: string }>;
 }
@@ -53,6 +60,11 @@ export interface NormalizedSysmlStore {
   evidence: Map<string, VerificationEvidence>;
   baselines: Map<string, ModelBaseline>;
   artifacts: Map<string, TraceArtifact>;
+  actors: Map<string, ActorDefinition>;
+  subjects: Map<string, SubjectDefinition>;
+  useCases: Map<string, UseCaseDefinition>;
+  extensionPoints: Map<string, ExtensionPoint>;
+  diagramReferences: Map<string, DiagramReference>;
   auditTrail: ModelChangeRecord[];
   coordinates: Map<string, PresentationCoordinates>;
   diagramPresentations: Map<string, { elementIds: string[] }>;
@@ -67,6 +79,8 @@ function createEmptyIndexes(): StoreIndexes {
     targetId: new Map(),
     diagramId: new Map(),
     requirementId: new Map(),
+    subjectId: new Map(),
+    useCaseId: new Map(),
     kind: new Map(),
     byId: new Map(),
   };
@@ -105,6 +119,11 @@ export function createEmptyNormalizedStore(): NormalizedSysmlStore {
     evidence: new Map(),
     baselines: new Map(),
     artifacts: new Map(),
+    actors: new Map(),
+    subjects: new Map(),
+    useCases: new Map(),
+    extensionPoints: new Map(),
+    diagramReferences: new Map(),
     auditTrail: [],
     coordinates: new Map(),
     diagramPresentations: new Map(),
@@ -149,6 +168,21 @@ function unindexEntity(store: NormalizedSysmlStore, id: string, entity: SysmlEnt
     for (const reqId of entity.verifiesRequirementIds) {
       removeFromIndex(indexes.requirementId, reqId, id);
     }
+  }
+
+  // subjectId
+  if ('subjectId' in entity && typeof entity.subjectId === 'string') {
+    removeFromIndex(indexes.subjectId, entity.subjectId, id);
+  }
+
+  // useCaseId
+  if ('useCaseId' in entity && typeof entity.useCaseId === 'string') {
+    removeFromIndex(indexes.useCaseId, entity.useCaseId, id);
+  }
+
+  // realizedByBlockId
+  if ('realizedByBlockId' in entity && typeof entity.realizedByBlockId === 'string') {
+    removeFromIndex(indexes.typeId, entity.realizedByBlockId, id);
   }
 }
 
@@ -195,6 +229,21 @@ function indexEntity(
     for (const reqId of entity.verifiesRequirementIds) {
       addToIndex(indexes.requirementId, reqId, id);
     }
+  }
+
+  // subjectId
+  if ('subjectId' in entity && typeof entity.subjectId === 'string') {
+    addToIndex(indexes.subjectId, entity.subjectId, id);
+  }
+
+  // useCaseId
+  if ('useCaseId' in entity && typeof entity.useCaseId === 'string') {
+    addToIndex(indexes.useCaseId, entity.useCaseId, id);
+  }
+
+  // realizedByBlockId
+  if ('realizedByBlockId' in entity && typeof entity.realizedByBlockId === 'string') {
+    addToIndex(indexes.typeId, entity.realizedByBlockId, id);
   }
 }
 
@@ -248,6 +297,26 @@ export function fromRepository(
     store.artifacts.set(id, art);
     indexEntity(store, 'artifacts', id, art);
   }
+  for (const [id, act] of Object.entries(repo.actors ?? {})) {
+    store.actors.set(id, act);
+    indexEntity(store, 'actors', id, act);
+  }
+  for (const [id, sub] of Object.entries(repo.subjects ?? {})) {
+    store.subjects.set(id, sub);
+    indexEntity(store, 'subjects', id, sub);
+  }
+  for (const [id, uc] of Object.entries(repo.useCases ?? {})) {
+    store.useCases.set(id, uc);
+    indexEntity(store, 'useCases', id, uc);
+  }
+  for (const [id, ep] of Object.entries(repo.extensionPoints ?? {})) {
+    store.extensionPoints.set(id, ep);
+    indexEntity(store, 'extensionPoints', id, ep);
+  }
+  for (const [id, ref] of Object.entries(repo.diagramReferences ?? {})) {
+    store.diagramReferences.set(id, ref);
+    indexEntity(store, 'diagramReferences', id, ref);
+  }
 
   if (coordinates) {
     for (const [id, coord] of Object.entries(coordinates)) {
@@ -269,21 +338,30 @@ export function fromRepository(
 
 /**
  * Export a NormalizedSysmlStore back to a canonical SysmlRepository (schemaVersion: 2).
+ * Keys are emitted in deterministic sorted-id order so serialization is stable
+ * across runs; semantic IDs themselves are never rewritten.
  */
 export function toRepository(store: NormalizedSysmlStore): SysmlRepository {
+  const sortedEntries = <T>(entries: Iterable<[string, T]>): Record<string, T> =>
+    Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b)));
   return {
     schemaVersion: 2,
     profileId: store.profileId,
     revision: store.revision,
-    definitions: Object.fromEntries(store.definitions),
-    usages: Object.fromEntries(store.usages),
-    connectors: Object.fromEntries(store.connectors),
-    relationships: Object.fromEntries(store.relationships),
-    requirements: Object.fromEntries(store.requirements),
-    verificationCases: Object.fromEntries(store.verificationCases),
-    evidence: Object.fromEntries(store.evidence),
-    baselines: Object.fromEntries(store.baselines),
-    artifacts: Object.fromEntries(store.artifacts),
+    definitions: sortedEntries(store.definitions),
+    usages: sortedEntries(store.usages),
+    connectors: sortedEntries(store.connectors),
+    relationships: sortedEntries(store.relationships),
+    requirements: sortedEntries(store.requirements),
+    verificationCases: sortedEntries(store.verificationCases),
+    evidence: sortedEntries(store.evidence),
+    baselines: sortedEntries(store.baselines),
+    artifacts: sortedEntries(store.artifacts),
+    actors: sortedEntries(store.actors),
+    subjects: sortedEntries(store.subjects),
+    useCases: sortedEntries(store.useCases),
+    extensionPoints: sortedEntries(store.extensionPoints),
+    diagramReferences: sortedEntries(store.diagramReferences),
     auditTrail: [...store.auditTrail],
   };
 }
@@ -313,6 +391,16 @@ export function getById(store: NormalizedSysmlStore, id: string): SysmlEntity | 
       return store.baselines.get(id);
     case 'artifacts':
       return store.artifacts.get(id);
+    case 'actors':
+      return store.actors.get(id);
+    case 'subjects':
+      return store.subjects.get(id);
+    case 'useCases':
+      return store.useCases.get(id);
+    case 'extensionPoints':
+      return store.extensionPoints.get(id);
+    case 'diagramReferences':
+      return store.diagramReferences.get(id);
   }
 }
 
@@ -384,6 +472,21 @@ export function upsertEntity(
     case 'artifacts':
       store.artifacts.set(entity.id, entity as TraceArtifact);
       break;
+    case 'actors':
+      store.actors.set(entity.id, entity as ActorDefinition);
+      break;
+    case 'subjects':
+      store.subjects.set(entity.id, entity as SubjectDefinition);
+      break;
+    case 'useCases':
+      store.useCases.set(entity.id, entity as UseCaseDefinition);
+      break;
+    case 'extensionPoints':
+      store.extensionPoints.set(entity.id, entity as ExtensionPoint);
+      break;
+    case 'diagramReferences':
+      store.diagramReferences.set(entity.id, entity as DiagramReference);
+      break;
   }
 
   indexEntity(store, collection, entity.id, entity);
@@ -428,6 +531,21 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
         break;
       case 'artifacts':
         store.artifacts.delete(id);
+        break;
+      case 'actors':
+        store.actors.delete(id);
+        break;
+      case 'subjects':
+        store.subjects.delete(id);
+        break;
+      case 'useCases':
+        store.useCases.delete(id);
+        break;
+      case 'extensionPoints':
+        store.extensionPoints.delete(id);
+        break;
+      case 'diagramReferences':
+        store.diagramReferences.delete(id);
         break;
     }
   }
@@ -1331,6 +1449,11 @@ export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
     baselines: snap.baselines ?? {},
     artifacts: snap.artifacts ?? {},
     auditTrail: snap.auditTrail ?? [],
+    actors: (snap as any).actors ?? {},
+    subjects: (snap as any).subjects ?? {},
+    useCases: (snap as any).useCases ?? {},
+    extensionPoints: (snap as any).extensionPoints ?? {},
+    diagramReferences: (snap as any).diagramReferences ?? {},
   };
 
   return fromRepository(repo, snap.coordinates, snap.diagramPresentations);

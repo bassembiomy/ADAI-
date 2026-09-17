@@ -12,7 +12,7 @@ const TOOLCHAIN_SHA256_HASHES = {
   // avr-gcc 15.2.0 official release archive sha256 hash
   Arduino: '3bcfdbdbff6e3576ef0bef9e119b16f7012657d30f002d6d9d4848a7efd4f8b7',
   // arm-none-eabi 10.3-2021.10 official release archive sha256 hash
-  STM32: 'd27f8372baf26bc6f62e843c080cb0c07c6f092780e8c057edc460d3d5786a51',
+  STM32: 'd287439b3090843f3f4e29c7c41f81d958a5323aecefcf705c203bfd8ae3f2e7',
   ESP32: 'fad96cffef900b4898bc89d5a11c16c581bddb88f25fc83eccbbc126cd9a4f41',
   'esp32-xtensa-gcc-13.2.0-win64': 'fad96cffef900b4898bc89d5a11c16c581bddb88f25fc83eccbbc126cd9a4f41',
   avrdude: 'f4aa811042ef95b52c68531f6e5044c5b5a8711bcd4b495d6b9af20f9ac41325',
