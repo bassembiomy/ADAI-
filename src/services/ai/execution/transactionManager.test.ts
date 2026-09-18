@@ -66,4 +66,122 @@ describe('TransactionManager with Deep Snapshot Fallback and Startup Crash Recov
     expect(res.status).toBe('ROLLED_BACK');
     expect(mockAdapter.restoreSnapshot).toHaveBeenCalledWith({ deep: 'copy' });
   });
+
+  it('executes valid EngineeringModelPlan atomically and commits new revision', async () => {
+    const { EngineeringModelAdapter } = await import('../adapters/engineeringModelAdapter');
+    const adapter = new EngineeringModelAdapter('xbridges');
+    const journalStore = new InMemoryTransactionJournalStore();
+    const tm = new TransactionManager(registry, new Map([['xbridges', adapter]]), journalStore);
+
+    const inverterPlan = {
+      schemaVersion: '1.0.0' as const,
+      planId: 'plan_inverter_tx',
+      projectId: 'proj_inv',
+      baseRevision: 1,
+      targetDomain: 'xbridges' as const,
+      designRationale: 'Transaction test for inverter',
+      assumptions: ['400V DC Bus'],
+      blocks: [
+        {
+          id: 'dc_src',
+          blockDefinitionId: 'Constant',
+          domain: 'xbridges' as const,
+          name: 'DC Source',
+          parameters: [{ blockId: 'dc_src', parameterName: 'value', value: 400 }]
+        },
+        {
+          id: 'inv_bridge',
+          blockDefinitionId: 'THREE_PHASE_INVERTER',
+          domain: 'xbridges' as const,
+          name: 'Inverter Bridge',
+          parameters: [{ blockId: 'inv_bridge', parameterName: 'Ron', value: 0.01 }]
+        }
+      ],
+      connections: [
+        {
+          id: 'c_dc_p',
+          fromBlockId: 'dc_src',
+          fromPortId: 'out',
+          toBlockId: 'inv_bridge',
+          toPortId: 'vdc_p',
+          domain: 'xbridges' as const
+        }
+      ],
+      validationCriteria: []
+    };
+
+    const res = await tm.executeEngineeringPlan(inverterPlan, 1);
+    expect(res.success).toBe(true);
+    expect(res.status).toBe('COMMITTED');
+    expect(res.newRevision).toBe(2);
+    expect(adapter.getAllBlocks()).toHaveLength(2);
+    expect(adapter.getAllConnections()).toHaveLength(1);
+
+    // Verify journal has entries
+    const entries = await journalStore.getEntries('proj_inv');
+    expect(entries.some(e => e.status === 'COMMITTED')).toBe(true);
+
+    // Test Undo
+    const commitRecord = entries.find(e => e.status === 'COMMITTED');
+    const undoRes = await tm.undoTransaction(commitRecord!.transactionId, 'proj_inv');
+    expect(undoRes.success).toBe(true);
+    expect(undoRes.status).toBe('ROLLED_BACK');
+    expect(adapter.getAllBlocks()).toHaveLength(0);
+    expect(adapter.getAllConnections()).toHaveLength(0);
+  });
+
+  it('fails closed and rolls back cleanly without partial blocks on runtime fault', async () => {
+    const { EngineeringModelAdapter } = await import('../adapters/engineeringModelAdapter');
+    const adapter = new EngineeringModelAdapter('xbridges');
+    const journalStore = new InMemoryTransactionJournalStore();
+    const tm = new TransactionManager(registry, new Map([['xbridges', adapter]]), journalStore);
+
+    // Inverter plan where second connection fails (nonexistent port on target)
+    const faultyPlan = {
+      schemaVersion: '1.0.0' as const,
+      planId: 'plan_faulty',
+      projectId: 'proj_inv',
+      baseRevision: 1,
+      targetDomain: 'xbridges' as const,
+      designRationale: 'Faulty plan test',
+      assumptions: [],
+      blocks: [
+        {
+          id: 'dc_src',
+          blockDefinitionId: 'Constant',
+          domain: 'xbridges' as const,
+          name: 'DC Source',
+          parameters: []
+        }
+      ],
+      connections: [],
+      validationCriteria: []
+    };
+
+    // Spy on connectPorts to simulate mid-execution crash
+    const origAdd = adapter.addBlock.bind(adapter);
+    let callCount = 0;
+    adapter.addBlock = async (b) => {
+      callCount++;
+      if (callCount === 2) {
+        throw new Error('Mid-execution disk or hardware fault');
+      }
+      return origAdd(b);
+    };
+
+    faultyPlan.blocks.push({
+      id: 'fault_block',
+      blockDefinitionId: 'Constant',
+      domain: 'xbridges' as const,
+      name: 'Second Block',
+      parameters: []
+    });
+
+    const res = await tm.executeEngineeringPlan(faultyPlan, 1);
+    expect(res.success).toBe(false);
+    expect(res.status).toBe('ROLLED_BACK');
+    expect(res.newRevision).toBe(1); // Revision unchanged
+    // Adapter must not retain partial blocks
+    expect(adapter.getAllBlocks()).toHaveLength(0);
+  });
 });
