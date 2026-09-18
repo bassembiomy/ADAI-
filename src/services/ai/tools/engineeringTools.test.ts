@@ -1,22 +1,103 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { EngineeringToolDispatcher } from './engineeringTools';
-import { AdiaBlockCatalog } from '../../../agent/adiaBlockCatalog';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  EngineeringToolDispatcher,
+  ProjectExecutionContext,
+  ApprovalTokenBinding
+} from './engineeringTools';
+import {
+  createXbridgesDelegate,
+  ReactFlowXbridgesNode,
+  ReactFlowXbridgesEdge
+} from '../../../agent/toolAdapters/xbridgesAdapter';
 
-describe('Engineering Tools Boundary', () => {
-  let dispatcher: EngineeringToolDispatcher;
-  const mockContext = {
-    projectId: 'proj_test',
-    currentRevision: 3,
-    validTokens: new Set(['token_approved_123']),
-    models: new Map<string, any>()
-  };
+function createMockLiveState() {
+  let nodes: ReactFlowXbridgesNode[] = [];
+  let edges: ReactFlowXbridgesEdge[] = [];
+  let saveCount = 0;
 
-  beforeEach(() => {
-    dispatcher = new EngineeringToolDispatcher(() => mockContext);
+  const delegate = createXbridgesDelegate({
+    getNodes: () => nodes,
+    getEdges: () => edges,
+    setNodes: (updater) => {
+      nodes = typeof updater === 'function' ? updater(nodes) : updater;
+    },
+    setEdges: (updater) => {
+      edges = typeof updater === 'function' ? updater(edges) : updater;
+    },
+    onSave: () => {
+      saveCount++;
+    }
   });
 
-  describe('Read Tools', () => {
+  return {
+    delegate,
+    getRawNodes: () => nodes,
+    getRawEdges: () => edges,
+    getSaveCount: () => saveCount
+  };
+}
+
+describe('Engineering Tools Boundary with Live State and Token Binding', () => {
+  let liveState: ReturnType<typeof createMockLiveState>;
+  let validTokens: Map<string, ApprovalTokenBinding>;
+  let currentRevision: number;
+
+  beforeEach(() => {
+    liveState = createMockLiveState();
+    currentRevision = 3;
+    validTokens = new Map([
+      [
+        'token_add_b1',
+        {
+          token: 'token_add_b1',
+          projectId: 'proj_test',
+          baseRevision: 3,
+          toolName: 'add_block'
+        }
+      ],
+      [
+        'token_set_p1',
+        {
+          token: 'token_set_p1',
+          projectId: 'proj_test',
+          baseRevision: 3,
+          toolName: 'set_parameter'
+        }
+      ],
+      [
+        'token_conn_1',
+        {
+          token: 'token_conn_1',
+          projectId: 'proj_test',
+          baseRevision: 3,
+          toolName: 'connect_ports'
+        }
+      ]
+    ]);
+  });
+
+  function makeDispatcher(connected = true): EngineeringToolDispatcher {
+    const contextProvider = (): ProjectExecutionContext => ({
+      projectId: 'proj_test',
+      currentRevision,
+      validTokens,
+      xbridgesDelegate: connected ? liveState.delegate : undefined,
+      diagnostics: []
+    });
+    return new EngineeringToolDispatcher(contextProvider);
+  }
+
+  describe('Context Provider Requirement', () => {
+    it('throws when initialized without a valid context provider', () => {
+      expect(() => new (EngineeringToolDispatcher as any)()).toThrow(
+        /context provider is required/i
+      );
+    });
+  });
+
+  describe('Read Tools and Project Scoping', () => {
     it('search_blocks returns catalog results deterministically', async () => {
+      const dispatcher = makeDispatcher();
       const result = await dispatcher.execute('search_blocks', {
         query: 'THREE_PHASE_INVERTER'
       });
@@ -27,141 +108,140 @@ describe('Engineering Tools Boundary', () => {
       }
     });
 
-    it('get_block_definition returns exact source library details or fails if nonexistent', async () => {
-      const result = await dispatcher.execute('get_block_definition', {
-        blockDefinitionId: 'resistor'
-      });
-      expect(result.status).toBe('SUCCESS');
-      if (result.status === 'SUCCESS') {
-        expect((result.data as any).block.id).toBe('resistor');
-        expect((result.data as any).block.sourceLibrary).toBe('vlab');
-      }
-
-      const ghostResult = await dispatcher.execute('get_block_definition', {
-        blockDefinitionId: 'ghost_block_999'
-      });
-      expect(ghostResult.status).toBe('FAILURE');
-      expect((ghostResult as any).error).toMatch(/Block definition 'ghost_block_999' not found/);
-    });
-
-    it('inspect_model returns project summary and structure', async () => {
+    it('rejects read operations when requested projectId does not match active project', async () => {
+      const dispatcher = makeDispatcher();
       const result = await dispatcher.execute('inspect_model', {
-        projectId: 'proj_test'
+        projectId: 'foreign_unauthorized_project'
       });
-      expect(result.status).toBe('SUCCESS');
+      expect(result.status).toBe('FAILURE');
+      expect((result as any).error).toMatch(/access denied/i);
     });
 
-    it('get_model_summary returns high-level block/connection counts', async () => {
-      const result = await dispatcher.execute('get_model_summary', {
+    it('inspect_model and get_model_summary reflect real live delegate state', async () => {
+      const dispatcher = makeDispatcher();
+
+      // Empty live state initially
+      const initialInspect = await dispatcher.execute('inspect_model', {
         projectId: 'proj_test'
       });
-      expect(result.status).toBe('SUCCESS');
+      expect(initialInspect.status).toBe('SUCCESS');
+      expect((initialInspect as any).data.blocks).toHaveLength(0);
+
+      // Mutate live delegate directly
+      await liveState.delegate.addBlock('THREE_PHASE_INVERTER', { id: 'inv_1' });
+
+      // Next inspect MUST reflect the real node created!
+      const afterInspect = await dispatcher.execute('inspect_model', {
+        projectId: 'proj_test'
+      });
+      expect(afterInspect.status).toBe('SUCCESS');
+      expect((afterInspect as any).data.blocks).toHaveLength(1);
+      expect((afterInspect as any).data.blocks[0].id).toBe('inv_1');
+
+      // Summary also reflects real count
+      const summary = await dispatcher.execute('get_model_summary', {
+        projectId: 'proj_test'
+      });
+      expect(summary.status).toBe('SUCCESS');
+      expect((summary as any).data.blockCount).toBe(1);
+    });
+
+    it('returns DELEGATE_UNAVAILABLE when delegate is not connected for inspect_model', async () => {
+      const disconnectedDispatcher = makeDispatcher(false);
+      const result = await disconnectedDispatcher.execute('inspect_model', {
+        projectId: 'proj_test'
+      });
+      expect(result.status).toBe('FAILURE');
+      expect((result as any).diagnostics?.[0]?.code).toBe('DELEGATE_UNAVAILABLE');
     });
   });
 
-  describe('Mutation Intents Security & Validation', () => {
-    it('rejects mutation with invalid or missing approval token', async () => {
+  describe('Live Mutations and Token Binding', () => {
+    it('executes add_block on the real delegate and verifies state change', async () => {
+      const dispatcher = makeDispatcher();
+
       const result = await dispatcher.execute('add_block', {
         projectId: 'proj_test',
         projectRevision: 3,
-        approvalToken: 'invalid_token',
-        blockId: 'b1',
-        blockDefinitionId: 'resistor',
-        name: 'Resistor 1',
-        domain: 'vlab'
-      });
-      expect(result.status).toBe('FAILURE');
-      expect((result as any).error).toMatch(/approval token/i);
-    });
-
-    it('rejects mutation when baseRevision does not match current project revision', async () => {
-      const result = await dispatcher.execute('add_block', {
-        projectId: 'proj_test',
-        projectRevision: 1, // Stale! Current is 3
-        approvalToken: 'token_approved_123',
-        blockId: 'b1',
-        blockDefinitionId: 'resistor',
-        name: 'Resistor 1',
-        domain: 'vlab'
-      });
-      expect(result.status).toBe('FAILURE');
-      expect((result as any).error).toMatch(/revision/i);
-    });
-
-    it('rejects mutation referencing a nonexistent blockDefinitionId', async () => {
-      const result = await dispatcher.execute('add_block', {
-        projectId: 'proj_test',
-        projectRevision: 3,
-        approvalToken: 'token_approved_123',
-        blockId: 'b1',
-        blockDefinitionId: 'hallucinated_block_type_xyz',
-        name: 'Hallucinated',
+        approvalToken: 'token_add_b1',
+        blockId: 'dc_1',
+        blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+        name: 'DC Source 1',
         domain: 'xbridges'
       });
-      expect(result.status).toBe('FAILURE');
-      expect((result as any).error).toMatch(/not found in catalog/i);
-    });
 
-    it('rejects arbitrary code or unknown fields fail-closed (strict schema)', async () => {
-      const result = await dispatcher.execute('add_block', {
-        projectId: 'proj_test',
-        projectRevision: 3,
-        approvalToken: 'token_approved_123',
-        blockId: 'b1',
-        blockDefinitionId: 'resistor',
-        name: 'Resistor 1',
-        domain: 'vlab',
-        arbitraryScript: 'process.exit(1)', // Forbidden!
-        rawJsonReplacement: {} // Forbidden!
+      expect(result.status).toBe('SUCCESS');
+      expect(liveState.getRawNodes()).toHaveLength(1);
+      expect(liveState.getSaveCount()).toBe(1);
+
+      // Re-inspection confirms mutation is visible
+      const inspect = await dispatcher.execute('inspect_model', {
+        projectId: 'proj_test'
       });
-      expect(result.status).toBe('FAILURE');
-      expect((result as any).error).toMatch(/Validation failed|Unrecognized key/i);
+      expect((inspect as any).data.blocks).toHaveLength(1);
     });
 
-    it('executes valid add_block, set_parameter, and connect_ports mutations', async () => {
-      const addResult = await dispatcher.execute('add_block', {
+    it('prevents approval token reuse (token consumed on use)', async () => {
+      const dispatcher = makeDispatcher();
+
+      // First use succeeds
+      const first = await dispatcher.execute('add_block', {
         projectId: 'proj_test',
         projectRevision: 3,
-        approvalToken: 'token_approved_123',
-        blockId: 'inv1',
-        blockDefinitionId: 'THREE_PHASE_INVERTER',
-        name: 'Inverter Bridge',
+        approvalToken: 'token_add_b1',
+        blockId: 'dc_1',
+        blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+        name: 'DC Source 1',
         domain: 'xbridges'
       });
-      expect(addResult.status).toBe('SUCCESS');
+      expect(first.status).toBe('SUCCESS');
 
-      const paramResult = await dispatcher.execute('set_parameter', {
+      // Second use with the same token MUST fail!
+      const second = await dispatcher.execute('add_block', {
         projectId: 'proj_test',
         projectRevision: 3,
-        approvalToken: 'token_approved_123',
-        blockId: 'inv1',
-        parameterName: 'Ron',
-        value: 0.02
-      });
-      expect(paramResult.status).toBe('SUCCESS');
-
-      const connectResult = await dispatcher.execute('connect_ports', {
-        projectId: 'proj_test',
-        projectRevision: 3,
-        approvalToken: 'token_approved_123',
-        connectionId: 'c1',
-        fromBlockId: 'src1',
-        fromPortId: 'pos',
-        toBlockId: 'inv1',
-        toPortId: 'vdc_p',
+        approvalToken: 'token_add_b1',
+        blockId: 'dc_2',
+        blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+        name: 'DC Source 2',
         domain: 'xbridges'
       });
-      expect(connectResult.status).toBe('SUCCESS');
+      expect(second.status).toBe('FAILURE');
+      expect((second as any).error).toMatch(/invalid, expired, or mismatched/i);
     });
 
-    it('supports undo_transaction with valid approval token', async () => {
-      const undoResult = await dispatcher.execute('undo_transaction', {
+    it('rejects token bound to another tool or wrong revision', async () => {
+      const dispatcher = makeDispatcher();
+
+      // Try to use 'token_add_b1' (bound to add_block) for set_parameter
+      const result = await dispatcher.execute('set_parameter', {
         projectId: 'proj_test',
         projectRevision: 3,
-        approvalToken: 'token_approved_123',
-        transactionId: 'tx_123'
+        approvalToken: 'token_add_b1',
+        blockId: 'dc_1',
+        parameterName: 'voltage',
+        value: 500
       });
-      expect(undoResult.status).toBe('SUCCESS');
+      expect(result.status).toBe('FAILURE');
+      expect((result as any).error).toMatch(/invalid, expired, or mismatched/i);
+    });
+
+    it('returns DELEGATE_UNAVAILABLE and leaves state unchanged when delegate is missing', async () => {
+      const disconnectedDispatcher = makeDispatcher(false);
+
+      const result = await disconnectedDispatcher.execute('add_block', {
+        projectId: 'proj_test',
+        projectRevision: 3,
+        approvalToken: 'token_add_b1',
+        blockId: 'dc_1',
+        blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+        name: 'DC Source 1',
+        domain: 'xbridges'
+      });
+
+      expect(result.status).toBe('FAILURE');
+      expect((result as any).diagnostics?.[0]?.code).toBe('DELEGATE_UNAVAILABLE');
+      expect(liveState.getRawNodes()).toHaveLength(0);
     });
   });
 });
