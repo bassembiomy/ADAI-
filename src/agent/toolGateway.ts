@@ -39,7 +39,11 @@ const ALLOWLISTED_READ_TOOLS = new Set([
   'inspect_project',
   'inspect_catalog',
   'inspect_model',
-  'inspect_simulation_status'
+  'inspect_simulation_status',
+  'search_blocks',
+  'get_block_definition',
+  'get_model_summary',
+  'read_diagnostics'
 ]);
 
 const ALLOWLISTED_EXECUTE_TOOLS = new Set([
@@ -49,7 +53,21 @@ const ALLOWLISTED_EXECUTE_TOOLS = new Set([
   'run_simulation',
   'generate_code',
   'run_tests',
-  'generate_report'
+  'generate_report',
+  'create_model',
+  'add_block',
+  'remove_block',
+  'move_block',
+  'rename_block',
+  'set_parameter',
+  'disconnect_ports',
+  'validate_model',
+  'simulate_model',
+  'undo_transaction',
+  'create_block',
+  'create_requirement',
+  'create_relationship',
+  'sysml_command'
 ]);
 
 import type { AgentApplicationDelegates } from './applicationDelegates';
@@ -73,18 +91,28 @@ export class ToolGateway {
 
     this.registerAdapter('generate_report', projectAdapter);
     this.registerAdapter('instantiate_block', xbridgesAdapter);
+    this.registerAdapter('add_block', xbridgesAdapter);
+    this.registerAdapter('remove_block', xbridgesAdapter);
+    this.registerAdapter('move_block', xbridgesAdapter);
+    this.registerAdapter('rename_block', xbridgesAdapter);
     this.registerAdapter('connect_ports', xbridgesAdapter);
+    this.registerAdapter('disconnect_ports', xbridgesAdapter);
     this.registerAdapter('configure_parameters', xbridgesAdapter);
+    this.registerAdapter('set_parameter', xbridgesAdapter);
+    this.registerAdapter('create_model', xbridgesAdapter);
+    this.registerAdapter('validate_model', xbridgesAdapter);
     this.registerAdapter('run_simulation', vlabAdapter);
+    this.registerAdapter('simulate_model', vlabAdapter);
     this.registerAdapter('generate_code', processAdapter);
     this.registerAdapter('run_tests', processAdapter);
 
     // Register SysML commands to sysmlAdapter
-    this.registerAdapter('create_block' as any, sysmlAdapter as any);
-    this.registerAdapter('create_requirement' as any, sysmlAdapter as any);
-    this.registerAdapter('create_relationship' as any, sysmlAdapter as any);
-    this.registerAdapter('sysml_command' as any, sysmlAdapter as any);
+    this.registerAdapter('create_block', sysmlAdapter);
+    this.registerAdapter('create_requirement', sysmlAdapter);
+    this.registerAdapter('create_relationship', sysmlAdapter);
+    this.registerAdapter('sysml_command', sysmlAdapter);
   }
+
 
   public getDelegates(): AgentApplicationDelegates | undefined {
     return this.delegates;

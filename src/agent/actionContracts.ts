@@ -7,7 +7,21 @@ export type ActionKind =
   | 'run_simulation'
   | 'generate_code'
   | 'run_tests'
-  | 'generate_report';
+  | 'generate_report'
+  | 'create_model'
+  | 'add_block'
+  | 'remove_block'
+  | 'move_block'
+  | 'rename_block'
+  | 'set_parameter'
+  | 'disconnect_ports'
+  | 'validate_model'
+  | 'simulate_model'
+  | 'undo_transaction'
+  | 'create_block'
+  | 'create_requirement'
+  | 'create_relationship'
+  | 'sysml_command';
 
 export const VALID_ACTION_KINDS: readonly ActionKind[] = [
   'instantiate_block',
@@ -16,8 +30,23 @@ export const VALID_ACTION_KINDS: readonly ActionKind[] = [
   'run_simulation',
   'generate_code',
   'run_tests',
-  'generate_report'
+  'generate_report',
+  'create_model',
+  'add_block',
+  'remove_block',
+  'move_block',
+  'rename_block',
+  'set_parameter',
+  'disconnect_ports',
+  'validate_model',
+  'simulate_model',
+  'undo_transaction',
+  'create_block',
+  'create_requirement',
+  'create_relationship',
+  'sysml_command'
 ] as const;
+
 
 export interface ApprovedAction {
   id: string;
