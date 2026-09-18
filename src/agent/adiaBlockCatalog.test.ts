@@ -66,4 +66,35 @@ describe('AdiaBlockCatalog (Read-only index over existing ADIA blocks)', () => {
     expect(AdiaBlockCatalog.isExistingBlockId('resistor')).toBe(true);
     expect(AdiaBlockCatalog.isExistingBlockId('variable_resistor')).toBe(true);
   });
+
+  it('exposes rich port metadata with direction, type, and domain', () => {
+    const resistor = AdiaBlockCatalog.findById('resistor');
+    expect(resistor).toBeDefined();
+    expect(resistor?.ports[0]).toHaveProperty('id');
+    expect(resistor?.ports[0]).toHaveProperty('direction');
+
+    const inv = AdiaBlockCatalog.findById('THREE_PHASE_INVERTER');
+    expect(inv).toBeDefined();
+    expect(inv?.ports.length).toBeGreaterThan(0);
+    const vdcPort = inv?.ports.find(p => p.id === 'vdc_p');
+    expect(vdcPort).toBeDefined();
+    expect(vdcPort?.direction).toBe('input');
+    expect(vdcPort?.type).toBe('power');
+  });
+
+  it('exposes parameter schema with types and default values', () => {
+    const inv = AdiaBlockCatalog.findById('THREE_PHASE_INVERTER');
+    expect(inv).toBeDefined();
+    expect(inv?.parameters['Ron']).toBeDefined();
+    expect(inv?.parameters['Ron'].value).toBe(0.01);
+  });
+
+  it('provides aliases and compatibility metadata', () => {
+    const pwm = AdiaBlockCatalog.findById('THREE_PHASE_PWM');
+    expect(pwm).toBeDefined();
+    expect(pwm?.aliases).toBeDefined();
+    expect(Array.isArray(pwm?.aliases)).toBe(true);
+    expect(pwm?.compatibility).toBeDefined();
+  });
 });
+
