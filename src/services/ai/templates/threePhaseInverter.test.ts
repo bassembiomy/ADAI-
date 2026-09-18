@@ -3,6 +3,7 @@ import {
   THREE_PHASE_INVERTER_TEMPLATE,
   findTemplateForIntent
 } from './threePhaseInverter';
+import { AdiaBlockCatalog } from '../../../agent/adiaBlockCatalog';
 
 describe('Three-Phase Inverter Engineering Template', () => {
   it('defines structured requirements, critical questions, assumptions, and validation criteria', () => {
@@ -37,5 +38,62 @@ describe('Three-Phase Inverter Engineering Template', () => {
   it('retains non-critical parameters as reviewable assumptions', () => {
     expect(THREE_PHASE_INVERTER_TEMPLATE.defaultAssumptions.length).toBeGreaterThan(0);
     expect(THREE_PHASE_INVERTER_TEMPLATE.defaultAssumptions.some(a => a.key === 'modulationIndex')).toBe(true);
+  });
+
+  it('maps every recommended role to an actual registered block in AdiaBlockCatalog with exact port semantics', () => {
+    for (const role of THREE_PHASE_INVERTER_TEMPLATE.recommendedRoles) {
+      const catalogEntry = AdiaBlockCatalog.findById(role.preferredBlockId);
+      expect(catalogEntry, `Block ${role.preferredBlockId} for role ${role.role} must exist in canonical catalog`).toBeDefined();
+      expect(catalogEntry?.sourceLibrary).toBe('xbridges');
+    }
+
+    // Verify THREE_PHASE_INVERTER exact ports
+    const inverter = AdiaBlockCatalog.findById('THREE_PHASE_INVERTER');
+    expect(inverter).toBeDefined();
+    const invInputIds = inverter!.ports.filter(p => p.direction === 'input').map(p => p.id);
+    expect(invInputIds).toContain('vdc_p');
+    expect(invInputIds).toContain('vdc_n');
+    expect(invInputIds).toContain('ga');
+    expect(invInputIds).toContain('gb');
+    expect(invInputIds).toContain('gc');
+    const invOutputIds = inverter!.ports.filter(p => p.direction === 'output').map(p => p.id);
+    expect(invOutputIds).toContain('va');
+    expect(invOutputIds).toContain('vb');
+    expect(invOutputIds).toContain('vc');
+
+    // Verify DC_VOLTAGE_SOURCE exact ports
+    const dcSource = AdiaBlockCatalog.findById('DC_VOLTAGE_SOURCE');
+    expect(dcSource).toBeDefined();
+    const dcOutputIds = dcSource!.ports.filter(p => p.direction === 'output').map(p => p.id);
+    expect(dcOutputIds).toContain('v_pos');
+    expect(dcOutputIds).toContain('v_neg');
+
+    // Verify THREE_PHASE_PWM exact ports
+    const pwm = AdiaBlockCatalog.findById('THREE_PHASE_PWM');
+    expect(pwm).toBeDefined();
+    const pwmInputIds = pwm!.ports.filter(p => p.direction === 'input').map(p => p.id);
+    expect(pwmInputIds).toContain('va_ref');
+    expect(pwmInputIds).toContain('vb_ref');
+    expect(pwmInputIds).toContain('vc_ref');
+    const pwmOutputIds = pwm!.ports.filter(p => p.direction === 'output').map(p => p.id);
+    expect(pwmOutputIds).toContain('ga');
+    expect(pwmOutputIds).toContain('gb');
+    expect(pwmOutputIds).toContain('gc');
+
+    // Verify VOLTAGE_REFERENCE_GENERATOR exact ports
+    const vRef = AdiaBlockCatalog.findById('VOLTAGE_REFERENCE_GENERATOR');
+    expect(vRef).toBeDefined();
+    const vRefOutputIds = vRef!.ports.filter(p => p.direction === 'output').map(p => p.id);
+    expect(vRefOutputIds).toContain('va');
+    expect(vRefOutputIds).toContain('vb');
+    expect(vRefOutputIds).toContain('vc');
+
+    // Verify THREE_PHASE_LOAD exact ports
+    const load = AdiaBlockCatalog.findById('THREE_PHASE_LOAD');
+    expect(load).toBeDefined();
+    const loadInputIds = load!.ports.filter(p => p.direction === 'input').map(p => p.id);
+    expect(loadInputIds).toContain('va');
+    expect(loadInputIds).toContain('vb');
+    expect(loadInputIds).toContain('vc');
   });
 });

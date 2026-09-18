@@ -57,29 +57,111 @@ export class PlanPreflight {
       }
     }
 
-    // 4. Missing environment/reference blocks detection
-    const hasInverterBridge = plan.blocks.some(b => {
+    // 4. Physical inverter topology checks
+    const inverterBlocks = plan.blocks.filter(b => {
       const defId = b.blockDefinitionId.toUpperCase();
-      return defId.includes('INVERTER') || defId.includes('H_BRIDGE') || defId === 'PWM_3PH_2LEVEL';
+      return defId === 'THREE_PHASE_INVERTER' || defId.includes('INVERTER') || defId.includes('H_BRIDGE');
     });
 
-    if (hasInverterBridge) {
-      const hasVoltageSource = plan.blocks.some(b => {
-        const defId = b.blockDefinitionId.toUpperCase();
-        return (
-          defId.includes('VOLTAGE') ||
-          defId.includes('SOURCE') ||
-          defId.includes('BATTERY') ||
-          defId === 'CONSTANT'
-        );
-      });
+    for (const invBlock of inverterBlocks) {
+      // Check DC rail connections (both positive rail and negative rail return are required)
+      const posConn = plan.connections.find(
+        c => c.toBlockId === invBlock.id && (c.toPortId === 'vdc_p' || c.toPortId === 'dc_pos')
+      );
+      const negConn = plan.connections.find(
+        c => c.toBlockId === invBlock.id && (c.toPortId === 'vdc_n' || c.toPortId === 'dc_neg')
+      );
 
-      if (!hasVoltageSource) {
+      if (!posConn) {
         diagnostics.push({
           category: 'ENGINEERING',
           code: 'MISSING_ENVIRONMENT_REFERENCE',
           severity: 'ERROR',
-          message: 'Inverter power topology requires an electrical voltage source (e.g. DC_VOLTAGE_SOURCE) to establish rail potential.'
+          message: `Inverter bridge '${invBlock.id}' requires an electrical DC voltage source connected to positive rail 'vdc_p'.`,
+          entityId: invBlock.id,
+          portId: 'vdc_p'
+        });
+      }
+
+      if (!negConn) {
+        diagnostics.push({
+          category: 'ENGINEERING',
+          code: 'MISSING_DC_RAIL_RETURN',
+          severity: 'ERROR',
+          message: `Inverter bridge '${invBlock.id}' is missing negative DC rail return on 'vdc_n'. A complete physical inverter circuit requires both positive and negative DC rail returns.`,
+          entityId: invBlock.id,
+          portId: 'vdc_n'
+        });
+      }
+
+      // Check for AC outputs connection to load
+      const acPhasePorts = ['va', 'vb', 'vc'];
+      const connectedAcPorts = plan.connections
+        .filter(c => c.fromBlockId === invBlock.id && acPhasePorts.includes(c.fromPortId))
+        .map(c => c.fromPortId);
+
+      if (connectedAcPorts.length < acPhasePorts.length) {
+        diagnostics.push({
+          category: 'ENGINEERING',
+          code: 'MISSING_LOAD_REFERENCE',
+          severity: 'ERROR',
+          message: `Inverter bridge '${invBlock.id}' 3-phase AC outputs (va, vb, vc) must connect to an AC load or machine. Missing: ${acPhasePorts.filter(p => !connectedAcPorts.includes(p)).join(', ')}.`,
+          entityId: invBlock.id
+        });
+      }
+    }
+
+    // Check PWM modulators
+    const pwmBlocks = plan.blocks.filter(b => b.blockDefinitionId === 'THREE_PHASE_PWM');
+    for (const pwm of pwmBlocks) {
+      const refPorts = ['va_ref', 'vb_ref', 'vc_ref'];
+      const connectedRefPorts = plan.connections
+        .filter(c => c.toBlockId === pwm.id && refPorts.includes(c.toPortId))
+        .map(c => c.toPortId);
+
+      if (connectedRefPorts.length < refPorts.length) {
+        diagnostics.push({
+          category: 'ENGINEERING',
+          code: 'MISSING_LOAD_REFERENCE',
+          severity: 'ERROR',
+          message: `PWM modulator '${pwm.id}' reference inputs (va_ref, vb_ref, vc_ref) must connect to a modulation voltage reference generator. Missing: ${refPorts.filter(p => !connectedRefPorts.includes(p)).join(', ')}.`,
+          entityId: pwm.id
+        });
+      }
+    }
+
+    // Check connections for port domain/type mismatch (gate vs physical vs signal)
+    for (const conn of plan.connections) {
+      const fromDef = resolvedBlocks.get(conn.fromBlockId);
+      const toDef = resolvedBlocks.get(conn.toBlockId);
+      if (!fromDef || !toDef) continue;
+
+      const fromPort = fromDef.ports.find(p => p.id === conn.fromPortId);
+      const toPort = toDef.ports.find(p => p.id === conn.toPortId);
+      if (!fromPort || !toPort) continue;
+
+      const fromType = (fromPort.type || '').toLowerCase();
+      const toType = (toPort.type || '').toLowerCase();
+
+      // Gate (logical) to Physical (power) mismatch
+      if ((fromType === 'logical' && toType === 'power') || (fromType === 'power' && toType === 'logical')) {
+        diagnostics.push({
+          category: 'TOPOLOGY',
+          code: 'GATE_PHYSICAL_PORT_MISMATCH',
+          severity: 'ERROR',
+          message: `Gate-to-physical port mismatch: Cannot connect logical gate port '${conn.fromBlockId}.${conn.fromPortId}' (${fromType}) to physical power port '${conn.toBlockId}.${conn.toPortId}' (${toType}).`,
+          entityId: conn.id
+        });
+      }
+
+      // Signal Constant to Electrical Power mismatch (do not equate signal Constant with electrical DC source)
+      if (fromDef.id === 'Constant' && toType === 'power') {
+        diagnostics.push({
+          category: 'ENGINEERING',
+          code: 'PORT_DOMAIN_MISMATCH',
+          severity: 'ERROR',
+          message: `Port domain mismatch: Cannot connect signal block '${conn.fromBlockId}' (Constant) to electrical power rail '${conn.toPortId}'. An electrical DC voltage source is required.`,
+          entityId: conn.id
         });
       }
     }

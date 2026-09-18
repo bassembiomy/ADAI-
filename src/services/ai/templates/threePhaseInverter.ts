@@ -83,44 +83,37 @@ export const THREE_PHASE_INVERTER_TEMPLATE: EngineeringSystemTemplate = {
     {
       role: 'DC_SOURCE',
       preferredBlockId: 'DC_VOLTAGE_SOURCE',
-      category: 'Sources',
+      category: 'DC-AC Inverters',
       domain: 'xbridges',
-      rationale: 'Provides constant DC bus voltage for inverter bridge input'
+      rationale: 'Provides electrical DC rail supply (v_pos, v_neg) for inverter bridge power input'
     },
     {
-      role: 'MODULATION_SINE',
-      preferredBlockId: 'WAVEFORM_GENERATOR',
-      category: 'Generators',
+      role: 'MODULATION_REFERENCE',
+      preferredBlockId: 'VOLTAGE_REFERENCE_GENERATOR',
+      category: 'Control & Modulation',
       domain: 'xbridges',
-      rationale: 'Produces 3-phase sinusoidal modulation references'
+      rationale: 'Produces balanced 3-phase sinusoidal reference voltages (va, vb, vc)'
     },
     {
       role: 'PWM_GENERATOR',
       preferredBlockId: 'THREE_PHASE_PWM',
-      category: 'Modulators',
+      category: 'PWM Generators',
       domain: 'xbridges',
-      rationale: 'Generates gate signals from modulating waveform and carrier'
+      rationale: 'Generates 3-phase gate pulses (ga, gb, gc) from reference inputs'
     },
     {
       role: 'INVERTER_BRIDGE',
       preferredBlockId: 'THREE_PHASE_INVERTER',
-      category: 'Power Converters',
+      category: 'DC-AC Inverters',
       domain: 'xbridges',
-      rationale: '6-switch inverter bridge converting DC bus into 3-phase AC voltage'
-    },
-    {
-      role: 'OUTPUT_FILTER',
-      preferredBlockId: 'LC_FILTER',
-      category: 'Filters',
-      domain: 'xbridges',
-      rationale: 'Suppresses carrier switching ripple'
+      rationale: 'Six-switch inverter bridge converting DC rail power into 3-phase AC voltage'
     },
     {
       role: 'LOAD',
-      preferredBlockId: 'RESISTIVE_LOAD',
-      category: 'Loads',
+      preferredBlockId: 'THREE_PHASE_LOAD',
+      category: 'DC-AC Inverters',
       domain: 'xbridges',
-      rationale: 'Receives filtered 3-phase sinusoidal AC power'
+      rationale: 'Receives 3-phase AC power across phases A, B, and C'
     }
   ],
   validationCriteria: [
