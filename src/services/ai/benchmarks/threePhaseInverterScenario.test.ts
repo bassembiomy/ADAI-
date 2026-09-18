@@ -12,6 +12,8 @@ describe('ThreePhaseInverterScenario Benchmark Evaluation', () => {
     expect(report.repairResult.success).toBe(true);
     expect(report.repairResult.totalAttempts).toBeLessThanOrEqual(3);
     expect(report.simulationResult.status).toBe('COMPLETED');
+    expect(report.simulationResult.engineRunId).toBeDefined();
+    expect(report.liveAdapterSuccess).toBe(true);
     expect(report.undoSuccess).toBe(true);
 
     // Verify key metrics
@@ -21,5 +23,6 @@ describe('ThreePhaseInverterScenario Benchmark Evaluation', () => {
     expect(report.metrics.repairMaxAttemptsBoundMet).toBe(true);
     expect(report.metrics.truthfulReportingVerified).toBe(true);
     expect(report.metrics.undoVerified).toBe(true);
+    expect(report.metrics.liveAdapterVerified).toBe(true);
   });
 });
