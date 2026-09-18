@@ -6,8 +6,14 @@ import {
   ParameterIntentSchema,
   ValidationCriterionSchema,
   EngineeringModelPlan,
+  StructuredDiagnostic,
   validateEngineeringModelPlan
 } from './engineeringModel';
+import {
+  createSuccessToolResult,
+  createFailureToolResult,
+  createRequiresApprovalToolResult
+} from './toolResults';
 
 describe('EngineeringModel contracts and schemas', () => {
   const validPlan: EngineeringModelPlan = {
@@ -105,7 +111,7 @@ describe('EngineeringModel contracts and schemas', () => {
     };
     const result = validateEngineeringModelPlan(planWithDuplicateBlocks);
     expect(result.isValid).toBe(false);
-    expect(result.diagnostics.some(d => d.code === 'DUPLICATE_BLOCK_ID')).toBe(true);
+    expect(result.diagnostics.some((d: StructuredDiagnostic) => d.code === 'DUPLICATE_BLOCK_ID')).toBe(true);
   });
 
   it('should reject duplicate connection IDs', () => {
@@ -118,7 +124,7 @@ describe('EngineeringModel contracts and schemas', () => {
     };
     const result = validateEngineeringModelPlan(planWithDuplicateConns);
     expect(result.isValid).toBe(false);
-    expect(result.diagnostics.some(d => d.code === 'DUPLICATE_CONNECTION_ID')).toBe(true);
+    expect(result.diagnostics.some((d: StructuredDiagnostic) => d.code === 'DUPLICATE_CONNECTION_ID')).toBe(true);
   });
 
   it('should reject connections to nonexistent blocks', () => {
@@ -137,7 +143,7 @@ describe('EngineeringModel contracts and schemas', () => {
     };
     const result = validateEngineeringModelPlan(planWithGhostBlock);
     expect(result.isValid).toBe(false);
-    expect(result.diagnostics.some(d => d.code === 'UNKNOWN_CONNECTION_ENDPOINT')).toBe(true);
+    expect(result.diagnostics.some((d: StructuredDiagnostic) => d.code === 'UNKNOWN_CONNECTION_ENDPOINT')).toBe(true);
   });
 
   it('should reject self-connections on the same block and port', () => {
@@ -156,7 +162,7 @@ describe('EngineeringModel contracts and schemas', () => {
     };
     const result = validateEngineeringModelPlan(planWithSelfConn);
     expect(result.isValid).toBe(false);
-    expect(result.diagnostics.some(d => d.code === 'SELF_CONNECTION')).toBe(true);
+    expect(result.diagnostics.some((d: StructuredDiagnostic) => d.code === 'SELF_CONNECTION')).toBe(true);
   });
 
   it('should reject cross-domain connections without a bridge', () => {
@@ -185,14 +191,12 @@ describe('EngineeringModel contracts and schemas', () => {
     };
     const result = validateEngineeringModelPlan(crossDomainPlan);
     expect(result.isValid).toBe(false);
-    expect(result.diagnostics.some(d => d.code === 'UNBRIDGED_CROSS_DOMAIN_CONNECTION')).toBe(true);
+    expect(result.diagnostics.some((d: StructuredDiagnostic) => d.code === 'UNBRIDGED_CROSS_DOMAIN_CONNECTION')).toBe(true);
   });
 });
 
 describe('ToolResult discriminated union contracts', () => {
-  it('should support discriminated tool result status and shapes', async () => {
-    const { createSuccessToolResult, createFailureToolResult, createRequiresApprovalToolResult } = await import('./toolResults');
-    
+  it('should support discriminated tool result status and shapes', () => {
     const successRes = createSuccessToolResult('search_blocks', { matches: [] }, 5, 'Found 0 blocks');
     expect(successRes.status).toBe('SUCCESS');
     expect(successRes.toolName).toBe('search_blocks');
