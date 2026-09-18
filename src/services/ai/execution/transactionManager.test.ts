@@ -3,6 +3,7 @@ import { TransactionManager } from './transactionManager';
 import { InMemoryTransactionJournalStore } from './transactionJournalStore';
 import { CapabilityRegistry } from '../contracts/capabilityRegistry';
 import { RiskClass, RollbackLevel, SideEffectClass } from '../contracts/types';
+import type { EngineeringModelPlan } from '../contracts/engineeringModel';
 import { z } from 'zod';
 
 describe('TransactionManager with Deep Snapshot Fallback and Startup Crash Recovery', () => {

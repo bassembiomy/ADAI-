@@ -3,30 +3,42 @@ import {
   computeFileSha256,
 } from './smVerificationEvidence';
 
-const getSpawn = (): any => {
+const getNodeBuiltin = (name: string): any => {
   if (typeof process !== 'undefined' && process.versions?.node) {
+    if (typeof (process as any).getBuiltinModule === 'function') {
+      try {
+        return (process as any).getBuiltinModule(name);
+      } catch {
+        // fallback
+      }
+    }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      // sast-ignore SEC-SAST-005: node process runner dynamic import fallback
-      return eval("require('child_process')").spawn;
+      if (typeof require === 'function') {
+        return require(name);
+      }
     } catch {
-      return null;
+      // fallback
+    }
+    try {
+      const req = (globalThis as any).require;
+      if (typeof req === 'function') {
+        return req(name);
+      }
+    } catch {
+      // fallback
     }
   }
   return null;
 };
 
+const getSpawn = (): any => {
+  const cp = getNodeBuiltin('node:child_process') || getNodeBuiltin('child_process');
+  return cp?.spawn ?? null;
+};
+
 const getResolve = (): any => {
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      // sast-ignore SEC-SAST-005: node path dynamic import fallback
-      return eval("require('path')").resolve;
-    } catch {
-      // fallback
-    }
-  }
-  return (...parts: string[]) => parts.filter(Boolean).join('/');
+  const p = getNodeBuiltin('node:path') || getNodeBuiltin('path');
+  return p?.resolve ?? ((...parts: string[]) => parts.filter(Boolean).join('/'));
 };
 
 export interface ToolRunRequest {

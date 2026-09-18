@@ -52,47 +52,91 @@ export async function computeSha256(bytes: Uint8Array): Promise<string> {
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
   }
-  try {
-    const nodeCrypto = await import('crypto');
-    return nodeCrypto.createHash('sha256').update(bytes).digest('hex');
-  } catch {
-    // Fallback deterministic 64-char hash
-    let h1 = 0xdeadbeef;
-    let h2 = 0x41c6ce57;
-    for (let i = 0; i < bytes.length; i++) {
-      h1 = Math.imul(h1 ^ bytes[i], 2654435761);
-      h2 = Math.imul(h2 ^ bytes[i], 1597334677);
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      const req = (globalThis as any).require;
+      if (typeof req === 'function') {
+        const nodeCrypto = req('crypto');
+        return nodeCrypto.createHash('sha256').update(bytes).digest('hex');
+      }
+    } catch {
+      // Fallback
     }
-    const part1 = (h1 >>> 0).toString(16).padStart(8, '0');
-    const part2 = (h2 >>> 0).toString(16).padStart(8, '0');
-    return (part1 + part2).repeat(4);
   }
+  // Fallback deterministic 64-char hash
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < bytes.length; i++) {
+    h1 = Math.imul(h1 ^ bytes[i], 2654435761);
+    h2 = Math.imul(h2 ^ bytes[i], 1597334677);
+  }
+  const part1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const part2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return (part1 + part2).repeat(4);
+}
+
+async function getNodeFs(): Promise<{ fs: any; path: any } | null> {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      const req = (globalThis as any).require;
+      if (typeof req === 'function') {
+        return {
+          fs: req('fs'),
+          path: req('path'),
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
 }
 
 async function defaultWriteFile(filePath: string, data: Uint8Array): Promise<void> {
-  try {
-    const fs = await import('fs');
-    const path = await import('path');
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+  // 1. If Electron IPC bridge is present
+  const electron = (globalThis as any).window?.electronAPI || (globalThis as any).electronAPI;
+  if (electron?.projectSave) {
+    try {
+      await electron.projectSave({ filePath, data: Array.from(data) });
+      return;
+    } catch {
+      // Fallback to node fs
     }
-    await fs.promises.writeFile(filePath, data);
-  } catch (err: unknown) {
-    throw new ReportAdapterError(
-      `Failed to write report artifact to ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
   }
+
+  // 2. Node filesystem via runtime require
+  const node = await getNodeFs();
+  if (node) {
+    try {
+      const dir = node.path.dirname(filePath);
+      if (!node.fs.existsSync(dir)) {
+        node.fs.mkdirSync(dir, { recursive: true });
+      }
+      await node.fs.promises.writeFile(filePath, data);
+      return;
+    } catch (err: unknown) {
+      throw new ReportAdapterError(
+        `Failed to write report artifact to ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  throw new ReportAdapterError(
+    `Failed to write report artifact to ${filePath}: no filesystem or IPC bridge available in this runtime environment.`,
+  );
 }
 
 async function defaultStatFile(filePath: string): Promise<{ size: number; exists: boolean }> {
-  try {
-    const fs = await import('fs');
-    const stat = await fs.promises.stat(filePath);
-    return { size: stat.size, exists: true };
-  } catch {
-    return { size: 0, exists: false };
+  const node = await getNodeFs();
+  if (node) {
+    try {
+      const stat = await node.fs.promises.stat(filePath);
+      return { size: stat.size, exists: true };
+    } catch {
+      return { size: 0, exists: false };
+    }
   }
+  return { size: 0, exists: false };
 }
 
 // ---------------------------------------------------------------------------

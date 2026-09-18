@@ -122,6 +122,87 @@ export const invalidIndexValues = (validCount: number): readonly number[] => {
 /**
  * Evaluates a simple boolean expression with given variable truth assignments.
  */
+/**
+ * Safely parses and evaluates a boolean expression consisting only of
+ * 'true', 'false', '!', '&&', '||', parentheses, and whitespace.
+ */
+export const evaluateSafeBooleanExpression = (expr: string): boolean => {
+  let pos = 0;
+
+  const skipWhitespace = () => {
+    while (pos < expr.length && (expr[pos] === ' ' || expr[pos] === '\t' || expr[pos] === '\n' || expr[pos] === '\r')) {
+      pos++;
+    }
+  };
+
+  const parsePrimary = (): boolean => {
+    skipWhitespace();
+    if (pos >= expr.length) {
+      throw new Error('Unexpected end of expression');
+    }
+    if (expr[pos] === '(') {
+      pos++;
+      const val = parseOr();
+      skipWhitespace();
+      if (pos >= expr.length || expr[pos] !== ')') {
+        throw new Error("Expected ')'");
+      }
+      pos++;
+      return val;
+    }
+    if (expr[pos] === '!') {
+      pos++;
+      return !parsePrimary();
+    }
+    if (expr.startsWith('true', pos) && !/[a-zA-Z0-9_]/.test(expr[pos + 4] ?? '')) {
+      pos += 4;
+      return true;
+    }
+    if (expr.startsWith('false', pos) && !/[a-zA-Z0-9_]/.test(expr[pos + 5] ?? '')) {
+      pos += 5;
+      return false;
+    }
+    throw new Error(`Unexpected token at position ${pos}`);
+  };
+
+  const parseAnd = (): boolean => {
+    let left = parsePrimary();
+    while (true) {
+      skipWhitespace();
+      if (expr.startsWith('&&', pos)) {
+        pos += 2;
+        const right = parsePrimary();
+        left = left && right;
+      } else {
+        break;
+      }
+    }
+    return left;
+  };
+
+  const parseOr = (): boolean => {
+    let left = parseAnd();
+    while (true) {
+      skipWhitespace();
+      if (expr.startsWith('||', pos)) {
+        pos += 2;
+        const right = parseAnd();
+        left = left || right;
+      } else {
+        break;
+      }
+    }
+    return left;
+  };
+
+  const result = parseOr();
+  skipWhitespace();
+  if (pos < expr.length) {
+    throw new Error(`Extra tokens at position ${pos}`);
+  }
+  return result;
+};
+
 const evaluateBooleanExpression = (
   expression: string,
   assignment: Readonly<Record<string, boolean>>,
@@ -137,19 +218,14 @@ const evaluateBooleanExpression = (
     expr = expr.replace(regex, val);
   }
 
-  // Safe evaluation using Function with only boolean tokens
   // Validate expression only contains boolean keywords, operators, and parentheses
   if (!/^[truefals!&|() \t]+$/.test(expr)) {
     throw new Error(`SM_MCDC_VECTOR_UNRESOLVED: unsafe expression syntax: ${expression}`);
   }
 
-  // Convert && and || logic
   try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    // sast-ignore SEC-SAST-005: safe verified boolean evaluator
-    const fn = new Function(`return Boolean(${expr});`);
-    return Boolean(fn());
-  } catch (err) {
+    return evaluateSafeBooleanExpression(expr);
+  } catch {
     throw new Error(`SM_MCDC_VECTOR_UNRESOLVED: failed to evaluate: ${expression}`);
   }
 };

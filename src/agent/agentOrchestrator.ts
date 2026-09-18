@@ -76,16 +76,17 @@ export class AgentOrchestrator {
   private executionPlan?: ExecutionPlan;
   private pendingApproval?: ExtendedApprovalRequest;
   private preExecutionSnapshot?: {
-    nodes: any[];
-    edges: any[];
+    nodes: readonly any[];
+    edges: readonly any[];
     revision: number;
   };
   private lastCommittedSnapshot?: {
-    nodes: any[];
-    edges: any[];
+    nodes: readonly any[];
+    edges: readonly any[];
     revision: number;
     committedRevision: number;
   };
+  private lastSimulationEvidence?: Record<string, unknown>;
   private projectContext: ProjectContext = {
     projectId: 'default',
     workspace: 'default',
@@ -496,8 +497,8 @@ export class AgentOrchestrator {
       const actionParams = { ...action.params };
       if (action.type === 'generate_report') {
         actionParams.modelRevision = actionParams.modelRevision ?? this.projectContext.revision;
-        actionParams.engineRunId = actionParams.engineRunId ?? this.taskState.evidence?.engineRunId;
-        actionParams.simulationStatus = actionParams.simulationStatus ?? (this.taskState.evidence?.engineRunId ? 'COMPLETED' : undefined);
+        actionParams.engineRunId = actionParams.engineRunId ?? (this.lastSimulationEvidence?.engineRunId as string | undefined);
+        actionParams.simulationStatus = actionParams.simulationStatus ?? (this.lastSimulationEvidence?.engineRunId ? 'COMPLETED' : undefined);
       }
 
       const approvedAction: ApprovedAction = {
@@ -663,13 +664,7 @@ export class AgentOrchestrator {
         }
 
         if (toolResult.evidence) {
-          this.taskState = {
-            ...this.taskState,
-            evidence: {
-              ...(this.taskState.evidence || {}),
-              ...toolResult.evidence
-            }
-          };
+          this.lastSimulationEvidence = { ...toolResult.evidence };
         }
       }
 
@@ -693,9 +688,10 @@ export class AgentOrchestrator {
         );
 
         this.pendingApproval = nextChangeReq;
+        const currentTaskState = this.taskState!;
         this.taskState = {
-          ...this.taskState,
-          approvals: [...this.taskState.approvals, nextChangeReq]
+          ...currentTaskState,
+          approvals: [...currentTaskState.approvals, nextChangeReq]
         };
 
         this.taskState = transitionState(
@@ -726,7 +722,7 @@ export class AgentOrchestrator {
       }
 
       this.taskState = transitionState(
-        this.taskState,
+        this.taskState!,
         'completed',
         'All plan actions executed and verified successfully'
       );

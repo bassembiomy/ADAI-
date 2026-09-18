@@ -1,3 +1,4 @@
+import { evaluate as mathEvaluate } from 'mathjs';
 import {
   xbConvertScalar,
   type XBConversionResult,
@@ -1470,12 +1471,7 @@ function writeStateOutputs(
 
       const evalStr = (expr: string, scope: Record<string, number>): number => {
         try {
-          let jsExpr = expr;
-          for (const [k, v] of Object.entries(scope)) {
-            jsExpr = jsExpr.replace(new RegExp(`\\b${k}\\b`, 'g'), String(v));
-          }
-          // sast-ignore SEC-SAST-005: safe substituted numerical evaluator
-          const res = Number(new Function(`return (${jsExpr});`)());
+          const res = Number(mathEvaluate(expr, scope));
           return Number.isFinite(res) ? res : 0;
         } catch {
           return 0;

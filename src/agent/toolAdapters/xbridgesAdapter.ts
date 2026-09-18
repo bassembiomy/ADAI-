@@ -282,7 +282,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
           instanceName: (n.data as any)?.instanceName || n.id,
           selected: false
         }
-      } as ReactFlowXbridgesNode)));
+      } as unknown as ReactFlowXbridgesNode)));
 
       setEdges(() => edges.map(e => ({
         id: e.id,

@@ -449,7 +449,7 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
     });
 
-    const tools = new ToolGateway({ xbridges: liveDelegate });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
     const xAdapter = new XbridgesAdapter(liveDelegate);
     tools.registerAdapter('instantiate_block', xAdapter);
     tools.registerAdapter('connect_ports', xAdapter);
@@ -546,7 +546,7 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       setEdges: updater => { edgesState = updater(edgesState); },
       onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
     });
-    const tools = new ToolGateway({ xbridges: liveDelegate });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
     const orch = new AgentOrchestrator(undefined, tools);
 
     const res = await orch.handle('Build an airplane rocket engine propulsion system');
