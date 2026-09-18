@@ -6,6 +6,8 @@ import {
 } from './approvalGate';
 
 import { ActionKind } from './actionContracts';
+import { PlanPreflight, PreflightResult } from '../services/ai/planner/planPreflight';
+import { EngineeringModelPlan } from '../services/ai/contracts/engineeringModel';
 
 export type PlanActionType = ActionKind;
 
@@ -303,3 +305,15 @@ export function createChangeApprovalRequest(
     }
   );
 }
+
+/**
+ * Preflights an EngineeringModelPlan against canonical catalog, topology, and revision.
+ * Strictly separates planner generation from state mutation.
+ */
+export function preflightEngineeringModelPlan(
+  plan: EngineeringModelPlan,
+  currentRevision: number
+): PreflightResult {
+  return PlanPreflight.preflight(plan, { currentRevision });
+}
+
