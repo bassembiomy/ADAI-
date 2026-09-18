@@ -136,6 +136,8 @@ export interface XbridgesApplicationDelegate {
   updateParameters(nodeId: string, params: Record<string, unknown>): Promise<XbridgesNode>;
   /** Persist the current workspace state through the existing save callback. */
   save(): Promise<void>;
+  /** Restore exact nodes and edges to the workspace state (used for atomic rollback/undo). */
+  restoreSnapshot?(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void>;
 }
 
 /**

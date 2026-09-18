@@ -269,6 +269,29 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       const edges = getEdges();
       onSave(nodes, edges, []);
     },
+
+    async restoreSnapshot(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void> {
+      setNodes(() => nodes.map(n => ({
+        id: n.id,
+        type: 'xblock',
+        position: (n as any).position || { x: 200, y: 200 },
+        data: {
+          ...n.data,
+          id: n.id,
+          type: n.type,
+          instanceName: (n.data as any)?.instanceName || n.id,
+          selected: false
+        }
+      } as ReactFlowXbridgesNode)));
+
+      setEdges(() => edges.map(e => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle
+      } as ReactFlowXbridgesEdge)));
+    },
   };
 }
 
