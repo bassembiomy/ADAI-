@@ -510,13 +510,31 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 </div>
               )}
 
+              {/* Confirmed Requirements Card */}
+              {Boolean(currentResponse?.specification?.requirements?.length) && (
+                <div className="adia-agent-requirements-card">
+                  <div className="adia-agent-requirements-title">✅ Confirmed Requirements</div>
+                  <ul className="adia-agent-requirements-list">
+                    {currentResponse!.specification!.requirements.map((req: any) => (
+                      <li key={req.id}>
+                        <strong>{req.description}:</strong> {String(req.value)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Assumptions Card */}
               {Boolean((currentResponse?.specification?.assumptions?.length || (currentResponse?.executionPlan as any)?.assumptions?.length)) && (
                 <div className="adia-agent-assumptions-card">
                   <div className="adia-agent-assumptions-title">📋 Engineering Assumptions</div>
                   <ul className="adia-agent-assumptions-list">
-                    {((currentResponse?.specification?.assumptions || (currentResponse?.executionPlan as any)?.assumptions || []) as string[]).map((asm, idx) => (
-                      <li key={idx}>{asm}</li>
+                    {((currentResponse?.specification?.assumptions || (currentResponse?.executionPlan as any)?.assumptions || []) as any[]).map((asm: any, idx: number) => (
+                      <li key={idx}>
+                        {typeof asm === 'object' && asm !== null
+                          ? `${asm.key}: ${asm.value} (${asm.description || asm.rationale || ''})`
+                          : String(asm)}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -538,10 +556,37 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     <div className="adia-agent-plan-action-list">
                       {(currentResponse?.executionPlan?.actions || []).map((act: any) => (
                         <div key={act.id} className="adia-agent-plan-action-item">
-                          <span className="action-kind-tag">[{act.kind || act.actionType}]</span> {act.title}
+                          <span className="action-kind-tag">[{act.kind || act.actionType || act.type}]</span> {act.title}
+                          {act.params?.sourceNodeId && (
+                            <div className="adia-plan-port-detail" style={{ fontSize: '10px', color: '#38bdf8', marginLeft: '12px' }}>
+                              Port: {act.params.sourceNodeId}:{act.params.sourcePortId} → {act.params.targetNodeId}:{act.params.targetPortId}
+                            </div>
+                          )}
+                          {act.blockId && (
+                            <div className="adia-plan-block-detail" style={{ fontSize: '10px', color: '#a78bfa', marginLeft: '12px' }}>
+                              Block: {act.blockId} ({act.params?.blockType || act.blockId})
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Preflight Diagnostics Panel */}
+              {Boolean((currentResponse?.preflightResult as any)?.diagnostics?.length) && (
+                <div className="adia-agent-preflight-card">
+                  <div className="adia-agent-preflight-header" style={{ fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
+                    🔍 Preflight Diagnostics ({((currentResponse!.preflightResult as any)!.diagnostics!.length)})
+                  </div>
+                  <div className="adia-agent-preflight-list">
+                    {(currentResponse!.preflightResult as any)!.diagnostics!.map((diag: any, i: number) => (
+                      <div key={i} className={`diag-item severity-${(diag.severity || 'info').toLowerCase()}`}>
+                        <span className="diag-badge">[{diag.code || diag.category || 'PREFLIGHT'}]</span>
+                        <span className="diag-msg">{diag.message}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -560,6 +605,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Execution Result Card */}
+              {currentResponse?.status === 'completed' && (
+                <div className="adia-agent-execution-result success" style={{ background: '#064e3b', border: '1px solid #059669', padding: '8px', borderRadius: '4px', margin: '8px 0' }}>
+                  <div style={{ fontWeight: 600, color: '#34d399' }}>🎉 Execution Completed</div>
+                  <div style={{ fontSize: '12px', color: '#e2e8f0', marginTop: '4px' }}>{currentResponse.message}</div>
+                </div>
+              )}
+              {currentResponse?.status === 'failed' && (
+                <div className="adia-agent-execution-result failure" style={{ background: '#450a0a', border: '1px solid #dc2626', padding: '8px', borderRadius: '4px', margin: '8px 0' }}>
+                  <div style={{ fontWeight: 600, color: '#f87171' }}>❌ Execution Failed</div>
+                  <div style={{ fontSize: '12px', color: '#e2e8f0', marginTop: '4px' }}>{currentResponse.message}</div>
                 </div>
               )}
 

@@ -4,6 +4,12 @@ import { ToolGateway } from './toolGateway';
 import { VLabAdapter } from './toolAdapters/vlabAdapter';
 import { ToolAdapter } from './actionContracts';
 import { LlmProvider, LlmRequest, JsonSchema, LlmResult, LlmHealth } from './llmProvider';
+import {
+  createXbridgesDelegate,
+  XbridgesAdapter,
+  ReactFlowXbridgesNode,
+  ReactFlowXbridgesEdge
+} from './toolAdapters/xbridgesAdapter';
 
 class MockLlmProvider implements LlmProvider {
   public mockResponse: any = {
@@ -429,6 +435,126 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(r1.taskState.requirementState.targetSystem).toBe('three_phase_inverter');
     expect(r1.message).toMatch(/DC bus/i);
     expect(r1.message).not.toMatch(/air fryer/i);
+  });
+
+  it('executes live three-phase inverter flow with approval gating, zero prior mutations, and observed delegate changes', async () => {
+    let nodesState: ReactFlowXbridgesNode[] = [];
+    let edgesState: ReactFlowXbridgesEdge[] = [];
+
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+
+    const tools = new ToolGateway({ xbridges: liveDelegate });
+    const xAdapter = new XbridgesAdapter(liveDelegate);
+    tools.registerAdapter('instantiate_block', xAdapter);
+    tools.registerAdapter('connect_ports', xAdapter);
+    tools.registerAdapter('configure_parameters', xAdapter);
+
+    const orch = new AgentOrchestrator(undefined, tools);
+
+    // 1. Initial Prompt
+    const r1 = await orch.handle('Create a three-phase inverter model');
+    expect(r1.status).toBe('clarifying');
+    expect(r1.message).toMatch(/DC bus/i);
+    // Zero mutations before approval
+    expect(nodesState).toHaveLength(0);
+    expect(edgesState).toHaveLength(0);
+
+    // 2. Supply answers to critical missing requirements
+    const r2 = await orch.handle('400V');
+    expect(r2.status).toBe('clarifying');
+    expect(r2.message).toMatch(/switching frequency/i);
+    expect(nodesState).toHaveLength(0);
+
+    const r3 = await orch.handle('10000Hz');
+    expect(r3.status).toBe('clarifying');
+    expect(r3.message).toMatch(/fundamental frequency/i);
+    expect(nodesState).toHaveLength(0);
+
+    const r4 = await orch.handle('50Hz');
+    expect(r4.status).toBe('awaiting_specification_approval');
+    expect(r4.pendingApproval).toBeDefined();
+    expect(r4.pendingApproval?.type).toBe('specification');
+    expect(r4.specification).toBeDefined();
+    expect(r4.specification?.requirements.length).toBeGreaterThanOrEqual(3);
+    expect(r4.specification?.assumptions.length).toBeGreaterThanOrEqual(2);
+    // Still zero mutations
+    expect(nodesState).toHaveLength(0);
+    expect(edgesState).toHaveLength(0);
+
+    // 3. User approves specification -> Plan generated & awaiting plan approval
+    const rPlan = await orch.approve(r4.pendingApproval!.id, 'Approved inverter specification');
+    expect(rPlan.status).toBe('awaiting_plan_approval');
+    expect(rPlan.pendingApproval?.type).toBe('plan');
+    expect(rPlan.executionPlan).toBeDefined();
+    expect(rPlan.executionPlan?.actions).toHaveLength(16);
+    expect(rPlan.preflightResult).toBeDefined();
+    expect((rPlan.preflightResult as any)?.passed).toBe(true);
+    // Still zero mutations before change approval
+    expect(nodesState).toHaveLength(0);
+    expect(edgesState).toHaveLength(0);
+
+    // 4. User approves plan -> First change approval proposed
+    const rChange1 = await orch.approve(rPlan.pendingApproval!.id, 'Approved 16-step inverter plan');
+    expect(rChange1.status).toBe('awaiting_change_approval');
+    expect(rChange1.pendingApproval?.type).toBe('change');
+    expect(rChange1.pendingApproval?.title).toContain('Instantiate DC Voltage Source');
+    expect(nodesState).toHaveLength(0);
+
+    // 5. User approves first action -> executes on live delegate!
+    let currentResp = await orch.approve(rChange1.pendingApproval!.id, 'Approve DC source creation');
+    expect(nodesState).toHaveLength(1);
+    expect(nodesState[0].id).toBe('dc_src');
+    expect(nodesState[0].data.type).toBe('DC_VOLTAGE_SOURCE');
+
+    // 6. Execute remaining 15 actions sequentially through approvals
+    while (currentResp.status === 'awaiting_change_approval' && currentResp.pendingApproval) {
+      currentResp = await orch.approve(currentResp.pendingApproval.id, 'Approve action');
+    }
+
+    expect(currentResp.status).toBe('completed');
+    expect(nodesState).toHaveLength(5);
+    expect(edgesState).toHaveLength(11);
+
+    // Verify created node identities
+    const nodeIds = nodesState.map(n => n.id);
+    expect(nodeIds).toContain('dc_src');
+    expect(nodeIds).toContain('v_ref');
+    expect(nodeIds).toContain('pwm_gen');
+    expect(nodeIds).toContain('inv_bridge');
+    expect(nodeIds).toContain('ac_load');
+
+    // Verify connections contain negative DC rail return
+    const dcReturnEdge = edgesState.find(
+      e => (e.source === 'dc_src' && e.sourceHandle === 'v_neg') || (e.target === 'inv_bridge' && e.targetHandle === 'vdc_n')
+    );
+    expect(dcReturnEdge).toBeDefined();
+  });
+
+  it('rejects unsupported intent with actionable diagnostics and zero mutations', async () => {
+    let nodesState: ReactFlowXbridgesNode[] = [];
+    let edgesState: ReactFlowXbridgesEdge[] = [];
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+    const tools = new ToolGateway({ xbridges: liveDelegate });
+    const orch = new AgentOrchestrator(undefined, tools);
+
+    const res = await orch.handle('Build an airplane rocket engine propulsion system');
+    expect(res.status).toBe('blocked');
+    expect(res.message).toMatch(/Unsupported engineering intent/i);
+    expect(res.message).toMatch(/Three-Phase Inverter/i);
+    expect(nodesState).toHaveLength(0);
+    expect(edgesState).toHaveLength(0);
   });
 });
 

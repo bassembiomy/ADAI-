@@ -22,8 +22,11 @@ import {
 import {
   buildExecutionPlan,
   createChangeApprovalRequest,
-  ExecutionPlan
+  ExecutionPlan,
+  buildEngineeringModelPlanFromSpecification
 } from './planEngine';
+import { AdiaBlockCatalog } from './adiaBlockCatalog';
+import { PlanPreflight } from '../services/ai/planner/planPreflight';
 import {
   createApprovalRequest,
   approve as gateApprove,
@@ -52,6 +55,7 @@ export interface OrchestratorResponse {
   specification?: EngineeringSpecification;
   executionPlan?: ExecutionPlan;
   validationResult?: ValidationCheckResult;
+  preflightResult?: unknown;
 }
 
 export interface ProjectContext {
@@ -161,36 +165,47 @@ export class AgentOrchestrator {
     // 1. If task is not yet started, initialize
     if (!this.taskState) {
       const matchedTemplate = findTemplateForIntent(input);
-      let targetSystem = matchedTemplate ? matchedTemplate.id : 'air-fryer';
+      let targetSystem = matchedTemplate ? matchedTemplate.id : undefined;
       let objective = input;
 
-      try {
-        const intentReq = intentExtractionPrompt(input);
-        const result = await this.llm.generate<{ targetSystem?: string; summary?: string }>(
-          intentReq,
-          { type: 'object' }
-        );
-        if (result.success && result.data.targetSystem) {
-          targetSystem = result.data.targetSystem;
+      if (!targetSystem) {
+        try {
+          const intentReq = intentExtractionPrompt(input);
+          const result = await this.llm.generate<{ targetSystem?: string; summary?: string }>(
+            intentReq,
+            { type: 'object' }
+          );
+          if (result.success && result.data.targetSystem) {
+            targetSystem = result.data.targetSystem;
+          }
+        } catch {
+          // Fallback to deterministic template matching
         }
-      } catch {
-        // Fallback to deterministic template matching
-        if (matchedTemplate) {
-          targetSystem = matchedTemplate.id;
-        } else if (input.toLowerCase().includes('air fryer') || input.toLowerCase().includes('air-fryer')) {
+      }
+
+      if (!targetSystem) {
+        if (input.toLowerCase().includes('air fryer') || input.toLowerCase().includes('air-fryer')) {
           targetSystem = 'air-fryer';
         }
       }
 
+      if (!targetSystem) {
+        return {
+          status: 'blocked',
+          message: `Unsupported engineering intent: '${input}'. Supported domains: Three-Phase Inverter ('three_phase_inverter') and Air-Fryer Thermal Control ('air-fryer'). Please specify a supported engineering system.`,
+          taskState: undefined as any
+        };
+      }
+
       this.taskState = createTaskState(objective, targetSystem);
 
-      if (matchedTemplate && matchedTemplate.id !== 'air_fryer' && matchedTemplate.defaultAssumptions.length > 0) {
+      if (matchedTemplate && matchedTemplate.defaultAssumptions.length > 0) {
         this.taskState.requirementState.assumptions = matchedTemplate.defaultAssumptions.map((a, idx) => ({
           id: `assump-${matchedTemplate.id}-${idx + 1}`,
           key: a.key,
           value: a.value,
           description: a.rationale,
-          status: 'pending_approval' as const
+          status: 'approved' as const
         }));
       }
 
@@ -318,13 +333,26 @@ export class AgentOrchestrator {
 
       this.executionPlan = buildExecutionPlan(this.specification);
 
+      let preflightResult: unknown = undefined;
+      if (
+        this.specification.targetSystem === 'three_phase_inverter' ||
+        this.specification.targetSystem.toLowerCase().includes('inverter')
+      ) {
+        const engPlan = buildEngineeringModelPlanFromSpecification(
+          this.specification,
+          this.projectContext.revision
+        );
+        preflightResult = PlanPreflight.preflight(engPlan, { currentRevision: this.projectContext.revision });
+      }
+
       const planApprovalReq = createApprovalRequest(
         'plan',
         'Approve Execution Plan',
         `Execution plan with ${this.executionPlan.actions.length} ordered actions`,
         {
           planId: this.executionPlan.id,
-          actionsCount: this.executionPlan.actions.length
+          actionsCount: this.executionPlan.actions.length,
+          preflightPassed: (preflightResult as any)?.passed
         }
       );
 
@@ -341,7 +369,8 @@ export class AgentOrchestrator {
 
       this.appendAudit('PLAN_APPROVAL_REQUESTED', {
         planId: this.executionPlan.id,
-        approvalId: planApprovalReq.id
+        approvalId: planApprovalReq.id,
+        preflightResult
       });
 
       return {
@@ -349,7 +378,8 @@ export class AgentOrchestrator {
         message: `Specification approved. Execution plan prepared with ${this.executionPlan.actions.length} actions. Please review and approve the plan.`,
         taskState: this.taskState,
         pendingApproval: planApprovalReq,
-        executionPlan: this.executionPlan
+        executionPlan: this.executionPlan,
+        preflightResult
       };
     }
 
@@ -438,12 +468,18 @@ export class AgentOrchestrator {
       );
 
       const blockIds: string[] = [];
-      if (action.blockId) blockIds.push(action.blockId);
-      if (typeof action.params.blockId === 'string' && !blockIds.includes(action.params.blockId)) {
-        blockIds.push(action.params.blockId);
+      if (action.blockId) {
+        blockIds.push(action.blockId);
       }
       if (typeof action.params.blockType === 'string' && !blockIds.includes(action.params.blockType)) {
         blockIds.push(action.params.blockType);
+      }
+      if (
+        typeof action.params.blockId === 'string' &&
+        !blockIds.includes(action.params.blockId) &&
+        (blockIds.length === 0 || AdiaBlockCatalog.isExistingBlockId(action.params.blockId))
+      ) {
+        blockIds.push(action.params.blockId);
       }
 
       const approvedAction: ApprovedAction = {

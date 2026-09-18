@@ -256,4 +256,106 @@ describe('AgentPanel UI Component', () => {
     expect(html).toContain('Diagnostics');
     expect(html).toContain('Floating gate input detected');
   });
+
+  it('renders confirmed requirements, exact block/port plan details, preflight diagnostics, and execution completion', () => {
+    const orchestrator = new AgentOrchestrator(new MockLlm());
+    const html = renderToStaticMarkup(
+      <AgentPanel
+        isOpen={true}
+        orchestrator={orchestrator}
+        initialResponse={{
+          status: 'completed',
+          message: 'All 16 plan actions executed and verified successfully',
+          taskState: createTaskState('Three-Phase Inverter', 'three_phase_inverter'),
+          specification: {
+            id: 'spec-inv-1',
+            title: '3-Phase Inverter Specification',
+            targetSystem: 'three_phase_inverter',
+            approved: true,
+            requirements: [
+              { id: 'REQ-001', category: 'electrical', description: 'DC bus input supply voltage', sourceAnswerKey: 'dcBusVoltage', value: '400V' },
+              { id: 'REQ-002', category: 'control', description: 'PWM carrier switching frequency', sourceAnswerKey: 'switchingFrequency', value: '10000Hz' }
+            ],
+            safetyLimits: [],
+            assumptions: [
+              { key: 'dcLinkFilterCapacitor', value: '1000uF', description: 'Stabilizes DC bus', status: 'approved' },
+              { key: 'deadTime', value: '2.0us', description: 'Prevents shoot-through', status: 'approved' }
+            ]
+          },
+          executionPlan: {
+            id: 'plan-inv-1',
+            specificationId: 'spec-inv-1',
+            title: 'Inverter Plan',
+            targetSystem: 'three_phase_inverter',
+            status: 'approved',
+            approved: true,
+            actions: [
+              {
+                id: 'act-1',
+                order: 1,
+                type: 'instantiate_block',
+                title: 'Instantiate DC Voltage Source',
+                description: 'Place DC_VOLTAGE_SOURCE',
+                blockId: 'DC_VOLTAGE_SOURCE',
+                params: { blockId: 'dc_src', blockType: 'DC_VOLTAGE_SOURCE', voltage: 400 },
+                dependencies: [],
+                affectedArtifacts: [],
+                expectedEvidence: '',
+                rollbackMetadata: { action: '', params: {} }
+              },
+              {
+                id: 'act-6',
+                order: 6,
+                type: 'connect_ports',
+                title: 'Connect DC Positive Rail',
+                description: 'Connect dc_src:v_pos to inv_bridge:vdc_p',
+                params: { sourceNodeId: 'dc_src', sourcePortId: 'v_pos', targetNodeId: 'inv_bridge', targetPortId: 'vdc_p' },
+                dependencies: [],
+                affectedArtifacts: [],
+                expectedEvidence: '',
+                rollbackMetadata: { action: '', params: {} }
+              }
+            ]
+          },
+          preflightResult: {
+            passed: true,
+            diagnostics: [
+              {
+                code: 'CANONICAL_TOPOLOGY_VALID',
+                category: 'TOPOLOGY',
+                severity: 'INFO',
+                message: 'All physical ports and bridge connections match canonical catalog'
+              }
+            ]
+          }
+        } as any}
+      />
+    );
+
+    // Confirmed requirements
+    expect(html).toContain('Confirmed Requirements');
+    expect(html).toContain('DC bus input supply voltage');
+    expect(html).toContain('400V');
+
+    // Assumptions formatted properly without [object Object]
+    expect(html).toContain('Engineering Assumptions');
+    expect(html).toContain('dcLinkFilterCapacitor: 1000uF');
+    expect(html).toContain('deadTime: 2.0us');
+    expect(html).not.toContain('[object Object]');
+
+    // Exact block and port plan preview
+    expect(html).toContain('Plan Preview');
+    expect(html).toContain('Instantiate DC Voltage Source');
+    expect(html).toContain('Port: dc_src:v_pos → inv_bridge:vdc_p');
+    expect(html).toContain('Block: DC_VOLTAGE_SOURCE');
+
+    // Preflight diagnostics
+    expect(html).toContain('Preflight Diagnostics');
+    expect(html).toContain('CANONICAL_TOPOLOGY_VALID');
+    expect(html).toContain('All physical ports and bridge connections match canonical catalog');
+
+    // Execution result
+    expect(html).toContain('Execution Completed');
+    expect(html).toContain('All 16 plan actions executed and verified successfully');
+  });
 });

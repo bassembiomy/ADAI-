@@ -51,9 +51,250 @@ export function buildExecutionPlan(specification: EngineeringSpecification): Exe
   const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const actions: PlanAction[] = [];
 
+  const isThreePhaseInverter =
+    specification.targetSystem === 'three_phase_inverter' ||
+    specification.targetSystem.toLowerCase().includes('inverter');
+
   const isXBridges = specification.targetSystem.toLowerCase().includes('xbridges');
 
-  if (isXBridges) {
+  if (isThreePhaseInverter) {
+    const dcBusReq = specification.requirements.find(r => r.sourceAnswerKey === 'dcBusVoltage');
+    const dcBusVoltage = dcBusReq ? parseFloat(String(dcBusReq.value)) || 400 : 400;
+
+    const acFreqReq = specification.requirements.find(r => r.sourceAnswerKey === 'targetAcFrequency');
+    const acFreq = acFreqReq ? parseFloat(String(acFreqReq.value)) || 50 : 50;
+
+    const switchFreqReq = specification.requirements.find(r => r.sourceAnswerKey === 'switchingFrequency');
+    const switchFreq = switchFreqReq ? parseFloat(String(switchFreqReq.value)) || 10000 : 10000;
+
+    // 1. DC Voltage Source
+    validateBlockProposal('DC_VOLTAGE_SOURCE');
+    actions.push({
+      id: `${planId}-act-1`,
+      order: 1,
+      type: 'instantiate_block',
+      title: 'Instantiate DC Voltage Source',
+      description: 'Place DC_VOLTAGE_SOURCE into X-BRIDGES workspace canvas',
+      blockId: 'DC_VOLTAGE_SOURCE',
+      params: { blockId: 'dc_src', blockType: 'DC_VOLTAGE_SOURCE', instanceName: 'dc_src', voltage: dcBusVoltage },
+      dependencies: [],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'DC Voltage Source component registered in workspace',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'dc_src' } }
+    });
+
+    // 2. Sine Voltage Reference Generator
+    validateBlockProposal('VOLTAGE_REFERENCE_GENERATOR');
+    actions.push({
+      id: `${planId}-act-2`,
+      order: 2,
+      type: 'instantiate_block',
+      title: 'Instantiate Voltage Reference Generator',
+      description: 'Place VOLTAGE_REFERENCE_GENERATOR into X-BRIDGES workspace canvas',
+      blockId: 'VOLTAGE_REFERENCE_GENERATOR',
+      params: { blockId: 'v_ref', blockType: 'VOLTAGE_REFERENCE_GENERATOR', instanceName: 'v_ref', frequency: acFreq },
+      dependencies: [`${planId}-act-1`],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Voltage Reference component registered in workspace',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'v_ref' } }
+    });
+
+    // 3. Three-Phase PWM Modulator
+    validateBlockProposal('THREE_PHASE_PWM');
+    actions.push({
+      id: `${planId}-act-3`,
+      order: 3,
+      type: 'instantiate_block',
+      title: 'Instantiate 3-Phase PWM Modulator',
+      description: 'Place THREE_PHASE_PWM into X-BRIDGES workspace canvas',
+      blockId: 'THREE_PHASE_PWM',
+      params: { blockId: 'pwm_gen', blockType: 'THREE_PHASE_PWM', instanceName: 'pwm_gen', frequency: switchFreq, method: 'SPWM' },
+      dependencies: [`${planId}-act-2`],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'PWM Generator component registered in workspace',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'pwm_gen' } }
+    });
+
+    // 4. Three-Phase Inverter Bridge
+    validateBlockProposal('THREE_PHASE_INVERTER');
+    actions.push({
+      id: `${planId}-act-4`,
+      order: 4,
+      type: 'instantiate_block',
+      title: 'Instantiate 3-Phase Inverter Bridge',
+      description: 'Place THREE_PHASE_INVERTER bridge into X-BRIDGES workspace canvas',
+      blockId: 'THREE_PHASE_INVERTER',
+      params: { blockId: 'inv_bridge', blockType: 'THREE_PHASE_INVERTER', instanceName: 'inv_bridge', Ron: 0.01, Vf: 0.7 },
+      dependencies: [`${planId}-act-3`],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Inverter Bridge component registered in workspace',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'inv_bridge' } }
+    });
+
+    // 5. Three-Phase AC Load
+    validateBlockProposal('THREE_PHASE_LOAD');
+    actions.push({
+      id: `${planId}-act-5`,
+      order: 5,
+      type: 'instantiate_block',
+      title: 'Instantiate 3-Phase AC Load',
+      description: 'Place THREE_PHASE_LOAD into X-BRIDGES workspace canvas',
+      blockId: 'THREE_PHASE_LOAD',
+      params: { blockId: 'ac_load', blockType: 'THREE_PHASE_LOAD', instanceName: 'ac_load', R: 10 },
+      dependencies: [`${planId}-act-4`],
+      affectedArtifacts: ['model_blocks.json'],
+      expectedEvidence: 'Three-Phase Load component registered in workspace',
+      rollbackMetadata: { action: 'delete_block', params: { instanceName: 'ac_load' } }
+    });
+
+    // Connections
+    // DC Rail: pos and neg return
+    actions.push({
+      id: `${planId}-act-6`,
+      order: 6,
+      type: 'connect_ports',
+      title: 'Connect DC Positive Rail',
+      description: 'Connect dc_src:v_pos to inv_bridge:vdc_p',
+      params: { sourceNodeId: 'dc_src', sourcePortId: 'v_pos', targetNodeId: 'inv_bridge', targetPortId: 'vdc_p' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'DC positive connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-7`,
+      order: 7,
+      type: 'connect_ports',
+      title: 'Connect DC Negative Rail Return',
+      description: 'Connect dc_src:v_neg to inv_bridge:vdc_n',
+      params: { sourceNodeId: 'dc_src', sourcePortId: 'v_neg', targetNodeId: 'inv_bridge', targetPortId: 'vdc_n' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'DC negative return connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    // Reference to PWM: va, vb, vc
+    actions.push({
+      id: `${planId}-act-8`,
+      order: 8,
+      type: 'connect_ports',
+      title: 'Connect Modulation Reference A',
+      description: 'Connect v_ref:va to pwm_gen:va_ref',
+      params: { sourceNodeId: 'v_ref', sourcePortId: 'va', targetNodeId: 'pwm_gen', targetPortId: 'va_ref' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Phase A reference connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-9`,
+      order: 9,
+      type: 'connect_ports',
+      title: 'Connect Modulation Reference B',
+      description: 'Connect v_ref:vb to pwm_gen:vb_ref',
+      params: { sourceNodeId: 'v_ref', sourcePortId: 'vb', targetNodeId: 'pwm_gen', targetPortId: 'vb_ref' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Phase B reference connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-10`,
+      order: 10,
+      type: 'connect_ports',
+      title: 'Connect Modulation Reference C',
+      description: 'Connect v_ref:vc to pwm_gen:vc_ref',
+      params: { sourceNodeId: 'v_ref', sourcePortId: 'vc', targetNodeId: 'pwm_gen', targetPortId: 'vc_ref' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Phase C reference connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    // PWM to Inverter Gates: ga, gb, gc
+    actions.push({
+      id: `${planId}-act-11`,
+      order: 11,
+      type: 'connect_ports',
+      title: 'Connect Gate Driver A',
+      description: 'Connect pwm_gen:ga to inv_bridge:ga',
+      params: { sourceNodeId: 'pwm_gen', sourcePortId: 'ga', targetNodeId: 'inv_bridge', targetPortId: 'ga' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Gate A connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-12`,
+      order: 12,
+      type: 'connect_ports',
+      title: 'Connect Gate Driver B',
+      description: 'Connect pwm_gen:gb to inv_bridge:gb',
+      params: { sourceNodeId: 'pwm_gen', sourcePortId: 'gb', targetNodeId: 'inv_bridge', targetPortId: 'gb' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Gate B connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-13`,
+      order: 13,
+      type: 'connect_ports',
+      title: 'Connect Gate Driver C',
+      description: 'Connect pwm_gen:gc to inv_bridge:gc',
+      params: { sourceNodeId: 'pwm_gen', sourcePortId: 'gc', targetNodeId: 'inv_bridge', targetPortId: 'gc' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'Gate C connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    // Inverter to AC Load: va, vb, vc
+    actions.push({
+      id: `${planId}-act-14`,
+      order: 14,
+      type: 'connect_ports',
+      title: 'Connect AC Phase A Output',
+      description: 'Connect inv_bridge:va to ac_load:va',
+      params: { sourceNodeId: 'inv_bridge', sourcePortId: 'va', targetNodeId: 'ac_load', targetPortId: 'va' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'AC Phase A connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-15`,
+      order: 15,
+      type: 'connect_ports',
+      title: 'Connect AC Phase B Output',
+      description: 'Connect inv_bridge:vb to ac_load:vb',
+      params: { sourceNodeId: 'inv_bridge', sourcePortId: 'vb', targetNodeId: 'ac_load', targetPortId: 'vb' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'AC Phase B connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+
+    actions.push({
+      id: `${planId}-act-16`,
+      order: 16,
+      type: 'connect_ports',
+      title: 'Connect AC Phase C Output',
+      description: 'Connect inv_bridge:vc to ac_load:vc',
+      params: { sourceNodeId: 'inv_bridge', sourcePortId: 'vc', targetNodeId: 'ac_load', targetPortId: 'vc' },
+      dependencies: [`${planId}-act-5`],
+      affectedArtifacts: ['model_connections.json'],
+      expectedEvidence: 'AC Phase C connection established',
+      rollbackMetadata: { action: 'disconnect', params: {} }
+    });
+  } else if (isXBridges) {
     // Action 1: Instantiate GAIN Block
     validateBlockProposal('GAIN');
     const act1: PlanAction = {
@@ -315,5 +556,197 @@ export function preflightEngineeringModelPlan(
   currentRevision: number
 ): PreflightResult {
   return PlanPreflight.preflight(plan, { currentRevision });
+}
+
+/**
+ * Builds a typed EngineeringModelPlan from an approved EngineeringSpecification
+ * and current project revision, ensuring physical canonical compatibility.
+ */
+export function buildEngineeringModelPlanFromSpecification(
+  specification: EngineeringSpecification,
+  baseRevision: number
+): EngineeringModelPlan {
+  const isThreePhaseInverter =
+    specification.targetSystem === 'three_phase_inverter' ||
+    specification.targetSystem.toLowerCase().includes('inverter');
+
+  if (isThreePhaseInverter) {
+    const dcBusReq = specification.requirements.find(r => r.sourceAnswerKey === 'dcBusVoltage');
+    const dcBusVoltage = dcBusReq ? parseFloat(String(dcBusReq.value)) || 400 : 400;
+
+    const acFreqReq = specification.requirements.find(r => r.sourceAnswerKey === 'targetAcFrequency');
+    const acFreq = acFreqReq ? parseFloat(String(acFreqReq.value)) || 50 : 50;
+
+    const switchFreqReq = specification.requirements.find(r => r.sourceAnswerKey === 'switchingFrequency');
+    const switchFreq = switchFreqReq ? parseFloat(String(switchFreqReq.value)) || 10000 : 10000;
+
+    return {
+      schemaVersion: '1.0.0',
+      planId: `eng-plan-${Date.now()}`,
+      projectId: specification.taskId,
+      baseRevision,
+      targetDomain: 'xbridges',
+      designRationale: specification.title,
+      assumptions: specification.assumptions.map(a => `${a.key}: ${a.value}`),
+      blocks: [
+        {
+          id: 'dc_src',
+          blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+          domain: 'xbridges',
+          name: 'DC Voltage Source',
+          parameters: [{ blockId: 'dc_src', parameterName: 'voltage', value: dcBusVoltage }]
+        },
+        {
+          id: 'v_ref',
+          blockDefinitionId: 'VOLTAGE_REFERENCE_GENERATOR',
+          domain: 'xbridges',
+          name: 'Sine Voltage Reference',
+          parameters: [
+            { blockId: 'v_ref', parameterName: 'frequency', value: acFreq },
+            { blockId: 'v_ref', parameterName: 'amplitude', value: 1 }
+          ]
+        },
+        {
+          id: 'pwm_gen',
+          blockDefinitionId: 'THREE_PHASE_PWM',
+          domain: 'xbridges',
+          name: '3-Phase SPWM Modulator',
+          parameters: [
+            { blockId: 'pwm_gen', parameterName: 'frequency', value: switchFreq },
+            { blockId: 'pwm_gen', parameterName: 'method', value: 'SPWM' }
+          ]
+        },
+        {
+          id: 'inv_bridge',
+          blockDefinitionId: 'THREE_PHASE_INVERTER',
+          domain: 'xbridges',
+          name: '3-Phase Inverter Bridge',
+          parameters: [
+            { blockId: 'inv_bridge', parameterName: 'Ron', value: 0.01 },
+            { blockId: 'inv_bridge', parameterName: 'Vf', value: 0.7 }
+          ]
+        },
+        {
+          id: 'ac_load',
+          blockDefinitionId: 'THREE_PHASE_LOAD',
+          domain: 'xbridges',
+          name: '3-Phase AC Load',
+          parameters: [{ blockId: 'ac_load', parameterName: 'R', value: 10 }]
+        }
+      ],
+      connections: [
+        {
+          id: 'c_dc_p',
+          fromBlockId: 'dc_src',
+          fromPortId: 'v_pos',
+          toBlockId: 'inv_bridge',
+          toPortId: 'vdc_p',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_dc_n',
+          fromBlockId: 'dc_src',
+          fromPortId: 'v_neg',
+          toBlockId: 'inv_bridge',
+          toPortId: 'vdc_n',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_ref_a',
+          fromBlockId: 'v_ref',
+          fromPortId: 'va',
+          toBlockId: 'pwm_gen',
+          toPortId: 'va_ref',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_ref_b',
+          fromBlockId: 'v_ref',
+          fromPortId: 'vb',
+          toBlockId: 'pwm_gen',
+          toPortId: 'vb_ref',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_ref_c',
+          fromBlockId: 'v_ref',
+          fromPortId: 'vc',
+          toBlockId: 'pwm_gen',
+          toPortId: 'vc_ref',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_pwm_a',
+          fromBlockId: 'pwm_gen',
+          fromPortId: 'ga',
+          toBlockId: 'inv_bridge',
+          toPortId: 'ga',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_pwm_b',
+          fromBlockId: 'pwm_gen',
+          fromPortId: 'gb',
+          toBlockId: 'inv_bridge',
+          toPortId: 'gb',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_pwm_c',
+          fromBlockId: 'pwm_gen',
+          fromPortId: 'gc',
+          toBlockId: 'inv_bridge',
+          toPortId: 'gc',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_out_a',
+          fromBlockId: 'inv_bridge',
+          fromPortId: 'va',
+          toBlockId: 'ac_load',
+          toPortId: 'va',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_out_b',
+          fromBlockId: 'inv_bridge',
+          fromPortId: 'vb',
+          toBlockId: 'ac_load',
+          toPortId: 'vb',
+          domain: 'xbridges'
+        },
+        {
+          id: 'c_out_c',
+          fromBlockId: 'inv_bridge',
+          fromPortId: 'vc',
+          toBlockId: 'ac_load',
+          toPortId: 'vc',
+          domain: 'xbridges'
+        }
+      ],
+      validationCriteria: [
+        {
+          id: 'crit_thd',
+          description: 'Total Harmonic Distortion <= 5%',
+          metric: 'THD',
+          operator: '<=',
+          targetValue: 0.05
+        }
+      ]
+    };
+  }
+
+  return {
+    schemaVersion: '1.0.0',
+    planId: `eng-plan-${Date.now()}`,
+    projectId: specification.taskId,
+    baseRevision,
+    targetDomain: 'xbridges',
+    designRationale: specification.title,
+    assumptions: [],
+    blocks: [],
+    connections: [],
+    validationCriteria: []
+  };
 }
 
