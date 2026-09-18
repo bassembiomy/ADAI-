@@ -38,7 +38,7 @@ export class PlanPreflight {
     }
 
     // 2. Base validation via PlanValidator
-    const validatorResult = PlanValidator.validateEngineeringModelPlan(plan, catalog, {
+    const validatorResult = PlanValidator.validateEngineeringModelPlan(plan, catalog as any, {
       expectedRevision: options.currentRevision,
       allowedBridgePairs: options.allowedBridgePairs
     });

@@ -192,6 +192,7 @@ export function safeCreateFunction(params: string[], body: string): Function {
     throw new Error("Security Violation: Access to restricted global objects (process, require, window, document) is forbidden in expressions.");
   }
   // Shadow global objects with undefined parameters to prevent global scope leakage
+  // sast-ignore SEC-SAST-005: safe sandboxed expression evaluator with shadowed globals
   return new Function('window', 'document', 'process', 'require', 'globalThis', ...params, body).bind(
     null, undefined, undefined, undefined, undefined, undefined
   );

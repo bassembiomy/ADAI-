@@ -536,9 +536,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       Actions ({currentResponse?.executionPlan?.actions?.length || 0} scheduled):
                     </div>
                     <div className="adia-agent-plan-action-list">
-                      {(currentResponse?.executionPlan?.actions || []).map(act => (
+                      {(currentResponse?.executionPlan?.actions || []).map((act: any) => (
                         <div key={act.id} className="adia-agent-plan-action-item">
-                          <span className="action-kind-tag">[{act.kind}]</span> {act.title}
+                          <span className="action-kind-tag">[{act.kind || act.actionType}]</span> {act.title}
                         </div>
                       ))}
                     </div>
@@ -547,13 +547,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               )}
 
               {/* Validation Diagnostics Panel */}
-              {Boolean(currentResponse?.validationResult?.diagnostics?.length) && (
+              {Boolean((currentResponse?.validationResult as any)?.diagnostics?.length) && (
                 <div className="adia-agent-diagnostics-card">
                   <div className="adia-agent-diagnostics-header">
-                    🔍 Diagnostics ({currentResponse!.validationResult!.diagnostics!.length})
+                    🔍 Diagnostics ({(currentResponse!.validationResult as any)!.diagnostics!.length})
                   </div>
                   <div className="adia-agent-diagnostics-list">
-                    {currentResponse!.validationResult!.diagnostics!.map((diag: any, i: number) => (
+                    {(currentResponse!.validationResult as any)!.diagnostics!.map((diag: any, i: number) => (
                       <div key={i} className={`diag-item severity-${(diag.severity || 'info').toLowerCase()}`}>
                         <span className="diag-badge">{diag.category || 'DIAGNOSTIC'}</span>
                         <span className="diag-msg">{diag.message}</span>

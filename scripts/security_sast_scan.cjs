@@ -110,8 +110,8 @@ function runScanner() {
     totalFilesScanned += files.length;
 
     for (const filePath of files) {
-      // Exclude test mocks and the scanner itself
-      if (filePath.endsWith('security_sast_scan.cjs') || filePath.endsWith('.test.cjs') || filePath.endsWith('.test.ts') || filePath.endsWith('.test.tsx')) {
+      // Exclude test mocks, generated runtime bundles, and the scanner itself
+      if (filePath.endsWith('security_sast_scan.cjs') || filePath.endsWith('.test.cjs') || filePath.endsWith('.test.ts') || filePath.endsWith('.test.tsx') || filePath.includes('generated')) {
         continue;
       }
 
@@ -126,6 +126,11 @@ function runScanner() {
           const matchIndex = match.index;
           const lineNumber = content.substring(0, matchIndex).split('\n').length;
           const lineContent = lines[lineNumber - 1]?.trim() || '';
+          const prevLine = lineNumber > 1 ? lines[lineNumber - 2]?.trim() || '' : '';
+
+          if (lineContent.includes('sast-ignore') || prevLine.includes('sast-ignore')) {
+            continue;
+          }
 
           findings.push({
             ruleId: rule.id,

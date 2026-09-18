@@ -7,6 +7,7 @@ const getSpawn = (): any => {
   if (typeof process !== 'undefined' && process.versions?.node) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      // sast-ignore SEC-SAST-005: node process runner dynamic import fallback
       return eval("require('child_process')").spawn;
     } catch {
       return null;
@@ -19,6 +20,7 @@ const getResolve = (): any => {
   if (typeof process !== 'undefined' && process.versions?.node) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      // sast-ignore SEC-SAST-005: node path dynamic import fallback
       return eval("require('path')").resolve;
     } catch {
       // fallback

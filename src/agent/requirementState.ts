@@ -217,6 +217,18 @@ export function approveProposal(state: TaskState, key: string): TaskState {
 }
 
 const VALID_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
+  understand: ['retrieve', 'clarify', 'plan', 'blocked', 'failed'],
+  retrieve: ['clarify', 'plan', 'understand', 'blocked', 'failed'],
+  clarify: ['plan', 'preflight', 'retrieve', 'blocked', 'failed'],
+  plan: ['preflight', 'clarify', 'build', 'blocked', 'failed'],
+  preflight: ['build', 'plan', 'clarify', 'blocked', 'failed'],
+  build: ['validate', 'repair', 'blocked', 'failed'],
+  validate: ['repair', 'simulate', 'final_verify', 'report', 'completed', 'blocked', 'failed'],
+  repair: ['validate', 'build', 'blocked', 'failed'],
+  simulate: ['final_verify', 'validate', 'report', 'blocked', 'failed'],
+  final_verify: ['report', 'completed', 'validate', 'blocked', 'failed'],
+  report: ['completed', 'understand', 'clarify'],
+
   clarifying: ['specification_ready', 'awaiting_specification_approval', 'blocked', 'failed'],
   specification_ready: ['awaiting_specification_approval', 'clarifying', 'blocked', 'failed'],
   awaiting_specification_approval: ['planning', 'clarifying', 'blocked', 'failed'],
@@ -225,8 +237,19 @@ const VALID_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   awaiting_change_approval: ['executing', 'awaiting_plan_approval', 'blocked', 'failed'],
   executing: ['validating', 'awaiting_change_approval', 'completed', 'failed', 'blocked'],
   validating: ['completed', 'awaiting_change_approval', 'failed', 'blocked'],
-  completed: ['clarifying'],
+  completed: ['clarifying', 'understand'],
   blocked: [
+    'understand',
+    'retrieve',
+    'clarify',
+    'plan',
+    'preflight',
+    'build',
+    'validate',
+    'repair',
+    'simulate',
+    'final_verify',
+    'report',
     'clarifying',
     'specification_ready',
     'awaiting_specification_approval',
@@ -237,7 +260,7 @@ const VALID_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
     'validating',
     'failed'
   ],
-  failed: ['clarifying']
+  failed: ['clarifying', 'understand']
 };
 
 /**

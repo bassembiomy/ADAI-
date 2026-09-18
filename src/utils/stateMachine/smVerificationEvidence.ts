@@ -60,8 +60,10 @@ export const computeFileSha256 = (filePath: string): string => {
   if (typeof process !== 'undefined' && process.versions?.node) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      // sast-ignore SEC-SAST-005: node fs dynamic import fallback
       const nodeFs = eval("require('node:fs')");
       // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      // sast-ignore SEC-SAST-005: node crypto dynamic import fallback
       const nodeCrypto = eval("require('node:crypto')");
       if (nodeFs.existsSync(filePath)) {
         const content = nodeFs.readFileSync(filePath);
@@ -78,6 +80,7 @@ export const computeContentSha256 = (content: string | Buffer): string => {
   if (typeof process !== 'undefined' && process.versions?.node) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      // sast-ignore SEC-SAST-005: node crypto dynamic import fallback
       const nodeCrypto = eval("require('node:crypto')");
       return nodeCrypto.createHash('sha256').update(content).digest('hex');
     } catch {

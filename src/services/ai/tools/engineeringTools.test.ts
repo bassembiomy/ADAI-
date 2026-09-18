@@ -41,7 +41,7 @@ describe('Engineering Tools Boundary', () => {
         blockDefinitionId: 'ghost_block_999'
       });
       expect(ghostResult.status).toBe('FAILURE');
-      expect(ghostResult.error).toMatch(/Block definition 'ghost_block_999' not found/);
+      expect((ghostResult as any).error).toMatch(/Block definition 'ghost_block_999' not found/);
     });
 
     it('inspect_model returns project summary and structure', async () => {
@@ -71,7 +71,7 @@ describe('Engineering Tools Boundary', () => {
         domain: 'vlab'
       });
       expect(result.status).toBe('FAILURE');
-      expect(result.error).toMatch(/approval token/i);
+      expect((result as any).error).toMatch(/approval token/i);
     });
 
     it('rejects mutation when baseRevision does not match current project revision', async () => {
@@ -85,7 +85,7 @@ describe('Engineering Tools Boundary', () => {
         domain: 'vlab'
       });
       expect(result.status).toBe('FAILURE');
-      expect(result.error).toMatch(/revision/i);
+      expect((result as any).error).toMatch(/revision/i);
     });
 
     it('rejects mutation referencing a nonexistent blockDefinitionId', async () => {
@@ -99,7 +99,7 @@ describe('Engineering Tools Boundary', () => {
         domain: 'xbridges'
       });
       expect(result.status).toBe('FAILURE');
-      expect(result.error).toMatch(/not found in catalog/i);
+      expect((result as any).error).toMatch(/not found in catalog/i);
     });
 
     it('rejects arbitrary code or unknown fields fail-closed (strict schema)', async () => {
@@ -115,7 +115,7 @@ describe('Engineering Tools Boundary', () => {
         rawJsonReplacement: {} // Forbidden!
       });
       expect(result.status).toBe('FAILURE');
-      expect(result.error).toMatch(/Validation failed|Unrecognized key/i);
+      expect((result as any).error).toMatch(/Validation failed|Unrecognized key/i);
     });
 
     it('executes valid add_block, set_parameter, and connect_ports mutations', async () => {

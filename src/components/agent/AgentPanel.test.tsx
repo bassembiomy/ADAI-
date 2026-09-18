@@ -243,7 +243,7 @@ describe('AgentPanel UI Component', () => {
               }
             ]
           }
-        }}
+        } as any}
       />
     );
 
