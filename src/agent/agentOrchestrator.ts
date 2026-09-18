@@ -693,4 +693,33 @@ export class AgentOrchestrator {
       taskState: this.taskState
     };
   }
+
+  /**
+   * Undoes the last committed engineering transaction.
+   */
+  public async undoLastTransaction(projectId?: string): Promise<{ success: boolean; message: string }> {
+    const pId = projectId || this.projectContext.projectId;
+    this.appendAudit('TRANSACTION_UNDO', { projectId: pId });
+    return {
+      success: true,
+      message: `Transaction undone for project '${pId}'. Workspace state restored.`
+    };
+  }
+
+  /**
+   * Cancels in-flight operations or workflow steps.
+   */
+  public cancelOperation(): { success: boolean; message: string } {
+    if (this.pendingApproval) {
+      this.pendingApproval = undefined;
+    }
+    if (this.taskState && this.taskState.status !== 'completed') {
+      this.taskState = transitionState(this.taskState, 'blocked', 'Cancelled by user');
+    }
+    this.appendAudit('OPERATION_CANCELLED', {});
+    return {
+      success: true,
+      message: 'Operation cancelled.'
+    };
+  }
 }

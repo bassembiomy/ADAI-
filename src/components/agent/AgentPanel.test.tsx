@@ -195,4 +195,65 @@ describe('AgentPanel UI Component', () => {
     expect(html).toContain('Blocked: Delegate for &#x27;instantiate_block&#x27; is unavailable');
     expect(html).toContain('disabled=""');
   });
+
+  it('renders question card, assumptions, plan preview, and diagnostics panels', () => {
+    const orchestrator = new AgentOrchestrator(new MockLlm());
+    const html = renderToStaticMarkup(
+      <AgentPanel
+        isOpen={true}
+        orchestrator={orchestrator}
+        initialResponse={{
+          status: 'clarifying',
+          message: 'What is the required DC bus voltage (e.g. 400V, 800V)?',
+          taskState: createTaskState('Inverter build', 'inverter'),
+          specification: {
+            id: 'spec-1',
+            title: 'Inverter Spec',
+            targetSystem: 'three-phase-inverter',
+            approved: false,
+            requirements: [],
+            safetyLimits: [],
+            assumptions: ['400V DC bus', '50Hz AC grid frequency']
+          },
+          executionPlan: {
+            id: 'plan-1',
+            specificationId: 'spec-1',
+            targetWorkspace: 'xbridges',
+            actions: [
+              {
+                id: 'act-1',
+                kind: 'instantiate_block',
+                title: 'Add Constant block',
+                targetWorkspace: 'xbridges',
+                params: { blockId: 'dc_src' },
+                blockIds: ['dc_src'],
+                approvalId: 'app-1',
+                expectedEvidence: 'Block instantiated'
+              }
+            ]
+          },
+          validationResult: {
+            valid: false,
+            errors: ['Floating gate input'],
+            diagnostics: [
+              {
+                category: 'TOPOLOGY',
+                severity: 'WARNING',
+                message: 'Floating gate input detected on inverter'
+              }
+            ]
+          }
+        }}
+      />
+    );
+
+    expect(html).toContain('Requirement Clarification');
+    expect(html).toContain('What is the required DC bus voltage');
+    expect(html).toContain('Engineering Assumptions');
+    expect(html).toContain('400V DC bus');
+    expect(html).toContain('Plan Preview');
+    expect(html).toContain('Add Constant block');
+    expect(html).toContain('Diagnostics');
+    expect(html).toContain('Floating gate input detected');
+  });
 });

@@ -64,6 +64,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [selectedModel, setSelectedModel] = useState<string>(() => localLlmService.getConfig().modelName);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'unavailable' | 'unselected'>('unavailable');
   const [isTesting, setIsTesting] = useState<boolean>(false);
+  const [canUndo, setCanUndo] = useState<boolean>(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const refreshStatus = async () => {
@@ -204,6 +205,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       };
 
       setMessages(prev => [...prev, agentMsg]);
+      setCanUndo(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setMessages(prev => [
@@ -215,6 +217,47 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           timestamp: new Date().toLocaleTimeString()
         }
       ]);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (orchestrator.cancelOperation) {
+      orchestrator.cancelOperation();
+      setIsBusy(false);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-cnl`,
+          sender: 'agent',
+          text: 'Workflow cancelled by user.',
+          timestamp: new Date().toLocaleTimeString()
+        }
+      ]);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      if (orchestrator.undoLastTransaction) {
+        const res = await orchestrator.undoLastTransaction(projectContext?.projectName);
+        setCanUndo(false);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-undo`,
+            sender: 'agent',
+            text: res.message,
+            timestamp: new Date().toLocaleTimeString()
+          }
+        ]);
+        if (projectContext?.refreshProject) {
+          projectContext.refreshProject();
+        }
+      }
     } finally {
       setIsBusy(false);
     }
@@ -459,6 +502,67 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 </div>
               ))}
 
+              {/* Question Card */}
+              {currentResponse?.status === 'clarifying' && (
+                <div className="adia-agent-question-card">
+                  <div className="adia-agent-question-title">❓ Requirement Clarification</div>
+                  <div className="adia-agent-question-text">{currentResponse.message}</div>
+                </div>
+              )}
+
+              {/* Assumptions Card */}
+              {Boolean((currentResponse?.specification?.assumptions?.length || (currentResponse?.executionPlan as any)?.assumptions?.length)) && (
+                <div className="adia-agent-assumptions-card">
+                  <div className="adia-agent-assumptions-title">📋 Engineering Assumptions</div>
+                  <ul className="adia-agent-assumptions-list">
+                    {((currentResponse?.specification?.assumptions || (currentResponse?.executionPlan as any)?.assumptions || []) as string[]).map((asm, idx) => (
+                      <li key={idx}>{asm}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Plan Preview */}
+              {Boolean(currentResponse?.executionPlan || pendingApproval?.type === 'plan') && (
+                <div className="adia-agent-plan-preview-card">
+                  <div className="adia-agent-plan-preview-header">
+                    <span className="adia-agent-plan-preview-title">📐 Plan Preview</span>
+                    <span className="adia-agent-plan-revision-badge">
+                      Rev: {orchestrator.getProjectContext().revision}
+                    </span>
+                  </div>
+                  <div className="adia-agent-plan-preview-body">
+                    <div style={{ color: '#94a3b8', fontSize: '11px', marginBottom: '6px' }}>
+                      Actions ({currentResponse?.executionPlan?.actions?.length || 0} scheduled):
+                    </div>
+                    <div className="adia-agent-plan-action-list">
+                      {(currentResponse?.executionPlan?.actions || []).map(act => (
+                        <div key={act.id} className="adia-agent-plan-action-item">
+                          <span className="action-kind-tag">[{act.kind}]</span> {act.title}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Diagnostics Panel */}
+              {Boolean(currentResponse?.validationResult?.diagnostics?.length) && (
+                <div className="adia-agent-diagnostics-card">
+                  <div className="adia-agent-diagnostics-header">
+                    🔍 Diagnostics ({currentResponse!.validationResult!.diagnostics!.length})
+                  </div>
+                  <div className="adia-agent-diagnostics-list">
+                    {currentResponse!.validationResult!.diagnostics!.map((diag: any, i: number) => (
+                      <div key={i} className={`diag-item severity-${(diag.severity || 'info').toLowerCase()}`}>
+                        <span className="diag-badge">{diag.category || 'DIAGNOSTIC'}</span>
+                        <span className="diag-msg">{diag.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Pending Approval Card */}
               {pendingApproval && pendingApproval.status === 'pending' && (
                 <div className="adia-agent-approval-card">
@@ -628,6 +732,27 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             onKeyDown={e => e.key === 'Enter' && handleSend()}
             disabled={isBusy}
           />
+          {isBusy && (
+            <button
+              type="button"
+              className="adia-agent-btn-stop"
+              onClick={handleCancel}
+              title="Stop in-flight operation"
+            >
+              Stop
+            </button>
+          )}
+          {canUndo && (
+            <button
+              type="button"
+              className="adia-agent-btn-undo"
+              onClick={handleUndo}
+              disabled={isBusy}
+              title="Undo last committed engineering transaction"
+            >
+              ↶ Undo
+            </button>
+          )}
           <button
             className="adia-agent-send-btn"
             onClick={handleSend}
