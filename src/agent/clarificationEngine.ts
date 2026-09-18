@@ -1,4 +1,5 @@
 import { TaskState, RequirementConflict, Assumption } from './types';
+import { findTemplateForIntent } from '../services/ai/templates/threePhaseInverter';
 
 export interface ClarificationQuestion {
   id: string;
@@ -7,6 +8,7 @@ export interface ClarificationQuestion {
   recommendedDefault?: string;
   rationale: string;
   options?: string[];
+  isCritical?: boolean;
 }
 
 export type AnalysisResult =
@@ -30,7 +32,9 @@ interface RequirementItemSpec {
   recommendedDefault: string;
   rationale: string;
   options?: string[];
+  isCritical?: boolean;
 }
+
 
 const AIR_FRYER_REQUIRED_SPECS: RequirementItemSpec[] = [
   {
@@ -123,10 +127,21 @@ export function analyzeCompleteness(
     };
   }
 
-  // Currently air-fryer is the baseline vertical
-  const requiredSpecs = targetSystem.includes('air-fryer') || targetSystem.includes('air fryer')
-    ? AIR_FRYER_REQUIRED_SPECS
-    : AIR_FRYER_REQUIRED_SPECS;
+  // Find template by target system or objective
+  const matchedTemplate =
+    findTemplateForIntent(targetSystem) ||
+    findTemplateForIntent(state.requirementState.objective);
+
+  const requiredSpecs: RequirementItemSpec[] = matchedTemplate
+    ? matchedTemplate.requiredQuestions.map(q => ({
+        key: q.key,
+        question: q.question,
+        recommendedDefault: q.recommendedDefault || '',
+        rationale: q.rationale,
+        options: q.options,
+        isCritical: q.isCritical ?? true
+      }))
+    : AIR_FRYER_REQUIRED_SPECS.map(s => ({ ...s, isCritical: true }));
 
   let answeredCount = 0;
   let nextMissingSpec: RequirementItemSpec | null = null;
@@ -134,14 +149,14 @@ export function analyzeCompleteness(
   for (const spec of requiredSpecs) {
     if (answers[spec.key] && String(answers[spec.key]).trim() !== '') {
       answeredCount++;
-    } else if (!nextMissingSpec) {
+    } else if (spec.isCritical && !nextMissingSpec) {
       nextMissingSpec = spec;
     }
   }
 
   const baseScore = Number((answeredCount / requiredSpecs.length).toFixed(2));
 
-  // If a required item is missing, ask for it immediately
+  // If a critical required item is missing, ask for it immediately
   if (nextMissingSpec) {
     return {
       status: 'question',
@@ -152,34 +167,39 @@ export function analyzeCompleteness(
         key: nextMissingSpec.key,
         question: nextMissingSpec.question,
         recommendedDefault: nextMissingSpec.recommendedDefault,
-        rationale: nextMissingSpec.rationale
+        rationale: nextMissingSpec.rationale,
+        options: nextMissingSpec.options,
+        isCritical: nextMissingSpec.isCritical
       }
     };
   }
 
-  // 3. Check for any unapproved assumptions/proposals
-  const unapprovedAssumption = state.requirementState.assumptions.find(
-    a => a.status === 'pending_approval'
-  );
-  if (unapprovedAssumption) {
-    return {
-      status: 'question',
-      missingKey: `unapproved_${unapprovedAssumption.key}`,
-      completenessScore: 0.9,
-      question: {
-        id: `q-approve-${unapprovedAssumption.key}`,
-        key: unapprovedAssumption.key,
-        question: `We proposed a default fan speed of ${unapprovedAssumption.value} for ${unapprovedAssumption.key} (${unapprovedAssumption.description}). Do you approve this default?`,
-        recommendedDefault: String(unapprovedAssumption.value),
-        rationale: `Engineering defaults require explicit approval before entering the specification: ${unapprovedAssumption.description}`
-      }
-    };
+  // 3. Check for any unapproved assumptions/proposals in legacy mode
+  if (!matchedTemplate || matchedTemplate.id === 'air_fryer') {
+    const unapprovedAssumption = state.requirementState.assumptions.find(
+      a => a.status === 'pending_approval'
+    );
+    if (unapprovedAssumption) {
+      return {
+        status: 'question',
+        missingKey: `unapproved_${unapprovedAssumption.key}`,
+        completenessScore: 0.9,
+        question: {
+          id: `q-approve-${unapprovedAssumption.key}`,
+          key: unapprovedAssumption.key,
+          question: `We proposed a default fan speed of ${unapprovedAssumption.value} for ${unapprovedAssumption.key} (${unapprovedAssumption.description}). Do you approve this default?`,
+          recommendedDefault: String(unapprovedAssumption.value),
+          rationale: `Engineering defaults require explicit approval before entering the specification: ${unapprovedAssumption.description}`
+        }
+      };
+    }
   }
 
   return {
     status: 'complete',
     completenessScore: 1.0
   };
+
 }
 
 export class ClarificationEngine {

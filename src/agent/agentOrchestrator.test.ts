@@ -418,4 +418,18 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(r16.message).toMatch(/report artifact is missing or empty/i);
     expect(orch.getAuditHistory().some(a => a.eventType === 'REPORT_VALIDATION_FAILED')).toBe(true);
   });
+
+  it('routes three-phase inverter requests to inverter template and asks dynamic critical questions', async () => {
+    const localTools = new ToolGateway();
+    const orch = new AgentOrchestrator(undefined, localTools);
+    const r1 = await orch.handle('Create a three-phase inverter model');
+
+    // Must be in clarifying state asking inverter-specific questions, NOT air fryer temperature!
+    expect(r1.status).toBe('clarifying');
+    expect(r1.taskState.requirementState.targetSystem).toBe('three_phase_inverter');
+    expect(r1.message).toMatch(/DC bus/i);
+    expect(r1.message).not.toMatch(/air fryer/i);
+  });
 });
+
+

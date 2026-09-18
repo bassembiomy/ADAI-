@@ -65,7 +65,59 @@ export function buildSpecification(state: TaskState): EngineeringSpecification {
 
   const requirements: EngineeringRequirement[] = [];
 
+  // Inverter domain requirements
+  if (answers['dcBusVoltage']) {
+    requirements.push({
+      id: makeId(),
+      category: 'electrical',
+      description: 'DC bus input supply voltage',
+      sourceAnswerKey: 'dcBusVoltage',
+      value: answers['dcBusVoltage']
+    });
+  }
+
+  if (answers['switchingFrequency']) {
+    requirements.push({
+      id: makeId(),
+      category: 'control',
+      description: 'PWM carrier switching frequency',
+      sourceAnswerKey: 'switchingFrequency',
+      value: answers['switchingFrequency']
+    });
+  }
+
+  if (answers['targetAcFrequency']) {
+    requirements.push({
+      id: makeId(),
+      category: 'electrical',
+      description: 'Desired AC output fundamental frequency',
+      sourceAnswerKey: 'targetAcFrequency',
+      value: answers['targetAcFrequency']
+    });
+  }
+
+  if (answers['modulationIndex']) {
+    requirements.push({
+      id: makeId(),
+      category: 'control',
+      description: 'Target SPWM modulation index',
+      sourceAnswerKey: 'modulationIndex',
+      value: answers['modulationIndex']
+    });
+  }
+
+  if (answers['loadType']) {
+    requirements.push({
+      id: makeId(),
+      category: 'electrical',
+      description: 'Target load connected to inverter output',
+      sourceAnswerKey: 'loadType',
+      value: answers['loadType']
+    });
+  }
+
   if (answers['targetTemperature']) {
+
     requirements.push({
       id: makeId(),
       category: 'thermal',

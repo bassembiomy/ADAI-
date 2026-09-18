@@ -3,6 +3,19 @@
  */
 
 export type WorkflowStatus =
+  // Explicit fine-grained engineering workflow states
+  | 'understand'
+  | 'retrieve'
+  | 'clarify'
+  | 'plan'
+  | 'preflight'
+  | 'build'
+  | 'validate'
+  | 'repair'
+  | 'simulate'
+  | 'final_verify'
+  | 'report'
+  // Preserved states for backward compatibility with existing TaskState persistence
   | 'clarifying'
   | 'specification_ready'
   | 'awaiting_specification_approval'
@@ -14,6 +27,7 @@ export type WorkflowStatus =
   | 'completed'
   | 'blocked'
   | 'failed';
+
 
 export type ApprovalType = 'specification' | 'plan' | 'change' | 'default_proposal';
 

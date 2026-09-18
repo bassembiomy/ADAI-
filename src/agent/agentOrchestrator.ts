@@ -41,6 +41,8 @@ import {
 } from './llmProvider';
 import { localLlmService } from '../services/localLlmService';
 import { intentExtractionPrompt } from './promptTemplates';
+import { findTemplateForIntent } from '../services/ai/templates/threePhaseInverter';
+
 
 export interface OrchestratorResponse {
   status: WorkflowStatus;
@@ -158,7 +160,8 @@ export class AgentOrchestrator {
   public async handle(input: string): Promise<OrchestratorResponse> {
     // 1. If task is not yet started, initialize
     if (!this.taskState) {
-      let targetSystem = 'air-fryer';
+      const matchedTemplate = findTemplateForIntent(input);
+      let targetSystem = matchedTemplate ? matchedTemplate.id : 'air-fryer';
       let objective = input;
 
       try {
@@ -171,17 +174,31 @@ export class AgentOrchestrator {
           targetSystem = result.data.targetSystem;
         }
       } catch {
-        // Fallback to deterministic detection
-        if (input.toLowerCase().includes('air fryer') || input.toLowerCase().includes('air-fryer')) {
+        // Fallback to deterministic template matching
+        if (matchedTemplate) {
+          targetSystem = matchedTemplate.id;
+        } else if (input.toLowerCase().includes('air fryer') || input.toLowerCase().includes('air-fryer')) {
           targetSystem = 'air-fryer';
         }
       }
 
       this.taskState = createTaskState(objective, targetSystem);
+
+      if (matchedTemplate && matchedTemplate.id !== 'air_fryer' && matchedTemplate.defaultAssumptions.length > 0) {
+        this.taskState.requirementState.assumptions = matchedTemplate.defaultAssumptions.map((a, idx) => ({
+          id: `assump-${matchedTemplate.id}-${idx + 1}`,
+          key: a.key,
+          value: a.value,
+          description: a.rationale,
+          status: 'pending_approval' as const
+        }));
+      }
+
     } else if (this.taskState.status === 'clarifying' && this.currentQuestionKey) {
       // Record user's answer to the pending question
       this.taskState = recordAnswer(this.taskState, this.currentQuestionKey, input);
     }
+
 
     // 2. Analyze requirement state completeness
     const analysis: AnalysisResult = ClarificationEngine.analyze(this.taskState);
