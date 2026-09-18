@@ -56,4 +56,46 @@ describe('RepairLoop Bounded Execution', () => {
     expect(repairRes.unresolvedDiagnostics.length).toBeGreaterThan(0);
     expect(repairRes.unresolvedDiagnostics.some(d => d.code === 'UNKNOWN_BLOCK_DEFINITION')).toBe(true);
   });
+
+  it('strictly caps repair attempts to 3 even if higher attempt count is requested', async () => {
+    const adapter = new EngineeringModelAdapter('xbridges');
+    adapter['blocks'].set('bad_block', {
+      id: 'bad_block',
+      blockDefinitionId: 'NONEXISTENT_MAGIC_BLOCK_UNKNOWN',
+      domain: 'xbridges',
+      name: 'Corrupted',
+      parameters: {}
+    });
+
+    const repairRes = await RepairLoop.run(adapter, { maxAttempts: 10 });
+    expect(repairRes.totalAttempts).toBeLessThanOrEqual(3);
+  });
+
+  it('respects approval policy and rejects unauthorized repair actions', async () => {
+    const adapter = new EngineeringModelAdapter('xbridges');
+    await adapter.addBlock({
+      id: 'inv',
+      blockDefinitionId: 'THREE_PHASE_INVERTER',
+      domain: 'xbridges',
+      name: 'Inverter',
+      parameters: [{ blockId: 'inv', parameterName: 'Ron', value: -0.05 }]
+    });
+
+    // Approval callback rejects parameter modifications
+    const approvalCheck = async (actionDesc: string) => {
+      if (actionDesc.includes('parameter')) return false;
+      return true;
+    };
+
+    const repairRes = await RepairLoop.run(adapter, {
+      maxAttempts: 3,
+      approvalCheck
+    });
+
+    expect(repairRes.success).toBe(false);
+    expect(repairRes.history.some(h => h.actionsTaken.some(a => a.includes('Rejected by approval policy')))).toBe(true);
+    // Parameter was NOT mutated
+    const invBlock = adapter.getBlock('inv');
+    expect(invBlock?.parameters.Ron).toBe(-0.05);
+  });
 });

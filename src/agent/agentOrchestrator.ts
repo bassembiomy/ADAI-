@@ -493,12 +493,19 @@ export class AgentOrchestrator {
         blockIds.push(action.params.blockId);
       }
 
+      const actionParams = { ...action.params };
+      if (action.type === 'generate_report') {
+        actionParams.modelRevision = actionParams.modelRevision ?? this.projectContext.revision;
+        actionParams.engineRunId = actionParams.engineRunId ?? this.taskState.evidence?.engineRunId;
+        actionParams.simulationStatus = actionParams.simulationStatus ?? (this.taskState.evidence?.engineRunId ? 'COMPLETED' : undefined);
+      }
+
       const approvedAction: ApprovedAction = {
         id: action.id,
         kind: action.type as ActionKind,
         projectId: this.taskState.requirementState.id,
         targetWorkspace: action.type === 'run_simulation' ? 'vlab' : action.type === 'generate_report' ? 'reporting' : 'xbridges',
-        params: action.params,
+        params: actionParams,
         blockIds,
         approvalId: approvedReq.id,
         expectedEvidence: action.expectedEvidence
@@ -652,6 +659,16 @@ export class AgentOrchestrator {
             message: `Validation failed: simulation results did not satisfy approved criteria.`,
             taskState: this.taskState,
             validationResult
+          };
+        }
+
+        if (toolResult.evidence) {
+          this.taskState = {
+            ...this.taskState,
+            evidence: {
+              ...(this.taskState.evidence || {}),
+              ...toolResult.evidence
+            }
           };
         }
       }

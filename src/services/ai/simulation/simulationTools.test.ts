@@ -56,8 +56,53 @@ describe('SimulationTools Capability and Normalization Boundary', () => {
     expect(result.isSupported).toBe(true);
     expect(result.validationPassed).toBe(true);
     expect(result.status).toBe('COMPLETED');
+    expect(result.engineRunId).toBeDefined();
     expect(result.signals).toBeDefined();
     expect(result.metrics?.thd).toBeDefined();
+    expect(result.metrics?.vRms).toBeDefined();
+  });
+
+  it('fails cleanly without stubbed traces when catalog/schema pass but compile fails', async () => {
+    const adapter = new EngineeringModelAdapter('xbridges');
+    // FUZZY_SURFACE_VIEWER is a registered catalog block, but lacks mandatory fisConfig parameter
+    await adapter.addBlock({
+      id: 'fuzz_view',
+      blockDefinitionId: 'FUZZY_SURFACE_VIEWER',
+      domain: 'xbridges',
+      name: 'Fuzzy Viewer',
+      parameters: []
+    });
+
+    const result = await SimulationTools.simulateModel(adapter, { domain: 'xbridges' });
+    expect(result.status).toBe('FAILED');
+    // Crucial requirement: A stubbed numerical trace must not satisfy this test
+    expect(result.signals).toBeUndefined();
+    expect(result.timeVector).toBeUndefined();
+    expect(result.diagnostics.some(d => d.category === 'COMPILE' || d.code === 'MISSING_FIS_CONFIG')).toBe(true);
+  });
+
+  it('fails cleanly without stubbed traces when simulation solver throws', async () => {
+    const adapter = new EngineeringModelAdapter('xbridges');
+    await adapter.addBlock({
+      id: 'dc_src',
+      blockDefinitionId: 'Constant',
+      domain: 'xbridges',
+      name: 'DC Source',
+      parameters: [{ blockId: 'dc_src', parameterName: 'value', value: 400 }]
+    });
+
+    const result = await SimulationTools.simulateModel(adapter, {
+      domain: 'xbridges',
+      customSimulator: async () => {
+        throw new Error('Singular Jacobian matrix at t=0.005s');
+      }
+    });
+
+    expect(result.status).toBe('FAILED');
+    expect(result.signals).toBeUndefined();
+    expect(result.timeVector).toBeUndefined();
+    expect(result.diagnostics.some(d => d.category === 'SIMULATION' && d.code === 'SOLVER_RUNTIME_EXCEPTION')).toBe(true);
+    expect(result.error).toContain('Singular Jacobian');
   });
 
   it('normalizes cancellation and timeouts cleanly', async () => {

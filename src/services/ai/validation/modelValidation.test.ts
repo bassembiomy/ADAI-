@@ -70,4 +70,27 @@ describe('ModelValidator Post-Build Diagnostics Aggregator', () => {
     expect(result.summary.categories.COMPILE).toBe(1);
     expect(result.summary.categories.SIMULATION).toBe(1);
   });
+
+  it('fails with categorized COMPILE error when catalog and schema checks pass but engine compile fails', async () => {
+    const adapter = new EngineeringModelAdapter('xbridges');
+
+    // FUZZY_SURFACE_VIEWER is a registered catalog block, but XbridgesEngine requires fisConfig
+    await adapter.addBlock({
+      id: 'fuzz_view',
+      blockDefinitionId: 'FUZZY_SURFACE_VIEWER',
+      domain: 'xbridges',
+      name: 'Fuzzy Viewer Block',
+      parameters: []
+    });
+
+    // 1. Without engine compile check, basic schema/catalog checks pass
+    const schemaOnlyResult = ModelValidator.validate(adapter, { checkEngineCompile: false });
+    expect(schemaOnlyResult.diagnostics.some(d => d.code === 'UNKNOWN_BLOCK_DEFINITION')).toBe(false);
+
+    // 2. With real engine compile check, honest compile diagnostic is produced
+    const engineCompileResult = ModelValidator.validate(adapter, { checkEngineCompile: true });
+    expect(engineCompileResult.passed).toBe(false);
+    expect(engineCompileResult.summary.categories.COMPILE).toBeGreaterThan(0);
+    expect(engineCompileResult.diagnostics.some(d => d.category === 'COMPILE' && d.code === 'MISSING_FIS_CONFIG')).toBe(true);
+  });
 });

@@ -1,6 +1,8 @@
 import { EngineeringDomain, StructuredDiagnostic, DiagnosticCategory } from '../contracts/engineeringModel';
 import { EngineeringModelAdapter, StoredBlock, StoredConnection } from '../adapters/engineeringModelAdapter';
 import { AdiaBlockCatalog } from '../../../agent/adiaBlockCatalog';
+import { XbridgesEngine } from '../../../engine/xbridges/XbridgesEngine';
+import { convertModelAdapterToXModel } from '../simulation/simulationTools';
 
 export interface ValidationSummary {
   errorCount: number;
@@ -14,14 +16,17 @@ export interface ModelValidationResult {
   summary: ValidationSummary;
 }
 
+export interface ModelValidatorOptions {
+  catalog?: typeof AdiaBlockCatalog;
+  compileResult?: { success: boolean; errors?: string[] };
+  simulationResult?: { success: boolean; errors?: string[] };
+  checkEngineCompile?: boolean;
+}
+
 export class ModelValidator {
   public static validate(
     adapter: EngineeringModelAdapter,
-    options?: {
-      catalog?: typeof AdiaBlockCatalog;
-      compileResult?: { success: boolean; errors?: string[] };
-      simulationResult?: { success: boolean; errors?: string[] };
-    }
+    options?: ModelValidatorOptions
   ): ModelValidationResult {
     const catalog = options?.catalog || AdiaBlockCatalog;
     const diagnostics: StructuredDiagnostic[] = [];
@@ -128,13 +133,39 @@ export class ModelValidator {
     }
 
     // 5. Compile check
-    if (options?.compileResult && !options.compileResult.success) {
-      for (const err of options.compileResult.errors || ['Compilation failed']) {
+    if (options?.compileResult) {
+      if (!options.compileResult.success) {
+        for (const err of options.compileResult.errors || ['Compilation failed']) {
+          diagnostics.push({
+            category: 'COMPILE',
+            code: 'MODEL_COMPILE_ERROR',
+            severity: 'ERROR',
+            message: err
+          });
+        }
+      }
+    } else if (options?.checkEngineCompile && adapter.targetDomain === 'xbridges' && blocks.length > 0) {
+      try {
+        const xModel = convertModelAdapterToXModel(adapter);
+        const engine = new XbridgesEngine(xModel);
+        const compileDiags = engine.compile(0);
+        for (const cd of compileDiags) {
+          if (cd.severity === 'error') {
+            diagnostics.push({
+              category: 'COMPILE',
+              code: cd.code || 'MODEL_COMPILE_ERROR',
+              severity: 'ERROR',
+              message: cd.message,
+              entityId: cd.blockIds?.[0]
+            });
+          }
+        }
+      } catch (err: any) {
         diagnostics.push({
           category: 'COMPILE',
-          code: 'MODEL_COMPILE_ERROR',
+          code: 'COMPILE_EXCEPTION',
           severity: 'ERROR',
-          message: err
+          message: err?.message || 'Engine compilation exception'
         });
       }
     }

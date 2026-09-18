@@ -72,6 +72,9 @@ export type ReportSnapshot = {
   format: 'docx' | 'pdf';
   template?: string;
   evidenceIds: string[];
+  modelRevision?: number;
+  engineRunId?: string;
+  simulationStatus?: string;
 };
 
 /** Artifact produced by the real report exporter — must be verified before returning. */

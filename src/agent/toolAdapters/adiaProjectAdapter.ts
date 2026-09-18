@@ -103,6 +103,8 @@ function buildDefaultProjectReportDocument(opts: {
   projectId: string;
   projectName?: string;
   revision?: number | string;
+  engineRunId?: string;
+  simulationStatus?: string;
   evidenceIds?: string[];
 }): ReportDocument {
   const projName = opts.projectName || opts.projectId || 'ADIA Project';
@@ -110,12 +112,14 @@ function buildDefaultProjectReportDocument(opts: {
   const evidenceList = opts.evidenceIds && opts.evidenceIds.length > 0
     ? opts.evidenceIds
     : ['EV-BASELINE-001'];
+  const runSub = opts.engineRunId ? ` | Engine Run ${opts.engineRunId}` : '';
+  const statusSub = opts.simulationStatus ? ` [${opts.simulationStatus}]` : '';
 
   return {
     header: {
       systemTitle: projName,
       documentTitle: 'System Architecture & Verification Report',
-      subtitle: `Model Revision ${rev} Evidence Summary`,
+      subtitle: `Model Revision ${rev}${runSub}${statusSub} Evidence Summary`,
       primaryObjective:
         'Verify architecture conformance, requirements traceability, and execution evidence across all subsystems.',
       status: 'Approved Draft',
@@ -241,7 +245,9 @@ export function createReportDelegate(opts: ReportDelegateOptions = {}): ReportAp
       }
 
       const projectData = getProjectData?.() ?? {};
-      const revision = projectData.modelRevision ?? 0;
+      const revision = snapshot.modelRevision ?? projectData.modelRevision ?? 0;
+      const engineRunId = snapshot.engineRunId ?? (projectData as any).engineRunId;
+      const simulationStatus = snapshot.simulationStatus ?? (projectData as any).simulationStatus;
 
       // 1. Build document model based on template or project data
       let doc: ReportDocument;
@@ -267,6 +273,8 @@ export function createReportDelegate(opts: ReportDelegateOptions = {}): ReportAp
           projectId: snapshot.projectId,
           projectName: projectData.projectName,
           revision,
+          engineRunId,
+          simulationStatus,
           evidenceIds: snapshot.evidenceIds,
         });
       }

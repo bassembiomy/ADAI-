@@ -19,15 +19,29 @@ export interface RepairResult {
   unresolvedDiagnostics: StructuredDiagnostic[];
 }
 
+export interface RepairOptions {
+  maxAttempts?: number;
+  approvalCheck?: (actionDescription: string) => Promise<boolean> | boolean;
+  checkEngineCompile?: boolean;
+}
+
 export class RepairLoop {
   public static readonly MAX_ATTEMPTS = 3;
 
   public static async run(
     adapter: EngineeringModelAdapter,
-    maxAttempts: number = RepairLoop.MAX_ATTEMPTS
+    optionsOrMaxAttempts?: number | RepairOptions
   ): Promise<RepairResult> {
+    const options: RepairOptions =
+      typeof optionsOrMaxAttempts === 'number'
+        ? { maxAttempts: optionsOrMaxAttempts }
+        : optionsOrMaxAttempts ?? {};
+
+    const maxAttempts = Math.min(options.maxAttempts ?? RepairLoop.MAX_ATTEMPTS, RepairLoop.MAX_ATTEMPTS);
+    const checkCompile = options.checkEngineCompile ?? true;
+
     const history: RepairAttemptLog[] = [];
-    let currentValidation = ModelValidator.validate(adapter);
+    let currentValidation = ModelValidator.validate(adapter, { checkEngineCompile: checkCompile });
 
     if (currentValidation.passed) {
       return {
@@ -65,6 +79,20 @@ export class RepairLoop {
 
       for (const item of repairable) {
         const act = item.suggestedAction!;
+        const actionDesc =
+          act.actionType === 'SET_PARAMETER'
+            ? `Set parameter '${act.parameterName}' on '${act.blockId}' to ${act.value}`
+            : act.actionType === 'ADD_BLOCK'
+            ? `Add block '${act.blockId}'`
+            : `Connect ports on '${act.blockId}'`;
+
+        if (options.approvalCheck) {
+          const approved = await options.approvalCheck(actionDesc);
+          if (!approved) {
+            actionsTaken.push(`Rejected by approval policy: ${actionDesc}`);
+            continue;
+          }
+        }
         if (act.actionType === 'SET_PARAMETER' && act.blockId && act.parameterName !== undefined) {
           await adapter.setParameter(act.blockId, act.parameterName, act.value);
           actionsTaken.push(`Set parameter '${act.parameterName}' on '${act.blockId}' to ${act.value}`);
@@ -104,7 +132,7 @@ export class RepairLoop {
         }
       }
 
-      const nextValidation = ModelValidator.validate(adapter);
+      const nextValidation = ModelValidator.validate(adapter, { checkEngineCompile: checkCompile });
       history.push({
         attemptNumber: attempt,
         diagnosticsBefore: [...currentValidation.diagnostics],
