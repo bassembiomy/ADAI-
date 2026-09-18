@@ -54,9 +54,10 @@ export async function computeSha256(bytes: Uint8Array): Promise<string> {
   }
   if (typeof process !== 'undefined' && process.versions?.node) {
     try {
-      const req = (globalThis as any).require;
-      if (typeof req === 'function') {
-        const nodeCrypto = req('crypto');
+      const nodeCrypto = typeof (process as any).getBuiltinModule === 'function'
+        ? ((process as any).getBuiltinModule('node:crypto') || (process as any).getBuiltinModule('crypto'))
+        : (typeof require === 'function' ? require('crypto') : (globalThis as any).require?.('crypto'));
+      if (nodeCrypto) {
         return nodeCrypto.createHash('sha256').update(bytes).digest('hex');
       }
     } catch {
@@ -77,6 +78,25 @@ export async function computeSha256(bytes: Uint8Array): Promise<string> {
 
 async function getNodeFs(): Promise<{ fs: any; path: any } | null> {
   if (typeof process !== 'undefined' && process.versions?.node) {
+    if (typeof (process as any).getBuiltinModule === 'function') {
+      try {
+        const fsMod = (process as any).getBuiltinModule('node:fs') || (process as any).getBuiltinModule('fs');
+        const pathMod = (process as any).getBuiltinModule('node:path') || (process as any).getBuiltinModule('path');
+        if (fsMod && pathMod) return { fs: fsMod, path: pathMod };
+      } catch {
+        // fallback
+      }
+    }
+    try {
+      if (typeof require === 'function') {
+        return {
+          fs: require('fs'),
+          path: require('path'),
+        };
+      }
+    } catch {
+      // fallback
+    }
     try {
       const req = (globalThis as any).require;
       if (typeof req === 'function') {
@@ -86,7 +106,7 @@ async function getNodeFs(): Promise<{ fs: any; path: any } | null> {
         };
       }
     } catch {
-      // ignore
+      // fallback
     }
   }
   return null;

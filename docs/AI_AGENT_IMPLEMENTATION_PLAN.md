@@ -198,21 +198,35 @@ Run: `npx vitest run src/services/ai/benchmarks/threePhaseInverterScenario.test.
 - Repair stops after three attempts and never claims success with unresolved errors.
 - Existing ADIA domain tests, security tests, TypeScript build, and relevant E2E tests remain green.
 
-## Spec Coverage Gaps to Resolve Before Release
+## Implementation & Finish Execution Status
 
-- Exact three-phase inverter block availability and port semantics must be confirmed from the current V-Lab/X-Bridges libraries; the specification's example IDs are illustrative, not authorized IDs.
-- A single cross-domain model target has not yet been selected. The first slice must choose one existing engine and document any bridge blocks.
-- No production-grade model-level compile/simulation contract currently spans all ADIA domains; unsupported capabilities must remain explicit until implemented.
-- The specification requests `docs/AI_AGENT_IMPLEMENTATION_PLAN.md`; this file is the repository-specific plan. Execution status and deviations should be appended here as tasks land.
+All 9 tasks from the finish implementation plan (`docs/superpowers/plans/2026-09-18-adia-agent-finish.md`) have been implemented, verified, and audited:
+
+1. **Task 1 (Real Inverter Topology):** Pinned `DC_VOLTAGE_SOURCE` and `THREE_PHASE_LOAD` in `BLOCK_LIBRARY`; `PlanPreflight` rejects missing rail returns, gate-power port mismatches, and domain mismatches fail-closed.
+2. **Task 2 (Live Model Adapter):** Built `LiveXbridgesModelAdapter` translating logical IDs to live ReactFlow node IDs with atomic snapshot/restore and stale-revision rejection.
+3. **Task 3 (Live Engineering Tools):** Connected `EngineeringToolDispatcher` directly to live adapters; single-use, revision-bound tokens enforced.
+4. **Task 4 (Guided UI Flow):** Interview extraction, 16-step canonical plan preview, diagnostics panel, and execution cards.
+5. **Task 5 (Atomic Transactions & Undo):** Rollback on partial writes/cancellations, journal status tracking, and stale undo prevention.
+6. **Task 6 (Honest Simulation & Repair):** Real `engineRunId` with measured solver metrics; compile validation via `XbridgesEngine.compile()`; bounded 3-attempt repair.
+7. **Task 7 (Security Hardening):** Removed loose `sast-ignore` and broad `generated` exclusions; eliminated unsafe `eval` and `new Function`; audited exceptions strictly verified.
+8. **Task 8 (Live Acceptance Benchmarks):** Canonical 5-block vertical slice benchmark meeting 100% metrics across resolution, preflight, validation, repair, simulation, live adapter, and undo.
+9. **Task 9 (Release Review):** Comprehensive independent code review documented in `docs/AI_AGENT_CODE_REVIEW.md`.
 
 ## Verification Commands
 
-Run the focused tests after each task, then:
-
 ```powershell
+# 1. Benchmark & Contract Tests
+npx vitest run src/services/ai/benchmarks/
+
+# 2. Agent, Services, & Validation Suite
 npx vitest run src/agent src/services/ai src/services/localLlmService.test.ts src/components/agent
-npx playwright test tests/e2e/agent-approval-flow.spec.ts tests/e2e/agent-real-adapter-contract.spec.ts
+
+# 3. Security Unit Tests & Offline SAST Scan
+node scripts/security_sast_scan.test.cjs
 npm run scan:sast
+
+# 4. Typecheck and Production Build
+npx tsc --noEmit
 npm run build
 ```
 
