@@ -75,6 +75,17 @@ export class AgentOrchestrator {
   private specification?: EngineeringSpecification;
   private executionPlan?: ExecutionPlan;
   private pendingApproval?: ExtendedApprovalRequest;
+  private preExecutionSnapshot?: {
+    nodes: any[];
+    edges: any[];
+    revision: number;
+  };
+  private lastCommittedSnapshot?: {
+    nodes: any[];
+    edges: any[];
+    revision: number;
+    committedRevision: number;
+  };
   private projectContext: ProjectContext = {
     projectId: 'default',
     workspace: 'default',
@@ -493,6 +504,15 @@ export class AgentOrchestrator {
         expectedEvidence: action.expectedEvidence
       };
 
+      const delegates = this.tools.getDelegates();
+      if (!this.preExecutionSnapshot && delegates?.xbridges) {
+        this.preExecutionSnapshot = {
+          nodes: await delegates.xbridges.getNodes(),
+          edges: await delegates.xbridges.getEdges(),
+          revision: this.projectContext.revision
+        };
+      }
+
       // Execute approved action with real parameters and matching approval token
       const toolResult = await this.tools.executeApprovedAction(
         approvedAction,
@@ -500,6 +520,12 @@ export class AgentOrchestrator {
       );
 
       if (!toolResult.success) {
+        if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
+          await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
+          if (delegates.xbridges.save) await delegates.xbridges.save();
+          this.refreshProjectContext();
+        }
+
         this.taskState = transitionState(
           this.taskState,
           'failed',
@@ -519,8 +545,6 @@ export class AgentOrchestrator {
       }
 
       // Post-action integrity validations
-      const delegates = this.tools.getDelegates();
-
       // 1. X-BRIDGES topology check
       if (
         (action.type === 'instantiate_block' || action.type === 'connect_ports' || action.type === 'configure_parameters') &&
@@ -674,6 +698,16 @@ export class AgentOrchestrator {
       }
 
       // All actions in the plan have completed!
+      if (this.preExecutionSnapshot) {
+        this.lastCommittedSnapshot = {
+          nodes: this.preExecutionSnapshot.nodes,
+          edges: this.preExecutionSnapshot.edges,
+          revision: this.preExecutionSnapshot.revision,
+          committedRevision: this.projectContext.revision
+        };
+        this.preExecutionSnapshot = undefined;
+      }
+
       this.taskState = transitionState(
         this.taskState,
         'completed',
@@ -731,21 +765,60 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Undoes the last committed engineering transaction.
+   * Undoes the last committed engineering transaction atomically.
    */
   public async undoLastTransaction(projectId?: string): Promise<{ success: boolean; message: string }> {
     const pId = projectId || this.projectContext.projectId;
-    this.appendAudit('TRANSACTION_UNDO', { projectId: pId });
+    if (!this.lastCommittedSnapshot) {
+      return {
+        success: false,
+        message: 'No committed transaction available to undo.'
+      };
+    }
+
+    if (this.projectContext.revision !== this.lastCommittedSnapshot.committedRevision) {
+      return {
+        success: false,
+        message: `Stale undo: workspace revision (${this.projectContext.revision}) does not match committed transaction revision (${this.lastCommittedSnapshot.committedRevision}). Subsequent user edits prevent transaction undo.`
+      };
+    }
+
+    const delegates = this.tools.getDelegates();
+    if (delegates?.xbridges?.restoreSnapshot) {
+      await delegates.xbridges.restoreSnapshot(this.lastCommittedSnapshot.nodes, this.lastCommittedSnapshot.edges);
+      if (delegates.xbridges.save) await delegates.xbridges.save();
+    }
+
+    this.projectContext = {
+      ...this.projectContext,
+      revision: this.lastCommittedSnapshot.revision
+    };
+    this.refreshProjectContext();
+
+    this.appendAudit('TRANSACTION_UNDO', {
+      projectId: pId,
+      restoredRevision: this.lastCommittedSnapshot.revision
+    });
+
+    this.lastCommittedSnapshot = undefined;
+
     return {
       success: true,
-      message: `Transaction undone for project '${pId}'. Workspace state restored.`
+      message: `Transaction undone for project '${pId}'. Workspace state restored to revision ${this.projectContext.revision}.`
     };
   }
 
   /**
-   * Cancels in-flight operations or workflow steps.
+   * Cancels in-flight operations or workflow steps, restoring exact pre-execution workspace state.
    */
-  public cancelOperation(): { success: boolean; message: string } {
+  public async cancelOperation(): Promise<{ success: boolean; message: string }> {
+    const delegates = this.tools.getDelegates();
+    if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
+      await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
+      if (delegates.xbridges.save) await delegates.xbridges.save();
+      this.refreshProjectContext();
+      this.preExecutionSnapshot = undefined;
+    }
     if (this.pendingApproval) {
       this.pendingApproval = undefined;
     }
@@ -755,7 +828,7 @@ export class AgentOrchestrator {
     this.appendAudit('OPERATION_CANCELLED', {});
     return {
       success: true,
-      message: 'Operation cancelled.'
+      message: 'Operation cancelled. Workspace restored to pre-execution snapshot.'
     };
   }
 }
