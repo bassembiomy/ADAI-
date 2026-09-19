@@ -15,6 +15,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   'local-llm-chat', 'local-llm-models',
   'sm-verify-generated-c',
   'project-open-dialog', 'project-save', 'project-save-as', 'project-accept-open',
+  'project-save-snapshot', 'project-reload-snapshot',
 ];
 
 const ALLOWED_ON_CHANNELS = [
@@ -63,6 +64,8 @@ const createIpcBridge = () => Object.freeze({
   projectSave: (data) => ipcRenderer.invoke('project-save', data),
   projectSaveAs: (data) => ipcRenderer.invoke('project-save-as', data),
   projectAcceptOpen: (payload) => ipcRenderer.invoke('project-accept-open', payload),
+  projectSaveSnapshot: (snapshot, options) => ipcRenderer.invoke('project-save-snapshot', snapshot, options),
+  projectReloadSnapshot: (receipt, options) => ipcRenderer.invoke('project-reload-snapshot', receipt, options),
   onProjectOpenRequested: (callback) => {
     const subscription = (_event, data) => callback(data);
     ipcRenderer.on('project-open-requested', subscription);

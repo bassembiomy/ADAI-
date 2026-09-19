@@ -338,5 +338,32 @@ describe('XbridgesAgentTransaction', () => {
       const tx = new XbridgesAgentTransaction(adapter, delegate);
       await expect(tx.begin(provedPlan)).rejects.toThrow(/UNPROVED_PLAN/);
     });
+
+    it('rolls back both live and persisted state if commit read-back verification detects a mismatch', async () => {
+      const { adapter, delegate, projectContext } = createTestFixture();
+      const provedPlan = createSampleProvedPlan();
+      const initialFingerprint = await delegate.getRevisionFingerprint();
+
+      // Corrupt saveAndReadBack to simulate disk write corruption / mismatch
+      delegate.saveAndReadBack = async () => ({
+        nodes: [],
+        edges: [],
+        fingerprint: 'corrupted_persisted_fingerprint'
+      });
+
+      const tx = new XbridgesAgentTransaction(adapter, delegate, projectContext);
+      await tx.begin(provedPlan);
+
+      for (let i = 0; i < provedPlan.plan.actions.length; i++) {
+        const act = provedPlan.plan.actions[i];
+        const b = makeBinding(`tok_${i}`, act, provedPlan.plan);
+        await tx.approveAndExecute(b);
+      }
+
+      // Commit should detect read-back mismatch and rollback
+      await expect(tx.commit()).rejects.toThrow(/COMMIT_READBACK_MISMATCH/);
+      expect(tx.getState().status).toBe('rolled_back');
+      expect(await delegate.getRevisionFingerprint()).toBe(initialFingerprint);
+    });
   });
 });

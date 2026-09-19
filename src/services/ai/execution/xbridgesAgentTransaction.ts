@@ -323,8 +323,26 @@ export class XbridgesAgentTransaction {
       throw new TransactionError('Transaction state corrupted', 'INTERNAL_ERROR');
     }
 
+    const currentLiveSnapshot = await this.adapter.inspect();
+    const liveFingerprint = this.delegate.getRevisionFingerprint
+      ? await this.delegate.getRevisionFingerprint()
+      : currentLiveSnapshot.stateHash;
+
     // Persist via saveAndReadBack
     const readBack = await this.delegate.saveAndReadBack();
+
+    if (readBack.fingerprint !== liveFingerprint) {
+      await this.rollback(
+        `COMMIT_READBACK_MISMATCH: Live state fingerprint '${liveFingerprint}' does not match read-back persistence '${readBack.fingerprint}'.`
+      );
+      if (this.delegate.save) {
+        await this.delegate.save();
+      }
+      throw new TransactionError(
+        `COMMIT_READBACK_MISMATCH: Live state fingerprint '${liveFingerprint}' does not match read-back persistence '${readBack.fingerprint}'.`,
+        'COMMIT_READBACK_MISMATCH'
+      );
+    }
 
     const baseRevision = this.plan.baseRevision;
     const committedRevision = baseRevision + 1;

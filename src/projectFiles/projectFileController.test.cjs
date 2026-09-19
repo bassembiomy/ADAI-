@@ -47,12 +47,32 @@ console.log('Running projectFileController tests...');
     },
   };
 
+  const mockDisk = new Map();
+  const mockFs = {
+    writeFileSync: (p, content) => mockDisk.set(p, content),
+    readFileSync: (p) => {
+      if (!mockDisk.has(p)) throw new Error(`File not found: ${p}`);
+      return mockDisk.get(p);
+    },
+    existsSync: (p) => mockDisk.has(p),
+    renameSync: (oldP, newP) => {
+      if (!mockDisk.has(oldP)) throw new Error(`File not found: ${oldP}`);
+      mockDisk.set(newP, mockDisk.get(oldP));
+      mockDisk.delete(oldP);
+    },
+    statSync: (p) => {
+      if (!mockDisk.has(p)) throw new Error(`File not found: ${p}`);
+      return { size: Buffer.byteLength(mockDisk.get(p)) };
+    },
+  };
+
   const controller = createProjectFileController({
     ipcMain: mockIpcMain,
     dialog: mockDialog,
     readProjectFile: mockReadProjectFile,
     writeProjectFile: mockWriteProjectFile,
     randomUUID: mockRandomUUID,
+    fsImpl: mockFs,
   });
 
   controller.registerIpc();
@@ -116,6 +136,47 @@ console.log('Running projectFileController tests...');
   const acceptExt = await handlers['project-accept-open']({}, { token: 'token-2' });
   assert.deepStrictEqual(acceptExt, { accepted: true });
   assert.strictEqual(controller.getActivePath(), 'C:\\work\\External.adia');
+
+  // 9. Snapshot save and reload via IPC
+  assert(typeof handlers['project-save-snapshot'] === 'function', 'project-save-snapshot handler must be registered');
+  assert(typeof handlers['project-reload-snapshot'] === 'function', 'project-reload-snapshot handler must be registered');
+
+  const sampleSnapshot = {
+    projectId: 'test_p1',
+    revision: 3,
+    nodes: [{ id: 'n1', type: 'block', position: { x: 0, y: 0 }, data: { blockId: 'STEP' } }],
+    edges: []
+  };
+
+  const receipt = await handlers['project-save-snapshot']({}, sampleSnapshot, {
+    targetPath: 'C:\\work\\snapshot_test.adia',
+    allowedBaseDir: 'C:\\work'
+  });
+
+  assert.strictEqual(receipt.filePath, 'C:\\work\\snapshot_test.adia');
+  assert(receipt.contentHash && receipt.contentHash.length === 64, 'contentHash must be a 64-char sha256 hex string');
+  assert(receipt.modelFingerprint && receipt.modelFingerprint.length === 64, 'modelFingerprint must be a 64-char sha256 hex string');
+  assert.strictEqual(receipt.revision, 3);
+
+  // Reload snapshot
+  const reloaded = await handlers['project-reload-snapshot']({}, receipt, {
+    allowedBaseDir: 'C:\\work'
+  });
+  assert.strictEqual(reloaded.projectId, 'test_p1');
+  assert.strictEqual(reloaded.revision, 3);
+  assert.strictEqual(reloaded.nodes.length, 1);
+  assert.strictEqual(reloaded.stateHash, receipt.modelFingerprint);
+
+  // Path traversal detection on save
+  await assert.rejects(
+    async () => {
+      await handlers['project-save-snapshot']({}, sampleSnapshot, {
+        targetPath: 'C:\\other\\forbidden.adia',
+        allowedBaseDir: 'C:\\work'
+      });
+    },
+    /PATH_TRAVERSAL_DETECTED/
+  );
 
   console.log('All projectFileController tests PASSED successfully.');
 })().catch((err) => {
