@@ -260,4 +260,100 @@ describe('LiveXbridgesModelAdapter', () => {
     expect(snapshotAfterRestore.edges).toHaveLength(0);
     expect(snapshotAfterRestore.revision).toBe(1);
   });
+
+  describe('executeAction (single typed action execution)', () => {
+    it('executes individual actions sequentially and returns ObservedActionResult', async () => {
+      const store = createLiveStore();
+      let currentRev = 1;
+
+      const adapter = new LiveXbridgesModelAdapter(store.delegate, {
+        projectId: 'test_proj',
+        getRevision: () => currentRev,
+        setRevision: (r) => { currentRev = r; }
+      });
+
+      // 1. add_block
+      const add1 = await adapter.executeAction({
+        id: 'act_add_1',
+        kind: 'add_block',
+        blockId: 'gain_1',
+        blockDefinitionId: 'GAIN',
+        parameters: [{ blockId: 'gain_1', parameterName: 'gain', value: 2 }]
+      });
+      expect(add1.changedNodeIds).toEqual(['gain_1']);
+      expect(add1.beforeHash).not.toBe(add1.afterHash);
+
+      // 2. add_block 2
+      const add2 = await adapter.executeAction({
+        id: 'act_add_2',
+        kind: 'add_block',
+        blockId: 'scope_1',
+        blockDefinitionId: 'Scope',
+        parameters: []
+      });
+      expect(add2.changedNodeIds).toEqual(['scope_1']);
+
+      // 3. connect_ports
+      const conn = await adapter.executeAction({
+        id: 'act_conn',
+        kind: 'connect_ports',
+        sourceBlockId: 'gain_1',
+        sourcePortId: 'y',
+        targetBlockId: 'scope_1',
+        targetPortId: 'in1'
+      });
+      expect(conn.changedEdgeIds.length).toBe(1);
+
+      // 4. set_parameter
+      const setParam = await adapter.executeAction({
+        id: 'act_param',
+        kind: 'set_parameter',
+        blockId: 'gain_1',
+        parameterName: 'gain',
+        value: 10
+      });
+      expect(setParam.changedNodeIds).toEqual(['gain_1']);
+      expect(setParam.beforeHash).not.toBe(setParam.afterHash);
+
+      // 5. move_block
+      const move = await adapter.executeAction({
+        id: 'act_move',
+        kind: 'move_block',
+        blockId: 'gain_1',
+        position: { x: 300, y: 150 }
+      });
+      expect(move.changedNodeIds).toEqual(['gain_1']);
+      expect(move.beforeHash).not.toBe(move.afterHash);
+
+      // 6. rename_block
+      const rename = await adapter.executeAction({
+        id: 'act_rename',
+        kind: 'rename_block',
+        blockId: 'gain_1',
+        newLabel: 'MainGain'
+      });
+      expect(rename.changedNodeIds).toEqual(['gain_1']);
+      expect(rename.beforeHash).not.toBe(rename.afterHash);
+
+      // 7. disconnect_ports
+      const disc = await adapter.executeAction({
+        id: 'act_disc',
+        kind: 'disconnect_ports',
+        sourceBlockId: 'gain_1',
+        sourcePortId: 'y',
+        targetBlockId: 'scope_1',
+        targetPortId: 'in1'
+      });
+      expect(disc.changedEdgeIds.length).toBe(1);
+
+      // 8. remove_block
+      const rem = await adapter.executeAction({
+        id: 'act_rem',
+        kind: 'remove_block',
+        blockId: 'scope_1'
+      });
+      expect(rem.changedNodeIds).toEqual(['scope_1']);
+      expect((await adapter.inspect()).nodes).toHaveLength(1);
+    });
+  });
 });

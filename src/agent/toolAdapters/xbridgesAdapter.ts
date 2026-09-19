@@ -9,6 +9,17 @@
  * - connectPorts validates that source port is an output and target port is an
  *   input on their respective nodes before appending the edge.
  * - updateParameters immutably merges params, preserving all other node data.
+/**
+ * src/agent/toolAdapters/xbridgesAdapter.ts
+ *
+ * Implements XbridgesApplicationDelegate by wrapping the live
+ * globalXBridgesNodes / globalXBridgesEdges state from App.tsx.
+ *
+ * Rules enforced here:
+ * - Block type must exist in BLOCK_LIBRARY; unknown types are rejected.
+ * - connectPorts validates that source port is an output and target port is an
+ *   input on their respective nodes before appending the edge.
+ * - updateParameters immutably merges params, preserving all other node data.
  * - save() calls the onSave callback passed from App.tsx (handleXBridgesSave).
  *
  * This adapter never modifies the BLOCK_LIBRARY or defines new block types.
@@ -17,6 +28,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
+import { computeModelFingerprint } from '../../engine/opm/canonicalHash';
 import type {
   ApprovedAction,
   ToolAdapter,
@@ -107,7 +119,13 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
    * uses. The agent never receives internal React Flow-specific fields.
    */
   function toAgentNode(n: ReactFlowXbridgesNode): XbridgesNode {
-    return { ...n, id: n.id, type: String(n.data?.type ?? n.type), data: { ...(n.data as Record<string, unknown>) } };
+    return {
+      ...n,
+      id: n.id,
+      type: String(n.data?.type ?? n.type),
+      position: n.position ? { x: n.position.x, y: n.position.y } : undefined,
+      data: { ...(n.data as Record<string, unknown>) }
+    };
   }
 
   /**
@@ -115,7 +133,6 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
    */
   function toAgentEdge(e: ReactFlowXbridgesEdge): XbridgesEdge {
     return {
-      ...e,
       id: e.id,
       source: e.source,
       target: e.target,
@@ -135,6 +152,83 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       return getEdges().map(toAgentEdge);
     },
 
+    async getRevisionFingerprint(): Promise<string> {
+      const nodes = getNodes().map(toAgentNode).sort((a, b) => a.id.localeCompare(b.id));
+      const edges = getEdges().map(toAgentEdge).sort((a, b) => a.id.localeCompare(b.id));
+      return computeModelFingerprint({ nodes, edges });
+    },
+
+    async validate(): Promise<{ valid: boolean; diagnostics: Array<{ code: string; message: string; severity?: string }> }> {
+      const nodes = getNodes();
+      const edges = getEdges();
+      const diagnostics: Array<{ code: string; message: string; severity?: string }> = [];
+
+      const nodeMap = new Map<string, ReactFlowXbridgesNode>();
+      for (const n of nodes) {
+        nodeMap.set(n.id, n);
+        const blockType = String(n.data?.type ?? n.type);
+        if (!BLOCK_LIBRARY[blockType]) {
+          diagnostics.push({
+            code: 'UNKNOWN_BLOCK_TYPE',
+            message: `Block "${n.id}" has unregistered type "${blockType}".`,
+            severity: 'ERROR',
+          });
+        }
+      }
+
+      const edgeSet = new Set<string>();
+      for (const e of edges) {
+        const key = `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
+        if (edgeSet.has(key)) {
+          diagnostics.push({
+            code: 'DUPLICATE_EDGE',
+            message: `Duplicate connection detected: ${key}`,
+            severity: 'ERROR',
+          });
+        }
+        edgeSet.add(key);
+
+        const sourceNode = nodeMap.get(e.source);
+        const targetNode = nodeMap.get(e.target);
+
+        if (!sourceNode || !targetNode) {
+          diagnostics.push({
+            code: 'DANGLING_EDGE',
+            message: `Edge "${e.id}" connects nonexistent node(s): source=${e.source}, target=${e.target}`,
+            severity: 'ERROR',
+          });
+          continue;
+        }
+
+        if (e.sourceHandle) {
+          const outPort = (sourceNode.data?.outputs ?? []).find((p: any) => p.id === e.sourceHandle);
+          if (!outPort) {
+            diagnostics.push({
+              code: 'INVALID_SOURCE_PORT',
+              message: `Source port "${e.sourceHandle}" not found in block "${e.source}".`,
+              severity: 'ERROR',
+            });
+          }
+        }
+
+        if (e.targetHandle) {
+          const inPort = (targetNode.data?.inputs ?? []).find((p: any) => p.id === e.targetHandle);
+          if (!inPort) {
+            diagnostics.push({
+              code: 'INVALID_TARGET_PORT',
+              message: `Target port "${e.targetHandle}" not found in block "${e.target}".`,
+              severity: 'ERROR',
+            });
+          }
+        }
+      }
+
+      return {
+        valid: diagnostics.length === 0,
+        diagnostics,
+      };
+    },
+
     // ----- Mutations -------------------------------------------------------
 
     async addBlock(type: string, params: Record<string, unknown>): Promise<XbridgesNode> {
@@ -147,12 +241,22 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       }
 
       const id = (params?.id as string) || (params?.instanceName as string) || `${type}-${uuidv4()}`;
+
+      // Duplicate prevention
+      const existing = getNodes().find(
+        (n) => n.id === id || (n.data as any)?.instanceName === id || (n.data as any)?.id === id
+      );
+      if (existing) {
+        throw new XbridgesAdapterError(`Block with ID or instanceName "${id}" already exists.`);
+      }
+
       const blockDef = factory(id, params);
+      const position = (params?.position as { x: number; y: number }) || { x: 200, y: 200 };
 
       const newNode: ReactFlowXbridgesNode = {
         id: blockDef.id,
         type: 'xblock',
-        position: { x: 200, y: 200 }, // default position; caller may later move it
+        position,
         data: {
           ...blockDef,
           instanceName: (params?.instanceName as string) || id,
@@ -160,13 +264,96 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         } as ReactFlowXbridgesNode['data'],
       };
 
-      // Capture the created node for the return value before the async update.
       const agentNode = toAgentNode(newNode);
-
-      // Update state synchronously via the setter; React batches this.
       setNodes((prev) => [...prev, newNode]);
 
       return agentNode;
+    },
+
+    async removeBlock(nodeId: string): Promise<{ removedNodeId: string; removedEdgeIds: string[] }> {
+      const currentNodes = getNodes();
+      const targetNode = currentNodes.find(
+        (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
+      );
+      if (!targetNode) {
+        throw new XbridgesAdapterError(`Block "${nodeId}" not found.`);
+      }
+
+      const currentEdges = getEdges();
+      const connectedEdges = currentEdges.filter(
+        (e) => e.source === targetNode.id || e.target === targetNode.id
+      );
+      const removedEdgeIds = connectedEdges.map((e) => e.id);
+
+      setNodes((prev) => prev.filter((n) => n.id !== targetNode.id));
+      setEdges((prev) => prev.filter((e) => e.source !== targetNode.id && e.target !== targetNode.id));
+
+      return {
+        removedNodeId: targetNode.id,
+        removedEdgeIds,
+      };
+    },
+
+    async moveBlock(nodeId: string, position: { x: number; y: number }): Promise<XbridgesNode> {
+      const nodes = getNodes();
+      const targetNode = nodes.find(
+        (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
+      );
+      if (!targetNode) {
+        throw new XbridgesAdapterError(`Block "${nodeId}" not found.`);
+      }
+
+      if (targetNode.position && targetNode.position.x === position.x && targetNode.position.y === position.y) {
+        throw new XbridgesAdapterError(`Block "${nodeId}" is already at position (${position.x}, ${position.y}). Unchanged state.`);
+      }
+
+      let updatedNode: ReactFlowXbridgesNode | null = null;
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (n.id !== targetNode.id) return n;
+          const moved: ReactFlowXbridgesNode = {
+            ...n,
+            position: { x: position.x, y: position.y },
+          };
+          updatedNode = moved;
+          return moved;
+        })
+      );
+
+      return toAgentNode(updatedNode ?? targetNode);
+    },
+
+    async renameBlock(nodeId: string, newName: string): Promise<XbridgesNode> {
+      const nodes = getNodes();
+      const targetNode = nodes.find(
+        (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
+      );
+      if (!targetNode) {
+        throw new XbridgesAdapterError(`Block "${nodeId}" not found.`);
+      }
+
+      const currentName = String((targetNode.data as any)?.instanceName ?? targetNode.id);
+      if (currentName === newName) {
+        throw new XbridgesAdapterError(`Block "${nodeId}" already has name "${newName}". Unchanged state.`);
+      }
+
+      let updatedNode: ReactFlowXbridgesNode | null = null;
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (n.id !== targetNode.id) return n;
+          const renamed: ReactFlowXbridgesNode = {
+            ...n,
+            data: {
+              ...n.data,
+              instanceName: newName,
+            },
+          };
+          updatedNode = renamed;
+          return renamed;
+        })
+      );
+
+      return toAgentNode(updatedNode ?? targetNode);
     },
 
     async connectPorts(
@@ -211,6 +398,15 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         );
       }
 
+      // Duplicate connection check
+      const currentEdges = getEdges();
+      const duplicate = currentEdges.find(
+        (e) => e.source === sourceNode.id && e.sourceHandle === sourcePortId && e.target === targetNode.id && e.targetHandle === targetPortId
+      );
+      if (duplicate) {
+        throw new XbridgesAdapterError(`Connection between "${sourceNode.id}:${sourcePortId}" and "${targetNode.id}:${targetPortId}" already exists.`);
+      }
+
       const edgeId = `e-${sourceNode.id}-${sourcePortId}-${targetNode.id}-${targetPortId}`;
 
       const newEdge: ReactFlowXbridgesEdge = {
@@ -227,6 +423,40 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       setEdges((prev) => [...prev, newEdge]);
 
       return agentEdge;
+    },
+
+    async disconnectPorts(
+      connection: string | { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string }
+    ): Promise<{ disconnectedEdgeId: string }> {
+      const currentEdges = getEdges();
+      let targetEdge: ReactFlowXbridgesEdge | undefined;
+
+      if (typeof connection === 'string') {
+        targetEdge = currentEdges.find((e) => e.id === connection);
+      } else {
+        const nodes = getNodes();
+        const sourceNode = nodes.find((n) => n.id === connection.sourceNodeId || (n.data as any)?.instanceName === connection.sourceNodeId);
+        const targetNode = nodes.find((n) => n.id === connection.targetNodeId || (n.data as any)?.instanceName === connection.targetNodeId);
+        const srcId = sourceNode ? sourceNode.id : connection.sourceNodeId;
+        const tgtId = targetNode ? targetNode.id : connection.targetNodeId;
+
+        targetEdge = currentEdges.find(
+          (e) =>
+            e.source === srcId &&
+            e.sourceHandle === connection.sourcePortId &&
+            e.target === tgtId &&
+            e.targetHandle === connection.targetPortId
+        );
+      }
+
+      if (!targetEdge) {
+        throw new XbridgesAdapterError(`Edge not found: ${typeof connection === 'string' ? connection : JSON.stringify(connection)}`);
+      }
+
+      const edgeId = targetEdge.id;
+      setEdges((prev) => prev.filter((e) => e.id !== edgeId));
+
+      return { disconnectedEdgeId: edgeId };
     },
 
     async updateParameters(
@@ -258,25 +488,29 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         }),
       );
 
-      // updatedNode is set synchronously by the map above.
       return toAgentNode(updatedNode ?? existing);
     },
 
     async save(): Promise<void> {
-      // Capture current state at call time and hand it to the existing
-      // handleXBridgesSave callback, which calls setGlobalXBridgesNodes/Edges
-      // and any other persistence logic.
       const nodes = getNodes();
       const edges = getEdges();
       onSave(nodes, edges, []);
+    },
+
+    async saveAndReadBack(): Promise<{ nodes: readonly XbridgesNode[]; edges: readonly XbridgesEdge[]; fingerprint: string }> {
+      await this.save();
+      const nodes = await this.getNodes();
+      const edges = await this.getEdges();
+      const fingerprint = await this.getRevisionFingerprint();
+      return { nodes, edges, fingerprint };
     },
 
     async restoreSnapshot(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void> {
       setNodes(() => nodes.map(n => ({
         ...n,
         id: n.id,
-        type: (n as any).position ? 'xblock' : n.type,
-        position: (n as any).position || { x: 200, y: 200 },
+        type: n.position ? 'xblock' : n.type,
+        position: n.position || { x: 200, y: 200 },
         data: {
           ...n.data,
           id: n.id,
@@ -366,8 +600,8 @@ export class XbridgesAdapter implements ToolAdapter {
     const payload = (rawPayload ?? action.params ?? {}) as Record<string, unknown>;
 
     try {
-      if (action.kind === 'instantiate_block') {
-        const blockType = (payload.blockType ?? payload.type) as string;
+      if (action.kind === 'instantiate_block' || action.kind === 'add_block') {
+        const blockType = (payload.blockType ?? payload.type ?? payload.blockDefinitionId) as string;
         const nestedParams = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
         const params = { ...payload, ...nestedParams };
 
@@ -377,7 +611,7 @@ export class XbridgesAdapter implements ToolAdapter {
             changedArtifacts: [],
             evidence: {},
             durationMs: Date.now() - startTime,
-            error: 'Missing required blockType in instantiate_block action params',
+            error: 'Missing required blockType in instantiate_block/add_block action params',
           };
         }
 
@@ -394,10 +628,72 @@ export class XbridgesAdapter implements ToolAdapter {
         };
       }
 
+      if (action.kind === 'remove_block') {
+        const blockId = (payload.blockId ?? payload.nodeId) as string;
+        if (!blockId) {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'remove_block requires blockId or nodeId',
+          };
+        }
+        const result = await this.delegate.removeBlock(blockId);
+        return {
+          success: true,
+          changedArtifacts: [result.removedNodeId, ...result.removedEdgeIds],
+          evidence: result,
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'move_block') {
+        const blockId = (payload.blockId ?? payload.nodeId) as string;
+        const position = payload.position as { x: number; y: number };
+        if (!blockId || !position) {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'move_block requires blockId and position { x, y }',
+          };
+        }
+        const node = await this.delegate.moveBlock(blockId, position);
+        return {
+          success: true,
+          changedArtifacts: [node.id],
+          evidence: { nodeId: node.id, position: node.position },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'rename_block') {
+        const blockId = (payload.blockId ?? payload.nodeId) as string;
+        const newName = (payload.newName ?? payload.newLabel) as string;
+        if (!blockId || !newName) {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'rename_block requires blockId and newName',
+          };
+        }
+        const node = await this.delegate.renameBlock(blockId, newName);
+        return {
+          success: true,
+          changedArtifacts: [node.id],
+          evidence: { nodeId: node.id, newName },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
       if (action.kind === 'connect_ports') {
-        const sourceNodeId = (payload.sourceNodeId ?? payload.sourceNode) as string;
+        const sourceNodeId = (payload.sourceNodeId ?? payload.sourceNode ?? payload.sourceBlockId) as string;
         const sourcePortId = (payload.sourcePortId ?? payload.sourcePort) as string;
-        const targetNodeId = (payload.targetNodeId ?? payload.targetNode) as string;
+        const targetNodeId = (payload.targetNodeId ?? payload.targetNode ?? payload.targetBlockId) as string;
         const targetPortId = (payload.targetPortId ?? payload.targetPort) as string;
 
         if (!sourceNodeId || !sourcePortId || !targetNodeId || !targetPortId) {
@@ -425,9 +721,45 @@ export class XbridgesAdapter implements ToolAdapter {
         };
       }
 
-      if (action.kind === 'configure_parameters') {
+      if (action.kind === 'disconnect_ports') {
+        const connectionId = (payload.connectionId ?? payload.edgeId) as string | undefined;
+        const sourceNodeId = (payload.sourceNodeId ?? payload.sourceBlockId) as string | undefined;
+        const sourcePortId = payload.sourcePortId as string | undefined;
+        const targetNodeId = (payload.targetNodeId ?? payload.targetBlockId) as string | undefined;
+        const targetPortId = payload.targetPortId as string | undefined;
+
+        let result: { disconnectedEdgeId: string };
+        if (connectionId) {
+          result = await this.delegate.disconnectPorts(connectionId);
+        } else if (sourceNodeId && sourcePortId && targetNodeId && targetPortId) {
+          result = await this.delegate.disconnectPorts({ sourceNodeId, sourcePortId, targetNodeId, targetPortId });
+        } else {
+          return {
+            success: false,
+            changedArtifacts: [],
+            evidence: {},
+            durationMs: Date.now() - startTime,
+            error: 'disconnect_ports requires connectionId or endpoints',
+          };
+        }
+
+        return {
+          success: true,
+          changedArtifacts: [result.disconnectedEdgeId],
+          evidence: result,
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'configure_parameters' || action.kind === 'set_parameter') {
         const nodeId = (payload.nodeId ?? payload.blockId ?? payload.instanceName) as string;
-        const params = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
+        let params: Record<string, unknown> = {};
+        if (action.kind === 'set_parameter') {
+          const paramName = payload.parameterName as string;
+          params = { [paramName]: payload.value };
+        } else {
+          params = (payload.parameters ?? payload.params ?? {}) as Record<string, unknown>;
+        }
 
         if (!nodeId) {
           return {
@@ -435,7 +767,7 @@ export class XbridgesAdapter implements ToolAdapter {
             changedArtifacts: [],
             evidence: {},
             durationMs: Date.now() - startTime,
-            error: 'configure_parameters requires nodeId or blockId',
+            error: 'configure_parameters/set_parameter requires nodeId or blockId',
           };
         }
 
@@ -447,6 +779,26 @@ export class XbridgesAdapter implements ToolAdapter {
             nodeId: updated.id,
             params: updated.data.params,
           },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'validate') {
+        const valResult = await this.delegate.validate();
+        return {
+          success: valResult.valid,
+          changedArtifacts: [],
+          evidence: { diagnostics: valResult.diagnostics },
+          durationMs: Date.now() - startTime,
+        };
+      }
+
+      if (action.kind === 'save_and_read_back') {
+        const res = await this.delegate.saveAndReadBack();
+        return {
+          success: true,
+          changedArtifacts: [],
+          evidence: { nodeCount: res.nodes.length, edgeCount: res.edges.length, fingerprint: res.fingerprint },
           durationMs: Date.now() - startTime,
         };
       }

@@ -22,6 +22,7 @@ export type XbridgesNode = {
   id: string;
   type: string;
   data: Record<string, unknown>;
+  position?: { x: number; y: number };
 };
 
 /** Minimal edge representation used by the agent layer. */
@@ -105,10 +106,8 @@ export type ProjectModelSnapshot = {
 /**
  * Bridges the agent to the live X-BRIDGES React Flow workspace.
  *
- * Read methods (`getNodes`, `getEdges`) may be called at any time.
- * Mutation methods (`addBlock`, `connectPorts`, `updateParameters`, `save`)
- * must only be called after an approved action token has been validated by
- * the AgentOrchestrator.
+ * Read methods (`getNodes`, `getEdges`, `getRevisionFingerprint`) may be called at any time.
+ * Mutation methods must only be called after an approved action token has been validated.
  */
 export interface XbridgesApplicationDelegate {
   /** Return a read-only snapshot of current nodes. */
@@ -122,6 +121,18 @@ export interface XbridgesApplicationDelegate {
    */
   addBlock(type: string, params: Record<string, unknown>): Promise<XbridgesNode>;
   /**
+   * Remove a block and all connected edges from the workspace.
+   */
+  removeBlock(nodeId: string): Promise<{ removedNodeId: string; removedEdgeIds: string[] }>;
+  /**
+   * Move a block to a new canvas position.
+   */
+  moveBlock(nodeId: string, position: { x: number; y: number }): Promise<XbridgesNode>;
+  /**
+   * Rename a block label/instanceName.
+   */
+  renameBlock(nodeId: string, newName: string): Promise<XbridgesNode>;
+  /**
    * Connect two ports with a new edge.
    * Validates source/target compatibility using existing X-BRIDGES port rules
    * before appending the edge.
@@ -133,12 +144,30 @@ export interface XbridgesApplicationDelegate {
     targetPortId: string,
   ): Promise<XbridgesEdge>;
   /**
+   * Disconnect ports between two blocks or remove by edge ID.
+   */
+  disconnectPorts(
+    connection: string | { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string }
+  ): Promise<{ disconnectedEdgeId: string }>;
+  /**
    * Immutably update the parameter map of an existing node.
    * All other node metadata must be preserved.
    */
   updateParameters(nodeId: string, params: Record<string, unknown>): Promise<XbridgesNode>;
+  /**
+   * Run model integrity validation against active blocks and connections.
+   */
+  validate(): Promise<{ valid: boolean; diagnostics: Array<{ code: string; message: string; severity?: string }> }>;
   /** Persist the current workspace state through the existing save callback. */
   save(): Promise<void>;
+  /**
+   * Persist current workspace state and return read-back nodes, edges, and fingerprint.
+   */
+  saveAndReadBack(): Promise<{ nodes: readonly XbridgesNode[]; edges: readonly XbridgesEdge[]; fingerprint: string }>;
+  /**
+   * Return the canonical revision fingerprint of the current workspace state.
+   */
+  getRevisionFingerprint(): Promise<string>;
   /** Restore exact nodes and edges to the workspace state (used for atomic rollback/undo). */
   restoreSnapshot?(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void>;
 }

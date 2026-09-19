@@ -332,3 +332,232 @@ describe('save', () => {
     expect(savedEdges).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: removeBlock
+// ---------------------------------------------------------------------------
+
+describe('removeBlock', () => {
+  it('removes block and cascades removal to connected edges', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    const scopeNode = makeNode(VALID_TYPE_2, 'scope-1');
+    const edge: ReactFlowXbridgesEdge = { id: 'e1', source: 'gain-1', target: 'scope-1' };
+    const store = createStore([gainNode, scopeNode], [edge]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const result = await delegate.removeBlock('gain-1');
+    expect(result.removedNodeId).toBe('gain-1');
+    expect(result.removedEdgeIds).toEqual(['e1']);
+
+    const snapshot = store.snapshot();
+    expect(snapshot.nodes).toHaveLength(1);
+    expect(snapshot.nodes[0].id).toBe('scope-1');
+    expect(snapshot.edges).toHaveLength(0);
+  });
+
+  it('throws XbridgesAdapterError when trying to remove a nonexistent block', async () => {
+    const store = createStore();
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.removeBlock('nonexistent')).rejects.toThrow(XbridgesAdapterError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: moveBlock & renameBlock
+// ---------------------------------------------------------------------------
+
+describe('moveBlock', () => {
+  it('updates position while preserving all other node attributes', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    gainNode.position = { x: 10, y: 20 };
+    gainNode.data.customField = 'preserve-me';
+    const store = createStore([gainNode]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const moved = await delegate.moveBlock('gain-1', { x: 150, y: 300 });
+    expect(moved.position).toEqual({ x: 150, y: 300 });
+    expect(moved.data.customField).toBe('preserve-me');
+
+    const nodeInStore = store.snapshot().nodes[0];
+    expect(nodeInStore.position).toEqual({ x: 150, y: 300 });
+  });
+
+  it('throws XbridgesAdapterError on nonexistent block', async () => {
+    const store = createStore();
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.moveBlock('nonexistent', { x: 0, y: 0 })).rejects.toThrow(XbridgesAdapterError);
+  });
+
+  it('rejects moving to the exact same position (unchanged-state false success prevention)', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    gainNode.position = { x: 10, y: 20 };
+    const store = createStore([gainNode]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.moveBlock('gain-1', { x: 10, y: 20 })).rejects.toThrow(XbridgesAdapterError);
+  });
+});
+
+describe('renameBlock', () => {
+  it('updates instanceName while preserving node type and parameters', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    gainNode.data.instanceName = 'OldGain';
+    const store = createStore([gainNode]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const renamed = await delegate.renameBlock('gain-1', 'NewGain');
+    expect(renamed.data.instanceName).toBe('NewGain');
+    expect(renamed.type).toBe(VALID_TYPE_1);
+
+    const nodeInStore = store.snapshot().nodes[0];
+    expect(nodeInStore.data.instanceName).toBe('NewGain');
+  });
+
+  it('throws XbridgesAdapterError on nonexistent block', async () => {
+    const store = createStore();
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.renameBlock('nonexistent', 'NewName')).rejects.toThrow(XbridgesAdapterError);
+  });
+
+  it('rejects renaming to the exact same name (unchanged-state false success prevention)', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    gainNode.data.instanceName = 'SameName';
+    const store = createStore([gainNode]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.renameBlock('gain-1', 'SameName')).rejects.toThrow(XbridgesAdapterError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: disconnectPorts & duplicate edge/node handling
+// ---------------------------------------------------------------------------
+
+describe('disconnectPorts', () => {
+  it('disconnects by endpoints', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    const scopeNode = makeNode(VALID_TYPE_2, 'scope-1');
+    const edge: ReactFlowXbridgesEdge = {
+      id: 'e-gain-y-scope-in1',
+      source: 'gain-1',
+      sourceHandle: 'y',
+      target: 'scope-1',
+      targetHandle: 'in1',
+    };
+    const store = createStore([gainNode, scopeNode], [edge]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const result = await delegate.disconnectPorts({
+      sourceNodeId: 'gain-1',
+      sourcePortId: 'y',
+      targetNodeId: 'scope-1',
+      targetPortId: 'in1',
+    });
+    expect(result.disconnectedEdgeId).toBe('e-gain-y-scope-in1');
+    expect(store.snapshot().edges).toHaveLength(0);
+  });
+
+  it('disconnects by edge ID', async () => {
+    const edge: ReactFlowXbridgesEdge = { id: 'e1', source: 'a', target: 'b' };
+    const store = createStore([], [edge]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const result = await delegate.disconnectPorts('e1');
+    expect(result.disconnectedEdgeId).toBe('e1');
+    expect(store.snapshot().edges).toHaveLength(0);
+  });
+
+  it('throws XbridgesAdapterError on nonexistent edge', async () => {
+    const store = createStore();
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.disconnectPorts('nonexistent')).rejects.toThrow(XbridgesAdapterError);
+  });
+});
+
+describe('duplicate prevention', () => {
+  it('rejects adding a block with an ID that already exists', async () => {
+    const existing = makeNode(VALID_TYPE_1, 'gain-1');
+    const store = createStore([existing]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(delegate.addBlock(VALID_TYPE_1, { id: 'gain-1' })).rejects.toThrow(XbridgesAdapterError);
+  });
+
+  it('rejects connecting duplicate edge between same source and target ports', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    const scopeNode = makeNode(VALID_TYPE_2, 'scope-1');
+    const gainOutputPort = (BLOCK_LIBRARY[VALID_TYPE_1]('x', {}) as any).outputs[0].id as string;
+    const scopeInputPort = (BLOCK_LIBRARY[VALID_TYPE_2]('x', {}) as any).inputs[0].id as string;
+
+    const existingEdge: ReactFlowXbridgesEdge = {
+      id: 'existing-edge',
+      source: 'gain-1',
+      sourceHandle: gainOutputPort,
+      target: 'scope-1',
+      targetHandle: scopeInputPort,
+    };
+    const store = createStore([gainNode, scopeNode], [existingEdge]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    await expect(
+      delegate.connectPorts('gain-1', gainOutputPort, 'scope-1', scopeInputPort),
+    ).rejects.toThrow(XbridgesAdapterError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: validate, saveAndReadBack, and getRevisionFingerprint
+// ---------------------------------------------------------------------------
+
+describe('validate, saveAndReadBack, getRevisionFingerprint', () => {
+  it('computes deterministic revision fingerprint that changes on mutations', async () => {
+    const store = createStore();
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const fp1 = await delegate.getRevisionFingerprint();
+    expect(typeof fp1).toBe('string');
+    expect(fp1).toHaveLength(64);
+
+    await delegate.addBlock(VALID_TYPE_1, { id: 'gain-1' });
+    const fp2 = await delegate.getRevisionFingerprint();
+    expect(fp2).not.toBe(fp1);
+
+    await delegate.moveBlock('gain-1', { x: 50, y: 70 });
+    const fp3 = await delegate.getRevisionFingerprint();
+    expect(fp3).not.toBe(fp2);
+  });
+
+  it('validates model graph integrity and reports diagnostics for dangling edges', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    const brokenEdge: ReactFlowXbridgesEdge = {
+      id: 'dangling',
+      source: 'gain-1',
+      sourceHandle: 'y',
+      target: 'missing-node',
+      targetHandle: 'in',
+    };
+    const store = createStore([gainNode], [brokenEdge]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+
+    const report = await delegate.validate();
+    expect(report.valid).toBe(false);
+    expect(report.diagnostics.length).toBeGreaterThan(0);
+    expect(report.diagnostics.some(d => d.code === 'DANGLING_EDGE')).toBe(true);
+  });
+
+  it('saveAndReadBack calls save and returns read-back state with fingerprint', async () => {
+    const gainNode = makeNode(VALID_TYPE_1, 'gain-1');
+    const store = createStore([gainNode]);
+    const onSave = vi.fn();
+    const delegate = createXbridgesDelegate({ ...store, onSave });
+
+    const result = await delegate.saveAndReadBack();
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(result.nodes).toHaveLength(1);
+    expect(result.fingerprint).toHaveLength(64);
+  });
+});

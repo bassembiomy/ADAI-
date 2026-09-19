@@ -1,4 +1,4 @@
-import { EngineeringModelPlan } from '../contracts/engineeringModel';
+import { EngineeringModelPlan, XbridgesAction } from '../contracts/engineeringModel';
 import { Diagnostic } from '../contracts/diagnostics';
 import {
   XbridgesApplicationDelegate,
@@ -14,6 +14,13 @@ export interface ModelSnapshot {
   readonly edges: readonly XbridgesEdge[];
   readonly stateHash: string;
   readonly timestamp: number;
+}
+
+export interface ObservedActionResult {
+  readonly beforeHash: string;
+  readonly afterHash: string;
+  readonly changedNodeIds: readonly string[];
+  readonly changedEdgeIds: readonly string[];
 }
 
 export interface AppliedModelResult {
@@ -111,6 +118,91 @@ export class LiveXbridgesModelAdapter {
     if (this.projectContext.setRevision) {
       this.projectContext.setRevision(snapshot.revision);
     }
+  }
+
+  public async executeAction(action: XbridgesAction): Promise<ObservedActionResult> {
+    const getFp = async () => {
+      if (this.delegate.getRevisionFingerprint) {
+        return await this.delegate.getRevisionFingerprint();
+      }
+      const nodes = await this.delegate.getNodes();
+      const edges = await this.delegate.getEdges();
+      return computeModelSnapshotHash(
+        this.projectContext.projectId,
+        this.projectContext.getRevision(),
+        nodes,
+        edges
+      );
+    };
+
+    const beforeHash = await getFp();
+    let changedNodeIds: string[] = [];
+    let changedEdgeIds: string[] = [];
+
+    switch (action.kind) {
+      case 'add_block': {
+        const params: Record<string, unknown> = { id: action.blockId, instanceName: action.blockId };
+        for (const p of action.parameters || []) {
+          params[p.parameterName] = p.value;
+        }
+        const node = await this.delegate.addBlock(action.blockDefinitionId, params);
+        changedNodeIds = [node.id];
+        break;
+      }
+      case 'remove_block': {
+        const result = await this.delegate.removeBlock(action.blockId);
+        changedNodeIds = [result.removedNodeId];
+        changedEdgeIds = [...result.removedEdgeIds];
+        break;
+      }
+      case 'set_parameter': {
+        const updated = await this.delegate.updateParameters(action.blockId, {
+          [action.parameterName]: action.value,
+        });
+        changedNodeIds = [updated.id];
+        break;
+      }
+      case 'move_block': {
+        const moved = await this.delegate.moveBlock(action.blockId, action.position);
+        changedNodeIds = [moved.id];
+        break;
+      }
+      case 'rename_block': {
+        const renamed = await this.delegate.renameBlock(action.blockId, action.newLabel);
+        changedNodeIds = [renamed.id];
+        break;
+      }
+      case 'connect_ports': {
+        const edge = await this.delegate.connectPorts(
+          action.sourceBlockId,
+          action.sourcePortId,
+          action.targetBlockId,
+          action.targetPortId,
+        );
+        changedEdgeIds = [edge.id];
+        break;
+      }
+      case 'disconnect_ports': {
+        const result = await this.delegate.disconnectPorts({
+          sourceNodeId: action.sourceBlockId,
+          sourcePortId: action.sourcePortId,
+          targetNodeId: action.targetBlockId,
+          targetPortId: action.targetPortId,
+        });
+        changedEdgeIds = [result.disconnectedEdgeId];
+        break;
+      }
+      default:
+        throw new Error(`Unsupported action kind: ${(action as any).kind}`);
+    }
+
+    const afterHash = await getFp();
+    return {
+      beforeHash,
+      afterHash,
+      changedNodeIds,
+      changedEdgeIds,
+    };
   }
 
   public async apply(

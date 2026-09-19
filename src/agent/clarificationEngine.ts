@@ -137,6 +137,7 @@ export function analyzeCompleteness(
   const isAirFryer =
     targetSystem.includes('air-fryer') ||
     targetSystem.includes('air fryer') ||
+    targetSystem.includes('xbridges-control') ||
     state.requirementState.objective.toLowerCase().includes('air fryer') ||
     targetSystem === '';
 

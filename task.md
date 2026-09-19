@@ -1,11 +1,16 @@
-# Task: Delete Use Case Module from Application
+# General X-Bridges Engineering Agent Implementation Checklist
 
-- [x] 1. Delete Use Case UI components (`src/components/usecase/*`) <!-- id: 0 -->
-- [x] 2. Delete types and persistence utilities (`src/types/usecase_types.*`, `src/utils/useCasePersistence.*`) <!-- id: 1 -->
-- [x] 3. Delete PlantUML/Reporting Use Case adapters and tests (`useCaseAdapter.*`, `reportDiagrams.usecase.test.ts`) <!-- id: 2 -->
-- [x] 4. Update PlantUML components and visual diagram models <!-- id: 3 -->
-- [x] 5. Update reporting module to remove Use Case diagram rendering <!-- id: 4 -->
-- [x] 6. Update `src/App.tsx` (remove Use Case mode, imports, state, ribbon tab, and rendering) <!-- id: 5 -->
-- [x] 7. Update engine/conformance tests and manifest (`useCaseMigration.test.ts`, `conformanceManifest.ts`, docs) <!-- id: 6 -->
-- [x] 8. Update/delete E2E tests (`sysml-usecase-conformance.spec.ts`, `sysml-persistence-report.spec.ts`) <!-- id: 7 -->
-- [x] 9. Verify with test suites and TypeScript build <!-- id: 8 -->
+- [x] Task 1: Generate the Canonical X-Bridges Capability Index
+- [x] Task 2: Add General Intent and Complete Requirement Resolution
+- [x] Task 3: Build the Deterministic General Graph Planner
+- [x] Task 4: Prove Compilation and Simulation Before Approval
+- [x] Task 5: Complete the Live X-Bridges Mutation Surface
+- [ ] Task 6: Implement Per-Action Approval Inside One Atomic Transaction
+- [ ] Task 7: Verify Real Save, Reload, Restart, and Undo
+- [ ] Task 8: Create the Versioned Offline Engineering Pattern Store
+- [ ] Task 9: Build Lawful Public-Source Ingestion
+- [ ] Task 10: Import Simulink and Scilab Models Into Quarantine
+- [ ] Task 11: General Diagnosis and Bounded Repair
+- [ ] Task 12: Deterministic Optimization With Evidence
+- [ ] Task 13: Replace the Inverter Route With the General Orchestrator and UI
+- [ ] Task 14: Build the Cross-Domain Acceptance Corpus and Release Gate
