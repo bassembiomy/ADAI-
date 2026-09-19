@@ -207,14 +207,7 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
-          const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
-          if (validationError) return validationError;
-
-          return createSuccessToolResult(toolName, {
-            modelName: parsed.data.modelName,
-            domain: parsed.data.domain,
-            created: true
-          }, ctx.currentRevision, `Model '${parsed.data.modelName}' created`, Date.now() - startTime);
+          return createFailureToolResult(toolName, 'Creating a project model is not supported by the active workspace delegate.', undefined, ctx.currentRevision, Date.now() - startTime);
         }
 
         case 'add_block': {
@@ -273,11 +266,8 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
-          const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
-          if (validationError) return validationError;
-
           const delegate = ctx.xbridgesDelegate;
-          if (!delegate) {
+          if (!delegate?.restoreSnapshot) {
             return createFailureToolResult(toolName, 'Active workspace delegate is not connected.', [{
               category: 'ENGINEERING',
               code: 'DELEGATE_UNAVAILABLE',
@@ -286,14 +276,17 @@ export class EngineeringToolDispatcher {
             }], ctx.currentRevision, Date.now() - startTime);
           }
 
-          if (delegate.restoreSnapshot) {
-            const currentNodes = await delegate.getNodes();
-            const currentEdges = await delegate.getEdges();
-            const updatedNodes = currentNodes.filter(n => n.id !== parsed.data.blockId);
-            const updatedEdges = currentEdges.filter(e => e.source !== parsed.data.blockId && e.target !== parsed.data.blockId);
-            await delegate.restoreSnapshot(updatedNodes, updatedEdges);
-            await delegate.save();
+          const currentNodes = await delegate.getNodes();
+          if (!currentNodes.some(n => n.id === parsed.data.blockId)) {
+            return createFailureToolResult(toolName, `Block '${parsed.data.blockId}' does not exist.`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
+          const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
+          if (validationError) return validationError;
+          const currentEdges = await delegate.getEdges();
+          const updatedNodes = currentNodes.filter(n => n.id !== parsed.data.blockId);
+          const updatedEdges = currentEdges.filter(e => e.source !== parsed.data.blockId && e.target !== parsed.data.blockId);
+          await delegate.restoreSnapshot(updatedNodes, updatedEdges);
+          await delegate.save();
 
           return createSuccessToolResult(toolName, {
             blockId: parsed.data.blockId,
@@ -306,13 +299,7 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
-          const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
-          if (validationError) return validationError;
-
-          return createSuccessToolResult(toolName, {
-            blockId: parsed.data.blockId,
-            position: parsed.data.position
-          }, ctx.currentRevision, `Block '${parsed.data.blockId}' moved`, Date.now() - startTime);
+          return createFailureToolResult(toolName, 'Moving blocks is not supported by the active workspace delegate.', undefined, ctx.currentRevision, Date.now() - startTime);
         }
 
         case 'rename_block': {
@@ -408,17 +395,20 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
+          const delegate = ctx.xbridgesDelegate;
+          if (!delegate?.restoreSnapshot) {
+            return createFailureToolResult(toolName, 'Active workspace delegate cannot disconnect ports.', undefined, ctx.currentRevision, Date.now() - startTime);
+          }
+          const currentEdges = await delegate.getEdges();
+          if (!currentEdges.some(e => e.id === parsed.data.connectionId)) {
+            return createFailureToolResult(toolName, `Connection '${parsed.data.connectionId}' does not exist.`, undefined, ctx.currentRevision, Date.now() - startTime);
+          }
           const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
           if (validationError) return validationError;
-
-          const delegate = ctx.xbridgesDelegate;
-          if (delegate && delegate.restoreSnapshot) {
-            const currentNodes = await delegate.getNodes();
-            const currentEdges = await delegate.getEdges();
-            const updatedEdges = currentEdges.filter(e => e.id !== parsed.data.connectionId);
-            await delegate.restoreSnapshot(currentNodes, updatedEdges);
-            await delegate.save();
-          }
+          const currentNodes = await delegate.getNodes();
+          const updatedEdges = currentEdges.filter(e => e.id !== parsed.data.connectionId);
+          await delegate.restoreSnapshot(currentNodes, updatedEdges);
+          await delegate.save();
 
           return createSuccessToolResult(toolName, {
             connectionId: parsed.data.connectionId,
@@ -431,12 +421,7 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
-          return createSuccessToolResult(toolName, {
-            projectId: parsed.data.projectId,
-            domain: parsed.data.domain,
-            isValid: true,
-            diagnostics: []
-          }, ctx.currentRevision, 'Model validated', Date.now() - startTime);
+          return createFailureToolResult(toolName, 'Validation is unavailable through this dispatcher; no engine validation was run.', undefined, ctx.currentRevision, Date.now() - startTime);
         }
 
         case 'simulate_model': {
@@ -444,15 +429,7 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
-          const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
-          if (validationError) return validationError;
-
-          return createSuccessToolResult(toolName, {
-            projectId: parsed.data.projectId,
-            domain: parsed.data.domain,
-            simulated: true,
-            metrics: {}
-          }, ctx.currentRevision, 'Simulation executed', Date.now() - startTime);
+          return createFailureToolResult(toolName, 'Simulation is unavailable through this dispatcher; no engine run was performed.', undefined, ctx.currentRevision, Date.now() - startTime);
         }
 
         case 'undo_transaction': {
@@ -460,13 +437,7 @@ export class EngineeringToolDispatcher {
           if (!parsed.success) {
             return createFailureToolResult(toolName, `Validation failed: ${parsed.error.message}`, undefined, ctx.currentRevision, Date.now() - startTime);
           }
-          const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
-          if (validationError) return validationError;
-
-          return createSuccessToolResult(toolName, {
-            transactionId: parsed.data.transactionId,
-            undone: true
-          }, ctx.currentRevision, `Transaction '${parsed.data.transactionId}' reverted`, Date.now() - startTime);
+          return createFailureToolResult(toolName, 'Undo is unavailable through this dispatcher; no transaction was reverted.', undefined, ctx.currentRevision, Date.now() - startTime);
         }
 
         default:
@@ -488,6 +459,9 @@ export class EngineeringToolDispatcher {
     data: { projectId: string; projectRevision: number; approvalToken: string },
     ctx: ProjectExecutionContext
   ): ToolResult | null {
+    if (data.projectId !== ctx.projectId) {
+      return createFailureToolResult(toolName, `Access denied: action project '${data.projectId}' does not match active project '${ctx.projectId}'.`, undefined, ctx.currentRevision);
+    }
     // 1. Revision scope check
     if (data.projectRevision !== ctx.currentRevision) {
       return createFailureToolResult(

@@ -157,6 +157,33 @@ describe('Engineering Tools Boundary with Live State and Token Binding', () => {
   });
 
   describe('Live Mutations and Token Binding', () => {
+    it.each([
+      ['create_model', { modelName: 'M', domain: 'xbridges' }],
+      ['move_block', { blockId: 'b1', position: { x: 1, y: 2 } }],
+      ['validate_model', { domain: 'xbridges' }],
+      ['simulate_model', { domain: 'xbridges' }],
+      ['undo_transaction', { transactionId: 'tx1' }]
+    ])('%s never reports success without a real implementation', async (toolName, payload) => {
+      validTokens.set('token_unsupported', { token: 'token_unsupported', projectId: 'proj_test', baseRevision: 3, toolName });
+      const result = await makeDispatcher().execute(toolName, {
+        projectId: 'proj_test', projectRevision: 3, approvalToken: 'token_unsupported', ...payload
+      });
+      expect(result.status).toBe('FAILURE');
+      expect(liveState.getRawNodes()).toHaveLength(0);
+    });
+
+    it.each([
+      ['remove_block', { blockId: 'missing' }],
+      ['disconnect_ports', { connectionId: 'missing' }],
+      ['rename_block', { blockId: 'missing', newName: 'renamed' }]
+    ])('%s rejects a missing target without claiming a mutation', async (toolName, payload) => {
+      validTokens.set('token_target', { token: 'token_target', projectId: 'proj_test', baseRevision: 3, toolName });
+      const result = await makeDispatcher().execute(toolName, {
+        projectId: 'proj_test', projectRevision: 3, approvalToken: 'token_target', ...payload
+      });
+      expect(result.status).toBe('FAILURE');
+      expect(liveState.getSaveCount()).toBe(0);
+    });
     it('executes add_block on the real delegate and verifies state change', async () => {
       const dispatcher = makeDispatcher();
 

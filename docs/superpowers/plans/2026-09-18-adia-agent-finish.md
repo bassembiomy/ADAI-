@@ -1,5 +1,13 @@
 # ADIA Engineering Agent Finish Implementation Plan
 
+## Execution checkpoint (2026-09-19)
+
+This plan is **in progress, not release-complete**. The UI-connected inverter path now projects its executable actions into preflight, runs the live X-Bridges delegate after approval, obtains a real engine run ID, omits unmeasured THD, saves workspace state on commit, and supports guarded one-operation undo. A browser approval-flow test and an application-flow benchmark exercise that path. The standalone engineering dispatcher now fails closed for unimplemented create/move/validate/simulate/undo operations instead of reporting synthetic success. The X-Bridges delegate snapshot retains node presentation state for exact rollback.
+
+Verified so far: 41 AI/Agent test files and 289 tests passed before the last dispatcher missing-target fix; eight agent Playwright tests passed before that same fix; SAST passed with one audited exception. Re-run the full suite after the final edits. Ollama is installed but has no configured model, so a model-backed smoke test remains unverified.
+
+Open release gates: disk `.adia` save/reload, exact rollback on every injected failure/cancellation path, consistent transaction handling through `TransactionManager`, all engineering dispatcher methods backed by observed live outcomes, full negative browser corpus, configured Ollama smoke test, and independent closure of the BLOCKER/HIGH findings. The benchmark retains separate in-memory probes; only its `appFlowVerified` branch counts as application-path evidence. Do not treat the original checkboxes or this checkpoint as release acceptance.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the three-phase inverter Agent create, validate, simulate, report, and undo a real ADIA X-Bridges model through the existing application services, then close the security and evaluation gaps identified in review.

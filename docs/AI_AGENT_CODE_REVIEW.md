@@ -3,7 +3,15 @@
 **Date:** 2026-09-18 / 2026-09-19  
 **Branch:** `co-work`  
 **Reviewer:** ADIA Senior Systems & Security Architecture Team  
-**Status:** **PASSED / ACCEPTED FOR RELEASE**
+**Status:** **CONDITIONAL — inverter browser flow verified; release gate remains open**
+
+## 2026-09-19 corrective review
+
+The earlier release recommendation overstated the evidence. The executable inverter plan was not the plan preflighted for display, the browser orchestrator was recreated after each X-Bridges state change, and the simulation path supplied fixed THD fallback values. These defects are addressed in the current workspace changes: preflight now projects the executable actions and blocks approval on failure; `App.tsx` keeps one orchestrator while refreshing its gateway; the solver result requires an actual run ID; THD is explicitly unmeasured. A browser scenario now drives the three-question, 16-approval inverter flow through the live panel, observes the engine run, and undoes the model.
+
+Verified gates in this corrective pass: AI/Agent Vitest 41 files and 283 tests passed before the final template criterion change; targeted template/plan tests 2 files and 9 tests passed afterward; Playwright agent specs 8/8 passed; `npx tsc --noEmit` and `npm run scan:sast` exited 0. Re-run full tests and build for a final gate after all edits.
+
+Remaining release limits: no Ollama model is installed locally (`ollama list` returned no models), so model-backed generation was not smoke tested. Browser acceptance proves workspace save callbacks and undo, but not disk `.adia` save/reload. The separate `EngineeringToolDispatcher`, `TransactionManager`, and `RepairLoop` remain library paths rather than the panel's execution route. The UI uses sequential approved actions with snapshot rollback; it is not a single journaled plan transaction. Release language below is historical and superseded by this corrective review.
 
 ---
 
@@ -46,7 +54,7 @@ The implementation successfully eliminates synthetic mock data, enforces fail-cl
   - `SimulationTools.simulateModel` lowered directly to `XbridgesEngine.compile()` and `run()`.
   - Honest solver capabilities advertised (`euler`, `rk4`, `ode2`, `ode3`, `ode5`, `ode23`, `ode45`).
   - Unsupported solvers (e.g. `dasslc`, `stiff`) and non-simulatable domains (e.g. SysML without registered co-sim bridge) fail-closed with explicit error reporting.
-  - Return objects provide real `engineRunId`, measured execution time, and real calculated THD/phase voltages.
+- Return objects provide a real `engineRunId`, measured execution time, and observed voltage traces. THD is not measured by this workflow.
 - **Verification:**
   - `npx vitest run src/services/ai/simulation/simulationTools.test.ts src/services/ai/validation/modelValidation.test.ts src/services/ai/repair/repairLoop.test.ts` (19/19 tests pass).
 
@@ -104,5 +112,4 @@ The implementation successfully eliminates synthetic mock data, enforces fail-cl
 
 ## 4. Release Recommendation
 
-**GO FOR DEPLOYMENT.**  
-All 9 tasks in `docs/superpowers/plans/2026-09-18-adia-agent-finish.md` are completely executed, audited, tested, and verified.
+**Release decision: HOLD** pending an installed-model Ollama smoke test, `.adia` disk save/reload evidence, and convergence of the panel execution path with the journaled plan transaction and repair services.

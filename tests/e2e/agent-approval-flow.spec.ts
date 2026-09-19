@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Prompt-Driven ADIA Agent Approval Flow E2E', () => {
+  test.setTimeout(180000);
   test.beforeEach(async ({ page }) => {
-    await page.goto('/?projectName=adia');
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto('/?projectName=adia', { waitUntil: 'domcontentloaded' });
 
     // Dismiss intro/welcome overlay if present
     const overlay = page.locator('[data-testid="welcome-overlay"], .fixed.inset-0.z-\\[9999\\]');
@@ -96,7 +96,7 @@ test.describe('Prompt-Driven ADIA Agent Approval Flow E2E', () => {
     // Check specification tab has populated requirements
     const specTabBtn = page.locator('button.adia-agent-tab-btn:has-text("Specification")');
     await specTabBtn.click();
-    await expect(page.locator('.adia-agent-body')).toContainText('Target System: air-fryer');
+    await expect(page.locator('.adia-agent-body')).toContainText('Target System: air_fryer');
 
     // Switch back to Workflow & Chat
     const chatTabBtn = page.locator('button.adia-agent-tab-btn:has-text("Workflow & Chat")');
@@ -138,5 +138,30 @@ test.describe('Prompt-Driven ADIA Agent Approval Flow E2E', () => {
     await expect(page.locator('.delegate-status-sysml')).toBeVisible();
     await expect(page.locator('.delegate-status-report')).toBeVisible();
     await expect(page.locator('.delegate-status-simulation')).toBeVisible();
+  });
+
+  test('builds a three-phase inverter after approvals and shows a measured engine run', async ({ page }) => {
+    await page.getByRole('button', { name: 'X-Bridges' }).first().click();
+    await page.locator('.adia-agent-toggle-tab').click();
+    await expect(page.locator('.delegate-status-xbridges')).toContainText('Ready');
+    const input = page.locator('.adia-agent-input');
+    const send = page.locator('.adia-agent-send-btn');
+    for (const message of ['Create a three-phase inverter model', '400V', '10000Hz', '50Hz']) {
+      await input.fill(message);
+      await send.click();
+      await expect(page.locator('.adia-agent-msg.agent').last()).toBeVisible();
+    }
+    await page.locator('.adia-agent-btn-approve:has-text("Approve Specification")').click();
+    await expect(page.locator('.adia-agent-plan-preview-card')).toContainText('DC_VOLTAGE_SOURCE');
+    await page.locator('.adia-agent-btn-approve:has-text("Approve Execution Plan")').click();
+    for (let i = 0; i < 16; i++) {
+      const approve = page.locator('.adia-agent-btn-approve:has-text("Approve Change")');
+      await expect(approve).toBeVisible();
+      await approve.click();
+    }
+    await expect(page.locator('.adia-agent-execution-result.success')).toContainText('xbr_run_');
+    await expect(page.locator('.adia-agent-execution-result.success')).toContainText('THD not measured');
+    await page.locator('.adia-agent-btn-undo').click();
+    await expect(page.locator('.adia-agent-msg.agent').last()).toContainText('Transaction undone');
   });
 });

@@ -23,10 +23,12 @@ import {
   buildExecutionPlan,
   createChangeApprovalRequest,
   ExecutionPlan,
-  buildEngineeringModelPlanFromSpecification
+  buildEngineeringModelPlanFromExecutionPlan
 } from './planEngine';
 import { AdiaBlockCatalog } from './adiaBlockCatalog';
-import { PlanPreflight } from '../services/ai/planner/planPreflight';
+import { PlanPreflight, PreflightResult } from '../services/ai/planner/planPreflight';
+import { EngineeringModelAdapter, StoredBlock, StoredConnection } from '../services/ai/adapters/engineeringModelAdapter';
+import { SimulationTools, SimulationResult } from '../services/ai/simulation/simulationTools';
 import {
   createApprovalRequest,
   approve as gateApprove,
@@ -56,6 +58,7 @@ export interface OrchestratorResponse {
   executionPlan?: ExecutionPlan;
   validationResult?: ValidationCheckResult;
   preflightResult?: unknown;
+  simulationResult?: SimulationResult;
 }
 
 export interface ProjectContext {
@@ -85,8 +88,10 @@ export class AgentOrchestrator {
     edges: readonly any[];
     revision: number;
     committedRevision: number;
+    stateFingerprint: string;
   };
   private lastSimulationEvidence?: Record<string, unknown>;
+  private simulationAbortController?: AbortController;
   private projectContext: ProjectContext = {
     projectId: 'default',
     workspace: 'default',
@@ -96,6 +101,10 @@ export class AgentOrchestrator {
   constructor(llmProvider?: LlmProvider, toolGatewayInstance?: ToolGateway) {
     this.llm = llmProvider || localLlmService.getProvider();
     this.tools = toolGatewayInstance || defaultToolGateway;
+  }
+
+  public setToolGateway(gateway: ToolGateway): void {
+    this.tools = gateway;
   }
 
   public getProjectContext(): ProjectContext {
@@ -345,16 +354,28 @@ export class AgentOrchestrator {
 
       this.executionPlan = buildExecutionPlan(this.specification);
 
-      let preflightResult: unknown = undefined;
+      let preflightResult: PreflightResult | undefined;
       if (
         this.specification.targetSystem === 'three_phase_inverter' ||
         this.specification.targetSystem.toLowerCase().includes('inverter')
       ) {
-        const engPlan = buildEngineeringModelPlanFromSpecification(
+        const engPlan = buildEngineeringModelPlanFromExecutionPlan(
+          this.executionPlan,
           this.specification,
           this.projectContext.revision
         );
         preflightResult = PlanPreflight.preflight(engPlan, { currentRevision: this.projectContext.revision });
+        if (!preflightResult.passed) {
+          const explanation = preflightResult.diagnostics.map(d => d.message).join('; ') || 'Engineering plan preflight failed';
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          this.appendAudit('PLAN_PREFLIGHT_REJECTED', { diagnostics: preflightResult.diagnostics });
+          return {
+            status: 'blocked',
+            message: `Engineering plan rejected: ${explanation}`,
+            taskState: this.taskState,
+            preflightResult
+          };
+        }
       }
 
       const planApprovalReq = createApprovalRequest(
@@ -397,6 +418,16 @@ export class AgentOrchestrator {
 
     // B) PLAN APPROVAL
     if (approvedReq.type === 'plan' && this.executionPlan) {
+      if (this.specification?.targetSystem === 'three_phase_inverter') {
+        const candidate = buildEngineeringModelPlanFromExecutionPlan(this.executionPlan, this.specification, this.projectContext.revision);
+        const check = PlanPreflight.preflight(candidate, { currentRevision: this.projectContext.revision });
+        if (!check.passed) {
+          const explanation = check.diagnostics.map(d => d.message).join('; ') || 'Plan preflight failed';
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          this.appendAudit('PLAN_PREFLIGHT_REJECTED', { diagnostics: check.diagnostics });
+          return { status: 'blocked', message: `Engineering plan rejected: ${explanation}`, taskState: this.taskState, preflightResult: check };
+        }
+      }
       this.executionPlan.approved = true;
       this.taskState = transitionState(
         this.taskState,
@@ -711,12 +742,69 @@ export class AgentOrchestrator {
       }
 
       // All actions in the plan have completed!
+      let simulationResult: SimulationResult | undefined;
+      if (this.specification?.targetSystem === 'three_phase_inverter') {
+        if (!delegates?.xbridges) {
+          this.taskState = transitionState(this.taskState, 'failed', 'X-Bridges workspace is unavailable for simulation');
+          return { status: 'failed', message: 'X-Bridges workspace is unavailable for simulation.', taskState: this.taskState };
+        }
+        const liveNodes = await delegates.xbridges.getNodes();
+        const liveEdges = await delegates.xbridges.getEdges();
+        const model = new EngineeringModelAdapter('xbridges');
+        const blocks: Array<[string, StoredBlock]> = liveNodes.map(node => [node.id, {
+          id: node.id,
+          blockDefinitionId: node.type,
+          domain: 'xbridges',
+          name: String(node.data.instanceName || node.id),
+          parameters: (node.data.params || {}) as Record<string, unknown>
+        }]);
+        const connections: Array<[string, StoredConnection]> = liveEdges.map(edge => [edge.id, {
+          id: edge.id,
+          fromBlockId: edge.source,
+          fromPortId: edge.sourceHandle || '',
+          toBlockId: edge.target,
+          toPortId: edge.targetHandle || '',
+          domain: 'xbridges'
+        }]);
+        await model.restoreSnapshot({ blocks, connections });
+        this.simulationAbortController = new AbortController();
+        simulationResult = await SimulationTools.simulateModel(model, {
+          domain: 'xbridges', abortSignal: this.simulationAbortController.signal
+        });
+        this.simulationAbortController = undefined;
+        if (simulationResult.status !== 'COMPLETED') {
+          if (this.preExecutionSnapshot && delegates.xbridges.restoreSnapshot) {
+            await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
+            await delegates.xbridges.save();
+          }
+          this.preExecutionSnapshot = undefined;
+          this.taskState = transitionState(this.taskState, 'failed', simulationResult.error || 'Simulation failed');
+          return { status: 'failed', message: `Inverter simulation failed: ${simulationResult.error}`, taskState: this.taskState, simulationResult };
+        }
+        this.lastSimulationEvidence = { engineRunId: simulationResult.engineRunId, metrics: simulationResult.metrics };
+      }
+      if (this.specification?.targetSystem === 'three_phase_inverter' && delegates?.xbridges) {
+        try {
+          await delegates.xbridges.save();
+        } catch (error) {
+          if (this.preExecutionSnapshot && delegates.xbridges.restoreSnapshot) {
+            await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
+          }
+          this.preExecutionSnapshot = undefined;
+          const reason = error instanceof Error ? error.message : String(error);
+          this.taskState = transitionState(this.taskState, 'failed', reason);
+          return { status: 'failed', message: `Inverter save failed: ${reason}`, taskState: this.taskState, simulationResult };
+        }
+      }
       if (this.preExecutionSnapshot) {
+        const committedNodes = await delegates?.xbridges?.getNodes() || [];
+        const committedEdges = await delegates?.xbridges?.getEdges() || [];
         this.lastCommittedSnapshot = {
           nodes: this.preExecutionSnapshot.nodes,
           edges: this.preExecutionSnapshot.edges,
           revision: this.preExecutionSnapshot.revision,
-          committedRevision: this.projectContext.revision
+          committedRevision: this.projectContext.revision,
+          stateFingerprint: JSON.stringify({ nodes: committedNodes, edges: committedEdges })
         };
         this.preExecutionSnapshot = undefined;
       }
@@ -736,7 +824,8 @@ export class AgentOrchestrator {
         status: 'completed',
         message: 'All planned engineering actions executed, verified, and completed successfully against criteria!',
         taskState: this.taskState,
-        validationResult
+        validationResult,
+        simulationResult
       };
     }
 
@@ -797,6 +886,15 @@ export class AgentOrchestrator {
     }
 
     const delegates = this.tools.getDelegates();
+    if (delegates?.xbridges) {
+      const currentFingerprint = JSON.stringify({
+        nodes: await delegates.xbridges.getNodes(),
+        edges: await delegates.xbridges.getEdges()
+      });
+      if (currentFingerprint !== this.lastCommittedSnapshot.stateFingerprint) {
+        return { success: false, message: 'Stale undo: X-Bridges model changed after the Agent transaction.' };
+      }
+    }
     if (delegates?.xbridges?.restoreSnapshot) {
       await delegates.xbridges.restoreSnapshot(this.lastCommittedSnapshot.nodes, this.lastCommittedSnapshot.edges);
       if (delegates.xbridges.save) await delegates.xbridges.save();
@@ -825,6 +923,7 @@ export class AgentOrchestrator {
    * Cancels in-flight operations or workflow steps, restoring exact pre-execution workspace state.
    */
   public async cancelOperation(): Promise<{ success: boolean; message: string }> {
+    this.simulationAbortController?.abort();
     const delegates = this.tools.getDelegates();
     if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
       await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);

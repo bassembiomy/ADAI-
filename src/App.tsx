@@ -7956,7 +7956,11 @@ const ADIA = () => {
       edges: globalXBridgesEdges,
     });
     return orchestrator;
-  }, [currentProjectName, diagramMode, canonicalSysmlRepository.revision, globalXBridgesNodes, globalXBridgesEdges, agentToolGateway]);
+  }, []);
+
+  useEffect(() => {
+    agentOrchestrator.setToolGateway(agentToolGateway);
+  }, [agentOrchestrator, agentToolGateway]);
 
   // Update orchestrator project context whenever project properties change
   useEffect(() => {

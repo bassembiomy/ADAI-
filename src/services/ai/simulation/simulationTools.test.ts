@@ -58,7 +58,7 @@ describe('SimulationTools Capability and Normalization Boundary', () => {
     expect(result.status).toBe('COMPLETED');
     expect(result.engineRunId).toBeDefined();
     expect(result.signals).toBeDefined();
-    expect(result.metrics?.thd).toBeDefined();
+    expect(result.metrics?.thd).toBeUndefined();
     expect(result.metrics?.vRms).toBeDefined();
   });
 
@@ -103,6 +103,17 @@ describe('SimulationTools Capability and Normalization Boundary', () => {
     expect(result.timeVector).toBeUndefined();
     expect(result.diagnostics.some(d => d.category === 'SIMULATION' && d.code === 'SOLVER_RUNTIME_EXCEPTION')).toBe(true);
     expect(result.error).toContain('Singular Jacobian');
+  });
+
+  it('does not invent a run id or harmonic metric for a simulator result without them', async () => {
+    const adapter = new EngineeringModelAdapter('xbridges');
+    await adapter.addBlock({ id: 'source', blockDefinitionId: 'Constant', domain: 'xbridges', name: 'Source', parameters: [] });
+    const result = await SimulationTools.simulateModel(adapter, {
+      domain: 'xbridges',
+      customSimulator: async () => ({ timeVector: [0, 0.001], signals: { out: [0, 0] }, metrics: {} })
+    });
+    expect(result.status).toBe('FAILED');
+    expect(result.engineRunId).toBeUndefined();
   });
 
   it('normalizes cancellation and timeouts cleanly', async () => {

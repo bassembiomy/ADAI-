@@ -110,7 +110,7 @@ function createWindow() {
         `default-src 'self'${devSources};`,
         `script-src 'self'${scriptInline}${devScriptSources} https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com;`,
         // AI provider origins added — Gemini, OpenAI, n8n (webhook), local LLM
-        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 http://127.0.0.1:1234 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
+        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 http://127.0.0.1:1234 http://127.0.0.1:11434 http://localhost:11434 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
         `img-src 'self' data: https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
         `font-src 'self' data: https://fonts.gstatic.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,

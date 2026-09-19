@@ -23,7 +23,7 @@ describe('Three-Phase Inverter Engineering Template', () => {
 
     // Validation criteria check
     expect(THREE_PHASE_INVERTER_TEMPLATE.validationCriteria.length).toBeGreaterThan(0);
-    expect(THREE_PHASE_INVERTER_TEMPLATE.validationCriteria.some(c => c.metric === 'THD')).toBe(true);
+    expect(THREE_PHASE_INVERTER_TEMPLATE.validationCriteria.some(c => c.metric === 'THD')).toBe(false);
   });
 
   it('routes three-phase inverter requests to the inverter template', () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AgentOrchestrator } from './agentOrchestrator';
+import { PlanPreflight } from '../services/ai/planner/planPreflight';
 import { ToolGateway } from './toolGateway';
 import { VLabAdapter } from './toolAdapters/vlabAdapter';
 import { ToolAdapter } from './actionContracts';
@@ -518,6 +519,9 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     }
 
     expect(currentResp.status).toBe('completed');
+    expect(currentResp.simulationResult?.status).toBe('COMPLETED');
+    expect(currentResp.simulationResult?.engineRunId).toMatch(/^xbr_run_/);
+    expect(currentResp.simulationResult?.metrics?.thd).toBeUndefined();
     expect(nodesState).toHaveLength(5);
     expect(edgesState).toHaveLength(11);
 
@@ -534,6 +538,58 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       e => (e.source === 'dc_src' && e.sourceHandle === 'v_neg') || (e.target === 'inv_bridge' && e.targetHandle === 'vdc_n')
     );
     expect(dcReturnEdge).toBeDefined();
+
+    nodesState.push({ ...nodesState[0], id: 'user_added_block' });
+    const staleUndo = await orch.undoLastTransaction();
+    expect(staleUndo.success).toBe(false);
+    expect(nodesState).toHaveLength(6);
+  });
+
+  it('blocks inverter execution when the canonical plan fails preflight', async () => {
+    const spy = vi.spyOn(PlanPreflight, 'preflight').mockReturnValueOnce({
+      passed: false,
+      diagnostics: [{ code: 'MISSING_DC_RETURN', severity: 'ERROR', message: 'DC return missing' }],
+      resolvedBlocks: new Map()
+    } as any);
+    try {
+      const orch = new AgentOrchestrator();
+      await orch.handle('Create a three-phase inverter model');
+      await orch.handle('400V');
+      await orch.handle('10000Hz');
+      const spec = await orch.handle('50Hz');
+      const result = await orch.approve(spec.pendingApproval!.id);
+      expect(result.status).toBe('blocked');
+      expect(result.pendingApproval).toBeUndefined();
+      expect(result.message).toContain('DC return missing');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('rejects an inverter action list changed after preflight and before approval', async () => {
+    const orch = new AgentOrchestrator();
+    await orch.handle('Create a three-phase inverter model');
+    await orch.handle('400V');
+    await orch.handle('10000Hz');
+    const spec = await orch.handle('50Hz');
+    const plan = await orch.approve(spec.pendingApproval!.id);
+    const connection = plan.executionPlan!.actions.find(a => a.type === 'connect_ports')!;
+    connection.params.targetPortId = 'invented_port';
+    const result = await orch.approve(plan.pendingApproval!.id);
+    expect(result.status).toBe('blocked');
+    expect(result.message).toContain('invented_port');
+  });
+
+  it('keeps a pending approval when the live workspace gateway is refreshed', async () => {
+    const orch = new AgentOrchestrator();
+    await orch.handle('Create a three-phase inverter model');
+    await orch.handle('400V');
+    await orch.handle('10000Hz');
+    const spec = await orch.handle('50Hz');
+    orch.setToolGateway(new ToolGateway());
+    expect(orch.getPendingApproval()?.id).toBe(spec.pendingApproval?.id);
+    const plan = await orch.approve(spec.pendingApproval!.id);
+    expect(plan.status).toBe('awaiting_plan_approval');
   });
 
   it('rejects unsupported intent with actionable diagnostics and zero mutations', async () => {

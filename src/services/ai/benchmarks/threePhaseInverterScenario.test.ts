@@ -14,6 +14,7 @@ describe('ThreePhaseInverterScenario Benchmark Evaluation', () => {
     expect(report.simulationResult.status).toBe('COMPLETED');
     expect(report.simulationResult.engineRunId).toBeDefined();
     expect(report.liveAdapterSuccess).toBe(true);
+    expect({ verified: report.appFlowVerified, error: report.appFlowError }).toEqual({ verified: true, error: undefined });
     expect(report.undoSuccess).toBe(true);
 
     // Verify key metrics

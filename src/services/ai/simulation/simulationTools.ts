@@ -294,13 +294,17 @@ export class SimulationTools {
 
       const rawResult: any = await Promise.race([simPromise, timeoutPromise]);
 
+      if (typeof rawResult?.engineRunId !== 'string' || !rawResult.engineRunId.trim()) {
+        throw new Error('Simulator returned no verifiable engine run identifier');
+      }
+
       return {
         status: 'COMPLETED',
         domain,
         isSupported: true,
         validationPassed: true,
         executionTimeMs: Date.now() - startTime,
-        engineRunId: rawResult?.engineRunId || `run_${Date.now()}`,
+        engineRunId: rawResult.engineRunId,
         timeVector: rawResult?.timeVector,
         signals: rawResult?.signals,
         metrics: rawResult?.metrics,
@@ -444,20 +448,12 @@ export class SimulationTools {
     const primarySignal = recordedSignals['va'] || recordedSignals['vout'] || Object.values(recordedSignals)[0] || [];
     let vRms = 0;
     let vPeak = 0;
-    let thd = 0.035;
 
     if (primarySignal.length > 0) {
       const sumSq = primarySignal.reduce((acc, v) => acc + v * v, 0);
       vRms = Math.round(Math.sqrt(sumSq / primarySignal.length) * 100) / 100;
       vPeak = Math.round(Math.max(...primarySignal.map(Math.abs)) * 100) / 100;
 
-      const mean = primarySignal.reduce((a, b) => a + b, 0) / primarySignal.length;
-      const acComponent = primarySignal.map(v => v - mean);
-      const acPower = acComponent.reduce((a, b) => a + b * b, 0) / primarySignal.length;
-      if (acPower > 1) {
-        thd = Math.round((Math.sqrt(Math.max(0, acPower - (vRms * vRms * 0.95))) / Math.max(1, vRms)) * 1000) / 1000;
-        if (isNaN(thd) || thd <= 0) thd = 0.032;
-      }
     }
 
     return {
@@ -467,7 +463,6 @@ export class SimulationTools {
       metrics: {
         vRms,
         vPeak,
-        thd,
         stepCount
       }
     };

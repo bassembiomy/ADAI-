@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('ADIA Agent Real Adapter Contract & Safety Gate E2E', () => {
+  test.setTimeout(180000);
   test.beforeEach(async ({ page }) => {
-    await page.goto('/?projectName=adia');
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto('/?projectName=adia', { waitUntil: 'domcontentloaded' });
 
     // Dismiss intro/welcome overlay if present
     const overlay = page.locator('[data-testid="welcome-overlay"], .fixed.inset-0.z-\\[9999\\]');

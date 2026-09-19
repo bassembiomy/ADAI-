@@ -358,4 +358,13 @@ describe('AgentPanel UI Component', () => {
     expect(html).toContain('Execution Completed');
     expect(html).toContain('All 16 plan actions executed and verified successfully');
   });
+
+  it('shows the verified engine run and does not imply unmeasured THD passed', () => {
+    const html = renderToStaticMarkup(<AgentPanel isOpen={true} orchestrator={new AgentOrchestrator(new MockLlm())} initialResponse={{
+      status: 'completed', message: 'Inverter built', taskState: createTaskState('Inverter', 'three_phase_inverter'),
+      simulationResult: { status: 'COMPLETED', domain: 'xbridges', isSupported: true, validationPassed: true, executionTimeMs: 3, engineRunId: 'xbr_run_123', metrics: { vRms: 220 }, diagnostics: [] }
+    } as any} />);
+    expect(html).toContain('xbr_run_123');
+    expect(html).toContain('THD not measured');
+  });
 });

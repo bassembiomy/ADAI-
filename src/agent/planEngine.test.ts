@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildExecutionPlan, createChangeApprovalRequest } from './planEngine';
+import { buildExecutionPlan, buildEngineeringModelPlanFromExecutionPlan, createChangeApprovalRequest } from './planEngine';
 import { EngineeringSpecification } from './specificationEngine';
 import { approve, createApprovalRequest } from './approvalGate';
 
@@ -83,5 +83,17 @@ describe('PlanEngine', () => {
     expect(changeReq.type).toBe('change');
     expect(changeReq.status).toBe('pending');
     expect(changeReq.payload['actionId']).toBe(plan.actions[0].id);
+  });
+
+  it('preflights the exact inverter actions that will execute', () => {
+    const spec: EngineeringSpecification = { ...sampleSpec, targetSystem: 'three_phase_inverter', approved: true };
+    const execution = buildExecutionPlan(spec);
+    const plan = buildEngineeringModelPlanFromExecutionPlan(execution, spec, 4);
+    expect(plan.blocks).toHaveLength(5);
+    expect(plan.connections).toHaveLength(11);
+    const edge = execution.actions.find(a => a.type === 'connect_ports')!;
+    edge.params.targetPortId = 'invented_port';
+    const changed = buildEngineeringModelPlanFromExecutionPlan(execution, spec, 4);
+    expect(changed.connections[0].toPortId).toBe('invented_port');
   });
 });

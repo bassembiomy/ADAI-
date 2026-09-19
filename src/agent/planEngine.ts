@@ -8,6 +8,7 @@ import {
 import { ActionKind } from './actionContracts';
 import { PlanPreflight, PreflightResult } from '../services/ai/planner/planPreflight';
 import { EngineeringModelPlan } from '../services/ai/contracts/engineeringModel';
+import { AdiaBlockCatalog } from './adiaBlockCatalog';
 
 export type PlanActionType = ActionKind;
 
@@ -34,6 +35,49 @@ export interface ExecutionPlan {
   status: 'draft' | 'awaiting_approval' | 'approved' | 'rejected';
   approved: boolean;
   createdAt: string;
+}
+
+/** Projects the approved action list into the model contract that preflight checks. */
+export function buildEngineeringModelPlanFromExecutionPlan(
+  execution: ExecutionPlan,
+  specification: EngineeringSpecification,
+  baseRevision: number
+): EngineeringModelPlan {
+  const blocks = execution.actions.filter(a => a.type === 'instantiate_block').map(action => {
+    const id = String(action.params.blockId);
+    const blockDefinitionId = String(action.params.blockType);
+    const definition = AdiaBlockCatalog.findById(blockDefinitionId);
+    const parameters = Object.entries(action.params)
+      .filter(([key]) => key !== 'blockId' && key !== 'blockType' && key !== 'instanceName')
+      .map(([parameterName, value]) => ({ blockId: id, parameterName, value: value as string | number | boolean }));
+    return {
+      id,
+      blockDefinitionId,
+      domain: 'xbridges' as const,
+      name: String(action.params.instanceName || definition?.name || id),
+      parameters
+    };
+  });
+  const connections = execution.actions.filter(a => a.type === 'connect_ports').map((action, index) => ({
+    id: `connection_${index}`,
+    fromBlockId: String(action.params.sourceNodeId),
+    fromPortId: String(action.params.sourcePortId),
+    toBlockId: String(action.params.targetNodeId),
+    toPortId: String(action.params.targetPortId),
+    domain: 'xbridges' as const
+  }));
+  return {
+    schemaVersion: '1.0.0',
+    planId: execution.id,
+    projectId: specification.taskId,
+    baseRevision,
+    targetDomain: 'xbridges',
+    designRationale: specification.title,
+    assumptions: specification.assumptions.map(a => `${a.key}: ${a.value}`),
+    blocks,
+    connections,
+    validationCriteria: []
+  };
 }
 
 /**
@@ -724,15 +768,7 @@ export function buildEngineeringModelPlanFromSpecification(
           domain: 'xbridges'
         }
       ],
-      validationCriteria: [
-        {
-          id: 'crit_thd',
-          description: 'Total Harmonic Distortion <= 5%',
-          metric: 'THD',
-          operator: '<=',
-          targetValue: 0.05
-        }
-      ]
+      validationCriteria: []
     };
   }
 

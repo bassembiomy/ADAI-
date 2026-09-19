@@ -118,25 +118,9 @@ export const THREE_PHASE_INVERTER_TEMPLATE: EngineeringSystemTemplate = {
   ],
   validationCriteria: [
     {
-      id: 'crit_thd',
-      description: 'Total Harmonic Distortion under 5%',
-      metric: 'THD',
-      operator: '<=',
-      targetValue: 0.05,
-      unit: 'ratio'
-    },
-    {
-      id: 'crit_freq',
-      description: 'Fundamental frequency matches target within 1%',
-      metric: 'FREQUENCY',
-      operator: '==',
-      targetValue: 50,
-      unit: 'Hz'
-    },
-    {
-      id: 'crit_continuity',
-      description: 'All 3 phases active without open circuit or DC saturation',
-      metric: 'PHASE_BALANCE',
+      id: 'crit_topology',
+      description: 'Inverter power, gate, and load connections pass topology validation',
+      metric: 'TOPOLOGY',
       operator: '==',
       targetValue: true
     }

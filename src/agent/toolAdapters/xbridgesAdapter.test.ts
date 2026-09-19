@@ -67,6 +67,19 @@ function makeNode(type: string, id: string): ReactFlowXbridgesNode {
 // ---------------------------------------------------------------------------
 
 describe('getNodes / getEdges', () => {
+  it('restores the exact node and edge presentation snapshot', async () => {
+    const node = makeNode(VALID_TYPE_1, 'gain-positioned');
+    node.position = { x: 47, y: 93 };
+    node.data.selected = true;
+    const store = createStore([node]);
+    const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });
+    const original = store.snapshot();
+    const snapshotNodes = await delegate.getNodes();
+    const snapshotEdges = await delegate.getEdges();
+    await delegate.addBlock(VALID_TYPE_2, { id: 'temporary' });
+    await delegate.restoreSnapshot!(snapshotNodes, snapshotEdges);
+    expect(store.snapshot()).toEqual(original);
+  });
   it('returns empty arrays when store is empty', async () => {
     const store = createStore();
     const delegate = createXbridgesDelegate({ ...store, onSave: vi.fn() });

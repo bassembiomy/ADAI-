@@ -613,6 +613,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 <div className="adia-agent-execution-result success" style={{ background: '#064e3b', border: '1px solid #059669', padding: '8px', borderRadius: '4px', margin: '8px 0' }}>
                   <div style={{ fontWeight: 600, color: '#34d399' }}>🎉 Execution Completed</div>
                   <div style={{ fontSize: '12px', color: '#e2e8f0', marginTop: '4px' }}>{currentResponse.message}</div>
+                  {currentResponse.simulationResult && (
+                    <div className="adia-agent-simulation-result" style={{ fontSize: '12px', marginTop: '6px' }}>
+                      Simulation: {currentResponse.simulationResult.status}; run: {currentResponse.simulationResult.engineRunId || 'none'}.
+                      {' '}THD {typeof currentResponse.simulationResult.metrics?.thd === 'number'
+                        ? `${currentResponse.simulationResult.metrics.thd}` : 'not measured'}.
+                    </div>
+                  )}
                 </div>
               )}
               {currentResponse?.status === 'failed' && (

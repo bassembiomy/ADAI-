@@ -1,5 +1,7 @@
 # ADIA Local AI Engineering Agent Evaluation & Architecture Report
 
+> 2026-09-19 update: The panel's inverter path is now covered by an 8-test Playwright agent suite and an application-path benchmark. The separate in-memory transaction/repair probes below do not establish that those services are wired into the panel. The solver reports observed voltage values and a real run ID; THD is not measured. Local Ollama has no installed model in this environment. See `docs/AI_AGENT_CODE_REVIEW.md` for open release gates.
+
 ## 1. Executive Summary
 
 This report evaluates ADIA's local AI Engineering Agent infrastructure, extending the agent framework into a controlled, validated three-phase inverter engineering workflow without duplicating model engines, registries, validators, persistence, or undo/transaction mechanisms.
@@ -36,9 +38,9 @@ The benchmark (`src/services/ai/benchmarks/threePhaseInverterScenario.ts`) exerc
 4. **Atomic Build:** Executed through `TransactionManager` with `EngineeringModelAdapter`, logging `PREPARED`, `EXECUTED`, and `COMMITTED` journal records and incrementing project revision.
 5. **Post-Build Validation:** `ModelValidator` evaluates schema, topology (no floating critical DC rails or gates, complete return path), and positive parameter values (`Ron > 0`).
 6. **Bounded Repair:** Intentional negative resistance is detected and deterministically repaired within the 3-attempt bound.
-7. **Simulation Gating:** Dynamic simulation runs via `SimulationTools.simulateModel`, returning real `engineRunId` with honest measured metrics (zero fabricated traces).
+7. **Simulation Gating:** Dynamic simulation runs via `SimulationTools.simulateModel`, returning a real `engineRunId` and observed voltage traces. Harmonic distortion remains unmeasured.
 8. **Live Application Adapter Realization:** Verified against `LiveXbridgesModelAdapter` connected to a live application delegate; verifies creation of exact 5 ReactFlow nodes and 11 edges.
-9. **Transaction Undo:** Calls `tm.undoTransaction()` to restore the initial empty state and verifies zero residual blocks.
+9. **Transaction Undo:** The isolated transaction probe calls `tm.undoTransaction()`. The application-path benchmark separately verifies panel orchestration, workspace save callback, and one-step undo.
 
 ### Benchmark Metrics
 

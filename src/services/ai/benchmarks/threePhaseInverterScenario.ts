@@ -1,4 +1,5 @@
 import { AgentOrchestrator } from '../../../agent/agentOrchestrator';
+import { ToolGateway } from '../../../agent/toolGateway';
 import { AdiaBlockCatalog } from '../../../agent/adiaBlockCatalog';
 import { EngineeringModelPlan } from '../contracts/engineeringModel';
 import { PlanPreflight } from '../planner/planPreflight';
@@ -6,6 +7,7 @@ import { EngineeringModelAdapter } from '../adapters/engineeringModelAdapter';
 import { LiveXbridgesModelAdapter } from '../adapters/liveXbridgesModelAdapter';
 import {
   createXbridgesDelegate,
+  XbridgesAdapter,
   ReactFlowXbridgesNode,
   ReactFlowXbridgesEdge,
 } from '../../../agent/toolAdapters/xbridgesAdapter';
@@ -25,6 +27,7 @@ export interface BenchmarkMetrics {
   truthfulReportingVerified: boolean;
   undoVerified: boolean;
   liveAdapterVerified: boolean;
+  appFlowVerified: boolean;
 }
 
 export interface ScenarioExecutionReport {
@@ -38,6 +41,8 @@ export interface ScenarioExecutionReport {
   simulationResult: SimulationResult;
   undoSuccess: boolean;
   liveAdapterSuccess: boolean;
+  appFlowVerified: boolean;
+  appFlowError?: string;
   metrics: BenchmarkMetrics;
 }
 
@@ -48,9 +53,7 @@ export class ThreePhaseInverterScenarioBenchmark {
     const template = findTemplateForIntent(requestText);
     const templateMatched = Boolean(template && (template.id === 'three_phase_inverter' || template.id === 'three-phase-inverter'));
 
-    const orchestrator = new AgentOrchestrator();
-    const clarTurn1 = await orchestrator.handle(requestText);
-    let clarificationTurns = 1;
+    let clarificationTurns = 0;
 
     // 2. Exact Registry Resolution
     const candidateBlocks = [
@@ -295,6 +298,53 @@ export class ThreePhaseInverterScenarioBenchmark {
       liveAdapterSuccess = false;
     }
 
+    // Run the same orchestrator and delegate action path used by AgentPanel.
+    let appFlowVerified = false;
+    let appFlowError: string | undefined;
+    try {
+      let liveNodes: ReactFlowXbridgesNode[] = [];
+      let liveEdges: ReactFlowXbridgesEdge[] = [];
+      let savedNodes: ReactFlowXbridgesNode[] = [];
+      let savedEdges: ReactFlowXbridgesEdge[] = [];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => liveNodes,
+        getEdges: () => liveEdges,
+        setNodes: updater => { liveNodes = updater(liveNodes); },
+        setEdges: updater => { liveEdges = updater(liveEdges); },
+        onSave: (nodes, edges) => { savedNodes = [...nodes]; savedEdges = [...edges]; }
+      });
+      const gateway = new ToolGateway({ xbridges: delegate } as any);
+      const adapter = new XbridgesAdapter(delegate);
+      gateway.registerAdapter('instantiate_block', adapter);
+      gateway.registerAdapter('connect_ports', adapter);
+      gateway.registerAdapter('configure_parameters', adapter);
+      const workflow = new AgentOrchestrator(undefined, gateway);
+      let response = await workflow.handle(requestText);
+      for (const answer of ['400V', '10000Hz', '50Hz']) {
+        if (response.status !== 'clarifying') throw new Error('Expected engineering clarification');
+        clarificationTurns++;
+        response = await workflow.handle(answer);
+      }
+      if (!response.pendingApproval || response.pendingApproval.type !== 'specification') throw new Error('No specification approval');
+      response = await workflow.approve(response.pendingApproval.id);
+      if (!response.pendingApproval || response.pendingApproval.type !== 'plan') throw new Error('No plan approval');
+      response = await workflow.approve(response.pendingApproval.id);
+      while (response.status === 'awaiting_change_approval' && response.pendingApproval) {
+        response = await workflow.approve(response.pendingApproval.id);
+      }
+      const simulationVerified = response.status === 'completed' && response.simulationResult?.status === 'COMPLETED'
+        && Boolean(response.simulationResult.engineRunId);
+      const stateVerified = liveNodes.length === 5 && liveEdges.length === 11;
+      const persistedAtCommit = savedNodes.length === 5 && savedEdges.length === 11;
+      const undo = await workflow.undoLastTransaction();
+      appFlowVerified = Boolean(simulationVerified && stateVerified && persistedAtCommit
+        && undo.success && liveNodes.length === 0 && liveEdges.length === 0 && savedNodes.length === 0 && savedEdges.length === 0);
+      if (!appFlowVerified) appFlowError = JSON.stringify({ status: response.status, simulationVerified, stateVerified, persistedAtCommit, undo, nodesAfterUndo: liveNodes.length, edgesAfterUndo: liveEdges.length });
+    } catch (error) {
+      appFlowVerified = false;
+      appFlowError = error instanceof Error ? error.message : String(error);
+    }
+
     // 9. Undo Transaction
     const entries = await journalStore.getEntries('proj_bench');
     const commitRecord = entries.find(e => e.status === 'COMMITTED');
@@ -316,6 +366,7 @@ export class ThreePhaseInverterScenarioBenchmark {
       truthfulReportingVerified,
       undoVerified: undoSuccess,
       liveAdapterVerified: liveAdapterSuccess,
+      appFlowVerified,
     };
 
     return {
@@ -329,6 +380,8 @@ export class ThreePhaseInverterScenarioBenchmark {
       simulationResult,
       undoSuccess,
       liveAdapterSuccess,
+      appFlowVerified,
+      appFlowError,
       metrics
     };
   }

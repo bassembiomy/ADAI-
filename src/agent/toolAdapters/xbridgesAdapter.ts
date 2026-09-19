@@ -107,7 +107,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
    * uses. The agent never receives internal React Flow-specific fields.
    */
   function toAgentNode(n: ReactFlowXbridgesNode): XbridgesNode {
-    return { id: n.id, type: String(n.data?.type ?? n.type), data: { ...(n.data as Record<string, unknown>) } };
+    return { ...n, id: n.id, type: String(n.data?.type ?? n.type), data: { ...(n.data as Record<string, unknown>) } };
   }
 
   /**
@@ -115,6 +115,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
    */
   function toAgentEdge(e: ReactFlowXbridgesEdge): XbridgesEdge {
     return {
+      ...e,
       id: e.id,
       source: e.source,
       target: e.target,
@@ -272,19 +273,19 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
 
     async restoreSnapshot(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void> {
       setNodes(() => nodes.map(n => ({
+        ...n,
         id: n.id,
-        type: 'xblock',
+        type: (n as any).position ? 'xblock' : n.type,
         position: (n as any).position || { x: 200, y: 200 },
         data: {
           ...n.data,
           id: n.id,
           type: n.type,
-          instanceName: (n.data as any)?.instanceName || n.id,
-          selected: false
         }
       } as unknown as ReactFlowXbridgesNode)));
 
       setEdges(() => edges.map(e => ({
+        ...e,
         id: e.id,
         source: e.source,
         target: e.target,
