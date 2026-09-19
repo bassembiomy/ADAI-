@@ -79,6 +79,106 @@ export const EngineeringModelPlanSchema = z.object({
 }).strict();
 export type EngineeringModelPlan = z.infer<typeof EngineeringModelPlanSchema>;
 
+export const XbridgesActionKindEnum = z.enum([
+  'add_block',
+  'remove_block',
+  'set_parameter',
+  'connect_ports',
+  'disconnect_ports',
+  'move_block',
+  'rename_block'
+]);
+export type XbridgesActionKind = z.infer<typeof XbridgesActionKindEnum>;
+
+export const XbridgesAddBlockActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('add_block'),
+  blockId: z.string().min(1),
+  blockType: z.string().min(1),
+  parameters: z.record(z.string(), z.unknown()).optional(),
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
+}).strict();
+
+export const XbridgesRemoveBlockActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('remove_block'),
+  blockId: z.string().min(1),
+}).strict();
+
+export const XbridgesSetParameterActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('set_parameter'),
+  blockId: z.string().min(1),
+  parameterName: z.string().min(1),
+  value: z.unknown(),
+  unit: z.string().optional(),
+}).strict();
+
+export const XbridgesConnectPortsActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('connect_ports'),
+  sourceBlockId: z.string().min(1),
+  sourcePortId: z.string().min(1),
+  targetBlockId: z.string().min(1),
+  targetPortId: z.string().min(1),
+}).strict();
+
+export const XbridgesDisconnectPortsActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('disconnect_ports'),
+  sourceBlockId: z.string().min(1),
+  sourcePortId: z.string().min(1),
+  targetBlockId: z.string().min(1),
+  targetPortId: z.string().min(1),
+}).strict();
+
+export const XbridgesMoveBlockActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('move_block'),
+  blockId: z.string().min(1),
+  position: z.object({ x: z.number(), y: z.number() }),
+}).strict();
+
+export const XbridgesRenameBlockActionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('rename_block'),
+  blockId: z.string().min(1),
+  newLabel: z.string().min(1),
+}).strict();
+
+export const XbridgesActionSchema = z.discriminatedUnion('kind', [
+  XbridgesAddBlockActionSchema,
+  XbridgesRemoveBlockActionSchema,
+  XbridgesSetParameterActionSchema,
+  XbridgesConnectPortsActionSchema,
+  XbridgesDisconnectPortsActionSchema,
+  XbridgesMoveBlockActionSchema,
+  XbridgesRenameBlockActionSchema,
+]);
+export type XbridgesAction = z.infer<typeof XbridgesActionSchema>;
+
+export const EngineeringModelPlanV2Schema = z.object({
+  schemaVersion: z.literal('2.0.0'),
+  planId: z.string().min(1),
+  planHash: z.string().min(1),
+  projectId: z.string().min(1),
+  baseRevision: z.number().int().nonnegative(),
+  catalogFingerprint: z.string().min(1),
+  expectedBeforeHash: z.string().min(1),
+  expectedAfterDelta: z.object({
+    addedBlocks: z.array(z.string()),
+    removedBlocks: z.array(z.string()),
+    modifiedBlocks: z.array(z.string()),
+    addedConnections: z.array(z.object({ from: z.string(), to: z.string() })),
+    removedConnections: z.array(z.object({ from: z.string(), to: z.string() })),
+  }),
+  actions: z.array(XbridgesActionSchema),
+  blocks: z.array(LogicalBlockSchema),
+  connections: z.array(LogicalConnectionSchema),
+  validationCriteria: z.array(ValidationCriterionSchema).optional(),
+}).strict();
+export type EngineeringModelPlanV2 = z.infer<typeof EngineeringModelPlanV2Schema>;
+
 export interface PlanValidationResult {
   isValid: boolean;
   diagnostics: StructuredDiagnostic[];
