@@ -112,11 +112,12 @@ export class PatternStore {
   ): Promise<EngineeringPattern> {
     if (!this.initialized) await this.init();
 
-    const contentHash = computePatternContentHash(payload);
-    const id = derivePatternId(payload.name, contentHash);
+    const { id: _ignoreId, contentHash: _ignoreHash, ...cleanPayload } = payload as any;
+    const contentHash = computePatternContentHash(cleanPayload);
+    const id = derivePatternId(cleanPayload.name, contentHash);
 
     const fullPattern: EngineeringPattern = {
-      ...payload,
+      ...cleanPayload,
       id,
       contentHash
     };
