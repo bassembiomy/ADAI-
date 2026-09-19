@@ -13,4 +13,4 @@
 - [x] Task 11: General Diagnosis and Bounded Repair
 - [x] Task 12: Deterministic Optimization With Evidence
 - [x] Task 13: Replace the Inverter Route With the General Orchestrator and UI
-- [ ] Task 14: Build the Cross-Domain Acceptance Corpus and Release Gate
+- [x] Task 14: Build the Cross-Domain Acceptance Corpus and Release Gate
