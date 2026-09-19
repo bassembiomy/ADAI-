@@ -10,7 +10,7 @@
 - [x] Task 8: Create the Versioned Offline Engineering Pattern Store
 - [x] Task 9: Build Lawful Public-Source Ingestion
 - [x] Task 10: Import Simulink and Scilab Models Into Quarantine
-- [ ] Task 11: General Diagnosis and Bounded Repair
+- [x] Task 11: General Diagnosis and Bounded Repair
 - [ ] Task 12: Deterministic Optimization With Evidence
 - [ ] Task 13: Replace the Inverter Route With the General Orchestrator and UI
 - [ ] Task 14: Build the Cross-Domain Acceptance Corpus and Release Gate
