@@ -70,6 +70,19 @@ describe('xbridgesWorker', () => {
     expect(response.engineSnapshot?.blockStates['integ']).toBeCloseTo(directIntegratorState, 6);
   });
 
+  it('rehydrates function-free blocks received through postMessage', () => {
+    const liveModel = createIntegratorModel();
+    const serializedModel = {
+      ...liveModel,
+      blocks: liveModel.blocks.map(({ execute: _execute, evaluateDerivatives: _derivatives, ZeroCrossingFn: _zeroCrossing, ...block }) => block as any)
+    } as XModel;
+    const response = handleXbridgesWorkerMessage({
+      requestId: 99, type: 'step', model: serializedModel,
+      solverType: 'rk4', time: 0, dt: 0.01
+    });
+    expect(response.ok).toBe(true);
+  });
+
   it('produces identical output to direct XbridgesEngine for coupled PID model using Euler and adaptive solvers', () => {
     const modelDirect = createPIDCoupledModel();
     const engineDirect = new XbridgesEngine(modelDirect);

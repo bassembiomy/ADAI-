@@ -112,11 +112,14 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       }
     }
 
+    const engineRunId = request.engineRunId || (type === 'compile' ? `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : undefined);
+
     if (type === 'compile') {
       return {
         requestId,
         ok: true,
         simulationTime: request.time || 0,
+        engineRunId,
         diagnostics: workerEngine.diagnostics,
         engineSnapshot: serializeEngineSnapshot(workerEngine, request.time || 0),
         outputValues: collectOutputValues(workerEngine),
@@ -146,6 +149,7 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       requestId,
       ok: true,
       simulationTime: currentTime,
+      engineRunId,
       engineSnapshot: serializeEngineSnapshot(workerEngine, currentTime),
       outputValues: collectOutputValues(workerEngine),
       diagnostics: workerEngine.diagnostics,

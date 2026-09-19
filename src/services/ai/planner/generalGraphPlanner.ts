@@ -74,6 +74,16 @@ interface InternalConnSpec {
   toPortId: string;
 }
 
+function getFirstInPort(catalog: XbridgesCapabilityIndex, blockType: string, fallback = 'in'): string {
+  const cap = catalog.blocks.get(blockType);
+  return cap?.inputs[0]?.id || fallback;
+}
+
+function getFirstOutPort(catalog: XbridgesCapabilityIndex, blockType: string, fallback = 'out'): string {
+  const cap = catalog.blocks.get(blockType);
+  return cap?.outputs[0]?.id || fallback;
+}
+
 // Built-in canonical reference archetypes for core engineering patterns
 function getCanonicalArchetype(
   behaviors: string[],
@@ -88,21 +98,28 @@ function getCanonicalArchetype(
 
   if (text.includes('feed_forward') || text.includes('open_loop') || text.includes('feed-forward')) {
     const stepType = catalog.blocks.has('Step') ? 'Step' : 'Constant';
-    const gainType = catalog.blocks.has('Gain') ? 'Gain' : 'Step';
-    const plantType = catalog.blocks.has('INTEGRATOR_CONTINUOUS') ? 'INTEGRATOR_CONTINUOUS' : 'Integrator';
+    const gainType = catalog.blocks.has('Gain') ? 'Gain' : (catalog.blocks.has('GAIN') ? 'GAIN' : 'Integrator');
+    const plantType = catalog.blocks.has('Integrator') ? 'Integrator' : 'INTEGRATOR_CONTINUOUS';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
+
+    const stepOut = getFirstOutPort(catalog, stepType, 'out');
+    const gainIn = getFirstInPort(catalog, gainType, 'in');
+    const gainOut = getFirstOutPort(catalog, gainType, 'out');
+    const plantIn = getFirstInPort(catalog, plantType, 'in');
+    const plantOut = getFirstOutPort(catalog, plantType, 'out');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
       blocks: [
         { id: 'src_step', type: stepType, params: { stepTime: 1, initialValue: 0, finalValue: 1 }, position: { x: 100, y: 150 } },
-        { id: 'gain_ff', type: gainType, params: { gain: 2 }, position: { x: 350, y: 150 } },
-        { id: 'plant_integ', type: plantType, params: { initial_condition: 0 }, position: { x: 600, y: 150 } },
+        { id: 'gain_ff', type: gainType, params: gainType === 'Integrator' ? { initialCondition: 0 } : { gain: 2 }, position: { x: 350, y: 150 } },
+        { id: 'plant_integ', type: plantType, params: { initialCondition: 0 }, position: { x: 600, y: 150 } },
         { id: 'sink_scope', type: sinkType, params: {}, position: { x: 850, y: 150 } },
       ],
       connections: [
-        { fromBlockId: 'src_step', fromPortId: 'out', toBlockId: 'gain_ff', toPortId: 'in' },
-        { fromBlockId: 'gain_ff', fromPortId: 'out', toBlockId: 'plant_integ', toPortId: 'in' },
-        { fromBlockId: 'plant_integ', fromPortId: 'out', toBlockId: 'sink_scope', toPortId: 'in1' },
+        { fromBlockId: 'src_step', fromPortId: stepOut, toBlockId: 'gain_ff', toPortId: gainIn },
+        { fromBlockId: 'gain_ff', fromPortId: gainOut, toBlockId: 'plant_integ', toPortId: plantIn },
+        { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
       ],
       provenance: { patternId: 'canonical_feedforward', version: '1.0.0', license: 'MIT' },
     };

@@ -4,6 +4,21 @@ import type {
 } from '../engine/xbridges/xbridgesWorkerProtocol';
 import type { XModel } from '../engine/xbridges/types';
 
+function serializeModelForWorker(model: XModel): XModel {
+  return {
+    connections: model.connections.map(connection => ({ ...connection })),
+    blocks: model.blocks.map(block => {
+      const {
+        execute: _execute,
+        evaluateDerivatives: _evaluateDerivatives,
+        ZeroCrossingFn: _zeroCrossingFn,
+        ...serializableBlock
+      } = block;
+      return serializableBlock as unknown as XModel['blocks'][number];
+    })
+  };
+}
+
 interface PendingStep {
   request: XbridgesWorkerRequest;
   resolve: (res: XbridgesWorkerResponse) => void;
@@ -106,7 +121,7 @@ export class XbridgesWorkerClient {
     const request: XbridgesWorkerRequest = {
       requestId,
       type: 'compile',
-      model,
+      model: serializeModelForWorker(model),
       time,
       dt: 0,
     };

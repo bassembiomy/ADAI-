@@ -12,6 +12,7 @@ export interface XbridgesWorkerRequest {
   requestId: number;
   type: XbridgesWorkerTaskType;
   model?: XModel;
+  engineRunId?: string;
   solverType?: string;
   solverOptions?: Partial<SolverOptions>;
   engineSnapshot?: XbridgesEngineSnapshot | null;
@@ -26,6 +27,7 @@ export interface XbridgesWorkerResponse {
   requestId: number;
   ok: boolean;
   simulationTime: number;
+  engineRunId?: string;
   engineSnapshot?: XbridgesEngineSnapshot;
   outputValues?: Record<string, any>;
   diagnostics?: ModelDiagnostic[];

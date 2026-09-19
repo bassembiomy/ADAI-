@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { XbridgesWorkerClient } from './xbridgesWorkerClient';
 import type { XbridgesWorkerRequest, XbridgesWorkerResponse } from '../engine/xbridges/xbridgesWorkerProtocol';
+import { BLOCK_LIBRARY } from '../engine/xbridges/BlockDefinitions';
 
 class MockWorker {
   public onmessage: ((this: any, ev: MessageEvent) => any) | null = null;
@@ -34,6 +35,15 @@ describe('XbridgesWorkerClient', () => {
     expect(client.available).toBe(true);
     const unavailable = new XbridgesWorkerClient(null);
     expect(unavailable.available).toBe(false);
+  });
+
+  it('serializes executable block definitions before posting a compile request', () => {
+    const model = { blocks: [BLOCK_LIBRARY.Constant('source', { value: 1 })], connections: [] };
+    void client.compile(model);
+    const request = mockWorker.postMessage.mock.calls[0][0] as XbridgesWorkerRequest;
+    expect(typeof model.blocks[0].execute).toBe('function');
+    expect(typeof request.model?.blocks[0].execute).toBe('undefined');
+    expect(() => structuredClone(request)).not.toThrow();
   });
 
   it('dispatches step and resolves with worker response', async () => {
