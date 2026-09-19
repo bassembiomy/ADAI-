@@ -68,10 +68,10 @@ function normalizeRequestInput(input: GeneralEngineeringRequest | TaskState): Ge
       targetBehaviors: [],
       inputs,
       outputs,
-      constraints: (rs.constraints || []).map(c => ({
-        name: c.id,
+      constraints: (rs.constraints || []).map((c: any, i: number) => ({
+        name: typeof c === 'string' ? `constraint_${i + 1}` : (c?.id || `constraint_${i + 1}`),
         type: 'max',
-        target: c.description,
+        target: typeof c === 'string' ? c : (c?.description || c?.target || `constraint_${i + 1}`),
         value: 0,
       })),
     };

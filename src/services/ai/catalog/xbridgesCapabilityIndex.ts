@@ -96,7 +96,7 @@ export function buildXbridgesCapabilityIndex(): XbridgesCapabilityIndex {
       })
     );
 
-    const allPorts: XbridgesPortCapability[] = Object.freeze([...inputs, ...outputs]);
+    const allPorts: readonly XbridgesPortCapability[] = Object.freeze([...inputs, ...outputs]);
 
     const paramsRecord: Record<string, XbridgesParameterCapability> = {};
     const parameterNames = Object.keys(instance.params || {}).sort();

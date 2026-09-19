@@ -300,7 +300,7 @@ export function planGeneralXbridgesModel(
   // 2. Synthesize Graph & Diff against activeSnapshot
   const existingNodeMap = new Map<string, any>();
   for (const n of activeSnapshot.nodes) {
-    const bId = n.data?.blockId || n.id;
+    const bId = String(n.data?.blockId || n.id);
     existingNodeMap.set(bId, n);
   }
 
@@ -321,11 +321,11 @@ export function planGeneralXbridgesModel(
     for (const inp of request.inputs) {
       // Find matching existing node by block type or name
       const targetNode = activeSnapshot.nodes.find(
-        n => (n.data?.blockType || '').toLowerCase() === inp.name.toLowerCase() ||
-             (n.data?.label || '').toLowerCase() === inp.name.toLowerCase()
+        n => String(n.data?.blockType || '').toLowerCase() === inp.name.toLowerCase() ||
+             String(n.data?.label || '').toLowerCase() === inp.name.toLowerCase()
       );
       if (targetNode) {
-        const bId = targetNode.data?.blockId || targetNode.id;
+        const bId = String(targetNode.data?.blockId || targetNode.id);
         const actionId = `act_param_${bId}_value`;
         actions.push({
           id: actionId,

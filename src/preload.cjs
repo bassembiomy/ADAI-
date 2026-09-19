@@ -16,6 +16,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   'sm-verify-generated-c',
   'project-open-dialog', 'project-save', 'project-save-as', 'project-accept-open',
   'project-save-snapshot', 'project-reload-snapshot',
+  'pattern-store-get', 'pattern-store-list',
 ];
 
 const ALLOWED_ON_CHANNELS = [
@@ -66,6 +67,8 @@ const createIpcBridge = () => Object.freeze({
   projectAcceptOpen: (payload) => ipcRenderer.invoke('project-accept-open', payload),
   projectSaveSnapshot: (snapshot, options) => ipcRenderer.invoke('project-save-snapshot', snapshot, options),
   projectReloadSnapshot: (receipt, options) => ipcRenderer.invoke('project-reload-snapshot', receipt, options),
+  patternStoreGet: (id) => ipcRenderer.invoke('pattern-store-get', id),
+  patternStoreList: (filter) => ipcRenderer.invoke('pattern-store-list', filter),
   onProjectOpenRequested: (callback) => {
     const subscription = (_event, data) => callback(data);
     ipcRenderer.on('project-open-requested', subscription);

@@ -141,11 +141,15 @@ export class LiveXbridgesModelAdapter {
 
     switch (action.kind) {
       case 'add_block': {
-        const params: Record<string, unknown> = { id: action.blockId, instanceName: action.blockId };
-        for (const p of action.parameters || []) {
-          params[p.parameterName] = p.value;
+        const params: Record<string, unknown> = {
+          id: action.blockId,
+          instanceName: action.blockId,
+          ...(action.parameters || {})
+        };
+        const node = await this.delegate.addBlock(action.blockType, params);
+        if (action.position && this.delegate.moveBlock) {
+          await this.delegate.moveBlock(node.id, action.position);
         }
-        const node = await this.delegate.addBlock(action.blockDefinitionId, params);
         changedNodeIds = [node.id];
         break;
       }

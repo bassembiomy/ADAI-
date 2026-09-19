@@ -326,6 +326,46 @@ app.on('activate', () => {
   }
 });
 
+// IPC Handlers for Offline Engineering Pattern Store
+const patternStoreBaseDir = path.join(__dirname, '..', 'resources', 'engineering-patterns');
+
+ipcMain.handle('pattern-store-get', async (_event, id) => {
+  if (!id || typeof id !== 'string' || id.includes('..') || id.includes('\0')) {
+    throw new Error('INVALID_PATTERN_ID');
+  }
+  const manifestPath = path.join(patternStoreBaseDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const entry = manifest.patterns && manifest.patterns[id];
+  if (!entry) return null;
+  const patternFile = path.resolve(patternStoreBaseDir, entry.filePath);
+  if (!patternFile.startsWith(path.resolve(patternStoreBaseDir))) {
+    throw new Error('PATH_TRAVERSAL_BLOCKED');
+  }
+  if (!fs.existsSync(patternFile)) return null;
+  return JSON.parse(fs.readFileSync(patternFile, 'utf8'));
+});
+
+ipcMain.handle('pattern-store-list', async (_event, filter) => {
+  const manifestPath = path.join(patternStoreBaseDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return [];
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const results = [];
+  for (const [id, entry] of Object.entries(manifest.patterns || {})) {
+    if (filter && filter.lifecycle && entry.lifecycle !== filter.lifecycle) continue;
+    const patternFile = path.resolve(patternStoreBaseDir, entry.filePath);
+    if (!patternFile.startsWith(path.resolve(patternStoreBaseDir))) continue;
+    if (fs.existsSync(patternFile)) {
+      try {
+        const pattern = JSON.parse(fs.readFileSync(patternFile, 'utf8'));
+        if (filter && filter.domain && pattern.domain !== filter.domain) continue;
+        results.push(pattern);
+      } catch {}
+    }
+  }
+  return results.sort((a, b) => a.id.localeCompare(b.id));
+});
+
 // IPC Handlers for Project persistence
 ipcMain.handle('import-json', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({

@@ -310,14 +310,14 @@ export class EngineeringToolDispatcher {
           const validationError = this.validateAndConsumeMutationToken(toolName, parsed.data, ctx);
           if (validationError) return validationError;
 
-          const moved = await delegate.moveBlock(parsed.data.blockId, { x: parsed.data.x, y: parsed.data.y });
+          const moved = await delegate.moveBlock(parsed.data.blockId, parsed.data.position);
           await delegate.save();
 
           return createSuccessToolResult(toolName, {
             blockId: moved.id,
             position: moved.position,
             moved: true
-          }, ctx.currentRevision, `Block '${parsed.data.blockId}' moved to (${parsed.data.x}, ${parsed.data.y})`, Date.now() - startTime);
+          }, ctx.currentRevision, `Block '${parsed.data.blockId}' moved to (${parsed.data.position.x}, ${parsed.data.position.y})`, Date.now() - startTime);
         }
 
         case 'rename_block': {

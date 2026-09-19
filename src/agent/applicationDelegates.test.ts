@@ -64,7 +64,14 @@ const mockXbridges: XbridgesApplicationDelegate = {
     type: 'updated',
     data: params,
   }),
+  removeBlock: async (nodeId) => ({ removedNodeId: nodeId, removedEdgeIds: [] }),
+  moveBlock: async (nodeId, pos) => ({ id: nodeId, type: 'block', data: {}, position: pos }),
+  renameBlock: async (_nodeId, newId) => ({ id: newId, type: 'block', data: {} }),
+  disconnectPorts: async () => ({ disconnectedEdgeId: 'edge-1' }),
+  validate: async () => ({ valid: true, diagnostics: [] }),
   save: async () => {},
+  saveAndReadBack: async () => ({ nodes: [], edges: [], fingerprint: 'fp_test' }),
+  getRevisionFingerprint: async () => 'fp_test',
 };
 
 const mockSysml: SysmlApplicationDelegate = {

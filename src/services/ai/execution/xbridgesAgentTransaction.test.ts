@@ -57,15 +57,15 @@ describe('XbridgesAgentTransaction', () => {
         id: 'act_1',
         kind: 'add_block',
         blockId: 'gain_1',
-        blockDefinitionId: 'GAIN',
-        parameters: [{ blockId: 'gain_1', parameterName: 'gain', value: 5 }]
+        blockType: 'GAIN',
+        parameters: { gain: 5 }
       },
       {
         id: 'act_2',
         kind: 'add_block',
         blockId: 'scope_1',
-        blockDefinitionId: 'Scope',
-        parameters: []
+        blockType: 'Scope',
+        parameters: {}
       },
       {
         id: 'act_3',

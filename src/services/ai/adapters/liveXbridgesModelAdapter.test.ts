@@ -277,8 +277,8 @@ describe('LiveXbridgesModelAdapter', () => {
         id: 'act_add_1',
         kind: 'add_block',
         blockId: 'gain_1',
-        blockDefinitionId: 'GAIN',
-        parameters: [{ blockId: 'gain_1', parameterName: 'gain', value: 2 }]
+        blockType: 'GAIN',
+        parameters: { gain: 2 }
       });
       expect(add1.changedNodeIds).toEqual(['gain_1']);
       expect(add1.beforeHash).not.toBe(add1.afterHash);
@@ -288,8 +288,8 @@ describe('LiveXbridgesModelAdapter', () => {
         id: 'act_add_2',
         kind: 'add_block',
         blockId: 'scope_1',
-        blockDefinitionId: 'Scope',
-        parameters: []
+        blockType: 'Scope',
+        parameters: {}
       });
       expect(add2.changedNodeIds).toEqual(['scope_1']);
 

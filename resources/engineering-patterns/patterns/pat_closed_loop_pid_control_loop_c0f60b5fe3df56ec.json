@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "id": "pat_closed_loop_pid_control_loop_c0f60b5fe3df56ec",
+  "name": "Closed-Loop PID Control Loop",
+  "description": "Feedback control loop with setpoint step input, PID controller, and first-order gain plant",
+  "domain": "control",
+  "provenance": {
+    "source": "reviewed_corpus",
+    "author": "ADIA Core Engineering",
+    "license": "Apache-2.0",
+    "licenseApproved": true,
+    "ingestedAt": 1710000000000
+  },
+  "lifecycle": "verified",
+  "requirements": {
+    "targetSystem": "closed_loop_pid",
+    "targetBehaviors": [
+      "error_regulation",
+      "setpoint_tracking"
+    ],
+    "requiredInputs": [
+      "setpoint_step"
+    ],
+    "requiredOutputs": [
+      "plant_output"
+    ]
+  },
+  "topology": {
+    "blocks": [
+      {
+        "blockId": "Step",
+        "role": "setpoint",
+        "defaultParams": {
+          "step_time": 1,
+          "initial_value": 0,
+          "final_value": 1
+        }
+      },
+      {
+        "blockId": "Sum",
+        "role": "error_detector",
+        "defaultParams": {
+          "signs": "+-"
+        }
+      },
+      {
+        "blockId": "PID_CONTROLLER",
+        "role": "controller",
+        "defaultParams": {
+          "Kp": 2,
+          "Ki": 0.5,
+          "Kd": 0.1
+        }
+      },
+      {
+        "blockId": "Gain",
+        "role": "plant",
+        "defaultParams": {
+          "gain": 5
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceBlockRole": "setpoint",
+        "sourcePort": "out",
+        "targetBlockRole": "error_detector",
+        "targetPort": "in1"
+      },
+      {
+        "sourceBlockRole": "error_detector",
+        "sourcePort": "out",
+        "targetBlockRole": "controller",
+        "targetPort": "error"
+      },
+      {
+        "sourceBlockRole": "controller",
+        "sourcePort": "u",
+        "targetBlockRole": "plant",
+        "targetPort": "u"
+      },
+      {
+        "sourceBlockRole": "plant",
+        "sourcePort": "y",
+        "targetBlockRole": "error_detector",
+        "targetPort": "in2"
+      }
+    ]
+  },
+  "exactMappings": {
+    "setpoint": "Step",
+    "error_detector": "Sum",
+    "controller": "PID_CONTROLLER",
+    "plant": "Gain"
+  },
+  "simulationContract": {
+    "minDuration": 5,
+    "stepSize": 0.001,
+    "expectedObservables": [
+      "plant_output",
+      "control_signal"
+    ]
+  },
+  "evidence": {
+    "proofStatus": "proved",
+    "catalogFingerprint": "xbridges_cat_verified_seed",
+    "engineRunId": "xbr_seed_run_002",
+    "measuredAt": 1710000000000,
+    "qualityScore": 0.95
+  },
+  "contentHash": "c0f60b5fe3df56eca92011bc0cd66590dda743eb57c491b6ff55be15cb40a528"
+}

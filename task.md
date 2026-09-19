@@ -7,7 +7,7 @@
 - [x] Task 5: Complete the Live X-Bridges Mutation Surface
 - [x] Task 6: Implement Per-Action Approval Inside One Atomic Transaction
 - [x] Task 7: Verify Real Save, Reload, Restart, and Undo
-- [ ] Task 8: Create the Versioned Offline Engineering Pattern Store
+- [x] Task 8: Create the Versioned Offline Engineering Pattern Store
 - [ ] Task 9: Build Lawful Public-Source Ingestion
 - [ ] Task 10: Import Simulink and Scilab Models Into Quarantine
 - [ ] Task 11: General Diagnosis and Bounded Repair

@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "id": "pat_three_phase_inverter_bridge_61924689c8269959",
+  "name": "Three-Phase Inverter Bridge",
+  "description": "Three-phase DC to AC bridge converter with PWM switching and LC filter",
+  "domain": "electrical",
+  "provenance": {
+    "source": "reviewed_corpus",
+    "author": "ADIA Core Engineering",
+    "license": "Apache-2.0",
+    "licenseApproved": true,
+    "ingestedAt": 1710000000000,
+    "originalSourceHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "lifecycle": "verified",
+  "requirements": {
+    "targetSystem": "three_phase_inverter",
+    "targetBehaviors": [
+      "dc_ac_inversion",
+      "sinusoidal_ac_output"
+    ],
+    "requiredInputs": [
+      "dc_voltage_source"
+    ],
+    "requiredOutputs": [
+      "phase_a",
+      "phase_b",
+      "phase_c"
+    ],
+    "operatingRanges": {
+      "dc_bus_voltage": {
+        "min": 200,
+        "max": 800,
+        "unit": "V"
+      }
+    }
+  },
+  "topology": {
+    "blocks": [
+      {
+        "blockId": "DC_VOLTAGE_SOURCE",
+        "role": "dc_source",
+        "defaultParams": {
+          "voltage": 400
+        }
+      },
+      {
+        "blockId": "THREE_PHASE_INVERTER",
+        "role": "inverter_bridge",
+        "defaultParams": {
+          "switching_freq": 10000
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceBlockRole": "dc_source",
+        "sourcePort": "v_pos",
+        "targetBlockRole": "inverter_bridge",
+        "targetPort": "vdc_p"
+      }
+    ]
+  },
+  "exactMappings": {
+    "dc_source": "DC_VOLTAGE_SOURCE",
+    "inverter_bridge": "THREE_PHASE_INVERTER"
+  },
+  "simulationContract": {
+    "minDuration": 0.05,
+    "stepSize": 0.00001,
+    "expectedObservables": [
+      "v_phase_a",
+      "current_thd"
+    ],
+    "tolerance": {
+      "current_thd": 0.05
+    }
+  },
+  "evidence": {
+    "proofStatus": "proved",
+    "catalogFingerprint": "xbridges_cat_verified_seed",
+    "engineRunId": "xbr_seed_run_001",
+    "measuredAt": 1710000000000,
+    "qualityScore": 0.98
+  },
+  "contentHash": "61924689c82699595eafcd99c6e8d3ef3fecf39bb7bdf4b3a6d10505e9c65b8b"
+}
