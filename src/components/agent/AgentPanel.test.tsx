@@ -367,4 +367,69 @@ describe('AgentPanel UI Component', () => {
     expect(html).toContain('xbr_run_123');
     expect(html).toContain('THD not measured');
   });
+
+  it('renders isolated proof card with engine run id, observables, and catalog fingerprint', () => {
+    const html = renderToStaticMarkup(
+      <AgentPanel
+        isOpen={true}
+        orchestrator={new AgentOrchestrator(new MockLlm())}
+        initialResponse={{
+          status: 'awaiting_plan_approval',
+          message: 'Plan proved in isolated worker. Please review and approve.',
+          taskState: createTaskState('General Test', 'xbridges'),
+          proof: {
+            status: 'proved',
+            planHash: 'hash_abc123',
+            catalogHash: 'cat_fp_456',
+            engineRunId: 'eng_run_proof_789',
+            diagnostics: [],
+            observables: { vOut: 12.0, iPeak: 1.5 }
+          },
+          pendingApproval: {
+            id: 'app_plan_1',
+            type: 'plan',
+            status: 'pending',
+            title: 'Approve Plan',
+            description: 'Approve execution plan',
+            payload: {},
+            createdAt: new Date().toISOString()
+          }
+        } as any}
+      />
+    );
+
+    expect(html).toContain('Isolated Plan Proof');
+    expect(html).toContain('eng_run_proof_789');
+    expect(html).toContain('cat_fp_456');
+    expect(html).toContain('vOut');
+    expect(html).toContain('12');
+  });
+
+  it('renders transaction status and observed delta evidence', () => {
+    const html = renderToStaticMarkup(
+      <AgentPanel
+        isOpen={true}
+        orchestrator={new AgentOrchestrator(new MockLlm())}
+        initialResponse={{
+          status: 'awaiting_change_approval',
+          message: 'Action 1 executed. Next action ready.',
+          taskState: createTaskState('General Test', 'xbridges'),
+          transactionStatus: 'awaiting_action',
+          observedDeltas: { addedBlocksCount: 1, modifiedParamsCount: 0 },
+          pendingApproval: {
+            id: 'app_chg_2',
+            type: 'change',
+            status: 'pending',
+            title: 'Add Capacitor',
+            description: 'Place capacitor block',
+            payload: {},
+            createdAt: new Date().toISOString()
+          }
+        } as any}
+      />
+    );
+
+    expect(html).toContain('Transaction Status');
+    expect(html).toContain('awaiting_action');
+  });
 });

@@ -574,6 +574,47 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 </div>
               )}
 
+              {/* Isolated Plan Proof Card */}
+              {Boolean(currentResponse?.proof) && (
+                <div className="adia-agent-proof-card" style={{ background: '#0f172a', border: '1px solid #0284c7', borderRadius: '4px', padding: '8px', margin: '8px 0' }}>
+                  <div style={{ fontWeight: 600, color: '#38bdf8', marginBottom: '4px' }}>
+                    🔬 Isolated Plan Proof ({currentResponse!.proof!.status.toUpperCase()})
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    Engine Run ID: <span style={{ color: '#38bdf8' }}>{currentResponse!.proof!.engineRunId || 'none'}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    Catalog Fingerprint: <span style={{ color: '#a78bfa' }}>{currentResponse!.proof!.catalogHash || 'canonical'}</span>
+                  </div>
+                  {Boolean(currentResponse!.proof!.observables && Object.keys(currentResponse!.proof!.observables).length > 0) && (
+                    <div style={{ marginTop: '4px', fontSize: '11px' }}>
+                      <div style={{ color: '#94a3b8' }}>Observables:</div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+                        {Object.entries(currentResponse!.proof!.observables).map(([k, v]) => (
+                          <span key={k} style={{ background: '#1e293b', padding: '2px 6px', borderRadius: '3px', color: '#34d399', fontSize: '10px' }}>
+                            {k}: {String(v)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Transaction Status Card */}
+              {Boolean(currentResponse?.transactionStatus && currentResponse.transactionStatus !== 'idle') && (
+                <div className="adia-agent-transaction-card" style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '4px', padding: '8px', margin: '8px 0' }}>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    Transaction Status: <span style={{ color: '#38bdf8', fontWeight: 600 }}>{currentResponse!.transactionStatus}</span>
+                  </div>
+                  {Boolean(currentResponse?.observedDeltas) && (
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                      Observed Deltas: {JSON.stringify(currentResponse!.observedDeltas)}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Preflight Diagnostics Panel */}
               {Boolean((currentResponse?.preflightResult as any)?.diagnostics?.length) && (
                 <div className="adia-agent-preflight-card">

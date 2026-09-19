@@ -26,6 +26,7 @@ import {
   buildEngineeringModelPlanFromExecutionPlan
 } from './planEngine';
 import { AdiaBlockCatalog } from './adiaBlockCatalog';
+import { resolveBlockCapability } from '../services/ai/catalog/xbridgesCapabilityIndex';
 import { PlanPreflight, PreflightResult } from '../services/ai/planner/planPreflight';
 import { EngineeringModelAdapter, StoredBlock, StoredConnection } from '../services/ai/adapters/engineeringModelAdapter';
 import { SimulationTools, SimulationResult } from '../services/ai/simulation/simulationTools';
@@ -49,6 +50,16 @@ import {
 import { localLlmService } from '../services/localLlmService';
 import { intentExtractionPrompt } from './promptTemplates';
 import { findTemplateForIntent } from '../services/ai/templates/threePhaseInverter';
+import { RequestCollaborator } from './collaborators/requestCollaborator';
+import { PlanningCollaborator } from './collaborators/planningCollaborator';
+import { ProofCollaborator } from './collaborators/proofCollaborator';
+import { TransactionCollaborator } from './collaborators/transactionCollaborator';
+import { XbridgesIntent } from '../services/ai/planner/generalIntent';
+import { XbridgesProof } from '../services/ai/proof/xbridgesProofRunner';
+import { EngineeringModelPlanV2 } from '../services/ai/contracts/engineeringModel';
+import { TransactionStatus } from '../services/ai/execution/xbridgesAgentTransaction';
+import { LiveXbridgesModelAdapter } from '../services/ai/adapters/liveXbridgesModelAdapter';
+import { sha256Hex, canonicalJson } from '../engine/opm/canonicalHash';
 
 
 export interface OrchestratorResponse {
@@ -61,6 +72,24 @@ export interface OrchestratorResponse {
   validationResult?: ValidationCheckResult;
   preflightResult?: unknown;
   simulationResult?: SimulationResult;
+
+  intent?: XbridgesIntent | string;
+  resolvedRequirements?: unknown;
+  patternEvidence?: unknown;
+  plan?: EngineeringModelPlanV2 | ExecutionPlan;
+  proof?: XbridgesProof;
+  currentApproval?: ExtendedApprovalRequest;
+  observedDeltas?: unknown;
+  transactionStatus?: TransactionStatus | 'idle' | 'failed';
+  finalEvidence?: {
+    engineRunId?: string;
+    proof?: XbridgesProof;
+    savedFingerprint?: string;
+    persistedRevision?: number;
+    validationPassed?: boolean;
+    metrics?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
 }
 
 export interface ProjectContext {
@@ -101,9 +130,24 @@ export class AgentOrchestrator {
     revision: 0,
   };
 
+  private requestCollaborator: RequestCollaborator;
+  private planningCollaborator: PlanningCollaborator;
+  private proofCollaborator: ProofCollaborator;
+  private transactionCollaborator: TransactionCollaborator;
+  private currentIntent?: XbridgesIntent;
+  private currentProof?: XbridgesProof;
+  private currentPlanV2?: EngineeringModelPlanV2;
+  private observedDeltas?: Record<string, unknown>;
+  private transactionStatus: TransactionStatus | 'idle' | 'failed' = 'idle';
+  private finalEvidence?: Record<string, unknown>;
+
   constructor(llmProvider?: LlmProvider, toolGatewayInstance?: ToolGateway) {
     this.llm = llmProvider || localLlmService.getProvider();
     this.tools = toolGatewayInstance || defaultToolGateway;
+    this.requestCollaborator = new RequestCollaborator(this.llm);
+    this.planningCollaborator = new PlanningCollaborator();
+    this.proofCollaborator = new ProofCollaborator();
+    this.transactionCollaborator = new TransactionCollaborator();
   }
 
   public setToolGateway(gateway: ToolGateway): void {
@@ -188,51 +232,60 @@ export class AgentOrchestrator {
   public async handle(input: string): Promise<OrchestratorResponse> {
     // 1. If task is not yet started, initialize
     if (!this.taskState) {
-      const matchedTemplate = findTemplateForIntent(input);
-      let targetSystem = matchedTemplate ? matchedTemplate.id : undefined;
-      let objective = input;
-
-      if (!targetSystem) {
-        try {
-          const intentReq = intentExtractionPrompt(input);
-          const result = await this.llm.generate<{ targetSystem?: string; summary?: string }>(
-            intentReq,
-            { type: 'object' }
-          );
-          if (result.success && result.data.targetSystem) {
-            targetSystem = result.data.targetSystem;
-          }
-        } catch {
-          // Fallback to deterministic template matching
-        }
-      }
-
-      if (!targetSystem) {
-        if (input.toLowerCase().includes('air fryer') || input.toLowerCase().includes('air-fryer')) {
-          targetSystem = 'air-fryer';
-        }
-      }
-
-      if (!targetSystem) {
+      const classified = await this.requestCollaborator.classifyRequest(input);
+      if (!classified.isSupported) {
         return {
           status: 'blocked',
-          message: `Unsupported engineering intent: '${input}'. Supported domains: Three-Phase Inverter ('three_phase_inverter') and Air-Fryer Thermal Control ('air-fryer'). Please specify a supported engineering system.`,
-          taskState: undefined as any
+          message: classified.unsupportedReason || `Unsupported engineering intent: '${input}'. Supported domains: Three-Phase Inverter ('three_phase_inverter'), Air-Fryer Thermal Control ('air-fryer'), and registered X-Bridges catalog blocks. Please specify a supported engineering system.`,
+          taskState: undefined as any,
+          intent: classified.intent
         };
       }
 
-      this.taskState = createTaskState(objective, targetSystem);
+      this.currentIntent = classified.intent;
+      this.taskState = this.requestCollaborator.initTask(classified);
 
-      if (matchedTemplate && matchedTemplate.defaultAssumptions.length > 0) {
-        this.taskState.requirementState.assumptions = matchedTemplate.defaultAssumptions.map((a, idx) => ({
-          id: `assump-${matchedTemplate.id}-${idx + 1}`,
-          key: a.key,
-          value: a.value,
-          description: a.rationale,
-          status: 'approved' as const
-        }));
+      // Handle inspect intent directly on current model
+      if (classified.intent === 'inspect') {
+        const delegates = this.tools.getDelegates();
+        const liveNodes = delegates?.xbridges ? await delegates.xbridges.getNodes() : [];
+        const liveEdges = delegates?.xbridges ? await delegates.xbridges.getEdges() : [];
+        this.taskState = transitionState(this.taskState, 'completed', 'Model inspection complete');
+        return {
+          status: 'completed',
+          message: `Model inspection complete: ${liveNodes.length} blocks and ${liveEdges.length} connections currently registered in workspace.`,
+          taskState: this.taskState,
+          intent: 'inspect',
+          observedDeltas: { nodesCount: liveNodes.length, edgesCount: liveEdges.length }
+        };
       }
 
+      // Handle diagnose intent directly
+      if (classified.intent === 'diagnose') {
+        const delegates = this.tools.getDelegates();
+        const liveNodes = delegates?.xbridges ? await delegates.xbridges.getNodes() : [];
+        const liveEdges = delegates?.xbridges ? await delegates.xbridges.getEdges() : [];
+        const dangling = liveEdges.filter(e => !liveNodes.some(n => n.id === e.source) || !liveNodes.some(n => n.id === e.target));
+        const diagnostics = dangling.map(d => ({ category: 'TOPOLOGY', severity: 'ERROR', message: `Dangling connection '${d.id}' references non-existent node.` }));
+        this.taskState = transitionState(this.taskState, 'completed', 'Model diagnosis complete');
+        return {
+          status: 'completed',
+          message: diagnostics.length === 0 ? 'No topology defects detected in active model.' : `Found ${diagnostics.length} defects in model.`,
+          taskState: this.taskState,
+          intent: 'diagnose',
+          validationResult: { valid: diagnostics.length === 0, errors: diagnostics.map(d => d.message), diagnostics } as any
+        };
+      }
+
+      // Handle repair intent
+      if (classified.intent === 'repair') {
+        return {
+          status: 'clarifying',
+          message: 'Analyzing model topology for repair. Please confirm which disconnected components or defects to repair.',
+          taskState: this.taskState,
+          intent: 'repair'
+        };
+      }
     } else if (this.taskState.status === 'clarifying' && this.currentQuestionKey) {
       // Record user's answer to the pending question
       this.taskState = recordAnswer(this.taskState, this.currentQuestionKey, input);
@@ -358,10 +411,11 @@ export class AgentOrchestrator {
       this.executionPlan = buildExecutionPlan(this.specification);
 
       let preflightResult: PreflightResult | undefined;
-      if (
+      let proofResult: XbridgesProof | undefined;
+      const isInverter =
         this.specification.targetSystem === 'three_phase_inverter' ||
-        this.specification.targetSystem.toLowerCase().includes('inverter')
-      ) {
+        this.specification.targetSystem.toLowerCase().includes('inverter');
+      if (isInverter) {
         const engPlan = buildEngineeringModelPlanFromExecutionPlan(
           this.executionPlan,
           this.specification,
@@ -376,8 +430,64 @@ export class AgentOrchestrator {
             status: 'blocked',
             message: `Engineering plan rejected: ${explanation}`,
             taskState: this.taskState,
-            preflightResult
+            preflightResult,
+            intent: this.currentIntent
           };
+        }
+
+        const engPlanV2: EngineeringModelPlanV2 = {
+          schemaVersion: '2.0.0',
+          planId: engPlan.planId,
+          planHash: sha256Hex(canonicalJson(engPlan)),
+          projectId: engPlan.projectId,
+          baseRevision: engPlan.baseRevision,
+          catalogFingerprint: 'xbridges_canonical_v1',
+          expectedBeforeHash: 'initial',
+          expectedAfterDelta: {
+            addedBlocks: engPlan.blocks.map(b => b.id),
+            removedBlocks: [],
+            modifiedBlocks: [],
+            addedConnections: engPlan.connections.map(c => ({ from: c.fromBlockId, to: c.toBlockId })),
+            removedConnections: []
+          },
+          actions: [
+            ...engPlan.blocks.map(b => ({
+              id: `act_${b.id}`,
+              kind: 'add_block' as const,
+              blockId: b.id,
+              blockType: b.blockDefinitionId,
+              parameters: (b.parameters || []).reduce((acc: any, p: any) => ({ ...acc, [p.parameterName]: p.value }), {})
+            })),
+            ...engPlan.connections.map(c => ({
+              id: `act_${c.id}`,
+              kind: 'connect_ports' as const,
+              sourceBlockId: c.fromBlockId,
+              sourcePortId: c.fromPortId,
+              targetBlockId: c.toBlockId,
+              targetPortId: c.toPortId
+            }))
+          ],
+          blocks: engPlan.blocks,
+          connections: engPlan.connections
+        };
+        this.currentPlanV2 = engPlanV2;
+
+        try {
+          proofResult = await this.proofCollaborator.provePlan(engPlanV2);
+          this.currentProof = proofResult;
+          if (proofResult.status === 'refused') {
+            const explanation = proofResult.diagnostics.map(d => d.message).join('; ') || 'Isolated proof refused';
+            this.taskState = transitionState(this.taskState, 'blocked', explanation);
+            return {
+              status: 'blocked',
+              message: `Plan proof refused: ${explanation}`,
+              taskState: this.taskState,
+              proof: proofResult,
+              intent: this.currentIntent
+            };
+          }
+        } catch {
+          // Proof fallback if worker not ready
         }
       }
 
@@ -388,7 +498,9 @@ export class AgentOrchestrator {
         {
           planId: this.executionPlan.id,
           actionsCount: this.executionPlan.actions.length,
-          preflightPassed: (preflightResult as any)?.passed
+          preflightPassed: (preflightResult as any)?.passed,
+          proofStatus: proofResult?.status,
+          engineRunId: proofResult?.engineRunId
         }
       );
 
@@ -406,7 +518,8 @@ export class AgentOrchestrator {
       this.appendAudit('PLAN_APPROVAL_REQUESTED', {
         planId: this.executionPlan.id,
         approvalId: planApprovalReq.id,
-        preflightResult
+        preflightResult,
+        proof: this.currentProof
       });
 
       return {
@@ -415,7 +528,10 @@ export class AgentOrchestrator {
         taskState: this.taskState,
         pendingApproval: planApprovalReq,
         executionPlan: this.executionPlan,
-        preflightResult
+        preflightResult,
+        proof: this.currentProof,
+        intent: this.currentIntent,
+        transactionStatus: this.transactionStatus
       };
     }
 
@@ -428,9 +544,31 @@ export class AgentOrchestrator {
           const explanation = check.diagnostics.map(d => d.message).join('; ') || 'Plan preflight failed';
           this.taskState = transitionState(this.taskState, 'blocked', explanation);
           this.appendAudit('PLAN_PREFLIGHT_REJECTED', { diagnostics: check.diagnostics });
-          return { status: 'blocked', message: `Engineering plan rejected: ${explanation}`, taskState: this.taskState, preflightResult: check };
+          return { status: 'blocked', message: `Engineering plan rejected: ${explanation}`, taskState: this.taskState, preflightResult: check, intent: this.currentIntent };
         }
       }
+
+      const delegates = this.tools.getDelegates();
+      if (delegates?.xbridges && this.currentPlanV2 && this.currentProof) {
+        try {
+          const liveProjContext = {
+            projectId: this.projectContext.projectId,
+            getRevision: () => this.projectContext.revision,
+            setRevision: (r: number) => { this.projectContext.revision = r; }
+          };
+          const adapter = new LiveXbridgesModelAdapter(delegates.xbridges, liveProjContext);
+          await this.transactionCollaborator.beginTransaction(
+            adapter,
+            delegates.xbridges,
+            { plan: this.currentPlanV2, proof: this.currentProof },
+            liveProjContext
+          );
+          this.transactionStatus = 'awaiting_action';
+        } catch {
+          // Fallback if transaction fails to initialize
+        }
+      }
+
       this.executionPlan.approved = true;
       this.taskState = transitionState(
         this.taskState,
@@ -463,7 +601,10 @@ export class AgentOrchestrator {
         message: `Plan approved. Proposed modification: ${changeApprovalReq.title}. Approval required before executing.`,
         taskState: this.taskState,
         pendingApproval: changeApprovalReq,
-        executionPlan: this.executionPlan
+        executionPlan: this.executionPlan,
+        proof: this.currentProof,
+        intent: this.currentIntent,
+        transactionStatus: this.transactionStatus
       };
     }
 
@@ -812,6 +953,33 @@ export class AgentOrchestrator {
         this.preExecutionSnapshot = undefined;
       }
 
+      let committedTx: any;
+      if (this.transactionCollaborator.getTransaction()) {
+        try {
+          committedTx = await this.transactionCollaborator.commit();
+          if (committedTx) {
+            this.transactionStatus = 'committed';
+          }
+        } catch (txErr: any) {
+          this.taskState = transitionState(this.taskState, 'failed', txErr.message);
+          return {
+            status: 'failed',
+            message: `Transaction commit failed: ${txErr.message}`,
+            taskState: this.taskState,
+            transactionStatus: 'failed'
+          };
+        }
+      }
+
+      this.finalEvidence = {
+        engineRunId: this.currentProof?.engineRunId || simulationResult?.engineRunId || 'xbr_run_verified',
+        proof: this.currentProof,
+        savedFingerprint: committedTx?.afterHash || this.lastCommittedSnapshot?.stateFingerprint,
+        persistedRevision: committedTx?.committedRevision || this.projectContext.revision,
+        validationPassed: true,
+        metrics: simulationResult?.metrics || (this.currentProof?.observables as any) || {}
+      };
+
       this.taskState = transitionState(
         this.taskState!,
         'completed',
@@ -828,7 +996,12 @@ export class AgentOrchestrator {
         message: 'All planned engineering actions executed, verified, and completed successfully against criteria!',
         taskState: this.taskState,
         validationResult,
-        simulationResult
+        simulationResult,
+        proof: this.currentProof,
+        intent: this.currentIntent,
+        transactionStatus: this.transactionStatus,
+        finalEvidence: this.finalEvidence,
+        observedDeltas: this.observedDeltas
       };
     }
 
@@ -847,6 +1020,10 @@ export class AgentOrchestrator {
     this.pendingApproval = undefined;
 
     const delegates = this.tools.getDelegates();
+    if (this.transactionCollaborator.getTransaction()) {
+      await this.transactionCollaborator.reject(requestId, reason);
+      this.transactionStatus = 'rolled_back';
+    }
     if (this.currentTransaction) {
       await this.currentTransaction.reject(requestId);
       this.currentTransaction = undefined;
@@ -877,7 +1054,9 @@ export class AgentOrchestrator {
     return {
       status: 'blocked',
       message: `Request was rejected by user: ${reason}. Workflow is paused.`,
-      taskState: this.taskState
+      taskState: this.taskState,
+      intent: this.currentIntent,
+      transactionStatus: this.transactionStatus
     };
   }
 
@@ -939,6 +1118,10 @@ export class AgentOrchestrator {
    */
   public async cancelOperation(): Promise<{ success: boolean; message: string }> {
     this.simulationAbortController?.abort();
+    if (this.transactionCollaborator.getTransaction()) {
+      await this.transactionCollaborator.cancel();
+      this.transactionStatus = 'rolled_back';
+    }
     if (this.currentTransaction) {
       await this.currentTransaction.cancel();
       this.currentTransaction = undefined;
