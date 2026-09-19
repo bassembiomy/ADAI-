@@ -87,3 +87,29 @@ Response MUST be strict JSON:
     prompt: `Proposed Item: "${item}"\nContext: "${context}"`
   };
 }
+
+/**
+ * Prompt template to extract general X-Bridges engineering request according to strict Zod schema.
+ */
+export function generalIntentExtractionPrompt(userInput: string): LlmRequest {
+  return {
+    systemPrompt: `You are the ADIA General Engineering Assistant. Extract user intent and requirements for X-Bridges modeling.
+Response MUST be strict JSON matching this structure:
+{
+  "intent": "create" | "inspect" | "modify" | "diagnose" | "repair" | "optimize",
+  "objective": string,
+  "targetBehaviors": string[],
+  "inputs": Array<{ "name": string, "value": number | string | boolean, "unit"?: string, "sourceText"?: string }>,
+  "outputs": Array<{ "name": string, "value": number | string | boolean, "unit"?: string }>,
+  "constraints": Array<{ "name": string, "type": "max" | "min" | "range" | "equality" | "stability" | "safety", "target": string, "value": number | [number, number] | string, "unit"?: string }>,
+  "optimization"?: {
+    "objective": string,
+    "targetMetric": string,
+    "direction": "minimize" | "maximize",
+    "parametersToTune": Array<{ "blockId": string, "parameterName": string, "min": number, "max": number, "step"?: number }>
+  }
+}
+Do NOT include markdown backticks or commentary outside JSON.`,
+    prompt: `User Request: "${userInput}"`
+  };
+}

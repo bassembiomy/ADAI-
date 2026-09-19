@@ -1,5 +1,7 @@
 import { TaskState, RequirementConflict, Assumption } from './types';
 import { findTemplateForIntent } from '../services/ai/templates/threePhaseInverter';
+import { resolveRequirements } from '../services/ai/planner/requirementResolver';
+import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
 
 export interface ClarificationQuestion {
   id: string;
@@ -132,6 +134,12 @@ export function analyzeCompleteness(
     findTemplateForIntent(targetSystem) ||
     findTemplateForIntent(state.requirementState.objective);
 
+  const isAirFryer =
+    targetSystem.includes('air-fryer') ||
+    targetSystem.includes('air fryer') ||
+    state.requirementState.objective.toLowerCase().includes('air fryer') ||
+    targetSystem === '';
+
   const requiredSpecs: RequirementItemSpec[] = matchedTemplate
     ? matchedTemplate.requiredQuestions.map(q => ({
         key: q.key,
@@ -141,7 +149,38 @@ export function analyzeCompleteness(
         options: q.options,
         isCritical: q.isCritical ?? true
       }))
-    : AIR_FRYER_REQUIRED_SPECS.map(s => ({ ...s, isCritical: true }));
+    : isAirFryer
+    ? AIR_FRYER_REQUIRED_SPECS.map(s => ({ ...s, isCritical: true }))
+    : [];
+
+  if (requiredSpecs.length === 0) {
+    const generalRes = resolveRequirements(state, buildXbridgesCapabilityIndex());
+    if (generalRes.conflicts && generalRes.conflicts.length > 0) {
+      const c = generalRes.conflicts[0];
+      return {
+        status: 'conflict',
+        conflict: {
+          id: `conf-${Date.now()}`,
+          description: c.description,
+          involvedKeys: c.involvedKeys,
+          resolved: false,
+        },
+        completenessScore: 0.5,
+      };
+    }
+    if (generalRes.nextQuestion) {
+      return {
+        status: 'question',
+        missingKey: generalRes.nextQuestion.key,
+        completenessScore: generalRes.complete ? 1.0 : 0.4,
+        question: generalRes.nextQuestion,
+      };
+    }
+    return {
+      status: 'complete',
+      completenessScore: 1.0,
+    };
+  }
 
   let answeredCount = 0;
   let nextMissingSpec: RequirementItemSpec | null = null;
