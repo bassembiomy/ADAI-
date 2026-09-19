@@ -1,6 +1,5 @@
 import { VLAB_LIBRARY, VLabBlock, VLabDomain } from '../utils/vlabLibrary';
-import { XBRIDGES_CATEGORIES } from '../utils/xbridges/XbridgesLibrary';
-import { BLOCK_LIBRARY } from '../engine/xbridges/BlockDefinitions';
+import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
 
 export interface CatalogPort {
   id: string;
@@ -167,171 +166,64 @@ class CatalogRegistry {
   }
 
   private indexXBridgesBlocks(): void {
-    for (const cat of XBRIDGES_CATEGORIES) {
-      this.domains.add(`X-BRIDGES: ${cat.name}`);
-      for (const b of cat.blocks) {
-        const id = b.type;
-        if (this.blocksById.has(id)) continue;
+    const capabilityIndex = buildXbridgesCapabilityIndex();
+    for (const cap of capabilityIndex.blocks.values()) {
+      if (this.blocksById.has(cap.id)) continue;
 
-        const capabilities = deriveCapabilities(
-          'X-BRIDGES',
-          cat.name,
-          b.type,
-          b.label
-        );
+      this.domains.add(`X-BRIDGES: ${cap.category}`);
 
-        let instance: any = null;
-        if (BLOCK_LIBRARY && typeof BLOCK_LIBRARY[id] === 'function') {
-          try {
-            instance = BLOCK_LIBRARY[id]('catalog_probe', {});
-          } catch {
-            // Some blocks may need special defaults; instance remains null
-          }
-        }
+      const capabilities = deriveCapabilities(
+        'X-BRIDGES',
+        cap.category,
+        cap.id,
+        cap.label,
+        cap.description
+      );
 
-        const ports: CatalogPort[] = [];
-        const params: Record<string, CatalogParameter> = {};
+      const ports: CatalogPort[] = cap.ports.map(p =>
+        Object.freeze({
+          id: p.id,
+          name: p.name || p.id,
+          pos: p.position,
+          label: p.name,
+          domain: 'xbridges',
+          direction: p.direction,
+          type: p.type || 'signal',
+          unit: p.unit,
+        })
+      );
 
-        if (instance) {
-          if (Array.isArray(instance.inputs)) {
-            for (const inp of instance.inputs) {
-              ports.push(Object.freeze({
-                id: inp.id,
-                name: inp.name || inp.id,
-                pos: inp.position,
-                label: inp.name,
-                domain: 'xbridges',
-                direction: 'input',
-                type: inp.type || 'signal'
-              }));
-            }
-          }
-          if (Array.isArray(instance.outputs)) {
-            for (const outp of instance.outputs) {
-              ports.push(Object.freeze({
-                id: outp.id,
-                name: outp.name || outp.id,
-                pos: outp.position,
-                label: outp.name,
-                domain: 'xbridges',
-                direction: 'output',
-                type: outp.type || 'signal'
-              }));
-            }
-          }
-          if (instance.params && typeof instance.params === 'object') {
-            for (const [k, val] of Object.entries(instance.params)) {
-              params[k] = {
-                value: val,
-                label: k,
-                type: typeof val,
-                defaultValue: val
-              };
-            }
-          }
-        }
-
-        const block: CatalogBlock = Object.freeze({
-          id: b.type,
-          aliases: Object.freeze([b.label, b.type.replace(/_/g, ' '), b.type.toLowerCase()]),
-          name: b.label,
-          domain: `X-BRIDGES: ${cat.name}`,
-          category: cat.name,
-          ports: Object.freeze(ports),
-          parameters: Object.freeze(params),
-          description: instance?.description || `${b.label} component from X-BRIDGES ${cat.name} library`,
-          capabilities: Object.freeze(capabilities),
-          sourceLibrary: 'xbridges',
-          documentationRef: instance?.equation || undefined,
-          compatibility: Object.freeze({
-            domains: ['xbridges'],
-            solvers: ['ode1', 'ode4', 'discrete']
-          })
-        });
-
-        this.blocksById.set(id, block);
-        this.blockList.push(block);
+      const params: Record<string, CatalogParameter> = {};
+      for (const [k, p] of Object.entries(cap.parameters)) {
+        params[k] = {
+          value: p.defaultValue,
+          unit: p.unit !== 'unknown' ? p.unit : undefined,
+          label: p.name,
+          type: p.type,
+          defaultValue: p.defaultValue,
+        };
       }
-    }
 
-    // Index any remaining blocks defined in BLOCK_LIBRARY that were not in XBRIDGES_CATEGORIES
-    if (BLOCK_LIBRARY) {
-      for (const [typeKey, factory] of Object.entries(BLOCK_LIBRARY)) {
-        if (this.blocksById.has(typeKey) || typeof factory !== 'function') continue;
+      const block: CatalogBlock = Object.freeze({
+        id: cap.id,
+        aliases: Object.freeze([...cap.aliases]),
+        name: cap.label,
+        domain: `X-BRIDGES: ${cap.category}`,
+        category: cap.category,
+        ports: Object.freeze(ports),
+        parameters: Object.freeze(params),
+        description: cap.description,
+        capabilities: Object.freeze(capabilities),
+        sourceLibrary: 'xbridges',
+        documentationRef: cap.equation || undefined,
+        compatibility: Object.freeze({
+          domains: ['xbridges'],
+          solvers: [...cap.solverFeatures],
+        }),
+      });
 
-        let instance: any = null;
-        try {
-          instance = factory('catalog_probe', {});
-        } catch {
-          // Skip if factory cannot instantiate probe
-        }
-
-        const ports: CatalogPort[] = [];
-        const params: Record<string, CatalogParameter> = {};
-
-        if (instance) {
-          if (Array.isArray(instance.inputs)) {
-            for (const inp of instance.inputs) {
-              ports.push(Object.freeze({
-                id: inp.id,
-                name: inp.name || inp.id,
-                pos: inp.position,
-                label: inp.name,
-                domain: 'xbridges',
-                direction: 'input',
-                type: inp.type || 'signal'
-              }));
-            }
-          }
-          if (Array.isArray(instance.outputs)) {
-            for (const outp of instance.outputs) {
-              ports.push(Object.freeze({
-                id: outp.id,
-                name: outp.name || outp.id,
-                pos: outp.position,
-                label: outp.name,
-                domain: 'xbridges',
-                direction: 'output',
-                type: outp.type || 'signal'
-              }));
-            }
-          }
-          if (instance.params && typeof instance.params === 'object') {
-            for (const [k, val] of Object.entries(instance.params)) {
-              params[k] = {
-                value: val,
-                label: k,
-                type: typeof val,
-                defaultValue: val
-              };
-            }
-          }
-        }
-
-        const label = instance?.label || typeKey.replace(/_/g, ' ');
-        const capabilities = deriveCapabilities('X-BRIDGES', 'Core Library', typeKey, label, instance?.description);
-
-        const block: CatalogBlock = Object.freeze({
-          id: typeKey,
-          aliases: Object.freeze([label, typeKey.replace(/_/g, ' '), typeKey.toLowerCase()]),
-          name: label,
-          domain: 'X-BRIDGES: Core Library',
-          category: 'Core Library',
-          ports: Object.freeze(ports),
-          parameters: Object.freeze(params),
-          description: instance?.description || `${label} component from X-BRIDGES Core Library`,
-          capabilities: Object.freeze(capabilities),
-          sourceLibrary: 'xbridges',
-          documentationRef: instance?.equation || undefined,
-          compatibility: Object.freeze({
-            domains: ['xbridges'],
-            solvers: ['ode1', 'ode4', 'discrete']
-          })
-        });
-
-        this.blocksById.set(typeKey, block);
-        this.blockList.push(block);
-      }
+      this.blocksById.set(cap.id, block);
+      this.blockList.push(block);
     }
   }
 
