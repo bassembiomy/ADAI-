@@ -29,7 +29,7 @@ export type WorkflowStatus =
   | 'failed';
 
 
-export type ApprovalType = 'specification' | 'plan' | 'change' | 'default_proposal';
+export type ApprovalType = 'specification' | 'plan' | 'change' | 'default_proposal' | 'action';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
 

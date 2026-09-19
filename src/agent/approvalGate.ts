@@ -35,6 +35,27 @@ export function createApprovalRequest(
 }
 
 /**
+ * Creates an approval request bound to an exact action and parameters.
+ */
+export function createActionApprovalRequest(
+  binding: {
+    projectId: string;
+    baseRevision: number;
+    planHash: string;
+    actionId: string;
+    actionKind: string;
+    canonicalParamsHash: string;
+    title?: string;
+    description?: string;
+  },
+  expiresInSeconds?: number
+): ExtendedApprovalRequest {
+  const title = binding.title || `Approve Action: ${binding.actionKind} (${binding.actionId})`;
+  const description = binding.description || `Approve action ${binding.actionId} of kind ${binding.actionKind}`;
+  return createApprovalRequest('action', title, description, binding as Record<string, unknown>, expiresInSeconds);
+}
+
+/**
  * Approves a pending approval request. Strictly prevents token reuse.
  */
 export function approve(

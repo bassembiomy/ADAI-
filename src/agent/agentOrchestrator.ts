@@ -33,8 +33,10 @@ import {
   createApprovalRequest,
   approve as gateApprove,
   reject as gateReject,
+  cancel as gateCancel,
   ExtendedApprovalRequest
 } from './approvalGate';
+import { XbridgesAgentTransaction } from '../services/ai/execution/xbridgesAgentTransaction';
 import {
   ToolGateway,
   toolGateway as defaultToolGateway,
@@ -92,6 +94,7 @@ export class AgentOrchestrator {
   };
   private lastSimulationEvidence?: Record<string, unknown>;
   private simulationAbortController?: AbortController;
+  private currentTransaction?: XbridgesAgentTransaction;
   private projectContext: ProjectContext = {
     projectId: 'default',
     workspace: 'default',
@@ -843,6 +846,18 @@ export class AgentOrchestrator {
     const rejectedReq = gateReject(this.pendingApproval, reason);
     this.pendingApproval = undefined;
 
+    const delegates = this.tools.getDelegates();
+    if (this.currentTransaction) {
+      await this.currentTransaction.reject(requestId);
+      this.currentTransaction = undefined;
+    }
+    if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
+      await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
+      if (delegates.xbridges.save) await delegates.xbridges.save();
+      this.refreshProjectContext();
+      this.preExecutionSnapshot = undefined;
+    }
+
     this.taskState = {
       ...this.taskState,
       approvals: [...this.taskState.approvals, rejectedReq]
@@ -924,6 +939,10 @@ export class AgentOrchestrator {
    */
   public async cancelOperation(): Promise<{ success: boolean; message: string }> {
     this.simulationAbortController?.abort();
+    if (this.currentTransaction) {
+      await this.currentTransaction.cancel();
+      this.currentTransaction = undefined;
+    }
     const delegates = this.tools.getDelegates();
     if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
       await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);

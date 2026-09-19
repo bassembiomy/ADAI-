@@ -5,7 +5,7 @@
 - [x] Task 3: Build the Deterministic General Graph Planner
 - [x] Task 4: Prove Compilation and Simulation Before Approval
 - [x] Task 5: Complete the Live X-Bridges Mutation Surface
-- [ ] Task 6: Implement Per-Action Approval Inside One Atomic Transaction
+- [x] Task 6: Implement Per-Action Approval Inside One Atomic Transaction
 - [ ] Task 7: Verify Real Save, Reload, Restart, and Undo
 - [ ] Task 8: Create the Versioned Offline Engineering Pattern Store
 - [ ] Task 9: Build Lawful Public-Source Ingestion
