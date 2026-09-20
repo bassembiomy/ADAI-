@@ -8,6 +8,7 @@ import {
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { ModelSnapshot } from '../adapters/liveXbridgesModelAdapter';
 import { GeneralEngineeringRequest } from './generalIntent';
+import { parseEngineeringEntities } from './engineeringEntityParser';
 import { canonicalJson, sha256Hex } from '../../../engine/opm/canonicalHash';
 
 export interface PatternReference {
@@ -88,12 +89,66 @@ function getFirstOutPort(catalog: XbridgesCapabilityIndex, blockType: string, fa
 function getCanonicalArchetype(
   behaviors: string[],
   objective: string,
-  catalog: XbridgesCapabilityIndex
+  catalog: XbridgesCapabilityIndex,
+  requestInputs?: Array<{ name: string; value: unknown }>
 ): { blocks: InternalBlockSpec[]; connections: InternalConnSpec[]; provenance: PatternReference } | null {
   const text = `${behaviors.join(' ')} ${objective}`.toLowerCase();
 
   if (text.includes('impossible') || text.includes('warp') || text.includes('perpetual') || text.includes('nonexistent')) {
     return null;
+  }
+
+  // Second-Order Dynamic Systems & RLC Transfer Function
+  if (
+    text.includes('second_order') ||
+    text.includes('second-order') ||
+    text.includes('rlc') ||
+    text.includes('resonant') ||
+    text.includes('mass_spring') ||
+    text.includes('mass-spring')
+  ) {
+    const srcType = catalog.blocks.has('Step') ? 'Step' : 'Constant';
+    const tfType = catalog.blocks.has('TRANSFER_FUNCTION') ? 'TRANSFER_FUNCTION' : 'Integrator';
+    const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
+
+    const sourceOut = getFirstOutPort(catalog, srcType, 'out');
+    const tfIn = getFirstInPort(catalog, tfType, 'in');
+    const tfOut = getFirstOutPort(catalog, tfType, 'out');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+
+    let R = 10;
+    let L = 0.01;
+    let C = 0.0001;
+
+    const rIn = requestInputs?.find(i => i.name.toLowerCase().includes('resist') || i.name === 'R');
+    const lIn = requestInputs?.find(i => i.name.toLowerCase().includes('induct') || i.name === 'L');
+    const cIn = requestInputs?.find(i => i.name.toLowerCase().includes('capacit') || i.name === 'C');
+
+    if (rIn && typeof rIn.value === 'number') R = rIn.value;
+    if (lIn && typeof lIn.value === 'number') L = lIn.value;
+    if (cIn && typeof cIn.value === 'number') C = cIn.value;
+
+    const parsed = parseEngineeringEntities(objective);
+    if (parsed.resistance !== undefined && (!rIn || typeof rIn.value !== 'number')) R = parsed.resistance;
+    if (parsed.inductance !== undefined && (!lIn || typeof lIn.value !== 'number')) L = parsed.inductance;
+    if (parsed.capacitance !== undefined && (!cIn || typeof cIn.value !== 'number')) C = parsed.capacitance;
+
+    const a2 = Number((L * C).toPrecision(6));
+    const a1 = Number((R * C).toPrecision(6));
+    const denominator = [a2, a1, 1];
+
+    return {
+      blocks: [
+        { id: 'src_step', type: srcType, params: { stepTime: 0.1, initialValue: 0, finalValue: 1 }, position: { x: 100, y: 150 } },
+        { id: 'plant_tf', type: tfType, params: { numerator: [1], denominator }, position: { x: 450, y: 150 } },
+        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 800, y: 150 } },
+      ],
+      connections: [
+        { fromBlockId: 'src_step', fromPortId: sourceOut, toBlockId: 'plant_tf', toPortId: tfIn },
+        { fromBlockId: 'plant_tf', fromPortId: tfOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+      ],
+      provenance: { patternId: 'canonical_second_order_dynamic', version: '1.0.0', license: 'MIT' },
+    };
   }
 
   if (text.includes('feed_forward') || text.includes('open_loop') || text.includes('feed-forward')) {
@@ -264,7 +319,7 @@ export function planGeneralXbridgesModel(
   const diagnostics: StructuredDiagnostic[] = [];
 
   // 1. Archetype resolution and candidate ranking
-  const archetype = getCanonicalArchetype(request.targetBehaviors, request.objective, catalog);
+  const archetype = getCanonicalArchetype(request.targetBehaviors, request.objective, catalog, request.inputs);
 
   if (!archetype) {
     diagnostics.push({

@@ -253,6 +253,40 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.diagnostics.length).toBeGreaterThan(0);
       expect(outcome.diagnostics.some(d => d.severity === 'ERROR')).toBe(true);
     });
+
+    it('synthesizes a 2nd-order dynamic RLC transfer function model with Step source and Scope sink', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'create rlc circuit transfer function with R=10, L=0.01, C=0.0001',
+        targetBehaviors: ['second_order_dynamic', 'transfer_function'],
+        inputs: [
+          { name: 'resistance', value: 10 },
+          { name: 'inductance', value: 0.01 },
+          { name: 'capacitance', value: 0.0001 },
+        ],
+        outputs: [{ name: 'output_signal', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_rlc',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_rlc'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan).toBeDefined();
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'TRANSFER_FUNCTION')).toBe(true);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
+
+      const tfBlock = outcome.plan?.blocks.find(b => b.blockDefinitionId === 'TRANSFER_FUNCTION');
+      expect(tfBlock).toBeDefined();
+      const denParam = tfBlock?.parameters?.find(p => p.parameterName === 'denominator');
+      expect(denParam).toBeDefined();
+      expect(denParam?.value).toEqual([1e-6, 0.001, 1]);
+    });
   });
 
   describe('Byte-identical Canonical Determinism', () => {
