@@ -64,7 +64,7 @@ import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCap
 import { resolveRequirements } from '../services/ai/planner/requirementResolver';
 import { EngineeringPattern } from '../services/ai/knowledge/patternSchemas';
 import { loadVerifiedRuntimePatterns } from '../services/ai/knowledge/runtimePatternGateway';
-import { RankedPatternMatch, retrieveCompatiblePatterns } from '../services/ai/knowledge/patternRetrieval';
+import { RankedPatternMatch, retrieveCompatiblePatterns, isPatternCatalogCompatible } from '../services/ai/knowledge/patternRetrieval';
 
 
 export interface OrchestratorResponse {
@@ -564,6 +564,47 @@ export class AgentOrchestrator {
           patterns,
           catalog
         );
+        const verifiedPatterns = this.currentPatternEvidence
+          .filter(m => m.pattern.lifecycle === 'verified' && m.pattern.evidence?.proofStatus === 'proved')
+          .sort((a, b) => {
+            const qDiff = (b.pattern.evidence?.qualityScore || 0) - (a.pattern.evidence?.qualityScore || 0);
+            if (Math.abs(qDiff) > 1e-4) return qDiff;
+            return a.pattern.id.localeCompare(b.pattern.id);
+          })
+          .map(m => {
+            const pat = m.pattern;
+            if (!isPatternCatalogCompatible(pat, catalog)) return null;
+
+            const blocks = pat.topology.blocks.map((b, i) => ({
+              id: b.role,
+              type: pat.exactMappings[b.role] || b.blockId,
+              params: (b.defaultParams && typeof b.defaultParams === 'object') ? { ...b.defaultParams } : {},
+              position: { x: 100 + i * 250, y: 150 },
+            }));
+
+            const connections = pat.topology.connections.map(c => ({
+              fromBlockId: c.sourceBlockRole,
+              fromPortId: c.sourcePort,
+              toBlockId: c.targetBlockRole,
+              toPortId: c.targetPort,
+            }));
+
+            return {
+              id: pat.id,
+              name: pat.name,
+              domain: pat.domain,
+              category: 'Verified',
+              description: pat.description,
+              requiredCapabilities: pat.requirements.targetBehaviors,
+              requiredBlocks: blocks.map(b => b.type),
+              targetBehaviors: pat.requirements.targetBehaviors,
+              templateGraph: { blocks, connections },
+              provenance: { patternId: pat.id, version: String(pat.version || '1.0.0') },
+              qualityScore: pat.evidence?.qualityScore,
+            };
+          })
+          .filter((p): p is NonNullable<typeof p> => p !== null);
+
         const outcome = await this.planningCollaborator.planGeneralModelAsync(
           { ...resolution.canonicalRequest, intent: this.currentIntent || 'create' },
           {
@@ -578,7 +619,7 @@ export class AgentOrchestrator {
               timestamp: Date.now()
             },
             catalog,
-            patterns: [],
+            patterns: verifiedPatterns,
             llm: this.llm
           }
         );

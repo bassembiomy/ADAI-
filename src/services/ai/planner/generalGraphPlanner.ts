@@ -389,8 +389,55 @@ export function planGeneralXbridgesModel(
   const { projectId, baseRevision, activeSnapshot, catalog } = context;
   const diagnostics: StructuredDiagnostic[] = [];
 
-  // 1. Archetype resolution and candidate ranking
-  const archetype = getCanonicalArchetype(request.targetBehaviors, request.objective, catalog, request.inputs);
+  // 1. Check verified patterns from context
+  let patternArchetype: {
+    blocks: InternalBlockSpec[];
+    connections: InternalConnSpec[];
+    provenance: PatternReference;
+  } | null = null;
+
+  if (context.patterns && context.patterns.length > 0) {
+    const text = `${request.targetBehaviors.join(' ')} ${request.objective}`.toLowerCase();
+    const rankedPatterns = [...context.patterns]
+      .filter(p => {
+        const blocksExist = p.templateGraph.blocks.every(b => catalog.blocks.has(b.type));
+        if (!blocksExist) return false;
+        return p.targetBehaviors.some(tb => text.includes(tb.toLowerCase()) || request.targetBehaviors.includes(tb));
+      })
+      .sort((a, b) => {
+        const qA = a.qualityScore ?? 0.5;
+        const qB = b.qualityScore ?? 0.5;
+        if (Math.abs(qB - qA) > 1e-4) return qB - qA;
+        const aMatches = a.targetBehaviors.filter(tb => request.targetBehaviors.includes(tb)).length;
+        const bMatches = b.targetBehaviors.filter(tb => request.targetBehaviors.includes(tb)).length;
+        if (bMatches !== aMatches) return bMatches - aMatches;
+        return a.id.localeCompare(b.id);
+      });
+
+    for (const pat of rankedPatterns) {
+      const validation = validateGeneratedGraph(
+        pat.templateGraph.blocks,
+        pat.templateGraph.connections,
+        catalog
+      );
+      if (validation.valid) {
+        patternArchetype = {
+          blocks: pat.templateGraph.blocks.map((b, i) => ({
+            id: b.id || `b_${i + 1}`,
+            type: b.type,
+            params: b.params || {},
+            position: b.position || { x: 100 + i * 250, y: 150 },
+          })),
+          connections: pat.templateGraph.connections,
+          provenance: pat.provenance,
+        };
+        break;
+      }
+    }
+  }
+
+  // Fallback to canonical archetypes
+  const archetype = patternArchetype || getCanonicalArchetype(request.targetBehaviors, request.objective, catalog, request.inputs);
 
   if (!archetype) {
     diagnostics.push(

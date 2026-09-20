@@ -727,4 +727,61 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.diagnostics.some(d => d.code === 'UNSUPPORTED_ENGINEERING_REQUEST')).toBe(true);
     });
   });
+
+  describe('Verified Pattern Integration in Planning', () => {
+    it('selects a compatible verified pattern from planner context before invoking LLM', async () => {
+      const verifiedPattern = {
+        id: 'pat_custom_saturation',
+        name: 'Custom Saturation Pipeline',
+        domain: 'control',
+        category: 'Nonlinear',
+        description: 'Verified pattern for signal saturation',
+        requiredCapabilities: ['WaveformGen', 'SATURATION', 'Scope'],
+        requiredBlocks: ['WaveformGen', 'SATURATION', 'Scope'],
+        targetBehaviors: ['custom_saturation'],
+        templateGraph: {
+          blocks: [
+            { id: 'b_wave', type: 'WaveformGen', params: { freq: 5 }, position: { x: 100, y: 150 } },
+            { id: 'b_sat', type: 'SATURATION', params: { upperLimit: 1, lowerLimit: -1 }, position: { x: 450, y: 150 } },
+            { id: 'b_scope', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
+          ],
+          connections: [
+            { fromBlockId: 'b_wave', fromPortId: 'out', toBlockId: 'b_sat', toPortId: 'u' },
+            { fromBlockId: 'b_sat', fromPortId: 'y', toBlockId: 'b_scope', toPortId: 'in1' },
+          ],
+        },
+        provenance: { patternId: 'pat_custom_saturation', version: '1.0.0' },
+        qualityScore: 0.95,
+      };
+
+      const mockLlm: LlmProvider = {
+        generate: vi.fn(),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'Construct a custom saturation pipeline',
+        targetBehaviors: ['custom_saturation'],
+        inputs: [],
+        outputs: [{ name: 'monitored', value: 'Scope' }],
+        constraints: [],
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_pattern',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_pattern'),
+        catalog,
+        patterns: [verifiedPattern],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan).toBeDefined();
+      expect(outcome.provenance.some(p => p.patternId === 'pat_custom_saturation')).toBe(true);
+      expect(mockLlm.generate).not.toHaveBeenCalled();
+    });
+  });
 });

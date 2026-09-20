@@ -28,13 +28,13 @@
   - [x] Step 3: Replace generic fallback with `UNSUPPORTED_ENGINEERING_REQUEST` and clarification diagnostic
   - [x] Step 4: Preserve explicit arithmetic and canonical archetype paths
   - [x] Step 5: Run focused planner/orchestrator tests and commit
-- [ ] Task 5: Connect verified pattern evidence to planning (`src/agent/agentOrchestrator.ts`, `planningCollaborator.ts`, `generalGraphPlanner.ts`)
-  - [ ] Step 1: Add failing test proving compatible verified pattern is in planner context and selected before LLM
-  - [ ] Step 2: Run targeted tests and confirm failure
-  - [ ] Step 3: Pass `currentPatternEvidence` instead of `patterns: []`
-  - [ ] Step 4: Add deterministic pattern ranking by quality score, capability coverage, ID tie-breaker
-  - [ ] Step 5: Reject unverified or incompatible pattern templates
-  - [ ] Step 6: Run tests and commit
+- [x] Task 5: Connect verified pattern evidence to planning (`src/agent/agentOrchestrator.ts`, `planningCollaborator.ts`, `generalGraphPlanner.ts`)
+  - [x] Step 1: Add failing test proving compatible verified pattern is in planner context and selected before LLM
+  - [x] Step 2: Run targeted tests and confirm failure
+  - [x] Step 3: Pass `currentPatternEvidence` instead of `patterns: []`
+  - [x] Step 4: Add deterministic pattern ranking by quality score, capability coverage, ID tie-breaker
+  - [x] Step 5: Reject unverified or incompatible pattern templates
+  - [x] Step 6: Run tests and commit
 - [ ] Task 6: Improve numeric and unit-aware request handling (`src/services/ai/planner/engineeringEntityParser.ts`, `generalGraphPlanner.ts`)
   - [ ] Step 1: Add failing tests for negative, fractional, scientific, unit-bearing, missing-value arithmetic
   - [ ] Step 2: Run parser/planner tests and confirm failures
