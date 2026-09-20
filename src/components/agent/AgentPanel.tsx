@@ -208,6 +208,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       setCanUndo(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      setCurrentResponse(prev => prev ? {
+        ...prev,
+        pendingApproval: undefined,
+        currentApproval: undefined,
+        transactionStatus: 'failed'
+      } : prev);
       setMessages(prev => [
         ...prev,
         {
