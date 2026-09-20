@@ -9,6 +9,7 @@ import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { ModelSnapshot } from '../adapters/liveXbridgesModelAdapter';
 import { GeneralEngineeringRequest } from './generalIntent';
 import { parseEngineeringEntities } from './engineeringEntityParser';
+import { resolveDomainOperation } from '../catalog/xbridgesDomainVocabulary';
 import { canonicalJson, sha256Hex } from '../../../engine/opm/canonicalHash';
 
 export interface PatternReference {
@@ -291,19 +292,10 @@ function getCanonicalArchetype(
     };
   }
 
-  // Arithmetic, Summation & Subtraction (e.g. "add two constant each is 1 and display on scope")
-  if (
-    text.includes('add') ||
-    text.includes('sum') ||
-    text.includes('plus') ||
-    text.includes('addition') ||
-    text.includes('subtract') ||
-    text.includes('minus') ||
-    text.includes('difference') ||
-    text.includes('arithmetic')
-  ) {
+  // Dynamic Domain Semantic Operations (Multiplication, Division, Power, Addition, Subtraction, Abs, Negation)
+  const domainOp = resolveDomainOperation(text, catalog);
+  if (domainOp) {
     const srcType = catalog.blocks.has('Constant') ? 'Constant' : 'Step';
-    const sumType = catalog.blocks.has('Sum') ? 'Sum' : (catalog.blocks.has('VectorAdd') ? 'VectorAdd' : 'Add');
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
     const numbers = text.match(/\b\d+(?:\.\d+)?\b/g);
@@ -317,29 +309,43 @@ function getCanonicalArchetype(
       val2 = parseFloat(numbers[0]);
     }
 
-    const signs = (text.includes('sub') || text.includes('minus') || text.includes('difference')) ? '+-' : '++';
-
     const source1Out = getFirstOutPort(catalog, srcType, 'out');
-    const source2Out = getFirstOutPort(catalog, srcType, 'out');
-    const sumIn1 = catalog.blocks.get(sumType)?.inputs[0]?.id || 'in1';
-    const sumIn2 = catalog.blocks.get(sumType)?.inputs[1]?.id || 'in2';
-    const sumOut = getFirstOutPort(catalog, sumType, 'out');
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
-    return {
-      blocks: [
-        { id: 'const_1', type: srcType, params: { value: val1 }, position: { x: 100, y: 100 } },
-        { id: 'const_2', type: srcType, params: { value: val2 }, position: { x: 100, y: 250 } },
-        { id: 'sum_1', type: sumType, params: { signs }, position: { x: 400, y: 175 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
-      ],
-      connections: [
-        { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'sum_1', toPortId: sumIn1 },
-        { fromBlockId: 'const_2', fromPortId: source2Out, toBlockId: 'sum_1', toPortId: sumIn2 },
-        { fromBlockId: 'sum_1', fromPortId: sumOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-      ],
-      provenance: { patternId: 'canonical_arithmetic_summation', version: '1.0.0', license: 'MIT' },
-    };
+    if (domainOp.inputPorts.length >= 2) {
+      const source2Out = getFirstOutPort(catalog, srcType, 'out');
+      const opIn1 = domainOp.inputPorts[0] || 'in1';
+      const opIn2 = domainOp.inputPorts[1] || 'in2';
+
+      return {
+        blocks: [
+          { id: 'const_1', type: srcType, params: { value: val1 }, position: { x: 100, y: 100 } },
+          { id: 'const_2', type: srcType, params: { value: val2 }, position: { x: 100, y: 250 } },
+          { id: 'op_1', type: domainOp.blockType, params: domainOp.defaultParams || {}, position: { x: 400, y: 175 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
+        ],
+        connections: [
+          { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'op_1', toPortId: opIn1 },
+          { fromBlockId: 'const_2', fromPortId: source2Out, toBlockId: 'op_1', toPortId: opIn2 },
+          { fromBlockId: 'op_1', fromPortId: domainOp.outputPort, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: `canonical_${domainOp.operator}`, version: '1.0.0', license: 'MIT' },
+      };
+    } else {
+      const opIn1 = domainOp.inputPorts[0] || 'in1';
+      return {
+        blocks: [
+          { id: 'const_1', type: srcType, params: { value: val1 }, position: { x: 100, y: 150 } },
+          { id: 'op_1', type: domainOp.blockType, params: domainOp.defaultParams || {}, position: { x: 400, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'op_1', toPortId: opIn1 },
+          { fromBlockId: 'op_1', fromPortId: domainOp.outputPort, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: `canonical_${domainOp.operator}`, version: '1.0.0', license: 'MIT' },
+      };
+    }
   }
 
   // Generic fallback if all blocks in request inputs exist

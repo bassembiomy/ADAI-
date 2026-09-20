@@ -187,6 +187,79 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Sum')).toBe(true);
       expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
     });
+
+    it('synthesizes multiplication of constant 10 by 100 on scope', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'make a model multiply constant its value is 10 by 100 and display the result on a scope',
+        targetBehaviors: [],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_mul',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_mul'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan?.blocks).toHaveLength(4);
+      expect(outcome.plan?.connections).toHaveLength(3);
+      const consts = outcome.plan?.blocks.filter(b => b.blockDefinitionId === 'Constant');
+      expect(consts).toHaveLength(2);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'VectorMul')).toBe(true);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
+    });
+
+    it('synthesizes division of constant 100 by 5 on scope', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'divide constant 100 by 5 and display on scope',
+        targetBehaviors: [],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_div',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_div'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'VectorDiv')).toBe(true);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
+    });
+
+    it('synthesizes power operation of constant 2 by 3 on scope', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'power of constant 2 to 3 and show on scope',
+        targetBehaviors: [],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_pow',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_pow'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'VectorPow')).toBe(true);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
+    });
   });
 
   describe('Modification Diffing & Refusal Handling', () => {
