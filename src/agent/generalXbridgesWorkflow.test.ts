@@ -32,7 +32,7 @@ interface Harness {
   revision(): number;
 }
 
-function makeHarness(llmPayload: Record<string, unknown> = {}): Harness {
+function makeHarness(llmPayload: Record<string, unknown> = {}, llmOverride?: LlmProvider): Harness {
   let nodes: ReactFlowXbridgesNode[] = [];
   let edges: ReactFlowXbridgesEdge[] = [];
   let revision = 1;
@@ -55,7 +55,8 @@ function makeHarness(llmPayload: Record<string, unknown> = {}): Harness {
     } as never,
   });
 
-  const workflow = new GeneralXbridgesWorkflow(new StubLlm(llmPayload), tools, {
+  const llm = llmOverride ?? new StubLlm(llmPayload);
+  const workflow = new GeneralXbridgesWorkflow(llm, tools, {
     requirements: resolveRequirements,
     patterns: new NullPatternGateway(),
     planner: new PlanningCollaborator(),
@@ -244,5 +245,58 @@ describe('GeneralXbridgesWorkflow create pipeline', () => {
     expect(diagRes.status).toBe('completed');
     expect(harness.nodes()).toHaveLength(0);
     expect(harness.saves()).toBe(0);
+  });
+});
+
+describe('Adversarial Ollama can never hijack the workflow (Task 5)', () => {
+  it('ignores an LLM intent override whenever a creation verb is present', async () => {
+    const harness = makeHarness({ intent: 'optimize', behaviors: ['quantum_warp'] });
+    const res = await harness.workflow.handle('Create a low pass filter for smoothing', harness.context);
+    expect(harness.workflow.lastHandledIntent).toBe('create');
+    expect(res.intent).toBe('create');
+    expect(res.status).not.toBe('failed');
+  });
+
+  it('applies an LLM intent only for ambiguous verb-less requests', async () => {
+    const harness = makeHarness({ intent: 'diagnose' });
+    const res = await harness.workflow.handle('why does my active model oscillate', harness.context);
+    expect(harness.workflow.lastHandledIntent).toBe('diagnose');
+    expect(res.intent).toBe('diagnose');
+  });
+
+  it('never merges behaviors outside the known vocabulary', async () => {
+    const adversarial = makeHarness({ behaviors: ['quantum_warp', 'perpetual_motion', 'impossible_warp_physics'] });
+    const res = await adversarial.workflow.handle(
+      'Create a thermal alarm that trips at 80 degC with hysteresis',
+      adversarial.context,
+    );
+    expect(res.intent).toBe('create');
+    // The adversarial payload must not block, fail, or refuse the request:
+    // it is stripped to nothing and the deterministic path proceeds.
+    expect(res.status).not.toBe('failed');
+    expect(res.status).not.toBe('blocked');
+
+    const clean = makeHarness({});
+    const baseline = await clean.workflow.handle(
+      'Create a thermal alarm that trips at 80 degC with hysteresis',
+      clean.context,
+    );
+    expect(res.status).toBe(baseline.status);
+  });
+
+  it('proceeds deterministically when the LLM is unavailable', async () => {
+    class OfflineLlm extends StubLlm {
+      override async health() {
+        return { available: false, error: 'OLLAMA_UNAVAILABLE' };
+      }
+    }
+    const harness = makeHarness({}, new OfflineLlm());
+    const res = await harness.workflow.handle(
+      'Create a signal chain: Step source into a Gain of 2 into a Scope',
+      harness.context,
+    );
+    expect(res.intent).toBe('create');
+    expect(['clarifying', 'awaiting_plan_approval']).toContain(res.status);
+    expect(harness.nodes()).toHaveLength(0);
   });
 });

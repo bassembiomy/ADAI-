@@ -1,12 +1,12 @@
 import { XbridgesIntent } from '../../services/ai/planner/generalIntent';
 import { resolveBlockCapability } from '../../services/ai/catalog/xbridgesCapabilityIndex';
+import { deriveBehaviorsFromText } from '../textExtraction';
 import { findTemplateForIntent } from '../../services/ai/templates/threePhaseInverter';
 import { TaskState } from '../types';
 import { createTaskState, recordAnswer } from '../requirementState';
 import { ClarificationEngine, AnalysisResult } from '../clarificationEngine';
 import { buildSpecification, EngineeringSpecification } from '../specificationEngine';
 import { LlmProvider } from '../llmProvider';
-import { intentExtractionPrompt } from '../promptTemplates';
 
 export interface ClassifiedRequest {
   intent: XbridgesIntent;
@@ -26,6 +26,32 @@ export interface RequestHandlingResult {
   diagnostics?: Array<{ category: string; message: string; severity?: string }>;
 }
 
+/**
+ * Deterministic intent classification from keywords only. Returns `undefined`
+ * when no action verb is recognized (caller defaults to 'create'). The LLM is
+ * deliberately not consulted here: clarification of ambiguous intent happens
+ * once, validated, via extractLlmClarification in the workflow.
+ */
+export function classifyIntentFromKeywords(input: string): XbridgesIntent | undefined {
+  const lower = input.toLowerCase();
+  if (lower.startsWith('inspect') || lower.includes('inspect current') || lower.includes('show model') || lower.includes('list blocks')) {
+    return 'inspect';
+  }
+  if (lower.startsWith('diagnose') || lower.includes('diagnose model') || lower.includes('detect fault') || lower.includes('topology error')) {
+    return 'diagnose';
+  }
+  if (lower.startsWith('repair') || lower.includes('repair model') || lower.includes('auto-repair') || lower.includes('fix disconnected')) {
+    return 'repair';
+  }
+  if (lower.startsWith('optimize') || lower.includes('optimize gain') || lower.includes('parameter search') || lower.includes('minimize') || lower.includes('maximize')) {
+    return 'optimize';
+  }
+  if (lower.startsWith('modify') || lower.includes('modify gain') || lower.includes('update parameter') || lower.includes('change resistor')) {
+    return 'modify';
+  }
+  return undefined;
+}
+
 export class RequestCollaborator {
   constructor(private readonly llm: LlmProvider) {}
 
@@ -33,19 +59,8 @@ export class RequestCollaborator {
     const trimmed = input.trim();
     const lower = trimmed.toLowerCase();
 
-    // 1. Check for explicit or keyword-based intent
-    let intent: XbridgesIntent = 'create';
-    if (lower.startsWith('inspect') || lower.includes('inspect current') || lower.includes('show model') || lower.includes('list blocks')) {
-      intent = 'inspect';
-    } else if (lower.startsWith('diagnose') || lower.includes('diagnose model') || lower.includes('detect fault') || lower.includes('topology error')) {
-      intent = 'diagnose';
-    } else if (lower.startsWith('repair') || lower.includes('repair model') || lower.includes('auto-repair') || lower.includes('fix disconnected')) {
-      intent = 'repair';
-    } else if (lower.startsWith('optimize') || lower.includes('optimize gain') || lower.includes('parameter search') || lower.includes('minimize') || lower.includes('maximize')) {
-      intent = 'optimize';
-    } else if (lower.startsWith('modify') || lower.includes('modify gain') || lower.includes('update parameter') || lower.includes('change resistor')) {
-      intent = 'modify';
-    }
+    // 1. Deterministic keyword-based intent (LLM never classifies here).
+    const intent: XbridgesIntent = classifyIntentFromKeywords(trimmed) ?? 'create';
 
     // 2. Determine target system
     let targetSystem: string | undefined;
@@ -74,32 +89,9 @@ export class RequestCollaborator {
       }
     }
 
-    // 3. Fallback to LLM if needed
-    if (!targetSystem) {
-      try {
-        const intentReq = intentExtractionPrompt(trimmed);
-        const result = await this.llm.generate<{ intent?: string; targetSystem?: string; summary?: string }>(
-          intentReq,
-          { type: 'object' }
-        );
-        if (result.success && result.data) {
-          if (result.data.intent) {
-            const llmIntent = result.data.intent.toLowerCase();
-            if (llmIntent.includes('inspect')) intent = 'inspect';
-            else if (llmIntent.includes('diag')) intent = 'diagnose';
-            else if (llmIntent.includes('repair')) intent = 'repair';
-            else if (llmIntent.includes('opt')) intent = 'optimize';
-            else if (llmIntent.includes('modif')) intent = 'modify';
-            else if (llmIntent.includes('create')) intent = 'create';
-          }
-          if (result.data.targetSystem) {
-            targetSystem = result.data.targetSystem;
-          }
-        }
-      } catch {
-        // Deterministic fallback
-      }
-    }
+    // 3. No LLM fallback: a target system must be recognizable deterministically
+    // (template match, domain keyword, or catalog block). Invented target
+    // systems from a model would bypass catalog validation downstream.
 
     // If intent is inspection, diagnosis, repair, modify, or general xbridges circuit
     if (!targetSystem && (intent === 'inspect' || intent === 'diagnose' || intent === 'repair' || intent === 'modify' || intent === 'optimize')) {
@@ -111,6 +103,13 @@ export class RequestCollaborator {
       if (lower.includes('circuit') || lower.includes('filter') || lower.includes('converter') || lower.includes('model') || lower.includes('rl') || lower.includes('rc') || lower.includes('rlc') || lower.includes('power supply')) {
         targetSystem = 'xbridges_model';
       }
+    }
+
+    // Behavior-named requests (thermal alarm, PID loop, motor drive, ...) are
+    // supported through catalog-driven synthesis even when no single block is
+    // named. Detection is deterministic keyword matching, never the LLM.
+    if (!targetSystem && deriveBehaviorsFromText(trimmed).length > 0) {
+      targetSystem = 'xbridges_behavioral_model';
     }
 
     // Check for unsupported domains

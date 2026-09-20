@@ -26,6 +26,8 @@ import {
 import { ToolGateway } from './toolGateway';
 import { LlmProvider } from './llmProvider';
 import { RequestCollaborator, ClassifiedRequest } from './collaborators/requestCollaborator';
+import { extractLlmClarification, canApplyLlmIntent, LlmClarification } from './llmClarification';
+import { deriveBehaviorsFromText, extractBlockMentions, extractQuantities } from './textExtraction';
 import { PlanningCollaborator } from './collaborators/planningCollaborator';
 import { ProofCollaborator } from './collaborators/proofCollaborator';
 import { TransactionCollaborator } from './collaborators/transactionCollaborator';
@@ -76,6 +78,11 @@ export interface GeneralWorkflowDependencies {
   planner: PlanningCollaborator;
   proof: ProofCollaborator;
   transactions: TransactionCollaborator;
+  /**
+   * Hard wall-clock cap for the advisory Ollama clarification round-trip.
+   * Defaults to 4000 ms. On expiry the deterministic path proceeds alone.
+   */
+  llmClarificationTimeoutMs?: number;
 }
 
 export interface LivePlanningContext {
@@ -355,7 +362,19 @@ export class GeneralXbridgesWorkflow {
     }
 
     const classified: ClassifiedRequest = await this.requestCollaborator.classifyRequest(input);
-    this.lastHandledIntent = classified.intent;
+
+    // Advisory clarification: bounded, validated, and never authoritative.
+    // Returns undefined silently when Ollama is unavailable or malformed.
+    const clarification = await extractLlmClarification(this.llm, input, {
+      timeoutMs: this.deps.llmClarificationTimeoutMs,
+    });
+
+    // An LLM intent may only replace the default 'create' classification.
+    const intent: XbridgesIntent =
+      clarification?.intent && canApplyLlmIntent(input, classified.intent)
+        ? clarification.intent
+        : classified.intent;
+    this.lastHandledIntent = intent;
 
     if (!classified.isSupported) {
       this.initTaskState(input, 'unsupported');
@@ -367,14 +386,14 @@ export class GeneralXbridgesWorkflow {
           classified.unsupportedReason ||
           'Request refused: no installed X-Bridges catalog capability matches this request. Describe a model expressible with catalog blocks (sources, gains, integrators, controllers, logic, sinks, ...).',
         taskState: this.requireTaskState(),
-        intent: classified.intent,
+        intent,
         transactionStatus: 'idle',
       });
     }
 
     this.initTaskState(input, classified.targetSystem);
     this.session = {
-      intent: classified.intent,
+      intent,
       objective: classified.objective,
       rawPrompt: input,
       patternsSelected: [],
@@ -388,15 +407,15 @@ export class GeneralXbridgesWorkflow {
     };
 
     // Read-only intents never mutate and need no approvals.
-    if (classified.intent === 'inspect') {
+    if (intent === 'inspect') {
       return this.runInspect();
     }
-    if (classified.intent === 'diagnose') {
+    if (intent === 'diagnose') {
       return this.runDiagnose();
     }
 
     // Mutation intents: extract and resolve requirements deterministically.
-    const request = await this.extractRequest(input, classified);
+    const request = await this.extractRequest(input, classified, clarification);
     this.session.request = request;
 
     const refusal = this.detectHardRefusals(request);
@@ -422,11 +441,27 @@ export class GeneralXbridgesWorkflow {
    * every identifier is revalidated against the installed catalog by the
    * deterministic layers downstream.
    */
-  private async extractRequest(input: string, classified: ClassifiedRequest): Promise<GeneralEngineeringRequest> {
+  private async extractRequest(
+    input: string,
+    classified: ClassifiedRequest,
+    clarification?: LlmClarification,
+  ): Promise<GeneralEngineeringRequest> {
     const behaviors = deriveBehaviorsFromText(`${input} ${classified.targetSystem}`);
+    // Merge only behaviors that already passed deterministic vocabulary
+    // validation; the LLM can never introduce identifiers of its own.
+    if (clarification && clarification.behaviors.length > 0) {
+      for (const b of clarification.behaviors) {
+        if (!behaviors.includes(b)) behaviors.push(b);
+      }
+      behaviors.sort();
+      this.appendAudit('LLM_CLARIFICATION_MERGED', {
+        behaviors: clarification.behaviors,
+        note: 'advisory only; validated against behavior vocabulary',
+      });
+    }
     const request: GeneralEngineeringRequest = {
-      intent: classified.intent,
-      objective: classified.objective,
+      intent: this.session?.intent ?? classified.intent,
+      objective: clarification?.objective ?? classified.objective,
       targetBehaviors: behaviors,
       inputs: [],
       outputs: [],
@@ -448,28 +483,10 @@ export class GeneralXbridgesWorkflow {
       request.inputs.push({ name: q.name, value: q.value, unit: q.unit, sourceText: q.sourceText });
     }
 
-    // LLM hint (advisory only — never authoritative).
-    try {
-      const health = await this.llm.health();
-      if (health.available) {
-        const hint = await this.llm.generate<{
-          targetBehaviors?: string[];
-          objective?: string;
-        }>(
-          {
-            system: 'You extract engineering intent. Reply JSON only.',
-            user: `Extract behaviors/objective for: ${input}`,
-          } as never,
-          { type: 'object' } as never
-        );
-        if (hint.success && hint.data) {
-          const extra = Array.isArray(hint.data.targetBehaviors) ? hint.data.targetBehaviors : [];
-          request.targetBehaviors = Array.from(new Set([...request.targetBehaviors, ...extra.filter(b => typeof b === 'string')]));
-        }
-      }
-    } catch {
-      // Deterministic extraction remains authoritative when Ollama is unavailable.
-    }
+    // Ollama is consulted exactly once per request, upstream of this method,
+    // through extractLlmClarification(). Its output is bounded, validated,
+    // and may only contribute intent hints and vocabulary-checked behaviors.
+    // No block, port, parameter, or quantity may ever originate from the LLM.
 
     return request;
   }
@@ -1177,52 +1194,10 @@ export class GeneralXbridgesWorkflow {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Deterministic extraction helpers (Ollama never authorizes identifiers)
-// ---------------------------------------------------------------------------
-const BEHAVIOR_KEYWORDS: Array<{ match: RegExp; behavior: string }> = [
-  { match: /\b(pid|closed[- ]loop|feedback)\b/i, behavior: 'closed_loop_control' },
-  { match: /\b(speed control|speed controller|velocity control)\b/i, behavior: 'speed_control' },
-  { match: /\b(low[- ]?pass|lowpass|filter|smoothing)\b/i, behavior: 'low_pass_filter' },
-  { match: /\b(thermal|temperature|heat|alarm)\b/i, behavior: 'thermal_alarm_logic' },
-  { match: /\b(motor drive|motor control|three[- ]phase|inverter|pwm)\b/i, behavior: 'motor_drive' },
-  { match: /\b(feed[- ]?forward|open[- ]?loop|signal chain|step response)\b/i, behavior: 'feed_forward' },
-  { match: /\b(air[- ]?fryer|airfryer)\b/i, behavior: 'thermal_control' },
-  { match: /\b(logic|interlock|sequen\w+|latch|flip[- ]?flop)\b/i, behavior: 'logical_sequencing' },
-];
-
-export function deriveBehaviorsFromText(text: string): string[] {
-  const behaviors = new Set<string>();
-  for (const { match, behavior } of BEHAVIOR_KEYWORDS) {
-    if (match.test(text)) behaviors.add(behavior);
-  }
-  return [...behaviors].sort();
-}
-
-const BLOCK_MENTION_PATTERN = /\b([A-Z][A-Z0-9_]{2,}|[A-Z][a-z]+(?:[A-Z][a-z]+)+)\b/g;
-
-export function extractBlockMentions(text: string): string[] {
-  const mentions = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = BLOCK_MENTION_PATTERN.exec(text)) !== null) {
-    mentions.add(m[1]);
-  }
-  return [...mentions].sort();
-}
-
-const QUANTITY_PATTERN =
-  /\b(setpoint|set point|gain|kp|ki|kd|threshold|frequency|voltage|time constant|amplitude|resistance|load)\s*(?:of|:|=)?\s*(-?\d+(?:\.\d+)?)\s*(rpm|hz|khz|mhz|v|kv|a|ma|w|kw|ohm|ohms|s|ms|degc|°c|celsius)?/gi;
-
-export function extractQuantities(text: string): Array<{ name: string; value: number; unit?: string; sourceText: string }> {
-  const out: Array<{ name: string; value: number; unit?: string; sourceText: string }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = QUANTITY_PATTERN.exec(text)) !== null) {
-    out.push({
-      name: m[1].toLowerCase().replace(/\s+/g, '_'),
-      value: Number(m[2]),
-      unit: m[3]?.toLowerCase(),
-      sourceText: m[0],
-    });
-  }
-  return out;
-}
+// Deterministic extraction helpers live in textExtraction.ts; re-exported
+// here for backwards compatibility.
+export {
+  deriveBehaviorsFromText,
+  extractBlockMentions,
+  extractQuantities,
+} from './textExtraction';
