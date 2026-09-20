@@ -1,6 +1,58 @@
-# Generic Dynamic Synthesizer & Multi-Domain Vocabulary Tasks
+# X-Bridges Agent Safety Gate Implementation Tasks
 
-- [x] Task 1: Multi-Domain Semantic Vocabulary & Synonym Resolver (`src/services/ai/catalog/xbridgesDomainVocabulary.ts`)
-- [x] Task 2: Dynamic Semantic Operator & Math Expression Synthesizer (`src/services/ai/planner/generalGraphPlanner.ts`)
-- [x] Task 3: Zero-Shot LLM Catalog-Informed Graph Synthesis (`src/services/ai/planner/generalGraphPlanner.ts`)
-- [x] Task 4: End-to-End Orchestration Integration & User Prompt Verification (`src/agent/agentOrchestrator.ts`)
+- [x] Task 1: Add the generated-graph validator (`src/services/ai/planner/generatedGraphValidator.ts`)
+  - [x] Step 1: Write failing validator tests (`generatedGraphValidator.test.ts`)
+  - [x] Step 2: Run focused test and verify failures
+  - [x] Step 3: Implement pure validator with stable diagnostic codes
+  - [x] Step 4: Add graph-size limits and non-finite parameter validation
+  - [x] Step 5: Run focused validator tests and confirm all pass
+  - [x] Step 6: Commit
+- [ ] Task 2: Route deterministic plans through validation (`src/services/ai/planner/generalGraphPlanner.ts`)
+  - [ ] Step 1: Add failing tests for catalog mutation / invalid deterministic graphs
+  - [ ] Step 2: Run planner tests to confirm failures
+  - [ ] Step 3: Call validator immediately after archetype resolution before diff/action creation
+  - [ ] Step 4: Ensure deterministic plan hashes remain stable
+  - [ ] Step 5: Run planner tests and confirm pass
+  - [ ] Step 6: Commit
+- [ ] Task 3: Validate and constrain LLM synthesis (`src/services/ai/planner/generalGraphPlanner.ts`)
+  - [ ] Step 1: Add failing tests for malformed, unknown ports, duplicate IDs, oversized LLM graphs
+  - [ ] Step 2: Run planner tests to confirm failures
+  - [ ] Step 3: Replace `allValid` with schema normalization + `validateGeneratedGraph`
+  - [ ] Step 4: Validate and bound each generated block, connection, parameter, position
+  - [ ] Step 5: Replace `.slice(0, 40)` with deterministic complete or domain-filtered capability summary
+  - [ ] Step 6: Return `LLM_GRAPH_INVALID` diagnostics and never return a plan for invalid output
+  - [ ] Step 7: Run planner tests and commit
+- [ ] Task 4: Remove misleading generic fallback behavior (`src/services/ai/planner/generalGraphPlanner.ts`)
+  - [ ] Step 1: Add failing tests asserting unrecognized requests do not generate `canonical_generic_model`
+  - [ ] Step 2: Run planner tests and verify failure
+  - [ ] Step 3: Replace generic fallback with `UNSUPPORTED_ENGINEERING_REQUEST` and clarification diagnostic
+  - [ ] Step 4: Preserve explicit arithmetic and canonical archetype paths
+  - [ ] Step 5: Run focused planner/orchestrator tests and commit
+- [ ] Task 5: Connect verified pattern evidence to planning (`src/agent/agentOrchestrator.ts`, `planningCollaborator.ts`, `generalGraphPlanner.ts`)
+  - [ ] Step 1: Add failing test proving compatible verified pattern is in planner context and selected before LLM
+  - [ ] Step 2: Run targeted tests and confirm failure
+  - [ ] Step 3: Pass `currentPatternEvidence` instead of `patterns: []`
+  - [ ] Step 4: Add deterministic pattern ranking by quality score, capability coverage, ID tie-breaker
+  - [ ] Step 5: Reject unverified or incompatible pattern templates
+  - [ ] Step 6: Run tests and commit
+- [ ] Task 6: Improve numeric and unit-aware request handling (`src/services/ai/planner/engineeringEntityParser.ts`, `generalGraphPlanner.ts`)
+  - [ ] Step 1: Add failing tests for negative, fractional, scientific, unit-bearing, missing-value arithmetic
+  - [ ] Step 2: Run parser/planner tests and confirm failures
+  - [ ] Step 3: Replace arithmetic regex extraction with entity parser + strict numeric path
+  - [ ] Step 4: Reject non-finite values, missing operands, incompatible units, division by zero
+  - [ ] Step 5: Preserve exact numeric values in canonical plan JSON and verify hashes
+  - [ ] Step 6: Run focused tests and commit
+- [ ] Task 7: Add semantic simulation assertions (`src/services/ai/benchmarks/generalXbridgesCorpus.test.ts`)
+  - [ ] Step 1: Add failing tests for arithmetic simulation assertions
+  - [ ] Step 2: Run targeted benchmark tests and confirm failures
+  - [ ] Step 3: Execute validated arithmetic plans through proof runner, assert Scope observables
+  - [ ] Step 4: Assert genuine engine run IDs, reject unavailable observables
+  - [ ] Step 5: Run benchmark tests and commit
+- [ ] Task 8: Full regression and release evidence (`docs/AI_AGENT_CODE_REVIEW.md`, `task.md`)
+  - [ ] Step 1: Add end-to-end adversarial lifecycle tests
+  - [ ] Step 2: Run focused suites
+  - [ ] Step 3: Run typecheck `npx tsc --noEmit`
+  - [ ] Step 4: Run production build `npm run build`
+  - [ ] Step 5: Run relevant X-Bridges E2E tests
+  - [ ] Step 6: Update release review with exact command output
+  - [ ] Step 7: Commit
