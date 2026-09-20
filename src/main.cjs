@@ -329,6 +329,30 @@ app.on('activate', () => {
 // IPC Handlers for Offline Engineering Pattern Store
 const patternStoreBaseDir = path.join(__dirname, '..', 'resources', 'engineering-patterns');
 
+// The manifest may carry Windows-style relative paths ('patterns\\x.json').
+// Normalize separators so resolution is correct on every platform, then prove
+// the result stays inside the store before reading anything.
+const resolvePatternFile = relativePath => {
+  if (typeof relativePath !== 'string' || relativePath.includes('\0')) return null;
+  const normalized = relativePath.split(/[\\/]+/).filter(Boolean);
+  if (normalized.some(segment => segment === '..')) return null;
+  const resolved = path.resolve(patternStoreBaseDir, ...normalized);
+  if (resolved !== patternStoreBaseDir && !resolved.startsWith(patternStoreBaseDir + path.sep)) {
+    return null;
+  }
+  return resolved;
+};
+
+ipcMain.handle('pattern-store-manifest', async () => {
+  const manifestPath = path.join(patternStoreBaseDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle('pattern-store-get', async (_event, id) => {
   if (!id || typeof id !== 'string' || id.includes('..') || id.includes('\0')) {
     throw new Error('INVALID_PATTERN_ID');
@@ -338,8 +362,8 @@ ipcMain.handle('pattern-store-get', async (_event, id) => {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const entry = manifest.patterns && manifest.patterns[id];
   if (!entry) return null;
-  const patternFile = path.resolve(patternStoreBaseDir, entry.filePath);
-  if (!patternFile.startsWith(path.resolve(patternStoreBaseDir))) {
+  const patternFile = resolvePatternFile(entry.filePath);
+  if (!patternFile) {
     throw new Error('PATH_TRAVERSAL_BLOCKED');
   }
   if (!fs.existsSync(patternFile)) return null;
@@ -353,8 +377,8 @@ ipcMain.handle('pattern-store-list', async (_event, filter) => {
   const results = [];
   for (const [id, entry] of Object.entries(manifest.patterns || {})) {
     if (filter && filter.lifecycle && entry.lifecycle !== filter.lifecycle) continue;
-    const patternFile = path.resolve(patternStoreBaseDir, entry.filePath);
-    if (!patternFile.startsWith(path.resolve(patternStoreBaseDir))) continue;
+    const patternFile = resolvePatternFile(entry.filePath);
+    if (!patternFile) continue;
     if (fs.existsSync(patternFile)) {
       try {
         const pattern = JSON.parse(fs.readFileSync(patternFile, 'utf8'));
@@ -364,6 +388,25 @@ ipcMain.handle('pattern-store-list', async (_event, filter) => {
     }
   }
   return results.sort((a, b) => a.id.localeCompare(b.id));
+});
+
+// Returns the exact on-disk bytes of a pattern so the renderer can verify the
+// manifest contentHash without trusting the parsed payload.
+ipcMain.handle('pattern-store-raw', async (_event, id) => {
+  if (!id || typeof id !== 'string' || id.includes('..') || id.includes('\0')) {
+    throw new Error('INVALID_PATTERN_ID');
+  }
+  const manifestPath = path.join(patternStoreBaseDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const entry = manifest.patterns && manifest.patterns[id];
+  if (!entry) return null;
+  const patternFile = resolvePatternFile(entry.filePath);
+  if (!patternFile) {
+    throw new Error('PATH_TRAVERSAL_BLOCKED');
+  }
+  if (!fs.existsSync(patternFile)) return null;
+  return { id, raw: fs.readFileSync(patternFile, 'utf8') };
 });
 
 // IPC Handlers for Project persistence
