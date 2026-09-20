@@ -3,6 +3,7 @@ import {
   LogicalBlock,
   LogicalConnection,
   StructuredDiagnostic,
+  StructuredDiagnosticSchema,
   XbridgesAction,
 } from '../contracts/engineeringModel';
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
@@ -619,9 +620,14 @@ export async function planGeneralXbridgesModelAsync(
   }
 
   try {
-    const catalogSummary = Array.from(context.catalog.blocks.values())
-      .slice(0, 40)
-      .map(b => `${b.id} (inputs: [${b.inputs.map(i => i.id).join(', ')}], outputs: [${b.outputs.map(o => o.id).join(', ')}])`)
+    const sortedBlocks = Array.from(context.catalog.blocks.values()).sort((a, b) => a.id.localeCompare(b.id));
+    const catalogSummary = sortedBlocks
+      .map(b => {
+        const ins = b.inputs.map(i => i.id).join(', ');
+        const outs = b.outputs.map(o => o.id).join(', ');
+        const params = b.parameterNames.join(', ');
+        return `- ${b.id}: inputs=[${ins}], outputs=[${outs}], params=[${params}]`;
+      })
       .join('\n');
 
     const prompt = {
@@ -633,25 +639,107 @@ export async function planGeneralXbridgesModelAsync(
       connections: Array<{ fromBlockId: string; fromPortId: string; toBlockId: string; toPortId: string }>;
     }>(prompt, { type: 'object' });
 
-    if (res.success && res.data?.blocks?.length) {
-      const { blocks, connections } = res.data;
-      const allValid = blocks.every(b => context.catalog.blocks.has(b.type));
-      if (allValid) {
-        const archetype = {
-          blocks: blocks.map((b, i) => ({
-            id: b.id || `b_${i + 1}`,
-            type: b.type,
-            params: b.params || {},
-            position: b.position || { x: 100 + i * 250, y: 150 },
-          })),
-          connections: (connections || []).map(c => ({
-            fromBlockId: c.fromBlockId,
-            fromPortId: c.fromPortId,
-            toBlockId: c.toBlockId,
-            toPortId: c.toPortId,
-          })),
-          provenance: { patternId: 'llm_catalog_synthesized', version: '1.0.0' },
+    if (!res.success || !res.data || !Array.isArray(res.data.blocks) || res.data.blocks.length === 0) {
+      return {
+        status: 'refused',
+        diagnostics: [
+          StructuredDiagnosticSchema.parse({
+            category: 'SCHEMA',
+            code: 'LLM_GRAPH_INVALID',
+            severity: 'ERROR',
+            message: `LLM graph synthesis failed: ${res.error || 'Empty or invalid graph structure returned.'}`,
+            remediation: 'Provide clearer engineering requirements or verify LLM service availability.',
+          }),
+        ],
+        provenance: [],
+      };
+    }
+
+    const rawBlocks = res.data.blocks;
+    const rawConns = res.data.connections || [];
+
+    // Validate and bound each generated block, connection, parameter object, and position
+    const boundedBlocks: InternalBlockSpec[] = [];
+    for (let i = 0; i < rawBlocks.length; i++) {
+      const b = rawBlocks[i];
+      if (!b || typeof b !== 'object' || !b.type) {
+        return {
+          status: 'refused',
+          diagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'SCHEMA',
+              code: 'LLM_GRAPH_INVALID',
+              severity: 'ERROR',
+              message: `LLM block at index ${i} is malformed or missing type.`,
+            }),
+          ],
+          provenance: [],
         };
+      }
+
+      const posX = typeof b.position?.x === 'number' && Number.isFinite(b.position.x)
+        ? Math.max(0, Math.min(10000, b.position.x))
+        : 100 + i * 250;
+      const posY = typeof b.position?.y === 'number' && Number.isFinite(b.position.y)
+        ? Math.max(0, Math.min(10000, b.position.y))
+        : 150;
+
+      boundedBlocks.push({
+        id: String(b.id || `b_${i + 1}`),
+        type: String(b.type),
+        params: (b.params && typeof b.params === 'object' && !Array.isArray(b.params)) ? { ...b.params } : {},
+        position: { x: posX, y: posY },
+      });
+    }
+
+    const boundedConns: InternalConnSpec[] = [];
+    for (const c of rawConns) {
+      if (!c || typeof c !== 'object') continue;
+      boundedConns.push({
+        fromBlockId: String(c.fromBlockId || ''),
+        fromPortId: String(c.fromPortId || ''),
+        toBlockId: String(c.toBlockId || ''),
+        toPortId: String(c.toPortId || ''),
+      });
+    }
+
+    const requireObservableSink = request.outputs?.some(o =>
+      /scope|display|sink|result|monitored/i.test(String(o.value || o.name || ''))
+    ) ?? false;
+
+    const validation = validateGeneratedGraph(
+      boundedBlocks,
+      boundedConns,
+      context.catalog,
+      {
+        maxBlocks: 50,
+        maxConnections: 100,
+        requireObservableSink,
+      }
+    );
+
+    if (!validation.valid) {
+      return {
+        status: 'refused',
+        diagnostics: [
+          StructuredDiagnosticSchema.parse({
+            category: 'SCHEMA',
+            code: 'LLM_GRAPH_INVALID',
+            severity: 'ERROR',
+            message: 'Synthesized LLM graph failed safety and structural validation.',
+            remediation: 'Refine request or provide clearer domain constraints.',
+          }),
+          ...validation.diagnostics,
+        ],
+        provenance: [],
+      };
+    }
+
+    const archetype = {
+      blocks: boundedBlocks,
+      connections: boundedConns,
+      provenance: { patternId: 'llm_catalog_synthesized', version: '1.0.0' },
+    };
 
         const { projectId, baseRevision, activeSnapshot, catalog } = context;
         const actions: XbridgesAction[] = [
@@ -718,11 +806,20 @@ export async function planGeneralXbridgesModelAsync(
           plan: { ...planPayload, planHash },
           diagnostics: [],
           provenance: [archetype.provenance],
-        };
-      }
-    }
-  } catch {
-    // Fallback to deterministic plan
+      };
+  } catch (err: any) {
+    return {
+      status: 'refused',
+      diagnostics: [
+        StructuredDiagnosticSchema.parse({
+          category: 'SCHEMA',
+          code: 'LLM_GRAPH_INVALID',
+          severity: 'ERROR',
+          message: `Zero-shot LLM graph synthesis threw an error: ${err?.message || String(err)}`,
+        }),
+      ],
+      provenance: [],
+    };
   }
 
   return syncOutcome;

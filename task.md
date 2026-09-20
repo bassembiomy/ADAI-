@@ -14,14 +14,14 @@
   - [x] Step 4: Ensure deterministic plan hashes remain stable
   - [x] Step 5: Run planner tests and confirm pass
   - [x] Step 6: Commit
-- [ ] Task 3: Validate and constrain LLM synthesis (`src/services/ai/planner/generalGraphPlanner.ts`)
-  - [ ] Step 1: Add failing tests for malformed, unknown ports, duplicate IDs, oversized LLM graphs
-  - [ ] Step 2: Run planner tests to confirm failures
-  - [ ] Step 3: Replace `allValid` with schema normalization + `validateGeneratedGraph`
-  - [ ] Step 4: Validate and bound each generated block, connection, parameter, position
-  - [ ] Step 5: Replace `.slice(0, 40)` with deterministic complete or domain-filtered capability summary
-  - [ ] Step 6: Return `LLM_GRAPH_INVALID` diagnostics and never return a plan for invalid output
-  - [ ] Step 7: Run planner tests and commit
+- [x] Task 3: Validate and constrain LLM synthesis (`src/services/ai/planner/generalGraphPlanner.ts`)
+  - [x] Step 1: Add failing tests for malformed, unknown ports, duplicate IDs, oversized LLM graphs
+  - [x] Step 2: Run planner tests to confirm failures
+  - [x] Step 3: Replace `allValid` with schema normalization + `validateGeneratedGraph`
+  - [x] Step 4: Validate and bound each generated block, connection, parameter, position
+  - [x] Step 5: Replace `.slice(0, 40)` with deterministic complete or domain-filtered capability summary
+  - [x] Step 6: Return `LLM_GRAPH_INVALID` diagnostics and never return a plan for invalid output
+  - [x] Step 7: Run planner tests and commit
 - [ ] Task 4: Remove misleading generic fallback behavior (`src/services/ai/planner/generalGraphPlanner.ts`)
   - [ ] Step 1: Add failing tests asserting unrecognized requests do not generate `canonical_generic_model`
   - [ ] Step 2: Run planner tests and verify failure

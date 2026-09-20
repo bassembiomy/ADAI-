@@ -269,13 +269,13 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
           success: true,
           data: {
             blocks: [
-              { id: 'b_wave', type: 'WaveformGen', params: { frequency: 5 }, position: { x: 100, y: 150 } },
+              { id: 'b_wave', type: 'WaveformGen', params: { freq: 5 }, position: { x: 100, y: 150 } },
               { id: 'b_sat', type: 'SATURATION', params: { upperLimit: 1, lowerLimit: -1 }, position: { x: 450, y: 150 } },
               { id: 'b_scope', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
             ],
             connections: [
-              { fromBlockId: 'b_wave', fromPortId: 'out', toBlockId: 'b_sat', toPortId: 'in' },
-              { fromBlockId: 'b_sat', fromPortId: 'out', toBlockId: 'b_scope', toPortId: 'in1' },
+              { fromBlockId: 'b_wave', fromPortId: 'out', toBlockId: 'b_sat', toPortId: 'u' },
+              { fromBlockId: 'b_sat', fromPortId: 'y', toBlockId: 'b_scope', toPortId: 'in1' },
             ],
           },
         }),
@@ -497,6 +497,208 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.status).toBe('refused');
       expect(outcome.plan).toBeUndefined();
       expect(outcome.diagnostics.some(d => d.code === 'UNKNOWN_TARGET_PORT')).toBe(true);
+    });
+  });
+
+  describe('Zero-Shot LLM Synthesis Safety Gate', () => {
+    const baseRequest: GeneralEngineeringRequest = {
+      intent: 'create',
+      objective: 'Custom novel system requiring LLM synthesis',
+      targetBehaviors: [],
+      inputs: [],
+      outputs: [{ name: 'result', value: 'Scope' }],
+      constraints: [],
+    };
+
+    it('refuses LLM output with unknown ports', async () => {
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            blocks: [
+              { id: 'b_wave', type: 'WaveformGen', params: { freq: 5 }, position: { x: 100, y: 150 } },
+              { id: 'b_scope', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
+            ],
+            connections: [
+              { fromBlockId: 'b_wave', fromPortId: 'invalid_source_port', toBlockId: 'b_scope', toPortId: 'in1' },
+            ],
+          },
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_llm_ports',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm_ports'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(baseRequest, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
+      expect(outcome.diagnostics.some(d => d.code === 'UNKNOWN_SOURCE_PORT')).toBe(true);
+    });
+
+    it('refuses LLM output with duplicate IDs', async () => {
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            blocks: [
+              { id: 'dup_id', type: 'WaveformGen', params: {}, position: { x: 100, y: 150 } },
+              { id: 'dup_id', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
+            ],
+            connections: [
+              { fromBlockId: 'dup_id', fromPortId: 'out', toBlockId: 'dup_id', toPortId: 'in1' },
+            ],
+          },
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_llm_dup',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm_dup'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(baseRequest, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
+      expect(outcome.diagnostics.some(d => d.code === 'DUPLICATE_BLOCK_ID')).toBe(true);
+    });
+
+    it('refuses LLM output with dangling connections', async () => {
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            blocks: [
+              { id: 'b_wave', type: 'WaveformGen', params: {}, position: { x: 100, y: 150 } },
+              { id: 'b_scope', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
+            ],
+            connections: [
+              { fromBlockId: 'b_wave', fromPortId: 'out', toBlockId: 'phantom_target', toPortId: 'in1' },
+            ],
+          },
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_llm_dangle',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm_dangle'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(baseRequest, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
+      expect(outcome.diagnostics.some(d => d.code === 'DANGLING_CONNECTION')).toBe(true);
+    });
+
+    it('refuses LLM output with invalid parameters', async () => {
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            blocks: [
+              { id: 'b_wave', type: 'WaveformGen', params: { freq: NaN }, position: { x: 100, y: 150 } },
+              { id: 'b_scope', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
+            ],
+            connections: [
+              { fromBlockId: 'b_wave', fromPortId: 'out', toBlockId: 'b_scope', toPortId: 'in1' },
+            ],
+          },
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_llm_params',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm_params'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(baseRequest, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
+      expect(outcome.diagnostics.some(d => d.code === 'INVALID_PARAMETER')).toBe(true);
+    });
+
+    it('refuses oversized LLM output', async () => {
+      const oversizedBlocks = Array.from({ length: 60 }, (_, i) => ({
+        id: `b_${i}`,
+        type: 'Constant',
+        params: { value: i },
+        position: { x: i * 50, y: 100 },
+      }));
+
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            blocks: oversizedBlocks,
+            connections: [],
+          },
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_llm_oversized',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm_oversized'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(baseRequest, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
+      expect(outcome.diagnostics.some(d => d.code === 'EXCEEDS_MAX_BLOCKS')).toBe(true);
+    });
+
+    it('refuses malformed or empty LLM output', async () => {
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'LLM generated malformed json',
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_llm_malformed',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm_malformed'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(baseRequest, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
     });
   });
 });
