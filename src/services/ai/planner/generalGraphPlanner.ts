@@ -291,6 +291,57 @@ function getCanonicalArchetype(
     };
   }
 
+  // Arithmetic, Summation & Subtraction (e.g. "add two constant each is 1 and display on scope")
+  if (
+    text.includes('add') ||
+    text.includes('sum') ||
+    text.includes('plus') ||
+    text.includes('addition') ||
+    text.includes('subtract') ||
+    text.includes('minus') ||
+    text.includes('difference') ||
+    text.includes('arithmetic')
+  ) {
+    const srcType = catalog.blocks.has('Constant') ? 'Constant' : 'Step';
+    const sumType = catalog.blocks.has('Sum') ? 'Sum' : (catalog.blocks.has('VectorAdd') ? 'VectorAdd' : 'Add');
+    const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
+
+    const numbers = text.match(/\b\d+(?:\.\d+)?\b/g);
+    let val1 = 1;
+    let val2 = 1;
+    if (numbers && numbers.length >= 2) {
+      val1 = parseFloat(numbers[0]);
+      val2 = parseFloat(numbers[1]);
+    } else if (numbers && numbers.length === 1) {
+      val1 = parseFloat(numbers[0]);
+      val2 = parseFloat(numbers[0]);
+    }
+
+    const signs = (text.includes('sub') || text.includes('minus') || text.includes('difference')) ? '+-' : '++';
+
+    const source1Out = getFirstOutPort(catalog, srcType, 'out');
+    const source2Out = getFirstOutPort(catalog, srcType, 'out');
+    const sumIn1 = catalog.blocks.get(sumType)?.inputs[0]?.id || 'in1';
+    const sumIn2 = catalog.blocks.get(sumType)?.inputs[1]?.id || 'in2';
+    const sumOut = getFirstOutPort(catalog, sumType, 'out');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+
+    return {
+      blocks: [
+        { id: 'const_1', type: srcType, params: { value: val1 }, position: { x: 100, y: 100 } },
+        { id: 'const_2', type: srcType, params: { value: val2 }, position: { x: 100, y: 250 } },
+        { id: 'sum_1', type: sumType, params: { signs }, position: { x: 400, y: 175 } },
+        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
+      ],
+      connections: [
+        { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'sum_1', toPortId: sumIn1 },
+        { fromBlockId: 'const_2', fromPortId: source2Out, toBlockId: 'sum_1', toPortId: sumIn2 },
+        { fromBlockId: 'sum_1', fromPortId: sumOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+      ],
+      provenance: { patternId: 'canonical_arithmetic_summation', version: '1.0.0', license: 'MIT' },
+    };
+  }
+
   // Generic fallback if all blocks in request inputs exist
   const firstIn = reqFirstInput(catalog);
   return {

@@ -160,6 +160,33 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.status).toBe('planned');
       expect(outcome.plan?.actions.some(a => a.kind === 'add_block')).toBe(true);
     });
+
+    it('synthesizes an arithmetic model adding two constants and displaying on scope', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'make a model add two cnstant each is 1 and display the result on a scope',
+        targetBehaviors: ['xbridges_vectoradd'],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_add',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_add'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan?.blocks).toHaveLength(4);
+      expect(outcome.plan?.connections).toHaveLength(3);
+      const constantBlocks = outcome.plan?.blocks.filter(b => b.blockDefinitionId === 'Constant');
+      expect(constantBlocks).toHaveLength(2);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Sum')).toBe(true);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
+    });
   });
 
   describe('Modification Diffing & Refusal Handling', () => {
