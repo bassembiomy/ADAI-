@@ -106,3 +106,6 @@ The architecture enforces strict security and integrity invariants:
 **Release decision: APPROVED / CERTIFIED.**  
 The General X-Bridges Engineering Agent and Safety Gate satisfy all architectural invariants, security boundaries, and cross-domain acceptance gates.
 
+## Engineering Knowledge Base Extension
+
+ADIA now includes a metadata-only source registry and bounded source fetcher for approved engineering references. Structured candidates are normalized into quarantine, checked against the active X-Bridges catalog, and promoted only after license approval, isolated proof, and human review. Runtime retrieval filters by lifecycle, license approval, proof status, and active catalog fingerprint. See `docs/knowledge/ENGINEERING_KNOWLEDGE_BASE.md` for source and lifecycle details.

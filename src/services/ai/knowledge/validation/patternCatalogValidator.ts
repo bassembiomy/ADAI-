@@ -4,7 +4,7 @@ import { EngineeringPattern } from '../patternSchemas';
 
 export interface PatternCatalogValidationResult {
   valid: boolean;
-  diagnostics: Array<{ code: string; message: string; severity: 'ERROR' | 'WARNING' }>;
+  diagnostics: Array<{ code: string; message: string; severity: 'ERROR' | 'WARNING' | 'INFO' }>;
 }
 
 export function validatePatternCatalogCompatibility(
