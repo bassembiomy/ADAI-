@@ -111,5 +111,37 @@ export function parseEngineeringEntities(input: string): ParsedEngineeringEntiti
     result.sourceVoltage = parseScaledNumber(vMatch[1], vMatch[2]);
   }
 
+  // 10. Positional & Sequence Fallbacks for component values (e.g. "10 10mH 100uF", "10 10 100", "10, 10m, 100u")
+  if (result.resistance === undefined && result.inductance !== undefined && result.capacitance !== undefined) {
+    // If L and C are identified, check if there is a remaining bare number before or around them for Resistance
+    const stripped = input
+      .replace(/\b(?:L\s*[:=]\s*|inductance\s*(?:is|of|[:=])?\s*)?(-?\d+(?:\.\d+)?)\s*([pnumµMG]?)\s*H\b/gi, '')
+      .replace(/\bL\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*([pnumµMG]?)\s*H?\b/gi, '')
+      .replace(/\b(?:C\s*[:=]\s*|capacitance\s*(?:is|of|[:=])?\s*)?(-?\d+(?:\.\d+)?)\s*([pnumµMG]?)\s*F\b/gi, '')
+      .replace(/\bC\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*([pnumµMG]?)\s*F?\b/gi, '');
+    const bareNumMatch = stripped.match(/\b(-?\d+(?:\.\d+)?)\s*([kKMm]?)\b/);
+    if (bareNumMatch) {
+      result.resistance = parseScaledNumber(bareNumMatch[1], bareNumMatch[2]);
+    }
+  } else if (result.resistance === undefined && result.inductance === undefined && result.capacitance === undefined) {
+    // Check if input is a space/comma separated sequence of numbers (e.g. "10 10 100", "10 10m 100u", "10 10 100 100")
+    const numberTokens = input.trim().match(/(-?\d+(?:\.\d+)?\s*[pnumµkKM]?(?:[HhFf]|ohm|ohms|Ω)?)/g);
+    if (numberTokens && numberTokens.length >= 3) {
+      const parseToken = (tok: string): number | undefined => {
+        const m = tok.match(/(-?\d+(?:\.\d+)?)\s*([pnumµkKM]?)/i);
+        if (!m) return undefined;
+        return parseScaledNumber(m[1], m[2]);
+      };
+      const n1 = parseToken(numberTokens[0]);
+      const n2 = parseToken(numberTokens[1]);
+      const n3 = parseToken(numberTokens[2]);
+      if (n1 !== undefined && n2 !== undefined && n3 !== undefined) {
+        result.resistance = n1;
+        result.inductance = n2;
+        result.capacitance = n3;
+      }
+    }
+  }
+
   return result;
 }

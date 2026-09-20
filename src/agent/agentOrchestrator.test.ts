@@ -654,4 +654,30 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(nodesState.length).toBeGreaterThanOrEqual(2);
     expect(nodesState.some(n => n.data?.type === 'TRANSFER_FUNCTION' || n.type === 'TRANSFER_FUNCTION' || n.data?.blockType === 'TRANSFER_FUNCTION')).toBe(true);
   });
+
+  it('accepts affirmative responses ("ok", "the same", "default") to adopt recommended question defaults', async () => {
+    let nodesState: any[] = [];
+    let edgesState: any[] = [];
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+    const orch = new AgentOrchestrator(undefined, tools);
+
+    // Prompt
+    const res1 = await orch.handle('create rlc circuit');
+    expect(res1.status).toBe('clarifying');
+    expect(res1.message).toContain('Recommended: R=10 ohm, L=10mH, C=100uF');
+
+    // User replies "ok"
+    const res2 = await orch.handle('ok');
+    expect(res2.status).toBe('awaiting_specification_approval');
+    expect(res2.specification?.title).toMatch(/rlc/i);
+    expect(res2.pendingApproval).toBeDefined();
+  });
 });
+

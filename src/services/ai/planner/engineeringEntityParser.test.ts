@@ -45,4 +45,24 @@ describe('EngineeringEntityParser', () => {
 
     expect(Object.keys(parsed).length).toBe(0);
   });
+
+  it('parses sequences and bare positional numbers without variable symbols', () => {
+    // 1. "10 10mH 100uF" -> bare 10 for R with L and C
+    const parsed1 = parseEngineeringEntities('10 10mH 100uF');
+    expect(parsed1.resistance).toBe(10);
+    expect(parsed1.inductance).toBeCloseTo(0.01);
+    expect(parsed1.capacitance).toBeCloseTo(0.0001);
+
+    // 2. "10 10 100 100" -> 3 numbers extracted as R, L, C
+    const parsed2 = parseEngineeringEntities('10 10 100 100');
+    expect(parsed2.resistance).toBe(10);
+    expect(parsed2.inductance).toBe(10);
+    expect(parsed2.capacitance).toBe(100);
+
+    // 3. "10 10m 100u" -> scaled tokens
+    const parsed3 = parseEngineeringEntities('10 10m 100u');
+    expect(parsed3.resistance).toBe(10);
+    expect(parsed3.inductance).toBeCloseTo(0.01);
+    expect(parsed3.capacitance).toBeCloseTo(0.0001);
+  });
 });

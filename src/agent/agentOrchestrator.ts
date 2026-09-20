@@ -147,6 +147,7 @@ export class AgentOrchestrator {
   private finalEvidence?: Record<string, unknown>;
   private currentPatternEvidence: RankedPatternMatch[] = [];
   private initialDomainGuidance?: string;
+  private currentQuestionDefault?: string;
 
   constructor(
     llmProvider?: LlmProvider,
@@ -301,8 +302,14 @@ export class AgentOrchestrator {
         };
       }
     } else if (this.taskState.status === 'clarifying' && this.currentQuestionKey) {
+      let resolvedAnswer = input;
+      const isAffirmative = /^\s*(ok|okay|k|yes|yep|yeah|sure|default|recommended|the same|same|as recommended|use recommended|use default|agree|accept|fine|go ahead|proceed|sounds good|do it|1)\b/i.test(input.trim());
+      if (isAffirmative && this.currentQuestionDefault) {
+        resolvedAnswer = this.currentQuestionDefault;
+      }
       // Record user's answer to the pending question
-      this.taskState = recordAnswer(this.taskState, this.currentQuestionKey, input);
+      this.taskState = recordAnswer(this.taskState, this.currentQuestionKey, resolvedAnswer);
+      this.currentQuestionDefault = undefined;
     }
 
 
@@ -311,6 +318,7 @@ export class AgentOrchestrator {
 
     if (analysis.status === 'question') {
       this.currentQuestionKey = analysis.missingKey;
+      this.currentQuestionDefault = analysis.question.recommendedDefault;
       const q = analysis.question;
 
       this.appendAudit('QUESTION_ASKED', {

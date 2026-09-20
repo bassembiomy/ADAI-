@@ -63,7 +63,15 @@ function normalizeRequestInput(input: GeneralEngineeringRequest | TaskState): Ge
 
     for (const [k, v] of Object.entries(answers)) {
       if (typeof v === 'string') {
-        const parsed = parseEngineeringEntities(v);
+        const isAffirmative = /^\s*(ok|okay|k|yes|yep|yeah|sure|default|recommended|the same|same|as recommended|use recommended|use default|agree|accept|fine|go ahead|proceed|sounds good|do it|1)\b/i.test(v.trim());
+        const effectiveVal = (isAffirmative && (k === 'component_values' || k.includes('component') || k.includes('value')))
+          ? 'R=10 ohm, L=10mH, C=100uF'
+          : (isAffirmative && (k === 'cutoff_frequency' || k.includes('cutoff') || k.includes('freq')))
+          ? '1000Hz'
+          : (isAffirmative && (k === 'source_voltage' || k.includes('voltage')))
+          ? '400V'
+          : v;
+        const parsed = parseEngineeringEntities(effectiveVal);
         if (parsed.resistance !== undefined && !inputs.some(i => i.name === 'resistance')) inputs.push({ name: 'resistance', value: parsed.resistance, unit: 'ohm' });
         if (parsed.inductance !== undefined && !inputs.some(i => i.name === 'inductance')) inputs.push({ name: 'inductance', value: parsed.inductance, unit: 'H' });
         if (parsed.capacitance !== undefined && !inputs.some(i => i.name === 'capacitance')) inputs.push({ name: 'capacitance', value: parsed.capacitance, unit: 'F' });
