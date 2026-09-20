@@ -197,4 +197,52 @@ describe('generatedGraphValidator', () => {
     expect(smallConnLimitResult.valid).toBe(false);
     expect(smallConnLimitResult.diagnostics.some(d => d.code === 'EXCEEDS_MAX_CONNECTIONS')).toBe(true);
   });
+
+  it('rejects parameter values whose runtime type differs from the catalog schema', () => {
+    const result = validateGeneratedGraph(
+      [{ id: 'constant_1', type: 'Constant', params: { value: 'not-a-number' } }],
+      [],
+      catalog,
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'INVALID_PARAMETER_TYPE')).toBe(true);
+  });
+
+  it('rejects a multi-input processing block when a required input port is missing', () => {
+    const result = validateGeneratedGraph(
+      [
+        { id: 'a', type: 'Constant', params: { value: 1 } },
+        { id: 'sum', type: 'Sum', params: { signs: '++' } },
+        { id: 'scope', type: 'Scope', params: {} },
+      ],
+      [
+        { fromBlockId: 'a', fromPortId: 'out', toBlockId: 'sum', toPortId: 'in1' },
+        { fromBlockId: 'sum', fromPortId: 'out', toBlockId: 'scope', toPortId: 'in1' },
+      ],
+      catalog,
+      { requireAllInputsConnected: true },
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'MISSING_INPUT_CONNECTION')).toBe(true);
+  });
+
+  it('rejects duplicate connections to a non-dynamic input port', () => {
+    const result = validateGeneratedGraph(
+      [
+        { id: 'a', type: 'Constant', params: { value: 1 } },
+        { id: 'b', type: 'Constant', params: { value: 2 } },
+        { id: 'scope', type: 'Scope', params: {} },
+      ],
+      [
+        { fromBlockId: 'a', fromPortId: 'out', toBlockId: 'scope', toPortId: 'in1' },
+        { fromBlockId: 'b', fromPortId: 'out', toBlockId: 'scope', toPortId: 'in1' },
+      ],
+      catalog,
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'INPUT_PORT_OVERCONNECTED')).toBe(true);
+  });
 });

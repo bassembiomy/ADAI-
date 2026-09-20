@@ -22,6 +22,7 @@ export interface GraphValidationOptions {
   maxBlocks?: number;
   maxConnections?: number;
   requireObservableSink?: boolean;
+  requireAllInputsConnected?: boolean;
 }
 
 export interface GraphValidationResult {
@@ -44,6 +45,15 @@ function isFiniteValue(value: unknown): boolean {
   if (value && typeof value === 'object') {
     return Object.values(value as Record<string, unknown>).every(item => isFiniteValue(item));
   }
+  return true;
+}
+
+function matchesParameterType(value: unknown, declaredType: string): boolean {
+  if (declaredType === 'array') return Array.isArray(value);
+  if (declaredType === 'object') return !!value && typeof value === 'object' && !Array.isArray(value);
+  if (declaredType === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (declaredType === 'boolean') return typeof value === 'boolean';
+  if (declaredType === 'string') return typeof value === 'string';
   return true;
 }
 
@@ -153,6 +163,21 @@ export function validateGeneratedGraph(
           continue;
         }
 
+        const declaredParam = cap.parameters[paramKey];
+        if (declaredParam && !matchesParameterType(paramVal, declaredParam.type)) {
+          diagnostics.push(StructuredDiagnosticSchema.parse({
+            category: 'PARAMETER',
+            code: 'INVALID_PARAMETER_TYPE',
+            severity: 'ERROR',
+            message: `Parameter '${paramKey}' on block '${block.id}' must have type '${declaredParam.type}'.`,
+            entityId: block.id,
+            fieldPath: `params.${paramKey}`,
+            actual: Array.isArray(paramVal) ? 'array' : typeof paramVal,
+            expected: declaredParam.type,
+            remediation: `Provide a value matching the catalog type for ${block.type}.${paramKey}.`,
+          }));
+        }
+
         // Check finite numerical values
         if (!isFiniteValue(paramVal)) {
           diagnostics.push(StructuredDiagnosticSchema.parse({
@@ -174,6 +199,7 @@ export function validateGeneratedGraph(
   const seenConnections = new Set<string>();
   const inDegrees = new Map<string, number>();
   const outDegrees = new Map<string, number>();
+  const inputConnections = new Map<string, Map<string, number>>();
 
   for (const conn of connections) {
     const fromBlock = blockMap.get(conn.fromBlockId);
@@ -286,6 +312,9 @@ export function validateGeneratedGraph(
     // Track connectivity
     outDegrees.set(conn.fromBlockId, (outDegrees.get(conn.fromBlockId) || 0) + 1);
     inDegrees.set(conn.toBlockId, (inDegrees.get(conn.toBlockId) || 0) + 1);
+    const blockInputs = inputConnections.get(conn.toBlockId) || new Map<string, number>();
+    blockInputs.set(conn.toPortId, (blockInputs.get(conn.toPortId) || 0) + 1);
+    inputConnections.set(conn.toBlockId, blockInputs);
   }
 
   // 4. Disconnected Blocks Validation
@@ -310,6 +339,34 @@ export function validateGeneratedGraph(
       if (cap) {
         const isPureSource = cap.inputs.length === 0;
         const isPureSink = cap.outputs.length === 0;
+
+        if (!cap.allowDynamicInputs) {
+          const connectedInputs = inputConnections.get(block.id) || new Map<string, number>();
+          for (const input of cap.inputs) {
+            const count = connectedInputs.get(input.id) || 0;
+            if (count === 0 && options?.requireAllInputsConnected) {
+              diagnostics.push(StructuredDiagnosticSchema.parse({
+                category: 'TOPOLOGY',
+                code: 'MISSING_INPUT_CONNECTION',
+                severity: 'ERROR',
+                message: `Required input port '${input.id}' on block '${block.id}' (${block.type}) is not connected.`,
+                entityId: block.id,
+                portId: input.id,
+                remediation: `Connect a signal to every required input port on ${block.type}.`,
+              }));
+            } else if (count > 1) {
+              diagnostics.push(StructuredDiagnosticSchema.parse({
+                category: 'TOPOLOGY',
+                code: 'INPUT_PORT_OVERCONNECTED',
+                severity: 'ERROR',
+                message: `Input port '${input.id}' on block '${block.id}' (${block.type}) has ${count} incoming connections.`,
+                entityId: block.id,
+                portId: input.id,
+                remediation: 'Connect at most one signal to a non-dynamic input port.',
+              }));
+            }
+          }
+        }
 
         if (!isPureSource && !isPureSink) {
           // Internal processing block requires both in and out connectivity
