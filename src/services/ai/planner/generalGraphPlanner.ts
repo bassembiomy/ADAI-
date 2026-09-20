@@ -10,6 +10,7 @@ import { ModelSnapshot } from '../adapters/liveXbridgesModelAdapter';
 import { GeneralEngineeringRequest } from './generalIntent';
 import { parseEngineeringEntities } from './engineeringEntityParser';
 import { resolveDomainOperation } from '../catalog/xbridgesDomainVocabulary';
+import { validateGeneratedGraph } from './generatedGraphValidator';
 import { canonicalJson, sha256Hex } from '../../../engine/opm/canonicalHash';
 import type { LlmProvider } from '../../../agent/llmProvider';
 
@@ -115,8 +116,8 @@ function getCanonicalArchetype(
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
     const sourceOut = getFirstOutPort(catalog, srcType, 'out');
-    const tfIn = getFirstInPort(catalog, tfType, 'in');
-    const tfOut = getFirstOutPort(catalog, tfType, 'out');
+    const tfIn = getFirstInPort(catalog, tfType, 'u');
+    const tfOut = getFirstOutPort(catalog, tfType, 'y');
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     let R = 10;
@@ -190,6 +191,16 @@ function getCanonicalArchetype(
     const plantType = catalog.blocks.has('INTEGRATOR_CONTINUOUS') ? 'INTEGRATOR_CONTINUOUS' : 'Integrator';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
+    const constOut = getFirstOutPort(catalog, constType, 'out');
+    const sumIn1 = 'in1';
+    const sumIn2 = 'in2';
+    const sumOut = getFirstOutPort(catalog, sumType, 'out');
+    const pidIn = getFirstInPort(catalog, pidType, 'r');
+    const pidOut = getFirstOutPort(catalog, pidType, 'u');
+    const plantIn = getFirstInPort(catalog, plantType, 'u');
+    const plantOut = getFirstOutPort(catalog, plantType, 'y');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+
     return {
       blocks: [
         { id: 'setpoint', type: constType, params: { value: 10 }, position: { x: 100, y: 150 } },
@@ -199,28 +210,28 @@ function getCanonicalArchetype(
         { id: 'sink_scope', type: sinkType, params: {}, position: { x: 900, y: 150 } },
       ],
       connections: [
-        { fromBlockId: 'setpoint', fromPortId: 'out', toBlockId: 'error_sum', toPortId: 'in1' },
-        { fromBlockId: 'error_sum', fromPortId: 'out', toBlockId: 'pid_ctrl', toPortId: 'in' },
-        { fromBlockId: 'pid_ctrl', fromPortId: 'out', toBlockId: 'plant_integ', toPortId: 'in' },
-        { fromBlockId: 'plant_integ', fromPortId: 'out', toBlockId: 'sink_scope', toPortId: 'in1' },
-        { fromBlockId: 'plant_integ', fromPortId: 'out', toBlockId: 'error_sum', toPortId: 'in2' },
+        { fromBlockId: 'setpoint', fromPortId: constOut, toBlockId: 'error_sum', toPortId: sumIn1 },
+        { fromBlockId: 'error_sum', fromPortId: sumOut, toBlockId: 'pid_ctrl', toPortId: pidIn },
+        { fromBlockId: 'pid_ctrl', fromPortId: pidOut, toBlockId: 'plant_integ', toPortId: plantIn },
+        { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'error_sum', toPortId: sumIn2 },
       ],
       provenance: { patternId: 'canonical_closed_loop_pid', version: '1.0.0', license: 'MIT' },
     };
   }
 
   if (text.includes('filter') || text.includes('lowpass') || text.includes('signal_filtering')) {
-    const srcType = catalog.blocks.has('Sine') ? 'Sine' : 'Constant';
+    const srcType = catalog.blocks.has('WaveformGen') ? 'WaveformGen' : (catalog.blocks.has('Constant') ? 'Constant' : 'Step');
     const filterType = catalog.blocks.has('TRANSFER_FUNCTION') ? 'TRANSFER_FUNCTION' : 'Integrator';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
     const sourceOut = getFirstOutPort(catalog, srcType, 'out');
-    const filterIn = getFirstInPort(catalog, filterType, 'in');
-    const filterOut = getFirstOutPort(catalog, filterType, 'out');
+    const filterIn = getFirstInPort(catalog, filterType, 'u');
+    const filterOut = getFirstOutPort(catalog, filterType, 'y');
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
       blocks: [
-        { id: 'src_signal', type: srcType, params: { frequency: 10 }, position: { x: 100, y: 150 } },
+        { id: 'src_signal', type: srcType, params: srcType === 'WaveformGen' ? { freq: 10 } : { value: 10 }, position: { x: 100, y: 150 } },
         { id: 'filter_tf', type: filterType, params: { numerator: [1], denominator: [0.01, 1] }, position: { x: 400, y: 150 } },
         { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
       ],
@@ -233,22 +244,34 @@ function getCanonicalArchetype(
   }
 
   if (text.includes('motor') || text.includes('drive')) {
+    const refType = catalog.blocks.has('Constant') ? 'Constant' : 'Step';
     const pwmType = catalog.blocks.has('THREE_PHASE_PWM') ? 'THREE_PHASE_PWM' : 'PWM_GENERATOR';
     const invType = catalog.blocks.has('THREE_PHASE_INVERTER') ? 'THREE_PHASE_INVERTER' : 'Gain';
     const motorType = catalog.blocks.has('AC_INDUCTION_MOTOR') ? 'AC_INDUCTION_MOTOR' : 'Integrator';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
+    const refOut = getFirstOutPort(catalog, refType, 'out');
+    const pwmIn = getFirstInPort(catalog, pwmType, 'va_ref');
+    const pwmOut = getFirstOutPort(catalog, pwmType, 'ga');
+    const invIn = getFirstInPort(catalog, invType, 'ga');
+    const invOut = getFirstOutPort(catalog, invType, 'va');
+    const motorIn = getFirstInPort(catalog, motorType, 'va');
+    const motorOut = getFirstOutPort(catalog, motorType, 'omega');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+
     return {
       blocks: [
-        { id: 'pwm_mod', type: pwmType, params: { frequency: 5000 }, position: { x: 100, y: 150 } },
-        { id: 'inv_bridge', type: invType, params: { Ron: 0.01 }, position: { x: 380, y: 150 } },
-        { id: 'motor_plant', type: motorType, params: { polePairs: 2 }, position: { x: 650, y: 150 } },
+        { id: 'src_ref', type: refType, params: { value: 1 }, position: { x: 50, y: 150 } },
+        { id: 'pwm_mod', type: pwmType, params: { frequency: 5000 }, position: { x: 250, y: 150 } },
+        { id: 'inv_bridge', type: invType, params: { Ron: 0.01 }, position: { x: 450, y: 150 } },
+        { id: 'motor_plant', type: motorType, params: { P: 2 }, position: { x: 680, y: 150 } },
         { id: 'sink_scope', type: sinkType, params: {}, position: { x: 920, y: 150 } },
       ],
       connections: [
-        { fromBlockId: 'pwm_mod', fromPortId: 'out', toBlockId: 'inv_bridge', toPortId: 'in' },
-        { fromBlockId: 'inv_bridge', fromPortId: 'va', toBlockId: 'motor_plant', toPortId: 'va' },
-        { fromBlockId: 'motor_plant', fromPortId: 'speed', toBlockId: 'sink_scope', toPortId: 'in1' },
+        { fromBlockId: 'src_ref', fromPortId: refOut, toBlockId: 'pwm_mod', toPortId: pwmIn },
+        { fromBlockId: 'pwm_mod', fromPortId: pwmOut, toBlockId: 'inv_bridge', toPortId: invIn },
+        { fromBlockId: 'inv_bridge', fromPortId: invOut, toBlockId: 'motor_plant', toPortId: motorIn },
+        { fromBlockId: 'motor_plant', fromPortId: motorOut, toBlockId: 'sink_scope', toPortId: sinkIn },
       ],
       provenance: { patternId: 'canonical_motor_control', version: '1.0.0', license: 'MIT' },
     };
@@ -259,15 +282,20 @@ function getCanonicalArchetype(
     const plantType = catalog.blocks.has('AIR_FRYER_LEARNING_MODEL') ? 'AIR_FRYER_LEARNING_MODEL' : 'Integrator';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
+    const srcOut = getFirstOutPort(catalog, srcType, 'out');
+    const plantIn = getFirstInPort(catalog, plantType, 'power');
+    const plantOut = getFirstOutPort(catalog, plantType, 'temp_actual');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+
     return {
       blocks: [
         { id: 'temp_setpoint', type: srcType, params: { value: 200 }, position: { x: 100, y: 150 } },
-        { id: 'thermal_plant', type: plantType, params: { target_temp: 200 }, position: { x: 450, y: 150 } },
+        { id: 'thermal_plant', type: plantType, params: { T_ambient: 25 }, position: { x: 450, y: 150 } },
         { id: 'sink_scope', type: sinkType, params: {}, position: { x: 800, y: 150 } },
       ],
       connections: [
-        { fromBlockId: 'temp_setpoint', fromPortId: 'out', toBlockId: 'thermal_plant', toPortId: 'in' },
-        { fromBlockId: 'thermal_plant', fromPortId: 'out', toBlockId: 'sink_scope', toPortId: 'in1' },
+        { fromBlockId: 'temp_setpoint', fromPortId: srcOut, toBlockId: 'thermal_plant', toPortId: plantIn },
+        { fromBlockId: 'thermal_plant', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
       ],
       provenance: { patternId: 'canonical_thermal_monitoring', version: '1.0.0', license: 'MIT' },
     };
@@ -394,20 +422,20 @@ export function planGeneralXbridgesModel(
     };
   }
 
-  // Verify all archetype blocks exist in catalog
-  for (const b of archetype.blocks) {
-    if (!catalog.blocks.has(b.type)) {
-      diagnostics.push({
-        category: 'TOPOLOGY',
-        code: 'UNKNOWN_BLOCK_TYPE',
-        severity: 'ERROR',
-        message: `Archetype requires block type '${b.type}' which does not exist in the X-Bridges capability index.`,
-        entityId: b.id,
-      });
-    }
-  }
+  // Comprehensive capability and structural validation of generated graph
+  const requireObservableSink = request.outputs?.some(o =>
+    /scope|display|sink|result|monitored/i.test(String(o.value || o.name || ''))
+  ) ?? false;
 
-  if (diagnostics.some(d => d.severity === 'ERROR')) {
+  const validation = validateGeneratedGraph(
+    archetype.blocks,
+    archetype.connections,
+    catalog,
+    { requireObservableSink }
+  );
+
+  if (!validation.valid) {
+    diagnostics.push(...validation.diagnostics);
     return {
       status: 'refused',
       diagnostics,

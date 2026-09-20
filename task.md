@@ -7,13 +7,13 @@
   - [x] Step 4: Add graph-size limits and non-finite parameter validation
   - [x] Step 5: Run focused validator tests and confirm all pass
   - [x] Step 6: Commit
-- [ ] Task 2: Route deterministic plans through validation (`src/services/ai/planner/generalGraphPlanner.ts`)
-  - [ ] Step 1: Add failing tests for catalog mutation / invalid deterministic graphs
-  - [ ] Step 2: Run planner tests to confirm failures
-  - [ ] Step 3: Call validator immediately after archetype resolution before diff/action creation
-  - [ ] Step 4: Ensure deterministic plan hashes remain stable
-  - [ ] Step 5: Run planner tests and confirm pass
-  - [ ] Step 6: Commit
+- [x] Task 2: Route deterministic plans through validation (`src/services/ai/planner/generalGraphPlanner.ts`)
+  - [x] Step 1: Add failing tests for catalog mutation / invalid deterministic graphs
+  - [x] Step 2: Run planner tests to confirm failures
+  - [x] Step 3: Call validator immediately after archetype resolution before diff/action creation
+  - [x] Step 4: Ensure deterministic plan hashes remain stable
+  - [x] Step 5: Run planner tests and confirm pass
+  - [x] Step 6: Commit
 - [ ] Task 3: Validate and constrain LLM synthesis (`src/services/ai/planner/generalGraphPlanner.ts`)
   - [ ] Step 1: Add failing tests for malformed, unknown ports, duplicate IDs, oversized LLM graphs
   - [ ] Step 2: Run planner tests to confirm failures

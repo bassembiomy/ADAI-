@@ -461,4 +461,42 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(canonicalJson(run1.plan)).toEqual(canonicalJson(run2.plan));
     });
   });
+
+  describe('Deterministic Graph Safety Validation', () => {
+    it('refuses deterministic plan when catalog port definition is mutated/invalid', () => {
+      // Create a mutated catalog where Scope has no inputs
+      const mutatedBlocks = new Map(catalog.blocks);
+      const originalScope = catalog.blocks.get('Scope')!;
+      mutatedBlocks.set('Scope', {
+        ...originalScope,
+        inputs: [], // removed inputs
+        ports: originalScope.outputs,
+      });
+      const mutatedCatalog = {
+        ...catalog,
+        blocks: mutatedBlocks,
+      };
+
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'multiply constant its value is 10 by 100 and display the result on a scope',
+        targetBehaviors: ['multiply'],
+        inputs: [{ name: 'input1', value: 10 }, { name: 'input2', value: 100 }],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_mutated',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_mutated'),
+        catalog: mutatedCatalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'UNKNOWN_TARGET_PORT')).toBe(true);
+    });
+  });
 });

@@ -112,6 +112,27 @@ export function buildXbridgesCapabilityIndex(): XbridgesCapabilityIndex {
       });
     }
 
+    if (blockId === 'TRANSFER_FUNCTION' || blockId === 'DISCRETE_TRANSFER_FUNCTION') {
+      if (!paramsRecord['numerator']) {
+        paramsRecord['numerator'] = Object.freeze({
+          name: 'numerator',
+          type: 'array',
+          defaultValue: [1],
+          unit: 'unknown',
+        });
+        parameterNames.push('numerator');
+      }
+      if (!paramsRecord['denominator']) {
+        paramsRecord['denominator'] = Object.freeze({
+          name: 'denominator',
+          type: 'array',
+          defaultValue: [1, 1],
+          unit: 'unknown',
+        });
+        parameterNames.push('denominator');
+      }
+    }
+
     const hasDerivative = typeof instance.evaluateDerivatives === 'function';
     const hasZeroCrossing = typeof instance.ZeroCrossingFn === 'function';
     const isStateful = !!instance.isStateful || instance.state !== undefined || hasDerivative;
