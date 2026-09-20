@@ -101,6 +101,14 @@ export function retrieveCompatiblePatterns(
       continue;
     }
 
+    if (!pattern.provenance.licenseApproved || pattern.evidence.proofStatus !== 'proved') {
+      continue;
+    }
+
+    if (pattern.evidence.catalogFingerprint !== capabilities.catalogFingerprint) {
+      continue;
+    }
+
     // Domain filter if specified
     if (query.domain && pattern.domain !== 'general' && pattern.domain !== query.domain) {
       continue;

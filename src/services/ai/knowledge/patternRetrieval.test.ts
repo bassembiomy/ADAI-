@@ -50,7 +50,7 @@ describe('Pattern Retrieval (Task 8 Step 4)', () => {
       },
       evidence: {
         proofStatus: 'proved',
-        catalogFingerprint: 'cat_fp_123',
+        catalogFingerprint: capabilityIndex.catalogFingerprint,
         qualityScore: 0.95
       },
       contentHash: 'a'.repeat(64),
@@ -124,7 +124,7 @@ describe('Pattern Retrieval (Task 8 Step 4)', () => {
         requiredInputs: ['dc_in'],
         requiredOutputs: ['ac_out']
       },
-      evidence: { proofStatus: 'proved', catalogFingerprint: 'f1', qualityScore: 0.8 }
+        evidence: { proofStatus: 'proved', catalogFingerprint: capabilityIndex.catalogFingerprint, qualityScore: 0.8 }
     });
 
     const p2 = makeTestPattern('pat_b', {
@@ -134,7 +134,7 @@ describe('Pattern Retrieval (Task 8 Step 4)', () => {
         requiredInputs: ['dc_in'],
         requiredOutputs: ['ac_out']
       },
-      evidence: { proofStatus: 'proved', catalogFingerprint: 'f1', qualityScore: 0.95 }
+        evidence: { proofStatus: 'proved', catalogFingerprint: capabilityIndex.catalogFingerprint, qualityScore: 0.95 }
     });
 
     const p3 = makeTestPattern('pat_c', {
@@ -144,7 +144,7 @@ describe('Pattern Retrieval (Task 8 Step 4)', () => {
         requiredInputs: ['dc_in'],
         requiredOutputs: ['ac_out']
       },
-      evidence: { proofStatus: 'proved', catalogFingerprint: 'f1', qualityScore: 0.99 }
+        evidence: { proofStatus: 'proved', catalogFingerprint: capabilityIndex.catalogFingerprint, qualityScore: 0.99 }
     });
 
     const query: PatternRetrievalQuery = {
