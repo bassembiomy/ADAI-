@@ -104,9 +104,13 @@ describe('General X-Bridges Engineering Orchestrator Workflow', () => {
 
     let response = await orchestrator.handle('Create a low pass filter model for sensor noise filtering');
     expect(response.status).toBe('clarifying');
-    response = await orchestrator.handle('5V');
+    response = await orchestrator.handle('5V sensor signal from 0 to 1kHz');
     expect(response.status).toBe('clarifying');
-    response = await orchestrator.handle('filtered sensor signal load');
+    response = await orchestrator.handle('100Hz');
+    expect(response.status).toBe('clarifying');
+    response = await orchestrator.handle('1');
+    expect(response.status).toBe('clarifying');
+    response = await orchestrator.handle('Display the filtered signal on Scope');
     expect(response.status).toBe('awaiting_specification_approval');
 
     const planned = await orchestrator.approve(response.pendingApproval!.id);

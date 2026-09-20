@@ -149,17 +149,73 @@ export function resolveRequirements(
 
   // 2. Intent-specific requirement completeness
   if (req.intent === 'create') {
-    // Must have operating source / DC bus voltage
-    const hasSource = req.inputs.some(
+    const objectiveText = `${req.objective} ${req.targetBehaviors.join(' ')}`.toLowerCase();
+    const isFilterRequest = /\b(low[ -]?pass|high[ -]?pass|band[ -]?pass|filter|filtering)\b/.test(objectiveText);
+
+    if (isFilterRequest) {
+      const values = [...req.inputs, ...req.outputs];
+      const hasValue = (key: string) => values.some(value => value.name.toLowerCase() === key);
+      const filterQuestions: Array<{
+        key: string;
+        question: string;
+        rationale: string;
+        recommendedDefault?: string;
+        dependencyRank: number;
+      }> = [
+        {
+          key: 'input_signal',
+          question: 'What is the input signal type, amplitude, and frequency range?',
+          rationale: 'The input signal characteristics determine the required source and filter operating range.',
+          dependencyRank: 0,
+        },
+        {
+          key: 'cutoff_frequency',
+          question: 'What cutoff frequency should the filter use?',
+          rationale: 'The cutoff frequency defines the filter transfer function.',
+          dependencyRank: 1,
+        },
+        {
+          key: 'filter_order',
+          question: 'What filter order is required?',
+          rationale: 'Filter order determines attenuation slope and implementation complexity.',
+          recommendedDefault: '1',
+          dependencyRank: 1,
+        },
+        {
+          key: 'output_signal',
+          question: 'Which filtered output should be observed or connected to a sink?',
+          rationale: 'An explicit output is required to verify filter behavior in simulation.',
+          recommendedDefault: 'Display the filtered signal on Scope',
+          dependencyRank: 2,
+        },
+      ];
+
+      for (const item of filterQuestions) {
+        if (hasValue(item.key)) continue;
+        unresolvedKeys.push(item.key);
+        questionCandidates.push({
+          id: `q_${item.key}`,
+          key: item.key,
+          question: item.question,
+          rationale: item.rationale,
+          recommendedDefault: item.recommendedDefault,
+          isCritical: true,
+          safetyRank: 1,
+          dependencyRank: item.dependencyRank,
+        });
+      }
+    } else {
+      // Power-conversion models require an operating source / DC bus voltage.
+      const hasSource = req.inputs.some(
       i =>
         i.name === 'source_voltage' ||
         i.name.toLowerCase().includes('voltage') ||
         i.name.toLowerCase().includes('vdc') ||
         i.name.toLowerCase().includes('supply')
     );
-    if (!hasSource) {
-      unresolvedKeys.push('source_voltage');
-      questionCandidates.push({
+      if (!hasSource) {
+        unresolvedKeys.push('source_voltage');
+        questionCandidates.push({
         id: 'q_source_voltage',
         key: 'source_voltage',
         question: 'What is the nominal DC bus or input source voltage (e.g., 400V, 48V, 24V)?',
@@ -169,11 +225,11 @@ export function resolveRequirements(
         isCritical: true,
         safetyRank: 1,
         dependencyRank: 0,
-      });
-    }
+        });
+      }
 
-    // Must have load specification or target output behavior
-    const hasLoad = req.outputs.some(
+      // Power-conversion models require a load specification or target output behavior.
+      const hasLoad = req.outputs.some(
       o =>
         o.name === 'load_specification' ||
         o.name.toLowerCase().includes('load') ||
@@ -181,9 +237,9 @@ export function resolveRequirements(
         o.name.toLowerCase().includes('motor') ||
         o.name.toLowerCase().includes('power')
     );
-    if (!hasLoad) {
-      unresolvedKeys.push('load_specification');
-      questionCandidates.push({
+      if (!hasLoad) {
+        unresolvedKeys.push('load_specification');
+        questionCandidates.push({
         id: 'q_load_specification',
         key: 'load_specification',
         question: 'What is the connected load type and rating (e.g., RL_LOAD, AC_INDUCTION_MOTOR, RESISTIVE)?',
@@ -193,7 +249,8 @@ export function resolveRequirements(
         isCritical: true,
         safetyRank: 2,
         dependencyRank: 1,
-      });
+        });
+      }
     }
   } else if (req.intent === 'optimize') {
     if (!req.optimization) {

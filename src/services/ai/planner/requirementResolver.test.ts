@@ -9,6 +9,28 @@ import { buildXbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex
 describe('requirementResolver (Deterministic Capability-Derived Requirements)', () => {
   const catalog = buildXbridgesCapabilityIndex();
 
+  it('asks filter-specific questions instead of DC bus and load requirements', () => {
+    const resolution = resolveRequirements({
+      intent: 'create',
+      objective: 'Create a low pass filter for sensor noise',
+      targetBehaviors: [],
+      inputs: [],
+      outputs: [],
+      constraints: [],
+    }, catalog);
+
+    expect(resolution.nextQuestion?.key).toBe('input_signal');
+    expect(resolution.nextQuestion?.question).toMatch(/input signal/i);
+    expect(resolution.unresolvedKeys).toEqual([
+      'input_signal',
+      'cutoff_frequency',
+      'filter_order',
+      'output_signal'
+    ]);
+    expect(resolution.unresolvedKeys).not.toContain('source_voltage');
+    expect(resolution.unresolvedKeys).not.toContain('load_specification');
+  });
+
   it('identifies missing operating points, source, and load for creation intent', () => {
     const rawReq: GeneralEngineeringRequest = {
       intent: 'create',
