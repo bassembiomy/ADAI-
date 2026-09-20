@@ -52,15 +52,17 @@ export async function ingestCandidate(
   }
 
   // 3. Parse content
-  let parsedContent: any;
-  try {
-    parsedContent = JSON.parse(validatedCandidate.content);
-  } catch {
-    throw new Error('MALFORMED_CONTENT: Ingestion candidate content is not valid JSON');
+  let parsedContent: any = {};
+  if (!validatedCandidate.metadataOnly) {
+    try {
+      parsedContent = JSON.parse(validatedCandidate.content);
+    } catch {
+      throw new Error('MALFORMED_CONTENT: Ingestion candidate content is not valid JSON');
+    }
   }
 
   const name = sanitizeText(parsedContent.name || validatedCandidate.title || 'Ingested Candidate');
-  const description = sanitizeText(parsedContent.description || 'Quarantined external reference');
+  const description = sanitizeText(parsedContent.description || (validatedCandidate.metadataOnly ? validatedCandidate.content.slice(0, 500) : 'Quarantined external reference'));
   const domain = sanitizeText(parsedContent.domain || 'general');
 
   const patternPayload: Omit<EngineeringPattern, 'contentHash' | 'id'> = {

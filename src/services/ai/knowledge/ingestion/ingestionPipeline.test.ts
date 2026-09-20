@@ -80,6 +80,23 @@ describe('Ingestion Pipeline (Task 9 Steps 2-4)', () => {
     expect(fromStore.lifecycle).toBe('quarantined');
   });
 
+  it('accepts metadata-only source fetches without parsing them as executable pattern JSON', async () => {
+    const metadataCandidate: SourceCandidate = {
+      ...candidateFixture,
+      sourceUrl: 'https://www.mathworks.com/help/simulink/',
+      origin: 'https://www.mathworks.com',
+      title: 'Simulink documentation',
+      content: 'Documentation metadata only.',
+      contentType: 'text/plain',
+      checksum: sha256Hex('Documentation metadata only.'),
+      metadataOnly: true,
+    };
+    const quarantined = await ingestCandidate(metadataCandidate, store);
+    expect(quarantined.lifecycle).toBe('quarantined');
+    expect(quarantined.topology.blocks).toHaveLength(0);
+    expect(quarantined.description).toContain('Documentation metadata only.');
+  });
+
   it('rejects candidate violating policy and does NOT write to store', async () => {
     const invalidCandidate = {
       ...candidateFixture,
