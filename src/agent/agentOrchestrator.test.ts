@@ -615,3 +615,48 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
 });
 
 
+
+describe('AgentOrchestrator general workflow routing', () => {
+  function makeLiveHarness() {
+    let nodesState: ReactFlowXbridgesNode[] = [];
+    let edgesState: ReactFlowXbridgesEdge[] = [];
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+    return { tools, nodes: () => nodesState, edges: () => edgesState };
+  }
+
+  const intents: Array<{ prompt: string; intent: string }> = [
+    { prompt: 'Create a signal chain: Step source into a Gain of 2 into a Scope', intent: 'create' },
+    { prompt: 'Inspect current schematic', intent: 'inspect' },
+    { prompt: 'Modify gain parameter to 5', intent: 'modify' },
+    { prompt: 'Diagnose model for disconnected ports', intent: 'diagnose' },
+    { prompt: 'Repair model topology', intent: 'repair' },
+    { prompt: 'Optimize gain to minimize rise time', intent: 'optimize' },
+    { prompt: 'Create a three-phase inverter model', intent: 'create' },
+    { prompt: 'Create an air fryer thermal control model', intent: 'create' },
+  ];
+
+  for (const { prompt, intent } of intents) {
+    it(`routes "${prompt.slice(0, 40)}..." through the single general workflow`, async () => {
+      const llm = new MockLlmProvider();
+      llm.mockResponse = { intent, targetSystem: 'xbridges_model', summary: prompt, confidence: 0.9 };
+      const { tools } = makeLiveHarness();
+      const orch = new AgentOrchestrator(llm, tools);
+
+      const res = await orch.handle(prompt);
+
+      // All six intents (including inverter and air-fryer requests) must enter
+      // the single production GeneralXbridgesWorkflow coordinator.
+      const workflow = orch.getGeneralWorkflow();
+      expect(workflow, 'orchestrator must expose the general xbridges workflow').toBeDefined();
+      expect(workflow!.lastHandledIntent, 'the general workflow must have handled the request').toBe(intent);
+      expect(res.intent).toBe(intent);
+    });
+  }
+});
