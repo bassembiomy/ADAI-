@@ -17,7 +17,7 @@ export const SourceCandidateSchema = z.object({
   origin: z.string().min(1),
   title: z.string().min(1),
   content: z.string(),
-  contentType: z.enum(['text/plain', 'application/json', 'application/xml', 'text/markdown']),
+  contentType: z.enum(['text/plain', 'text/html', 'application/json', 'application/xml', 'text/markdown']),
   checksum: z.string().length(64),
   license: z.string().min(1),
   author: z.string().min(1),
@@ -26,7 +26,8 @@ export const SourceCandidateSchema = z.object({
   requiresAuth: z.boolean().optional(),
   isPaywalled: z.boolean().optional(),
   hasMacros: z.boolean().optional(),
-  isExecutable: z.boolean().optional()
+  isExecutable: z.boolean().optional(),
+  metadataOnly: z.boolean().optional()
 }).strict();
 
 export type SourceCandidate = z.infer<typeof SourceCandidateSchema>;
