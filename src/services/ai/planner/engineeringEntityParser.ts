@@ -44,6 +44,59 @@ function parseScaledNumber(numStr: string, unitStr?: string): number | undefined
   return num;
 }
 
+export interface ParsedArithmeticOperand {
+  value: number;
+  unit?: string;
+  baseUnit?: string;
+  raw: string;
+}
+
+export function parseArithmeticOperands(text: string): {
+  operands: ParsedArithmeticOperand[];
+  hasEachQualifier: boolean;
+} {
+  const operands: ParsedArithmeticOperand[] = [];
+  const eachQualifier = /\beach\s+(?:is|=|of)?\s*[-+]?(?:\d+(?:\.\d+)?|\.\d+)/i.test(text);
+
+  // Matches signed floats, scientific notation, with optional SI prefix and unit
+  const tokenRegex = /(?:^|[^\w.])([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([pnuµmkKMGT]?)(Hz|ohm|ohms|Ω|V|s|F|H|%|(?=[^\w]|$))/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = tokenRegex.exec(text)) !== null) {
+    const rawNum = match[1];
+    const prefix = match[2];
+    const rawUnit = match[3];
+
+    let val = parseFloat(rawNum);
+    if (!Number.isFinite(val)) continue;
+
+    // Apply SI prefix if present and not already accounted for by scientific exponent (e.g. 1e3)
+    if (prefix && PREFIX_MULTIPLIERS[prefix] && !/[eE]/.test(rawNum)) {
+      val = val * PREFIX_MULTIPLIERS[prefix];
+    }
+
+    let baseUnit: string | undefined = undefined;
+    if (rawUnit) {
+      if (/^(?:ohm|ohms|Ω)$/i.test(rawUnit)) baseUnit = 'ohm';
+      else if (/^Hz$/i.test(rawUnit)) baseUnit = 'Hz';
+      else if (/^V$/i.test(rawUnit)) baseUnit = 'V';
+      else if (/^s$/i.test(rawUnit)) baseUnit = 's';
+      else if (/^F$/i.test(rawUnit)) baseUnit = 'F';
+      else if (/^H$/i.test(rawUnit)) baseUnit = 'H';
+      else if (/^%$/i.test(rawUnit)) baseUnit = '%';
+    }
+
+    operands.push({
+      value: val,
+      unit: (prefix || '') + (rawUnit || ''),
+      baseUnit,
+      raw: match[0].trim(),
+    });
+  }
+
+  return { operands, hasEachQualifier: eachQualifier };
+}
+
 export function parseEngineeringEntities(input: string): ParsedEngineeringEntities {
   const result: ParsedEngineeringEntities = {};
   if (!input || typeof input !== 'string') return result;

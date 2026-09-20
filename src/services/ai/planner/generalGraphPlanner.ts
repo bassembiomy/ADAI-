@@ -9,7 +9,7 @@ import {
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { ModelSnapshot } from '../adapters/liveXbridgesModelAdapter';
 import { GeneralEngineeringRequest } from './generalIntent';
-import { parseEngineeringEntities } from './engineeringEntityParser';
+import { parseEngineeringEntities, parseArithmeticOperands } from './engineeringEntityParser';
 import { resolveDomainOperation } from '../catalog/xbridgesDomainVocabulary';
 import { validateGeneratedGraph } from './generatedGraphValidator';
 import { canonicalJson, sha256Hex } from '../../../engine/opm/canonicalHash';
@@ -90,13 +90,22 @@ function getFirstOutPort(catalog: XbridgesCapabilityIndex, blockType: string, fa
   return cap?.outputs[0]?.id || fallback;
 }
 
+interface CanonicalArchetypeResult {
+  archetype?: {
+    blocks: InternalBlockSpec[];
+    connections: InternalConnSpec[];
+    provenance: PatternReference;
+  };
+  refusalDiagnostics?: StructuredDiagnostic[];
+}
+
 // Built-in canonical reference archetypes for core engineering patterns
 function getCanonicalArchetype(
   behaviors: string[],
   objective: string,
   catalog: XbridgesCapabilityIndex,
   requestInputs?: Array<{ name: string; value: unknown }>
-): { blocks: InternalBlockSpec[]; connections: InternalConnSpec[]; provenance: PatternReference } | null {
+): CanonicalArchetypeResult | null {
   const text = `${behaviors.join(' ')} ${objective}`.toLowerCase();
 
   if (text.includes('impossible') || text.includes('warp') || text.includes('perpetual') || text.includes('nonexistent')) {
@@ -143,20 +152,22 @@ function getCanonicalArchetype(
     const denominator = [a2, a1, 1];
 
     return {
-      blocks: [
-        { id: 'src_step', type: srcType, params: { stepTime: 0.1, initialValue: 0, finalValue: 1 }, position: { x: 100, y: 150 } },
-        { id: 'plant_tf', type: tfType, params: { numerator: [1], denominator }, position: { x: 450, y: 150 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 800, y: 150 } },
-      ],
-      connections: [
-        { fromBlockId: 'src_step', fromPortId: sourceOut, toBlockId: 'plant_tf', toPortId: tfIn },
-        { fromBlockId: 'plant_tf', fromPortId: tfOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-      ],
-      provenance: { patternId: 'canonical_second_order_dynamic', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'src_step', type: srcType, params: { stepTime: 0.1, initialValue: 0, finalValue: 1 }, position: { x: 100, y: 150 } },
+          { id: 'plant_tf', type: tfType, params: { numerator: [1], denominator }, position: { x: 450, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 800, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'src_step', fromPortId: sourceOut, toBlockId: 'plant_tf', toPortId: tfIn },
+          { fromBlockId: 'plant_tf', fromPortId: tfOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: 'canonical_second_order_dynamic', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
-  if (text.includes('feed_forward') || text.includes('open_loop') || text.includes('feed-forward')) {
+  if (text.includes('feed_forward') || text.includes('open_loop') || text.includes('feed-forward') || text.includes('gain_stage') || text.includes('gain')) {
     const stepType = catalog.blocks.has('Step') ? 'Step' : 'Constant';
     const gainType = catalog.blocks.has('Gain') ? 'Gain' : (catalog.blocks.has('GAIN') ? 'GAIN' : 'Integrator');
     const plantType = catalog.blocks.has('Integrator') ? 'Integrator' : 'INTEGRATOR_CONTINUOUS';
@@ -170,18 +181,20 @@ function getCanonicalArchetype(
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
-      blocks: [
-        { id: 'src_step', type: stepType, params: { stepTime: 1, initialValue: 0, finalValue: 1 }, position: { x: 100, y: 150 } },
-        { id: 'gain_ff', type: gainType, params: gainType === 'Integrator' ? { initialCondition: 0 } : { gain: 2 }, position: { x: 350, y: 150 } },
-        { id: 'plant_integ', type: plantType, params: { initialCondition: 0 }, position: { x: 600, y: 150 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 850, y: 150 } },
-      ],
-      connections: [
-        { fromBlockId: 'src_step', fromPortId: stepOut, toBlockId: 'gain_ff', toPortId: gainIn },
-        { fromBlockId: 'gain_ff', fromPortId: gainOut, toBlockId: 'plant_integ', toPortId: plantIn },
-        { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-      ],
-      provenance: { patternId: 'canonical_feedforward', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'src_step', type: stepType, params: { stepTime: 1, initialValue: 0, finalValue: 1 }, position: { x: 100, y: 150 } },
+          { id: 'gain_ff', type: gainType, params: gainType === 'Integrator' ? { initialCondition: 0 } : { gain: 2 }, position: { x: 350, y: 150 } },
+          { id: 'plant_integ', type: plantType, params: { initialCondition: 0 }, position: { x: 600, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 850, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'src_step', fromPortId: stepOut, toBlockId: 'gain_ff', toPortId: gainIn },
+          { fromBlockId: 'gain_ff', fromPortId: gainOut, toBlockId: 'plant_integ', toPortId: plantIn },
+          { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: 'canonical_feedforward', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
@@ -203,21 +216,23 @@ function getCanonicalArchetype(
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
-      blocks: [
-        { id: 'setpoint', type: constType, params: { value: 10 }, position: { x: 100, y: 150 } },
-        { id: 'error_sum', type: sumType, params: { signs: '+-' }, position: { x: 300, y: 150 } },
-        { id: 'pid_ctrl', type: pidType, params: { Kp: 2.0, Ki: 0.5, Kd: 0.05 }, position: { x: 500, y: 150 } },
-        { id: 'plant_integ', type: plantType, params: { initial_condition: 0 }, position: { x: 700, y: 150 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 900, y: 150 } },
-      ],
-      connections: [
-        { fromBlockId: 'setpoint', fromPortId: constOut, toBlockId: 'error_sum', toPortId: sumIn1 },
-        { fromBlockId: 'error_sum', fromPortId: sumOut, toBlockId: 'pid_ctrl', toPortId: pidIn },
-        { fromBlockId: 'pid_ctrl', fromPortId: pidOut, toBlockId: 'plant_integ', toPortId: plantIn },
-        { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-        { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'error_sum', toPortId: sumIn2 },
-      ],
-      provenance: { patternId: 'canonical_closed_loop_pid', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'setpoint', type: constType, params: { value: 10 }, position: { x: 100, y: 150 } },
+          { id: 'error_sum', type: sumType, params: { signs: '+-' }, position: { x: 300, y: 150 } },
+          { id: 'pid_ctrl', type: pidType, params: { Kp: 2.0, Ki: 0.5, Kd: 0.05 }, position: { x: 500, y: 150 } },
+          { id: 'plant_integ', type: plantType, params: { initial_condition: 0 }, position: { x: 700, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 900, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'setpoint', fromPortId: constOut, toBlockId: 'error_sum', toPortId: sumIn1 },
+          { fromBlockId: 'error_sum', fromPortId: sumOut, toBlockId: 'pid_ctrl', toPortId: pidIn },
+          { fromBlockId: 'pid_ctrl', fromPortId: pidOut, toBlockId: 'plant_integ', toPortId: plantIn },
+          { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+          { fromBlockId: 'plant_integ', fromPortId: plantOut, toBlockId: 'error_sum', toPortId: sumIn2 },
+        ],
+        provenance: { patternId: 'canonical_closed_loop_pid', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
@@ -231,16 +246,18 @@ function getCanonicalArchetype(
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
-      blocks: [
-        { id: 'src_signal', type: srcType, params: srcType === 'WaveformGen' ? { freq: 10 } : { value: 10 }, position: { x: 100, y: 150 } },
-        { id: 'filter_tf', type: filterType, params: { numerator: [1], denominator: [0.01, 1] }, position: { x: 400, y: 150 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
-      ],
-      connections: [
-        { fromBlockId: 'src_signal', fromPortId: sourceOut, toBlockId: 'filter_tf', toPortId: filterIn },
-        { fromBlockId: 'filter_tf', fromPortId: filterOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-      ],
-      provenance: { patternId: 'canonical_signal_filter', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'src_signal', type: srcType, params: srcType === 'WaveformGen' ? { freq: 10 } : { value: 10 }, position: { x: 100, y: 150 } },
+          { id: 'filter_tf', type: filterType, params: { numerator: [1], denominator: [0.01, 1] }, position: { x: 400, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'src_signal', fromPortId: sourceOut, toBlockId: 'filter_tf', toPortId: filterIn },
+          { fromBlockId: 'filter_tf', fromPortId: filterOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: 'canonical_signal_filter', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
@@ -261,20 +278,22 @@ function getCanonicalArchetype(
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
-      blocks: [
-        { id: 'src_ref', type: refType, params: { value: 1 }, position: { x: 50, y: 150 } },
-        { id: 'pwm_mod', type: pwmType, params: { frequency: 5000 }, position: { x: 250, y: 150 } },
-        { id: 'inv_bridge', type: invType, params: { Ron: 0.01 }, position: { x: 450, y: 150 } },
-        { id: 'motor_plant', type: motorType, params: { P: 2 }, position: { x: 680, y: 150 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 920, y: 150 } },
-      ],
-      connections: [
-        { fromBlockId: 'src_ref', fromPortId: refOut, toBlockId: 'pwm_mod', toPortId: pwmIn },
-        { fromBlockId: 'pwm_mod', fromPortId: pwmOut, toBlockId: 'inv_bridge', toPortId: invIn },
-        { fromBlockId: 'inv_bridge', fromPortId: invOut, toBlockId: 'motor_plant', toPortId: motorIn },
-        { fromBlockId: 'motor_plant', fromPortId: motorOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-      ],
-      provenance: { patternId: 'canonical_motor_control', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'src_ref', type: refType, params: { value: 1 }, position: { x: 50, y: 150 } },
+          { id: 'pwm_mod', type: pwmType, params: { frequency: 5000 }, position: { x: 250, y: 150 } },
+          { id: 'inv_bridge', type: invType, params: { Ron: 0.01 }, position: { x: 450, y: 150 } },
+          { id: 'motor_plant', type: motorType, params: { P: 2 }, position: { x: 680, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 920, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'src_ref', fromPortId: refOut, toBlockId: 'pwm_mod', toPortId: pwmIn },
+          { fromBlockId: 'pwm_mod', fromPortId: pwmOut, toBlockId: 'inv_bridge', toPortId: invIn },
+          { fromBlockId: 'inv_bridge', fromPortId: invOut, toBlockId: 'motor_plant', toPortId: motorIn },
+          { fromBlockId: 'motor_plant', fromPortId: motorOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: 'canonical_motor_control', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
@@ -289,16 +308,18 @@ function getCanonicalArchetype(
     const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
-      blocks: [
-        { id: 'temp_setpoint', type: srcType, params: { value: 200 }, position: { x: 100, y: 150 } },
-        { id: 'thermal_plant', type: plantType, params: { T_ambient: 25 }, position: { x: 450, y: 150 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 800, y: 150 } },
-      ],
-      connections: [
-        { fromBlockId: 'temp_setpoint', fromPortId: srcOut, toBlockId: 'thermal_plant', toPortId: plantIn },
-        { fromBlockId: 'thermal_plant', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
-      ],
-      provenance: { patternId: 'canonical_thermal_monitoring', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'temp_setpoint', type: srcType, params: { value: 200 }, position: { x: 100, y: 150 } },
+          { id: 'thermal_plant', type: plantType, params: { T_ambient: 25 }, position: { x: 450, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 800, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'temp_setpoint', fromPortId: srcOut, toBlockId: 'thermal_plant', toPortId: plantIn },
+          { fromBlockId: 'thermal_plant', fromPortId: plantOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: 'canonical_thermal_monitoring', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
@@ -308,18 +329,20 @@ function getCanonicalArchetype(
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
     return {
-      blocks: [
-        { id: 'data_in', type: srcType, params: { value: 1 }, position: { x: 100, y: 100 } },
-        { id: 'clk_in', type: srcType, params: { value: 1 }, position: { x: 100, y: 250 } },
-        { id: 'seq_latch', type: seqType, params: {}, position: { x: 400, y: 175 } },
-        { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
-      ],
-      connections: [
-        { fromBlockId: 'data_in', fromPortId: 'out', toBlockId: 'seq_latch', toPortId: seqType === 'DFlipFlop' ? 'd' : 'in' },
-        { fromBlockId: 'clk_in', fromPortId: 'out', toBlockId: 'seq_latch', toPortId: seqType === 'DFlipFlop' ? 'clk' : 'in' },
-        { fromBlockId: 'seq_latch', fromPortId: seqType === 'DFlipFlop' ? 'q' : 'out', toBlockId: 'sink_scope', toPortId: 'in1' },
-      ],
-      provenance: { patternId: 'canonical_logical_sequencing', version: '1.0.0', license: 'MIT' },
+      archetype: {
+        blocks: [
+          { id: 'data_in', type: srcType, params: { value: 1 }, position: { x: 100, y: 100 } },
+          { id: 'clk_in', type: srcType, params: { value: 1 }, position: { x: 100, y: 250 } },
+          { id: 'seq_latch', type: seqType, params: {}, position: { x: 400, y: 175 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
+        ],
+        connections: [
+          { fromBlockId: 'data_in', fromPortId: 'out', toBlockId: 'seq_latch', toPortId: seqType === 'DFlipFlop' ? 'd' : 'in' },
+          { fromBlockId: 'clk_in', fromPortId: 'out', toBlockId: 'seq_latch', toPortId: seqType === 'DFlipFlop' ? 'clk' : 'in' },
+          { fromBlockId: 'seq_latch', fromPortId: seqType === 'DFlipFlop' ? 'q' : 'out', toBlockId: 'sink_scope', toPortId: 'in1' },
+        ],
+        provenance: { patternId: 'canonical_logical_sequencing', version: '1.0.0', license: 'MIT' },
+      },
     };
   }
 
@@ -329,52 +352,155 @@ function getCanonicalArchetype(
     const srcType = catalog.blocks.has('Constant') ? 'Constant' : 'Step';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
 
-    const numbers = text.match(/\b\d+(?:\.\d+)?\b/g);
-    let val1 = 1;
-    let val2 = 1;
-    if (numbers && numbers.length >= 2) {
-      val1 = parseFloat(numbers[0]);
-      val2 = parseFloat(numbers[1]);
-    } else if (numbers && numbers.length === 1) {
-      val1 = parseFloat(numbers[0]);
-      val2 = parseFloat(numbers[0]);
+    const parsedOps = parseArithmeticOperands(objective);
+    let operands = [...parsedOps.operands];
+
+    if (operands.length === 0 && requestInputs && requestInputs.length > 0) {
+      for (const inp of requestInputs) {
+        if (typeof inp.value === 'number') {
+          operands.push({ value: inp.value, raw: String(inp.value) });
+        }
+      }
     }
 
-    const source1Out = getFirstOutPort(catalog, srcType, 'out');
-    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+    if (operands.length === 1 && parsedOps.hasEachQualifier) {
+      operands = [operands[0], operands[0]];
+    }
 
     if (domainOp.inputPorts.length >= 2) {
+      if (operands.length < 2) {
+        return {
+          refusalDiagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'ENGINEERING',
+              code: 'MISSING_ARITHMETIC_OPERAND',
+              severity: 'ERROR',
+              message: `Binary operation "${domainOp.operator}" requires two operands, but only ${operands.length} was provided.`,
+              remediation: 'Specify both operand values explicitly (e.g., "multiply 10 by 100" or "add two constants each is 5").',
+            }),
+          ],
+        };
+      }
+
+      const op1 = operands[0];
+      const op2 = operands[1];
+
+      if (!Number.isFinite(op1.value) || !Number.isFinite(op2.value)) {
+        return {
+          refusalDiagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'ENGINEERING',
+              code: 'INVALID_ARITHMETIC_OPERAND',
+              severity: 'ERROR',
+              message: 'Arithmetic operand is not a finite number.',
+              remediation: 'Provide valid finite numeric values.',
+            }),
+          ],
+        };
+      }
+
+      if (domainOp.operator === 'divide' && Math.abs(op2.value) === 0) {
+        return {
+          refusalDiagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'ENGINEERING',
+              code: 'DIVISION_BY_ZERO',
+              severity: 'ERROR',
+              message: 'Division by zero is mathematically undefined and cannot be modeled.',
+              remediation: 'Provide a non-zero denominator divisor value.',
+            }),
+          ],
+        };
+      }
+
+      if (
+        (domainOp.operator === 'add' || domainOp.operator === 'subtract') &&
+        op1.baseUnit &&
+        op2.baseUnit &&
+        op1.baseUnit !== op2.baseUnit
+      ) {
+        return {
+          refusalDiagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'ENGINEERING',
+              code: 'INCOMPATIBLE_UNITS',
+              severity: 'ERROR',
+              message: `Cannot perform "${domainOp.operator}" between incompatible physical units "${op1.baseUnit}" and "${op2.baseUnit}".`,
+              remediation: 'Ensure operands in addition and subtraction have compatible physical dimensions.',
+            }),
+          ],
+        };
+      }
+
+      const source1Out = getFirstOutPort(catalog, srcType, 'out');
       const source2Out = getFirstOutPort(catalog, srcType, 'out');
+      const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
       const opIn1 = domainOp.inputPorts[0] || 'in1';
       const opIn2 = domainOp.inputPorts[1] || 'in2';
 
       return {
-        blocks: [
-          { id: 'const_1', type: srcType, params: { value: val1 }, position: { x: 100, y: 100 } },
-          { id: 'const_2', type: srcType, params: { value: val2 }, position: { x: 100, y: 250 } },
-          { id: 'op_1', type: domainOp.blockType, params: domainOp.defaultParams || {}, position: { x: 400, y: 175 } },
-          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
-        ],
-        connections: [
-          { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'op_1', toPortId: opIn1 },
-          { fromBlockId: 'const_2', fromPortId: source2Out, toBlockId: 'op_1', toPortId: opIn2 },
-          { fromBlockId: 'op_1', fromPortId: domainOp.outputPort, toBlockId: 'sink_scope', toPortId: sinkIn },
-        ],
-        provenance: { patternId: `canonical_${domainOp.operator}`, version: '1.0.0', license: 'MIT' },
+        archetype: {
+          blocks: [
+            { id: 'const_1', type: srcType, params: { value: op1.value }, position: { x: 100, y: 100 } },
+            { id: 'const_2', type: srcType, params: { value: op2.value }, position: { x: 100, y: 250 } },
+            { id: 'op_1', type: domainOp.blockType, params: domainOp.defaultParams || {}, position: { x: 400, y: 175 } },
+            { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 175 } },
+          ],
+          connections: [
+            { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'op_1', toPortId: opIn1 },
+            { fromBlockId: 'const_2', fromPortId: source2Out, toBlockId: 'op_1', toPortId: opIn2 },
+            { fromBlockId: 'op_1', fromPortId: domainOp.outputPort, toBlockId: 'sink_scope', toPortId: sinkIn },
+          ],
+          provenance: { patternId: `canonical_${domainOp.operator}`, version: '1.0.0', license: 'MIT' },
+        },
       };
     } else {
+      if (operands.length < 1) {
+        return {
+          refusalDiagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'ENGINEERING',
+              code: 'MISSING_ARITHMETIC_OPERAND',
+              severity: 'ERROR',
+              message: `Unary operation "${domainOp.operator}" requires an operand, but none was provided.`,
+              remediation: 'Specify the operand value explicitly.',
+            }),
+          ],
+        };
+      }
+
+      const op1 = operands[0];
+      if (!Number.isFinite(op1.value)) {
+        return {
+          refusalDiagnostics: [
+            StructuredDiagnosticSchema.parse({
+              category: 'ENGINEERING',
+              code: 'INVALID_ARITHMETIC_OPERAND',
+              severity: 'ERROR',
+              message: 'Arithmetic operand is not a finite number.',
+              remediation: 'Provide valid finite numeric values.',
+            }),
+          ],
+        };
+      }
+
+      const source1Out = getFirstOutPort(catalog, srcType, 'out');
+      const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
       const opIn1 = domainOp.inputPorts[0] || 'in1';
+
       return {
-        blocks: [
-          { id: 'const_1', type: srcType, params: { value: val1 }, position: { x: 100, y: 150 } },
-          { id: 'op_1', type: domainOp.blockType, params: domainOp.defaultParams || {}, position: { x: 400, y: 150 } },
-          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
-        ],
-        connections: [
-          { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'op_1', toPortId: opIn1 },
-          { fromBlockId: 'op_1', fromPortId: domainOp.outputPort, toBlockId: 'sink_scope', toPortId: sinkIn },
-        ],
-        provenance: { patternId: `canonical_${domainOp.operator}`, version: '1.0.0', license: 'MIT' },
+        archetype: {
+          blocks: [
+            { id: 'const_1', type: srcType, params: { value: op1.value }, position: { x: 100, y: 150 } },
+            { id: 'op_1', type: domainOp.blockType, params: domainOp.defaultParams || {}, position: { x: 400, y: 150 } },
+            { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
+          ],
+          connections: [
+            { fromBlockId: 'const_1', fromPortId: source1Out, toBlockId: 'op_1', toPortId: opIn1 },
+            { fromBlockId: 'op_1', fromPortId: domainOp.outputPort, toBlockId: 'sink_scope', toPortId: sinkIn },
+          ],
+          provenance: { patternId: `canonical_${domainOp.operator}`, version: '1.0.0', license: 'MIT' },
+        },
       };
     }
   }
@@ -437,7 +563,26 @@ export function planGeneralXbridgesModel(
   }
 
   // Fallback to canonical archetypes
-  const archetype = patternArchetype || getCanonicalArchetype(request.targetBehaviors, request.objective, catalog, request.inputs);
+  let archetype: {
+    blocks: InternalBlockSpec[];
+    connections: InternalConnSpec[];
+    provenance: PatternReference;
+  } | undefined = patternArchetype || undefined;
+
+  if (!archetype) {
+    const canonicalRes = getCanonicalArchetype(request.targetBehaviors, request.objective, catalog, request.inputs);
+    if (canonicalRes?.refusalDiagnostics && canonicalRes.refusalDiagnostics.length > 0) {
+      diagnostics.push(...canonicalRes.refusalDiagnostics);
+      return {
+        status: 'refused',
+        diagnostics,
+        provenance: [],
+      };
+    }
+    if (canonicalRes?.archetype) {
+      archetype = canonicalRes.archetype;
+    }
+  }
 
   if (!archetype) {
     diagnostics.push(

@@ -784,4 +784,151 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(mockLlm.generate).not.toHaveBeenCalled();
     });
   });
+
+  describe('Numeric and Unit-Aware Arithmetic Handling', () => {
+    it('handles negative, fractional, and scientific notation arithmetic operands', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'multiply -2.5 by 1e3 and display result on a scope',
+        targetBehaviors: ['multiply'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_arith_sci',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_arith_sci'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      const c1 = outcome.plan?.blocks.find(b => b.id === 'const_1');
+      const c2 = outcome.plan?.blocks.find(b => b.id === 'const_2');
+      expect(c1?.parameters.find(p => p.parameterName === 'value')?.value).toBe(-2.5);
+      expect(c2?.parameters.find(p => p.parameterName === 'value')?.value).toBe(1000);
+    });
+
+    it('handles unit-bearing operands with SI prefixes', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'multiply 10k by 500m and display result on a scope',
+        targetBehaviors: ['multiply'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_arith_units',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_arith_units'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      const c1 = outcome.plan?.blocks.find(b => b.id === 'const_1');
+      const c2 = outcome.plan?.blocks.find(b => b.id === 'const_2');
+      expect(c1?.parameters.find(p => p.parameterName === 'value')?.value).toBe(10000);
+      expect(c2?.parameters.find(p => p.parameterName === 'value')?.value).toBe(0.5);
+    });
+
+    it('refuses division by zero with structured diagnostic', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'divide 100 by 0 and display result on a scope',
+        targetBehaviors: ['divide'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_div_zero',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_div_zero'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'DIVISION_BY_ZERO')).toBe(true);
+    });
+
+    it('refuses binary operations with missing operands instead of duplicating values', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'multiply constant its value is 10 and display the result on a scope',
+        targetBehaviors: ['multiply'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_missing_op',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_missing_op'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'MISSING_ARITHMETIC_OPERAND')).toBe(true);
+    });
+
+    it('refuses addition between incompatible physical units', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'add 10V and 5s on a scope',
+        targetBehaviors: ['add'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_incompatible_units',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_incompatible_units'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'INCOMPATIBLE_UNITS')).toBe(true);
+    });
+
+    it('preserves exact numeric values in canonical plan JSON and verifies deterministic planHash', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'multiply -2.5 by 1e3 and display result on a scope',
+        targetBehaviors: ['multiply'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_arith_det',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_arith_det'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome1 = planGeneralXbridgesModel(request, context);
+      const outcome2 = planGeneralXbridgesModel(request, context);
+      expect(outcome1.status).toBe('planned');
+      expect(outcome2.status).toBe('planned');
+      expect(outcome1.plan?.planHash).toBe(outcome2.plan?.planHash);
+      expect(typeof outcome1.plan?.planHash).toBe('string');
+      expect(outcome1.plan?.planHash.length).toBe(64);
+    });
+  });
 });
