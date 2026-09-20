@@ -14,6 +14,8 @@ export interface ClassifiedRequest {
   objective: string;
   isSupported: boolean;
   unsupportedReason?: string;
+  domainGuidance?: string;
+  suggestedAlternative?: 'xbridges_transfer_function' | 'vlab_physical';
 }
 
 export interface RequestHandlingResult {
@@ -25,6 +27,11 @@ export interface RequestHandlingResult {
   inspectionDetails?: Record<string, unknown>;
   diagnostics?: Array<{ category: string; message: string; severity?: string }>;
 }
+
+const STOP_WORDS = new Set([
+  'and', 'or', 'not', 'with', 'from', 'into', 'then', 'that',
+  'this', 'have', 'make', 'show', 'test', 'over', 'under', 'for', 'the'
+]);
 
 export class RequestCollaborator {
   constructor(private readonly llm: LlmProvider) {}
@@ -47,11 +54,60 @@ export class RequestCollaborator {
       intent = 'modify';
     }
 
-    // 2. Determine target system
+    // 2. Early Boundary Check: Non-engineering requests
+    if (
+      lower.includes('poem') ||
+      lower.includes('story') ||
+      lower.includes('vacation') ||
+      lower.includes('recipe') ||
+      lower.includes('joke') ||
+      lower.includes('tax')
+    ) {
+      return {
+        intent,
+        targetSystem: 'unsupported',
+        objective: trimmed,
+        isSupported: false,
+        unsupportedReason: `The ADIA agent specializes in Model-Based Systems Engineering (MBSE), control systems, and dynamic block simulation in X-Bridges. '${trimmed}' is a non-engineering request outside this domain.`
+      };
+    }
+
+    // 3. Early Boundary Check: 3D FEA / CFD
+    if (
+      lower.includes('cfd') ||
+      lower.includes('fea') ||
+      lower.includes('aerodynamic') ||
+      lower.includes('finite element') ||
+      lower.includes('airflow over')
+    ) {
+      return {
+        intent,
+        targetSystem: 'unsupported',
+        objective: trimmed,
+        isSupported: false,
+        unsupportedReason: `X-Bridges operates in the 1D lumped-parameter and control systems domain. 3D finite element analysis (FEA) and computational fluid dynamics (CFD) are outside 1D block simulation. Please formulate a 1D lumped dynamic model or use a specialized 3D CFD/FEA tool.`
+      };
+    }
+
+    // 4. Physical Circuit Interception (RLC / Resistor / Capacitor networks)
+    let domainGuidance: string | undefined;
+    const isPhysicalCircuit =
+      lower.includes('rlc') ||
+      (lower.includes('circuit') && (lower.includes('resistor') || lower.includes('capacitor') || lower.includes('inductor') || lower.includes('series') || lower.includes('parallel')));
+
     let targetSystem: string | undefined;
-    const matchedTemplate = findTemplateForIntent(trimmed);
-    if (matchedTemplate) {
-      targetSystem = matchedTemplate.id;
+
+    if (isPhysicalCircuit) {
+      targetSystem = 'xbridges_second_order_dynamic';
+      domainGuidance = "X-Bridges is a causal signal/block-diagram simulator. Physical component schematics with across/through wiring belong to V-Lab. In X-Bridges, this is modeled as an equivalent continuous transfer function or dynamic state-space block.";
+    }
+
+    // 5. Template check
+    if (!targetSystem) {
+      const matchedTemplate = findTemplateForIntent(trimmed);
+      if (matchedTemplate) {
+        targetSystem = matchedTemplate.id === 'air_fryer' ? 'air-fryer' : matchedTemplate.id;
+      }
     }
 
     if (!targetSystem) {
@@ -60,10 +116,11 @@ export class RequestCollaborator {
       } else if (lower.includes('inverter') || lower.includes('three-phase') || lower.includes('3-phase')) {
         targetSystem = 'three_phase_inverter';
       } else {
-        // Check catalog blocks
+        // Check catalog blocks (excluding stop words)
         const tokens = trimmed.split(/[\s,._-]+/);
         for (const token of tokens) {
-          if (token.length > 2) {
+          const norm = token.toLowerCase();
+          if (norm.length > 2 && !STOP_WORDS.has(norm)) {
             const cap = resolveBlockCapability(token);
             if (cap) {
               targetSystem = `xbridges_${cap.id.toLowerCase()}`;
@@ -74,7 +131,7 @@ export class RequestCollaborator {
       }
     }
 
-    // 3. Fallback to LLM if needed
+    // 6. Fallback to LLM if needed
     if (!targetSystem) {
       try {
         const intentReq = intentExtractionPrompt(trimmed);
@@ -108,7 +165,7 @@ export class RequestCollaborator {
 
     // Generic circuit keywords
     if (!targetSystem) {
-      if (lower.includes('circuit') || lower.includes('filter') || lower.includes('converter') || lower.includes('model') || lower.includes('rl') || lower.includes('rc') || lower.includes('rlc') || lower.includes('power supply')) {
+      if (lower.includes('circuit') || lower.includes('filter') || lower.includes('converter') || lower.includes('model') || lower.includes('rl') || lower.includes('rc') || lower.includes('power supply')) {
         targetSystem = 'xbridges_model';
       }
     }
@@ -143,7 +200,8 @@ export class RequestCollaborator {
       intent,
       targetSystem,
       objective: trimmed,
-      isSupported: true
+      isSupported: true,
+      domainGuidance
     };
   }
 
