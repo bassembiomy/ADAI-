@@ -124,7 +124,7 @@ describe('General X-Bridges Engineering Agent Cross-Domain Corpus & Release Gate
 
         // Verify zero prohibited / hallucinated block IDs were created
         for (const node of nodes) {
-          const blockType = (node.data?.blockType || node.type || '') as string;
+          const blockType = (node.data?.type || node.data?.blockType || node.type || '') as string;
           expect(testCase.prohibitedInventedIds).not.toContain(blockType);
           // Every block must exist in canonical catalog
           expect(catalog.blocks.has(blockType) || Boolean((BLOCK_LIBRARY as Record<string, unknown>)[blockType])).toBe(true);
@@ -260,7 +260,7 @@ describe('General X-Bridges Engineering Agent Cross-Domain Corpus & Release Gate
         // Either error or action failure
         if (rExec.status === 'awaiting_change_approval' && rExec.pendingApproval) {
           const rAct = await faultyOrchestrator.approve(rExec.pendingApproval.id);
-          expect(['error', 'blocked', 'awaiting_change_approval']).toContain(rAct.status);
+          expect(['error', 'blocked', 'failed', 'awaiting_change_approval']).toContain(rAct.status);
         }
       }
 

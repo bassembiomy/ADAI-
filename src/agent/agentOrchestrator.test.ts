@@ -612,6 +612,46 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(nodesState).toHaveLength(0);
     expect(edgesState).toHaveLength(0);
   });
+
+  it('handles "create rlc circuit" through complete lifecycle without inverter confusion', async () => {
+    let nodesState: any[] = [];
+    let edgesState: any[] = [];
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+    const orch = new AgentOrchestrator(undefined, tools);
+
+    // Step 1: Prompt
+    const res1 = await orch.handle('create rlc circuit');
+    expect(res1.status).toBe('clarifying');
+    expect(res1.message).toContain('V-Lab');
+    expect(res1.message).toContain('transfer function');
+    expect(res1.message).not.toContain('400V');
+
+    // Step 2: Answer with parameters
+    const res2 = await orch.handle('R=10 ohm, L=10mH, C=100uF');
+    expect(res2.status).toBe('awaiting_specification_approval');
+    expect(res2.pendingApproval).toBeDefined();
+
+    // Step 3: Approve specification
+    const res3 = await orch.approve(res2.pendingApproval!.id);
+    expect(res3.status).toBe('awaiting_plan_approval');
+    expect(res3.executionPlan).toBeDefined();
+    expect(res3.executionPlan?.actions.length).toBeGreaterThan(0);
+
+    // Step 4: Approve execution plan -> Executes actions through change approvals
+    let currentResp = await orch.approve(res3.pendingApproval!.id);
+    while (currentResp.status === 'awaiting_change_approval' && currentResp.pendingApproval) {
+      currentResp = await orch.approve(currentResp.pendingApproval.id, 'Approve action');
+    }
+
+    expect(currentResp.status).toBe('completed');
+    expect(nodesState.length).toBeGreaterThanOrEqual(2);
+    expect(nodesState.some(n => n.data?.type === 'TRANSFER_FUNCTION' || n.type === 'TRANSFER_FUNCTION' || n.data?.blockType === 'TRANSFER_FUNCTION')).toBe(true);
+  });
 });
-
-

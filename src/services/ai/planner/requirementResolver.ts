@@ -5,6 +5,7 @@ import {
 } from './generalIntent';
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { TaskState } from '../../../agent/types';
+import { parseEngineeringEntities } from './engineeringEntityParser';
 
 export type { GeneralEngineeringRequest };
 
@@ -54,7 +55,20 @@ function normalizeRequestInput(input: GeneralEngineeringRequest | TaskState): Ge
     const inputs: RequirementValue[] = [];
     const outputs: RequirementValue[] = [];
 
+    // Parse entities from objective
+    const objEntities = parseEngineeringEntities(rs.objective || '');
+    if (objEntities.resistance !== undefined) inputs.push({ name: 'resistance', value: objEntities.resistance, unit: 'ohm' });
+    if (objEntities.inductance !== undefined) inputs.push({ name: 'inductance', value: objEntities.inductance, unit: 'H' });
+    if (objEntities.capacitance !== undefined) inputs.push({ name: 'capacitance', value: objEntities.capacitance, unit: 'F' });
+
     for (const [k, v] of Object.entries(answers)) {
+      if (typeof v === 'string') {
+        const parsed = parseEngineeringEntities(v);
+        if (parsed.resistance !== undefined && !inputs.some(i => i.name === 'resistance')) inputs.push({ name: 'resistance', value: parsed.resistance, unit: 'ohm' });
+        if (parsed.inductance !== undefined && !inputs.some(i => i.name === 'inductance')) inputs.push({ name: 'inductance', value: parsed.inductance, unit: 'H' });
+        if (parsed.capacitance !== undefined && !inputs.some(i => i.name === 'capacitance')) inputs.push({ name: 'capacitance', value: parsed.capacitance, unit: 'F' });
+      }
+
       if (k.toLowerCase().includes('voltage') || k.toLowerCase().includes('supply') || k.toLowerCase().includes('in')) {
         inputs.push({ name: k, value: v as any, unit: typeof v === 'string' && v.includes('V') ? 'V' : undefined });
       } else {
@@ -62,10 +76,12 @@ function normalizeRequestInput(input: GeneralEngineeringRequest | TaskState): Ge
       }
     }
 
+    const behaviors = rs.targetSystem ? [rs.targetSystem] : [];
+
     return {
       intent: 'create',
       objective: rs.objective || rs.targetSystem || 'Engineering Model',
-      targetBehaviors: [],
+      targetBehaviors: behaviors,
       inputs,
       outputs,
       constraints: (rs.constraints || []).map((c: any, i: number) => ({

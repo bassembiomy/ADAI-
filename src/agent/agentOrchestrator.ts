@@ -146,6 +146,7 @@ export class AgentOrchestrator {
   private transactionStatus: TransactionStatus | 'idle' | 'failed' = 'idle';
   private finalEvidence?: Record<string, unknown>;
   private currentPatternEvidence: RankedPatternMatch[] = [];
+  private initialDomainGuidance?: string;
 
   constructor(
     llmProvider?: LlmProvider,
@@ -254,6 +255,9 @@ export class AgentOrchestrator {
 
       this.currentIntent = classified.intent;
       this.taskState = this.requestCollaborator.initTask(classified);
+      if (classified.domainGuidance) {
+        this.initialDomainGuidance = classified.domainGuidance;
+      }
 
       // Handle inspect intent directly on current model
       if (classified.intent === 'inspect') {
@@ -315,9 +319,14 @@ export class AgentOrchestrator {
         recommendedDefault: q.recommendedDefault
       });
 
-      const promptText = q.recommendedDefault
+      const promptBase = q.recommendedDefault
         ? `${q.question}\n(Recommended: ${q.recommendedDefault} — ${q.rationale})`
         : q.question;
+
+      const promptText = this.initialDomainGuidance
+        ? `${this.initialDomainGuidance}\n\n${promptBase}`
+        : promptBase;
+      this.initialDomainGuidance = undefined;
 
       return {
         status: this.taskState.status,
@@ -382,9 +391,15 @@ export class AgentOrchestrator {
         approvalId: approvalReq.id
       });
 
+      const baseSpecMsg = `Requirements are fully defined. Please review and approve the formal specification: ${this.specification.title}.`;
+      const specMsg = this.initialDomainGuidance
+        ? `${this.initialDomainGuidance}\n\n${baseSpecMsg}`
+        : baseSpecMsg;
+      this.initialDomainGuidance = undefined;
+
       return {
         status: 'awaiting_specification_approval',
-        message: `Requirements are fully defined. Please review and approve the formal specification: ${this.specification.title}.`,
+        message: specMsg,
         taskState: this.taskState,
         pendingApproval: approvalReq,
         specification: this.specification
@@ -812,22 +827,33 @@ export class AgentOrchestrator {
         if (!typedAction || typedAction.id !== action.id) {
           throw new Error(`Typed transaction action mismatch at index ${actionIndex}`);
         }
-        const observed = await this.transactionCollaborator.executeApproved({
-          token: approvedReq.id,
-          projectId: this.currentPlanV2.projectId,
-          baseRevision: this.currentPlanV2.baseRevision,
-          planHash: this.currentPlanV2.planHash,
-          actionId: typedAction.id,
-          actionKind: typedAction.kind,
-          canonicalParamsHash: computeModelFingerprint(typedAction)
-        });
-        this.observedDeltas = observed as unknown as Record<string, unknown>;
-        this.transactionStatus = activeTransaction.getState().status;
-        toolResult = {
-          success: true,
-          evidence: observed as unknown as Record<string, unknown>,
-          changedArtifacts: [] as string[]
-        };
+        try {
+          const observed = await this.transactionCollaborator.executeApproved({
+            token: approvedReq.id,
+            projectId: this.currentPlanV2.projectId,
+            baseRevision: this.currentPlanV2.baseRevision,
+            planHash: this.currentPlanV2.planHash,
+            actionId: typedAction.id,
+            actionKind: typedAction.kind,
+            canonicalParamsHash: computeModelFingerprint(typedAction)
+          });
+          this.observedDeltas = observed as unknown as Record<string, unknown>;
+          this.transactionStatus = activeTransaction.getState().status;
+          toolResult = {
+            success: true,
+            evidence: observed as unknown as Record<string, unknown>,
+            changedArtifacts: [] as string[]
+          };
+        } catch (txErr) {
+          const errMsg = txErr instanceof Error ? txErr.message : String(txErr);
+          await this.transactionCollaborator.rollback(errMsg);
+          this.transactionStatus = 'failed';
+          toolResult = {
+            success: false,
+            error: errMsg,
+            changedArtifacts: []
+          };
+        }
       } else {
         toolResult = await this.tools.executeApprovedAction(
           approvedAction,
@@ -837,9 +863,13 @@ export class AgentOrchestrator {
 
       if (!toolResult.success) {
         if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
-          await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
-          if (delegates.xbridges.save) await delegates.xbridges.save();
-          this.refreshProjectContext();
+          try {
+            await delegates.xbridges.restoreSnapshot(this.preExecutionSnapshot.nodes, this.preExecutionSnapshot.edges);
+            if (delegates.xbridges.save) await delegates.xbridges.save();
+            this.refreshProjectContext();
+          } catch {
+            // Best effort snapshot restoration in fault-injection / disk-quota scenarios
+          }
         }
 
         this.taskState = transitionState(
