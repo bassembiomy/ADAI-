@@ -212,6 +212,21 @@ describe('XbridgesAgentTransaction', () => {
       expect(await delegate.getRevisionFingerprint()).toBe(initialFingerprint);
     });
 
+    it('reports failed_rollback when restore returns without restoring the original fingerprint', async () => {
+      const { adapter, delegate } = createTestFixture();
+      const provedPlan = createSampleProvedPlan();
+      const tx = new XbridgesAgentTransaction(adapter, delegate);
+      await tx.begin(provedPlan);
+
+      await tx.approveAndExecute(makeBinding('tok_rollback_mismatch', provedPlan.plan.actions[0], provedPlan.plan));
+      delegate.restoreSnapshot = async () => undefined;
+
+      const rollback = await tx.cancel();
+      expect(rollback.success).toBe(false);
+      expect(rollback.error).toMatch(/ROLLBACK_FINGERPRINT_MISMATCH/);
+      expect(tx.getState().status).toBe('failed_rollback');
+    });
+
     it('undo restores exact pre-transaction state after successful commit', async () => {
       const { adapter, delegate, projectContext } = createTestFixture();
       const provedPlan = createSampleProvedPlan();
@@ -238,6 +253,35 @@ describe('XbridgesAgentTransaction', () => {
       expect(edgesStore).toHaveLength(0);
       expect(currentRevision).toBe(1);
       expect(await delegate.getRevisionFingerprint()).toBe(initialFingerprint);
+    });
+
+    it('refuses undo when the model changed after the transaction committed', async () => {
+      const { adapter, delegate, projectContext } = createTestFixture();
+      const provedPlan = createSampleProvedPlan();
+      const tx = new XbridgesAgentTransaction(adapter, delegate, projectContext);
+      await tx.begin(provedPlan);
+
+      for (let i = 0; i < provedPlan.plan.actions.length; i++) {
+        await tx.approveAndExecute(makeBinding(`tok_changed_${i}`, provedPlan.plan.actions[i], provedPlan.plan));
+      }
+      const committed = await tx.commit();
+      nodesStore.push({
+        id: 'later_user_edit',
+        type: 'xbridgesBlock',
+        position: { x: 0, y: 0 },
+        data: {
+          id: 'later_user_edit',
+          type: 'GAIN',
+          blockId: 'GAIN',
+          instanceName: 'Later Edit',
+          params: { gain: 2 },
+          inputs: [{ id: 'u', direction: 'input' }],
+          outputs: [{ id: 'y', direction: 'output' }]
+        }
+      });
+
+      await expect(tx.undo(committed.transactionId)).rejects.toThrow(/CURRENT_STATE_CHANGED/);
+      expect(nodesStore.some(node => node.id === 'later_user_edit')).toBe(true);
     });
   });
 

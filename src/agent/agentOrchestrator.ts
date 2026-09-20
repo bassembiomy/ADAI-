@@ -59,7 +59,12 @@ import { XbridgesProof } from '../services/ai/proof/xbridgesProofRunner';
 import { EngineeringModelPlanV2 } from '../services/ai/contracts/engineeringModel';
 import { TransactionStatus } from '../services/ai/execution/xbridgesAgentTransaction';
 import { LiveXbridgesModelAdapter } from '../services/ai/adapters/liveXbridgesModelAdapter';
-import { sha256Hex, canonicalJson } from '../engine/opm/canonicalHash';
+import { sha256Hex, canonicalJson, computeModelFingerprint } from '../engine/opm/canonicalHash';
+import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
+import { resolveRequirements } from '../services/ai/planner/requirementResolver';
+import { EngineeringPattern } from '../services/ai/knowledge/patternSchemas';
+import { loadVerifiedRuntimePatterns } from '../services/ai/knowledge/runtimePatternGateway';
+import { RankedPatternMatch, retrieveCompatiblePatterns } from '../services/ai/knowledge/patternRetrieval';
 
 
 export interface OrchestratorResponse {
@@ -140,8 +145,13 @@ export class AgentOrchestrator {
   private observedDeltas?: Record<string, unknown>;
   private transactionStatus: TransactionStatus | 'idle' | 'failed' = 'idle';
   private finalEvidence?: Record<string, unknown>;
+  private currentPatternEvidence: RankedPatternMatch[] = [];
 
-  constructor(llmProvider?: LlmProvider, toolGatewayInstance?: ToolGateway) {
+  constructor(
+    llmProvider?: LlmProvider,
+    toolGatewayInstance?: ToolGateway,
+    private readonly loadPatterns: () => Promise<EngineeringPattern[]> = loadVerifiedRuntimePatterns
+  ) {
     this.llm = llmProvider || localLlmService.getProvider();
     this.tools = toolGatewayInstance || defaultToolGateway;
     this.requestCollaborator = new RequestCollaborator(this.llm);
@@ -415,6 +425,11 @@ export class AgentOrchestrator {
       const isInverter =
         this.specification.targetSystem === 'three_phase_inverter' ||
         this.specification.targetSystem.toLowerCase().includes('inverter');
+      const isLegacyAirFryer =
+        this.specification.targetSystem.toLowerCase().includes('air-fryer') ||
+        this.specification.targetSystem.toLowerCase().includes('air fryer') ||
+        this.specification.targetSystem.toLowerCase().includes('air_fryer') ||
+        this.specification.targetSystem.toLowerCase() === 'xbridges-control';
       if (isInverter) {
         const engPlan = buildEngineeringModelPlanFromExecutionPlan(
           this.executionPlan,
@@ -471,6 +486,10 @@ export class AgentOrchestrator {
           connections: engPlan.connections
         };
         this.currentPlanV2 = engPlanV2;
+        this.executionPlan = this.planningCollaborator.convertModelPlanToExecutionPlan(
+          engPlanV2,
+          this.specification
+        );
 
         try {
           proofResult = await this.proofCollaborator.provePlan(engPlanV2);
@@ -486,8 +505,85 @@ export class AgentOrchestrator {
               intent: this.currentIntent
             };
           }
-        } catch {
-          // Proof fallback if worker not ready
+        } catch (error) {
+          const explanation = error instanceof Error ? error.message : String(error);
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          return {
+            status: 'blocked',
+            message: `Plan proof failed: ${explanation}`,
+            taskState: this.taskState,
+            intent: this.currentIntent
+          };
+        }
+      } else if (!isLegacyAirFryer) {
+        const delegates = this.tools.getDelegates();
+        const catalog = buildXbridgesCapabilityIndex();
+        const resolution = resolveRequirements(this.taskState, catalog);
+        if (!resolution.complete || !resolution.canonicalRequest) {
+          const explanation = `General requirements are incomplete: ${resolution.unresolvedKeys.join(', ')}`;
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          return { status: 'blocked', message: explanation, taskState: this.taskState, intent: this.currentIntent };
+        }
+        const nodes = delegates?.xbridges ? await delegates.xbridges.getNodes() : [];
+        const edges = delegates?.xbridges ? await delegates.xbridges.getEdges() : [];
+        const stateHash = delegates?.xbridges?.getRevisionFingerprint
+          ? await delegates.xbridges.getRevisionFingerprint()
+          : computeModelFingerprint({ nodes, edges });
+        const patterns = await this.loadPatterns();
+        this.currentPatternEvidence = retrieveCompatiblePatterns(
+          {
+            intent: this.currentIntent,
+            targetSystem: this.specification.targetSystem,
+            targetBehaviors: resolution.canonicalRequest.targetBehaviors,
+            requiredInputs: resolution.canonicalRequest.inputs.map(input => input.name),
+            requiredOutputs: resolution.canonicalRequest.outputs.map(output => output.name)
+          },
+          patterns,
+          catalog
+        );
+        const outcome = this.planningCollaborator.planGeneralModel(
+          { ...resolution.canonicalRequest, intent: this.currentIntent || 'create' },
+          {
+            projectId: this.projectContext.projectId,
+            baseRevision: this.projectContext.revision,
+            activeSnapshot: {
+              projectId: this.projectContext.projectId,
+              revision: this.projectContext.revision,
+              nodes,
+              edges,
+              stateHash,
+              timestamp: Date.now()
+            },
+            catalog,
+            patterns: []
+          }
+        );
+        if (outcome.status !== 'planned' || !outcome.plan) {
+          const explanation = outcome.diagnostics.map(diagnostic => diagnostic.message).join('; ') || 'General planning refused';
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          return {
+            status: 'blocked',
+            message: `General planning refused: ${explanation}`,
+            taskState: this.taskState,
+            intent: this.currentIntent,
+            patternEvidence: this.currentPatternEvidence
+          };
+        }
+        this.currentPlanV2 = outcome.plan;
+        this.executionPlan = this.planningCollaborator.convertModelPlanToExecutionPlan(outcome.plan, this.specification);
+        proofResult = await this.proofCollaborator.provePlan(outcome.plan);
+        this.currentProof = proofResult;
+        if (proofResult.status !== 'proved') {
+          const explanation = proofResult.diagnostics.map(diagnostic => diagnostic.message).join('; ') || 'Isolated proof refused';
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          return {
+            status: 'blocked',
+            message: `Plan proof refused: ${explanation}`,
+            taskState: this.taskState,
+            proof: proofResult,
+            intent: this.currentIntent,
+            patternEvidence: this.currentPatternEvidence
+          };
         }
       }
 
@@ -530,6 +626,7 @@ export class AgentOrchestrator {
         executionPlan: this.executionPlan,
         preflightResult,
         proof: this.currentProof,
+        patternEvidence: this.currentPatternEvidence,
         intent: this.currentIntent,
         transactionStatus: this.transactionStatus
       };
@@ -564,8 +661,18 @@ export class AgentOrchestrator {
             liveProjContext
           );
           this.transactionStatus = 'awaiting_action';
-        } catch {
-          // Fallback if transaction fails to initialize
+        } catch (error) {
+          const explanation = error instanceof Error ? error.message : String(error);
+          this.taskState = transitionState(this.taskState, 'blocked', explanation);
+          this.transactionStatus = 'failed';
+          return {
+            status: 'blocked',
+            message: `Transaction initialization failed: ${explanation}`,
+            taskState: this.taskState,
+            proof: this.currentProof,
+            intent: this.currentIntent,
+            transactionStatus: this.transactionStatus
+          };
         }
       }
 
@@ -696,11 +803,37 @@ export class AgentOrchestrator {
         };
       }
 
-      // Execute approved action with real parameters and matching approval token
-      const toolResult = await this.tools.executeApprovedAction(
-        approvedAction,
-        approvedReq.id
-      );
+      // Execute through the proved atomic transaction whenever a typed plan is active.
+      // The legacy gateway remains only for non-X-Bridges workflows that have no typed plan.
+      let toolResult;
+      const activeTransaction = this.transactionCollaborator.getTransaction();
+      if (activeTransaction && this.currentPlanV2) {
+        const typedAction = this.currentPlanV2.actions[actionIndex];
+        if (!typedAction || typedAction.id !== action.id) {
+          throw new Error(`Typed transaction action mismatch at index ${actionIndex}`);
+        }
+        const observed = await this.transactionCollaborator.executeApproved({
+          token: approvedReq.id,
+          projectId: this.currentPlanV2.projectId,
+          baseRevision: this.currentPlanV2.baseRevision,
+          planHash: this.currentPlanV2.planHash,
+          actionId: typedAction.id,
+          actionKind: typedAction.kind,
+          canonicalParamsHash: computeModelFingerprint(typedAction)
+        });
+        this.observedDeltas = observed as unknown as Record<string, unknown>;
+        this.transactionStatus = activeTransaction.getState().status;
+        toolResult = {
+          success: true,
+          evidence: observed as unknown as Record<string, unknown>,
+          changedArtifacts: [] as string[]
+        };
+      } else {
+        toolResult = await this.tools.executeApprovedAction(
+          approvedAction,
+          approvedReq.id
+        );
+      }
 
       if (!toolResult.success) {
         if (this.preExecutionSnapshot && delegates?.xbridges?.restoreSnapshot) {
@@ -959,6 +1092,9 @@ export class AgentOrchestrator {
           committedTx = await this.transactionCollaborator.commit();
           if (committedTx) {
             this.transactionStatus = 'committed';
+            if (this.lastCommittedSnapshot) {
+              this.lastCommittedSnapshot.committedRevision = committedTx.committedRevision;
+            }
           }
         } catch (txErr: any) {
           this.taskState = transitionState(this.taskState, 'failed', txErr.message);

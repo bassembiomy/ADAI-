@@ -155,16 +155,20 @@ function getCanonicalArchetype(
     const srcType = catalog.blocks.has('Sine') ? 'Sine' : 'Constant';
     const filterType = catalog.blocks.has('TRANSFER_FUNCTION') ? 'TRANSFER_FUNCTION' : 'Integrator';
     const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
+    const sourceOut = getFirstOutPort(catalog, srcType, 'out');
+    const filterIn = getFirstInPort(catalog, filterType, 'in');
+    const filterOut = getFirstOutPort(catalog, filterType, 'out');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
 
     return {
       blocks: [
         { id: 'src_signal', type: srcType, params: { frequency: 10 }, position: { x: 100, y: 150 } },
-        { id: 'filter_tf', type: filterType, params: { numerator: '1', denominator: '0.01s+1' }, position: { x: 400, y: 150 } },
+        { id: 'filter_tf', type: filterType, params: { numerator: [1], denominator: [0.01, 1] }, position: { x: 400, y: 150 } },
         { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
       ],
       connections: [
-        { fromBlockId: 'src_signal', fromPortId: 'out', toBlockId: 'filter_tf', toPortId: 'in' },
-        { fromBlockId: 'filter_tf', fromPortId: 'out', toBlockId: 'sink_scope', toPortId: 'in1' },
+        { fromBlockId: 'src_signal', fromPortId: sourceOut, toBlockId: 'filter_tf', toPortId: filterIn },
+        { fromBlockId: 'filter_tf', fromPortId: filterOut, toBlockId: 'sink_scope', toPortId: sinkIn },
       ],
       provenance: { patternId: 'canonical_signal_filter', version: '1.0.0', license: 'MIT' },
     };

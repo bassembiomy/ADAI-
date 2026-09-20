@@ -73,6 +73,7 @@ console.log('Running projectFileController tests...');
     writeProjectFile: mockWriteProjectFile,
     randomUUID: mockRandomUUID,
     fsImpl: mockFs,
+    snapshotBaseDir: 'C:\\work',
   });
 
   controller.registerIpc();
@@ -173,6 +174,27 @@ console.log('Running projectFileController tests...');
       await handlers['project-save-snapshot']({}, sampleSnapshot, {
         targetPath: 'C:\\other\\forbidden.adia',
         allowedBaseDir: 'C:\\work'
+      });
+    },
+    /PATH_TRAVERSAL_DETECTED/
+  );
+
+  // Renderer cannot enlarge the trusted main-process snapshot boundary.
+  await assert.rejects(
+    async () => {
+      await handlers['project-save-snapshot']({}, sampleSnapshot, {
+        targetPath: 'C:\\other\\renderer_escape.adia',
+        allowedBaseDir: 'C:\\'
+      });
+    },
+    /PATH_TRAVERSAL_DETECTED/
+  );
+
+  // Prefix siblings are not children (C:\\work-evil must not pass C:\\work).
+  await assert.rejects(
+    async () => {
+      await handlers['project-save-snapshot']({}, sampleSnapshot, {
+        targetPath: 'C:\\work-evil\\prefix_escape.adia'
       });
     },
     /PATH_TRAVERSAL_DETECTED/

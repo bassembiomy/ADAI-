@@ -3,6 +3,7 @@ import { AgentOrchestrator } from './agentOrchestrator';
 import { ToolGateway } from './toolGateway';
 import { createXbridgesDelegate, ReactFlowXbridgesNode, ReactFlowXbridgesEdge } from './toolAdapters/xbridgesAdapter';
 import { LlmProvider, LlmRequest, JsonSchema, LlmResult, LlmHealth } from './llmProvider';
+import { EngineeringPattern, computePatternContentHash, derivePatternId } from '../services/ai/knowledge/patternSchemas';
 
 class TestMockLlm implements LlmProvider {
   constructor(private intentData: any = { intent: 'create', targetSystem: 'rl_circuit' }) {}
@@ -70,6 +71,60 @@ describe('General X-Bridges Engineering Orchestrator Workflow', () => {
 
     orchestrator = new AgentOrchestrator(mockLlm, tools);
     orchestrator.updateProjectContext({ projectId: 'proj_general_test', workspace: 'xbridges', revision });
+  });
+
+  it('uses verified runtime knowledge and the generic planner for a non-inverter model', async () => {
+    const payload = {
+      version: 1,
+      name: 'Runtime Filter Pattern',
+      description: 'A verified low-pass filter pattern',
+      domain: 'signal_processing',
+      provenance: { source: 'test', author: 'ADIA', license: 'MIT', licenseApproved: true, ingestedAt: 1 },
+      lifecycle: 'verified' as const,
+      requirements: {
+        targetSystem: 'xbridges_model',
+        targetBehaviors: ['noise_filtering'],
+        requiredInputs: [],
+        requiredOutputs: []
+      },
+      topology: { blocks: [], connections: [] },
+      exactMappings: {},
+      simulationContract: { minDuration: 1, stepSize: 0.01, expectedObservables: [] },
+      evidence: { proofStatus: 'proved' as const, catalogFingerprint: 'catalog', qualityScore: 1 }
+    };
+    const contentHash = computePatternContentHash(payload);
+    const pattern: EngineeringPattern = {
+      ...payload,
+      id: derivePatternId(payload.name, contentHash),
+      contentHash
+    };
+    const loadPatterns = vi.fn(async () => [pattern]);
+    orchestrator = new AgentOrchestrator(mockLlm, tools, loadPatterns);
+    orchestrator.updateProjectContext({ projectId: 'proj_general_test', workspace: 'xbridges', revision });
+
+    let response = await orchestrator.handle('Create a low pass filter model for sensor noise filtering');
+    expect(response.status).toBe('clarifying');
+    response = await orchestrator.handle('5V');
+    expect(response.status).toBe('clarifying');
+    response = await orchestrator.handle('filtered sensor signal load');
+    expect(response.status).toBe('awaiting_specification_approval');
+
+    const planned = await orchestrator.approve(response.pendingApproval!.id);
+    expect(loadPatterns).toHaveBeenCalledOnce();
+    expect(planned.status, planned.message).toBe('awaiting_plan_approval');
+    expect(planned.patternEvidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ pattern: expect.objectContaining({ id: pattern.id }) })
+    ]));
+    expect(planned.executionPlan?.actions.some(action => action.params.blockType === 'TRANSFER_FUNCTION')).toBe(true);
+    expect(planned.proof?.status).toBe('proved');
+
+    let execution = await orchestrator.approve(planned.pendingApproval!.id);
+    while (execution.status === 'awaiting_change_approval' && execution.pendingApproval) {
+      execution = await orchestrator.approve(execution.pendingApproval.id);
+    }
+    expect(execution.status).toBe('completed');
+    expect(execution.transactionStatus).toBe('committed');
+    expect(nodes.some(node => node.data.type === 'TRANSFER_FUNCTION')).toBe(true);
   });
 
   it('handles all 6 general intents: create, inspect, modify, diagnose, repair, optimize', async () => {
@@ -220,6 +275,7 @@ describe('General X-Bridges Engineering Orchestrator Workflow', () => {
     }
 
     expect(curr.status).toBe('completed');
+    expect(curr.transactionStatus).toBe('committed');
     // Final evidence must exist
     expect(savedNodes.length).toBeGreaterThan(0);
     expect(curr.simulationResult || curr.finalEvidence).toBeDefined();

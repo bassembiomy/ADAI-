@@ -289,6 +289,14 @@ export class XbridgesAgentTransaction {
         restoredFp = await this.delegate.getRevisionFingerprint();
       }
 
+      const expectedFingerprint = this.initialFingerprint || this.initialSnapshot?.stateHash || '';
+      if (!restoredFp || restoredFp !== expectedFingerprint) {
+        throw new TransactionError(
+          `ROLLBACK_FINGERPRINT_MISMATCH: Restored fingerprint '${restoredFp}' does not match initial fingerprint '${expectedFingerprint}'.`,
+          'ROLLBACK_FINGERPRINT_MISMATCH'
+        );
+      }
+
       this.status = 'rolled_back';
 
       return {
@@ -378,6 +386,16 @@ export class XbridgesAgentTransaction {
       throw new TransactionError(`Transaction '${transactionId}' not found in journal.`, 'TX_NOT_FOUND');
     }
 
+    const currentFingerprint = this.delegate.getRevisionFingerprint
+      ? await this.delegate.getRevisionFingerprint()
+      : (await this.adapter.inspect()).stateHash;
+    if (currentFingerprint !== entry.record.afterHash) {
+      throw new TransactionError(
+        `CURRENT_STATE_CHANGED: Cannot undo transaction '${transactionId}' because the current fingerprint '${currentFingerprint}' does not match committed fingerprint '${entry.record.afterHash}'.`,
+        'CURRENT_STATE_CHANGED'
+      );
+    }
+
     await this.adapter.restore(entry.initialSnapshot);
     await this.delegate.save();
 
@@ -388,6 +406,13 @@ export class XbridgesAgentTransaction {
     let restoredFp = '';
     if (this.delegate.getRevisionFingerprint) {
       restoredFp = await this.delegate.getRevisionFingerprint();
+    }
+
+    if (restoredFp && restoredFp !== entry.record.beforeHash) {
+      throw new TransactionError(
+        `UNDO_FINGERPRINT_MISMATCH: Restored fingerprint '${restoredFp}' does not match pre-transaction fingerprint '${entry.record.beforeHash}'.`,
+        'UNDO_FINGERPRINT_MISMATCH'
+      );
     }
 
     COMMITTED_TRANSACTIONS.delete(transactionId);

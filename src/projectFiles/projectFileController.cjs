@@ -35,6 +35,7 @@ function createProjectFileController(deps = {}) {
   const writeProjectFile = deps.writeProjectFile || defaultWrite;
   const randomUUID = deps.randomUUID || (() => crypto.randomUUID());
   const fsImpl = deps.fsImpl || fs;
+  const snapshotBaseDir = path.resolve(deps.snapshotBaseDir || process.cwd());
 
   let activeProjectPath = null;
   const pendingTokens = new Map();
@@ -46,6 +47,19 @@ function createProjectFileController(deps = {}) {
 
   function getActivePath() {
     return activeProjectPath;
+  }
+
+  function isPathInside(baseDir, candidatePath) {
+    const relative = path.relative(path.resolve(baseDir), path.resolve(candidatePath));
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
+  function assertSnapshotPathAllowed(candidatePath) {
+    const trustedRoots = [snapshotBaseDir];
+    if (activeProjectPath) trustedRoots.push(path.dirname(path.resolve(activeProjectPath)));
+    if (!trustedRoots.some((root) => isPathInside(root, candidatePath))) {
+      throw new Error('PATH_TRAVERSAL_DETECTED: Target path is outside allowed project base directory');
+    }
   }
 
   async function openFromDialog() {
@@ -118,13 +132,12 @@ function createProjectFileController(deps = {}) {
     const edges = snapshot.edges || [];
     const modelFingerprint = computeModelFingerprint({ nodes, edges });
 
-    const allowedBase = options.allowedBaseDir ? path.resolve(options.allowedBaseDir) : process.cwd();
-    let targetPath = options.targetPath ? path.resolve(options.targetPath) : (activeProjectPath || path.join(allowedBase, `project_${projectId}.adia`));
+    const targetPath = options.targetPath
+      ? path.resolve(options.targetPath)
+      : (activeProjectPath || path.join(snapshotBaseDir, `project_${projectId}.adia`));
 
     const resolvedPath = path.resolve(targetPath);
-    if (!resolvedPath.startsWith(allowedBase)) {
-      throw new Error('PATH_TRAVERSAL_DETECTED: Target path is outside allowed project base directory');
-    }
+    assertSnapshotPathAllowed(resolvedPath);
 
     const now = Date.now();
     const payload = {
@@ -161,11 +174,8 @@ function createProjectFileController(deps = {}) {
       throw new Error('INVALID_RECEIPT: receipt must contain filePath');
     }
 
-    const allowedBase = options.allowedBaseDir ? path.resolve(options.allowedBaseDir) : process.cwd();
     const resolvedPath = path.resolve(receipt.filePath);
-    if (!resolvedPath.startsWith(allowedBase)) {
-      throw new Error('PATH_TRAVERSAL_DETECTED: Target path is outside allowed project base directory');
-    }
+    assertSnapshotPathAllowed(resolvedPath);
 
     if (!fsImpl.existsSync(resolvedPath)) {
       throw new Error(`FILE_NOT_FOUND: Persisted file '${resolvedPath}' does not exist.`);
