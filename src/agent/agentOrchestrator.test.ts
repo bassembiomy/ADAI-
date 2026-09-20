@@ -720,6 +720,48 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(nodesState.some(n => n.data?.type === 'Scope')).toBe(true);
     expect(edgesState.length).toBe(3);
   });
+
+  it('handles "make a model multiply constant its value is 10 by 100 and display the result on a scope" through complete lifecycle', async () => {
+    let nodesState: any[] = [];
+    let edgesState: any[] = [];
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+    const orch = new AgentOrchestrator(undefined, tools);
+
+    const res1 = await orch.handle('make a model multiply constant its value is 10 by 100 and display the result on a scope');
+    expect(['awaiting_specification_approval', 'clarifying']).toContain(res1.status);
+
+    let specApproval = res1.pendingApproval;
+    if (res1.status === 'clarifying') {
+      const resClarify = await orch.handle('ok');
+      specApproval = resClarify.pendingApproval;
+    }
+
+    expect(specApproval).toBeDefined();
+    const resPlan = await orch.approve(specApproval!.id);
+    expect(resPlan.status).toBe('awaiting_plan_approval');
+    expect(resPlan.executionPlan?.actions.length).toBeGreaterThanOrEqual(4);
+
+    let currentResp = await orch.approve(resPlan.pendingApproval!.id);
+    while (currentResp.status === 'awaiting_change_approval' && currentResp.pendingApproval) {
+      currentResp = await orch.approve(currentResp.pendingApproval.id, 'Approve action');
+    }
+
+    expect(currentResp.status).toBe('completed');
+    expect(nodesState.length).toBe(4);
+    const constNodes = nodesState.filter(n => n.data?.type === 'Constant');
+    expect(constNodes).toHaveLength(2);
+    expect(nodesState.some(n => n.data?.type === 'VectorMul')).toBe(true);
+    expect(nodesState.some(n => n.data?.type === 'Scope')).toBe(true);
+    expect(edgesState.length).toBe(3);
+  });
 });
+
 
 
