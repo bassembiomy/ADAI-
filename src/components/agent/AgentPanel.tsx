@@ -515,7 +515,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 <div className="adia-agent-requirements-card">
                   <div className="adia-agent-requirements-title">✅ Confirmed Requirements</div>
                   <ul className="adia-agent-requirements-list">
-                    {currentResponse!.specification!.requirements.map((req: any) => (
+                    {(currentResponse!.specification!.requirements || []).map((req: any) => (
                       <li key={req.id}>
                         <strong>{req.description}:</strong> {String(req.value)}
                       </li>
@@ -764,7 +764,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   </p>
                   <h5 style={{ marginTop: 12, color: '#94a3b8' }}>Requirements:</h5>
                   <ul>
-                    {currentResponse.specification.requirements.map(r => (
+                    {(currentResponse.specification.requirements || []).map((r: any) => (
                       <li key={r.id}>
                         <b>{r.id}</b> ({r.category}): {r.description} = {String(r.value)}
                       </li>
@@ -772,7 +772,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   </ul>
                   <h5 style={{ marginTop: 12, color: '#94a3b8' }}>Safety Limits:</h5>
                   <ul>
-                    {currentResponse.specification.safetyLimits.map((s, idx) => (
+                    {(currentResponse.specification.safetyLimits || []).map((s: any, idx: number) => (
                       <li key={idx}>{s}</li>
                     ))}
                   </ul>

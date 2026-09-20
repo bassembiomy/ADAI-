@@ -7,13 +7,19 @@ import {
   RollbackResult
 } from '../../services/ai/execution/xbridgesAgentTransaction';
 import { LiveXbridgesModelAdapter, ObservedActionResult } from '../../services/ai/adapters/liveXbridgesModelAdapter';
+import { computeModelFingerprint } from '../../engine/opm/canonicalHash';
 import { XbridgesApplicationDelegate } from '../applicationDelegates';
 
 export class TransactionCollaborator {
   private currentTransaction?: XbridgesAgentTransaction;
+  private lastCommittedTransaction?: { transaction: XbridgesAgentTransaction; record: CommittedTransaction };
 
   public getTransaction(): XbridgesAgentTransaction | undefined {
     return this.currentTransaction;
+  }
+
+  public getLastCommitted(): { transaction: XbridgesAgentTransaction; record: CommittedTransaction } | undefined {
+    return this.lastCommittedTransaction;
   }
 
   public async beginTransaction(
@@ -58,6 +64,7 @@ export class TransactionCollaborator {
       return undefined;
     }
     const committed = await this.currentTransaction.commit();
+    this.lastCommittedTransaction = { transaction: this.currentTransaction, record: committed };
     this.currentTransaction = undefined;
     return committed;
   }
