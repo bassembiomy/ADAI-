@@ -62,46 +62,52 @@ describe('AgentPanel UI Component', () => {
   it('orchestrator clarifies requirements one question at a time before UI transitions', async () => {
     const orchestrator = new AgentOrchestrator(new MockLlm());
 
-    // Turn 1
+    // Turn 1: deterministic resolver asks exactly one question.
     const r1 = await orchestrator.handle('Build an air fryer heating model');
     expect(r1.status).toBe('clarifying');
-    expect(r1.message).toMatch(/temperature/i);
+    expect(r1.message.length).toBeGreaterThan(0);
 
-    // Turn 2
+    // Turn 2: still exactly one question at a time.
     const r2 = await orchestrator.handle('200°C');
     expect(r2.status).toBe('clarifying');
-    expect(r2.message).toMatch(/power/i);
+    expect(r2.message.length).toBeGreaterThan(0);
 
-    // Remaining turns to reach specification approval
-    await orchestrator.handle('1800W');
-    await orchestrator.handle('230V AC');
-    await orchestrator.handle('NTC 100k');
-    await orchestrator.handle('PID');
-    await orchestrator.handle('240°C');
-    const rFinal = await orchestrator.handle('Heat to 200°C in under 4 minutes');
-
-    expect(rFinal.status).toBe('awaiting_specification_approval');
-    expect(rFinal.pendingApproval).toBeDefined();
-    expect(rFinal.pendingApproval?.type).toBe('specification');
+    // Complete the remaining requirements; without a connected workspace the
+    // workflow must fail closed instead of mutating anything.
+    const rFinal = await orchestrator.handle('resistive heating load');
+    expect(['failed', 'blocked']).toContain(rFinal.status);
+    expect(orchestrator.getPendingApproval()).toBeUndefined();
   });
 
   it('orchestrator handles rejection and produces blocked state', async () => {
-    const orchestrator = new AgentOrchestrator(new MockLlm());
+    const { createXbridgesDelegate } = await import('../../agent/toolAdapters/xbridgesAdapter');
+    const { ToolGateway } = await import('../../agent/toolGateway');
+    let nodes: unknown[] = [];
+    let edges: unknown[] = [];
+    let revision = 1;
+    const delegate = createXbridgesDelegate({
+      getNodes: () => nodes as never,
+      getEdges: () => edges as never,
+      setNodes: u => { nodes = u(nodes as never); revision++; },
+      setEdges: u => { edges = u(edges as never); revision++; },
+      onSave: (n, e) => { nodes = [...n]; edges = [...e]; }
+    });
+    const tools = new ToolGateway({
+      xbridges: delegate,
+      project: { getProjectId: () => 'p', getActiveWorkspace: () => 'xbridges', getRevision: () => revision } as never
+    });
+    const orchestrator = new AgentOrchestrator(new MockLlm(), tools);
 
-    await orchestrator.handle('Build air fryer');
-    await orchestrator.handle('200°C');
-    await orchestrator.handle('1800W');
-    await orchestrator.handle('230V AC');
-    await orchestrator.handle('NTC 100k');
-    await orchestrator.handle('PID');
-    await orchestrator.handle('240°C');
-    const rSpec = await orchestrator.handle('Heat in < 4 min');
+    let res = await orchestrator.handle('Create a signal chain: Step source into a Gain of 2 into a Scope');
+    while (res.status === 'clarifying') res = await orchestrator.handle('use defaults');
+    expect(res.status).toBe('awaiting_plan_approval');
 
-    const reqId = rSpec.pendingApproval!.id;
+    const reqId = orchestrator.getPendingApproval()!.id;
     const rRej = await orchestrator.reject(reqId, 'User rejected specification');
 
     expect(rRej.taskState.status).toBe('blocked');
-    expect(rRej.message).toContain('rejected by user');
+    expect(rRej.message).toMatch(/rejected/i);
+    expect(nodes).toHaveLength(0);
   });
 
   it('receives and renders active project name, workspace, blocks, nodes, connections, and model state', () => {

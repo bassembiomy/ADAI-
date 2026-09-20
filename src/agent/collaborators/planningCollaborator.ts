@@ -21,6 +21,7 @@ export class PlanningCollaborator {
       activeSnapshot: ModelSnapshot;
       catalog: XbridgesCapabilityIndex;
       patterns?: EngineeringPattern[];
+      knowledgeHash?: string;
     }
   ): PlanningOutcome {
     const planningContext: PlanningContext = {
@@ -28,7 +29,8 @@ export class PlanningCollaborator {
       baseRevision: context.baseRevision,
       activeSnapshot: context.activeSnapshot,
       catalog: context.catalog,
-      patterns: context.patterns || []
+      patterns: context.patterns || [],
+      knowledgeHash: context.knowledgeHash
     };
 
     return planGeneralXbridgesModel(request, planningContext);

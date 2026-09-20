@@ -107,6 +107,13 @@ export class XbridgesAgentTransaction {
     private readonly projectContext?: TransactionProjectContext
   ) {}
 
+  public getPlan(): EngineeringModelPlanV2 {
+    if (!this.plan) {
+      throw new TransactionError('Transaction not started. Call begin() first.', 'NOT_INITIALIZED');
+    }
+    return this.plan;
+  }
+
   public getState(): TransactionState {
     return {
       transactionId: this.transactionId,
@@ -145,6 +152,20 @@ export class XbridgesAgentTransaction {
     this.consumedTokens.clear();
 
     this.initialSnapshot = await this.adapter.inspect();
+
+    // Stale-state guard: the workspace must still match the state the plan
+    // was synthesized against. Refuse before the first mutation.
+    if (
+      plan.expectedBeforeHash &&
+      plan.expectedBeforeHash !== 'initial' &&
+      this.initialSnapshot.stateHash !== plan.expectedBeforeHash
+    ) {
+      throw new TransactionError(
+        `STALE_STATE: Workspace changed after planning (expected '${plan.expectedBeforeHash}', found '${this.initialSnapshot.stateHash}'). Re-plan before executing.`,
+        'STALE_STATE'
+      );
+    }
+
     if (this.delegate.getRevisionFingerprint) {
       this.initialFingerprint = await this.delegate.getRevisionFingerprint();
     } else {
