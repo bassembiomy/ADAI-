@@ -8,6 +8,7 @@ import { sha256Hex } from '../../../../engine/opm/canonicalHash';
 export const APPROVED_INGESTION_ORIGINS: readonly string[] = Object.freeze([
   'https://raw.githubusercontent.com',
   'https://github.com',
+  'https://www.mathworks.com',
   'https://gitlab.com',
   'https://zenodo.org',
   'https://arxiv.org',
