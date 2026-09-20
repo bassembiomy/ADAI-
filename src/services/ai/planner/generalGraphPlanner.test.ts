@@ -10,6 +10,7 @@ import { buildXbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex
 import { canonicalJson } from '../../../engine/opm/canonicalHash';
 import type { ModelSnapshot } from '../adapters/liveXbridgesModelAdapter';
 import type { GeneralEngineeringRequest } from './generalIntent';
+import { proveXbridgesPlan } from '../proof/xbridgesProofRunner';
 
 function createEmptySnapshot(projectId: string = 'proj_test'): ModelSnapshot {
   return {
@@ -929,6 +930,31 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome1.plan?.planHash).toBe(outcome2.plan?.planHash);
       expect(typeof outcome1.plan?.planHash).toBe('string');
       expect(outcome1.plan?.planHash.length).toBe(64);
+    });
+
+    it('executes validated arithmetic plans through simulation proof and asserts Scope observable equals expected calculation', async () => {
+      const mulReq: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'multiply -2.5 by 1e3 and display result on a scope',
+        targetBehaviors: ['multiply'],
+        inputs: [],
+        outputs: [{ name: 'result', value: 'Scope' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_proof_sim',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_proof_sim'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(mulReq, context);
+      expect(outcome.status).toBe('planned');
+      const proof = await proveXbridgesPlan(outcome.plan!);
+      expect(proof.status).toBe('proved');
+      expect(proof.engineRunId).toBeTruthy();
+      expect(Number(proof.observables['sink_scope'])).toBeCloseTo(-2500, 4);
     });
   });
 });

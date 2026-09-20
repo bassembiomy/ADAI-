@@ -239,6 +239,31 @@ export async function proveXbridgesPlan(
     }
   }
 
+  if (stepRes.engineSnapshot?.blockStates) {
+    for (const [bId, state] of Object.entries(stepRes.engineSnapshot.blockStates)) {
+      if (state && Array.isArray(state.history) && state.history.length > 0) {
+        const lastSample = state.history[state.history.length - 1];
+        if (lastSample && lastSample.y1 !== undefined) {
+          observables[bId] = lastSample.y1;
+          observables[`${bId}.in1`] = lastSample.y1;
+          observables[`${bId}.y1`] = lastSample.y1;
+        }
+      }
+    }
+  }
+
+  for (const c of plan.connections) {
+    const srcVal = observables[`${c.fromBlockId}.${c.fromPortId}`];
+    if (srcVal !== undefined) {
+      if (observables[c.toBlockId] === undefined) {
+        observables[c.toBlockId] = srcVal;
+      }
+      if (observables[`${c.toBlockId}.${c.toPortId}`] === undefined) {
+        observables[`${c.toBlockId}.${c.toPortId}`] = srcVal;
+      }
+    }
+  }
+
   for (const reqObs of requiredObservables) {
     if (observables[reqObs] === undefined) {
       diagnostics.push({

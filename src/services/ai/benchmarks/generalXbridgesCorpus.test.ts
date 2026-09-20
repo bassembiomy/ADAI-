@@ -7,6 +7,8 @@ import { LlmProvider, LlmRequest, JsonSchema, LlmResult, LlmHealth } from '../..
 import { buildXbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { BLOCK_LIBRARY } from '../../../engine/xbridges/BlockDefinitions';
 import { sha256Hex, canonicalJson } from '../../../engine/opm/canonicalHash';
+import { planGeneralXbridgesModel, PlanningContext } from '../planner/generalGraphPlanner';
+import { proveXbridgesPlan } from '../proof/xbridgesProofRunner';
 
 class TestMockLlm implements LlmProvider {
   constructor(private intentData: any = { intent: 'create' }) {}
@@ -319,6 +321,173 @@ describe('General X-Bridges Engineering Agent Cross-Domain Corpus & Release Gate
       // Must not advance to executed model
       expect(nodes).toHaveLength(0);
       expect(edges).toHaveLength(0);
+    });
+  });
+
+  describe('Step 4: Semantic Simulation Proof of Arithmetic Graphs', () => {
+    const createEmptySnapshot = (id: string) => ({
+      nodes: [],
+      edges: [],
+      stateHash: `hash_${id}`,
+      timestamp: Date.now(),
+    });
+
+    it('executes multiplication plan through simulation proof and verifies Scope observable equals product', async () => {
+      const planContext: PlanningContext = {
+        projectId: 'proj_sim_mul',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_sim_mul'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(
+        {
+          intent: 'create',
+          objective: 'make a model multiply constant its value is 10 by 100 and display the result on a scope',
+          targetBehaviors: [],
+          inputs: [],
+          outputs: [],
+          constraints: [],
+        },
+        planContext
+      );
+
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan).toBeDefined();
+
+      const proof = await proveXbridgesPlan(outcome.plan!);
+      expect(proof.status).toBe('proved');
+      expect(proof.engineRunId).toBeTruthy();
+      expect(proof.engineRunId).toMatch(/^run_\d+_[a-z0-9]+$/);
+      expect(proof.diagnostics).toHaveLength(0);
+
+      // Verify Scope observable matches mathematical result (10 * 100 = 1000)
+      const scopeVal = Number(proof.observables['sink_scope']);
+      expect(scopeVal).toBeCloseTo(1000, 4);
+    });
+
+    it('executes division plan through simulation proof and verifies Scope observable equals quotient', async () => {
+      const planContext: PlanningContext = {
+        projectId: 'proj_sim_div',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_sim_div'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(
+        {
+          intent: 'create',
+          objective: 'divide constant 100 by 5 and display on scope',
+          targetBehaviors: [],
+          inputs: [],
+          outputs: [],
+          constraints: [],
+        },
+        planContext
+      );
+
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan).toBeDefined();
+
+      const proof = await proveXbridgesPlan(outcome.plan!);
+      expect(proof.status).toBe('proved');
+      expect(proof.engineRunId).toBeTruthy();
+      expect(proof.engineRunId).toMatch(/^run_\d+_[a-z0-9]+$/);
+
+      // Verify Scope observable matches mathematical result (100 / 5 = 20)
+      const scopeVal = Number(proof.observables['sink_scope']);
+      expect(scopeVal).toBeCloseTo(20, 4);
+    });
+
+    it('executes addition plan with negative values and verifies Scope observable', async () => {
+      const planContext: PlanningContext = {
+        projectId: 'proj_sim_add_neg',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_sim_add_neg'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(
+        {
+          intent: 'create',
+          objective: 'add -15 and 40 on a scope',
+          targetBehaviors: ['add'],
+          inputs: [],
+          outputs: [{ name: 'result', value: 'Scope' }],
+          constraints: [],
+        },
+        planContext
+      );
+
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan).toBeDefined();
+
+      const proof = await proveXbridgesPlan(outcome.plan!);
+      expect(proof.status).toBe('proved');
+      expect(proof.engineRunId).toBeTruthy();
+
+      // Verify Scope observable matches mathematical result (-15 + 40 = 25)
+      const scopeVal = Number(proof.observables['sink_scope']);
+      expect(scopeVal).toBeCloseTo(25, 4);
+    });
+
+    it('refuses division by zero during planning and never executes proof', async () => {
+      const planContext: PlanningContext = {
+        projectId: 'proj_sim_div_zero',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_sim_div_zero'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(
+        {
+          intent: 'create',
+          objective: 'divide 50 by 0 and display result on a scope',
+          targetBehaviors: ['divide'],
+          inputs: [],
+          outputs: [{ name: 'result', value: 'Scope' }],
+          constraints: [],
+        },
+        planContext
+      );
+
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.diagnostics.some(d => d.code === 'DIVISION_BY_ZERO')).toBe(true);
+    });
+
+    it('rejects unavailable observables when requested observable is not produced by simulation', async () => {
+      const planContext: PlanningContext = {
+        projectId: 'proj_sim_missing_obs',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_sim_missing_obs'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(
+        {
+          intent: 'create',
+          objective: 'make a model multiply constant its value is 10 by 100 and display the result on a scope',
+          targetBehaviors: [],
+          inputs: [],
+          outputs: [],
+          constraints: [],
+        },
+        planContext
+      );
+
+      expect(outcome.status).toBe('planned');
+      const proof = await proveXbridgesPlan(outcome.plan!, {
+        requiredObservables: ['nonexistent_sensor_telemetry'],
+      });
+
+      expect(proof.status).toBe('refused');
+      expect(proof.diagnostics.some(d => d.code === 'OBSERVABLE_UNAVAILABLE')).toBe(true);
     });
   });
 });
