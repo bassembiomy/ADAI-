@@ -11,6 +11,7 @@ import { GeneralEngineeringRequest } from './generalIntent';
 import { parseEngineeringEntities } from './engineeringEntityParser';
 import { resolveDomainOperation } from '../catalog/xbridgesDomainVocabulary';
 import { canonicalJson, sha256Hex } from '../../../engine/opm/canonicalHash';
+import type { LlmProvider } from '../../../agent/llmProvider';
 
 export interface PatternReference {
   patternId: string;
@@ -53,6 +54,7 @@ export interface PlanningContext {
   activeSnapshot: ModelSnapshot;
   catalog: XbridgesCapabilityIndex;
   patterns: EngineeringPattern[];
+  llm?: LlmProvider;
 }
 
 export interface PlanningOutcome {
@@ -569,4 +571,131 @@ export function planGeneralXbridgesModel(
     diagnostics: [],
     provenance: [archetype.provenance],
   };
+}
+
+/**
+ * Asynchronous graph planner that uses zero-shot LLM catalog synthesis when
+ * no deterministic canonical pattern or semantic operation matches.
+ */
+export async function planGeneralXbridgesModelAsync(
+  request: GeneralEngineeringRequest,
+  context: PlanningContext
+): Promise<PlanningOutcome> {
+  const syncOutcome = planGeneralXbridgesModel(request, context);
+  const isGenericFallback =
+    syncOutcome.status === 'planned' &&
+    syncOutcome.provenance.some(p => p.patternId === 'canonical_generic_model');
+
+  if (!isGenericFallback || !context.llm) {
+    return syncOutcome;
+  }
+
+  try {
+    const catalogSummary = Array.from(context.catalog.blocks.values())
+      .slice(0, 40)
+      .map(b => `${b.id} (inputs: [${b.inputs.map(i => i.id).join(', ')}], outputs: [${b.outputs.map(o => o.id).join(', ')}])`)
+      .join('\n');
+
+    const prompt = {
+      prompt: `Synthesize a valid X-Bridges block diagram for: "${request.objective}". Available blocks:\n${catalogSummary}`
+    };
+
+    const res = await context.llm.generate<{
+      blocks: Array<{ id: string; type: string; params?: Record<string, unknown>; position?: { x: number; y: number } }>;
+      connections: Array<{ fromBlockId: string; fromPortId: string; toBlockId: string; toPortId: string }>;
+    }>(prompt, { type: 'object' });
+
+    if (res.success && res.data?.blocks?.length) {
+      const { blocks, connections } = res.data;
+      const allValid = blocks.every(b => context.catalog.blocks.has(b.type));
+      if (allValid) {
+        const archetype = {
+          blocks: blocks.map((b, i) => ({
+            id: b.id || `b_${i + 1}`,
+            type: b.type,
+            params: b.params || {},
+            position: b.position || { x: 100 + i * 250, y: 150 },
+          })),
+          connections: (connections || []).map(c => ({
+            fromBlockId: c.fromBlockId,
+            fromPortId: c.fromPortId,
+            toBlockId: c.toBlockId,
+            toPortId: c.toPortId,
+          })),
+          provenance: { patternId: 'llm_catalog_synthesized', version: '1.0.0' },
+        };
+
+        const { projectId, baseRevision, activeSnapshot, catalog } = context;
+        const actions: XbridgesAction[] = [
+          ...archetype.blocks.map(b => ({
+            id: `act_${b.id}`,
+            kind: 'add_block' as const,
+            blockId: b.id,
+            blockType: b.type,
+            parameters: b.params,
+          })),
+          ...archetype.connections.map((c, i) => ({
+            id: `act_conn_${i}_${c.fromBlockId}_${c.toBlockId}`,
+            kind: 'connect_ports' as const,
+            sourceBlockId: c.fromBlockId,
+            sourcePortId: c.fromPortId,
+            targetBlockId: c.toBlockId,
+            targetPortId: c.toPortId,
+          })),
+        ];
+
+        const logicalBlocks: LogicalBlock[] = archetype.blocks.map(b => ({
+          id: b.id,
+          blockDefinitionId: b.type,
+          domain: 'xbridges',
+          name: b.id,
+          parameters: Object.entries(b.params).map(([k, v]) => ({
+            blockId: b.id,
+            parameterName: k,
+            value: v as any,
+          })),
+        }));
+
+        const logicalConnections: LogicalConnection[] = archetype.connections.map((c, i) => ({
+          id: `conn_${i}_${c.fromBlockId}_${c.toBlockId}`,
+          fromBlockId: c.fromBlockId,
+          fromPortId: c.fromPortId,
+          toBlockId: c.toBlockId,
+          toPortId: c.toPortId,
+          domain: 'xbridges',
+        }));
+
+        const planPayload = {
+          schemaVersion: '2.0.0' as const,
+          planId: `plan_${projectId}_rev${baseRevision}`,
+          projectId,
+          baseRevision,
+          catalogFingerprint: catalog.catalogFingerprint,
+          expectedBeforeHash: activeSnapshot.stateHash,
+          expectedAfterDelta: {
+            addedBlocks: archetype.blocks.map(b => b.id),
+            removedBlocks: [],
+            modifiedBlocks: [],
+            addedConnections: archetype.connections.map(c => ({ from: c.fromBlockId, to: c.toBlockId })),
+            removedConnections: [],
+          },
+          actions,
+          blocks: logicalBlocks,
+          connections: logicalConnections,
+        };
+
+        const planHash = sha256Hex(canonicalJson(planPayload));
+        return {
+          status: 'planned',
+          plan: { ...planPayload, planHash },
+          diagnostics: [],
+          provenance: [archetype.provenance],
+        };
+      }
+    }
+  } catch {
+    // Fallback to deterministic plan
+  }
+
+  return syncOutcome;
 }

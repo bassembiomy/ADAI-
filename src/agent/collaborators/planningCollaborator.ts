@@ -3,6 +3,7 @@ import { ExecutionPlan, PlanAction } from '../planEngine';
 import { EngineeringModelPlanV2, XbridgesAction } from '../../services/ai/contracts/engineeringModel';
 import {
   planGeneralXbridgesModel,
+  planGeneralXbridgesModelAsync,
   PlanningContext,
   PlanningOutcome,
   EngineeringPattern
@@ -11,6 +12,7 @@ import { XbridgesCapabilityIndex } from '../../services/ai/catalog/xbridgesCapab
 import { ModelSnapshot } from '../../services/ai/adapters/liveXbridgesModelAdapter';
 import { GeneralEngineeringRequest } from '../../services/ai/planner/generalIntent';
 import { AdiaBlockCatalog } from '../adiaBlockCatalog';
+import type { LlmProvider } from '../llmProvider';
 
 export class PlanningCollaborator {
   public planGeneralModel(
@@ -21,6 +23,7 @@ export class PlanningCollaborator {
       activeSnapshot: ModelSnapshot;
       catalog: XbridgesCapabilityIndex;
       patterns?: EngineeringPattern[];
+      llm?: LlmProvider;
     }
   ): PlanningOutcome {
     const planningContext: PlanningContext = {
@@ -28,10 +31,34 @@ export class PlanningCollaborator {
       baseRevision: context.baseRevision,
       activeSnapshot: context.activeSnapshot,
       catalog: context.catalog,
-      patterns: context.patterns || []
+      patterns: context.patterns || [],
+      llm: context.llm,
     };
 
     return planGeneralXbridgesModel(request, planningContext);
+  }
+
+  public async planGeneralModelAsync(
+    request: GeneralEngineeringRequest,
+    context: {
+      projectId: string;
+      baseRevision: number;
+      activeSnapshot: ModelSnapshot;
+      catalog: XbridgesCapabilityIndex;
+      patterns?: EngineeringPattern[];
+      llm?: LlmProvider;
+    }
+  ): Promise<PlanningOutcome> {
+    const planningContext: PlanningContext = {
+      projectId: context.projectId,
+      baseRevision: context.baseRevision,
+      activeSnapshot: context.activeSnapshot,
+      catalog: context.catalog,
+      patterns: context.patterns || [],
+      llm: context.llm,
+    };
+
+    return planGeneralXbridgesModelAsync(request, planningContext);
   }
 
   public convertModelPlanToExecutionPlan(

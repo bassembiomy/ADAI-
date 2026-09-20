@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   planGeneralXbridgesModel,
+  planGeneralXbridgesModelAsync,
   type PlanningContext,
   type PlanningOutcome,
 } from './generalGraphPlanner';
+import type { LlmProvider } from '../../../agent/llmProvider';
 import { buildXbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { canonicalJson } from '../../../engine/opm/canonicalHash';
 import type { ModelSnapshot } from '../adapters/liveXbridgesModelAdapter';
@@ -259,6 +261,49 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.status).toBe('planned');
       expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'VectorPow')).toBe(true);
       expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'Scope')).toBe(true);
+    });
+
+    it('uses zero-shot LLM catalog synthesis when available for custom systems', async () => {
+      const mockLlm: LlmProvider = {
+        generate: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            blocks: [
+              { id: 'b_wave', type: 'WaveformGen', params: { frequency: 5 }, position: { x: 100, y: 150 } },
+              { id: 'b_sat', type: 'SATURATION', params: { upperLimit: 1, lowerLimit: -1 }, position: { x: 450, y: 150 } },
+              { id: 'b_scope', type: 'Scope', params: {}, position: { x: 800, y: 150 } },
+            ],
+            connections: [
+              { fromBlockId: 'b_wave', fromPortId: 'out', toBlockId: 'b_sat', toPortId: 'in' },
+              { fromBlockId: 'b_sat', fromPortId: 'out', toBlockId: 'b_scope', toPortId: 'in1' },
+            ],
+          },
+        }),
+        health: vi.fn().mockResolvedValue({ status: 'healthy', provider: 'test', latencyMs: 1 }),
+      };
+
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'Custom saturated wave generator pipeline with Scope',
+        targetBehaviors: [],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_llm',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_llm'),
+        catalog,
+        patterns: [],
+        llm: mockLlm,
+      };
+
+      const outcome = await planGeneralXbridgesModelAsync(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan?.blocks).toHaveLength(3);
+      expect(outcome.plan?.blocks.some(b => b.blockDefinitionId === 'SATURATION')).toBe(true);
+      expect(outcome.provenance.some(p => p.patternId === 'llm_catalog_synthesized')).toBe(true);
     });
   });
 

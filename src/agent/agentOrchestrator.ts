@@ -564,7 +564,7 @@ export class AgentOrchestrator {
           patterns,
           catalog
         );
-        const outcome = this.planningCollaborator.planGeneralModel(
+        const outcome = await this.planningCollaborator.planGeneralModelAsync(
           { ...resolution.canonicalRequest, intent: this.currentIntent || 'create' },
           {
             projectId: this.projectContext.projectId,
@@ -578,7 +578,8 @@ export class AgentOrchestrator {
               timestamp: Date.now()
             },
             catalog,
-            patterns: []
+            patterns: [],
+            llm: this.llm
           }
         );
         if (outcome.status !== 'planned' || !outcome.plan) {
