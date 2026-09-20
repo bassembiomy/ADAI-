@@ -38,6 +38,7 @@ import { XbridgesProof } from '../services/ai/proof/xbridgesProofRunner';
 import { ActionApprovalBinding, TransactionStatus } from '../services/ai/execution/xbridgesAgentTransaction';
 import { computeModelFingerprint, canonicalJson, sha256Hex } from '../engine/opm/canonicalHash';
 import { EngineeringPattern } from '../services/ai/planner/generalGraphPlanner';
+import { resolveBlockToken } from '../services/ai/planner/graphSynthesizer';
 
 // ---------------------------------------------------------------------------
 // Pattern gateway contract (browser-safe; no Node fs/path in renderer code).
@@ -479,7 +480,7 @@ export class GeneralXbridgesWorkflow {
     const mentionInput = request.inputs.find(i => i.name === 'block_mentions');
     if (mentionInput && typeof mentionInput.value === 'string') {
       for (const name of mentionInput.value.split(',').map(s => s.trim()).filter(Boolean)) {
-        const cap = catalog.blocks.get(name) || catalog.aliases.get(name.toLowerCase());
+        const cap = resolveBlockToken(name, catalog);
         if (!cap) {
           return {
             code: 'UNKNOWN_BLOCK',
@@ -607,6 +608,7 @@ export class GeneralXbridgesWorkflow {
       activeSnapshot: snapshot,
       catalog,
       patterns,
+      knowledgeHash: session.knowledgeHash,
     });
 
     if (outcome.status === 'refused' || !outcome.plan) {

@@ -5,6 +5,21 @@ import {
 } from './generalIntent';
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { TaskState } from '../../../agent/types';
+import { resolveCatalogTokens } from './graphSynthesizer';
+
+/**
+ * Behaviors whose catalog topologies are fully self-contained: defaults come
+ * from explicit quantities or documented catalog-neutral values, never from
+ * silent invention. They require no power-domain clarification.
+ */
+const SELF_CONTAINED_BEHAVIORS = new Set([
+  'closed_loop_control',
+  'speed_control',
+  'low_pass_filter',
+  'thermal_alarm_logic',
+  'motor_drive',
+  'logical_sequencing',
+]);
 
 export type { GeneralEngineeringRequest };
 
@@ -149,8 +164,19 @@ export function resolveRequirements(
 
   // 2. Intent-specific requirement completeness
   if (req.intent === 'create') {
+    // Self-contained behaviors (closed-loop control, filters, alarm logic,
+    // motor drive, sequencing) and explicit catalog block chains carry enough
+    // information to synthesize a topology without power-domain questions.
+    const hasSelfContainedBehavior = req.targetBehaviors.some(b => SELF_CONTAINED_BEHAVIORS.has(b));
+    const sourceText = `${req.objective} ${req.rawPrompt || ''}`;
+    const explicitChainCount = _catalog ? resolveCatalogTokens(sourceText, _catalog).length : 0;
+    const hasExplicitChain = explicitChainCount >= 2;
+    const hasBlockMentions = req.inputs.some(i => i.name === 'block_mentions');
+
+    const skipPowerQuestions = hasSelfContainedBehavior || hasExplicitChain || hasBlockMentions;
+
     // Must have operating source / DC bus voltage
-    const hasSource = req.inputs.some(
+    const hasSource = skipPowerQuestions || req.inputs.some(
       i =>
         i.name === 'source_voltage' ||
         i.name.toLowerCase().includes('voltage') ||
@@ -173,7 +199,7 @@ export function resolveRequirements(
     }
 
     // Must have load specification or target output behavior
-    const hasLoad = req.outputs.some(
+    const hasLoad = skipPowerQuestions || req.outputs.some(
       o =>
         o.name === 'load_specification' ||
         o.name.toLowerCase().includes('load') ||
