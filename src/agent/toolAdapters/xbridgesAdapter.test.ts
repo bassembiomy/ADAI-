@@ -91,6 +91,27 @@ describe('live React state accessors', () => {
   });
 });
 
+describe('delegate identity continuity', () => {
+  it('connects nodes immediately even when the external React snapshot is stale', async () => {
+    let committedNodes: ReactFlowXbridgesNode[] = [];
+    const delegate = createXbridgesDelegate({
+      getNodes: () => [],
+      getEdges: () => [],
+      setNodes: (updater) => { committedNodes = updater(committedNodes); },
+      setEdges: () => undefined,
+      onSave: () => undefined,
+    });
+
+    await delegate.addBlock('GAIN', { id: 'gain_live', instanceName: 'gain_live' });
+    await delegate.addBlock('Scope', { id: 'scope_live', instanceName: 'scope_live' });
+
+    const edge = await delegate.connectPorts('gain_live', 'y', 'scope_live', 'in1');
+    expect(edge.source).toBe('gain_live');
+    expect(edge.target).toBe('scope_live');
+    expect(committedNodes.map(node => node.id)).toEqual(['gain_live', 'scope_live']);
+  });
+});
+
 /** Create a minimal ReactFlow node that mimics what addBlock produces. */
 function makeNode(type: string, id: string): ReactFlowXbridgesNode {
   const blockDef = BLOCK_LIBRARY[type](id, {});

@@ -156,6 +156,13 @@ export function createLiveXbridgesStateAccessors(
  */
 export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesApplicationDelegate {
   const { getNodes, getEdges, setNodes, setEdges, onSave } = opts;
+  const recentlyCreatedNodes = new Map<string, ReactFlowXbridgesNode>();
+
+  function resolveNode(nodeId: string): ReactFlowXbridgesNode | undefined {
+    return getNodes().find(
+      (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
+    ) || recentlyCreatedNodes.get(nodeId);
+  }
 
   /**
    * Convert a ReactFlow node to the lean XbridgesNode shape the agent layer
@@ -309,6 +316,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
 
       const agentNode = toAgentNode(newNode);
       setNodes((prev) => [...prev, newNode]);
+      recentlyCreatedNodes.set(id, newNode);
 
       return agentNode;
     },
@@ -405,18 +413,12 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       targetNodeId: string,
       targetPortId: string,
     ): Promise<XbridgesEdge> {
-      const nodes = getNodes();
-
-      const sourceNode = nodes.find(
-        (n) => n.id === sourceNodeId || (n.data as any)?.instanceName === sourceNodeId || (n.data as any)?.id === sourceNodeId
-      );
+      const sourceNode = resolveNode(sourceNodeId);
       if (!sourceNode) {
         throw new XbridgesAdapterError(`Source node "${sourceNodeId}" not found.`);
       }
 
-      const targetNode = nodes.find(
-        (n) => n.id === targetNodeId || (n.data as any)?.instanceName === targetNodeId || (n.data as any)?.id === targetNodeId
-      );
+      const targetNode = resolveNode(targetNodeId);
       if (!targetNode) {
         throw new XbridgesAdapterError(`Target node "${targetNodeId}" not found.`);
       }
