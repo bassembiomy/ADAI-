@@ -27,6 +27,29 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
   const catalog = buildXbridgesCapabilityIndex();
 
   describe('Corpus Domain Plans & Action Generation', () => {
+    it('synthesizes a deterministic step-integrator-scope graph', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'Create a model that integrates a step input and displays the result on a Scope',
+        targetBehaviors: ['integration'],
+        inputs: [{ name: 'Step', value: 1 }],
+        outputs: [{ name: 'Scope', value: 'display' }],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_integrator',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_integrator'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('planned');
+      expect(outcome.plan?.blocks.map(block => block.blockDefinitionId)).toEqual(['Step', 'Integrator', 'Scope']);
+      expect(outcome.plan?.connections).toHaveLength(2);
+    });
+
     it('synthesizes a feed-forward control graph plan', () => {
       const request: GeneralEngineeringRequest = {
         intent: 'create',

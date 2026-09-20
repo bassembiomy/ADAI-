@@ -112,6 +112,36 @@ function getCanonicalArchetype(
     return null;
   }
 
+  // Deterministic integration pipeline: Step -> Integrator -> Scope.
+  if (
+    text.includes('integrat') ||
+    text.includes('integral') ||
+    text.includes('accumulat')
+  ) {
+    const sourceType = catalog.blocks.has('Step') ? 'Step' : 'Constant';
+    const integratorType = catalog.blocks.has('Integrator') ? 'Integrator' : 'INTEGRATOR_CONTINUOUS';
+    const sinkType = catalog.blocks.has('Scope') ? 'Scope' : 'Display';
+    const sourceOut = getFirstOutPort(catalog, sourceType, 'out');
+    const integratorIn = getFirstInPort(catalog, integratorType, integratorType === 'INTEGRATOR_CONTINUOUS' ? 'u' : 'in');
+    const integratorOut = getFirstOutPort(catalog, integratorType, integratorType === 'INTEGRATOR_CONTINUOUS' ? 'y' : 'out');
+    const sinkIn = getFirstInPort(catalog, sinkType, 'in1');
+
+    return {
+      archetype: {
+        blocks: [
+          { id: 'src_step', type: sourceType, params: sourceType === 'Step' ? { stepTime: 1, initialValue: 0, finalValue: 1 } : { value: 1 }, position: { x: 100, y: 150 } },
+          { id: 'integrator_1', type: integratorType, params: integratorType === 'Integrator' ? { initialCondition: 0 } : { initial_condition: 0 }, position: { x: 400, y: 150 } },
+          { id: 'sink_scope', type: sinkType, params: {}, position: { x: 750, y: 150 } },
+        ],
+        connections: [
+          { fromBlockId: 'src_step', fromPortId: sourceOut, toBlockId: 'integrator_1', toPortId: integratorIn },
+          { fromBlockId: 'integrator_1', fromPortId: integratorOut, toBlockId: 'sink_scope', toPortId: sinkIn },
+        ],
+        provenance: { patternId: 'canonical_integration', version: '1.0.0', license: 'MIT' },
+      },
+    };
+  }
+
   // Second-Order Dynamic Systems & RLC Transfer Function
   if (
     text.includes('second_order') ||
