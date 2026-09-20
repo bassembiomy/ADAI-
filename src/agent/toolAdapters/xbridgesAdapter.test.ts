@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createXbridgesDelegate, XbridgesAdapterError, type ReactFlowXbridgesNode, type ReactFlowXbridgesEdge } from './xbridgesAdapter';
+import { createLiveXbridgesStateAccessors, createXbridgesDelegate, XbridgesAdapterError, type ReactFlowXbridgesNode, type ReactFlowXbridgesEdge } from './xbridgesAdapter';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 
 // ---------------------------------------------------------------------------
@@ -50,6 +50,46 @@ const VALID_TYPE_2 = 'Scope';
 if (!BLOCK_LIBRARY[VALID_TYPE_1] || !BLOCK_LIBRARY[VALID_TYPE_2]) {
   throw new Error(`BLOCK_LIBRARY is missing required test types: ${VALID_TYPE_1}, ${VALID_TYPE_2}`);
 }
+
+describe('live React state accessors', () => {
+  it('exposes mutations immediately even when the React commit is deferred', () => {
+    const nodesRef = { current: [] as ReactFlowXbridgesNode[] };
+    const edgesRef = { current: [] as ReactFlowXbridgesEdge[] };
+    const committedNodes: ReactFlowXbridgesNode[][] = [];
+    const committedEdges: ReactFlowXbridgesEdge[][] = [];
+    const accessors = createLiveXbridgesStateAccessors(
+      nodesRef,
+      edgesRef,
+      (nodes) => committedNodes.push(nodes),
+      (edges) => committedEdges.push(edges),
+    );
+    const node = makeNode(VALID_TYPE_1, 'gain-live');
+    const edge: ReactFlowXbridgesEdge = { id: 'edge-live', source: 'a', target: 'b' };
+
+    accessors.setNodes((previous) => [...previous, node]);
+    accessors.setEdges((previous) => [...previous, edge]);
+
+    expect(accessors.getNodes()).toEqual([node]);
+    expect(accessors.getEdges()).toEqual([edge]);
+    expect(committedNodes).toEqual([[node]]);
+    expect(committedEdges).toEqual([[edge]]);
+  });
+
+  it('restores the live snapshot when the React commit rejects a mutation', () => {
+    const existing = makeNode(VALID_TYPE_1, 'existing');
+    const nodesRef = { current: [existing] };
+    const edgesRef = { current: [] as ReactFlowXbridgesEdge[] };
+    const accessors = createLiveXbridgesStateAccessors(
+      nodesRef,
+      edgesRef,
+      () => { throw new Error('commit failed'); },
+      () => undefined,
+    );
+
+    expect(() => accessors.setNodes(() => [])).toThrow('commit failed');
+    expect(accessors.getNodes()).toEqual([existing]);
+  });
+});
 
 /** Create a minimal ReactFlow node that mimics what addBlock produces. */
 function makeNode(type: string, id: string): ReactFlowXbridgesNode {

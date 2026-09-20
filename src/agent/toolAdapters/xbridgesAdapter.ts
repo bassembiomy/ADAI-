@@ -104,6 +104,49 @@ export interface XbridgesAdapterOptions {
   onSave: (nodes: ReactFlowXbridgesNode[], edges: ReactFlowXbridgesEdge[], mappings: readonly never[]) => void;
 }
 
+export interface MutableStateRef<T> {
+  current: T;
+}
+
+/**
+ * Keep a long-lived delegate synchronized with React state. Active agent
+ * transactions retain their delegate while React may create newer renders,
+ * so its reads must not close over a particular render's arrays.
+ */
+export function createLiveXbridgesStateAccessors(
+  nodesRef: MutableStateRef<ReactFlowXbridgesNode[]>,
+  edgesRef: MutableStateRef<ReactFlowXbridgesEdge[]>,
+  commitNodes: (nodes: ReactFlowXbridgesNode[]) => void,
+  commitEdges: (edges: ReactFlowXbridgesEdge[]) => void,
+): Pick<XbridgesAdapterOptions, 'getNodes' | 'getEdges' | 'setNodes' | 'setEdges'> {
+  return {
+    getNodes: () => nodesRef.current,
+    getEdges: () => edgesRef.current,
+    setNodes: (updater) => {
+      const previous = nodesRef.current;
+      const next = updater(nodesRef.current);
+      nodesRef.current = next;
+      try {
+        commitNodes(next);
+      } catch (error) {
+        nodesRef.current = previous;
+        throw error;
+      }
+    },
+    setEdges: (updater) => {
+      const previous = edgesRef.current;
+      const next = updater(edgesRef.current);
+      edgesRef.current = next;
+      try {
+        commitEdges(next);
+      } catch (error) {
+        edgesRef.current = previous;
+        throw error;
+      }
+    },
+  };
+}
+
 /**
  * Create an XbridgesApplicationDelegate backed by live React state.
  *

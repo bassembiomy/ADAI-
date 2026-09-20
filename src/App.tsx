@@ -133,7 +133,7 @@ import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoReposit
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
-import { createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
+import { createLiveXbridgesStateAccessors, createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
 import { ToolGateway } from './agent/toolGateway';
 import { AgentOrchestrator } from './agent/agentOrchestrator';
 import { AgentPanel } from './components/agent/AgentPanel';
@@ -6334,6 +6334,16 @@ const ADIA = () => {
   // Global X-Bridges persistence
   const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+  const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
+  const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
+
+  useEffect(() => {
+    globalXBridgesNodesRef.current = globalXBridgesNodes;
+  }, [globalXBridgesNodes]);
+
+  useEffect(() => {
+    globalXBridgesEdgesRef.current = globalXBridgesEdges;
+  }, [globalXBridgesEdges]);
 
   // V-Lab STATE
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
@@ -7912,16 +7922,20 @@ const ADIA = () => {
   }, [buildUnifiedProjectPayload, currentProjectName, addError]);
 
   // X-BRIDGES Application Delegate connected to live React Flow state
+  const liveXbridgesState = useMemo(() => createLiveXbridgesStateAccessors(
+    globalXBridgesNodesRef,
+    globalXBridgesEdgesRef,
+    setGlobalXBridgesNodes,
+    setGlobalXBridgesEdges,
+  ), []);
+
   const xbridgesApplicationDelegate = useMemo<XbridgesApplicationDelegate | undefined>(() => {
     if (diagramMode !== 'xbridges') return undefined;
     return createXbridgesDelegate({
-      getNodes: () => globalXBridgesNodes,
-      getEdges: () => globalXBridgesEdges,
-      setNodes: setGlobalXBridgesNodes,
-      setEdges: setGlobalXBridgesEdges,
+      ...liveXbridgesState,
       onSave: (nodes, edges) => handleXBridgesSave(nodes, edges, []),
     });
-  }, [diagramMode, globalXBridgesNodes, globalXBridgesEdges, handleXBridgesSave]);
+  }, [diagramMode, liveXbridgesState, handleXBridgesSave]);
 
   // Project Application Delegate for project identity, active workspace, and persistence
   const projectApplicationDelegate = useMemo<ProjectApplicationDelegate>(() => {
