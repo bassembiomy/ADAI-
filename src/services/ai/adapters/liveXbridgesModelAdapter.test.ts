@@ -263,14 +263,17 @@ describe('LiveXbridgesModelAdapter', () => {
 
   describe('executeAction (single typed action execution)', () => {
     it('positions a new block atomically without reading stale React state', async () => {
+      let fingerprint = 'before';
       const addBlock = vi.fn().mockResolvedValue({ id: 'filter_tf', type: 'xblock', data: {} });
+      addBlock.mockImplementation(async () => {
+        setTimeout(() => { fingerprint = 'after'; }, 0);
+        return { id: 'filter_tf', type: 'xblock', data: {} };
+      });
       const moveBlock = vi.fn().mockRejectedValue(new Error('Block "filter_tf" not found.'));
       const delegate: any = {
         getNodes: vi.fn().mockResolvedValue([]),
         getEdges: vi.fn().mockResolvedValue([]),
-        getRevisionFingerprint: vi.fn()
-          .mockResolvedValueOnce('before')
-          .mockResolvedValueOnce('after'),
+        getRevisionFingerprint: vi.fn().mockImplementation(async () => fingerprint),
         addBlock,
         moveBlock,
       };
@@ -286,7 +289,11 @@ describe('LiveXbridgesModelAdapter', () => {
         blockType: 'TRANSFER_FUNCTION',
         parameters: { numerator: [1], denominator: [0.01, 1] },
         position: { x: 400, y: 150 },
-      })).resolves.toMatchObject({ changedNodeIds: ['filter_tf'] });
+      })).resolves.toMatchObject({
+        changedNodeIds: ['filter_tf'],
+        beforeHash: 'before',
+        afterHash: 'after'
+      });
 
       expect(addBlock).toHaveBeenCalledWith('TRANSFER_FUNCTION', expect.objectContaining({
         id: 'filter_tf',

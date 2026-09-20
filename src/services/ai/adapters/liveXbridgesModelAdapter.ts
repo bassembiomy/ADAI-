@@ -198,7 +198,14 @@ export class LiveXbridgesModelAdapter {
         throw new Error(`Unsupported action kind: ${(action as any).kind}`);
     }
 
-    const afterHash = await getFp();
+    // React state setters commit asynchronously. Wait for the delegate's live
+    // fingerprint to observe the mutation instead of treating the same-tick
+    // pre-render snapshot as an unchanged action.
+    let afterHash = await getFp();
+    for (let attempt = 0; afterHash === beforeHash && attempt < 20; attempt++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 10));
+      afterHash = await getFp();
+    }
     return {
       beforeHash,
       afterHash,
