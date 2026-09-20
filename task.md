@@ -22,12 +22,12 @@
   - [x] Step 5: Replace `.slice(0, 40)` with deterministic complete or domain-filtered capability summary
   - [x] Step 6: Return `LLM_GRAPH_INVALID` diagnostics and never return a plan for invalid output
   - [x] Step 7: Run planner tests and commit
-- [ ] Task 4: Remove misleading generic fallback behavior (`src/services/ai/planner/generalGraphPlanner.ts`)
-  - [ ] Step 1: Add failing tests asserting unrecognized requests do not generate `canonical_generic_model`
-  - [ ] Step 2: Run planner tests and verify failure
-  - [ ] Step 3: Replace generic fallback with `UNSUPPORTED_ENGINEERING_REQUEST` and clarification diagnostic
-  - [ ] Step 4: Preserve explicit arithmetic and canonical archetype paths
-  - [ ] Step 5: Run focused planner/orchestrator tests and commit
+- [x] Task 4: Remove misleading generic fallback behavior (`src/services/ai/planner/generalGraphPlanner.ts`)
+  - [x] Step 1: Add failing tests asserting unrecognized requests do not generate `canonical_generic_model`
+  - [x] Step 2: Run planner tests and verify failure
+  - [x] Step 3: Replace generic fallback with `UNSUPPORTED_ENGINEERING_REQUEST` and clarification diagnostic
+  - [x] Step 4: Preserve explicit arithmetic and canonical archetype paths
+  - [x] Step 5: Run focused planner/orchestrator tests and commit
 - [ ] Task 5: Connect verified pattern evidence to planning (`src/agent/agentOrchestrator.ts`, `planningCollaborator.ts`, `generalGraphPlanner.ts`)
   - [ ] Step 1: Add failing test proving compatible verified pattern is in planner context and selected before LLM
   - [ ] Step 2: Run targeted tests and confirm failure

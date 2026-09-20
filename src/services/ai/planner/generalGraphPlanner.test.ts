@@ -701,4 +701,30 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(outcome.diagnostics.some(d => d.code === 'LLM_GRAPH_INVALID')).toBe(true);
     });
   });
+
+  describe('Unsupported Request Refusal (No Silent Generic Fallback)', () => {
+    it('refuses unrecognized requests without generating canonical_generic_model or actions', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'Completely ambiguous or unsupported request without recognized engineering behavior',
+        targetBehaviors: ['unknown_behavior_xyz'],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+      const context: PlanningContext = {
+        projectId: 'proj_unrecognized',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_unrecognized'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      expect(outcome.provenance.some(p => p.patternId === 'canonical_generic_model')).toBe(false);
+      expect(outcome.diagnostics.some(d => d.code === 'UNSUPPORTED_ENGINEERING_REQUEST')).toBe(true);
+    });
+  });
 });

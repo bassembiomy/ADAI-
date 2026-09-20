@@ -379,24 +379,7 @@ function getCanonicalArchetype(
     }
   }
 
-  // Generic fallback if all blocks in request inputs exist
-  const firstIn = reqFirstInput(catalog);
-  return {
-    blocks: [
-      { id: 'src_1', type: firstIn, params: { value: 1 }, position: { x: 100, y: 150 } },
-      { id: 'sink_1', type: 'Scope', params: {}, position: { x: 500, y: 150 } },
-    ],
-    connections: [
-      { fromBlockId: 'src_1', fromPortId: 'out', toBlockId: 'sink_1', toPortId: 'in1' },
-    ],
-    provenance: { patternId: 'canonical_generic_model', version: '1.0.0', license: 'MIT' },
-  };
-}
-
-function reqFirstInput(catalog: XbridgesCapabilityIndex): string {
-  if (catalog.blocks.has('Constant')) return 'Constant';
-  if (catalog.blocks.has('Step')) return 'Step';
-  return [...catalog.blocks.keys()][0] || 'Constant';
+  return null;
 }
 
 export function planGeneralXbridgesModel(
@@ -410,12 +393,15 @@ export function planGeneralXbridgesModel(
   const archetype = getCanonicalArchetype(request.targetBehaviors, request.objective, catalog, request.inputs);
 
   if (!archetype) {
-    diagnostics.push({
-      category: 'ENGINEERING',
-      code: 'IMPOSSIBLE_REQUIREMENT',
-      severity: 'ERROR',
-      message: `The requested engineering behaviors '${request.targetBehaviors.join(', ')}' cannot be realized by active X-Bridges catalog capabilities.`,
-    });
+    diagnostics.push(
+      StructuredDiagnosticSchema.parse({
+        category: 'ENGINEERING',
+        code: 'UNSUPPORTED_ENGINEERING_REQUEST',
+        severity: 'ERROR',
+        message: `The requested engineering objective "${request.objective}" cannot be realized by active X-Bridges catalog capabilities. Missing recognized target behaviors or component specifications.`,
+        remediation: 'Specify explicit target behaviors (e.g. feedback control, signal filtering, arithmetic operations) or required input and output signals.',
+      })
+    );
     return {
       status: 'refused',
       diagnostics,
@@ -611,11 +597,11 @@ export async function planGeneralXbridgesModelAsync(
   context: PlanningContext
 ): Promise<PlanningOutcome> {
   const syncOutcome = planGeneralXbridgesModel(request, context);
-  const isGenericFallback =
-    syncOutcome.status === 'planned' &&
-    syncOutcome.provenance.some(p => p.patternId === 'canonical_generic_model');
+  const isUnsupported =
+    syncOutcome.status === 'refused' &&
+    syncOutcome.diagnostics.some(d => d.code === 'UNSUPPORTED_ENGINEERING_REQUEST');
 
-  if (!isGenericFallback || !context.llm) {
+  if (!isUnsupported || !context.llm) {
     return syncOutcome;
   }
 
