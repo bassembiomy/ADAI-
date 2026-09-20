@@ -761,6 +761,47 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(nodesState.some(n => n.data?.type === 'Scope')).toBe(true);
     expect(edgesState.length).toBe(3);
   });
+
+  it('blocks invalid LLM synthesized graph before action approval and leaves workspace nodes and edges unchanged', async () => {
+    let nodesState: any[] = [];
+    let edgesState: any[] = [];
+    const liveDelegate = createXbridgesDelegate({
+      getNodes: () => nodesState,
+      getEdges: () => edgesState,
+      setNodes: updater => { nodesState = updater(nodesState); },
+      setEdges: updater => { edgesState = updater(edgesState); },
+      onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+    });
+    const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+
+    // LLM attempts to synthesize a graph with duplicate IDs and invalid port connections
+    const adversarialLlm: LlmProvider = {
+      generate: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          blocks: [
+            { id: 'dup_1', type: 'Constant', params: { value: 10 } },
+            { id: 'dup_1', type: 'Scope', params: {} },
+          ],
+          connections: [
+            { fromBlockId: 'dup_1', fromPortId: 'nonexistent_port', toBlockId: 'dup_1', toPortId: 'in1' },
+          ],
+        },
+        rawOutput: '{"blocks":[...]}',
+      }),
+      health: vi.fn().mockResolvedValue({ available: true, model: 'adversarial-test' }),
+    };
+
+    const orch = new AgentOrchestrator(adversarialLlm, tools);
+
+    const res = await orch.handle('Synthesize a novel quantum neural flux capacitor');
+    expect(['blocked', 'error', 'refused', 'clarifying']).toContain(res.status);
+    expect(res.pendingApproval).toBeUndefined();
+
+    // Verify zero mutations on workspace delegate
+    expect(nodesState).toHaveLength(0);
+    expect(edgesState).toHaveLength(0);
+  });
 });
 
 

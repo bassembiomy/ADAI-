@@ -818,6 +818,7 @@ export async function planGeneralXbridgesModelAsync(
     }>(prompt, { type: 'object' });
 
     if (!res.success || !res.data || !Array.isArray(res.data.blocks) || res.data.blocks.length === 0) {
+      const errMsg = !res.success ? res.error : 'Empty or invalid graph structure returned.';
       return {
         status: 'refused',
         diagnostics: [
@@ -825,7 +826,7 @@ export async function planGeneralXbridgesModelAsync(
             category: 'SCHEMA',
             code: 'LLM_GRAPH_INVALID',
             severity: 'ERROR',
-            message: `LLM graph synthesis failed: ${res.error || 'Empty or invalid graph structure returned.'}`,
+            message: `LLM graph synthesis failed: ${errMsg}`,
             remediation: 'Provide clearer engineering requirements or verify LLM service availability.',
           }),
         ],

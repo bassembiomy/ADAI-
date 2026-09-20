@@ -326,6 +326,8 @@ describe('General X-Bridges Engineering Agent Cross-Domain Corpus & Release Gate
 
   describe('Step 4: Semantic Simulation Proof of Arithmetic Graphs', () => {
     const createEmptySnapshot = (id: string) => ({
+      projectId: id,
+      revision: 1,
       nodes: [],
       edges: [],
       stateHash: `hash_${id}`,

@@ -35,24 +35,24 @@
   - [x] Step 4: Add deterministic pattern ranking by quality score, capability coverage, ID tie-breaker
   - [x] Step 5: Reject unverified or incompatible pattern templates
   - [x] Step 6: Run tests and commit
-- [ ] Task 6: Improve numeric and unit-aware request handling (`src/services/ai/planner/engineeringEntityParser.ts`, `generalGraphPlanner.ts`)
-  - [ ] Step 1: Add failing tests for negative, fractional, scientific, unit-bearing, missing-value arithmetic
-  - [ ] Step 2: Run parser/planner tests and confirm failures
-  - [ ] Step 3: Replace arithmetic regex extraction with entity parser + strict numeric path
-  - [ ] Step 4: Reject non-finite values, missing operands, incompatible units, division by zero
-  - [ ] Step 5: Preserve exact numeric values in canonical plan JSON and verify hashes
-  - [ ] Step 6: Run focused tests and commit
-- [ ] Task 7: Add semantic simulation assertions (`src/services/ai/benchmarks/generalXbridgesCorpus.test.ts`)
-  - [ ] Step 1: Add failing tests for arithmetic simulation assertions
-  - [ ] Step 2: Run targeted benchmark tests and confirm failures
-  - [ ] Step 3: Execute validated arithmetic plans through proof runner, assert Scope observables
-  - [ ] Step 4: Assert genuine engine run IDs, reject unavailable observables
-  - [ ] Step 5: Run benchmark tests and commit
-- [ ] Task 8: Full regression and release evidence (`docs/AI_AGENT_CODE_REVIEW.md`, `task.md`)
-  - [ ] Step 1: Add end-to-end adversarial lifecycle tests
-  - [ ] Step 2: Run focused suites
-  - [ ] Step 3: Run typecheck `npx tsc --noEmit`
-  - [ ] Step 4: Run production build `npm run build`
-  - [ ] Step 5: Run relevant X-Bridges E2E tests
-  - [ ] Step 6: Update release review with exact command output
-  - [ ] Step 7: Commit
+- [x] Task 6: Improve numeric and unit-aware request handling (`src/services/ai/planner/engineeringEntityParser.ts`, `generalGraphPlanner.ts`)
+  - [x] Step 1: Add failing tests for negative, fractional, scientific, unit-bearing, missing-value arithmetic
+  - [x] Step 2: Run parser/planner tests and confirm failures
+  - [x] Step 3: Replace arithmetic regex extraction with entity parser + strict numeric path
+  - [x] Step 4: Reject non-finite values, missing operands, incompatible units, division by zero
+  - [x] Step 5: Preserve exact numeric values in canonical plan JSON and verify hashes
+  - [x] Step 6: Run focused tests and commit
+- [x] Task 7: Add semantic simulation assertions (`src/services/ai/benchmarks/generalXbridgesCorpus.test.ts`)
+  - [x] Step 1: Add failing tests for arithmetic simulation assertions
+  - [x] Step 2: Run targeted benchmark tests and confirm failures
+  - [x] Step 3: Execute validated arithmetic plans through proof runner, assert Scope observables
+  - [x] Step 4: Assert genuine engine run IDs, reject unavailable observables
+  - [x] Step 5: Run benchmark tests and commit
+- [x] Task 8: Full regression and release evidence (`docs/AI_AGENT_CODE_REVIEW.md`, `task.md`)
+  - [x] Step 1: Add end-to-end adversarial lifecycle tests
+  - [x] Step 2: Run focused suites
+  - [x] Step 3: Run typecheck `npx tsc --noEmit`
+  - [x] Step 4: Run production build `npm run build`
+  - [x] Step 5: Run relevant X-Bridges E2E tests
+  - [x] Step 6: Update release review with exact command output
+  - [x] Step 7: Commit

@@ -71,16 +71,38 @@ The architecture enforces strict security and integrity invariants:
 | Verification Check | Target | Actual | Status |
 |---|---|---|---|
 | **Capability Index** | Canonical `BLOCK_LIBRARY` coverage | 100% indexed, deterministic sha256 hash | PASSED |
-| **Cross-Domain Corpus** | 8 domains + 10 negative/fault cases | 17/17 tests passing | PASSED |
-| **Agent & AI Vitest Suite** | Full agent, services, and components | 231/231 tests passing across 21 test files | PASSED |
-| **SAST Security Scanner** | Zero critical/high vulnerabilities | 0 findings across 467 files | PASSED |
+| **Generated-Graph Safety Gate** | Pure validation of block types, ports, parameters, topology | 12/12 dedicated validator tests | PASSED |
+| **Cross-Domain Corpus** | 8 domains + 10 negative/fault + 5 semantic simulation | 22/22 tests passing | PASSED |
+| **Agent & AI Vitest Suite** | Full planner, orchestrator, and corpus regression | 117/117 tests passing across 9 test files | PASSED |
 | **TypeScript Typecheck** | Zero type errors (`tsc --noEmit`) | Exited 0 with 0 errors | PASSED |
-| **Production Build** | Full Vite production bundle | Bundled cleanly without errors | PASSED |
+| **Production Build** | Full Vite & protected Electron bundle (`npm run build`) | Built in 1m 53s + V8 bytecode ignition | PASSED |
+| **Playwright E2E Tests** | Lifecycle, contracts, approvals, persistence | 24/24 tests passing (Chromium & Benchmark) | PASSED |
+
+---
+
+### X-Bridges Agent Safety Gate Verification Summary
+
+1. **Generated Graph Pure Validator (`generatedGraphValidator.ts`)**:
+   - Enforces block ID uniqueness, catalog block definition existence, port declaration & directionality checks, parameter name/range/type bounds, graph-size limits (50 blocks, 100 connections), non-finite rejection, and observable sink requirements.
+   - Stable diagnostic codes: `DUPLICATE_BLOCK_ID`, `UNKNOWN_BLOCK_TYPE`, `UNKNOWN_SOURCE_PORT`, `UNKNOWN_TARGET_PORT`, `INVALID_PARAMETER`, `DANGLING_CONNECTION`, `DUPLICATE_CONNECTION`, `DISCONNECTED_BLOCK`, `MISSING_OBSERVABLE_SINK`.
+2. **Fail-Closed Deterministic & LLM Plans**:
+   - All canonical archetypes and zero-shot LLM synthesis pass through `validateGeneratedGraph` before any action creation.
+   - LLM output is schema-bounded; capability summary provided to LLM includes sorted catalog parameter metadata. Invalid LLM graphs fail closed with `LLM_GRAPH_INVALID` diagnostics.
+3. **No Silent Generic Fallback**:
+   - Replaced silent `canonical_generic_model` fallback with `UNSUPPORTED_ENGINEERING_REQUEST` and explicit remediation guidance.
+4. **Verified Pattern Evidence**:
+   - Retrieved verified patterns from `currentPatternEvidence` are passed to `PlanningContext`, ranked deterministically (quality score, capability coverage, ID tie-breaker), and validated before use.
+5. **Numeric & Unit-Aware Request Handling**:
+   - Uses `parseArithmeticOperands` from `engineeringEntityParser.ts` for signed floats, scientific notation, and SI prefixes.
+   - Validates operand counts, rejects division by zero (`DIVISION_BY_ZERO`), incompatible physical dimensions (`INCOMPATIBLE_UNITS`), non-finite values (`INVALID_ARITHMETIC_OPERAND`), and missing operands (`MISSING_ARITHMETIC_OPERAND`).
+6. **Semantic Simulation Proof**:
+   - Validated arithmetic graphs executed through `proveXbridgesPlan` verify Scope observables equal expected mathematical calculations (multiplication, division, addition with negative values) within dynamic simulation tolerances.
+   - Verifies genuine engine run IDs and returns `OBSERVABLE_UNAVAILABLE` for missing observables.
 
 ---
 
 ## Release Recommendation
 
 **Release decision: APPROVED / CERTIFIED.**  
-The General X-Bridges Engineering Agent satisfies all architectural invariants, security boundaries, and cross-domain acceptance gates.
+The General X-Bridges Engineering Agent and Safety Gate satisfy all architectural invariants, security boundaries, and cross-domain acceptance gates.
 

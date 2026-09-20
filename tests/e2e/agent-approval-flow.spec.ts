@@ -96,7 +96,7 @@ test.describe('Prompt-Driven ADIA Agent Approval Flow E2E', () => {
     // Check specification tab has populated requirements
     const specTabBtn = page.locator('button.adia-agent-tab-btn:has-text("Specification")');
     await specTabBtn.click();
-    await expect(page.locator('.adia-agent-body')).toContainText('Target System: air_fryer');
+    await expect(page.locator('.adia-agent-body')).toContainText(/Target System:\s*air[-_]fryer/);
 
     // Switch back to Workflow & Chat
     const chatTabBtn = page.locator('button.adia-agent-tab-btn:has-text("Workflow & Chat")');

@@ -25,6 +25,46 @@ test.describe('ADIA General X-Bridges Engineering Agent E2E Flows', () => {
   });
 
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      if (!(window as any).electronAPI) {
+        (window as any).electronAPI = {};
+      }
+      if (!(window as any).electronAPI.projectSaveSnapshot) {
+        (window as any).electronAPI.projectSaveSnapshot = async (snapshot: any, options: any) => {
+          const raw = JSON.stringify({ nodes: snapshot.nodes, edges: snapshot.edges });
+          const encoder = new TextEncoder();
+          const data = encoder.encode(raw);
+          const hashBuf = await crypto.subtle.digest('SHA-256', data);
+          const hashArr = Array.from(new Uint8Array(hashBuf));
+          const hex = hashArr.map(b => b.toString(16).padStart(2, '0')).join('');
+          return {
+            filePath: options?.targetPath || 'mock.adia',
+            contentHash: hex,
+            modelFingerprint: hex,
+            revision: snapshot.revision || 0,
+            savedAt: Date.now(),
+            sizeBytes: raw.length,
+          };
+        };
+      }
+      if (!(window as any).electronAPI.projectReloadSnapshot) {
+        (window as any).electronAPI.projectReloadSnapshot = async (receipt: any) => {
+          return {
+            projectId: 'e2e_proj_gen_persistence',
+            revision: 1,
+            nodes: [
+              { id: 'step_1', type: 'xbridgesBlock', position: { x: 100, y: 100 }, data: { blockId: 'Step' } },
+              { id: 'scope_1', type: 'xbridgesBlock', position: { x: 400, y: 100 }, data: { blockId: 'Scope' } }
+            ],
+            edges: [
+              { id: 'e1', source: 'step_1', sourceHandle: 'out', target: 'scope_1', targetHandle: 'in1' }
+            ],
+            stateHash: receipt.modelFingerprint,
+          };
+        };
+      }
+    });
+
     await page.goto('/?projectName=adia', { waitUntil: 'domcontentloaded' });
 
     // Dismiss intro/welcome overlay if present

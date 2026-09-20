@@ -3,8 +3,11 @@ import { RequestCollaborator } from './requestCollaborator';
 import { LlmProvider } from '../llmProvider';
 
 class MockLlm implements LlmProvider {
-  async generate<T>(): Promise<{ success: boolean; data?: T; error?: string }> {
+  async generate<T>(): Promise<any> {
     return { success: false, error: 'Offline mock' };
+  }
+  async health() {
+    return { available: true, model: 'mock', latencyMs: 0 };
   }
 }
 
