@@ -139,4 +139,43 @@ describe('requirementResolver (Deterministic Capability-Derived Requirements)', 
     expect(resolution.canonicalRequest).toBeDefined();
     expect(resolution.canonicalRequest?.intent).toBe('create');
   });
+
+  it('does NOT ask for DC bus voltage or motor load for 2nd-order dynamic/RLC requests', () => {
+    const rlcReq: GeneralEngineeringRequest = {
+      intent: 'create',
+      objective: 'Create RLC circuit transfer function',
+      targetBehaviors: ['second_order_dynamic'],
+      inputs: [],
+      outputs: [],
+      constraints: [],
+    };
+
+    const resolution = resolveRequirements(rlcReq, catalog);
+    expect(resolution.complete).toBe(false);
+    expect(resolution.unresolvedKeys).not.toContain('source_voltage');
+    expect(resolution.unresolvedKeys).not.toContain('load_specification');
+    expect(resolution.unresolvedKeys).toContain('component_values');
+    expect(resolution.nextQuestion?.key).toBe('component_values');
+    expect(resolution.nextQuestion?.question).toMatch(/resistance|inductance|capacitance/i);
+  });
+
+  it('automatically resolves 2nd-order dynamic parameters when provided inline in prompt', () => {
+    const rlcWithParams: GeneralEngineeringRequest = {
+      intent: 'create',
+      objective: 'Create RLC circuit with R=100, L=10mH, C=100uF',
+      targetBehaviors: ['second_order_dynamic'],
+      inputs: [
+        { name: 'resistance', value: 100 },
+        { name: 'inductance', value: 0.01 },
+        { name: 'capacitance', value: 0.0001 },
+      ],
+      outputs: [{ name: 'output_signal', value: 'Scope' }],
+      constraints: [],
+    };
+
+    const resolution = resolveRequirements(rlcWithParams, catalog);
+    expect(resolution.complete).toBe(true);
+    expect(resolution.unresolvedKeys).toHaveLength(0);
+    expect(resolution.nextQuestion).toBeUndefined();
+  });
 });

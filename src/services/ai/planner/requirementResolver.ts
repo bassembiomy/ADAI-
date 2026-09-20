@@ -151,6 +151,8 @@ export function resolveRequirements(
   if (req.intent === 'create') {
     const objectiveText = `${req.objective} ${req.targetBehaviors.join(' ')}`.toLowerCase();
     const isFilterRequest = /\b(low[ -]?pass|high[ -]?pass|band[ -]?pass|filter|filtering)\b/.test(objectiveText);
+    const isSecondOrderDynamic = /\b(rlc|second[ -]?order|resonant|mass[ -]?spring|lrc|second_order_dynamic)\b/.test(objectiveText);
+    const isPowerConversion = /\b(inverter|converter|power[ -]?supply|motor[ -]?drive|dc[ -]?dc|rectifier|buck|boost)\b/.test(objectiveText);
 
     if (isFilterRequest) {
       const values = [...req.inputs, ...req.outputs];
@@ -204,51 +206,87 @@ export function resolveRequirements(
           dependencyRank: item.dependencyRank,
         });
       }
-    } else {
+    } else if (isSecondOrderDynamic) {
+      const hasR = req.inputs.some(i => i.name.toLowerCase().includes('resist') || i.name === 'R');
+      const hasL = req.inputs.some(i => i.name.toLowerCase().includes('induct') || i.name === 'L');
+      const hasC = req.inputs.some(i => i.name.toLowerCase().includes('capacit') || i.name === 'C');
+      const hasExplicitValues = req.inputs.some(i => i.name === 'component_values') || (hasR && hasL && hasC);
+
+      if (!hasExplicitValues) {
+        unresolvedKeys.push('component_values');
+        questionCandidates.push({
+          id: 'q_component_values',
+          key: 'component_values',
+          question: 'What component values should be used for resistance, inductance, and capacitance (e.g., R=10, L=10mH, C=100uF)?',
+          recommendedDefault: 'R=10 ohm, L=10mH, C=100uF',
+          rationale: 'Component values determine the natural frequency, characteristic impedance, and damping ratio.',
+          options: ['R=10, L=10mH, C=100uF', 'R=50, L=1mH, C=10uF', 'R=100, L=100mH, C=1uF'],
+          isCritical: true,
+          safetyRank: 1,
+          dependencyRank: 0,
+        });
+      }
+    } else if (isPowerConversion) {
       // Power-conversion models require an operating source / DC bus voltage.
       const hasSource = req.inputs.some(
-      i =>
-        i.name === 'source_voltage' ||
-        i.name.toLowerCase().includes('voltage') ||
-        i.name.toLowerCase().includes('vdc') ||
-        i.name.toLowerCase().includes('supply')
-    );
+        i =>
+          i.name === 'source_voltage' ||
+          i.name.toLowerCase().includes('voltage') ||
+          i.name.toLowerCase().includes('vdc') ||
+          i.name.toLowerCase().includes('supply')
+      );
       if (!hasSource) {
         unresolvedKeys.push('source_voltage');
         questionCandidates.push({
-        id: 'q_source_voltage',
-        key: 'source_voltage',
-        question: 'What is the nominal DC bus or input source voltage (e.g., 400V, 48V, 24V)?',
-        recommendedDefault: '400V',
-        rationale: 'Source voltage dictates device voltage breakdown ratings and DC rail modeling.',
-        options: ['400V', '48V', '24V', '12V'],
-        isCritical: true,
-        safetyRank: 1,
-        dependencyRank: 0,
+          id: 'q_source_voltage',
+          key: 'source_voltage',
+          question: 'What is the nominal DC bus or input source voltage (e.g., 400V, 48V, 24V)?',
+          recommendedDefault: '400V',
+          rationale: 'Source voltage dictates device voltage breakdown ratings and DC rail modeling.',
+          options: ['400V', '48V', '24V', '12V'],
+          isCritical: true,
+          safetyRank: 1,
+          dependencyRank: 0,
         });
       }
 
       // Power-conversion models require a load specification or target output behavior.
       const hasLoad = req.outputs.some(
-      o =>
-        o.name === 'load_specification' ||
-        o.name.toLowerCase().includes('load') ||
-        o.name.toLowerCase().includes('target_frequency') ||
-        o.name.toLowerCase().includes('motor') ||
-        o.name.toLowerCase().includes('power')
-    );
+        o =>
+          o.name === 'load_specification' ||
+          o.name.toLowerCase().includes('load') ||
+          o.name.toLowerCase().includes('target_frequency') ||
+          o.name.toLowerCase().includes('motor') ||
+          o.name.toLowerCase().includes('power')
+      );
       if (!hasLoad) {
         unresolvedKeys.push('load_specification');
         questionCandidates.push({
-        id: 'q_load_specification',
-        key: 'load_specification',
-        question: 'What is the connected load type and rating (e.g., RL_LOAD, AC_INDUCTION_MOTOR, RESISTIVE)?',
-        recommendedDefault: 'RL_LOAD',
-        rationale: 'Load characteristics determine output filter requirements and current capacity.',
-        options: ['RL_LOAD', 'AC_INDUCTION_MOTOR', 'RESISTIVE', 'PMSM'],
-        isCritical: true,
-        safetyRank: 2,
-        dependencyRank: 1,
+          id: 'q_load_specification',
+          key: 'load_specification',
+          question: 'What is the connected load type and rating (e.g., RL_LOAD, AC_INDUCTION_MOTOR, RESISTIVE)?',
+          recommendedDefault: 'RL_LOAD',
+          rationale: 'Load characteristics determine output filter requirements and current capacity.',
+          options: ['RL_LOAD', 'AC_INDUCTION_MOTOR', 'RESISTIVE', 'PMSM'],
+          isCritical: true,
+          safetyRank: 2,
+          dependencyRank: 1,
+        });
+      }
+    } else {
+      // Generic model default: ensure at least one target output or observation is specified
+      const hasOutput = req.outputs.length > 0;
+      if (!hasOutput && req.inputs.length === 0) {
+        unresolvedKeys.push('output_signal');
+        questionCandidates.push({
+          id: 'q_output_signal',
+          key: 'output_signal',
+          question: 'Which signal or state should be observed or routed to a Scope sink?',
+          recommendedDefault: 'Display output on Scope',
+          rationale: 'Observability is required to verify system simulation responses.',
+          isCritical: true,
+          safetyRank: 2,
+          dependencyRank: 1,
         });
       }
     }
