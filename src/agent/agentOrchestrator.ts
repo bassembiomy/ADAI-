@@ -162,6 +162,12 @@ export class AgentOrchestrator {
     this.transactionCollaborator = new TransactionCollaborator();
   }
 
+  public createFreshSession(): AgentOrchestrator {
+    const freshSession = new AgentOrchestrator(this.llm, this.tools, this.loadPatterns);
+    freshSession.projectContext = { ...this.projectContext };
+    return freshSession;
+  }
+
   public setToolGateway(gateway: ToolGateway): void {
     this.tools = gateway;
   }

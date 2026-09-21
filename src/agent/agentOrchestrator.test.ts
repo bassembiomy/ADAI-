@@ -56,6 +56,32 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     orchestrator = new AgentOrchestrator(llm);
   });
 
+  it('creates a fresh session with shared dependencies and copied project context', async () => {
+    const tools = new ToolGateway();
+    const loadPatterns = vi.fn().mockResolvedValue([]);
+    const source = new AgentOrchestrator(llm, tools, loadPatterns);
+    source.updateProjectContext({
+      projectId: 'project-1',
+      workspace: 'workspace-1',
+      revision: 7,
+      nodes: [{ id: 'node-1' }],
+      edges: [],
+      artifactSnapshot: { saved: true }
+    });
+    await source.handle('Build an air fryer');
+
+    const fresh = source.createFreshSession();
+
+    expect(fresh).not.toBe(source);
+    expect((fresh as any).llm).toBe(llm);
+    expect(fresh.getToolGateway()).toBe(tools);
+    expect((fresh as any).loadPatterns).toBe(loadPatterns);
+    expect(fresh.getProjectContext()).toEqual(source.getProjectContext());
+    expect(fresh.getProjectContext()).not.toBe(source.getProjectContext());
+    expect(() => fresh.getState()).toThrow('No active task state initialized in orchestrator');
+    expect(source.getState()).toBeDefined();
+  });
+
   it('runs complete end-to-end approval-gated lifecycle across all sequential plan actions', async () => {
     // Inject a ToolGateway with a real simulation runner mock
     const tools = new ToolGateway();
@@ -803,6 +829,5 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(edgesState).toHaveLength(0);
   });
 });
-
 
 
