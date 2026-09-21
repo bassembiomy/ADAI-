@@ -1535,16 +1535,28 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const R = params.R || 1e6;
     return [(across[0] - across[1]) - branch[0] * R];
   },
-  variable_reluctance: ({ across, branch, params }) => {
-    const Rmin = params.Rmin || 1e5;
-    const R_ctrl = Math.max(Rmin, across[2] !== undefined ? across[2] : 1e6);
-    return [(across[0] - across[1]) - branch[0] * R_ctrl];
+  variable_reluctance: ({ across, branch, params, ports }) => {
+    const nIdx = ports ? ports.indexOf('n') : 0;
+    const sIdx = ports ? ports.indexOf('s') : 1;
+    const ctrlIdx = ports ? ports.indexOf('ctrl') : 2;
+    const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
+    const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
+    const ctrlVal = (ctrlIdx !== -1 && across[ctrlIdx] !== undefined) ? across[ctrlIdx] : (across[2] !== undefined ? across[2] : undefined);
+    const Rmin = params.Rmin !== undefined ? Number(params.Rmin) : 1e5;
+    const R_ctrl = Math.max(Rmin, ctrlVal !== undefined ? Number(ctrlVal) : 1e6);
+    return [(Vn - Vs) - branch[0] * R_ctrl];
   },
-  permanent_magnet: ({ across, branch, params }) => {
-    const Hc = params.Hc || 1000;
-    const L = params.L || 0.05;
-    const mmf_pm = Hc * L;
-    return [(across[0] - across[1]) - mmf_pm];
+  permanent_magnet: ({ across, branch, params, ports }) => {
+    const nIdx = ports ? ports.indexOf('n') : 0;
+    const sIdx = ports ? ports.indexOf('s') : 1;
+    const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
+    const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
+    const Hc = Number(params.Hc ?? 1000);
+    const Lm = Number(params.Lm ?? params.L ?? 0.05);
+    const Rm = Number(params.Rm ?? 0);
+    const phi = branch[0] ?? 0;
+    const mmf_pm = Hc * Lm - phi * Rm;
+    return [(Vn - Vs) - mmf_pm];
   },
   em_converter: ({ across, dAcross, branch, dBranch, params }) => {
     const N = params.N || 100;
@@ -1557,27 +1569,52 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       mmf - N * I
     ];
   },
-  reluctance_force: ({ across, branch, params }) => {
-    const R0 = params.R0 || 1e6;
-    const k = params.k || 10;
-    const x = across[2] - (across[3] || 0);
-    const R = R0 * (1 + k * Math.max(0, x));
-    const dRdx = R0 * k;
-    const phi = branch[0];
-    const force = branch[1];
+  reluctance_force: ({ across, branch, params, ports }) => {
+    const nIdx = ports ? ports.indexOf('n') : 0;
+    const sIdx = ports ? ports.indexOf('s') : 1;
+    const rIdx = ports ? ports.indexOf('r') : 2;
+    const cIdx = ports ? ports.indexOf('c') : 3;
+    const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
+    const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
+    const xr = (rIdx !== -1 && across[rIdx] !== undefined) ? across[rIdx] : (across[2] ?? 0);
+    const xc = (cIdx !== -1 && across[cIdx] !== undefined) ? across[cIdx] : (across[3] ?? 0);
+
+    const R0 = Number(params.R0 ?? 1e6);
+    const K = Number(params.K ?? (params.k !== undefined ? R0 * Number(params.k) : 1e7));
+    const x = xr - xc;
+    const R = R0 + K * Math.max(0, x);
+    const dRdx = K;
+    const phi = branch[0] ?? 0;
+    const force = branch[1] ?? 0;
     return [
-      (across[0] - across[1]) - phi * R,
+      (Vn - Vs) - phi * R,
       force - 0.5 * phi * phi * dRdx
     ];
   },
-  mag_flux_sensor: ({ across, branch }) => [
-    across[0] - across[1],
-    branch[1] - branch[0]
-  ],
-  mag_mmf_sensor: ({ across, branch }) => [
-    branch[0],
-    branch[1] - (across[0] - across[1])
-  ],
+  mag_flux_sensor: ({ across, branch, ports }) => {
+    const nIdx = ports ? ports.indexOf('n') : 0;
+    const sIdx = ports ? ports.indexOf('s') : 1;
+    const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
+    const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
+    const fluxThru = branch[0] ?? 0;
+    const sigPhi = branch[1] !== undefined ? branch[1] : fluxThru;
+    return [
+      Vn - Vs,
+      sigPhi - fluxThru
+    ];
+  },
+  mag_mmf_sensor: ({ across, branch, ports }) => {
+    const nIdx = ports ? ports.indexOf('n') : 0;
+    const sIdx = ports ? ports.indexOf('s') : 1;
+    const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
+    const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
+    const fluxThru = branch[0] ?? 0;
+    const sigF = branch[1] !== undefined ? branch[1] : (Vn - Vs);
+    return [
+      fluxThru,
+      sigF - (Vn - Vs)
+    ];
+  },
   mag_mmf_source: ({ across, params }) => {
     const MMF = params.MMF || 10;
     return [(across[0] - across[1]) - MMF];
@@ -1586,9 +1623,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const phi = params.phi || 0.001;
     return [branch[0] - phi];
   },
-  mag_controlled_mmf: ({ across, params }) => {
-    const S = across[2] !== undefined ? across[2] : 0;
-    return [(across[0] - across[1]) - S];
+  mag_controlled_mmf: ({ across, params, ports }) => {
+    const nIdx = ports ? ports.indexOf('n') : 0;
+    const sIdx = ports ? ports.indexOf('s') : 1;
+    const srcIdx = ports ? (ports.indexOf('src') !== -1 ? ports.indexOf('src') : ports.indexOf('s_in')) : 2;
+    const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
+    const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
+    const S = (srcIdx !== -1 && across[srcIdx] !== undefined) ? across[srcIdx] : (across[2] !== undefined ? across[2] : (params.MMF ?? 0));
+    return [(Vn - Vs) - S];
   },
 
   // ── ADVANCED CONTROL & OBSERVERS ───────────────────────────────────────────

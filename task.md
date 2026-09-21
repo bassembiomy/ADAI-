@@ -56,3 +56,11 @@
   - [x] Step 5: Run relevant X-Bridges E2E tests
   - [x] Step 6: Update release review with exact command output
   - [x] Step 7: Commit
+
+# VLab Magnetic Circuit & Control Port Fixes
+- [x] Task 1: TDD tests for magnetic sensors, control ports, permanent magnet, and reluctance force (`src/engine/vlab/vlab_magnetic_fixes.test.ts`)
+- [x] Task 2: Fix magnetic sensors signal branches & scopeOutputs (`src/engine/vlab/DAEAssembler.ts`, `src/engine/vlab/vlabEquations.ts`, `src/utils/vlabLibrary.ts`)
+- [x] Task 3: Fix physical control ports domain representation & indeterminate equations (`src/engine/vlab/DAEAssembler.ts`, `src/engine/vlab/vlabEquations.ts`, `src/utils/vlabLibrary.ts`)
+- [x] Task 4: Add Lm and Rm to Permanent Magnet parameters and equations (`src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabEquations.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`)
+- [x] Task 5: Unify Reluctance Force parameters (R0, K) between UI and equations (`src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabEquations.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`)
+- [x] Task 6: Run full verification suite and update documentation

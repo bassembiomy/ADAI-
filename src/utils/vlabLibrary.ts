@@ -1965,6 +1965,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "ctrl",
+            "domain": "Physical",
             "pos": "top",
             "label": "C"
           }
@@ -1983,6 +1984,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1000,
             "unit": "A/m",
             "label": "Coercivity"
+          },
+          "Lm": {
+            "value": 0.05,
+            "unit": "m",
+            "label": "Magnet Length"
+          },
+          "Rm": {
+            "value": 0,
+            "unit": "A-t/Wb",
+            "label": "Internal Reluctance"
           }
         },
         "ports": [
@@ -2045,30 +2056,39 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rel_force",
         "category": "Couplings",
         "params": {
+          "R0": {
+            "value": 1000000,
+            "unit": "A-t/Wb",
+            "label": "Initial Reluctance"
+          },
           "K": {
-            "value": 1,
-            "unit": "N-m/Wb^2",
-            "label": "Force Constant"
+            "value": 10000000,
+            "unit": "A-t/(Wb-m)",
+            "label": "Reluctance Gradient (dR/dx)"
           }
         },
         "ports": [
           {
             "id": "n",
+            "domain": "Magnetic",
             "pos": "left",
             "label": "N"
           },
           {
             "id": "s",
+            "domain": "Magnetic",
             "pos": "left",
             "label": "S"
           },
           {
             "id": "r",
+            "domain": "Translational",
             "pos": "right",
             "label": "R"
           },
           {
             "id": "c",
+            "domain": "Translational",
             "pos": "right",
             "label": "C"
           }
@@ -2096,6 +2116,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "phi",
+            "domain": "Physical",
             "pos": "top",
             "label": "Φ"
           }
@@ -2123,6 +2144,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "f",
+            "domain": "Physical",
             "pos": "right",
             "label": "F"
           }
@@ -2206,6 +2228,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "src",
+            "domain": "Physical",
             "pos": "left",
             "label": "S"
           }

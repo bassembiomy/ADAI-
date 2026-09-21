@@ -440,10 +440,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A magnetic reluctance whose value is modulated by an external physical signal (PS).'
   },
   permanent_magnet: {
-    equations: ['mmf = Hc * L'],
-    latex: ['\\mathcal{F} = H_c L'],
+    equations: ['mmf = Hc * Lm - phi * Rm'],
+    latex: ['\\mathcal{F} = H_c L_m - \\phi R_m'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'Models a hard magnetic material providing constant magneto-motive force (MMF).'
+    description: 'Models a permanent magnet material providing MMF with coercive force Hc, length Lm, and internal reluctance Rm.'
   },
   em_converter: {
     equations: ['V = N * dphi/dt', 'mmf = N * I'],
@@ -452,10 +452,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Magnetic domains. Models a coil with N turns.'
   },
   reluctance_force: {
-    equations: ['F = -0.5 * phi^2 * dR/dx'],
-    latex: ['f = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
+    equations: ['F = 0.5 * phi^2 * K', 'R = R0 + K * x'],
+    latex: ['f = \\frac{1}{2} \\phi^2 K', '\\mathcal{R} = \\mathcal{R}_0 + K x'],
     across: 'A-t, m/s', through: 'Wb, N',
-    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays. Force is directed to minimize reluctance.'
+    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays with initial reluctance R0 and reluctance gradient K.'
   },
   mag_flux_sensor: {
     equations: ['phi_out = phi'],
