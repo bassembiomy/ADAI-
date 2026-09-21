@@ -4,6 +4,7 @@ import { ToolGateway } from './toolGateway';
 import { createXbridgesDelegate, ReactFlowXbridgesNode, ReactFlowXbridgesEdge } from './toolAdapters/xbridgesAdapter';
 import { LlmProvider, LlmRequest, JsonSchema, LlmResult, LlmHealth } from './llmProvider';
 import { EngineeringPattern, computePatternContentHash, derivePatternId } from '../services/ai/knowledge/patternSchemas';
+import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
 
 class TestMockLlm implements LlmProvider {
   constructor(private intentData: any = { intent: 'create', targetSystem: 'rl_circuit' }) {}
@@ -90,7 +91,7 @@ describe('General X-Bridges Engineering Orchestrator Workflow', () => {
       topology: { blocks: [], connections: [] },
       exactMappings: {},
       simulationContract: { minDuration: 1, stepSize: 0.01, expectedObservables: [] },
-      evidence: { proofStatus: 'proved' as const, catalogFingerprint: 'catalog', qualityScore: 1 }
+      evidence: { proofStatus: 'proved' as const, catalogFingerprint: buildXbridgesCapabilityIndex().catalogFingerprint, qualityScore: 1 }
     };
     const contentHash = computePatternContentHash(payload);
     const pattern: EngineeringPattern = {

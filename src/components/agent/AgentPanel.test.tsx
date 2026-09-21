@@ -5,6 +5,7 @@ import { AgentPanel } from './AgentPanel';
 import { AgentOrchestrator } from '../../agent/agentOrchestrator';
 import { LlmProvider, LlmRequest, JsonSchema, LlmResult, LlmHealth } from '../../agent/llmProvider';
 import { createTaskState } from '../../agent/requirementState';
+import { AgentChatSession, updateSessionById } from './agentChatSessions';
 
 class MockLlm implements LlmProvider {
   async generate<T>(_req: LlmRequest, _schema: JsonSchema): Promise<LlmResult<T>> {
@@ -549,7 +550,7 @@ describe('AgentPanel UI Component', () => {
         isBusy: false,
       };
 
-      let sessions = [sessionA, sessionB];
+      let sessions: AgentChatSession[] = [sessionA, sessionB];
 
       // Simulate asynchronous result arriving for Session A while active session is B
       const delayedResponse = {
@@ -558,7 +559,6 @@ describe('AgentPanel UI Component', () => {
       };
 
       // updateSessionById must target sessionA strictly by ID
-      const { updateSessionById } = await import('./agentChatSessions');
       sessions = updateSessionById(sessions, 'session-A', s => ({
         ...s,
         isBusy: false,

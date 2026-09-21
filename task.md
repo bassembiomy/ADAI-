@@ -103,3 +103,32 @@
   - [x] Step 3: Fix any compatibility issues if found
   - [x] Step 4: Run git diff --check and complete verification
   - [x] Step 5: Commit final compatibility fixes
+
+# Agent Multi-Chat Session Implementation Plan
+- [x] Task 1: Add a safe fresh-orchestrator factory
+  - [x] Step 1: Write a failing test for createFreshSession()
+  - [x] Step 2: Run focused test to confirm failure
+  - [x] Step 3: Implement createFreshSession()
+  - [x] Step 4: Run focused tests to confirm pass
+  - [x] Step 5: Commit
+- [x] Task 2: Introduce the in-memory chat-session model
+  - [x] Step 1: Write failing unit tests for session helpers
+  - [x] Step 2: Run focused tests to confirm failure
+  - [x] Step 3: Implement pure session helpers
+  - [x] Step 4: Replace panel-global state with sessions and active session ID
+  - [x] Step 5: Run helper and panel tests to confirm pass
+  - [x] Step 6: Commit
+- [x] Task 3: Add New Chat and history switching UI
+  - [x] Step 1: Write failing component tests for New Chat and history switching
+  - [x] Step 2: Add failing concurrency test for late orchestrator response
+  - [x] Step 3: Run focused tests to confirm failures
+  - [x] Step 4: Implement header control and history list UI
+  - [x] Step 5: Add focused CSS for compact history layout
+  - [x] Step 6: Run focused tests to confirm pass
+  - [x] Step 7: Commit
+- [x] Task 4: Integrate and verify the complete feature
+  - [x] Step 1: Run agent and components suites
+  - [x] Step 2: Fix any compatibility failures
+  - [x] Step 3: Run typecheck with tsc --noEmit
+  - [x] Step 4: Run git diff --check and verify no browser storage APIs
+  - [x] Step 5: Commit final integration fixes
