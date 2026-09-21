@@ -980,4 +980,66 @@ describe('generalGraphPlanner (Deterministic General Graph Planner)', () => {
       expect(Number(proof.observables['sink_scope'])).toBeCloseTo(-2500, 4);
     });
   });
+
+  describe('Task 4: Deterministic Routing at Planner Boundary', () => {
+    it('refuses architecture PatternStore request after earlier add-numbers request without misrouting or leaking arithmetic', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'Analyze PatternStore catalog metadata and candidate patterns for architecture refinement',
+        targetBehaviors: [],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_arch',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_arch'),
+        catalog,
+        patterns: [],
+        conversationHistory: [
+          { role: 'user', content: 'add 5 and 7', intent: 'arithmetic', operands: [{ value: 5 }, { value: 7 }] },
+          { role: 'assistant', content: 'Result is 12' },
+        ],
+        priorTurn: {
+          objective: 'add 5 and 7',
+          intent: 'arithmetic',
+          operands: [{ value: 5 }, { value: 7 }],
+        },
+      } as PlanningContext;
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.plan).toBeUndefined();
+      // Must not leak arithmetic or produce generic UNSUPPORTED_ENGINEERING_REQUEST
+      expect(outcome.diagnostics.some(d => d.code === 'MISSING_ARITHMETIC_OPERAND')).toBe(false);
+      expect(outcome.diagnostics[0].code).toBe('ROUTED_TO_PATTERN_WORKFLOW');
+    });
+
+    it('returns routing clarification diagnostics unchanged for explicit add request without operands', () => {
+      const request: GeneralEngineeringRequest = {
+        intent: 'create',
+        objective: 'add',
+        targetBehaviors: [],
+        inputs: [],
+        outputs: [],
+        constraints: [],
+      };
+
+      const context: PlanningContext = {
+        projectId: 'proj_add',
+        baseRevision: 1,
+        activeSnapshot: createEmptySnapshot('proj_add'),
+        catalog,
+        patterns: [],
+      };
+
+      const outcome = planGeneralXbridgesModel(request, context);
+      expect(outcome.status).toBe('refused');
+      expect(outcome.diagnostics.length).toBeGreaterThan(0);
+      expect(outcome.diagnostics[0].code).toBe('MISSING_ARITHMETIC_OPERAND');
+      expect(outcome.diagnostics[0].remediation).toContain('explicitly');
+    });
+  });
 });

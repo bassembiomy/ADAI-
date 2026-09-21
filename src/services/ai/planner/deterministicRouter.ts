@@ -88,11 +88,12 @@ export function normalizeCurrentTurn(request: GeneralEngineeringRequest): Normal
 }
 
 // Bounded candidate detector patterns with strict word boundaries
-const ARITHMETIC_PATTERN = /\b(?:add|addition|sum|summation|plus|subtract|subtraction|minus|difference|multiply|multiplication|product\s+of|times|divide|division|divided\s+by|quotient|squared|cubed|pow|raise\s+to\s+(?:the\s+)?power|to\s+the\s+power\s+of)\b/i;
+const ARITHMETIC_PATTERN = /\b(?:add|addition|sum|summation|plus|subtract|subtraction|minus|difference|multiply|multiplication|product\s+of|times|divide|division|divided\s+by|quotient|squared|cubed|pow|power\s+of|raise\s+to\s+(?:the\s+)?power|to\s+the\s+power\s+of)\b/i;
+const GRAPH_EDIT_ADD_PATTERN = /\badd\s+(?:a\s+|an\s+|the\s+)?(?:gain|stage|block|component|node|connection|port|parameter|subsystem|circuit|model|sensor|actuator|filter)\b/gi;
 const PATTERN_WORKFLOW_PATTERN = /\b(?:patternstore|patterns?|template|templates?|artifact|artifacts?|catalog\s+metadata|ingest(?:ion)?|provenance)\b/i;
 const VALIDATION_PATTERN = /\b(?:validate|validation|verify|verification|check\s+(?:topology|model|consistency|bounds))\b/i;
 const SIMULATION_PATTERN = /\b(?:simulate|simulation|run\s+simulation|step\s+response|transient\s+response)\b/i;
-const MODEL_CONSTRUCTION_PATTERN = /\b(?:construct|create|build|assemble|feedback\s+control|control\s+loop|rlc|resonant|transfer\s+function|second[-_\s]order|plant\s+model|integrator|gain\s+stage|thermal\s+monitoring)\b/i;
+const MODEL_CONSTRUCTION_PATTERN = /\b(?:construct|create|build|design|assemble|synthesize|model|feedback|feed[-_\s]?forward|open[-_\s]?loop|closed[-_\s]?loop|control|loop|rlc|resonant|transfer[-_\s]?function|second[-_\s]?order|plant|integrat(?:e|ion|or)?|filter|filtering|motor|actuator|thermal|heat|cooling|logic|sequence|safety|interlock|gain|pid)\b/i;
 
 export interface PreconditionCheck {
   eligible: boolean;
@@ -214,7 +215,13 @@ export function routeDeterministically(
   // Detect candidate intents
   const candidates: PlannerIntent[] = [];
 
-  if (ARITHMETIC_PATTERN.test(text)) {
+  const hasArithmeticCandidate = () => {
+    if (!ARITHMETIC_PATTERN.test(text)) return false;
+    const stripped = text.replace(GRAPH_EDIT_ADD_PATTERN, ' ');
+    return ARITHMETIC_PATTERN.test(stripped);
+  };
+
+  if (hasArithmeticCandidate()) {
     candidates.push('arithmetic');
   }
   if (PATTERN_WORKFLOW_PATTERN.test(text)) {

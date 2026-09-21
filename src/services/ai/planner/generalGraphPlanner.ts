@@ -14,6 +14,7 @@ import { resolveDomainOperation } from '../catalog/xbridgesDomainVocabulary';
 import { validateGeneratedGraph } from './generatedGraphValidator';
 import { canonicalJson, sha256Hex } from '../../../engine/opm/canonicalHash';
 import type { LlmProvider } from '../../../agent/llmProvider';
+import { routeDeterministically } from './deterministicRouter';
 
 export interface PatternReference {
   patternId: string;
@@ -57,6 +58,8 @@ export interface PlanningContext {
   catalog: XbridgesCapabilityIndex;
   patterns: EngineeringPattern[];
   llm?: LlmProvider;
+  conversationHistory?: Array<unknown>;
+  priorTurn?: unknown;
 }
 
 export interface PlanningOutcome {
@@ -544,6 +547,62 @@ export function planGeneralXbridgesModel(
 ): PlanningOutcome {
   const { projectId, baseRevision, activeSnapshot, catalog } = context;
   const diagnostics: StructuredDiagnostic[] = [];
+
+  // Deterministic routing gate before domain planning
+  const routingResult = routeDeterministically(request, {
+    conversationHistory: context.conversationHistory,
+    priorTurn: context.priorTurn,
+  });
+
+  if (routingResult.status === 'clarification') {
+    return {
+      status: 'refused',
+      diagnostics: routingResult.diagnostics.map(d =>
+        StructuredDiagnosticSchema.parse({
+          category: 'ENGINEERING',
+          code: d.code,
+          severity: 'ERROR',
+          message: d.message,
+          remediation: d.remediation || 'Clarify request requirements.',
+        })
+      ),
+      provenance: [],
+    };
+  }
+
+  if (routingResult.intent === 'pattern_workflow') {
+    return {
+      status: 'refused',
+      diagnostics: [
+        StructuredDiagnosticSchema.parse({
+          category: 'ENGINEERING',
+          code: 'ROUTED_TO_PATTERN_WORKFLOW',
+          severity: 'ERROR',
+          message: 'Request objective was routed to pattern_workflow service rather than graph planning.',
+          remediation: 'Dispatch this request to the PatternStore lifecycle service.',
+        }),
+      ],
+      provenance: [],
+    };
+  }
+
+  if (routingResult.intent !== 'arithmetic' && routingResult.intent !== 'model_construction') {
+    return {
+      status: 'refused',
+      diagnostics: [
+        StructuredDiagnosticSchema.parse({
+          category: 'ENGINEERING',
+          code: 'UNSUPPORTED_ENGINEERING_REQUEST',
+          severity: 'ERROR',
+          message: `The requested engineering objective "${request.objective}" cannot be realized by active X-Bridges catalog capabilities. Missing recognized target behaviors or component specifications.`,
+          remediation: 'Specify explicit target behaviors (e.g. feedback control, signal filtering, arithmetic operations) or required input and output signals.',
+        }),
+      ],
+      provenance: [],
+    };
+  }
+
+  request = routingResult.normalizedRequest;
 
   // 1. Check verified patterns from context
   let patternArchetype: {
