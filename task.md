@@ -72,4 +72,34 @@
 - [x] Task 4: Unify `gear_box` port definitions (`s1, s2`) across `vlabLibrary.ts`, `DAEAssembler.ts`, `vlabEquations.ts`, and `vlabComponentDefinitions.ts`
 - [x] Task 5: Verify all tests pass, run full test suite, and document results
 
-
+# Deterministic Generic Agent Routing Implementation Plan
+- [x] Task 1: Define the routing contract and failing tests
+  - [x] Step 1: Write failing tests for routing contract
+  - [x] Step 2: Run focused test and verify failures
+  - [x] Step 3: Define minimal TypeScript/Zod-compatible routing types
+  - [x] Step 4: Run focused test to confirm compilation and expected failures
+  - [x] Step 5: Commit
+- [x] Task 2: Implement bounded normalization and intent candidate detection
+  - [x] Step 1: Add failing tests for architecture prose and explicit arithmetic phrases
+  - [x] Step 2: Run focused tests and confirm broad substring behavior is rejected
+  - [x] Step 3: Implement normalization and bounded candidate detection
+  - [x] Step 4: Run focused tests and confirm all detector tests pass
+  - [x] Step 5: Commit
+- [x] Task 3: Add deterministic preconditions and clarification diagnostics
+  - [x] Step 1: Add failing tests for preconditions and diagnostics
+  - [x] Step 2: Run focused tests and verify diagnostics
+  - [x] Step 3: Implement precondition table and stable precedence order
+  - [x] Step 4: Run focused tests and confirm invalid cases return deterministic diagnostics
+  - [x] Step 5: Commit
+- [x] Task 4: Integrate routing before general graph planning
+  - [x] Step 1: Add regression tests for conversation isolation and explicit add without operands
+  - [x] Step 2: Run regression tests to verify current implementation fails/misroutes
+  - [x] Step 3: Insert routeDeterministically at planner boundary
+  - [x] Step 4: Run planner and router tests and confirm regressions pass
+  - [x] Step 5: Commit
+- [x] Task 5: Verify cross-system compatibility and complete handoff
+  - [x] Step 1: Run focused planner and ingestion suites
+  - [x] Step 2: Run full project test command
+  - [x] Step 3: Fix any compatibility issues if found
+  - [x] Step 4: Run git diff --check and complete verification
+  - [x] Step 5: Commit final compatibility fixes
