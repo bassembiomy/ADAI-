@@ -47,6 +47,36 @@ describe('requirementResolver (Deterministic Capability-Derived Requirements)', 
     expect(resolution.unresolvedKeys).toContain('arithmetic_operands');
   });
 
+  it('consumes an arithmetic_operands answer from task state instead of repeating the question', () => {
+    const resolution = resolveRequirements({
+      id: 'task-1',
+      status: 'clarifying',
+      createdAt: '2026-09-21T00:00:00.000Z',
+      updatedAt: '2026-09-21T00:00:00.000Z',
+      requirementState: {
+        id: 'req-1',
+        objective: 'Create a model adding two numbers',
+        targetSystem: '',
+        inputs: { arithmetic_operands: '10 and 20' },
+        constraints: [],
+        assumptions: [],
+        requiredOutputs: ['Display output on Scope'],
+        successCriteria: [],
+        openQuestions: [],
+        answers: { arithmetic_operands: '10 and 20' },
+        completenessScore: 0,
+        conflicts: [],
+      },
+      events: [],
+      approvals: [],
+      pendingActions: [],
+      auditHistory: [],
+    }, catalog);
+
+    expect(resolution.unresolvedKeys).not.toContain('arithmetic_operands');
+    expect(resolution.nextQuestion?.key).not.toBe('arithmetic_operands');
+  });
+
   it('identifies missing operating points, source, and load for creation intent', () => {
     const rawReq: GeneralEngineeringRequest = {
       intent: 'create',

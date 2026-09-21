@@ -75,9 +75,18 @@ function normalizeRequestInput(input: GeneralEngineeringRequest | TaskState): Ge
         if (parsed.resistance !== undefined && !inputs.some(i => i.name === 'resistance')) inputs.push({ name: 'resistance', value: parsed.resistance, unit: 'ohm' });
         if (parsed.inductance !== undefined && !inputs.some(i => i.name === 'inductance')) inputs.push({ name: 'inductance', value: parsed.inductance, unit: 'H' });
         if (parsed.capacitance !== undefined && !inputs.some(i => i.name === 'capacitance')) inputs.push({ name: 'capacitance', value: parsed.capacitance, unit: 'F' });
+        if (k === 'arithmetic_operands') {
+          const arithmeticOperands = parseArithmeticOperands(effectiveVal).operands;
+          arithmeticOperands.forEach((operand, index) => {
+            const name = `arithmetic_operand_${index + 1}`;
+            if (!inputs.some(i => i.name === name)) inputs.push({ name, value: operand.value, unit: operand.baseUnit });
+          });
+        }
       }
 
-      if (k.toLowerCase().includes('voltage') || k.toLowerCase().includes('supply') || k.toLowerCase().includes('in')) {
+      if (k === 'arithmetic_operands') {
+        // Parsed above into numeric input operands; do not treat the raw answer as an output.
+      } else if (k.toLowerCase().includes('voltage') || k.toLowerCase().includes('supply') || k.toLowerCase().includes('in')) {
         inputs.push({ name: k, value: v as any, unit: typeof v === 'string' && v.includes('V') ? 'V' : undefined });
       } else {
         outputs.push({ name: k, value: v as any });
@@ -178,7 +187,10 @@ export function resolveRequirements(
     if (arithmeticRequested) {
       const parsedArithmetic = parseArithmeticOperands(req.objective || '');
       const numericInputs = req.inputs.filter(input => typeof input.value === 'number' && Number.isFinite(input.value));
-      const operandCount = Math.max(parsedArithmetic.operands.length, numericInputs.length);
+      const parsedOperandCount = parsedArithmetic.operands.length === 1 && parsedArithmetic.hasEachQualifier
+        ? 2
+        : parsedArithmetic.operands.length;
+      const operandCount = Math.max(parsedOperandCount, numericInputs.length);
       if (operandCount < 2) {
         unresolvedKeys.push('arithmetic_operands');
         questionCandidates.push({
