@@ -143,6 +143,25 @@ export function checkPreconditions(
     return { eligible: true, failedPreconditions: [] };
   }
 
+  if (intent === 'pattern_workflow') {
+    const text = `${req.objective} ${(req.targetBehaviors || []).join(' ')}`.toLowerCase();
+    if (/\b(?:ingest|publish|register)\b/i.test(text) && !req.sourceMetadata) {
+      return {
+        eligible: false,
+        failedPreconditions: ['source_metadata_required'],
+        diagnostics: [
+          {
+            code: 'MISSING_PATTERN_SOURCE_METADATA',
+            message: 'Pattern ingestion requires valid source metadata (e.g. author, license, sourceUri).',
+            remediation: 'Provide pattern source metadata before requesting ingestion or registration.',
+            failedPreconditions: ['source_metadata_required'],
+          },
+        ],
+      };
+    }
+    return { eligible: true, failedPreconditions: [] };
+  }
+
   return { eligible: true, failedPreconditions: [] };
 }
 
@@ -154,6 +173,19 @@ export function routeDeterministically(
   request: GeneralEngineeringRequest,
   _context?: RoutingContext
 ): RoutingResult {
+  if (!request.objective || request.objective.trim().length === 0) {
+    return {
+      status: 'clarification',
+      diagnostics: [
+        {
+          code: 'EMPTY_REQUEST_OBJECTIVE',
+          message: 'The request objective is empty or contains only whitespace.',
+          remediation: 'Please specify an engineering objective or operational command.',
+        },
+      ],
+    };
+  }
+
   const normalized = normalizeCurrentTurn(request);
   const text = `${normalized.objective} ${(normalized.targetBehaviors || []).join(' ')}`.trim();
 
@@ -200,9 +232,7 @@ export function routeDeterministically(
 
   // If conflicting intents detected
   if (candidates.length > 1) {
-    // Check if one clearly subsumes another or if it's truly ambiguous
-    // For example, if arithmetic AND pattern_workflow both match
-    if (candidates.includes('arithmetic') && candidates.includes('pattern_workflow')) {
+    if (candidates.includes('arithmetic') && (candidates.includes('pattern_workflow') || candidates.includes('model_construction'))) {
       return {
         status: 'clarification',
         diagnostics: [
@@ -224,8 +254,16 @@ export function routeDeterministically(
     };
   }
 
-  // Pick candidate
-  const selectedIntent = candidates[0];
+  // Stable precedence order: arithmetic -> pattern_workflow -> validation -> simulation -> model_construction
+  const intentPrecedence: PlannerIntent[] = [
+    'arithmetic',
+    'pattern_workflow',
+    'validation',
+    'simulation',
+    'model_construction',
+  ];
+
+  const selectedIntent = intentPrecedence.find(intent => candidates.includes(intent)) || candidates[0];
   const preCheck = checkPreconditions(selectedIntent, normalized);
   if (!preCheck.eligible) {
     return {

@@ -116,7 +116,7 @@ describe('deterministicRouter', () => {
       const queries = [
         'Search PatternStore for verified templates',
         'Retrieve candidate patterns from catalog',
-        'Ingest pattern artifact metadata',
+        'Inspect pattern artifact metadata',
       ];
       for (const q of queries) {
         const result = routeDeterministically(baseRequest(q));
@@ -161,6 +161,84 @@ describe('deterministicRouter', () => {
       expect(result.status).toBe('routed');
       if (result.status === 'routed') {
         expect(result.intent).toBe('unknown');
+      }
+    });
+  });
+
+  describe('Task 3: Deterministic preconditions and clarification diagnostics', () => {
+    it('returns clarification for missing or single arithmetic operands', () => {
+      const zeroOpRes = routeDeterministically(baseRequest('multiply numbers'));
+      expect(zeroOpRes.status).toBe('clarification');
+      if (zeroOpRes.status === 'clarification') {
+        expect(zeroOpRes.diagnostics[0].code).toBe('MISSING_ARITHMETIC_OPERAND');
+        expect(zeroOpRes.diagnostics[0].failedPreconditions).toContain('finite_operands_required');
+        expect(zeroOpRes.diagnostics[0].remediation).toBeDefined();
+      }
+
+      const oneOpRes = routeDeterministically(baseRequest('add 5'));
+      expect(oneOpRes.status).toBe('clarification');
+      if (oneOpRes.status === 'clarification') {
+        expect(oneOpRes.diagnostics[0].code).toBe('MISSING_ARITHMETIC_OPERAND');
+      }
+    });
+
+    it('returns clarification for non-finite arithmetic operands', () => {
+      const req = baseRequest('add 5 and 10', {
+        operands: [
+          { value: 5, raw: '5' },
+          { value: Infinity, raw: 'Infinity' },
+        ],
+      });
+      const result = routeDeterministically(req);
+      expect(result.status).toBe('clarification');
+      if (result.status === 'clarification') {
+        expect(result.diagnostics[0].code).toBe('INVALID_ARITHMETIC_OPERAND');
+        expect(result.diagnostics[0].failedPreconditions).toContain('finite_operands_required');
+      }
+    });
+
+    it('returns clarification when pattern ingestion lacks source metadata', () => {
+      const req = baseRequest('Ingest pattern template into PatternStore');
+      const result = routeDeterministically(req);
+      expect(result.status).toBe('clarification');
+      if (result.status === 'clarification') {
+        expect(result.diagnostics[0].code).toBe('MISSING_PATTERN_SOURCE_METADATA');
+        expect(result.diagnostics[0].failedPreconditions).toContain('source_metadata_required');
+        expect(result.diagnostics[0].remediation).toContain('source metadata');
+      }
+    });
+
+    it('allows pattern ingestion when valid source metadata is provided', () => {
+      const req = baseRequest('Ingest pattern template into PatternStore', {
+        sourceMetadata: {
+          author: 'Bassem',
+          license: 'MIT',
+          sourceUri: 'catalog://patterns/pid_1',
+        },
+      });
+      const result = routeDeterministically(req);
+      expect(result.status).toBe('routed');
+      if (result.status === 'routed') {
+        expect(result.intent).toBe('pattern_workflow');
+        expect(result.normalizedRequest.sourceMetadata).toBeDefined();
+      }
+    });
+
+    it('returns clarification for empty or whitespace-only objective', () => {
+      const result = routeDeterministically(baseRequest('   '));
+      expect(result.status).toBe('clarification');
+      if (result.status === 'clarification') {
+        expect(result.diagnostics[0].code).toBe('EMPTY_REQUEST_OBJECTIVE');
+        expect(result.diagnostics[0].remediation).toBeDefined();
+      }
+    });
+
+    it('returns clarification for ambiguous or conflicting explicit intents', () => {
+      const result = routeDeterministically(baseRequest('multiply 10 by 100 and ingest pattern template into PatternStore'));
+      expect(result.status).toBe('clarification');
+      if (result.status === 'clarification') {
+        expect(result.diagnostics[0].code).toBe('AMBIGUOUS_PLANNER_INTENT');
+        expect(result.diagnostics[0].message).toMatch(/Conflicting intents detected/);
       }
     });
   });
