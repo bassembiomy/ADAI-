@@ -241,5 +241,15 @@ describe('deterministicRouter', () => {
         expect(result.diagnostics[0].message).toMatch(/Conflicting intents detected/);
       }
     });
+
+    it('rejects an invalid explicit intent instead of casting it into a planner intent', () => {
+      const result = routeDeterministically(baseRequest('Create a model', {
+        explicitIntent: 'not_a_real_planner',
+      }));
+      expect(result.status).toBe('clarification');
+      if (result.status === 'clarification') {
+        expect(result.diagnostics[0].code).toBe('INVALID_EXPLICIT_INTENT');
+      }
+    });
   });
 });

@@ -83,7 +83,9 @@ export function normalizeCurrentTurn(request: GeneralEngineeringRequest): Normal
     sourceMetadata: request.sourceMetadata ? { ...request.sourceMetadata } : undefined,
     operands: operands.length > 0 ? operands : undefined,
     entities,
-    explicitIntent: request.explicitIntent as PlannerIntent | undefined,
+    explicitIntent: request.explicitIntent && PlannerIntentSchema.safeParse(request.explicitIntent).success
+      ? request.explicitIntent as PlannerIntent
+      : undefined,
   };
 }
 
@@ -189,6 +191,19 @@ export function routeDeterministically(
 
   const normalized = normalizeCurrentTurn(request);
   const text = `${normalized.objective} ${(normalized.targetBehaviors || []).join(' ')}`.trim();
+
+  if (request.explicitIntent && !PlannerIntentSchema.safeParse(request.explicitIntent).success) {
+    return {
+      status: 'clarification',
+      diagnostics: [
+        {
+          code: 'INVALID_EXPLICIT_INTENT',
+          message: `The explicit planner intent "${request.explicitIntent}" is not supported.`,
+          remediation: `Use one of: ${PlannerIntentSchema.options.join(', ')}.`,
+        },
+      ],
+    };
+  }
 
   // If explicit intent was specified, honor it if valid
   if (normalized.explicitIntent) {
