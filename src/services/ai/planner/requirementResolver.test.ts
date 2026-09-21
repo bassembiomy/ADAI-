@@ -31,6 +31,22 @@ describe('requirementResolver (Deterministic Capability-Derived Requirements)', 
     expect(resolution.unresolvedKeys).not.toContain('load_specification');
   });
 
+  it('asks for both arithmetic values before completing a two-number model request', () => {
+    const resolution = resolveRequirements({
+      intent: 'create',
+      objective: 'Create a model adding two numbers',
+      targetBehaviors: [],
+      inputs: [],
+      outputs: [{ name: 'output_signal', value: 'Display output on Scope' }],
+      constraints: [],
+    }, catalog);
+
+    expect(resolution.complete).toBe(false);
+    expect(resolution.nextQuestion?.key).toBe('arithmetic_operands');
+    expect(resolution.nextQuestion?.question).toMatch(/two.*number|operand/i);
+    expect(resolution.unresolvedKeys).toContain('arithmetic_operands');
+  });
+
   it('identifies missing operating points, source, and load for creation intent', () => {
     const rawReq: GeneralEngineeringRequest = {
       intent: 'create',

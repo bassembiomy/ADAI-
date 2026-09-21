@@ -5,7 +5,7 @@ import {
 } from './generalIntent';
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { TaskState } from '../../../agent/types';
-import { parseEngineeringEntities } from './engineeringEntityParser';
+import { parseArithmeticOperands, parseEngineeringEntities } from './engineeringEntityParser';
 
 export type { GeneralEngineeringRequest };
 
@@ -174,6 +174,24 @@ export function resolveRequirements(
   // 2. Intent-specific requirement completeness
   if (req.intent === 'create') {
     const objectiveText = `${req.objective} ${req.targetBehaviors.join(' ')}`.toLowerCase();
+    const arithmeticRequested = /\b(?:add|adding|addition|sum|summation|plus|subtract|subtraction|minus|difference|multiply|multiplication|product|times|divide|division|divided|quotient|squared|cubed|pow)\b/i.test(objectiveText);
+    if (arithmeticRequested) {
+      const parsedArithmetic = parseArithmeticOperands(req.objective || '');
+      const numericInputs = req.inputs.filter(input => typeof input.value === 'number' && Number.isFinite(input.value));
+      const operandCount = Math.max(parsedArithmetic.operands.length, numericInputs.length);
+      if (operandCount < 2) {
+        unresolvedKeys.push('arithmetic_operands');
+        questionCandidates.push({
+          id: 'q_arithmetic_operands',
+          key: 'arithmetic_operands',
+          question: 'What are the two numeric operand values to use in the arithmetic model?',
+          rationale: 'The arithmetic operation cannot be constructed or simulated until both input values are specified.',
+          isCritical: true,
+          safetyRank: 0,
+          dependencyRank: 0,
+        });
+      }
+    }
     const isFilterRequest = /\b(low[ -]?pass|high[ -]?pass|band[ -]?pass|filter|filtering)\b/.test(objectiveText);
     const isSecondOrderDynamic = /\b(rlc|second[ -]?order|resonant|mass[ -]?spring|lrc|second_order_dynamic)\b/.test(objectiveText);
     const isPowerConversion = /\b(inverter|converter|power[ -]?supply|motor[ -]?drive|dc[ -]?dc|rectifier|buck|boost)\b/.test(objectiveText);
