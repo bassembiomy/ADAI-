@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GeneralEngineeringRequest } from './generalIntent';
+import { parseArithmeticOperands, parseEngineeringEntities } from './engineeringEntityParser';
 
 export const PlannerIntentSchema = z.enum([
   'arithmetic',
@@ -46,6 +47,106 @@ export interface RoutingContext {
 }
 
 /**
+ * Normalizes the current-turn request by copying only fields present
+ * on the supplied request, completely isolated from prior conversational context.
+ */
+export function normalizeCurrentTurn(request: GeneralEngineeringRequest): NormalizedRoutingRequest {
+  const parsedOps = parseArithmeticOperands(request.objective || '');
+  let operands = request.operands ? [...request.operands] : [...parsedOps.operands];
+
+  if (operands.length === 0 && request.inputs && request.inputs.length > 0) {
+    for (const inp of request.inputs) {
+      if (typeof inp.value === 'number') {
+        operands.push({ value: inp.value, raw: String(inp.value) });
+      }
+    }
+  }
+
+  if (operands.length === 1 && parsedOps.hasEachQualifier) {
+    operands = [operands[0], operands[0]];
+  }
+
+  const parsedEntities = parseEngineeringEntities(request.objective || '');
+  const entities = request.entities
+    ? { ...request.entities }
+    : (Object.keys(parsedEntities).length > 0 ? (parsedEntities as Record<string, unknown>) : undefined);
+
+  return {
+    intent: request.intent,
+    objective: request.objective,
+    targetBehaviors: [...(request.targetBehaviors || [])],
+    inputs: [...(request.inputs || [])],
+    outputs: [...(request.outputs || [])],
+    constraints: [...(request.constraints || [])],
+    optimization: request.optimization,
+    rawPrompt: request.rawPrompt,
+    sourceMetadata: request.sourceMetadata ? { ...request.sourceMetadata } : undefined,
+    operands: operands.length > 0 ? operands : undefined,
+    entities,
+    explicitIntent: request.explicitIntent as PlannerIntent | undefined,
+  };
+}
+
+// Bounded candidate detector patterns with strict word boundaries
+const ARITHMETIC_PATTERN = /\b(?:add|addition|sum|summation|plus|subtract|subtraction|minus|difference|multiply|multiplication|product\s+of|times|divide|division|divided\s+by|quotient|squared|cubed|pow|raise\s+to\s+(?:the\s+)?power|to\s+the\s+power\s+of)\b/i;
+const PATTERN_WORKFLOW_PATTERN = /\b(?:patternstore|patterns?|template|templates?|artifact|artifacts?|catalog\s+metadata|ingest(?:ion)?|provenance)\b/i;
+const VALIDATION_PATTERN = /\b(?:validate|validation|verify|verification|check\s+(?:topology|model|consistency|bounds))\b/i;
+const SIMULATION_PATTERN = /\b(?:simulate|simulation|run\s+simulation|step\s+response|transient\s+response)\b/i;
+const MODEL_CONSTRUCTION_PATTERN = /\b(?:construct|create|build|assemble|feedback\s+control|control\s+loop|rlc|resonant|transfer\s+function|second[-_\s]order|plant\s+model|integrator|gain\s+stage|thermal\s+monitoring)\b/i;
+
+export interface PreconditionCheck {
+  eligible: boolean;
+  failedPreconditions: string[];
+  diagnostics?: RoutingDiagnostic[];
+}
+
+/**
+ * Checks candidate preconditions for a given intent.
+ */
+export function checkPreconditions(
+  intent: PlannerIntent,
+  req: NormalizedRoutingRequest
+): PreconditionCheck {
+  if (intent === 'arithmetic') {
+    const operands = req.operands || [];
+    if (operands.length < 2) {
+      return {
+        eligible: false,
+        failedPreconditions: ['finite_operands_required'],
+        diagnostics: [
+          {
+            code: 'MISSING_ARITHMETIC_OPERAND',
+            message: `Arithmetic operations require at least two finite operands, but found ${operands.length}.`,
+            remediation: 'Specify both operand values explicitly (e.g. "add 5 and 7" or "multiply 10 by 100").',
+            failedPreconditions: ['finite_operands_required'],
+          },
+        ],
+      };
+    }
+
+    const nonFinite = operands.some(op => !Number.isFinite(op.value));
+    if (nonFinite) {
+      return {
+        eligible: false,
+        failedPreconditions: ['finite_operands_required'],
+        diagnostics: [
+          {
+            code: 'INVALID_ARITHMETIC_OPERAND',
+            message: 'One or more operands is not a finite number.',
+            remediation: 'Provide valid finite numeric values.',
+            failedPreconditions: ['finite_operands_required'],
+          },
+        ],
+      };
+    }
+
+    return { eligible: true, failedPreconditions: [] };
+  }
+
+  return { eligible: true, failedPreconditions: [] };
+}
+
+/**
  * Pure routing function that normalizes current turn request and
  * selects exactly one planner intent or returns clarification diagnostics.
  */
@@ -53,18 +154,95 @@ export function routeDeterministically(
   request: GeneralEngineeringRequest,
   _context?: RoutingContext
 ): RoutingResult {
+  const normalized = normalizeCurrentTurn(request);
+  const text = `${normalized.objective} ${(normalized.targetBehaviors || []).join(' ')}`.trim();
+
+  // If explicit intent was specified, honor it if valid
+  if (normalized.explicitIntent) {
+    const pre = checkPreconditions(normalized.explicitIntent, normalized);
+    if (!pre.eligible) {
+      return {
+        status: 'clarification',
+        diagnostics: pre.diagnostics || [
+          {
+            code: 'PRECONDITION_FAILED',
+            message: `Preconditions failed for explicit intent ${normalized.explicitIntent}: ${pre.failedPreconditions.join(', ')}`,
+            failedPreconditions: pre.failedPreconditions,
+          },
+        ],
+      };
+    }
+    return {
+      status: 'routed',
+      intent: normalized.explicitIntent,
+      normalizedRequest: normalized,
+    };
+  }
+
+  // Detect candidate intents
+  const candidates: PlannerIntent[] = [];
+
+  if (ARITHMETIC_PATTERN.test(text)) {
+    candidates.push('arithmetic');
+  }
+  if (PATTERN_WORKFLOW_PATTERN.test(text)) {
+    candidates.push('pattern_workflow');
+  }
+  if (VALIDATION_PATTERN.test(text)) {
+    candidates.push('validation');
+  }
+  if (SIMULATION_PATTERN.test(text)) {
+    candidates.push('simulation');
+  }
+  if (MODEL_CONSTRUCTION_PATTERN.test(text) && !candidates.includes('arithmetic')) {
+    candidates.push('model_construction');
+  }
+
+  // If conflicting intents detected
+  if (candidates.length > 1) {
+    // Check if one clearly subsumes another or if it's truly ambiguous
+    // For example, if arithmetic AND pattern_workflow both match
+    if (candidates.includes('arithmetic') && candidates.includes('pattern_workflow')) {
+      return {
+        status: 'clarification',
+        diagnostics: [
+          {
+            code: 'AMBIGUOUS_PLANNER_INTENT',
+            message: `Conflicting intents detected: ${candidates.join(', ')}. Unable to route deterministically.`,
+            remediation: 'Clarify whether you want an arithmetic operation or a pattern store workflow.',
+          },
+        ],
+      };
+    }
+  }
+
+  if (candidates.length === 0) {
+    return {
+      status: 'routed',
+      intent: 'unknown',
+      normalizedRequest: normalized,
+    };
+  }
+
+  // Pick candidate
+  const selectedIntent = candidates[0];
+  const preCheck = checkPreconditions(selectedIntent, normalized);
+  if (!preCheck.eligible) {
+    return {
+      status: 'clarification',
+      diagnostics: preCheck.diagnostics || [
+        {
+          code: 'PRECONDITION_FAILED',
+          message: `Preconditions failed for intent ${selectedIntent}`,
+          failedPreconditions: preCheck.failedPreconditions,
+        },
+      ],
+    };
+  }
+
   return {
     status: 'routed',
-    intent: 'unknown',
-    normalizedRequest: {
-      intent: request.intent,
-      objective: request.objective,
-      targetBehaviors: [...request.targetBehaviors],
-      inputs: [...request.inputs],
-      outputs: [...request.outputs],
-      constraints: [...request.constraints],
-      optimization: request.optimization,
-      rawPrompt: request.rawPrompt,
-    },
+    intent: selectedIntent,
+    normalizedRequest: normalized,
   };
 }
