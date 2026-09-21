@@ -268,7 +268,7 @@ export class DAEAssembler {
             id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
           return false;
         }
-        if (['n', 's', 'p', 'p1', 'p2', 'n1', 'n2', 'r', 'c', 'r1', 'r2', 'c1', 'c2', 'a', 'b'].includes(id) &&
+        if (['n', 's', 'p', 'p1', 'p2', 'n1', 'n2', 'r', 'c', 'r1', 'r2', 'c1', 'c2', 's1', 's2', 'a', 'b'].includes(id) &&
             !['v_sensor', 'i_sensor', 'temp_sensor', 'heat_sensor', 'heat_flow_sensor', 'pressure_sensor', 'flow_sensor'].includes(blockType)) {
           return false;
         }
@@ -460,11 +460,17 @@ export class DAEAssembler {
         case 'rot_hard_stop':
         case 'torque_sensor':
         case 'torque_source':
+        case 'ang_vel_source':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
           break;
         case 'gear_box':
-          branches.push({ name: 'torque1', ports: [{ id: 'r1', sign: -1 }, { id: 'c1', sign: 1 }] });
-          branches.push({ name: 'torque2', ports: [{ id: 'r2', sign: -1 }, { id: 'c2', sign: 1 }] });
+          if (ports.includes('r1') || ports.includes('c1')) {
+            branches.push({ name: 'torque1', ports: [{ id: 'r1', sign: -1 }, { id: 'c1', sign: 1 }] });
+            branches.push({ name: 'torque2', ports: [{ id: 'r2', sign: -1 }, { id: 'c2', sign: 1 }] });
+          } else {
+            branches.push({ name: 'torque1', ports: [{ id: 's1', sign: -1 }] });
+            branches.push({ name: 'torque2', ports: [{ id: 's2', sign: -1 }] });
+          }
           break;
         case 'mass':
           branches.push({ name: 'force', ports: [{ id: 'p', sign: -1 }] });
@@ -915,7 +921,7 @@ export class DAEAssembler {
             if (matchingBranchIdx === -1 && sourceBranchIndices.length > 0) {
               if (sourceType === 'force_source' || sourceType === 'force_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'force' || b.name.includes('force'));
-              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor') {
+              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor' || sourceType === 'ang_vel_source') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'torque' || b.name.includes('torque'));
               } else if (sourceType === 'current_source' || sourceType === 'controlled_current' || sourceType === 'current_sensor' || sourceType === 'ideal_current_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'current' || b.name.includes('current'));

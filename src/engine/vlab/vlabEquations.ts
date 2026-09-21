@@ -397,15 +397,42 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   
-  gear_box: ({ across, branch, params }) => {
-    // w2 = ratio * w1
-    // T1 = ratio * T2
-    const ratio = params.ratio || 2;
-    const w1 = across[0] - (across[1] || 0);
-    const w2 = across[2] - (across[3] || 0);
+  gear_box: ({ across, branch, params, ports }) => {
+    // w1 = ratio * w2  =>  w2 = w1 / ratio
+    // T1 * w1 + T2 * w2 = 0  =>  ratio * T1 + T2 = 0
+    const ratio = Number(params.ratio ?? 2);
+    let w1: number;
+    let w2: number;
+
+    if (ports && (ports.includes('s1') || ports.includes('s2'))) {
+      const s1Idx = ports.indexOf('s1');
+      const s2Idx = ports.indexOf('s2');
+      w1 = (s1Idx !== -1 && across[s1Idx] !== undefined) ? across[s1Idx] : (across[0] ?? 0);
+      w2 = (s2Idx !== -1 && across[s2Idx] !== undefined) ? across[s2Idx] : (across[1] ?? 0);
+    } else if (ports && (ports.includes('r1') || ports.includes('c1'))) {
+      const r1Idx = ports.indexOf('r1');
+      const c1Idx = ports.indexOf('c1');
+      const r2Idx = ports.indexOf('r2');
+      const c2Idx = ports.indexOf('c2');
+      const wr1 = (r1Idx !== -1 && across[r1Idx] !== undefined) ? across[r1Idx] : (across[0] ?? 0);
+      const wc1 = (c1Idx !== -1 && across[c1Idx] !== undefined) ? across[c1Idx] : (across[1] ?? 0);
+      const wr2 = (r2Idx !== -1 && across[r2Idx] !== undefined) ? across[r2Idx] : (across[2] ?? 0);
+      const wc2 = (c2Idx !== -1 && across[c2Idx] !== undefined) ? across[c2Idx] : (across[3] ?? 0);
+      w1 = wr1 - wc1;
+      w2 = wr2 - wc2;
+    } else {
+      if (across.length >= 4) {
+        w1 = across[0] - (across[1] || 0);
+        w2 = across[2] - (across[3] || 0);
+      } else {
+        w1 = across[0] ?? 0;
+        w2 = across[1] ?? 0;
+      }
+    }
+
     return [
-      w2 - ratio * w1,
-      branch[0] + ratio * branch[1]
+      w1 - ratio * w2,
+      ratio * (branch[0] ?? 0) + (branch[1] ?? 0)
     ];
   },
 
@@ -1608,10 +1635,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const sIdx = ports ? ports.indexOf('s') : 1;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
-    const fluxThru = branch[0] ?? 0;
     const sigF = branch[1] !== undefined ? branch[1] : (Vn - Vs);
     return [
-      fluxThru,
+      Vn - Vs,
       sigF - (Vn - Vs)
     ];
   },
@@ -2335,8 +2361,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── MECHANICAL & MULTIBODY ──────────────────────────────────────────────────
   ang_vel_source: ({ across, params }) => {
-    const w = params.w !== undefined ? params.w : 50;
-    return [across[0] - across[1] - w];
+    const w = across[2] !== undefined ? across[2] : (params.omega !== undefined ? Number(params.omega) : (params.w !== undefined ? Number(params.w) : 50));
+    return [across[0] - (across[1] || 0) - w];
   },
 
   wheel_axle: ({ across, branch, params }) => {

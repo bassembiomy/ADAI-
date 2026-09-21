@@ -88,7 +88,7 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
           }
         } 
         else if (domain === 'rotational') {
-          if (['r', 'r1', 'r2'].includes(portId)) {
+          if (['r', 'r1', 'r2', 's1'].includes(portId)) {
             const srcId = `src_rot_${portId}`;
             nodes.push({
               id: srcId,

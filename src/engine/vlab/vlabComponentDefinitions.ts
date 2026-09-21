@@ -513,15 +513,21 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   torque_source: {
     equations: ['T_r - T_c = T_src'],
-    latex: ['\tau = T_{src}'],
+    latex: ['\\tau = T_{src}'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'An ideal torque generator for rotational networks.'
   },
-  gear_box: {
-    equations: ['omega2 = ratio * omega1', 'tau1 = ratio * tau2'],
-    latex: ['\omega_2 = N \omega_1', '\tau_1 = N \tau_2'],
+  ang_vel_source: {
+    equations: ['omega_r - omega_c = omega'],
+    latex: ['\\omega_r - \\omega_c = \\omega'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
-    description: 'Models a mechanical transmission that scales velocity and torque based on the gear ratio.'
+    description: 'An ideal angular velocity generator for rotational networks.'
+  },
+  gear_box: {
+    equations: ['omega1 = ratio * omega2', 'tau2 = ratio * tau1'],
+    latex: ['\\omega_1 = N \\omega_2', '\\tau_2 = N \\tau_1'],
+    across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
+    description: 'Models a mechanical transmission that scales velocity and torque between shafts s1 and s2 based on the gear ratio.'
   },
   lever: {
     equations: ['v_b = -(L2/L1) * v_a', 'f_a = (L2/L1) * f_b'],

@@ -64,3 +64,12 @@
 - [x] Task 4: Add Lm and Rm to Permanent Magnet parameters and equations (`src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabEquations.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`)
 - [x] Task 5: Unify Reluctance Force parameters (R0, K) between UI and equations (`src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabEquations.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`)
 - [x] Task 6: Run full verification suite and update documentation
+
+# VLab MMF Sensor, Angular Velocity Source, and Gear Box Port Alignment
+- [x] Task 1: Write TDD tests for `mag_mmf_sensor` in series path, `ang_vel_source` omega parameter, and `gear_box` s1/s2 ports
+- [x] Task 2: Update `mag_mmf_sensor` equation in `vlabEquations.ts` to enforce zero MMF drop across sensor instead of `fluxThru = 0`
+- [x] Task 3: Update `ang_vel_source` equation in `vlabEquations.ts` and DAEAssembler to support `omega` with fallback to `w` and register branch
+- [x] Task 4: Unify `gear_box` port definitions (`s1, s2`) across `vlabLibrary.ts`, `DAEAssembler.ts`, `vlabEquations.ts`, and `vlabComponentDefinitions.ts`
+- [x] Task 5: Verify all tests pass, run full test suite, and document results
+
+

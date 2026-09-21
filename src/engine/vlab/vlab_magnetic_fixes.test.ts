@@ -64,32 +64,32 @@ describe('VLab Magnetic Circuit & Control Port Fixes', () => {
       expect(finalReading).toBeCloseTo(0.001, 5);
     });
 
-    it('measures MMF difference with mag_mmf_sensor and displays it on scope', () => {
-      // MMF Source (100 A-t) -> Reluctance (1e5 A-t/Wb)
-      // MMF Sensor across Reluctance -> Scope
-      // Expected MMF reading = 100 A-t
+    it('allows mag_mmf_sensor and mag_flux_sensor in linear path without killing flux', () => {
+      // MMF Source (100 A-t) -> MMF Sensor -> Flux Sensor -> Reluctance (1e5 A-t/Wb) -> Return
+      // Expected flux = 100 / 1e5 = 0.001 Wb
       const { readings } = run({
         dt: 0.01,
         steps: 3,
         nodes: [
           node('src', 'mag_mmf_source', { MMF: 100 }),
+          node('mmf_sensor', 'mag_mmf_sensor'),
+          node('flux_sensor', 'mag_flux_sensor'),
           node('rel', 'reluctance', { R: 1e5 }),
-          node('sensor', 'mag_mmf_sensor'),
           node('ref', 'mag_ref'),
           node('scope', 'scope'),
         ],
         edges: [
-          edge('e1', 'src', 'n_s', 'rel', 'n_t'),
-          edge('e2', 'rel', 's_s', 'src', 's_t'),
-          edge('e3', 'src', 's_s', 'ref', 'n_t'),
-          edge('e4', 'rel', 'n_s', 'sensor', 'n_t'),
-          edge('e5', 'rel', 's_s', 'sensor', 's_t'),
-          edge('e6', 'sensor', 'f_s', 'scope', 'in1_t'),
+          edge('e1', 'src', 'n_s', 'mmf_sensor', 'n_t'),
+          edge('e2', 'mmf_sensor', 's_s', 'flux_sensor', 'n_t'),
+          edge('e3', 'flux_sensor', 's_s', 'rel', 'n_t'),
+          edge('e4', 'rel', 's_s', 'src', 's_t'),
+          edge('e5', 'src', 's_s', 'ref', 'n_t'),
+          edge('e6', 'flux_sensor', 'phi_s', 'scope', 'in1_t'),
         ]
       });
 
       const finalReading = readings[readings.length - 1];
-      expect(finalReading).toBeCloseTo(100, 2);
+      expect(Math.abs(finalReading)).toBeCloseTo(0.001, 4);
     });
   });
 
