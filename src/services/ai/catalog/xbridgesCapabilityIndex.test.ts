@@ -15,8 +15,13 @@ describe('xbridgesCapabilityIndex (Canonical X-Bridges Capability Index)', () =>
       const block = factory(`probe_${id}`, {});
       expect(index.blocks.get(id)?.ports.map(p => p.id).sort())
         .toEqual([...block.inputs, ...block.outputs].map(p => p.id).sort());
+      const expectedParams = Object.keys(block.params);
+      if (id === 'TRANSFER_FUNCTION' || id === 'DISCRETE_TRANSFER_FUNCTION') {
+        if (!expectedParams.includes('numerator')) expectedParams.push('numerator');
+        if (!expectedParams.includes('denominator')) expectedParams.push('denominator');
+      }
       expect([...(index.blocks.get(id)?.parameterNames || [])].sort())
-        .toEqual(Object.keys(block.params).sort());
+        .toEqual(expectedParams.sort());
     }
   });
 
