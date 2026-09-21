@@ -30,6 +30,8 @@ export interface AgentPanelProps {
   orchestrator?: AgentOrchestrator;
   onProjectChange?: () => void;
   initialResponse?: OrchestratorResponse;
+  initialSessions?: AgentChatSession[];
+  initialActiveSessionId?: string;
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({
@@ -39,7 +41,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   projectContext,
   orchestrator: propOrchestrator,
   onProjectChange,
-  initialResponse
+  initialResponse,
+  initialSessions,
+  initialActiveSessionId,
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen;
@@ -51,10 +55,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   );
   const orchestrator = propOrchestrator || internalOrchestrator;
   const [sessions, setSessions] = useState<AgentChatSession[]>(() => {
+    if (initialSessions && initialSessions.length > 0) {
+      return initialSessions;
+    }
     const session = createAgentChatSession(orchestrator);
     return [{ ...session, currentResponse: initialResponse ?? null }];
   });
-  const [activeSessionId] = useState(() => sessions[0]?.id);
+  const [activeSessionId, setActiveSessionId] = useState<string>(
+    () => initialActiveSessionId || sessions[0]?.id
+  );
   const activeSession = sessions.find(session => session.id === activeSessionId) ?? sessions[0];
   const activeSessionOrchestrator = activeSession!.orchestrator;
   const messages = activeSession?.messages ?? [];
@@ -143,6 +152,36 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     } else {
       setInternalIsOpen(!isOpen);
     }
+  };
+
+  const handleNewChat = () => {
+    if (isBusy) return;
+    try {
+      const freshOrchestrator = activeSessionOrchestrator.createFreshSession();
+      const newSession = createAgentChatSession(freshOrchestrator);
+      setSessions(prev => [...prev, newSession]);
+      setActiveSessionId(newSession.id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSessions(prev => updateSessionById(prev, activeSessionId, session => ({
+        ...session,
+        messages: [
+          ...session.messages,
+          {
+            id: `msg-${Date.now()}-err`,
+            sender: 'agent',
+            text: `Failed to create new chat: ${msg}`,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+        ],
+        updatedAt: Date.now(),
+      })));
+    }
+  };
+
+  const handleSelectSession = (sessionId: string) => {
+    if (isBusy || sessionId === activeSessionId) return;
+    setActiveSessionId(sessionId);
   };
 
   const handleSend = async () => {
@@ -446,6 +485,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               <span className="adia-agent-badge-mode" style={{ marginLeft: '6px', fontSize: '11px', color: '#94a3b8' }}>
                 Deterministic inspection-only mode
               </span>
+              <button
+                type="button"
+                className="adia-agent-new-chat-btn"
+                onClick={handleNewChat}
+                disabled={isBusy}
+                aria-label="New Chat"
+              >
+                + New Chat
+              </button>
             </div>
             <div className="adia-agent-meta">
               Project: {projectContext?.projectName || 'Main Project'} | Workspace: {projectContext?.activeWorkspace || 'vlab'} | Blocks: {projectContext?.blocksCount ?? 0} | Nodes: {projectContext?.nodesCount ?? 0} | Connections: {projectContext?.connectionsCount ?? 0} | {modelStatus}
@@ -514,6 +562,28 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <button className="adia-agent-close-btn" onClick={handleToggle} title="Close Panel">
             ✕
           </button>
+        </div>
+
+        <div className="adia-agent-chat-history" role="region" aria-label="Chat History">
+          <span className="adia-agent-history-label">Chats:</span>
+          <div className="adia-agent-history-list">
+            {[...sessions].sort((a, b) => b.updatedAt - a.updatedAt).map(s => (
+              <button
+                key={s.id}
+                type="button"
+                className={`adia-agent-history-item ${s.id === activeSessionId ? 'active' : ''}`}
+                onClick={() => handleSelectSession(s.id)}
+                disabled={isBusy}
+                aria-label={`Switch to chat ${s.title}`}
+                aria-current={s.id === activeSessionId ? 'true' : undefined}
+              >
+                <span className="adia-agent-history-title">{s.title}</span>
+                <span className="adia-agent-history-time">
+                  {new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="adia-agent-tabs">

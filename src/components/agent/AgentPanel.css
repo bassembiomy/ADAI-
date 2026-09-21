@@ -104,6 +104,101 @@
   background: #232733;
 }
 
+.adia-agent-new-chat-btn {
+  margin-left: auto;
+  background: #1e293b;
+  color: #38bdf8;
+  border: 1px solid #0284c7;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.adia-agent-new-chat-btn:hover:not(:disabled) {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.adia-agent-new-chat-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.adia-agent-chat-history {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #13161f;
+  border-bottom: 1px solid #232733;
+  overflow-x: auto;
+}
+
+.adia-agent-history-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.adia-agent-history-list {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.adia-agent-history-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1a1e29;
+  color: #94a3b8;
+  border: 1px solid #282d3b;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.adia-agent-history-item:hover:not(:disabled) {
+  background: #232838;
+  color: #e2e8f0;
+  border-color: #3b4256;
+}
+
+.adia-agent-history-item.active {
+  background: #1e293b;
+  color: #38bdf8;
+  border-color: #0284c7;
+  font-weight: 600;
+}
+
+.adia-agent-history-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.adia-agent-history-title {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adia-agent-history-time {
+  font-size: 10px;
+  color: #64748b;
+}
+
 .adia-agent-tabs {
   display: flex;
   border-bottom: 1px solid #282d3b;

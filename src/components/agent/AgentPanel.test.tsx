@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentPanel } from './AgentPanel';
 import { AgentOrchestrator } from '../../agent/agentOrchestrator';
@@ -431,5 +431,150 @@ describe('AgentPanel UI Component', () => {
 
     expect(html).toContain('Transaction Status');
     expect(html).toContain('awaiting_action');
+  });
+
+  describe('Task 3: Multi-Chat Session History and Switching', () => {
+    it('renders the New Chat control and chat history region', () => {
+      const orchestrator = new AgentOrchestrator(new MockLlm());
+      const html = renderToStaticMarkup(
+        <AgentPanel
+          isOpen={true}
+          orchestrator={orchestrator}
+        />
+      );
+
+      expect(html).toContain('adia-agent-new-chat-btn');
+      expect(html).toContain('New Chat');
+      expect(html).toContain('adia-agent-chat-history');
+      expect(html).toContain('Chat History');
+    });
+
+    it('renders multiple sessions in history ordered by most recent activity and displays active transcript', () => {
+      const orchestrator1 = new AgentOrchestrator(new MockLlm());
+      const orchestrator2 = orchestrator1.createFreshSession();
+
+      const session1 = {
+        id: 'session-1',
+        title: 'Design RLC Circuit',
+        createdAt: 1000,
+        updatedAt: 1000,
+        messages: [{ id: 'm1', sender: 'user' as const, text: 'Design RLC Circuit', timestamp: '10:00:00' }],
+        currentResponse: null,
+        orchestrator: orchestrator1,
+        isBusy: false,
+      };
+
+      const session2 = {
+        id: 'session-2',
+        title: 'Add Inverter Bridge',
+        createdAt: 2000,
+        updatedAt: 2000,
+        messages: [{ id: 'm2', sender: 'user' as const, text: 'Add Inverter Bridge', timestamp: '10:05:00' }],
+        currentResponse: null,
+        orchestrator: orchestrator2,
+        isBusy: false,
+      };
+
+      const html = renderToStaticMarkup(
+        <AgentPanel
+          isOpen={true}
+          orchestrator={orchestrator1}
+          initialSessions={[session1, session2]}
+          initialActiveSessionId="session-2"
+        />
+      );
+
+      // Session 2 is active, so its message should appear in transcript
+      expect(html).toContain('Add Inverter Bridge');
+      // History should list both session titles
+      expect(html).toContain('Design RLC Circuit');
+      expect(html).toContain('adia-agent-history-item active');
+    });
+
+    it('disables New Chat and history switching when active session is busy', () => {
+      const orchestrator = new AgentOrchestrator(new MockLlm());
+      const busySession = {
+        id: 'session-busy',
+        title: 'Busy Session',
+        createdAt: 1000,
+        updatedAt: 1000,
+        messages: [],
+        currentResponse: null,
+        orchestrator,
+        isBusy: true,
+      };
+
+      const html = renderToStaticMarkup(
+        <AgentPanel
+          isOpen={true}
+          orchestrator={orchestrator}
+          initialSessions={[busySession]}
+          initialActiveSessionId="session-busy"
+        />
+      );
+
+      expect(html).toMatch(/<button[^>]*class="[^"]*adia-agent-new-chat-btn[^"]*"[^>]*disabled/);
+    });
+
+    it('appends late asynchronous responses to their originating session without leaking to other chats', async () => {
+      const orchestratorA = new AgentOrchestrator(new MockLlm());
+      const orchestratorB = orchestratorA.createFreshSession();
+
+      let resolveOrchestratorA: (value: any) => void;
+      const deferredPromise = new Promise(resolve => {
+        resolveOrchestratorA = resolve;
+      });
+
+      orchestratorA.handle = vi.fn().mockImplementation(() => deferredPromise);
+
+      const sessionA = {
+        id: 'session-A',
+        title: 'Session A',
+        createdAt: 1000,
+        updatedAt: 1000,
+        messages: [{ id: 'msg-u-a', sender: 'user' as const, text: 'Calculate something', timestamp: '10:00' }],
+        currentResponse: null,
+        orchestrator: orchestratorA,
+        isBusy: true,
+      };
+
+      const sessionB = {
+        id: 'session-B',
+        title: 'Session B',
+        createdAt: 2000,
+        updatedAt: 2000,
+        messages: [{ id: 'msg-u-b', sender: 'user' as const, text: 'Hello Session B', timestamp: '10:01' }],
+        currentResponse: null,
+        orchestrator: orchestratorB,
+        isBusy: false,
+      };
+
+      let sessions = [sessionA, sessionB];
+
+      // Simulate asynchronous result arriving for Session A while active session is B
+      const delayedResponse = {
+        status: 'idle',
+        message: 'Completed calculation for A',
+      };
+
+      // updateSessionById must target sessionA strictly by ID
+      const { updateSessionById } = await import('./agentChatSessions');
+      sessions = updateSessionById(sessions, 'session-A', s => ({
+        ...s,
+        isBusy: false,
+        currentResponse: delayedResponse as any,
+        messages: [
+          ...s.messages,
+          { id: 'msg-a-a', sender: 'agent', text: delayedResponse.message, timestamp: '10:02' },
+        ],
+        updatedAt: 3000,
+      }));
+
+      expect(sessions.find(s => s.id === 'session-A')?.messages).toHaveLength(2);
+      expect(sessions.find(s => s.id === 'session-A')?.messages[1].text).toBe('Completed calculation for A');
+      // Session B must be completely untouched
+      expect(sessions.find(s => s.id === 'session-B')?.messages).toHaveLength(1);
+      expect(sessions.find(s => s.id === 'session-B')?.messages[0].text).toBe('Hello Session B');
+    });
   });
 });
