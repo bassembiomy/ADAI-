@@ -43,6 +43,10 @@ export interface GeneralEngineeringRequest {
   constraints: RequirementConstraint[];
   optimization?: OptimizationRequest;
   rawPrompt?: string;
+  operands?: Array<{ value: number; unit?: string; baseUnit?: string; raw?: string }>;
+  sourceMetadata?: Record<string, unknown>;
+  entities?: Record<string, unknown>;
+  explicitIntent?: string;
 }
 
 export function normalizeEngineeringUnits(unit: string): string {
@@ -136,6 +140,15 @@ export const GeneralEngineeringRequestSchema = z.object({
   constraints: z.array(RequirementConstraintSchema).default([]),
   optimization: OptimizationRequestSchema.optional(),
   rawPrompt: z.string().optional(),
+  operands: z.array(z.object({
+    value: z.number(),
+    unit: z.string().optional(),
+    baseUnit: z.string().optional(),
+    raw: z.string().optional(),
+  })).optional(),
+  sourceMetadata: z.record(z.string(), z.unknown()).optional(),
+  entities: z.record(z.string(), z.unknown()).optional(),
+  explicitIntent: z.string().optional(),
 });
 
 export type ParseResult<T> =
