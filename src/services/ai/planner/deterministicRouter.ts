@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { GeneralEngineeringRequest } from './generalIntent';
-import { parseArithmeticOperands, parseEngineeringEntities } from './engineeringEntityParser';
+import { normalizeArithmeticLanguage, parseArithmeticOperands, parseEngineeringEntities } from './engineeringEntityParser';
 
 export const PlannerIntentSchema = z.enum([
   'arithmetic',
@@ -73,7 +73,7 @@ export function normalizeCurrentTurn(request: GeneralEngineeringRequest): Normal
 
   return {
     intent: request.intent,
-    objective: request.objective,
+    objective: normalizeArithmeticLanguage(request.objective),
     targetBehaviors: [...(request.targetBehaviors || [])],
     inputs: [...(request.inputs || [])],
     outputs: [...(request.outputs || [])],
@@ -190,7 +190,7 @@ export function routeDeterministically(
   }
 
   const normalized = normalizeCurrentTurn(request);
-  const text = `${normalized.objective} ${(normalized.targetBehaviors || []).join(' ')}`.trim();
+  const text = normalizeArithmeticLanguage(`${normalized.objective} ${(normalized.targetBehaviors || []).join(' ')}`.trim());
 
   if (request.explicitIntent && !PlannerIntentSchema.safeParse(request.explicitIntent).success) {
     return {

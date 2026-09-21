@@ -5,7 +5,7 @@ import {
 } from './generalIntent';
 import { XbridgesCapabilityIndex } from '../catalog/xbridgesCapabilityIndex';
 import { TaskState } from '../../../agent/types';
-import { parseArithmeticOperands, parseEngineeringEntities } from './engineeringEntityParser';
+import { normalizeArithmeticLanguage, parseArithmeticOperands, parseEngineeringEntities } from './engineeringEntityParser';
 
 export type { GeneralEngineeringRequest };
 
@@ -173,7 +173,7 @@ export function resolveRequirements(
 
   // 2. Intent-specific requirement completeness
   if (req.intent === 'create') {
-    const objectiveText = `${req.objective} ${req.targetBehaviors.join(' ')}`.toLowerCase();
+    const objectiveText = normalizeArithmeticLanguage(`${req.objective} ${req.targetBehaviors.join(' ')}`).toLowerCase();
     const arithmeticRequested = /\b(?:add|adding|addition|sum|summation|plus|subtract|subtraction|minus|difference|multiply|multiplication|product|times|divide|division|divided|quotient|squared|cubed|pow)\b/i.test(objectiveText);
     if (arithmeticRequested) {
       const parsedArithmetic = parseArithmeticOperands(req.objective || '');

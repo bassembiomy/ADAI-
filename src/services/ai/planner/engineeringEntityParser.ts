@@ -51,6 +51,16 @@ export interface ParsedArithmeticOperand {
   raw: string;
 }
 
+/** Normalizes common arithmetic inflections and frequent speech/transcription typos. */
+export function normalizeArithmeticLanguage(text: string): string {
+  return text
+    .replace(/\bmultibly(?:ing|ed)?\b/gi, 'multiply')
+    .replace(/\bmultiplying\b/gi, 'multiply')
+    .replace(/\badding\b/gi, 'add')
+    .replace(/\bsubtracting\b/gi, 'subtract')
+    .replace(/\bdividing\b/gi, 'divide');
+}
+
 export function parseArithmeticOperands(text: string): {
   operands: ParsedArithmeticOperand[];
   hasEachQualifier: boolean;

@@ -112,6 +112,16 @@ describe('deterministicRouter', () => {
       }
     });
 
+    it('recognizes common multiplication inflections and typo-tolerant phrasing', () => {
+      for (const q of ['create a model multiplying two numbers', 'create a model multiblying two numbers']) {
+        const result = routeDeterministically(baseRequest(q));
+        expect(result.status, `Expected clarification for "${q}"`).toBe('clarification');
+        if (result.status === 'clarification') {
+          expect(result.diagnostics[0].code).toBe('MISSING_ARITHMETIC_OPERAND');
+        }
+      }
+    });
+
     it('detects pattern_workflow intent for pattern catalog/store vocabulary', () => {
       const queries = [
         'Search PatternStore for verified templates',
