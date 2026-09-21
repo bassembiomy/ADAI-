@@ -3,6 +3,7 @@ import { AgentOrchestrator, OrchestratorResponse } from '../../agent/agentOrches
 import { AdiaBlockCatalog, CatalogBlock } from '../../agent/adiaBlockCatalog';
 import { ExtendedApprovalRequest } from '../../agent/approvalGate';
 import { localLlmService } from '../../services/localLlmService';
+import { AgentChatSession, ChatMessage, createAgentChatSession, deriveChatTitle, updateSessionById } from './agentChatSessions';
 import './AgentPanel.css';
 
 export interface AgentPanelProjectContext {
@@ -31,13 +32,6 @@ export interface AgentPanelProps {
   initialResponse?: OrchestratorResponse;
 }
 
-interface ChatMessage {
-  id: string;
-  sender: 'user' | 'agent';
-  text: string;
-  timestamp: string;
-}
-
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   isOpen: propIsOpen,
   onClose,
@@ -51,14 +45,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen;
 
   const [activeTab, setActiveTab] = useState<'chat' | 'spec' | 'blocks' | 'audit'>('chat');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isBusy, setIsBusy] = useState(false);
   const [internalOrchestrator] = useState<AgentOrchestrator>(
     () => propOrchestrator || new AgentOrchestrator()
   );
   const orchestrator = propOrchestrator || internalOrchestrator;
-  const [currentResponse, setCurrentResponse] = useState<OrchestratorResponse | null>(() => initialResponse ?? null);
+  const [sessions, setSessions] = useState<AgentChatSession[]>(() => {
+    const session = createAgentChatSession(orchestrator);
+    return [{ ...session, currentResponse: initialResponse ?? null }];
+  });
+  const [activeSessionId] = useState(() => sessions[0]?.id);
+  const activeSession = sessions.find(session => session.id === activeSessionId) ?? sessions[0];
+  const activeSessionOrchestrator = activeSession!.orchestrator;
+  const messages = activeSession?.messages ?? [];
+  const currentResponse = activeSession?.currentResponse ?? null;
+  const isBusy = activeSession?.isBusy ?? false;
   const [modelStatus, setModelStatus] = useState<string>('Checking...');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(() => localLlmService.getConfig().modelName);
@@ -147,6 +148,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const handleSend = async () => {
     if (!inputText.trim() || isBusy) return;
 
+    const sessionId = activeSessionId;
+    const sessionOrchestrator = activeSession!.orchestrator;
+    if (!sessionId) return;
+    const promptToSend = inputText.trim();
+
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}-u`,
       sender: 'user',
@@ -154,14 +160,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       timestamp: new Date().toLocaleTimeString()
     };
 
-    setMessages(prev => [...prev, userMsg]);
-    const promptToSend = inputText.trim();
+    setSessions(prev => updateSessionById(prev, sessionId, session => ({
+      ...session,
+      title: session.messages.length === 0 ? deriveChatTitle(promptToSend) : session.title,
+      updatedAt: Date.now(),
+      messages: [...session.messages, userMsg],
+      isBusy: true,
+    })));
     setInputText('');
-    setIsBusy(true);
 
     try {
-      const resp = await orchestrator.handle(promptToSend);
-      setCurrentResponse(resp);
+      const resp = await sessionOrchestrator.handle(promptToSend);
 
       const agentMsg: ChatMessage = {
         id: `msg-${Date.now()}-a`,
@@ -170,30 +179,42 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         timestamp: new Date().toLocaleTimeString()
       };
 
-      setMessages(prev => [...prev, agentMsg]);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        currentResponse: resp,
+        messages: [...session.messages, agentMsg],
+        updatedAt: Date.now(),
+      })));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-err`,
-          sender: 'agent',
-          text: `Error: ${msg}`,
-          timestamp: new Date().toLocaleTimeString()
-        }
-      ]);
+      const errorMessage: ChatMessage = {
+        id: `msg-${Date.now()}-err`,
+        sender: 'agent',
+        text: `Error: ${msg}`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        messages: [...session.messages, errorMessage],
+        updatedAt: Date.now(),
+      })));
     } finally {
-      setIsBusy(false);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({ ...session, isBusy: false })));
     }
   };
 
   const handleApprove = async (requestId: string) => {
     if (isBusy) return;
-    setIsBusy(true);
+    const sessionId = activeSessionId;
+    const sessionOrchestrator = activeSession!.orchestrator;
+    if (!sessionId) return;
+    setSessions(prev => updateSessionById(prev, sessionId, session => ({
+      ...session,
+      isBusy: true,
+    })));
 
     try {
-      const resp = await orchestrator.approve(requestId);
-      setCurrentResponse(resp);
+      const resp = await sessionOrchestrator.approve(requestId);
       projectContext?.refreshProject?.();
       onProjectChange?.();
 
@@ -204,78 +225,112 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         timestamp: new Date().toLocaleTimeString()
       };
 
-      setMessages(prev => [...prev, agentMsg]);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        currentResponse: resp,
+        messages: [...session.messages, agentMsg],
+        updatedAt: Date.now(),
+      })));
       setCanUndo(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setCurrentResponse(prev => prev ? {
-        ...prev,
-        pendingApproval: undefined,
-        currentApproval: undefined,
-        transactionStatus: 'failed'
-      } : prev);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-err`,
-          sender: 'agent',
-          text: `Approval failed: ${msg}`,
-          timestamp: new Date().toLocaleTimeString()
-        }
-      ]);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        currentResponse: session.currentResponse
+          ? {
+              ...session.currentResponse,
+              pendingApproval: undefined,
+              currentApproval: undefined,
+              transactionStatus: 'failed',
+            }
+          : session.currentResponse,
+        messages: [
+          ...session.messages,
+          {
+            id: `msg-${Date.now()}-err`,
+            sender: 'agent',
+            text: `Approval failed: ${msg}`,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+        ],
+        updatedAt: Date.now(),
+      })));
     } finally {
-      setIsBusy(false);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        isBusy: false,
+      })));
     }
   };
 
   const handleCancel = () => {
-    if (orchestrator.cancelOperation) {
-      orchestrator.cancelOperation();
-      setIsBusy(false);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-cnl`,
-          sender: 'agent',
-          text: 'Workflow cancelled by user.',
-          timestamp: new Date().toLocaleTimeString()
-        }
-      ]);
+    const sessionId = activeSessionId;
+    const sessionOrchestrator = activeSession!.orchestrator;
+    if (sessionOrchestrator.cancelOperation && sessionId) {
+      sessionOrchestrator.cancelOperation();
+      const cancelMessage: ChatMessage = {
+        id: `msg-${Date.now()}-cnl`,
+        sender: 'agent',
+        text: 'Workflow cancelled by user.',
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        isBusy: false,
+        messages: [...session.messages, cancelMessage],
+        updatedAt: Date.now(),
+      })));
     }
   };
 
   const handleUndo = async () => {
     if (isBusy) return;
-    setIsBusy(true);
+    const sessionId = activeSessionId;
+    const sessionOrchestrator = activeSession!.orchestrator;
+    if (!sessionId) return;
+    setSessions(prev => updateSessionById(prev, sessionId, session => ({
+      ...session,
+      isBusy: true,
+    })));
     try {
-      if (orchestrator.undoLastTransaction) {
-        const res = await orchestrator.undoLastTransaction(projectContext?.projectName);
+      if (sessionOrchestrator.undoLastTransaction) {
+        const res = await sessionOrchestrator.undoLastTransaction(projectContext?.projectName);
         setCanUndo(false);
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `msg-${Date.now()}-undo`,
-            sender: 'agent',
-            text: res.message,
-            timestamp: new Date().toLocaleTimeString()
-          }
-        ]);
+        const undoMessage: ChatMessage = {
+          id: `msg-${Date.now()}-undo`,
+          sender: 'agent',
+          text: res.message,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+        setSessions(prev => updateSessionById(prev, sessionId, session => ({
+          ...session,
+          messages: [...session.messages, undoMessage],
+          updatedAt: Date.now(),
+        })));
         if (projectContext?.refreshProject) {
           projectContext.refreshProject();
         }
       }
     } finally {
-      setIsBusy(false);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        isBusy: false,
+      })));
     }
   };
 
   const handleReject = async (requestId: string) => {
     if (isBusy) return;
-    setIsBusy(true);
+    const sessionId = activeSessionId;
+    const sessionOrchestrator = activeSession!.orchestrator;
+    if (!sessionId) return;
+    setSessions(prev => updateSessionById(prev, sessionId, session => ({
+      ...session,
+      isBusy: true,
+    })));
 
     try {
-      const resp = await orchestrator.reject(requestId, 'Requirement rejected by user');
-      setCurrentResponse(resp);
+      const resp = await sessionOrchestrator.reject(requestId, 'Requirement rejected by user');
 
       const agentMsg: ChatMessage = {
         id: `msg-${Date.now()}-rej`,
@@ -284,28 +339,38 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         timestamp: new Date().toLocaleTimeString()
       };
 
-      setMessages(prev => [...prev, agentMsg]);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        currentResponse: resp,
+        messages: [...session.messages, agentMsg],
+        updatedAt: Date.now(),
+      })));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-err`,
-          sender: 'agent',
-          text: `Rejection error: ${msg}`,
-          timestamp: new Date().toLocaleTimeString()
-        }
-      ]);
+      const errorMessage: ChatMessage = {
+        id: `msg-${Date.now()}-err`,
+        sender: 'agent',
+        text: `Rejection error: ${msg}`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        messages: [...session.messages, errorMessage],
+        updatedAt: Date.now(),
+      })));
     } finally {
-      setIsBusy(false);
+      setSessions(prev => updateSessionById(prev, sessionId, session => ({
+        ...session,
+        isBusy: false,
+      })));
     }
   };
 
   const pendingApproval: ExtendedApprovalRequest | undefined =
-    currentResponse?.pendingApproval || orchestrator.getPendingApproval?.();
+    currentResponse?.pendingApproval || activeSessionOrchestrator.getPendingApproval?.();
   const taskState = currentResponse?.taskState;
   const catalogBlocks: readonly CatalogBlock[] = AdiaBlockCatalog.list().slice(0, 30);
-  const auditList = orchestrator.getAuditHistory();
+  const auditList = activeSessionOrchestrator.getAuditHistory();
 
   // Evaluate approval gating checks
   const isStale = Boolean(
@@ -320,7 +385,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   }
 
-  const readiness = projectContext?.delegateReadiness || orchestrator.getToolGateway().getDelegateReadiness?.() || {
+  const readiness = projectContext?.delegateReadiness || activeSessionOrchestrator.getToolGateway().getDelegateReadiness?.() || {
     xbridges: false,
     sysml: false,
     report: false,
@@ -332,7 +397,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   let missingDelegateReason = '';
   if (pendingApproval?.type === 'change' && pendingApproval.payload?.actionType) {
     const actionKind = pendingApproval.payload.actionType as any;
-    const adapter = orchestrator.getToolGateway().getAdapter(actionKind);
+    const adapter = activeSessionOrchestrator.getToolGateway().getAdapter(actionKind);
     if (!adapter) {
       hasNoAdapter = true;
       isDelegateMissing = true;
@@ -552,7 +617,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   <div className="adia-agent-plan-preview-header">
                     <span className="adia-agent-plan-preview-title">📐 Plan Preview</span>
                     <span className="adia-agent-plan-revision-badge">
-                      Rev: {orchestrator.getProjectContext().revision}
+                      Rev: {activeSessionOrchestrator.getProjectContext().revision}
                     </span>
                   </div>
                   <div className="adia-agent-plan-preview-body">
