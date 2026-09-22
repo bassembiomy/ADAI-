@@ -289,10 +289,10 @@
   - [x] Step 1: Maintain transaction-local mirror of nodes and edges for sequential action visibility before React commits
   - [x] Step 2: Validate edges against mirror immediately; test deferred React commits and concurrent user edits
   - [x] Step 3: Commit `fix(agent): preserve topology consistency across deferred React commits`
-- [ ] Task 11: Improve explainability without exposing hidden reasoning
-  - [ ] Step 1: Return concise interpretation, extracted values, assumptions, unresolved requirements, mappings, citations
-  - [ ] Step 2: Make every clarification and capability gap actionable; display template in approval summary
-  - [ ] Step 3: Commit `feat(ai): expose request interpretation evidence`
+- [x] Task 11: Improve explainability without exposing hidden reasoning
+  - [x] Step 1: Return concise interpretation, extracted values, assumptions, unresolved requirements, mappings, citations
+  - [x] Step 2: Make every clarification and capability gap actionable; display template in approval summary
+  - [x] Step 3: Commit `feat(ai): expose request interpretation evidence`
 - [ ] Task 12: Build the evaluation corpus and regression harness
   - [ ] Step 1: Add at least 200 reviewed examples across arithmetic, transfer functions, PID, Scope, units, typos
   - [ ] Step 2: Split into 70% dev, 15% validation, 15% holdout; enforce release metric thresholds

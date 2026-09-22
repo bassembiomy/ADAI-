@@ -940,6 +940,32 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       expect((fresh2 as any).engineeringSessionId).toBe('eng_sess_123');
       expect((fresh2 as any).engineeringRequestInput).toBe('Add 10 and 20');
     });
+
+    it('returns concise interpretation evidence, template name, and citations in approval request', async () => {
+      let nodesState: any[] = [];
+      let edgesState: any[] = [];
+      const liveDelegate = createXbridgesDelegate({
+        getNodes: () => nodesState,
+        getEdges: () => edgesState,
+        setNodes: updater => { nodesState = updater(nodesState); },
+        setEdges: updater => { edgesState = updater(edgesState); },
+        onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+      });
+      const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      const res = await orch.handle('Add 10 and 20');
+      expect(res.status).toBe('awaiting_plan_approval');
+      expect(res.interpretationEvidence).toBeDefined();
+      expect(res.interpretationEvidence?.template).toMatch(/Arithmetic/i);
+      expect(res.interpretationEvidence?.rationale).toMatch(/Addition/i);
+      expect(res.interpretationEvidence?.citations.length).toBeGreaterThan(0);
+      expect(res.interpretationEvidence?.components.length).toBeGreaterThanOrEqual(3);
+
+      const payload = res.pendingApproval?.payload as any;
+      expect(payload?.interpretationEvidence).toBeDefined();
+      expect(payload?.interpretationEvidence?.template).toMatch(/Arithmetic/i);
+    });
   });
 });
 

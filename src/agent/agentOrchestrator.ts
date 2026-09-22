@@ -110,6 +110,22 @@ export interface OrchestratorResponse {
     metrics?: Record<string, unknown>;
     [key: string]: unknown;
   };
+  interpretationEvidence?: InterpretationEvidence;
+}
+
+export interface InterpretationEvidence {
+  template: string;
+  rationale: string;
+  extractedValues: Array<{ id: string; value: unknown; unit?: string }>;
+  assumptions: string[];
+  unresolvedRequirements: string[];
+  citations: string[];
+  components: Array<{
+    id: string;
+    name: string;
+    conceptId: string;
+    parameters?: Record<string, unknown>;
+  }>;
 }
 
 export interface ProjectContext {
@@ -347,11 +363,35 @@ export class AgentOrchestrator {
       return { status: 'blocked', message, taskState: this.taskState, proof: this.currentProof, intent: 'create' };
     }
 
+    const templateName = outcome.architecturePlan.system?.name || 'Deterministic Engineering Template';
+    const interpretationEvidence: InterpretationEvidence = {
+      template: templateName,
+      rationale: outcome.architecturePlan.rationale,
+      extractedValues: outcome.architecturePlan.components
+        .flatMap(c => Object.entries(c.designParameters || {}).map(([k, v]) => ({ id: `${c.id}.${k}`, value: v }))),
+      assumptions: outcome.architecturePlan.assumptions.map(a => a.statement),
+      unresolvedRequirements: outcome.architecturePlan.informationRequirements
+        .filter(r => r.resolutionState === 'unresolved')
+        .map(r => r.slotName),
+      citations: outcome.citations,
+      components: outcome.architecturePlan.components.map(c => ({
+        id: c.id,
+        name: c.name,
+        conceptId: c.conceptId,
+        parameters: c.designParameters as Record<string, unknown>
+      }))
+    };
+
     const planApproval = createApprovalRequest(
       'plan',
       'Approve Engineering Model Plan',
       `Verified engineering plan with ${this.executionPlan.actions.length} ordered actions`,
-      { planId: this.executionPlan.id, citations: outcome.citations, proofStatus: this.currentProof.status }
+      {
+        planId: this.executionPlan.id,
+        citations: outcome.citations,
+        proofStatus: this.currentProof.status,
+        interpretationEvidence
+      }
     );
     this.pendingApproval = planApproval;
     if (this.taskState.status === 'clarifying') {
@@ -372,7 +412,8 @@ export class AgentOrchestrator {
       executionPlan: this.executionPlan,
       proof: this.currentProof,
       plan: outcome.plan,
-      intent: 'create'
+      intent: 'create',
+      interpretationEvidence
     };
   }
 
