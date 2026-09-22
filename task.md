@@ -293,10 +293,10 @@
   - [x] Step 1: Return concise interpretation, extracted values, assumptions, unresolved requirements, mappings, citations
   - [x] Step 2: Make every clarification and capability gap actionable; display template in approval summary
   - [x] Step 3: Commit `feat(ai): expose request interpretation evidence`
-- [ ] Task 12: Build the evaluation corpus and regression harness
-  - [ ] Step 1: Add at least 200 reviewed examples across arithmetic, transfer functions, PID, Scope, units, typos
-  - [ ] Step 2: Split into 70% dev, 15% validation, 15% holdout; enforce release metric thresholds
-  - [ ] Step 3: Commit `test(ai): add request understanding evaluation corpus`
+- [x] Task 12: Build the evaluation corpus and regression harness
+  - [x] Step 1: Add at least 200 reviewed examples across arithmetic, transfer functions, PID, Scope, units, typos
+  - [x] Step 2: Split into 70% dev, 15% validation, 15% holdout; enforce release metric thresholds
+  - [x] Step 3: Commit `test(ai): add request understanding evaluation corpus`
 - [ ] Task 13: Add observability for failed understanding
   - [ ] Step 1: Log normalized request hash, extractor outcome, unresolved slot IDs, catalog outcome, and plan hash
   - [ ] Step 2: Redact sensitive content; record stage durations and reasons without hidden reasoning

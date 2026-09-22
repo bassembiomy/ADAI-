@@ -85,10 +85,11 @@ export class StructuredRequestExtractor {
 
     // 5. Operations
     const operations: string[] = [];
-    const isAdd = /(?:\b(?:add|adding|addition|sum|plus)\b|\+)/i.test(lower);
-    const isSub = /(?:\b(?:subtract|subtracting|subtraction|minus)\b|-)/i.test(lower);
+    const isTfOrPid = /\b(?:transfer function|transfer_function|tf|pid|controller|plant)\b/i.test(lower);
+    const isAdd = !isTfOrPid && /(?:\b(?:add|adding|addition|sum|plus)\b|\+)/i.test(lower);
+    const isSub = !isTfOrPid && /(?:\b(?:subtract|subtracting|subtraction|minus|difference)\b|(?<=\w\s+)-(?=\s+\w))/i.test(lower);
     const isMul = /(?:\b(?:multiply|multiplying|multiplication|product|times|vectormul)\b|\*)/i.test(lower);
-    const isDiv = /(?:\b(?:divide|dividing|division|quotient)\b|\/)/i.test(lower);
+    const isDiv = /(?:\b(?:divide|dividing|division|quotient)\b|(?<=\d|\s)\/(?=\s|\d))/i.test(lower.replace(/rad\/s/g, ''));
 
     if (isAdd) operations.push('add');
     if (isSub) operations.push('subtract');
@@ -128,26 +129,59 @@ export class StructuredRequestExtractor {
 
     // 7. Numeric & Unit Values extraction
     // Regex matches signed floats, scientific notation with optional prefix & unit
-    const numRegex = /(?:^|[^\w.])([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([pnuµmkKMGT]?)(Hz|ohm|ohms|Ω|V|s|F|H|%|rad\/s|(?=[^\w]|$))/gi;
+    const STANDARD_UNITS: Record<string, string> = {
+      hz: 'Hz',
+      hertz: 'Hz',
+      v: 'V',
+      volt: 'V',
+      volts: 'V',
+      ohm: 'ohm',
+      ohms: 'ohm',
+      'ω': 'ohm',
+      'Ω': 'ohm',
+      s: 's',
+      sec: 's',
+      secs: 's',
+      second: 's',
+      seconds: 's',
+      f: 'F',
+      h: 'H',
+      w: 'W',
+      a: 'A',
+      rad: 'rad',
+      'rad/s': 'rad/s',
+      '%': '%'
+    };
+
+    const numRegex = /(?:^|[^\w.])([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([pnuµmkKMGT]?)(Hz|ohm|ohms|Ω|V|s|sec|F|H|A|W|%|rad\/s|(?=[^\w]|$))/gi;
     let match: RegExpExecArray | null;
     let valIndex = 1;
 
     while ((match = numRegex.exec(polyStripped)) !== null) {
       const rawNum = match[1];
-      const prefix = match[2];
+      let prefix = match[2];
       const rawUnit = match[3];
 
       let numVal = parseFloat(rawNum);
       if (!Number.isFinite(numVal)) continue;
 
-      if (prefix && SI_PREFIX_MULTIPLIERS[prefix] && !/[eE]/.test(rawNum)) {
-        numVal = numVal * SI_PREFIX_MULTIPLIERS[prefix];
+      let unit: string | undefined = undefined;
+      if (rawUnit && rawUnit.trim().length > 0) {
+        unit = STANDARD_UNITS[rawUnit.toLowerCase()] || rawUnit;
       }
 
-      let unit: string | undefined = undefined;
-      if (rawUnit) {
-        if (/^(?:ohm|ohms|Ω)$/i.test(rawUnit)) unit = 'ohm';
-        else unit = rawUnit;
+      // Check case-sensitive prefix if unit is present
+      if (unit && prefix) {
+        // Find exact casing of prefix in original match
+        const fullMatchText = match[0];
+        const prefixIdx = fullMatchText.indexOf(prefix + rawUnit);
+        if (prefixIdx !== -1) {
+          prefix = fullMatchText[prefixIdx];
+        }
+      }
+
+      if (prefix && SI_PREFIX_MULTIPLIERS[prefix] && !/[eE]/.test(rawNum)) {
+        numVal = parseFloat((numVal * SI_PREFIX_MULTIPLIERS[prefix]).toPrecision(12));
       }
 
       values.push({
@@ -209,6 +243,14 @@ export class StructuredRequestExtractor {
           confidence: 1.0
         });
       }
+      if (isDiv) {
+        addEntity({
+          id: 'div_1',
+          semanticType: 'VectorDiv',
+          sourceText: 'divide',
+          confidence: 1.0
+        });
+      }
     }
 
     // PID Controller entity
@@ -250,7 +292,7 @@ export class StructuredRequestExtractor {
 
     // Constants feed arithmetic blocks
     if (isArithmetic) {
-      const targetOpEntity = entities.find(e => e.semanticType === 'Sum' || e.semanticType === 'VectorMul');
+      const targetOpEntity = entities.find(e => e.semanticType === 'Sum' || e.semanticType === 'VectorMul' || e.semanticType === 'VectorDiv');
       if (targetOpEntity) {
         const constEntities = entities.filter(e => e.semanticType === 'Constant');
         for (const c of constEntities) {
@@ -268,7 +310,7 @@ export class StructuredRequestExtractor {
     // Scope observation
     const scopeEntity = entities.find(e => e.semanticType === 'Scope');
     if (scopeEntity) {
-      const producer = entities.find(e => e.semanticType === 'VectorMul' || e.semanticType === 'Sum' || e.semanticType === 'TRANSFER_FUNCTION');
+      const producer = entities.find(e => e.semanticType === 'VectorMul' || e.semanticType === 'Sum' || e.semanticType === 'VectorDiv' || e.semanticType === 'TRANSFER_FUNCTION');
       if (producer) {
         relationships.push({
           id: `rel_${relIndex++}`,

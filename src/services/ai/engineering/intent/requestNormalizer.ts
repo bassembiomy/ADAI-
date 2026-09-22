@@ -170,10 +170,17 @@ export class RequestNormalizer {
       .trim();
 
     // Lowercase words unless they are recognized standard unit notations (like V, Hz, W, A)
+    // or contain numeric units with prefixes (e.g. 1MHz, 1Mohm, 500mV, 10kHz)
     const UNIT_CAPITALS = new Set(['V', 'Hz', 'W', 'A', 'N']);
     reconstructed = reconstructed
       .split(' ')
-      .map(w => (UNIT_CAPITALS.has(w) ? w : w.toLowerCase()))
+      .map(w => {
+        if (UNIT_CAPITALS.has(w)) return w;
+        if (/^[+-]?\d+(?:\.\d+)?[pnuµmkKMGT]?(?:Hz|ohm|ohms|Ω|V|s|sec|F|H|A|W|%|rad\/s)$/i.test(w)) {
+          return w;
+        }
+        return w.toLowerCase();
+      })
       .join(' ');
 
     // Generate lowercase tokens for matching (stripping punctuation from tokens)
