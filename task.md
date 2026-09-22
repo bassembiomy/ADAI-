@@ -207,12 +207,12 @@
   - [x] Step 3: Return structured `BLOCK_CAPABILITY_GAP` when no valid implementation exists
   - [x] Step 4: Keep candidate compositions unselected until validated and evidenced
   - [x] Step 5: Commit `feat(ai): map concepts to verified ADIA capabilities`
-- [ ] Task 13: Compile Model IR through existing plans and transactions
-  - [ ] Step 1: Compile bound IR to `EngineeringModelPlanV2` and existing actions with stable ordering
-  - [ ] Step 2: Compile hierarchy to supported subsystem constructs; otherwise return an explicit hierarchy capability gap
-  - [ ] Step 3: Pass output through existing plan validation, preflight, isolated proof, approval, and transactions
-  - [ ] Step 4: Prove identical IR/catalog inputs produce identical plan fingerprints
-  - [ ] Step 5: Commit `feat(ai): compile engineering Model IR deterministically`
+- [x] Task 13: Compile Model IR through existing plans and transactions
+  - [x] Step 1: Compile bound IR to `EngineeringModelPlanV2` and existing actions with stable ordering
+  - [x] Step 2: Compile hierarchy to supported subsystem constructs; otherwise return an explicit hierarchy capability gap
+  - [x] Step 3: Pass output through existing plan validation, preflight, isolated proof, approval, and transactions
+  - [x] Step 4: Prove identical IR/catalog inputs produce identical plan fingerprints
+  - [x] Step 5: Commit `feat(ai): compile engineering Model IR deterministically`
 - [ ] Task 14: Compose the engineering validation pipeline
   - [ ] Step 1: Validate IR schema, hierarchy, semantic completeness, capability bindings, ports, dimensions, data types, physical domains, parameter completeness, references, unconnected outputs, controller/plant relationships, feedback, algebraic loops, and unsupported blocks
   - [ ] Step 2: Normalize results into structured diagnostics with affected component, evidence, required values, and remediation

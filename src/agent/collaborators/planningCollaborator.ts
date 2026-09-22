@@ -18,8 +18,12 @@ import { EngineeringIntent } from '../../services/ai/engineering/contracts/seman
 import { RetrievedKnowledgeBundle } from '../../services/ai/engineering/retrieval/hybridRetriever';
 import { ProjectMemorySnapshot } from '../../services/ai/engineering/contracts/memory';
 
+import { ModelIrCompiler, CompileContext } from '../../services/ai/engineering/modelIr/modelIrCompiler';
+import { BoundEngineeringModelIR } from '../../services/ai/engineering/contracts/modelIr';
+
 export class PlanningCollaborator {
   private engineeringPlanner = new EngineeringPlanner();
+  private modelIrCompiler = new ModelIrCompiler();
 
   public async planArchitecture(
     intent: EngineeringIntent,
@@ -27,6 +31,13 @@ export class PlanningCollaborator {
     memory: ProjectMemorySnapshot
   ): Promise<ArchitecturePlanningResult> {
     return this.engineeringPlanner.plan(intent, knowledge, memory);
+  }
+
+  public compileModelIr(
+    ir: BoundEngineeringModelIR,
+    context: CompileContext
+  ): EngineeringModelPlanV2 {
+    return this.modelIrCompiler.compile(ir, context);
   }
   public planGeneralModel(
     request: GeneralEngineeringRequest,
