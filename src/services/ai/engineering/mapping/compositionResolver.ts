@@ -87,6 +87,21 @@ export class CompositionResolver {
     concept_foc: {
       blockId: 'FIELD_ORIENTED_CONTROL',
       portMapping: {}
+    },
+    concept_transfer_function: {
+      blockId: 'TRANSFER_FUNCTION',
+      parameterMapping: { numerator: 'numerator', denominator: 'denominator' },
+      portMapping: { in: 'u', in1: 'u', u: 'u', out: 'y', y: 'y' }
+    },
+    concept_tf: {
+      blockId: 'TRANSFER_FUNCTION',
+      parameterMapping: { numerator: 'numerator', denominator: 'denominator' },
+      portMapping: { in: 'u', in1: 'u', u: 'u', out: 'y', y: 'y' }
+    },
+    concept_discrete_transfer_function: {
+      blockId: 'DISCRETE_TRANSFER_FUNCTION',
+      parameterMapping: { numerator: 'numerator', denominator: 'denominator', sampleTime: 'sampleTime' },
+      portMapping: { in: 'u', in1: 'u', u: 'u', out: 'y', y: 'y' }
     }
   };
 

@@ -256,11 +256,11 @@
   - [x] Step 2: Extract engineering components through aliases; extract relationships and emit unresolved slots
   - [x] Step 3: Add metamorphic tests proving paraphrases produce equivalent structured requests
   - [x] Step 4: Run tests and commit `feat(ai): extract structured engineering requests`
-- [ ] Task 4: Ground extracted entities against the verified catalog
-  - [ ] Step 1: Resolve aliases only through buildXbridgesCapabilityIndex() and verified composition mappings
-  - [ ] Step 2: Validate required ports and parameters during resolution; return capability gap for unknown blocks
-  - [ ] Step 3: Add catalog-backed mappings for transfer functions, PID controllers, arithmetic, constants, Scope
-  - [ ] Step 4: Run tests and commit `feat(ai): ground request entities in verified catalog`
+- [x] Task 4: Ground extracted entities against the verified catalog
+  - [x] Step 1: Resolve aliases only through buildXbridgesCapabilityIndex() and verified composition mappings
+  - [x] Step 2: Validate required ports and parameters during resolution; return capability gap for unknown blocks
+  - [x] Step 3: Add catalog-backed mappings for transfer functions, PID controllers, arithmetic, constants, Scope
+  - [x] Step 4: Run tests and commit `feat(ai): ground request entities in verified catalog`
 - [ ] Task 5: Make follow-up answers resolve conversation slots
   - [ ] Step 1: Store unresolved slots with type, prompt, affected decisions, and original evidence
   - [ ] Step 2: Parse answers (e.g. 10 and 20, display on Scope, use FOC) against active slot; reject invalid answers
