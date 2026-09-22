@@ -15,6 +15,7 @@ import * as path from 'path';
 
 import * as os from 'os';
 
+// Integration tests for engineering intelligence pipeline
 describe('EngineeringIntelligencePipeline', () => {
   let catalog: XbridgesCapabilityIndex;
   let pipeline: EngineeringIntelligencePipeline;

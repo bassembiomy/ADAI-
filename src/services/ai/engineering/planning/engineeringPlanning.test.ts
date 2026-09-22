@@ -7,6 +7,7 @@ import { RetrievedKnowledgeBundle } from '../retrieval/hybridRetriever';
 import { ProjectMemorySnapshot } from '../contracts/memory';
 import { EngineeringConcept } from '../contracts/engineeringKnowledge';
 
+// Engineering planner and classifier unit tests
 describe('InformationClassifier', () => {
   const classifier = new InformationClassifier();
 

@@ -17,6 +17,7 @@ import {
   computeRelationshipHash
 } from '../contracts/conceptGraph';
 
+// Hybrid retrieval unit tests
 describe('HybridRetriever', () => {
   let tempDir: string;
   let conceptStore: ConceptStore;

@@ -4,6 +4,7 @@ import { BoundEngineeringModelIR } from '../contracts/modelIr';
 import { buildXbridgesCapabilityIndex, XbridgesCapabilityIndex } from '../../catalog/xbridgesCapabilityIndex';
 import { EngineeringModelPlanV2Schema } from '../../contracts/engineeringModel';
 
+// Deterministic Model IR compiler test suite
 describe('ModelIrCompiler', () => {
   let catalog: XbridgesCapabilityIndex;
   const compiler = new ModelIrCompiler();

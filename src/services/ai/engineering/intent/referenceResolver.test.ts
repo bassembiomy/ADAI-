@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ReferenceResolver } from './referenceResolver';
 
+// Unit tests for semantic pronoun reference resolution
 describe('ReferenceResolver', () => {
   const resolver = new ReferenceResolver();
 

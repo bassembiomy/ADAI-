@@ -3,6 +3,7 @@ import { EngineeringIntelligenceTools } from './engineeringIntelligenceTools';
 import { buildXbridgesCapabilityIndex, XbridgesCapabilityIndex } from '../../catalog/xbridgesCapabilityIndex';
 import { EngineeringArchitecturePlan } from '../contracts/architecturePlan';
 
+// Bounded engineering intelligence tools test suite
 describe('EngineeringIntelligenceTools', () => {
   let catalog: XbridgesCapabilityIndex;
   let tools: EngineeringIntelligenceTools;

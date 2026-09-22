@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EngineeringValidationPipeline } from './engineeringValidationPipeline';
 import { EngineeringModelIR, BoundEngineeringModelIR } from '../contracts/modelIr';
 
+// Tests for 4-stage engineering validation pipeline
 describe('EngineeringValidationPipeline', () => {
   const pipeline = new EngineeringValidationPipeline();
 

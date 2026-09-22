@@ -5,6 +5,7 @@ import { diffModelIr, applyModelIrDiff, ModelIrDiff } from './modelIrDiff';
 import { EngineeringArchitecturePlan } from '../contracts/architecturePlan';
 import { EngineeringModelIR } from '../contracts/modelIr';
 
+// Model IR Builder, Validator, and Diff test suite
 describe('ModelIrBuilder', () => {
   const builder = new ModelIrBuilder();
 
