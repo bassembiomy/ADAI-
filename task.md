@@ -261,11 +261,11 @@
   - [x] Step 2: Validate required ports and parameters during resolution; return capability gap for unknown blocks
   - [x] Step 3: Add catalog-backed mappings for transfer functions, PID controllers, arithmetic, constants, Scope
   - [x] Step 4: Run tests and commit `feat(ai): ground request entities in verified catalog`
-- [ ] Task 5: Make follow-up answers resolve conversation slots
-  - [ ] Step 1: Store unresolved slots with type, prompt, affected decisions, and original evidence
-  - [ ] Step 2: Parse answers (e.g. 10 and 20, display on Scope, use FOC) against active slot; reject invalid answers
-  - [ ] Step 3: Prevent repeated questions; permit exactly one active request per session; apply answers atomically
-  - [ ] Step 4: Run tests and commit `feat(ai): resolve clarification answers against active request slots`
+- [x] Task 5: Make follow-up answers resolve conversation slots
+  - [x] Step 1: Store unresolved slots with type, prompt, affected decisions, and original evidence
+  - [x] Step 2: Parse answers (e.g. 10 and 20, display on Scope, use FOC) against active slot; reject invalid answers
+  - [x] Step 3: Prevent repeated questions; permit exactly one active request per session; apply answers atomically
+  - [x] Step 4: Run tests and commit `feat(ai): resolve clarification answers against active request slots`
 - [ ] Task 6: Add confidence and clarification policy
   - [ ] Step 1: Define thresholds for ready, clarification-required, unsupported, and invalid outcomes
   - [ ] Step 2: Treat missing REQUIRED values as blocking; ensure one actionable question per clarification response

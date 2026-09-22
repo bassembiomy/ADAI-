@@ -2,9 +2,11 @@ import {
   DialogueTurn,
   ConversationMemorySnapshot
 } from '../contracts/memory';
+import { ActiveRequestSession } from '../contracts/structuredEngineeringRequest';
 
 export class ConversationMemoryManager {
   private readonly sessions = new Map<string, ConversationMemorySnapshot>();
+  private readonly activeRequestSessions = new Map<string, ActiveRequestSession>();
 
   public createSession(sessionId?: string): ConversationMemorySnapshot {
     const id = sessionId || `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -51,7 +53,21 @@ export class ConversationMemoryManager {
     return session ? [...session.turns] : [];
   }
 
+  public getActiveRequestSession(sessionId: string): ActiveRequestSession | null {
+    return this.activeRequestSessions.get(sessionId) ?? null;
+  }
+
+  public setActiveRequestSession(sessionId: string, session: ActiveRequestSession): void {
+    this.activeRequestSessions.set(sessionId, { ...session });
+  }
+
+  public clearActiveRequestSession(sessionId: string): void {
+    this.activeRequestSessions.delete(sessionId);
+  }
+
   public clearSession(sessionId: string): void {
     this.sessions.delete(sessionId);
+    this.activeRequestSessions.delete(sessionId);
   }
 }
+
