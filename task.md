@@ -270,11 +270,11 @@
   - [x] Step 1: Define thresholds for ready, clarification-required, unsupported, and invalid outcomes
   - [x] Step 2: Treat missing REQUIRED values as blocking; ensure one actionable question per clarification response
   - [x] Step 3: Run tests and commit `feat(ai): add request confidence and clarification policy`
-- [ ] Task 7: Add deterministic engineering templates
-  - [ ] Step 1: Implement templates for arithmetic, PID/feedback/transfer-function, source/plant/Scope
-  - [ ] Step 2: Resolve every template port through the catalog before producing an architecture plan
-  - [ ] Step 3: Add deterministic snapshot tests for block IDs, ports, parameters, connections, and plan hashes
-  - [ ] Step 4: Commit `feat(ai): add deterministic engineering architecture templates`
+- [x] Task 7: Add deterministic engineering templates
+  - [x] Step 1: Implement templates for arithmetic, PID/feedback/transfer-function, source/plant/Scope
+  - [x] Step 2: Resolve every template port through the catalog before producing an architecture plan
+  - [x] Step 3: Add deterministic snapshot tests for block IDs, ports, parameters, connections, and plan hashes
+  - [x] Step 4: Commit `feat(ai): add deterministic engineering architecture templates`
 - [ ] Task 8: Integrate structured understanding before legacy planning
   - [ ] Step 1: Route supported structured requests into the engineering pipeline with fallback for unsupported capabilities
   - [ ] Step 2: Preserve existing approval, proof, transaction, rollback, and simulation boundaries

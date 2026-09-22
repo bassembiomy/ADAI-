@@ -13,6 +13,9 @@ import { ProjectMemorySnapshot } from '../contracts/memory';
 import { InformationClassifier } from './informationClassifier';
 import { validateArchitecturePlan } from './architecturePlanValidator';
 
+import { StructuredEngineeringRequest } from '../contracts/structuredEngineeringRequest';
+import { DeterministicEngineeringTemplates } from './deterministicEngineeringTemplates';
+
 export type ArchitecturePlanningResult =
   | {
       status: 'ok';
@@ -35,12 +38,25 @@ export type ArchitecturePlanningResult =
 
 export class EngineeringPlanner {
   private classifier = new InformationClassifier();
+  private templates = new DeterministicEngineeringTemplates();
 
   public async plan(
     intent: EngineeringIntent,
     knowledge: RetrievedKnowledgeBundle,
-    memory: ProjectMemorySnapshot
+    memory: ProjectMemorySnapshot,
+    structuredRequest?: StructuredEngineeringRequest
   ): Promise<ArchitecturePlanningResult> {
+    // 0. Deterministic Template Selection if structured request is provided
+    if (structuredRequest) {
+      const templatePlan = this.templates.selectAndInstantiateTemplate(structuredRequest);
+      if (templatePlan) {
+        return {
+          status: 'ok',
+          plan: templatePlan
+        };
+      }
+    }
+
     const conceptsList = (knowledge as any).concepts || (knowledge as any).rankedConcepts || [];
 
     // 1. Identify primary system concept

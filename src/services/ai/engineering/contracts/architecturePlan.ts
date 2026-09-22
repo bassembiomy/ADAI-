@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canonicalJson, sha256Hex } from '../../../../engine/opm/canonicalHash';
 
 export const SlotClassificationEnum = z.enum([
   'REQUIRED',
@@ -190,3 +191,8 @@ export function validateArchitecturePlanIntegrity(
     errors
   };
 }
+
+export function computeArchitecturePlanHash(plan: EngineeringArchitecturePlan): string {
+  return sha256Hex(canonicalJson(plan));
+}
+
