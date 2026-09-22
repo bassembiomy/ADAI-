@@ -170,13 +170,13 @@
   - [x] Step 3: Weight verified ADIA knowledge, standards, manufacturer docs, textbooks, and peer-reviewed sources above uncontrolled sources
   - [x] Step 4: Return cited evidence and score breakdown; never return quarantined knowledge to runtime planning
   - [x] Step 5: Run retrieval/provider tests and commit `feat(ai): add hybrid engineering knowledge retrieval`
-- [ ] Task 7: Replace keyword routing with typed semantic interpretation
-  - [ ] Step 1: Parse deterministic entities/units/operations first, then use schema-constrained Qwen output for unresolved semantics
-  - [ ] Step 2: Resolve pronouns such as “it” against project/conversation memory with explicit confidence and ambiguity diagnostics
-  - [ ] Step 3: Preserve unknowns instead of inventing parameters
-  - [ ] Step 4: Route using typed intent fields, not substring checks
-  - [ ] Step 5: Acceptance: addition maps to two numeric operands and sum; BLDC speed control maps to plant/actuator/controller/feedback concepts without selecting blocks
-  - [ ] Step 6: Commit `feat(ai): add semantic engineering intent interpretation`
+- [x] Task 7: Replace keyword routing with typed semantic interpretation
+  - [x] Step 1: Parse deterministic entities/units/operations first, then use schema-constrained Qwen output for unresolved semantics
+  - [x] Step 2: Resolve pronouns such as “it” against project/conversation memory with explicit confidence and ambiguity diagnostics
+  - [x] Step 3: Preserve unknowns instead of inventing parameters
+  - [x] Step 4: Route using typed intent fields, not substring checks
+  - [x] Step 5: Acceptance: addition maps to two numeric operands and sum; BLDC speed control maps to plant/actuator/controller/feedback concepts without selecting blocks
+  - [x] Step 6: Commit `feat(ai): add semantic engineering intent interpretation`
 - [ ] Task 8: Separate the four memory layers
   - [ ] Step 1: Store current dialogue in conversation memory, reusable engineering truth only in verified knowledge stores, approved project decisions in project memory, and graph/revision state in model memory
   - [ ] Step 2: Give every decision provenance, timestamp, scope, and supersession metadata

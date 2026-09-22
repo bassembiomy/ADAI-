@@ -7,6 +7,7 @@ import { ClarificationEngine, AnalysisResult } from '../clarificationEngine';
 import { buildSpecification, EngineeringSpecification } from '../specificationEngine';
 import { LlmProvider } from '../llmProvider';
 import { intentExtractionPrompt } from '../promptTemplates';
+import { EngineeringIntentInterpreter } from '../../services/ai/engineering/intent/engineeringIntentInterpreter';
 
 export interface ClassifiedRequest {
   intent: XbridgesIntent;
@@ -34,59 +35,38 @@ const STOP_WORDS = new Set([
 ]);
 
 export class RequestCollaborator {
+  private readonly intentInterpreter = new EngineeringIntentInterpreter();
+
   constructor(private readonly llm: LlmProvider) {}
 
   public async classifyRequest(input: string): Promise<ClassifiedRequest> {
     const trimmed = input.trim();
-    const lower = trimmed.toLowerCase();
 
-    // 1. Check for explicit or keyword-based intent
+    // 1. Semantic interpretation and boundary checks via EngineeringIntentInterpreter
+    const interpreted = await this.intentInterpreter.interpret(trimmed);
+    if (interpreted.status === 'unsupported') {
+      return {
+        intent: 'create',
+        targetSystem: 'unsupported',
+        objective: trimmed,
+        isSupported: false,
+        unsupportedReason: interpreted.reason
+      };
+    }
+
     let intent: XbridgesIntent = 'create';
-    if (lower.startsWith('inspect') || lower.includes('inspect current') || lower.includes('show model') || lower.includes('list blocks')) {
-      intent = 'inspect';
-    } else if (lower.startsWith('diagnose') || lower.includes('diagnose model') || lower.includes('detect fault') || lower.includes('topology error')) {
+    const parsedIntent = interpreted.intent.intent;
+    if (parsedIntent === 'inspect') intent = 'inspect';
+    else if (parsedIntent === 'modify') intent = 'modify';
+    else if (parsedIntent === 'validate') intent = 'diagnose';
+    else if (parsedIntent === 'simulate') intent = 'create';
+    else if (parsedIntent === 'optimize') intent = 'optimize';
+
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith('diagnose') || lower.includes('diagnose model') || lower.includes('detect fault') || lower.includes('topology error')) {
       intent = 'diagnose';
     } else if (lower.startsWith('repair') || lower.includes('repair model') || lower.includes('auto-repair') || lower.includes('fix disconnected')) {
       intent = 'repair';
-    } else if (lower.startsWith('optimize') || lower.includes('optimize gain') || lower.includes('parameter search') || lower.includes('minimize') || lower.includes('maximize')) {
-      intent = 'optimize';
-    } else if (lower.startsWith('modify') || lower.includes('modify gain') || lower.includes('update parameter') || lower.includes('change resistor')) {
-      intent = 'modify';
-    }
-
-    // 2. Early Boundary Check: Non-engineering requests
-    if (
-      lower.includes('poem') ||
-      lower.includes('story') ||
-      lower.includes('vacation') ||
-      lower.includes('recipe') ||
-      lower.includes('joke') ||
-      lower.includes('tax')
-    ) {
-      return {
-        intent,
-        targetSystem: 'unsupported',
-        objective: trimmed,
-        isSupported: false,
-        unsupportedReason: `The ADIA agent specializes in Model-Based Systems Engineering (MBSE), control systems, and dynamic block simulation in X-Bridges. '${trimmed}' is a non-engineering request outside this domain.`
-      };
-    }
-
-    // 3. Early Boundary Check: 3D FEA / CFD
-    if (
-      lower.includes('cfd') ||
-      lower.includes('fea') ||
-      lower.includes('aerodynamic') ||
-      lower.includes('finite element') ||
-      lower.includes('airflow over')
-    ) {
-      return {
-        intent,
-        targetSystem: 'unsupported',
-        objective: trimmed,
-        isSupported: false,
-        unsupportedReason: `X-Bridges operates in the 1D lumped-parameter and control systems domain. 3D finite element analysis (FEA) and computational fluid dynamics (CFD) are outside 1D block simulation. Please formulate a 1D lumped dynamic model or use a specialized 3D CFD/FEA tool.`
-      };
     }
 
     // 4. Physical Circuit Interception (RLC / Resistor / Capacitor networks)
