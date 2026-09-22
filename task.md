@@ -218,12 +218,12 @@
   - [x] Step 2: Normalize results into structured diagnostics with affected component, evidence, required values, and remediation
   - [x] Step 3: Keep validation, compilation, proof, and simulation statuses distinct
   - [x] Step 4: Commit `feat(ai): add staged engineering validation pipeline`
-- [ ] Task 15: Expose explicit planner tools
-  - [ ] Step 1: Add read tools: `search_engineering_knowledge`, `get_concept`, `find_related_concepts`, `get_fact_evidence`, existing block/schema tools, model inspection
-  - [ ] Step 2: Add controlled transformations: `validate_architecture_plan`, `build_model_ir`, `validate_model_ir`, `map_concepts`, `compile_model_ir`
-  - [ ] Step 3: Keep mutation/simulation tools behind existing approval and transaction gates
-  - [ ] Step 4: Log tool input hashes, outputs, evidence IDs, and diagnostics
-  - [ ] Step 5: Commit `feat(ai): expose bounded engineering intelligence tools`
+- [x] Task 15: Expose explicit planner tools
+  - [x] Step 1: Add read tools: `search_engineering_knowledge`, `get_concept`, `find_related_concepts`, `get_fact_evidence`, existing block/schema tools, model inspection
+  - [x] Step 2: Add controlled transformations: `validate_architecture_plan`, `build_model_ir`, `validate_model_ir`, `map_concepts`, `compile_model_ir`
+  - [x] Step 3: Keep mutation/simulation tools behind existing approval and transaction gates
+  - [x] Step 4: Log tool input hashes, outputs, evidence IDs, and diagnostics
+  - [x] Step 5: Commit `feat(ai): expose bounded engineering intelligence tools`
 - [ ] Task 16: Integrate the pipeline into the orchestrator with compatibility fallback
   - [ ] Step 1: Add explicit stages: interpret → retrieve → plan architecture → clarify → build IR → map → validate → compile → proof → approve → execute → verify
   - [ ] Step 2: Present concise cited rationale, assumptions, unresolved requirements, capability gaps, and validation results without hidden chain-of-thought

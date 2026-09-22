@@ -125,3 +125,59 @@ export type DisconnectPortsInput = z.infer<typeof DisconnectPortsInputSchema>;
 export type ValidateModelInput = z.infer<typeof ValidateModelInputSchema>;
 export type SimulateModelInput = z.infer<typeof SimulateModelInputSchema>;
 export type UndoTransactionInput = z.infer<typeof UndoTransactionInputSchema>;
+
+// --- Engineering Intelligence Tool Schemas ---
+
+export const SearchEngineeringKnowledgeInputSchema = z.object({
+  query: z.string().min(1),
+  domainFilter: z.string().optional(),
+  limit: z.number().int().positive().optional()
+}).strict();
+
+export const GetConceptInputSchema = z.object({
+  conceptId: z.string().min(1)
+}).strict();
+
+export const FindRelatedConceptsInputSchema = z.object({
+  conceptId: z.string().min(1),
+  maxDepth: z.number().int().positive().optional()
+}).strict();
+
+export const GetFactEvidenceInputSchema = z.object({
+  factId: z.string().min(1)
+}).strict();
+
+export const ValidateArchitecturePlanInputSchema = z.object({
+  plan: z.any()
+}).strict();
+
+export const BuildModelIrInputSchema = z.object({
+  plan: z.any(),
+  modelId: z.string().min(1),
+  baseRevision: z.number().int().nonnegative().optional()
+}).strict();
+
+export const ValidateModelIrInputSchema = z.object({
+  ir: z.any(),
+  checkAlgebraicLoops: z.boolean().optional()
+}).strict();
+
+export const MapConceptsInputSchema = z.object({
+  ir: z.any()
+}).strict();
+
+export const CompileModelIrInputSchema = z.object({
+  ir: z.any(),
+  projectId: z.string().min(1),
+  baseRevision: z.number().int().nonnegative()
+}).strict();
+
+export type SearchEngineeringKnowledgeInput = z.infer<typeof SearchEngineeringKnowledgeInputSchema>;
+export type GetConceptInput = z.infer<typeof GetConceptInputSchema>;
+export type FindRelatedConceptsInput = z.infer<typeof FindRelatedConceptsInputSchema>;
+export type GetFactEvidenceInput = z.infer<typeof GetFactEvidenceInputSchema>;
+export type ValidateArchitecturePlanInput = z.infer<typeof ValidateArchitecturePlanInputSchema>;
+export type BuildModelIrInput = z.infer<typeof BuildModelIrInputSchema>;
+export type ValidateModelIrInput = z.infer<typeof ValidateModelIrInputSchema>;
+export type MapConceptsInput = z.infer<typeof MapConceptsInputSchema>;
+export type CompileModelIrInput = z.infer<typeof CompileModelIrInputSchema>;
