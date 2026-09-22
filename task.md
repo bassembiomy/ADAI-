@@ -236,5 +236,80 @@
   - [x] Step 3: Implement acceptance A (addition), B (BLDC architecture clarification/hierarchy/IR), and C (sensorless modification by IR diff)
   - [x] Step 4: Add negative tests for invented facts, fake citations, unverified retrieval, hallucinated blocks/ports, ambiguous pronouns, invalid units, and repeated questions
   - [x] Step 5: Run full AI, X-Bridges, security, persistence, and TypeScript gates
-  - [x] Step 6: Commit `test(ai): certify general engineering intelligence pipeline`
+
+# Generic Request Understanding Accuracy Implementation Plan
+
+- [x] Task 1: Define the structured request contract
+  - [x] Step 1: Define Zod schemas for operation, entities, numericValues, units, relationships, outputs, constraints, unresolvedRequirements, confidence, and evidence
+  - [x] Step 2: Use discriminated outcomes: ready, clarification_required, unsupported, and invalid
+  - [x] Step 3: Require each extracted value to include source text and normalized value
+  - [x] Step 4: Add tests for addition, multiplication, PID/transfer-function, Scope output, malformed values, and missing operands
+  - [x] Step 5: Run tests and commit `feat(ai): define structured engineering request contract`
+- [ ] Task 2: Implement deterministic normalization and typo handling
+  - [ ] Step 1: Normalize case, whitespace, punctuation, common spelling errors, number words, and unit spellings
+  - [ ] Step 2: Add bounded synonym dictionaries for operations, components, and observability terms
+  - [ ] Step 3: Preserve original text for evidence; never silently change user intent
+  - [ ] Step 4: Test creat, multiblying, cnstant, scope, show, display, and equivalent phrasing; ensure idempotence
+  - [ ] Step 5: Run tests and commit `feat(ai): normalize engineering requests deterministically`
+- [ ] Task 3: Extract values, operations, components, and outputs
+  - [ ] Step 1: Extract arithmetic operators and all numeric operands without defaulting missing operands to zero
+  - [ ] Step 2: Extract engineering components through aliases; extract relationships and emit unresolved slots
+  - [ ] Step 3: Add metamorphic tests proving paraphrases produce equivalent structured requests
+  - [ ] Step 4: Run tests and commit `feat(ai): extract structured engineering requests`
+- [ ] Task 4: Ground extracted entities against the verified catalog
+  - [ ] Step 1: Resolve aliases only through buildXbridgesCapabilityIndex() and verified composition mappings
+  - [ ] Step 2: Validate required ports and parameters during resolution; return capability gap for unknown blocks
+  - [ ] Step 3: Add catalog-backed mappings for transfer functions, PID controllers, arithmetic, constants, Scope
+  - [ ] Step 4: Run tests and commit `feat(ai): ground request entities in verified catalog`
+- [ ] Task 5: Make follow-up answers resolve conversation slots
+  - [ ] Step 1: Store unresolved slots with type, prompt, affected decisions, and original evidence
+  - [ ] Step 2: Parse answers (e.g. 10 and 20, display on Scope, use FOC) against active slot; reject invalid answers
+  - [ ] Step 3: Prevent repeated questions; permit exactly one active request per session; apply answers atomically
+  - [ ] Step 4: Run tests and commit `feat(ai): resolve clarification answers against active request slots`
+- [ ] Task 6: Add confidence and clarification policy
+  - [ ] Step 1: Define thresholds for ready, clarification-required, unsupported, and invalid outcomes
+  - [ ] Step 2: Treat missing REQUIRED values as blocking; ensure one actionable question per clarification response
+  - [ ] Step 3: Run tests and commit `feat(ai): add request confidence and clarification policy`
+- [ ] Task 7: Add deterministic engineering templates
+  - [ ] Step 1: Implement templates for arithmetic, PID/feedback/transfer-function, source/plant/Scope
+  - [ ] Step 2: Resolve every template port through the catalog before producing an architecture plan
+  - [ ] Step 3: Add deterministic snapshot tests for block IDs, ports, parameters, connections, and plan hashes
+  - [ ] Step 4: Commit `feat(ai): add deterministic engineering architecture templates`
+- [ ] Task 8: Integrate structured understanding before legacy planning
+  - [ ] Step 1: Route supported structured requests into the engineering pipeline with fallback for unsupported capabilities
+  - [ ] Step 2: Preserve existing approval, proof, transaction, rollback, and simulation boundaries
+  - [ ] Step 3: Lock route for lifetime of request; test Add 10 and 20, transfer function + PID, Scope
+  - [ ] Step 4: Commit `feat(ai): integrate structured request understanding`
+- [ ] Task 9: Enforce browser/Electron runtime boundaries
+  - [ ] Step 1: Use browser-safe in-memory/read-only repositories from renderer-reachable code
+  - [ ] Step 2: Prohibit renderer execution of process.cwd(), fs, path, and unguarded Buffer usage
+  - [ ] Step 3: Test with globalThis.process = undefined and verify build
+  - [ ] Step 4: Commit `fix(ai): enforce browser-safe engineering knowledge access`
+- [ ] Task 10: Guarantee transaction-local topology consistency
+  - [ ] Step 1: Maintain transaction-local mirror of nodes and edges for sequential action visibility before React commits
+  - [ ] Step 2: Validate edges against mirror immediately; test deferred React commits and concurrent user edits
+  - [ ] Step 3: Commit `fix(agent): preserve topology consistency across deferred React commits`
+- [ ] Task 11: Improve explainability without exposing hidden reasoning
+  - [ ] Step 1: Return concise interpretation, extracted values, assumptions, unresolved requirements, mappings, citations
+  - [ ] Step 2: Make every clarification and capability gap actionable; display template in approval summary
+  - [ ] Step 3: Commit `feat(ai): expose request interpretation evidence`
+- [ ] Task 12: Build the evaluation corpus and regression harness
+  - [ ] Step 1: Add at least 200 reviewed examples across arithmetic, transfer functions, PID, Scope, units, typos
+  - [ ] Step 2: Split into 70% dev, 15% validation, 15% holdout; enforce release metric thresholds
+  - [ ] Step 3: Commit `test(ai): add request understanding evaluation corpus`
+- [ ] Task 13: Add observability for failed understanding
+  - [ ] Step 1: Log normalized request hash, extractor outcome, unresolved slot IDs, catalog outcome, and plan hash
+  - [ ] Step 2: Redact sensitive content; record stage durations and reasons without hidden reasoning
+  - [ ] Step 3: Commit `feat(ai): audit request understanding decisions`
+- [ ] Task 14: Define timeout and degraded-mode behavior
+  - [ ] Step 1: Apply bounded timeout to optional LLM interpretation; continue deterministically when resolvable
+  - [ ] Step 2: Fail closed on invalid structured LLM output, catalog unavailability, or stale fingerprints
+  - [ ] Step 3: Commit `fix(ai): add deterministic degraded-mode request handling`
+- [ ] Task 15: Add persistence migration and rollout controls
+  - [ ] Step 1: Increment persisted request/session schema version; migrate old sessions deterministically
+  - [ ] Step 2: Add feature flags for shadow, selected-project, and general rollout stages
+  - [ ] Step 3: Commit `feat(ai): migrate and gate structured request sessions`
+- [ ] Task 16: Evaluate prompt improvements and optional fine-tuning
+  - [ ] Step 1: Run corpus against current model and prompts; improve few-shot examples
+  - [ ] Step 2: Verify holdout set and regression gate; commit model decision report
 
