@@ -213,11 +213,11 @@
   - [x] Step 3: Pass output through existing plan validation, preflight, isolated proof, approval, and transactions
   - [x] Step 4: Prove identical IR/catalog inputs produce identical plan fingerprints
   - [x] Step 5: Commit `feat(ai): compile engineering Model IR deterministically`
-- [ ] Task 14: Compose the engineering validation pipeline
-  - [ ] Step 1: Validate IR schema, hierarchy, semantic completeness, capability bindings, ports, dimensions, data types, physical domains, parameter completeness, references, unconnected outputs, controller/plant relationships, feedback, algebraic loops, and unsupported blocks
-  - [ ] Step 2: Normalize results into structured diagnostics with affected component, evidence, required values, and remediation
-  - [ ] Step 3: Keep validation, compilation, proof, and simulation statuses distinct
-  - [ ] Step 4: Commit `feat(ai): add staged engineering validation pipeline`
+- [x] Task 14: Compose the engineering validation pipeline
+  - [x] Step 1: Validate IR schema, hierarchy, semantic completeness, capability bindings, ports, dimensions, data types, physical domains, parameter completeness, references, unconnected outputs, controller/plant relationships, feedback, algebraic loops, and unsupported blocks
+  - [x] Step 2: Normalize results into structured diagnostics with affected component, evidence, required values, and remediation
+  - [x] Step 3: Keep validation, compilation, proof, and simulation statuses distinct
+  - [x] Step 4: Commit `feat(ai): add staged engineering validation pipeline`
 - [ ] Task 15: Expose explicit planner tools
   - [ ] Step 1: Add read tools: `search_engineering_knowledge`, `get_concept`, `find_related_concepts`, `get_fact_evidence`, existing block/schema tools, model inspection
   - [ ] Step 2: Add controlled transformations: `validate_architecture_plan`, `build_model_ir`, `validate_model_ir`, `map_concepts`, `compile_model_ir`
