@@ -152,13 +152,13 @@
   - [x] Step 2: Implement bounded neighbors, ancestors, requirements closure, alternatives, and shortest evidence path
   - [x] Step 3: Return traversal evidence with every result
   - [x] Step 4: Run focused graph tests and commit `feat(ai): add bounded engineering concept graph`
-- [ ] Task 4: Add trusted document-ingestion pipeline
-  - [ ] Step 1: Expand source taxonomy to approved documentation, standard, textbook, application note, manufacturer document, paper, and internal document
-  - [ ] Step 2: Store document identity, version/date, section locators, license decision, retrieval timestamp, checksum, and source reliability
-  - [ ] Step 3: Extract text/sections without executing active content, macros, scripts, embedded binaries, or arbitrary code
-  - [ ] Step 4: Use schema-constrained LLM extraction only to create quarantined candidates; deterministic validation and human review control promotion
-  - [ ] Step 5: Preserve extracted fact-to-section provenance and reject unsupported citations
-  - [ ] Step 6: Run ingestion/source-policy tests and commit `feat(ai): ingest quarantined engineering knowledge`
+- [x] Task 4: Add trusted document-ingestion pipeline
+  - [x] Step 1: Expand source taxonomy to approved documentation, standard, textbook, application note, manufacturer document, paper, and internal document
+  - [x] Step 2: Store document identity, version/date, section locators, license decision, retrieval timestamp, checksum, and source reliability
+  - [x] Step 3: Extract text/sections without executing active content, macros, scripts, embedded binaries, or arbitrary code
+  - [x] Step 4: Use schema-constrained LLM extraction only to create quarantined candidates; deterministic validation and human review control promotion
+  - [x] Step 5: Preserve extracted fact-to-section provenance and reject unsupported citations
+  - [x] Step 6: Run ingestion/source-policy tests and commit `feat(ai): ingest quarantined engineering knowledge`
 - [ ] Task 5: Implement review and promotion gates
   - [ ] Step 1: Require license approval, source reliability threshold, reviewer identity, fact/relationship validation, and conflict checks
   - [ ] Step 2: Promote atomically from quarantined to reviewed/verified; retain superseded history

@@ -3,6 +3,13 @@ import { sha256Hex } from '../../../../engine/opm/canonicalHash';
 
 export const KnowledgeSourceTypeSchema = z.enum([
   'documentation',
+  'approved_documentation',
+  'standard',
+  'textbook',
+  'application_note',
+  'manufacturer_document',
+  'paper',
+  'internal_document',
   'model_finder',
   'model_reference',
   'file_exchange',
