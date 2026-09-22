@@ -196,11 +196,11 @@
   - [x] Step 3: Never repeat a resolved question; reject invalid answers with a precise correction request
   - [x] Step 4: Present architecture alternatives with short engineering rationale
   - [x] Step 5: Commit `feat(ai): add slot-driven engineering clarification`
-- [ ] Task 11: Build hierarchical Model IR and diff support
-  - [ ] Step 1: Convert an approved architecture plan into subsystem/component/connection IR with trace links
-  - [ ] Step 2: Validate stable IDs, ownership, subsystem boundaries, semantic ports, dimensions, units, required references, unresolved required parameters, and invalid cycles
-  - [ ] Step 3: Implement semantic IR diffs so “make it sensorless” changes affected sensing/control subsystems instead of rebuilding the project
-  - [ ] Step 4: Commit `feat(ai): add hierarchical engineering Model IR`
+- [x] Task 11: Build hierarchical Model IR and diff support
+  - [x] Step 1: Convert an approved architecture plan into subsystem/component/connection IR with trace links
+  - [x] Step 2: Validate stable IDs, ownership, subsystem boundaries, semantic ports, dimensions, units, required references, unresolved required parameters, and invalid cycles
+  - [x] Step 3: Implement semantic IR diffs so “make it sensorless” changes affected sensing/control subsystems instead of rebuilding the project
+  - [x] Step 4: Commit `feat(ai): add hierarchical engineering Model IR`
 - [ ] Task 12: Implement deterministic concept-to-ADIA capability mapping
   - [ ] Step 1: Resolve semantic concepts only to catalog IDs and verified compatible compositions
   - [ ] Step 2: Validate ports, parameters, domains, solver features, and catalog fingerprint
