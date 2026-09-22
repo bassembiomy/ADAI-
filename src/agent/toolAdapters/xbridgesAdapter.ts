@@ -157,6 +157,8 @@ export function createLiveXbridgesStateAccessors(
 export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesApplicationDelegate {
   const { getNodes, getEdges, setNodes, setEdges, onSave } = opts;
   const recentlyCreatedNodes = new Map<string, ReactFlowXbridgesNode>();
+  const deletedNodeIds = new Set<string>();
+  const deletedEdgeIds = new Set<string>();
   // React state setters may commit asynchronously. Keep a transaction-local
   // mirror so sequential agent actions observe their own writes immediately.
   let localNodes = [...getNodes()];
@@ -164,16 +166,16 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
   const readNodes = () => {
     // External additions (for example a user edit between transaction and
     // undo) must remain visible, while stale React snapshots must not erase
-    // nodes created by the current transaction.
+    // nodes created by the current transaction or re-add deleted nodes.
     const external = getNodes();
     const known = new Set(localNodes.map(node => node.id));
-    localNodes = [...localNodes, ...external.filter(node => !known.has(node.id))];
+    localNodes = [...localNodes, ...external.filter(node => !known.has(node.id) && !deletedNodeIds.has(node.id))];
     return localNodes;
   };
   const readEdges = () => {
     const external = getEdges();
     const known = new Set(localEdges.map(edge => edge.id));
-    localEdges = [...localEdges, ...external.filter(edge => !known.has(edge.id))];
+    localEdges = [...localEdges, ...external.filter(edge => !known.has(edge.id) && !deletedEdgeIds.has(edge.id))];
     return localEdges;
   };
   const writeNodes = (updater: (previous: ReactFlowXbridgesNode[]) => ReactFlowXbridgesNode[]) => {
@@ -342,6 +344,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       };
 
       const agentNode = toAgentNode(newNode);
+      deletedNodeIds.delete(id);
       writeNodes((prev) => [...prev, newNode]);
       recentlyCreatedNodes.set(id, newNode);
 
@@ -362,6 +365,12 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         (e) => e.source === targetNode.id || e.target === targetNode.id
       );
       const removedEdgeIds = connectedEdges.map((e) => e.id);
+
+      deletedNodeIds.add(targetNode.id);
+      recentlyCreatedNodes.delete(targetNode.id);
+      for (const eid of removedEdgeIds) {
+        deletedEdgeIds.add(eid);
+      }
 
       writeNodes((prev) => prev.filter((n) => n.id !== targetNode.id));
       writeEdges((prev) => prev.filter((e) => e.source !== targetNode.id && e.target !== targetNode.id));
@@ -492,6 +501,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       };
 
       const agentEdge = toAgentEdge(newEdge);
+      deletedEdgeIds.delete(edgeId);
       writeEdges((prev) => [...prev, newEdge]);
 
       return agentEdge;
@@ -526,6 +536,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       }
 
       const edgeId = targetEdge.id;
+      deletedEdgeIds.add(edgeId);
       writeEdges((prev) => prev.filter((e) => e.id !== edgeId));
 
       return { disconnectedEdgeId: edgeId };

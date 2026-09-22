@@ -285,10 +285,10 @@
   - [x] Step 2: Prohibit renderer execution of process.cwd(), fs, path, and unguarded Buffer usage
   - [x] Step 3: Test with globalThis.process = undefined and verify build
   - [x] Step 4: Commit `fix(ai): enforce browser-safe engineering knowledge access`
-- [ ] Task 10: Guarantee transaction-local topology consistency
-  - [ ] Step 1: Maintain transaction-local mirror of nodes and edges for sequential action visibility before React commits
-  - [ ] Step 2: Validate edges against mirror immediately; test deferred React commits and concurrent user edits
-  - [ ] Step 3: Commit `fix(agent): preserve topology consistency across deferred React commits`
+- [x] Task 10: Guarantee transaction-local topology consistency
+  - [x] Step 1: Maintain transaction-local mirror of nodes and edges for sequential action visibility before React commits
+  - [x] Step 2: Validate edges against mirror immediately; test deferred React commits and concurrent user edits
+  - [x] Step 3: Commit `fix(agent): preserve topology consistency across deferred React commits`
 - [ ] Task 11: Improve explainability without exposing hidden reasoning
   - [ ] Step 1: Return concise interpretation, extracted values, assumptions, unresolved requirements, mappings, citations
   - [ ] Step 2: Make every clarification and capability gap actionable; display template in approval summary

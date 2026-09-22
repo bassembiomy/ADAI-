@@ -621,4 +621,106 @@ describe('validate, saveAndReadBack, getRevisionFingerprint', () => {
     expect(result.nodes).toHaveLength(1);
     expect(result.fingerprint).toHaveLength(64);
   });
+
+  describe('Transaction-Local Mirror & Deferred React Commits', () => {
+    it('guarantees sequential action visibility and connects ports under deferred React commits', async () => {
+      let committedNodes: ReactFlowXbridgesNode[] = [];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+      const pendingNodeUpdaters: Array<(prev: ReactFlowXbridgesNode[]) => ReactFlowXbridgesNode[]> = [];
+      const pendingEdgeUpdaters: Array<(prev: ReactFlowXbridgesEdge[]) => ReactFlowXbridgesEdge[]> = [];
+
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: (updater) => {
+          pendingNodeUpdaters.push(updater);
+        },
+        setEdges: (updater) => {
+          pendingEdgeUpdaters.push(updater);
+        },
+        onSave: vi.fn()
+      });
+
+      // 1. Add source block
+      await delegate.addBlock(VALID_TYPE_1, { id: 'source-node' });
+      // 2. Add target block
+      await delegate.addBlock(VALID_TYPE_2, { id: 'target-node' });
+
+      // At this point, React has NOT committed: committedNodes is still empty!
+      expect(committedNodes).toHaveLength(0);
+
+      // 3. Sequential connectPorts MUST see the local mirror immediately and succeed!
+      const edge = await delegate.connectPorts('source-node', 'y', 'target-node', 'in1');
+      expect(edge.source).toBe('source-node');
+      expect(edge.target).toBe('target-node');
+
+      // Local mirror reflects the additions
+      const nodes = await delegate.getNodes();
+      const edges = await delegate.getEdges();
+      expect(nodes).toHaveLength(2);
+      expect(edges).toHaveLength(1);
+
+      // Now simulate React flush
+      pendingNodeUpdaters.forEach(u => { committedNodes = u(committedNodes); });
+      pendingEdgeUpdaters.forEach(u => { committedEdges = u(committedEdges); });
+      expect(committedNodes).toHaveLength(2);
+      expect(committedEdges).toHaveLength(1);
+    });
+
+    it('preserves concurrent user edits alongside transaction-local mirror writes', async () => {
+      let committedNodes: ReactFlowXbridgesNode[] = [];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: (updater) => { committedNodes = updater(committedNodes); },
+        setEdges: (updater) => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      await delegate.addBlock(VALID_TYPE_1, { id: 'agent-block-1' });
+
+      // Concurrent user edit adds a node directly to the canvas
+      const userNode = makeNode(VALID_TYPE_2, 'user-block-2');
+      committedNodes.push(userNode);
+
+      // Delegate readNodes should see BOTH the agent's block and the user's block
+      const allNodes = await delegate.getNodes();
+      expect(allNodes).toHaveLength(2);
+      expect(allNodes.some(n => n.id === 'agent-block-1')).toBe(true);
+      expect(allNodes.some(n => n.id === 'user-block-2')).toBe(true);
+    });
+
+    it('reflects removeBlock and disconnectPorts immediately in local mirror before React commits', async () => {
+      const committedNodes: ReactFlowXbridgesNode[] = [
+        makeNode(VALID_TYPE_1, 'block-a'),
+        makeNode(VALID_TYPE_2, 'block-b')
+      ];
+      const committedEdges: ReactFlowXbridgesEdge[] = [
+        { id: 'edge-ab', source: 'block-a', sourceHandle: 'y', target: 'block-b', targetHandle: 'in1' }
+      ];
+
+      // Deferred React setters
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: vi.fn(),
+        setEdges: vi.fn(),
+        onSave: vi.fn()
+      });
+
+      // Remove block-a
+      const removeResult = await delegate.removeBlock('block-a');
+      expect(removeResult.removedNodeId).toBe('block-a');
+      expect(removeResult.removedEdgeIds).toContain('edge-ab');
+
+      // Mirror immediately reflects removal without waiting for React
+      const nodesAfter = await delegate.getNodes();
+      const edgesAfter = await delegate.getEdges();
+      expect(nodesAfter).toHaveLength(1);
+      expect(nodesAfter[0].id).toBe('block-b');
+      expect(edgesAfter).toHaveLength(0);
+    });
+  });
 });
