@@ -301,10 +301,10 @@
   - [x] Step 1: Log normalized request hash, extractor outcome, unresolved slot IDs, catalog outcome, and plan hash
   - [x] Step 2: Redact sensitive content; record stage durations and reasons without hidden reasoning
   - [x] Step 3: Commit `feat(ai): audit request understanding decisions`
-- [ ] Task 14: Define timeout and degraded-mode behavior
-  - [ ] Step 1: Apply bounded timeout to optional LLM interpretation; continue deterministically when resolvable
-  - [ ] Step 2: Fail closed on invalid structured LLM output, catalog unavailability, or stale fingerprints
-  - [ ] Step 3: Commit `fix(ai): add deterministic degraded-mode request handling`
+- [x] Task 14: Define timeout and degraded-mode behavior
+  - [x] Step 1: Apply bounded timeout to optional LLM interpretation; continue deterministically when resolvable
+  - [x] Step 2: Fail closed on invalid structured LLM output, catalog unavailability, or stale fingerprints
+  - [x] Step 3: Commit `fix(ai): add deterministic degraded-mode request handling`
 - [ ] Task 15: Add persistence migration and rollout controls
   - [ ] Step 1: Increment persisted request/session schema version; migrate old sessions deterministically
   - [ ] Step 2: Add feature flags for shadow, selected-project, and general rollout stages

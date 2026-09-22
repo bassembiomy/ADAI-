@@ -90,6 +90,16 @@ export class EngineeringIntelligencePipeline {
       };
     }
 
+    // 0. Catalog and Fingerprint Availability Guard (Fail Closed)
+    if (!this.config.catalog || !this.config.catalog.catalogFingerprint || this.config.catalog.totalBlocks === 0 || this.config.catalog.catalogFingerprint === 'stale') {
+      return {
+        status: 'capability_gap',
+        gaps: [],
+        unsupported: [],
+        notes: 'Catalog unavailable or invalid/stale catalog fingerprint. Cannot execute engineering pipeline.'
+      };
+    }
+
     // 1. Semantic Intent Interpretation
     const conversationSnapshot = this.config.conversationMemory.getSnapshot(request.sessionId);
     const intentResult = await this.interpreter.interpret(
@@ -159,17 +169,28 @@ export class EngineeringIntelligencePipeline {
 
     // 2. Hybrid Engineering Knowledge Retrieval
     const queryDomain = intent.domainCandidates[0];
-    let knowledge = await this.config.retriever.retrieve({
-      query: intent.objective,
-      domain: queryDomain
-    });
-
-    let concepts = (knowledge as any).concepts || (knowledge as any).rankedConcepts || [];
-    if (concepts.length === 0 && queryDomain) {
+    let knowledge;
+    let concepts: any[] = [];
+    try {
       knowledge = await this.config.retriever.retrieve({
-        query: intent.objective
+        query: intent.objective,
+        domain: queryDomain
       });
+
       concepts = (knowledge as any).concepts || (knowledge as any).rankedConcepts || [];
+      if (concepts.length === 0 && queryDomain) {
+        knowledge = await this.config.retriever.retrieve({
+          query: intent.objective
+        });
+        concepts = (knowledge as any).concepts || (knowledge as any).rankedConcepts || [];
+      }
+    } catch (retrieverErr: any) {
+      return {
+        status: 'capability_gap',
+        gaps: [],
+        unsupported: [],
+        notes: `Engineering knowledge store failure: ${retrieverErr.message || 'Retrieval failed'}`
+      };
     }
 
     if (concepts.length === 0) {

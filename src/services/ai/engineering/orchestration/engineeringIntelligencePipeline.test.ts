@@ -153,4 +153,92 @@ describe('EngineeringIntelligencePipeline', () => {
       expect(result.prompt).toBeDefined();
     }
   });
+
+  it('fails closed when catalog is unavailable or catalog fingerprint is missing or stale', async () => {
+    const brokenCatalog = {
+      catalogFingerprint: 'stale',
+      totalBlocks: 0,
+      blocks: new Map(),
+      aliases: new Map(),
+      categories: []
+    } as any;
+
+    const pipelineWithBrokenCatalog = new EngineeringIntelligencePipeline({
+      catalog: brokenCatalog,
+      retriever: (pipeline as any).config.retriever,
+      projectMemory: new ProjectMemoryManager(),
+      conversationMemory: new ConversationMemoryManager(),
+      modelMemory: new ModelMemoryManager()
+    });
+
+    const result = await pipelineWithBrokenCatalog.processUserRequest({
+      input: 'Add 10 and 20',
+      sessionId: 'sess_stale_cat',
+      projectId: 'proj_stale_cat',
+      baseRevision: 1
+    });
+
+    expect(result.status).toBe('capability_gap');
+    if (result.status === 'capability_gap') {
+      expect(result.notes).toMatch(/catalog unavailable or invalid\/stale/i);
+    }
+  });
+
+  it('fails closed when knowledge store or retriever encounters an unexpected error', async () => {
+    const brokenRetriever = {
+      retrieve: () => Promise.reject(new Error('Database disk image is malformed'))
+    } as any;
+
+    const pipelineWithBrokenStore = new EngineeringIntelligencePipeline({
+      catalog,
+      retriever: brokenRetriever,
+      projectMemory: new ProjectMemoryManager(),
+      conversationMemory: new ConversationMemoryManager(),
+      modelMemory: new ModelMemoryManager()
+    });
+
+    const result = await pipelineWithBrokenStore.processUserRequest({
+      input: 'Add 10 and 20',
+      sessionId: 'sess_broken_store',
+      projectId: 'proj_broken_store',
+      baseRevision: 1
+    });
+
+    expect(result.status).toBe('capability_gap');
+    if (result.status === 'capability_gap') {
+      expect(result.notes).toMatch(/knowledge store failure/i);
+    }
+  });
+
+  it('never downgrades an invalid architecture plan into an unverified legacy plan', async () => {
+    // A request that fails validation or architecture planning
+    const invalidPipeline = new EngineeringIntelligencePipeline({
+      catalog,
+      retriever: (pipeline as any).config.retriever,
+      projectMemory: new ProjectMemoryManager(),
+      conversationMemory: new ConversationMemoryManager(),
+      modelMemory: new ModelMemoryManager()
+    });
+
+    // Mock planner to return invalid
+    (invalidPipeline as any).planner = {
+      plan: () => Promise.resolve({
+        status: 'invalid',
+        errors: ['Algebraic loop detected between components']
+      })
+    };
+
+    const result = await invalidPipeline.processUserRequest({
+      input: 'Add 10 and 20',
+      sessionId: 'sess_invalid_plan',
+      projectId: 'proj_invalid_plan',
+      baseRevision: 1
+    });
+
+    expect(result.status).toBe('validation_failed');
+    expect(result.status).not.toBe('fallback_to_legacy');
+    if (result.status === 'validation_failed') {
+      expect(result.diagnostics[0].message).toContain('Algebraic loop detected');
+    }
+  });
 });
