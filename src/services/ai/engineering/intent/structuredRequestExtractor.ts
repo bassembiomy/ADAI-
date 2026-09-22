@@ -354,6 +354,16 @@ export class StructuredRequestExtractor {
       };
     }
 
+    const domainOperations = operations.filter(op => !['create', 'modify', 'inspect', 'validate', 'simulate', 'optimize'].includes(op));
+
+    if (finalEntities.length === 0 && domainOperations.length === 0) {
+      return {
+        status: 'unsupported',
+        reason: `No supported engineering entities or operations detected in: "${originalText.trim()}"`,
+        request: structuredReq
+      };
+    }
+
     return {
       status: 'ready',
       request: structuredReq

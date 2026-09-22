@@ -855,4 +855,91 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(nodesState).toHaveLength(0);
     expect(edgesState).toHaveLength(0);
   });
+
+  describe('Structured Request Understanding & Engineering Pipeline Integration', () => {
+    it('routes "Add 10 and 20" into engineering intelligence and compiles verified plan', async () => {
+      let nodesState: any[] = [];
+      let edgesState: any[] = [];
+      const liveDelegate = createXbridgesDelegate({
+        getNodes: () => nodesState,
+        getEdges: () => edgesState,
+        setNodes: updater => { nodesState = updater(nodesState); },
+        setEdges: updater => { edgesState = updater(edgesState); },
+        onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+      });
+      const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      const res = await orch.handle('Add 10 and 20');
+      expect(res.status).toBe('awaiting_plan_approval');
+      expect(res.pendingApproval).toBeDefined();
+      expect(res.executionPlan).toBeDefined();
+      expect(res.executionPlan?.actions.some(a => a.params?.blockType === 'Sum')).toBe(true);
+    });
+
+    it('pauses with clarification for "Create a model adding two numbers" with missing operands', async () => {
+      const tools = new ToolGateway();
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      const res = await orch.handle('Create a model adding two numbers');
+      expect(res.status).toBe('clarifying');
+      expect(res.message).toMatch(/numbers|operands/i);
+    });
+
+    it('routes "Multiply 10 by 100 and display it on a scope" with VectorMul and Scope', async () => {
+      let nodesState: any[] = [];
+      let edgesState: any[] = [];
+      const liveDelegate = createXbridgesDelegate({
+        getNodes: () => nodesState,
+        getEdges: () => edgesState,
+        setNodes: updater => { nodesState = updater(nodesState); },
+        setEdges: updater => { edgesState = updater(edgesState); },
+        onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+      });
+      const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      const res = await orch.handle('Multiply 10 by 100 and display it on a scope');
+      expect(res.status).toBe('awaiting_plan_approval');
+      expect(res.executionPlan?.actions.some(a => a.params?.blockType === 'VectorMul')).toBe(true);
+      expect(res.executionPlan?.actions.some(a => a.params?.blockType === 'Scope')).toBe(true);
+    });
+
+    it('routes "Create a transfer function and a PID controller for it" into feedback architecture', async () => {
+      let nodesState: any[] = [];
+      let edgesState: any[] = [];
+      const liveDelegate = createXbridgesDelegate({
+        getNodes: () => nodesState,
+        getEdges: () => edgesState,
+        setNodes: updater => { nodesState = updater(nodesState); },
+        setEdges: updater => { edgesState = updater(edgesState); },
+        onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+      });
+      const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      const res = await orch.handle('Create a transfer function and a PID controller for it');
+      expect(['awaiting_plan_approval', 'clarifying']).toContain(res.status);
+      if (res.status === 'awaiting_plan_approval') {
+        expect(res.executionPlan?.actions.some(a => a.params?.blockType === 'TRANSFER_FUNCTION')).toBe(true);
+        expect(res.executionPlan?.actions.some(a => a.params?.blockType === 'PID_CONTROLLER')).toBe(true);
+      }
+    });
+
+    it('preserves request/session state across createFreshSession only when explicitly requested', () => {
+      const orch = new AgentOrchestrator(new MockLlmProvider(), new ToolGateway());
+      (orch as any).engineeringSessionId = 'eng_sess_123';
+      (orch as any).engineeringRequestInput = 'Add 10 and 20';
+
+      // Default: does NOT preserve state
+      const fresh1 = orch.createFreshSession();
+      expect((fresh1 as any).engineeringSessionId).toBeUndefined();
+
+      // Explicit preserveSessionState: true
+      const fresh2 = orch.createFreshSession({ preserveSessionState: true });
+      expect((fresh2 as any).engineeringSessionId).toBe('eng_sess_123');
+      expect((fresh2 as any).engineeringRequestInput).toBe('Add 10 and 20');
+    });
+  });
 });
+

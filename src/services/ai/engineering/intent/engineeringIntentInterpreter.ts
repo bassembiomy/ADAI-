@@ -229,7 +229,10 @@ export class EngineeringIntentInterpreter {
 
     return {
       status: 'ok',
-      intent: EngineeringIntentSchema.parse(intent)
+      intent: EngineeringIntentSchema.parse(intent),
+      structuredRequest: structuredResult.status === 'ready' || structuredResult.status === 'clarification_required'
+        ? structuredResult.request
+        : undefined
     };
   }
 }

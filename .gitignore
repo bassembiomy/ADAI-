@@ -41,3 +41,4 @@ playwright-report/
 .tmp-vitest-results.json
 npm-audit-*.json
 Z-CODE/
+data/

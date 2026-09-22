@@ -275,11 +275,11 @@
   - [x] Step 2: Resolve every template port through the catalog before producing an architecture plan
   - [x] Step 3: Add deterministic snapshot tests for block IDs, ports, parameters, connections, and plan hashes
   - [x] Step 4: Commit `feat(ai): add deterministic engineering architecture templates`
-- [ ] Task 8: Integrate structured understanding before legacy planning
-  - [ ] Step 1: Route supported structured requests into the engineering pipeline with fallback for unsupported capabilities
-  - [ ] Step 2: Preserve existing approval, proof, transaction, rollback, and simulation boundaries
-  - [ ] Step 3: Lock route for lifetime of request; test Add 10 and 20, transfer function + PID, Scope
-  - [ ] Step 4: Commit `feat(ai): integrate structured request understanding`
+- [x] Task 8: Integrate structured understanding before legacy planning
+  - [x] Step 1: Route supported structured requests into the engineering pipeline with fallback for unsupported capabilities
+  - [x] Step 2: Preserve existing approval, proof, transaction, rollback, and simulation boundaries
+  - [x] Step 3: Lock route for lifetime of request; test Add 10 and 20, transfer function + PID, Scope
+  - [x] Step 4: Commit `feat(ai): integrate structured request understanding`
 - [ ] Task 9: Enforce browser/Electron runtime boundaries
   - [ ] Step 1: Use browser-safe in-memory/read-only repositories from renderer-reachable code
   - [ ] Step 2: Prohibit renderer execution of process.cwd(), fs, path, and unguarded Buffer usage

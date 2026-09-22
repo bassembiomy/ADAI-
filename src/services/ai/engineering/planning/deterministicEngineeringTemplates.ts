@@ -170,7 +170,7 @@ export class DeterministicEngineeringTemplates {
         coveredConceptIds: components.map(c => c.conceptId),
         unsupportedConceptIds: []
       },
-      rationale: 'Deterministic arithmetic architecture instantiated from verified catalog.'
+      rationale: `Deterministic arithmetic architecture (${opType === 'multiply' ? 'Multiplication' : opType === 'subtract' ? 'Subtraction' : opType === 'divide' ? 'Division' : 'Addition'}) instantiated from verified catalog.`
     };
   }
 

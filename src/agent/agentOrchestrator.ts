@@ -47,6 +47,7 @@ import { ProjectMemoryManager } from '../services/ai/engineering/memory/projectM
 import { ConversationMemoryManager } from '../services/ai/engineering/memory/conversationMemory';
 import { ModelMemoryManager } from '../services/ai/engineering/memory/modelMemory';
 import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
+import { extractStructuredEngineeringRequest } from '../services/ai/engineering/intent/structuredRequestExtractor';
 import { HybridRetriever } from '../services/ai/engineering/retrieval/hybridRetriever';
 import { ConceptStore } from '../services/ai/engineering/knowledge/conceptStore';
 import { FactStore } from '../services/ai/engineering/knowledge/factStore';
@@ -209,7 +210,7 @@ export class AgentOrchestrator {
   public async processWithEngineeringIntelligence(input: string): Promise<PipelineOutcome> {
     await this.ensureEngineeringKnowledge();
     const pipeline = this.getEngineeringPipeline();
-    const effectiveInput = this.engineeringRequestInput && this.engineeringSessionId
+    const effectiveInput = this.engineeringRequestInput && this.engineeringSessionId && input !== this.engineeringRequestInput
       ? `${this.engineeringRequestInput}; user clarification: ${input}`
       : input;
     return pipeline.processUserRequest({
@@ -352,6 +353,9 @@ export class AgentOrchestrator {
       { planId: this.executionPlan.id, citations: outcome.citations, proofStatus: this.currentProof.status }
     );
     this.pendingApproval = planApproval;
+    if (this.taskState.status === 'clarifying') {
+      this.taskState = transitionState(this.taskState, 'awaiting_specification_approval', 'Specification ready from verified engineering pipeline');
+    }
     this.taskState = transitionState({
       ...this.taskState,
       approvals: [...this.taskState.approvals, planApproval]
@@ -375,8 +379,12 @@ export class AgentOrchestrator {
     if (this.engineeringSessionId) return true;
     const lower = input.toLowerCase();
     if (/air[- ]?fryer|inverter|rlc circuit|three[- ]phase|quantum|flux capacitor/.test(lower)) return false;
-    return /\b(add|adding|addition|sum|plus|subtract|subtracting|minus|multiply|multiplying|product|divide|dividing|division)\b/.test(lower)
-      && /\b(model|number|constant|result|scope|block|value)\b/.test(lower);
+    if (/\b(?:transfer\s+function|tf|pid\s+controller|pid)\b/i.test(lower)) return true;
+    if (/\b(add|adding|addition|sum|plus|subtract|subtracting|minus|multiply|multiplying|product|divide|dividing|division)\b/i.test(lower)) {
+      return true;
+    }
+    const structured = extractStructuredEngineeringRequest(input);
+    return structured.status === 'ready' || structured.status === 'clarification_required';
   }
 
   constructor(
@@ -392,9 +400,14 @@ export class AgentOrchestrator {
     this.transactionCollaborator = new TransactionCollaborator();
   }
 
-  public createFreshSession(): AgentOrchestrator {
+  public createFreshSession(options?: { preserveSessionState?: boolean }): AgentOrchestrator {
     const freshSession = new AgentOrchestrator(this.llm, this.tools, this.loadPatterns);
     freshSession.projectContext = { ...this.projectContext };
+    if (options?.preserveSessionState) {
+      freshSession.engineeringSessionId = this.engineeringSessionId;
+      freshSession.engineeringRequestInput = this.engineeringRequestInput;
+      freshSession.taskState = this.taskState ? { ...this.taskState } : undefined;
+    }
     return freshSession;
   }
 

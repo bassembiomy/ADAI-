@@ -171,7 +171,12 @@ export class EngineeringIntelligencePipeline {
 
     // 3. Evidence-Backed Architecture Planning
     const projectSnapshot = this.config.projectMemory.getOrCreate(request.projectId);
-    const planningResult = await this.planner.plan(intent, knowledge, projectSnapshot);
+    const planningResult = await this.planner.plan(
+      intent,
+      knowledge,
+      projectSnapshot,
+      intentResult.structuredRequest
+    );
 
     if (planningResult.status === 'clarification_required') {
       const decision = this.clarificationManager.next(planningResult.plan);
