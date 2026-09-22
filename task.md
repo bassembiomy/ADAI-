@@ -224,12 +224,12 @@
   - [x] Step 3: Keep mutation/simulation tools behind existing approval and transaction gates
   - [x] Step 4: Log tool input hashes, outputs, evidence IDs, and diagnostics
   - [x] Step 5: Commit `feat(ai): expose bounded engineering intelligence tools`
-- [ ] Task 16: Integrate the pipeline into the orchestrator with compatibility fallback
-  - [ ] Step 1: Add explicit stages: interpret → retrieve → plan architecture → clarify → build IR → map → validate → compile → proof → approve → execute → verify
-  - [ ] Step 2: Present concise cited rationale, assumptions, unresolved requirements, capability gaps, and validation results without hidden chain-of-thought
-  - [ ] Step 3: Feature-flag the new pipeline; retain current planner for unsupported/migration cases during rollout
-  - [ ] Step 4: Prevent fallback after the new pipeline has made architecture decisions unless the user explicitly restarts
-  - [ ] Step 5: Commit `feat(ai): integrate engineering intelligence workflow`
+- [x] Task 16: Integrate the pipeline into the orchestrator with compatibility fallback
+  - [x] Step 1: Add explicit stages: interpret → retrieve → plan architecture → clarify → build IR → map → validate → compile → proof → approve → execute → verify
+  - [x] Step 2: Present concise cited rationale, assumptions, unresolved requirements, capability gaps, and validation results without hidden chain-of-thought
+  - [x] Step 3: Feature-flag the new pipeline; retain current planner for unsupported/migration cases during rollout
+  - [x] Step 4: Prevent fallback after the new pipeline has made architecture decisions unless the user explicitly restarts
+  - [x] Step 5: Commit `feat(ai): integrate engineering intelligence workflow`
 - [ ] Task 17: Seed cross-domain knowledge and acceptance benchmarks
   - [ ] Step 1: Seed small reviewed concepts for addition, PID loop, BLDC drive, FOC, six-step commutation, buck/boost converter, thermal loop, hydraulic actuator, differential drive, state machine, Kalman filter, and vibration system
   - [ ] Step 2: Do not seed unsupported ADIA mappings; represent them as capability gaps

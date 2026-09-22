@@ -22,6 +22,10 @@ export class ConversationMemoryManager {
     return this.sessions.get(sessionId) ?? null;
   }
 
+  public getSnapshot(sessionId: string): ConversationMemorySnapshot | null {
+    return this.getSession(sessionId);
+  }
+
   public recordTurn(
     sessionId: string,
     turn: Omit<DialogueTurn, 'id' | 'timestamp'>

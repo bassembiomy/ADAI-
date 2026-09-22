@@ -41,8 +41,10 @@ export class EngineeringPlanner {
     knowledge: RetrievedKnowledgeBundle,
     memory: ProjectMemorySnapshot
   ): Promise<ArchitecturePlanningResult> {
+    const conceptsList = (knowledge as any).concepts || (knowledge as any).rankedConcepts || [];
+
     // 1. Identify primary system concept
-    const primaryConcept = knowledge.rankedConcepts[0]?.concept;
+    const primaryConcept = conceptsList[0]?.concept;
     if (!primaryConcept) {
       return {
         status: 'capability_gap',
@@ -183,16 +185,27 @@ export class EngineeringPlanner {
     }
 
     // 3. Information Classification for all active concept parameters
-    for (const ranked of knowledge.rankedConcepts) {
+    for (const ranked of conceptsList) {
       const c = ranked.concept;
-      for (const [paramName, paramDef] of Object.entries(c.designParameters || {})) {
+      const paramsList = Array.isArray(c.designParameters)
+        ? c.designParameters
+        : Object.entries(c.designParameters || {}).map(([name, def]: any) => ({ name, ...def }));
+
+      for (const p of paramsList) {
+        const paramName = p.name;
         const userProvided =
           memory.resolvedSlots[paramName] ??
-          intent.inputs.find(i => i.name === paramName)?.type; // check if passed in intent
+          intent.inputs.find(i => i.name === paramName)?.type;
 
         const slot = this.classifier.classifySlot({
           slotName: paramName,
-          definition: paramDef,
+          definition: {
+            type: p.type || 'string',
+            default: p.defaultValue ?? (p as any).default,
+            unit: p.unit,
+            description: p.description,
+            required: p.required
+          },
           userProvidedValue: userProvided,
           conceptId: c.id,
           candidateValues: paramName.includes('commutation') ? ['foc', 'six_step'] : undefined,
@@ -207,11 +220,11 @@ export class EngineeringPlanner {
     const assumptions = this.classifier.generateAssumptions(informationRequirements);
 
     // 5. Build Knowledge Evidence citations
-    const knowledgeEvidence: KnowledgeEvidence[] = knowledge.rankedConcepts.map(rc => ({
+    const knowledgeEvidence: KnowledgeEvidence[] = conceptsList.map((rc: any) => ({
       conceptId: rc.concept.id,
-      factIds: rc.evidenceFactIds,
+      factIds: rc.evidenceFactIds || [],
       confidence: rc.concept.confidence,
-      citation: rc.citations[0] || 'Verified engineering knowledge base'
+      citation: rc.citations?.[0] || rc.evidence || 'Verified engineering knowledge base'
     }));
 
     // 6. Capability Assessment

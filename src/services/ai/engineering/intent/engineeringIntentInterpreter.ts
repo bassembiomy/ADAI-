@@ -92,9 +92,9 @@ export class EngineeringIntentInterpreter {
 
     // 5A. Handle arithmetic path
     const isArithmeticWord = /\b(?:add|addition|sum|plus|subtract|minus|multiply|product|divide)\b/i.test(lower);
-    if (isArithmeticWord && arithmetic.operands.length >= 2) {
-      const op1 = arithmetic.operands[0].value;
-      const op2 = arithmetic.operands[1].value;
+    if (isArithmeticWord) {
+      const op1 = arithmetic.operands[0]?.value ?? 0;
+      const op2 = arithmetic.operands[1]?.value ?? 0;
       const opType = lower.includes('subtract') || lower.includes('minus') ? 'subtract' : 'add';
 
       const intent: EngineeringIntent = {
@@ -103,19 +103,19 @@ export class EngineeringIntentInterpreter {
         intent: intentKind,
         objective: trimmed,
         domainCandidates: ['arithmetic'],
-        systemConceptIds: [opType === 'add' ? 'concept.math.addition' : 'concept.math.subtraction'],
+        systemConceptIds: [opType === 'add' ? 'concept_addition' : 'concept_subtraction'],
         operations: [
           {
             type: opType,
-            parameters: { operand1: op1, operand2: op2 },
-            targetConceptId: opType === 'add' ? 'concept.math.addition' : 'concept.math.subtraction'
+            parameters: arithmetic.operands.length >= 2 ? { operand1: op1, operand2: op2 } : {},
+            targetConceptId: opType === 'add' ? 'concept_addition' : 'concept_subtraction'
           }
         ],
         controlledVariables: [],
         actuators: [],
         plants: [],
         sensors: [],
-        inputs: [String(op1), String(op2)],
+        inputs: arithmetic.operands.map(o => String(o.value)),
         outputs: [opType === 'add' ? 'sum' : 'difference'],
         constraints: [],
         requestedFidelity: 'symbolic',
@@ -124,7 +124,7 @@ export class EngineeringIntentInterpreter {
         unknownTerms,
         unresolvedReferences: [],
         evidence: [
-          { sourceId: 'user_prompt', description: 'Deterministic arithmetic operands extracted', score: 1.0 }
+          { sourceId: 'user_prompt', description: 'Arithmetic intent detected', score: 1.0 }
         ]
       };
       return { status: 'ok', intent };

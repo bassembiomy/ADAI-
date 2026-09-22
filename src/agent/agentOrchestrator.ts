@@ -38,6 +38,19 @@ import {
   ExtendedApprovalRequest
 } from './approvalGate';
 import { XbridgesAgentTransaction } from '../services/ai/execution/xbridgesAgentTransaction';
+import * as path from 'path';
+import {
+  EngineeringIntelligencePipeline,
+  PipelineOutcome
+} from '../services/ai/engineering/orchestration/engineeringIntelligencePipeline';
+import { ProjectMemoryManager } from '../services/ai/engineering/memory/projectMemory';
+import { ConversationMemoryManager } from '../services/ai/engineering/memory/conversationMemory';
+import { ModelMemoryManager } from '../services/ai/engineering/memory/modelMemory';
+import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
+import { HybridRetriever } from '../services/ai/engineering/retrieval/hybridRetriever';
+import { ConceptStore } from '../services/ai/engineering/knowledge/conceptStore';
+import { FactStore } from '../services/ai/engineering/knowledge/factStore';
+import { ConceptGraphStore } from '../services/ai/engineering/graph/conceptGraphStore';
 import {
   ToolGateway,
   toolGateway as defaultToolGateway,
@@ -148,6 +161,45 @@ export class AgentOrchestrator {
   private currentPatternEvidence: RankedPatternMatch[] = [];
   private initialDomainGuidance?: string;
   private currentQuestionDefault?: string;
+  private enableEngineeringIntelligence: boolean = true;
+  private engineeringPipeline?: EngineeringIntelligencePipeline;
+  private projectMemoryManager = new ProjectMemoryManager();
+  private conversationMemoryManager = new ConversationMemoryManager();
+  private modelMemoryManager = new ModelMemoryManager();
+
+  public setEngineeringIntelligenceEnabled(enabled: boolean): void {
+    this.enableEngineeringIntelligence = enabled;
+  }
+
+  public getEngineeringPipeline(): EngineeringIntelligencePipeline {
+    if (!this.engineeringPipeline) {
+      const storageDir = path.join(process.cwd(), 'data', 'engineering-knowledge');
+      const conceptStore = new ConceptStore({ storageDir });
+      const factStore = new FactStore({ storageDir });
+      const conceptGraphStore = new ConceptGraphStore({ storageDir });
+      const retriever = new HybridRetriever({ conceptStore, factStore, conceptGraphStore });
+
+      this.engineeringPipeline = new EngineeringIntelligencePipeline({
+        catalog: buildXbridgesCapabilityIndex(),
+        retriever,
+        projectMemory: this.projectMemoryManager,
+        conversationMemory: this.conversationMemoryManager,
+        modelMemory: this.modelMemoryManager,
+        enabled: this.enableEngineeringIntelligence
+      });
+    }
+    return this.engineeringPipeline;
+  }
+
+  public async processWithEngineeringIntelligence(input: string): Promise<PipelineOutcome> {
+    const pipeline = this.getEngineeringPipeline();
+    return pipeline.processUserRequest({
+      input,
+      sessionId: this.taskState?.id || `sess_${Date.now()}`,
+      projectId: this.projectContext.projectId,
+      baseRevision: this.projectContext.revision
+    });
+  }
 
   constructor(
     llmProvider?: LlmProvider,
