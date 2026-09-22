@@ -164,12 +164,12 @@
   - [x] Step 2: Promote atomically from quarantined to reviewed/verified; retain superseded history
   - [x] Step 3: Prevent runtime retrieval of unverified facts
   - [x] Step 4: Commit `feat(ai): add verified knowledge promotion workflow`
-- [ ] Task 6: Build hybrid retrieval and evidence reranking
-  - [ ] Step 1: Implement lexical token/BM25-style scoring, exact aliases, domain/version/lifecycle/source filters, graph-neighborhood expansion, and optional cosine similarity
-  - [ ] Step 2: Combine scores with an explicit formula and stable ID tie-breaker
-  - [ ] Step 3: Weight verified ADIA knowledge, standards, manufacturer docs, textbooks, and peer-reviewed sources above uncontrolled sources
-  - [ ] Step 4: Return cited evidence and score breakdown; never return quarantined knowledge to runtime planning
-  - [ ] Step 5: Run retrieval/provider tests and commit `feat(ai): add hybrid engineering knowledge retrieval`
+- [x] Task 6: Build hybrid retrieval and evidence reranking
+  - [x] Step 1: Implement lexical token/BM25-style scoring, exact aliases, domain/version/lifecycle/source filters, graph-neighborhood expansion, and optional cosine similarity
+  - [x] Step 2: Combine scores with an explicit formula and stable ID tie-breaker
+  - [x] Step 3: Weight verified ADIA knowledge, standards, manufacturer docs, textbooks, and peer-reviewed sources above uncontrolled sources
+  - [x] Step 4: Return cited evidence and score breakdown; never return quarantined knowledge to runtime planning
+  - [x] Step 5: Run retrieval/provider tests and commit `feat(ai): add hybrid engineering knowledge retrieval`
 - [ ] Task 7: Replace keyword routing with typed semantic interpretation
   - [ ] Step 1: Parse deterministic entities/units/operations first, then use schema-constrained Qwen output for unresolved semantics
   - [ ] Step 2: Resolve pronouns such as “it” against project/conversation memory with explicit confidence and ambiguity diagnostics
