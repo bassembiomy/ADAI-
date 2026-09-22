@@ -147,11 +147,11 @@
   - [x] Step 3: Verify corrupt records, path traversal, oversized records, and hash mismatches fail closed
   - [x] Step 4: Run `npx vitest run src/services/ai/engineering/knowledge src/services/ai/engineering/graph`
   - [x] Step 5: Commit `feat(ai): add provenance-aware engineering knowledge stores`
-- [ ] Task 3: Implement concept-graph validation and traversal
-  - [ ] Step 1: Validate endpoints, relation taxonomy, cycles, confidence, and lifecycle eligibility
-  - [ ] Step 2: Implement bounded neighbors, ancestors, requirements closure, alternatives, and shortest evidence path
-  - [ ] Step 3: Return traversal evidence with every result
-  - [ ] Step 4: Run focused graph tests and commit `feat(ai): add bounded engineering concept graph`
+- [x] Task 3: Implement concept-graph validation and traversal
+  - [x] Step 1: Validate endpoints, relation taxonomy, cycles, confidence, and lifecycle eligibility
+  - [x] Step 2: Implement bounded neighbors, ancestors, requirements closure, alternatives, and shortest evidence path
+  - [x] Step 3: Return traversal evidence with every result
+  - [x] Step 4: Run focused graph tests and commit `feat(ai): add bounded engineering concept graph`
 - [ ] Task 4: Add trusted document-ingestion pipeline
   - [ ] Step 1: Expand source taxonomy to approved documentation, standard, textbook, application note, manufacturer document, paper, and internal document
   - [ ] Step 2: Store document identity, version/date, section locators, license decision, retrieval timestamp, checksum, and source reliability
