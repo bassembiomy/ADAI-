@@ -83,4 +83,16 @@ export class ProjectMemoryManager {
     if (!proj) return [];
     return proj.decisions.filter(d => d.decisionKey === decisionKey);
   }
+
+  public resolveSlot(projectId: string, slotName: string, value: unknown): void {
+    const proj = this.getOrCreate(projectId);
+    proj.resolvedSlots[slotName] = value;
+    proj.updatedAt = Date.now();
+  }
+
+  public recordAssumption(projectId: string, assumption: { id: string; statement: string; source: string }): void {
+    const proj = this.getOrCreate(projectId);
+    proj.assumptions.push(assumption);
+    proj.updatedAt = Date.now();
+  }
 }

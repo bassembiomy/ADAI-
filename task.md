@@ -190,12 +190,12 @@
   - [x] Step 4: Validate architecture completeness, contradictions, unsupported concepts, and traceability
   - [x] Step 5: Acceptance: BLDC request produces power/control/sensing/plant/load functions; FOC and six-step remain alternatives rather than hard-coded choices
   - [x] Step 6: Commit `feat(ai): add evidence-backed engineering architecture planner`
-- [ ] Task 10: Replace question loops with a generic clarification manager
-  - [ ] Step 1: Rank unresolved REQUIRED slots by architecture impact and dependency order
-  - [ ] Step 2: Parse answers through each slot's declared value schema and update project memory
-  - [ ] Step 3: Never repeat a resolved question; reject invalid answers with a precise correction request
-  - [ ] Step 4: Present architecture alternatives with short engineering rationale
-  - [ ] Step 5: Commit `feat(ai): add slot-driven engineering clarification`
+- [x] Task 10: Replace question loops with a generic clarification manager
+  - [x] Step 1: Rank unresolved REQUIRED slots by architecture impact and dependency order
+  - [x] Step 2: Parse answers through each slot's declared value schema and update project memory
+  - [x] Step 3: Never repeat a resolved question; reject invalid answers with a precise correction request
+  - [x] Step 4: Present architecture alternatives with short engineering rationale
+  - [x] Step 5: Commit `feat(ai): add slot-driven engineering clarification`
 - [ ] Task 11: Build hierarchical Model IR and diff support
   - [ ] Step 1: Convert an approved architecture plan into subsystem/component/connection IR with trace links
   - [ ] Step 2: Validate stable IDs, ownership, subsystem boundaries, semantic ports, dimensions, units, required references, unresolved required parameters, and invalid cycles

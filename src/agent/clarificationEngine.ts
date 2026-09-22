@@ -2,6 +2,8 @@ import { TaskState, RequirementConflict, Assumption } from './types';
 import { findTemplateForIntent } from '../services/ai/templates/threePhaseInverter';
 import { resolveRequirements } from '../services/ai/planner/requirementResolver';
 import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
+import { ClarificationManager } from '../services/ai/engineering/planning/clarificationManager';
+import { EngineeringArchitecturePlan } from '../services/ai/engineering/contracts/architecturePlan';
 
 export interface ClarificationQuestion {
   id: string;
@@ -245,5 +247,27 @@ export function analyzeCompleteness(
 export class ClarificationEngine {
   public static analyze(state: TaskState): AnalysisResult {
     return analyzeCompleteness(state);
+  }
+
+  public static fromArchitecturePlan(plan: EngineeringArchitecturePlan): AnalysisResult {
+    const manager = new ClarificationManager();
+    const decision = manager.next(plan);
+    if (decision.type === 'all_resolved') {
+      return { status: 'complete', completenessScore: 1.0 };
+    }
+    const slot = decision.slot;
+    return {
+      status: 'question',
+      missingKey: slot.slotName,
+      completenessScore: 0.5,
+      question: {
+        id: slot.id,
+        key: slot.slotName,
+        question: decision.prompt,
+        options: decision.alternatives?.map(a => String(a.value)),
+        rationale: decision.alternatives?.[0]?.rationale || slot.reason,
+        isCritical: slot.classification === 'REQUIRED'
+      }
+    };
   }
 }
