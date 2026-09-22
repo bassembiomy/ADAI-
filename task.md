@@ -201,12 +201,12 @@
   - [x] Step 2: Validate stable IDs, ownership, subsystem boundaries, semantic ports, dimensions, units, required references, unresolved required parameters, and invalid cycles
   - [x] Step 3: Implement semantic IR diffs so “make it sensorless” changes affected sensing/control subsystems instead of rebuilding the project
   - [x] Step 4: Commit `feat(ai): add hierarchical engineering Model IR`
-- [ ] Task 12: Implement deterministic concept-to-ADIA capability mapping
-  - [ ] Step 1: Resolve semantic concepts only to catalog IDs and verified compatible compositions
-  - [ ] Step 2: Validate ports, parameters, domains, solver features, and catalog fingerprint
-  - [ ] Step 3: Return structured `BLOCK_CAPABILITY_GAP` when no valid implementation exists
-  - [ ] Step 4: Keep candidate compositions unselected until validated and evidenced
-  - [ ] Step 5: Commit `feat(ai): map concepts to verified ADIA capabilities`
+- [x] Task 12: Implement deterministic concept-to-ADIA capability mapping
+  - [x] Step 1: Resolve semantic concepts only to catalog IDs and verified compatible compositions
+  - [x] Step 2: Validate ports, parameters, domains, solver features, and catalog fingerprint
+  - [x] Step 3: Return structured `BLOCK_CAPABILITY_GAP` when no valid implementation exists
+  - [x] Step 4: Keep candidate compositions unselected until validated and evidenced
+  - [x] Step 5: Commit `feat(ai): map concepts to verified ADIA capabilities`
 - [ ] Task 13: Compile Model IR through existing plans and transactions
   - [ ] Step 1: Compile bound IR to `EngineeringModelPlanV2` and existing actions with stable ordering
   - [ ] Step 2: Compile hierarchy to supported subsystem constructs; otherwise return an explicit hierarchy capability gap
