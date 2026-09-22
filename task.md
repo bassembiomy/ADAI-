@@ -245,12 +245,12 @@
   - [x] Step 3: Require each extracted value to include source text and normalized value
   - [x] Step 4: Add tests for addition, multiplication, PID/transfer-function, Scope output, malformed values, and missing operands
   - [x] Step 5: Run tests and commit `feat(ai): define structured engineering request contract`
-- [ ] Task 2: Implement deterministic normalization and typo handling
-  - [ ] Step 1: Normalize case, whitespace, punctuation, common spelling errors, number words, and unit spellings
-  - [ ] Step 2: Add bounded synonym dictionaries for operations, components, and observability terms
-  - [ ] Step 3: Preserve original text for evidence; never silently change user intent
-  - [ ] Step 4: Test creat, multiblying, cnstant, scope, show, display, and equivalent phrasing; ensure idempotence
-  - [ ] Step 5: Run tests and commit `feat(ai): normalize engineering requests deterministically`
+- [x] Task 2: Implement deterministic normalization and typo handling
+  - [x] Step 1: Normalize case, whitespace, punctuation, common spelling errors, number words, and unit spellings
+  - [x] Step 2: Add bounded synonym dictionaries for operations, components, and observability terms
+  - [x] Step 3: Preserve original text for evidence; never silently change user intent
+  - [x] Step 4: Test creat, multiblying, cnstant, scope, show, display, and equivalent phrasing; ensure idempotence
+  - [x] Step 5: Run tests and commit `feat(ai): normalize engineering requests deterministically`
 - [ ] Task 3: Extract values, operations, components, and outputs
   - [ ] Step 1: Extract arithmetic operators and all numeric operands without defaulting missing operands to zero
   - [ ] Step 2: Extract engineering components through aliases; extract relationships and emit unresolved slots
