@@ -305,10 +305,10 @@
   - [x] Step 1: Apply bounded timeout to optional LLM interpretation; continue deterministically when resolvable
   - [x] Step 2: Fail closed on invalid structured LLM output, catalog unavailability, or stale fingerprints
   - [x] Step 3: Commit `fix(ai): add deterministic degraded-mode request handling`
-- [ ] Task 15: Add persistence migration and rollout controls
-  - [ ] Step 1: Increment persisted request/session schema version; migrate old sessions deterministically
-  - [ ] Step 2: Add feature flags for shadow, selected-project, and general rollout stages
-  - [ ] Step 3: Commit `feat(ai): migrate and gate structured request sessions`
+- [x] Task 15: Add persistence migration and rollout controls
+  - [x] Step 1: Increment persisted request/session schema version; migrate old sessions deterministically
+  - [x] Step 2: Add feature flags for shadow, selected-project, and general rollout stages
+  - [x] Step 3: Commit `feat(ai): migrate and gate structured request sessions`
 - [ ] Task 16: Evaluate prompt improvements and optional fine-tuning
   - [ ] Step 1: Run corpus against current model and prompts; improve few-shot examples
   - [ ] Step 2: Verify holdout set and regression gate; commit model decision report

@@ -998,6 +998,82 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       expect(latest.redactedInput).toContain('[REDACTED_');
       expect((latest as any).reasoning).toBeUndefined();
     });
+
+    it('supports shadow rollout stage: evaluates in shadow, logs audit event, and routes user to legacy planner', async () => {
+      let nodesState: any[] = [];
+      let edgesState: any[] = [];
+      const liveDelegate = createXbridgesDelegate({
+        getNodes: () => nodesState,
+        getEdges: () => edgesState,
+        setNodes: updater => { nodesState = updater(nodesState); },
+        setEdges: updater => { edgesState = updater(edgesState); },
+        onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+      });
+      const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      orch.setRolloutConfig({ stage: 'shadow' });
+      expect(orch.getRolloutConfig().stage).toBe('shadow');
+
+      const auditor = orch.getRequestUnderstandingAuditor();
+      auditor.clear();
+
+      const res = await orch.handle('make a model add two cnstant each is 1 and display the result on a scope');
+      // Shadow routes to legacy, which asks for specification approval or clarifying
+      expect(['awaiting_specification_approval', 'clarifying', 'awaiting_plan_approval']).toContain(res.status);
+
+      // Verify shadow audit event was recorded
+      const shadowEvents = auditor.getEvents();
+      expect(shadowEvents.length).toBeGreaterThan(0);
+      expect(shadowEvents[0].fallbackReason).toMatch(/Shadow mode evaluation/);
+    });
+
+    it('supports selected_project rollout stage: gates by project ID', async () => {
+      const tools = new ToolGateway();
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      orch.setRolloutConfig({
+        stage: 'selected_project',
+        allowedProjectIds: ['beta_project_1']
+      });
+
+      // Project not in allowed list
+      orch.updateProjectContext({ projectId: 'unapproved_project' });
+      const resUnapproved = await orch.handle('Add 10 and 20');
+      // Unapproved project routes to legacy (which handles as generic request or asks spec approval)
+      expect(resUnapproved.interpretationEvidence).toBeUndefined();
+
+      // Allowed project
+      const allowedOrch = new AgentOrchestrator(new MockLlmProvider(), tools);
+      allowedOrch.setRolloutConfig({
+        stage: 'selected_project',
+        allowedProjectIds: ['beta_project_1']
+      });
+      allowedOrch.updateProjectContext({ projectId: 'beta_project_1' });
+      const resAllowed = await allowedOrch.handle('Add 10 and 20');
+      expect(resAllowed.status).toBe('awaiting_plan_approval');
+      expect(resAllowed.interpretationEvidence).toBeDefined();
+    });
+
+    it('supports instant rollback via disabled stage without destroying knowledge or session state', async () => {
+      const tools = new ToolGateway();
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      // Verify knowledge exists
+      const pipeline = orch.getEngineeringPipeline();
+      expect(pipeline).toBeDefined();
+
+      // Rollback to disabled
+      orch.setRolloutConfig({ stage: 'disabled' });
+      expect(orch.getRolloutConfig().stage).toBe('disabled');
+
+      const resDisabled = await orch.handle('Add 10 and 20');
+      // Disabled routes to legacy without error
+      expect(resDisabled.interpretationEvidence).toBeUndefined();
+
+      // Pipeline and knowledge remain intact
+      expect(orch.getEngineeringPipeline()).toBe(pipeline);
+    });
   });
 });
 

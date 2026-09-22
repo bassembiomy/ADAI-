@@ -65,7 +65,38 @@ describe('AgentPersistence', () => {
     expect(deserialized.auditTrail).toHaveLength(1);
   });
 
-  it('rejects deserialization of corrupted or incompatible version payloads', () => {
+  it('migrates version 1 and version 2 payloads deterministically to schema version 3', () => {
+    const v1Payload = JSON.stringify({
+      version: 1,
+      requirementState: initialRequirementState,
+      taskState: baseTaskState,
+      pendingApprovals: [],
+      auditTrail: []
+    });
+
+    const v1Migrated = AgentPersistence.deserialize(v1Payload);
+    expect(v1Migrated.version).toBe(3);
+    expect(v1Migrated.projectMemory).toBeDefined();
+    expect(v1Migrated.modelMemory).toBeDefined();
+    expect(v1Migrated.engineeringSession).toBeUndefined();
+
+    const v2Payload = JSON.stringify({
+      version: 2,
+      requirementState: initialRequirementState,
+      taskState: baseTaskState,
+      pendingApprovals: [],
+      auditTrail: [],
+      projectMemory: { cached: true },
+      modelMemory: { rev: 1 }
+    });
+
+    const v2Migrated = AgentPersistence.deserialize(v2Payload);
+    expect(v2Migrated.version).toBe(3);
+    expect(v2Migrated.projectMemory).toEqual({ cached: true });
+    expect(v2Migrated.modelMemory).toEqual({ rev: 1 });
+  });
+
+  it('rejects deserialization of corrupted or incompatible version payloads with actionable diagnostic', () => {
     expect(() => AgentPersistence.deserialize('not-json')).toThrow(/Invalid JSON/);
 
     const incompatible = JSON.stringify({
@@ -75,7 +106,7 @@ describe('AgentPersistence', () => {
       pendingApprovals: [],
       auditTrail: []
     });
-    expect(() => AgentPersistence.deserialize(incompatible)).toThrow(/Incompatible persistence version/);
+    expect(() => AgentPersistence.deserialize(incompatible)).toThrow(/Incompatible persistence version.*expected <= 3/);
   });
 
   it('marks interrupted executing state as blocked with requires_review on restore and never resumes automatically', () => {

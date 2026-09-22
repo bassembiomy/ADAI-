@@ -5,7 +5,7 @@ import {
   ApprovalRequest
 } from './types';
 
-export const AGENT_PERSISTENCE_SCHEMA_VERSION = 2;
+export const AGENT_PERSISTENCE_SCHEMA_VERSION = 3;
 
 export interface PersistedActionResult {
   readonly actionId: string;
@@ -30,6 +30,12 @@ export interface AgentPersistenceData {
   lastSavedAt: string;
   projectMemory?: Record<string, unknown>;
   modelMemory?: Record<string, unknown>;
+  engineeringSession?: {
+    sessionId?: string;
+    requestInput?: string;
+    plannerRoute?: 'deterministic' | 'legacy';
+  };
+  rolloutStage?: 'shadow' | 'selected_project' | 'general' | 'disabled';
 }
 
 export class AgentPersistence {
@@ -47,7 +53,7 @@ export class AgentPersistence {
 
   /**
    * Deserializes session data with strict version and schema checks,
-   * providing backwards-compatible fail-safe migration from Version 1.
+   * providing backwards-compatible fail-safe migration from Version 1 and 2.
    */
   public static deserialize(json: string): AgentPersistenceData {
     let parsed: any;
@@ -62,13 +68,18 @@ export class AgentPersistence {
     }
 
     if (parsed.version === 1) {
-      // Deterministic fail-safe migration from V1 to V2
+      // Deterministic fail-safe migration from V1 to V3
       parsed.version = AGENT_PERSISTENCE_SCHEMA_VERSION;
       parsed.projectMemory = parsed.projectMemory || {};
       parsed.modelMemory = parsed.modelMemory || {};
+      parsed.engineeringSession = undefined;
+    } else if (parsed.version === 2) {
+      // Deterministic fail-safe migration from V2 to V3
+      parsed.version = AGENT_PERSISTENCE_SCHEMA_VERSION;
+      parsed.engineeringSession = parsed.engineeringSession || undefined;
     } else if (parsed.version !== AGENT_PERSISTENCE_SCHEMA_VERSION) {
       throw new Error(
-        `Incompatible persistence version: expected ${AGENT_PERSISTENCE_SCHEMA_VERSION}, received ${parsed.version}`
+        `Incompatible persistence version: expected <= ${AGENT_PERSISTENCE_SCHEMA_VERSION}, received ${parsed.version}. Please open in read-only mode or update ADIA.`
       );
     }
 
@@ -156,12 +167,17 @@ export class AgentPersistence {
       requirementState: data.requirementState,
       taskState: {
         ...updatedTaskState,
+        approvals: updatedPendingApprovals,
         auditHistory: updatedAuditTrail
       },
       pendingApprovals: updatedPendingApprovals,
       actionResults,
       auditTrail: updatedAuditTrail,
-      lastSavedAt: now
+      lastSavedAt: now,
+      projectMemory: data.projectMemory ? { ...data.projectMemory } : {},
+      modelMemory: data.modelMemory ? { ...data.modelMemory } : {},
+      engineeringSession: data.engineeringSession ? { ...data.engineeringSession } : undefined,
+      rolloutStage: data.rolloutStage
     };
   }
 

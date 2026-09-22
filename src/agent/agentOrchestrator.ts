@@ -138,6 +138,13 @@ export interface ProjectContext {
   artifactSnapshot?: unknown;
 }
 
+export type EngineeringRolloutStage = 'shadow' | 'selected_project' | 'general' | 'disabled';
+
+export interface EngineeringRolloutConfig {
+  stage: EngineeringRolloutStage;
+  allowedProjectIds?: string[];
+}
+
 export class AgentOrchestrator {
   private llm: LlmProvider;
   private tools: ToolGateway;
@@ -181,6 +188,7 @@ export class AgentOrchestrator {
   private initialDomainGuidance?: string;
   private currentQuestionDefault?: string;
   private enableEngineeringIntelligence: boolean = true;
+  private rolloutConfig: EngineeringRolloutConfig = { stage: 'general' };
   private engineeringPipeline?: EngineeringIntelligencePipeline;
   private engineeringConceptStore?: ConceptRepository;
   private engineeringKnowledgeReady?: Promise<void>;
@@ -190,8 +198,18 @@ export class AgentOrchestrator {
   private conversationMemoryManager = new ConversationMemoryManager();
   private modelMemoryManager = new ModelMemoryManager();
 
+  public setRolloutConfig(config: EngineeringRolloutConfig): void {
+    this.rolloutConfig = { ...config };
+    this.enableEngineeringIntelligence = config.stage !== 'disabled';
+  }
+
+  public getRolloutConfig(): EngineeringRolloutConfig {
+    return { ...this.rolloutConfig };
+  }
+
   public setEngineeringIntelligenceEnabled(enabled: boolean): void {
     this.enableEngineeringIntelligence = enabled;
+    this.rolloutConfig.stage = enabled ? 'general' : 'disabled';
   }
 
   public getEngineeringPipeline(): EngineeringIntelligencePipeline {
@@ -516,7 +534,40 @@ export class AgentOrchestrator {
   }
 
   private shouldUseEngineeringPipeline(input: string): boolean {
+    if (this.rolloutConfig.stage === 'disabled') return false;
     if (this.engineeringSessionId) return true;
+
+    if (this.rolloutConfig.stage === 'selected_project') {
+      const allowed = this.rolloutConfig.allowedProjectIds || [];
+      if (!allowed.includes(this.projectContext.projectId)) {
+        return false;
+      }
+    }
+
+    if (this.rolloutConfig.stage === 'shadow') {
+      const normalizedHash = sha256Hex(input.trim().toLowerCase());
+      try {
+        const structured = extractStructuredEngineeringRequest(input);
+        requestUnderstandingAuditor.recordEvent({
+          normalizedRequestHash: normalizedHash,
+          extractorOutcome: structured.status === 'ready' ? 'ready' : (structured.status === 'clarification_required' ? 'clarification_required' : 'unsupported'),
+          routeSource: 'legacy_fallback',
+          unresolvedSlotIds: structured.status === 'clarification_required' ? [structured.blockingRequirement.id] : [],
+          catalogResolutionOutcome: {
+            totalEntities: structured.request?.entities.length || 0,
+            resolvedCount: structured.request?.entities.filter(e => e.groundedBlockType).length || 0,
+            gapCount: 0
+          },
+          stageDurationsMs: { totalMs: 1 },
+          fallbackReason: 'Shadow mode evaluation: request evaluated in shadow, routed to legacy planner',
+          redactedInput: input
+        });
+      } catch {
+        // ignore in shadow
+      }
+      return false;
+    }
+
     const lower = input.toLowerCase();
     if (/air[- ]?fryer|inverter|rlc circuit|three[- ]phase|quantum|flux capacitor/.test(lower)) return false;
     if (/\b(?:transfer\s+function|tf|pid\s+controller|pid)\b/i.test(lower)) return true;
