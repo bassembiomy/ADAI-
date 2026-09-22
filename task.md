@@ -159,11 +159,11 @@
   - [x] Step 4: Use schema-constrained LLM extraction only to create quarantined candidates; deterministic validation and human review control promotion
   - [x] Step 5: Preserve extracted fact-to-section provenance and reject unsupported citations
   - [x] Step 6: Run ingestion/source-policy tests and commit `feat(ai): ingest quarantined engineering knowledge`
-- [ ] Task 5: Implement review and promotion gates
-  - [ ] Step 1: Require license approval, source reliability threshold, reviewer identity, fact/relationship validation, and conflict checks
-  - [ ] Step 2: Promote atomically from quarantined to reviewed/verified; retain superseded history
-  - [ ] Step 3: Prevent runtime retrieval of unverified facts
-  - [ ] Step 4: Commit `feat(ai): add verified knowledge promotion workflow`
+- [x] Task 5: Implement review and promotion gates
+  - [x] Step 1: Require license approval, source reliability threshold, reviewer identity, fact/relationship validation, and conflict checks
+  - [x] Step 2: Promote atomically from quarantined to reviewed/verified; retain superseded history
+  - [x] Step 3: Prevent runtime retrieval of unverified facts
+  - [x] Step 4: Commit `feat(ai): add verified knowledge promotion workflow`
 - [ ] Task 6: Build hybrid retrieval and evidence reranking
   - [ ] Step 1: Implement lexical token/BM25-style scoring, exact aliases, domain/version/lifecycle/source filters, graph-neighborhood expansion, and optional cosine similarity
   - [ ] Step 2: Combine scores with an explicit formula and stable ID tie-breaker
