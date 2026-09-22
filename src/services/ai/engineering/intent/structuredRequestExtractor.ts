@@ -9,6 +9,7 @@ import {
   RequestIntentKind
 } from '../contracts/structuredEngineeringRequest';
 import { normalizeEngineeringRequest } from './requestNormalizer';
+import { CatalogEntityResolver } from './catalogEntityResolver';
 
 const NON_ENGINEERING_PATTERNS = [
   /\b(?:poem|poetry|story|vacation|recipe|baking|joke|taxes)\b/i
@@ -317,6 +318,11 @@ export class StructuredRequestExtractor {
       });
     }
 
+    // 11. Ground extracted entities against verified catalog
+    const resolver = new CatalogEntityResolver();
+    const grounded = resolver.groundEntities(entities);
+    const finalEntities = grounded.groundedEntities;
+
     const structuredReq: StructuredEngineeringRequest = {
       schemaVersion: '1.0.0',
       requestId,
@@ -324,7 +330,7 @@ export class StructuredRequestExtractor {
       normalizedText,
       intent,
       operations,
-      entities,
+      entities: finalEntities,
       values,
       relationships,
       requestedOutputs,

@@ -4,6 +4,7 @@ import { ProjectMemoryManager } from '../memory/projectMemory';
 import { ConversationMemoryManager } from '../memory/conversationMemory';
 import { ModelMemoryManager } from '../memory/modelMemory';
 import { EngineeringIntentInterpreter } from '../intent/engineeringIntentInterpreter';
+import { RequestConfidencePolicy } from '../intent/requestConfidencePolicy';
 import { EngineeringPlanner } from '../planning/engineeringPlanner';
 import { ClarificationManager } from '../planning/clarificationManager';
 import { ModelIrBuilder } from '../modelIr/modelIrBuilder';
@@ -68,6 +69,7 @@ export type PipelineOutcome =
 
 export class EngineeringIntelligencePipeline {
   private interpreter = new EngineeringIntentInterpreter();
+  private confidencePolicy = new RequestConfidencePolicy();
   private planner = new EngineeringPlanner();
   private clarificationManager = new ClarificationManager();
   private irBuilder = new ModelIrBuilder();
@@ -101,6 +103,41 @@ export class EngineeringIntelligencePipeline {
       };
     }
     const intent = intentResult.intent;
+
+    // Check structured request confidence & clarification policy
+    if (intentResult.structuredRequest) {
+      const confidenceOutcome = this.confidencePolicy.evaluate(intentResult.structuredRequest);
+      if (confidenceOutcome.status === 'clarification_required') {
+        const blockingSlot = confidenceOutcome.clarificationQuestion;
+        const archPlan: EngineeringArchitecturePlan = {
+          schemaVersion: '1.0.0',
+          planId: `arch_plan_${intentResult.structuredRequest.requestId}`,
+          intentId: intentResult.intent.id,
+          objective: intentResult.intent.objective,
+          decisions: [],
+          unresolvedRequirements: [
+            {
+              id: blockingSlot.targetSlotId,
+              name: blockingSlot.targetSlotId,
+              type: 'value',
+              prompt: blockingSlot.question,
+              reason: blockingSlot.reason,
+              affectedDecisionIds: [],
+              status: 'unresolved'
+            }
+          ],
+          confidence: confidenceOutcome.confidence,
+          citations: []
+        };
+
+        return {
+          status: 'clarification_required',
+          architecturePlan: archPlan,
+          question: archPlan.unresolvedRequirements[0],
+          prompt: blockingSlot.question
+        };
+      }
+    }
 
     // Record turn in conversation memory
     this.config.conversationMemory.recordTurn(request.sessionId, {

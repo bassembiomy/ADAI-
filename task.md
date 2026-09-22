@@ -266,10 +266,10 @@
   - [x] Step 2: Parse answers (e.g. 10 and 20, display on Scope, use FOC) against active slot; reject invalid answers
   - [x] Step 3: Prevent repeated questions; permit exactly one active request per session; apply answers atomically
   - [x] Step 4: Run tests and commit `feat(ai): resolve clarification answers against active request slots`
-- [ ] Task 6: Add confidence and clarification policy
-  - [ ] Step 1: Define thresholds for ready, clarification-required, unsupported, and invalid outcomes
-  - [ ] Step 2: Treat missing REQUIRED values as blocking; ensure one actionable question per clarification response
-  - [ ] Step 3: Run tests and commit `feat(ai): add request confidence and clarification policy`
+- [x] Task 6: Add confidence and clarification policy
+  - [x] Step 1: Define thresholds for ready, clarification-required, unsupported, and invalid outcomes
+  - [x] Step 2: Treat missing REQUIRED values as blocking; ensure one actionable question per clarification response
+  - [x] Step 3: Run tests and commit `feat(ai): add request confidence and clarification policy`
 - [ ] Task 7: Add deterministic engineering templates
   - [ ] Step 1: Implement templates for arithmetic, PID/feedback/transfer-function, source/plant/Scope
   - [ ] Step 2: Resolve every template port through the catalog before producing an architecture plan
