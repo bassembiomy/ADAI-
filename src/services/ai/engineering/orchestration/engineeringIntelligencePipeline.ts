@@ -15,6 +15,7 @@ import { BoundEngineeringModelIR } from '../contracts/modelIr';
 import { EngineeringModelPlanV2, StructuredDiagnostic } from '../../contracts/engineeringModel';
 import { CapabilityGap } from '../mapping/capabilityGap';
 import { EngineeringPattern } from '../../planner/generalGraphPlanner';
+import { sha256Hex } from '../../../../engine/opm/canonicalHash';
 
 export interface PipelineConfig {
   catalog: XbridgesCapabilityIndex;
@@ -31,6 +32,7 @@ export interface PipelineRequest {
   sessionId: string;
   projectId: string;
   baseRevision: number;
+  expectedBeforeHash?: string;
 }
 
 export type PipelineOutcome =
@@ -167,9 +169,14 @@ export class EngineeringIntelligencePipeline {
     const architecturePlan = planningResult.plan;
 
     // 4. Hierarchical Model IR Construction
+    const modelFingerprint = sha256Hex(JSON.stringify({
+      projectId: request.projectId,
+      baseRevision: request.baseRevision,
+      planId: architecturePlan.planId
+    })).slice(0, 16);
     const ir = this.irBuilder.buildModelIr(
       architecturePlan,
-      `model_${request.projectId}_${Date.now()}`,
+      `model_${request.projectId}_${modelFingerprint}`,
       request.baseRevision
     );
 
@@ -202,7 +209,8 @@ export class EngineeringIntelligencePipeline {
     const plan = this.compiler.compile(boundIr, {
       projectId: request.projectId,
       baseRevision: request.baseRevision,
-      catalog: this.config.catalog
+      catalog: this.config.catalog,
+      expectedBeforeHash: request.expectedBeforeHash
     });
 
     // Record model revision snapshot in model memory

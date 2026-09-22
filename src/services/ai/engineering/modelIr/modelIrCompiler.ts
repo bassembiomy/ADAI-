@@ -50,14 +50,14 @@ export class ModelIrCompiler {
         id: `act_${comp.id}_add`,
         kind: 'add_block',
         blockId: comp.id,
-        blockType: binding.catalogBlockType,
+        blockType: binding.catalogBlockId,
         parameters: Object.keys(paramRecord).length > 0 ? paramRecord : undefined,
         position: { x: 100 + (idx % 4) * 180, y: 100 + Math.floor(idx / 4) * 120 }
       });
 
       blocks.push({
         id: comp.id,
-        blockDefinitionId: binding.catalogBlockType,
+        blockDefinitionId: binding.catalogBlockId,
         domain: 'xbridges',
         name: comp.name,
         parameters: Object.entries(paramRecord).map(([parameterName, value]) => ({
@@ -78,19 +78,28 @@ export class ModelIrCompiler {
       const fromPort = portMap.get(conn.fromPortId);
       const toPort = portMap.get(conn.toPortId);
 
-      const sourceBlockId = fromPort?.componentId || 'unknown_source';
-      const targetBlockId = toPort?.componentId || 'unknown_target';
+      if (!fromPort || !toPort) {
+        const missing = !fromPort && !toPort
+          ? `source port '${conn.fromPortId}' and target port '${conn.toPortId}'`
+          : !fromPort
+            ? `source port '${conn.fromPortId}'`
+            : `target port '${conn.toPortId}'`;
+        throw new Error(`Cannot compile connection '${conn.id}': missing ${missing}`);
+      }
+
+      const sourceBlockId = fromPort.componentId;
+      const targetBlockId = toPort.componentId;
 
       const sourceComp = compMap.get(sourceBlockId);
       const targetComp = compMap.get(targetBlockId);
 
       // Port mapping from capability bindings
-      let sourcePortId = fromPort?.name || 'out';
+      let sourcePortId = fromPort.name;
       if (sourceComp?.capabilityBinding?.portMapping[sourcePortId]) {
         sourcePortId = sourceComp.capabilityBinding.portMapping[sourcePortId];
       }
 
-      let targetPortId = toPort?.name || 'in';
+      let targetPortId = toPort.name;
       if (targetComp?.capabilityBinding?.portMapping[targetPortId]) {
         targetPortId = targetComp.capabilityBinding.portMapping[targetPortId];
       }

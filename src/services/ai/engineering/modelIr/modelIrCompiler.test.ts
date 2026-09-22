@@ -109,4 +109,29 @@ describe('ModelIrCompiler', () => {
     expect(plan1.expectedAfterDelta.addedBlocks).toContain('comp_adder');
     expect(plan1.expectedAfterDelta.addedBlocks).toContain('comp_const');
   });
+
+  it('rejects connections that reference missing IR ports instead of inventing endpoints', () => {
+    const ir = createMockBoundIr();
+    ir.connections[0].fromPortId = 'missing_port';
+
+    expect(() => compiler.compile(ir, {
+      projectId: 'proj_compile_100',
+      baseRevision: 1,
+      catalog
+    })).toThrow(/missing.*port/i);
+  });
+
+  it('uses the catalog block id as the executable definition identity', () => {
+    const ir = createMockBoundIr();
+    ir.components[0].capabilityBinding!.catalogBlockType = 'display-name';
+
+    const plan = compiler.compile(ir, {
+      projectId: 'proj_compile_100',
+      baseRevision: 1,
+      catalog
+    });
+
+    const adder = plan.blocks.find(block => block.id === 'comp_adder');
+    expect(adder?.blockDefinitionId).toBe('Sum');
+  });
 });

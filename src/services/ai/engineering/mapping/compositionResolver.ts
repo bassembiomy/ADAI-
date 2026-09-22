@@ -22,6 +22,14 @@ export class CompositionResolver {
       blockId: 'Sum',
       portMapping: { in1: 'in1', in2: 'in2', sum: 'out' }
     },
+    concept_multiply: {
+      blockId: 'VectorMul',
+      portMapping: { in1: 'in1', in2: 'in2', product: 'out', out: 'out' }
+    },
+    concept_divide: {
+      blockId: 'VectorDiv',
+      portMapping: { in1: 'in1', in2: 'in2', quotient: 'out', out: 'out' }
+    },
     concept_subtraction: {
       blockId: 'Sum', // Sum block handles signs (+-)
       portMapping: { in1: 'in1', in2: 'in2', diff: 'out' }
@@ -55,6 +63,10 @@ export class CompositionResolver {
       blockId: 'Constant',
       parameterMapping: { value: 'value' },
       portMapping: { out: 'out' }
+    },
+    concept_scope: {
+      blockId: 'Scope',
+      portMapping: { in: 'in1' }
     },
     concept_integrator: {
       blockId: 'Integrator',

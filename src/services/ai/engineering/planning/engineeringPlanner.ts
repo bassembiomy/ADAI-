@@ -54,7 +54,7 @@ export class EngineeringPlanner {
     }
 
     const systemName = primaryConcept.canonicalName;
-    const planId = `plan_${intent.id}_${Date.now()}`;
+    const planId = `plan_${intent.id}`;
 
     // 2. Expand subsystems & components based on concept domain and functional roles
     const subsystems: ArchitectureSubsystem[] = [];
@@ -73,14 +73,49 @@ export class EngineeringPlanner {
       };
       subsystems.push(subMath);
 
+      const arithmeticType = intent.operations[0]?.type || 'add';
+      const arithmeticConceptId = arithmeticType === 'add' || arithmeticType === 'subtract'
+        ? 'concept_addition'
+        : `concept_${arithmeticType}`;
       components.push({
         id: 'comp_adder',
-        name: primaryConcept.canonicalName,
-        conceptId: primaryConcept.id,
+        name: arithmeticType === 'add' ? primaryConcept.canonicalName : `${arithmeticType} operation`,
+        conceptId: arithmeticConceptId,
         subsystemId: subMath.id,
         role: 'adder',
         designParameters: {}
       });
+
+      const operands = intent.operations[0]?.parameters || {};
+      const operandValues = [operands.operand1, operands.operand2];
+      operandValues.forEach((value, index) => {
+        components.push({
+          id: `comp_constant_${index + 1}`,
+          name: `Operand ${index + 1}`,
+          conceptId: 'concept_constant',
+          subsystemId: subMath.id,
+          role: 'source',
+          designParameters: { value }
+        });
+      });
+      const wantsObservable = /\b(scope|display|plot|observe|output)\b/i.test(intent.objective);
+      if (wantsObservable) {
+        components.push({
+          id: 'comp_scope',
+          name: 'Result Scope',
+          conceptId: 'concept_scope',
+          subsystemId: subMath.id,
+          role: 'observable',
+          designParameters: {}
+        });
+      }
+      connections.push(
+        { id: 'conn_operand_1', fromComponentId: 'comp_constant_1', fromPort: 'out', toComponentId: 'comp_adder', toPort: 'in1', semanticType: 'signal' },
+        { id: 'conn_operand_2', fromComponentId: 'comp_constant_2', fromPort: 'out', toComponentId: 'comp_adder', toPort: 'in2', semanticType: 'signal' }
+      );
+      if (wantsObservable) {
+        connections.push({ id: 'conn_result_scope', fromComponentId: 'comp_adder', fromPort: 'out', toComponentId: 'comp_scope', toPort: 'in', semanticType: 'signal' });
+      }
     } else if (
       primaryConcept.domain === 'motor_control' ||
       primaryConcept.id.includes('bldc') ||

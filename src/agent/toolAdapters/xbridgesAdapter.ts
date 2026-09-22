@@ -157,9 +157,36 @@ export function createLiveXbridgesStateAccessors(
 export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesApplicationDelegate {
   const { getNodes, getEdges, setNodes, setEdges, onSave } = opts;
   const recentlyCreatedNodes = new Map<string, ReactFlowXbridgesNode>();
+  // React state setters may commit asynchronously. Keep a transaction-local
+  // mirror so sequential agent actions observe their own writes immediately.
+  let localNodes = [...getNodes()];
+  let localEdges = [...getEdges()];
+  const readNodes = () => {
+    // External additions (for example a user edit between transaction and
+    // undo) must remain visible, while stale React snapshots must not erase
+    // nodes created by the current transaction.
+    const external = getNodes();
+    const known = new Set(localNodes.map(node => node.id));
+    localNodes = [...localNodes, ...external.filter(node => !known.has(node.id))];
+    return localNodes;
+  };
+  const readEdges = () => {
+    const external = getEdges();
+    const known = new Set(localEdges.map(edge => edge.id));
+    localEdges = [...localEdges, ...external.filter(edge => !known.has(edge.id))];
+    return localEdges;
+  };
+  const writeNodes = (updater: (previous: ReactFlowXbridgesNode[]) => ReactFlowXbridgesNode[]) => {
+    localNodes = updater(localNodes);
+    setNodes(() => localNodes);
+  };
+  const writeEdges = (updater: (previous: ReactFlowXbridgesEdge[]) => ReactFlowXbridgesEdge[]) => {
+    localEdges = updater(localEdges);
+    setEdges(() => localEdges);
+  };
 
   function resolveNode(nodeId: string): ReactFlowXbridgesNode | undefined {
-    return getNodes().find(
+    return readNodes().find(
       (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
     ) || recentlyCreatedNodes.get(nodeId);
   }
@@ -195,22 +222,22 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     // ----- Read-only -------------------------------------------------------
 
     async getNodes(): Promise<readonly XbridgesNode[]> {
-      return getNodes().map(toAgentNode);
+      return readNodes().map(toAgentNode);
     },
 
     async getEdges(): Promise<readonly XbridgesEdge[]> {
-      return getEdges().map(toAgentEdge);
+      return readEdges().map(toAgentEdge);
     },
 
     async getRevisionFingerprint(): Promise<string> {
-      const nodes = getNodes().map(toAgentNode).sort((a, b) => a.id.localeCompare(b.id));
-      const edges = getEdges().map(toAgentEdge).sort((a, b) => a.id.localeCompare(b.id));
+      const nodes = readNodes().map(toAgentNode).sort((a, b) => a.id.localeCompare(b.id));
+      const edges = readEdges().map(toAgentEdge).sort((a, b) => a.id.localeCompare(b.id));
       return computeModelFingerprint({ nodes, edges });
     },
 
     async validate(): Promise<{ valid: boolean; diagnostics: Array<{ code: string; message: string; severity?: string }> }> {
-      const nodes = getNodes();
-      const edges = getEdges();
+      const nodes = readNodes();
+      const edges = readEdges();
       const diagnostics: Array<{ code: string; message: string; severity?: string }> = [];
 
       const nodeMap = new Map<string, ReactFlowXbridgesNode>();
@@ -293,7 +320,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       const id = (params?.id as string) || (params?.instanceName as string) || `${type}-${uuidv4()}`;
 
       // Duplicate prevention
-      const existing = getNodes().find(
+      const existing = readNodes().find(
         (n) => n.id === id || (n.data as any)?.instanceName === id || (n.data as any)?.id === id
       );
       if (existing) {
@@ -315,14 +342,14 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       };
 
       const agentNode = toAgentNode(newNode);
-      setNodes((prev) => [...prev, newNode]);
+      writeNodes((prev) => [...prev, newNode]);
       recentlyCreatedNodes.set(id, newNode);
 
       return agentNode;
     },
 
     async removeBlock(nodeId: string): Promise<{ removedNodeId: string; removedEdgeIds: string[] }> {
-      const currentNodes = getNodes();
+      const currentNodes = readNodes();
       const targetNode = currentNodes.find(
         (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
       );
@@ -330,14 +357,14 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         throw new XbridgesAdapterError(`Block "${nodeId}" not found.`);
       }
 
-      const currentEdges = getEdges();
+      const currentEdges = readEdges();
       const connectedEdges = currentEdges.filter(
         (e) => e.source === targetNode.id || e.target === targetNode.id
       );
       const removedEdgeIds = connectedEdges.map((e) => e.id);
 
-      setNodes((prev) => prev.filter((n) => n.id !== targetNode.id));
-      setEdges((prev) => prev.filter((e) => e.source !== targetNode.id && e.target !== targetNode.id));
+      writeNodes((prev) => prev.filter((n) => n.id !== targetNode.id));
+      writeEdges((prev) => prev.filter((e) => e.source !== targetNode.id && e.target !== targetNode.id));
 
       return {
         removedNodeId: targetNode.id,
@@ -346,7 +373,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     },
 
     async moveBlock(nodeId: string, position: { x: number; y: number }): Promise<XbridgesNode> {
-      const nodes = getNodes();
+      const nodes = readNodes();
       const targetNode = nodes.find(
         (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
       );
@@ -359,7 +386,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       }
 
       let updatedNode: ReactFlowXbridgesNode | null = null;
-      setNodes((prev) =>
+      writeNodes((prev) =>
         prev.map((n) => {
           if (n.id !== targetNode.id) return n;
           const moved: ReactFlowXbridgesNode = {
@@ -375,7 +402,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     },
 
     async renameBlock(nodeId: string, newName: string): Promise<XbridgesNode> {
-      const nodes = getNodes();
+      const nodes = readNodes();
       const targetNode = nodes.find(
         (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
       );
@@ -389,7 +416,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       }
 
       let updatedNode: ReactFlowXbridgesNode | null = null;
-      setNodes((prev) =>
+      writeNodes((prev) =>
         prev.map((n) => {
           if (n.id !== targetNode.id) return n;
           const renamed: ReactFlowXbridgesNode = {
@@ -444,7 +471,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       }
 
       // Duplicate connection check
-      const currentEdges = getEdges();
+      const currentEdges = readEdges();
       const duplicate = currentEdges.find(
         (e) => e.source === sourceNode.id && e.sourceHandle === sourcePortId && e.target === targetNode.id && e.targetHandle === targetPortId
       );
@@ -465,7 +492,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       };
 
       const agentEdge = toAgentEdge(newEdge);
-      setEdges((prev) => [...prev, newEdge]);
+      writeEdges((prev) => [...prev, newEdge]);
 
       return agentEdge;
     },
@@ -473,13 +500,13 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     async disconnectPorts(
       connection: string | { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string }
     ): Promise<{ disconnectedEdgeId: string }> {
-      const currentEdges = getEdges();
+      const currentEdges = readEdges();
       let targetEdge: ReactFlowXbridgesEdge | undefined;
 
       if (typeof connection === 'string') {
         targetEdge = currentEdges.find((e) => e.id === connection);
       } else {
-        const nodes = getNodes();
+        const nodes = readNodes();
         const sourceNode = nodes.find((n) => n.id === connection.sourceNodeId || (n.data as any)?.instanceName === connection.sourceNodeId);
         const targetNode = nodes.find((n) => n.id === connection.targetNodeId || (n.data as any)?.instanceName === connection.targetNodeId);
         const srcId = sourceNode ? sourceNode.id : connection.sourceNodeId;
@@ -499,7 +526,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       }
 
       const edgeId = targetEdge.id;
-      setEdges((prev) => prev.filter((e) => e.id !== edgeId));
+      writeEdges((prev) => prev.filter((e) => e.id !== edgeId));
 
       return { disconnectedEdgeId: edgeId };
     },
@@ -508,7 +535,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
       nodeId: string,
       params: Record<string, unknown>,
     ): Promise<XbridgesNode> {
-      const nodes = getNodes();
+      const nodes = readNodes();
       const existing = nodes.find(
         (n) => n.id === nodeId || (n.data as any)?.instanceName === nodeId || (n.data as any)?.id === nodeId
       );
@@ -518,7 +545,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
 
       let updatedNode: ReactFlowXbridgesNode | null = null;
 
-      setNodes((prev) =>
+      writeNodes((prev) =>
         prev.map((n) => {
           if (n.id !== existing.id) return n;
           const merged: ReactFlowXbridgesNode = {
@@ -537,8 +564,8 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     },
 
     async save(): Promise<void> {
-      const nodes = getNodes();
-      const edges = getEdges();
+      const nodes = readNodes();
+      const edges = readEdges();
       onSave(nodes, edges, []);
     },
 
@@ -551,7 +578,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     },
 
     async restoreSnapshot(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void> {
-      setNodes(() => nodes.map(n => ({
+      writeNodes(() => nodes.map(n => ({
         ...n,
         id: n.id,
         type: n.position ? 'xblock' : n.type,
@@ -563,7 +590,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
         }
       } as unknown as ReactFlowXbridgesNode)));
 
-      setEdges(() => edges.map(e => ({
+      writeEdges(() => edges.map(e => ({
         ...e,
         id: e.id,
         source: e.source,

@@ -87,7 +87,7 @@ describe('EngineeringIntelligencePipeline', () => {
 
   it('runs end-to-end pipeline for arithmetic request and compiles EngineeringModelPlanV2', async () => {
     const result = await pipeline.processUserRequest({
-      input: 'Add two numbers',
+      input: 'Add 10 and 20',
       sessionId: 'sess_test_1',
       projectId: 'proj_pipeline_test',
       baseRevision: 1

@@ -229,7 +229,7 @@ const VALID_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   final_verify: ['report', 'completed', 'validate', 'blocked', 'failed'],
   report: ['completed', 'understand', 'clarify'],
 
-  clarifying: ['specification_ready', 'awaiting_specification_approval', 'completed', 'blocked', 'failed'],
+  clarifying: ['specification_ready', 'awaiting_specification_approval', 'planning', 'completed', 'blocked', 'failed'],
   specification_ready: ['awaiting_specification_approval', 'clarifying', 'blocked', 'failed'],
   awaiting_specification_approval: ['planning', 'clarifying', 'blocked', 'failed'],
   planning: ['awaiting_plan_approval', 'clarifying', 'blocked', 'failed'],

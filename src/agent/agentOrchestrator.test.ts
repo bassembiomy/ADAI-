@@ -56,6 +56,29 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     orchestrator = new AgentOrchestrator(llm);
   });
 
+  it('routes a generic arithmetic request through engineering intelligence before approval', async () => {
+    const result = await orchestrator.handle('Create a model adding 10 and 20');
+
+    expect(result.status).toBe('awaiting_plan_approval');
+    expect(result.executionPlan).toBeDefined();
+    expect(result.executionPlan?.actions.some(action => action.type === 'instantiate_block')).toBe(true);
+    expect(result.pendingApproval?.type).toBe('plan');
+    expect(result.proof?.status).toBe('proved');
+  });
+
+  it('uses browser-safe in-memory knowledge when the renderer has no Node process global', async () => {
+    const nodeProcess = (globalThis as any).process;
+    try {
+      (globalThis as any).process = undefined;
+      const browserOrchestrator = new AgentOrchestrator();
+      const result = await browserOrchestrator.handle('Create a model adding 10 and 20');
+      expect(result.status).toBe('awaiting_plan_approval');
+      expect(result.executionPlan?.actions.some(action => action.type === 'instantiate_block')).toBe(true);
+    } finally {
+      (globalThis as any).process = nodeProcess;
+    }
+  });
+
   it('creates a fresh session with shared dependencies and copied project context', async () => {
     const tools = new ToolGateway();
     const loadPatterns = vi.fn().mockResolvedValue([]);
@@ -720,7 +743,7 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     const orch = new AgentOrchestrator(undefined, tools);
 
     const res1 = await orch.handle('make a model add two cnstant each is 1 and display the result on a scope');
-    expect(['awaiting_specification_approval', 'clarifying']).toContain(res1.status);
+    expect(['awaiting_specification_approval', 'clarifying', 'awaiting_plan_approval']).toContain(res1.status);
 
     let specApproval = res1.pendingApproval;
     if (res1.status === 'clarifying') {
@@ -729,7 +752,9 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     }
 
     expect(specApproval).toBeDefined();
-    const resPlan = await orch.approve(specApproval!.id);
+    const resPlan = res1.status === 'awaiting_plan_approval'
+      ? res1
+      : await orch.approve(specApproval!.id);
     expect(resPlan.status).toBe('awaiting_plan_approval');
     expect(resPlan.executionPlan?.actions.length).toBeGreaterThanOrEqual(4);
 
@@ -761,7 +786,7 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     const orch = new AgentOrchestrator(undefined, tools);
 
     const res1 = await orch.handle('make a model multiply constant its value is 10 by 100 and display the result on a scope');
-    expect(['awaiting_specification_approval', 'clarifying']).toContain(res1.status);
+    expect(['awaiting_specification_approval', 'clarifying', 'awaiting_plan_approval']).toContain(res1.status);
 
     let specApproval = res1.pendingApproval;
     if (res1.status === 'clarifying') {
@@ -770,7 +795,9 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     }
 
     expect(specApproval).toBeDefined();
-    const resPlan = await orch.approve(specApproval!.id);
+    const resPlan = res1.status === 'awaiting_plan_approval'
+      ? res1
+      : await orch.approve(specApproval!.id);
     expect(resPlan.status).toBe('awaiting_plan_approval');
     expect(resPlan.executionPlan?.actions.length).toBeGreaterThanOrEqual(4);
 
@@ -829,5 +856,3 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     expect(edgesState).toHaveLength(0);
   });
 });
-
-

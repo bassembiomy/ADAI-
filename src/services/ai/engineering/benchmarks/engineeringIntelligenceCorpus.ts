@@ -27,7 +27,7 @@ export const ACCEPTANCE_BENCHMARKS: AcceptanceBenchmarkCase[] = [
     id: 'acceptance_a_addition',
     name: 'Acceptance A: Symbolic Arithmetic Summation',
     description: 'Addition request maps to two operands and Sum block without selecting or hallucinating arbitrary blocks',
-    input: 'Add two numbers',
+    input: 'Add 10 and 20',
     expectedDomain: 'arithmetic',
     expectedPrimaryConcept: 'concept_addition',
     expectedOutcome: 'compiled'

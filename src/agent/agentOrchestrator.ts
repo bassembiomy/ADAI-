@@ -77,6 +77,9 @@ import { resolveRequirements } from '../services/ai/planner/requirementResolver'
 import { EngineeringPattern } from '../services/ai/knowledge/patternSchemas';
 import { loadVerifiedRuntimePatterns } from '../services/ai/knowledge/runtimePatternGateway';
 import { RankedPatternMatch, retrieveCompatiblePatterns, isPatternCatalogCompatible } from '../services/ai/knowledge/patternRetrieval';
+import { loadSeedConcepts } from '../services/ai/engineering/benchmarks/engineeringIntelligenceCorpus';
+import { InMemoryConceptStore, InMemoryFactStore, InMemoryRelationshipStore } from '../services/ai/engineering/knowledge/inMemoryKnowledgeStores';
+import { ConceptRepository } from '../services/ai/engineering/knowledge/contentAddressedStore';
 
 
 export interface OrchestratorResponse {
@@ -162,6 +165,10 @@ export class AgentOrchestrator {
   private currentQuestionDefault?: string;
   private enableEngineeringIntelligence: boolean = true;
   private engineeringPipeline?: EngineeringIntelligencePipeline;
+  private engineeringConceptStore?: ConceptRepository;
+  private engineeringKnowledgeReady?: Promise<void>;
+  private engineeringSessionId?: string;
+  private engineeringRequestInput?: string;
   private projectMemoryManager = new ProjectMemoryManager();
   private conversationMemoryManager = new ConversationMemoryManager();
   private modelMemoryManager = new ModelMemoryManager();
@@ -172,11 +179,20 @@ export class AgentOrchestrator {
 
   public getEngineeringPipeline(): EngineeringIntelligencePipeline {
     if (!this.engineeringPipeline) {
-      const storageDir = path.join(process.cwd(), 'data', 'engineering-knowledge');
-      const conceptStore = new ConceptStore({ storageDir });
-      const factStore = new FactStore({ storageDir });
-      const conceptGraphStore = new ConceptGraphStore({ storageDir });
+      const runtimeProcess = (globalThis as typeof globalThis & {
+        process?: { cwd?: () => string };
+      }).process;
+      const conceptStore = runtimeProcess?.cwd
+        ? new ConceptStore({ storageDir: path.join(runtimeProcess.cwd(), 'data', 'engineering-knowledge') })
+        : new InMemoryConceptStore();
+      const factStore = runtimeProcess?.cwd
+        ? new FactStore({ storageDir: path.join(runtimeProcess.cwd(), 'data', 'engineering-knowledge') })
+        : new InMemoryFactStore();
+      const conceptGraphStore = runtimeProcess?.cwd
+        ? new ConceptGraphStore({ storageDir: path.join(runtimeProcess.cwd(), 'data', 'engineering-knowledge') })
+        : new InMemoryRelationshipStore();
       const retriever = new HybridRetriever({ conceptStore, factStore, conceptGraphStore });
+      this.engineeringConceptStore = conceptStore;
 
       this.engineeringPipeline = new EngineeringIntelligencePipeline({
         catalog: buildXbridgesCapabilityIndex(),
@@ -191,13 +207,176 @@ export class AgentOrchestrator {
   }
 
   public async processWithEngineeringIntelligence(input: string): Promise<PipelineOutcome> {
+    await this.ensureEngineeringKnowledge();
     const pipeline = this.getEngineeringPipeline();
+    const effectiveInput = this.engineeringRequestInput && this.engineeringSessionId
+      ? `${this.engineeringRequestInput}; user clarification: ${input}`
+      : input;
     return pipeline.processUserRequest({
-      input,
+      input: effectiveInput,
       sessionId: this.taskState?.id || `sess_${Date.now()}`,
       projectId: this.projectContext.projectId,
-      baseRevision: this.projectContext.revision
+      baseRevision: this.projectContext.revision,
+      expectedBeforeHash: computeModelFingerprint({
+        nodes: this.projectContext.nodes || [],
+        edges: this.projectContext.edges || []
+      })
     });
+  }
+
+  private async ensureEngineeringKnowledge(): Promise<void> {
+    if (!this.engineeringKnowledgeReady) {
+      this.engineeringKnowledgeReady = (async () => {
+        this.getEngineeringPipeline();
+        const store = this.engineeringConceptStore;
+        if (!store) throw new Error('Engineering concept store was not initialized');
+        if ((await store.list()).length > 0) return;
+        for (const concept of loadSeedConcepts()) {
+          await store.put(concept);
+        }
+      })();
+    }
+    await this.engineeringKnowledgeReady;
+  }
+
+  private async handleEngineeringPipelineRequest(input: string): Promise<OrchestratorResponse | undefined> {
+    if (!this.enableEngineeringIntelligence) return undefined;
+    if (!this.engineeringSessionId) {
+      this.engineeringSessionId = `engineering_${sha256Hex(input.trim().toLowerCase()).slice(0, 16)}`;
+      this.engineeringRequestInput = input;
+    }
+
+    const outcome = await this.processWithEngineeringIntelligence(input);
+    if (outcome.status === 'fallback_to_legacy') {
+      this.engineeringSessionId = undefined;
+      this.engineeringRequestInput = undefined;
+      return undefined;
+    }
+
+    // A compiled plan is not sufficient if it omitted an explicitly requested
+    // observable output. Let the compatibility planner handle the request
+    // until the semantic planner can represent that topology completely.
+    if (outcome.status === 'compiled'
+      && /\b(scope|display|plot|observe|output)\b/i.test(this.engineeringRequestInput || input)
+      && outcome.plan.actions.length < 4) {
+      this.engineeringSessionId = undefined;
+      this.engineeringRequestInput = undefined;
+      return undefined;
+    }
+
+    if (outcome.status === 'clarification_required') {
+      if (!this.taskState) {
+        this.taskState = createTaskState(input, 'engineering');
+      }
+      this.currentQuestionKey = `engineering:${outcome.question.id}`;
+      this.currentQuestionDefault = outcome.alternatives?.[0]?.value === undefined
+        ? undefined
+        : String(outcome.alternatives[0].value);
+      return {
+        status: 'clarifying',
+        message: outcome.prompt,
+        taskState: this.taskState,
+        intent: 'create'
+      };
+    }
+
+    if (outcome.status === 'capability_gap') {
+      if (/\b(scope|display|plot|observe|output)\b/i.test(this.engineeringRequestInput || input)) {
+        this.engineeringSessionId = undefined;
+        this.engineeringRequestInput = undefined;
+        return undefined;
+      }
+      if (!this.taskState) {
+        this.taskState = createTaskState(input, 'engineering');
+      }
+      this.taskState = transitionState(this.taskState, 'blocked', outcome.notes);
+      this.engineeringSessionId = undefined;
+      this.engineeringRequestInput = undefined;
+      return {
+        status: 'blocked',
+        message: `Engineering capability gap: ${outcome.notes}`,
+        taskState: this.taskState,
+        intent: 'create'
+      };
+    }
+
+    if (outcome.status === 'validation_failed') {
+      if (/\b(scope|display|plot|observe|output)\b/i.test(this.engineeringRequestInput || input)) {
+        this.engineeringSessionId = undefined;
+        this.engineeringRequestInput = undefined;
+        return undefined;
+      }
+      if (!this.taskState) {
+        this.taskState = createTaskState(input, 'engineering');
+      }
+      const message = outcome.diagnostics.map(d => d.message).join('; ') || 'Engineering validation failed';
+      this.taskState = transitionState(this.taskState, 'blocked', message);
+      this.engineeringSessionId = undefined;
+      this.engineeringRequestInput = undefined;
+      return { status: 'blocked', message, taskState: this.taskState, intent: 'create' };
+    }
+
+    if (!this.taskState) {
+      this.taskState = createTaskState(input, outcome.plan.projectId);
+    }
+    this.currentPlanV2 = outcome.plan;
+    this.specification = {
+      id: `spec_${outcome.plan.planId}`,
+      taskId: this.taskState.id,
+      title: outcome.architecturePlan.rationale,
+      targetSystem: outcome.plan.projectId,
+      requirements: [],
+      assumptions: [],
+      safetyLimits: [],
+      successCriteria: [],
+      approved: true,
+      createdAt: new Date().toISOString()
+    };
+    this.executionPlan = this.planningCollaborator.convertModelPlanToExecutionPlan(
+      outcome.plan,
+      this.specification
+    );
+    this.currentProof = await this.proofCollaborator.provePlan(outcome.plan);
+    if (this.currentProof.status !== 'proved') {
+      const message = this.currentProof.diagnostics.map(d => d.message).join('; ') || 'Isolated proof refused';
+      this.taskState = transitionState(this.taskState, 'blocked', message);
+      this.engineeringSessionId = undefined;
+      this.engineeringRequestInput = undefined;
+      return { status: 'blocked', message, taskState: this.taskState, proof: this.currentProof, intent: 'create' };
+    }
+
+    const planApproval = createApprovalRequest(
+      'plan',
+      'Approve Engineering Model Plan',
+      `Verified engineering plan with ${this.executionPlan.actions.length} ordered actions`,
+      { planId: this.executionPlan.id, citations: outcome.citations, proofStatus: this.currentProof.status }
+    );
+    this.pendingApproval = planApproval;
+    this.taskState = transitionState({
+      ...this.taskState,
+      approvals: [...this.taskState.approvals, planApproval]
+    }, 'planning', 'Verified engineering plan compiled');
+    this.taskState = transitionState(this.taskState, 'awaiting_plan_approval', 'Verified engineering plan ready for approval');
+    this.engineeringSessionId = undefined;
+    this.engineeringRequestInput = undefined;
+    return {
+      status: 'awaiting_plan_approval',
+      message: 'Verified engineering plan prepared. Please review and approve the execution plan.',
+      taskState: this.taskState,
+      pendingApproval: planApproval,
+      executionPlan: this.executionPlan,
+      proof: this.currentProof,
+      plan: outcome.plan,
+      intent: 'create'
+    };
+  }
+
+  private shouldUseEngineeringPipeline(input: string): boolean {
+    if (this.engineeringSessionId) return true;
+    const lower = input.toLowerCase();
+    if (/air[- ]?fryer|inverter|rlc circuit|three[- ]phase|quantum|flux capacitor/.test(lower)) return false;
+    return /\b(add|adding|addition|sum|plus|subtract|subtracting|minus|multiply|multiplying|product|divide|dividing|division)\b/.test(lower)
+      && /\b(model|number|constant|result|scope|block|value)\b/.test(lower);
   }
 
   constructor(
@@ -299,6 +478,11 @@ export class AgentOrchestrator {
    * Primary entrypoint for natural language user input.
    */
   public async handle(input: string): Promise<OrchestratorResponse> {
+    if (this.enableEngineeringIntelligence && (!this.taskState || this.engineeringSessionId) && this.shouldUseEngineeringPipeline(input)) {
+      const engineeringResponse = await this.handleEngineeringPipelineRequest(input);
+      if (engineeringResponse) return engineeringResponse;
+    }
+
     // 1. If task is not yet started, initialize
     if (!this.taskState) {
       const classified = await this.requestCollaborator.classifyRequest(input);

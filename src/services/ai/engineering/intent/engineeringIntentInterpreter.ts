@@ -8,6 +8,7 @@ import {
   parseEngineeringEntities
 } from '../../planner/engineeringEntityParser';
 import { ReferenceResolver, MemoryContextForResolution } from './referenceResolver';
+import { sha256Hex } from '../../../../engine/opm/canonicalHash';
 
 export type EngineeringIntentResult =
   | {
@@ -91,27 +92,34 @@ export class EngineeringIntentInterpreter {
     }
 
     // 5A. Handle arithmetic path
-    const isArithmeticWord = /\b(?:add|addition|sum|plus|subtract|minus|multiply|product|divide)\b/i.test(lower);
+    const isArithmeticWord = /\b(?:add|adding|addition|sum|plus|subtract|subtracting|minus|multiply|multiplying|product|divide|dividing|division)\b/i.test(lower);
     if (isArithmeticWord) {
       const op1 = arithmetic.operands[0]?.value ?? 0;
       const op2 = arithmetic.operands[1]?.value ?? 0;
-      const opType = lower.includes('subtract') || lower.includes('minus') ? 'subtract' : 'add';
+      const opType = lower.includes('subtract') || lower.includes('minus')
+        ? 'subtract'
+        : lower.includes('multiply') || lower.includes('product')
+          ? 'multiply'
+          : lower.includes('divide')
+            ? 'divide'
+            : 'add';
+      const operationId = sha256Hex(trimmed.trim().toLowerCase()).slice(0, 16);
 
       const intent: EngineeringIntent = {
         schemaVersion: '1.0.0',
-        id: `intent.arithmetic.${Date.now()}`,
+        id: `intent.arithmetic.${operationId}`,
         intent: intentKind,
         objective: trimmed,
         domainCandidates: ['arithmetic'],
         systemConceptIds: [
-          opType === 'add' ? 'concept_addition' : 'concept_subtraction',
-          opType === 'add' ? 'concept.math.addition' : 'concept.math.subtraction'
+          opType === 'add' ? 'concept_addition' : `concept_${opType}`,
+          opType === 'add' ? 'concept.math.addition' : `concept.math.${opType}`
         ],
         operations: [
           {
             type: opType,
             parameters: arithmetic.operands.length >= 2 ? { operand1: op1, operand2: op2 } : {},
-            targetConceptId: opType === 'add' ? 'concept_addition' : 'concept_subtraction'
+            targetConceptId: opType === 'add' ? 'concept_addition' : `concept_${opType}`
           }
         ],
         controlledVariables: [],
@@ -175,9 +183,10 @@ export class EngineeringIntentInterpreter {
     if (lower.includes('12v')) constraints.push('12V');
     if (lower.includes('48v')) constraints.push('48V');
 
+    const intentId = sha256Hex(trimmed.trim().toLowerCase()).slice(0, 16);
     const intent: EngineeringIntent = {
       schemaVersion: '1.0.0',
-      id: `intent.engineering.${Date.now()}`,
+      id: `intent.engineering.${intentId}`,
       intent: intentKind,
       objective: trimmed,
       domainCandidates: domainCandidates.length > 0 ? Array.from(new Set(domainCandidates)) : ['control'],
