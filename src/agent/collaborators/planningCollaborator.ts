@@ -13,8 +13,21 @@ import { ModelSnapshot } from '../../services/ai/adapters/liveXbridgesModelAdapt
 import { GeneralEngineeringRequest } from '../../services/ai/planner/generalIntent';
 import { AdiaBlockCatalog } from '../adiaBlockCatalog';
 import type { LlmProvider } from '../llmProvider';
+import { EngineeringPlanner, ArchitecturePlanningResult } from '../../services/ai/engineering/planning/engineeringPlanner';
+import { EngineeringIntent } from '../../services/ai/engineering/contracts/semanticIntent';
+import { RetrievedKnowledgeBundle } from '../../services/ai/engineering/retrieval/hybridRetriever';
+import { ProjectMemorySnapshot } from '../../services/ai/engineering/contracts/memory';
 
 export class PlanningCollaborator {
+  private engineeringPlanner = new EngineeringPlanner();
+
+  public async planArchitecture(
+    intent: EngineeringIntent,
+    knowledge: RetrievedKnowledgeBundle,
+    memory: ProjectMemorySnapshot
+  ): Promise<ArchitecturePlanningResult> {
+    return this.engineeringPlanner.plan(intent, knowledge, memory);
+  }
   public planGeneralModel(
     request: GeneralEngineeringRequest,
     context: {

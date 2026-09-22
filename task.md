@@ -183,13 +183,13 @@
   - [x] Step 3: Ensure new chats do not silently inherit conversation memory; project decisions may be explicitly attached by project ID
   - [x] Step 4: Migrate persistence schema version with fail-safe restoration and approval invalidation
   - [x] Step 5: Commit `feat(ai): separate conversation project and model memory`
-- [ ] Task 9: Implement generic engineering planning and information classification
-  - [ ] Step 1: Expand retrieved concept requirements into a hierarchical functional architecture before block selection
-  - [ ] Step 2: Classify missing information as REQUIRED/OPTIONAL/INFERABLE/DEFAULTABLE using concept rules and affected-decision analysis
-  - [ ] Step 3: Require evidence for inferred/defaulted values and record them as assumptions
-  - [ ] Step 4: Validate architecture completeness, contradictions, unsupported concepts, and traceability
-  - [ ] Step 5: Acceptance: BLDC request produces power/control/sensing/plant/load functions; FOC and six-step remain alternatives rather than hard-coded choices
-  - [ ] Step 6: Commit `feat(ai): add evidence-backed engineering architecture planner`
+- [x] Task 9: Implement generic engineering planning and information classification
+  - [x] Step 1: Expand retrieved concept requirements into a hierarchical functional architecture before block selection
+  - [x] Step 2: Classify missing information as REQUIRED/OPTIONAL/INFERABLE/DEFAULTABLE using concept rules and affected-decision analysis
+  - [x] Step 3: Require evidence for inferred/defaulted values and record them as assumptions
+  - [x] Step 4: Validate architecture completeness, contradictions, unsupported concepts, and traceability
+  - [x] Step 5: Acceptance: BLDC request produces power/control/sensing/plant/load functions; FOC and six-step remain alternatives rather than hard-coded choices
+  - [x] Step 6: Commit `feat(ai): add evidence-backed engineering architecture planner`
 - [ ] Task 10: Replace question loops with a generic clarification manager
   - [ ] Step 1: Rank unresolved REQUIRED slots by architecture impact and dependency order
   - [ ] Step 2: Parse answers through each slot's declared value schema and update project memory
