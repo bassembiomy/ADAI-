@@ -62,13 +62,13 @@ function evaluateSplit(cases: RequestUnderstandingTestCase[]): SplitEvaluationMe
     totalExpectedEntities += expectedSet.size;
 
     if (req) {
-      const extractedEntityTypes = req.entities.map(e => e.groundedBlockType || e.semanticType);
+      const extractedEntityTypes = req.entities.map(e => e.catalogBlockId || e.semanticType);
       const extractedSet = new Set(extractedEntityTypes);
       totalExtractedEntities += extractedSet.size;
 
       // Check hallucinated blocks
       for (const ent of req.entities) {
-        const typeToCheck = ent.groundedBlockType || ent.semanticType;
+        const typeToCheck = ent.catalogBlockId || ent.semanticType;
         if (!validCatalogBlocks.has(typeToCheck)) {
           hallucinatedBlocks++;
         }

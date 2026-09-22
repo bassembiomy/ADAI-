@@ -309,7 +309,7 @@
   - [x] Step 1: Increment persisted request/session schema version; migrate old sessions deterministically
   - [x] Step 2: Add feature flags for shadow, selected-project, and general rollout stages
   - [x] Step 3: Commit `feat(ai): migrate and gate structured request sessions`
-- [ ] Task 16: Evaluate prompt improvements and optional fine-tuning
-  - [ ] Step 1: Run corpus against current model and prompts; improve few-shot examples
-  - [ ] Step 2: Verify holdout set and regression gate; commit model decision report
+- [x] Task 16: Evaluate prompt improvements and optional fine-tuning
+  - [x] Step 1: Run corpus against current model and prompts; improve few-shot examples
+  - [x] Step 2: Verify holdout set and regression gate; commit model decision report
 

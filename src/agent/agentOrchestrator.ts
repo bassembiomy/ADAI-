@@ -555,7 +555,7 @@ export class AgentOrchestrator {
           unresolvedSlotIds: structured.status === 'clarification_required' ? [structured.blockingRequirement.id] : [],
           catalogResolutionOutcome: {
             totalEntities: structured.request?.entities.length || 0,
-            resolvedCount: structured.request?.entities.filter(e => e.groundedBlockType).length || 0,
+            resolvedCount: structured.request?.entities.filter(e => e.catalogBlockId).length || 0,
             gapCount: 0
           },
           stageDurationsMs: { totalMs: 1 },
