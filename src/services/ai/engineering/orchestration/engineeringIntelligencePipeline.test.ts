@@ -96,7 +96,7 @@ describe('EngineeringIntelligencePipeline', () => {
     if (result.status === 'compiled') {
       expect(result.plan).toBeDefined();
       expect(result.plan.schemaVersion).toBe('2.0.0');
-      expect(result.plan.actions.some(a => a.kind === 'add_block' && a.blockType === 'Sum')).toBe(true);
+      expect(result.plan.actions.some((a: any) => a.kind === 'add_block' && a.blockType === 'Sum')).toBe(true);
       expect(result.citations).toBeDefined();
       expect(result.summary).toContain('Addition');
     }

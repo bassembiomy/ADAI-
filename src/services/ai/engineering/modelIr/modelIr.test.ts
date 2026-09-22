@@ -145,8 +145,8 @@ describe('ModelIrBuilder', () => {
     expect(ir.traceLinks.length).toBeGreaterThan(0);
 
     // Verify trace links point to components and subsystems
-    expect(ir.traceLinks.some(t => t.architectureElementId === 'comp_inverter')).toBe(true);
-    expect(ir.traceLinks.some(t => t.architectureElementId === 'sub_power')).toBe(true);
+    expect(ir.traceLinks.some((t: any) => t.architectureElementId === 'comp_inverter')).toBe(true);
+    expect(ir.traceLinks.some((t: any) => t.architectureElementId === 'sub_power')).toBe(true);
   });
 });
 
@@ -235,8 +235,8 @@ describe('ModelIrValidator', () => {
 
     const report = validateModelIr(badIr);
     expect(report.valid).toBe(false);
-    expect(report.errors.some(e => e.includes('unresolved_resistance'))).toBe(true);
-    expect(report.errors.some(e => e.includes('p_non_existent'))).toBe(true);
+    expect(report.errors.some((e: any) => e.includes('unresolved_resistance'))).toBe(true);
+    expect(report.errors.some((e: any) => e.includes('p_non_existent'))).toBe(true);
   });
 });
 
@@ -298,9 +298,9 @@ describe('ModelIrDiff', () => {
     expect(diff.removedSubsystems).toHaveLength(0);
 
     // Only sensing and control components affected:
-    expect(diff.removedComponents.map(c => c.id)).toContain('comp_hall');
-    expect(diff.addedComponents.map(c => c.id)).toContain('comp_smo');
-    expect(diff.modifiedComponents.map(c => c.id)).toContain('comp_ctrl');
+    expect(diff.removedComponents.map((c: any) => c.id)).toContain('comp_hall');
+    expect(diff.addedComponents.map((c: any) => c.id)).toContain('comp_smo');
+    expect(diff.modifiedComponents.map((c: any) => c.id)).toContain('comp_ctrl');
 
     // Inverter and motor untouched:
     expect(diff.unchangedComponentIds).toContain('comp_inv');
@@ -308,7 +308,7 @@ describe('ModelIrDiff', () => {
 
     // Applying diff to baseIr produces modifiedIr:
     const patchedIr = applyModelIrDiff(baseIr, diff);
-    expect(patchedIr.components.some(c => c.id === 'comp_smo')).toBe(true);
-    expect(patchedIr.components.some(c => c.id === 'comp_hall')).toBe(false);
+    expect(patchedIr.components.some((c: any) => c.id === 'comp_smo')).toBe(true);
+    expect(patchedIr.components.some((c: any) => c.id === 'comp_hall')).toBe(false);
   });
 });

@@ -121,14 +121,14 @@ describe('ConceptGraphTraversal', () => {
   it('retrieves neighbors with direction and relationType filtering', () => {
     const outgoing = traversal.getNeighbors('c.motor.bldc', { direction: 'outgoing' });
     expect(outgoing).toHaveLength(2);
-    expect(outgoing.map(o => o.targetConceptId).sort()).toEqual([
+    expect(outgoing.map((o: ConceptRelationship) => o.targetConceptId).sort()).toEqual([
       'c.electrical.inverter',
       'c.stator.windings'
     ]);
 
     const incoming = traversal.getNeighbors('c.electrical.inverter', { direction: 'incoming' });
     expect(incoming).toHaveLength(2);
-    expect(incoming.map(i => i.sourceConceptId).sort()).toEqual([
+    expect(incoming.map((i: ConceptRelationship) => i.sourceConceptId).sort()).toEqual([
       'c.control.six_step',
       'c.motor.bldc'
     ]);
@@ -148,10 +148,10 @@ describe('ConceptGraphTraversal', () => {
 
   it('finds symmetric alternatives for a concept', () => {
     const altForFoc = traversal.getAlternatives('c.control.foc');
-    expect(altForFoc.map(a => a.conceptId)).toContain('c.control.six_step');
+    expect(altForFoc.map((a: { conceptId: string }) => a.conceptId)).toContain('c.control.six_step');
 
     const altForSixStep = traversal.getAlternatives('c.control.six_step');
-    expect(altForSixStep.map(a => a.conceptId)).toContain('c.control.foc');
+    expect(altForSixStep.map((a: { conceptId: string }) => a.conceptId)).toContain('c.control.foc');
   });
 
   it('finds shortest evidence path between two concepts', () => {

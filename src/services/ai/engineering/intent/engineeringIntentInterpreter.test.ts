@@ -56,7 +56,7 @@ describe('EngineeringIntentInterpreter', () => {
     expect(result.status).toBe('ok');
     if (result.status === 'ok') {
       expect(result.intent.unknownTerms.length).toBeGreaterThan(0);
-      expect(result.intent.unknownTerms.some(t => t.includes('hyper-relativistic'))).toBe(true);
+      expect(result.intent.unknownTerms.some((t: string) => t.includes('hyper-relativistic'))).toBe(true);
     }
   });
 

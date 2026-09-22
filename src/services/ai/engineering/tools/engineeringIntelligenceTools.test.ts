@@ -79,7 +79,7 @@ describe('EngineeringIntelligenceTools', () => {
       });
       expect(compRes.success).toBe(true);
       expect(compRes.data.planHash).toBeDefined();
-      expect(compRes.data.actions.some(a => a.kind === 'add_block')).toBe(true);
+      expect(compRes.data.actions.some((a: any) => a.kind === 'add_block')).toBe(true);
     }
   });
 
@@ -87,6 +87,6 @@ describe('EngineeringIntelligenceTools', () => {
     const invalidPlan = { ...validPlan, components: [{ ...validPlan.components[0], conceptId: 'xbridges_leaked_id' }] };
     const res = tools.validateArchitecturePlan({ plan: invalidPlan });
     expect(res.data.valid).toBe(false);
-    expect(res.data.errors.some(e => e.includes('illegally contains catalog block ID'))).toBe(true);
+    expect(res.data.errors.some((e: any) => e.includes('illegally contains catalog block ID'))).toBe(true);
   });
 });

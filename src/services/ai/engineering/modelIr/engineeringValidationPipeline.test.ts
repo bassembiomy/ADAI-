@@ -69,7 +69,7 @@ describe('EngineeringValidationPipeline', () => {
     expect(report.stages.parametersAndCompleteness).toBe(true);
     expect(report.stages.portsAndDimensions).toBe(true);
     expect(report.stages.topologyAndFeedback).toBe(true);
-    expect(report.diagnostics.filter(d => d.severity === 'ERROR')).toHaveLength(0);
+    expect(report.diagnostics.filter((d: any) => d.severity === 'ERROR')).toHaveLength(0);
   });
 
   it('detects domain mismatch between connected ports with structured remediation', () => {
@@ -82,7 +82,7 @@ describe('EngineeringValidationPipeline', () => {
     expect(report.status).toBe('failed');
     expect(report.stages.portsAndDimensions).toBe(false);
 
-    const domainDiag = report.diagnostics.find(d => d.code === 'PHYSICAL_DOMAIN_MISMATCH');
+    const domainDiag = report.diagnostics.find((d: any) => d.code === 'PHYSICAL_DOMAIN_MISMATCH');
     expect(domainDiag).toBeDefined();
     expect(domainDiag?.expected).toBe('electrical');
     expect(domainDiag?.actual).toBe('hydraulic');
@@ -133,6 +133,6 @@ describe('EngineeringValidationPipeline', () => {
     const report = pipeline.validate(loopIr, { checkAlgebraicLoops: true });
     expect(report.isValid).toBe(false);
     expect(report.stages.topologyAndFeedback).toBe(false);
-    expect(report.diagnostics.some(d => d.code === 'ALGEBRAIC_LOOP_DETECTED')).toBe(true);
+    expect(report.diagnostics.some((d: any) => d.code === 'ALGEBRAIC_LOOP_DETECTED')).toBe(true);
   });
 });

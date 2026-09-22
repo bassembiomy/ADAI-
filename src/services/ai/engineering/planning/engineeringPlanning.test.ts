@@ -180,7 +180,7 @@ describe('ArchitecturePlanValidator', () => {
 
     const result = validateArchitecturePlan(leakyPlan);
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.includes('illegally contains catalog block ID'))).toBe(true);
+    expect(result.errors.some((e: string) => e.includes('illegally contains catalog block ID'))).toBe(true);
   });
 });
 
@@ -275,7 +275,7 @@ describe('EngineeringPlanner', () => {
     if (result.status === 'ok') {
       expect(result.plan.system.conceptId).toBe('concept_addition');
       expect(result.plan.components.length).toBeGreaterThan(0);
-      expect(result.plan.components.every(c => !c.conceptId.startsWith('xbridges_'))).toBe(true);
+      expect(result.plan.components.every((c: any) => !c.conceptId.startsWith('xbridges_'))).toBe(true);
       expect(result.plan.capabilityAssessment.feasible).toBe(true);
     }
   });
@@ -383,21 +383,21 @@ describe('EngineeringPlanner', () => {
     if (result.status === 'clarification_required') {
       const plan = result.plan;
       // Functional subsystems should include power, control, sensing, plant/load
-      const roles = plan.subsystems.flatMap(s => s.functionalRoles);
+      const roles = plan.subsystems.flatMap((s: any) => s.functionalRoles);
       expect(roles).toContain('power');
       expect(roles).toContain('control');
       expect(roles).toContain('plant');
 
       // Check design decisions: commutation mode should have FOC and six-step as alternatives
-      const commutationDecision = plan.designDecisions.find(d => d.id.includes('commutation'));
+      const commutationDecision = plan.designDecisions.find((d: any) => d.id.includes('commutation'));
       expect(commutationDecision).toBeDefined();
       expect(commutationDecision?.consideredAlternatives).toEqual(expect.arrayContaining(['foc', 'six_step']));
 
       // Check supply_voltage is defaulted and listed as assumption
-      expect(plan.assumptions.some(a => a.statement.includes('supply_voltage'))).toBe(true);
+      expect(plan.assumptions.some((a: any) => a.statement.includes('supply_voltage'))).toBe(true);
 
       // Check unresolved requirement
-      expect(result.unresolvedSlots.some(s => s.slotName === 'commutation_strategy')).toBe(true);
+      expect(result.unresolvedSlots.some((s: any) => s.slotName === 'commutation_strategy')).toBe(true);
     }
   });
 });

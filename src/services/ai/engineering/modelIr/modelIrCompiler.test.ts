@@ -98,9 +98,9 @@ describe('ModelIrCompiler', () => {
     expect(plan1.planHash).toBe(plan2.planHash);
 
     // Actions verification
-    expect(plan1.actions.some(a => a.kind === 'add_block' && a.blockType === 'Sum')).toBe(true);
-    expect(plan1.actions.some(a => a.kind === 'add_block' && a.blockType === 'Constant')).toBe(true);
-    expect(plan1.actions.some(a => a.kind === 'connect_ports')).toBe(true);
+    expect(plan1.actions.some((a: any) => a.kind === 'add_block' && a.blockType === 'Sum')).toBe(true);
+    expect(plan1.actions.some((a: any) => a.kind === 'add_block' && a.blockType === 'Constant')).toBe(true);
+    expect(plan1.actions.some((a: any) => a.kind === 'connect_ports')).toBe(true);
 
     // Blocks and connections
     expect(plan1.blocks).toHaveLength(2);

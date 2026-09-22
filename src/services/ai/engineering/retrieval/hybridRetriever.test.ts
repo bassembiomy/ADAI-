@@ -221,16 +221,16 @@ describe('HybridRetriever', () => {
       expandGraph: true
     });
 
-    const conceptIds = bundle.concepts.map(c => c.concept.id);
+    const conceptIds = bundle.concepts.map((c: any) => c.concept.id);
     expect(conceptIds).toContain('concept.electromechanical.bldc_motor');
     expect(conceptIds).toContain('concept.electrical.inverter');
 
     // Verified fact attached to bldc motor should be retrieved
-    const factIds = bundle.facts.map(f => f.fact.id);
+    const factIds = bundle.facts.map((f: any) => f.fact.id);
     expect(factIds).toContain('fact.bldc.back_emf');
 
     // Graph relationship should be retrieved
-    const relIds = bundle.relationships.map(r => r.relationship.id);
+    const relIds = bundle.relationships.map((r: any) => r.relationship.id);
     expect(relIds).toContain('rel.bldc.inverter');
   });
 
@@ -241,7 +241,7 @@ describe('HybridRetriever', () => {
     });
 
     // Experimental quarantined concept must NEVER appear
-    const ids = bundle.concepts.map(c => c.concept.id);
+    const ids = bundle.concepts.map((c: any) => c.concept.id);
     expect(ids).not.toContain('concept.experimental.cold_fusion_drive');
   });
 
@@ -249,8 +249,8 @@ describe('HybridRetriever', () => {
     const bundle1 = await retriever.retrieve({ query: 'motor', runtimePlanning: true });
     const bundle2 = await retriever.retrieve({ query: 'motor', runtimePlanning: true });
 
-    expect(bundle1.concepts.map(c => c.concept.id)).toEqual(
-      bundle2.concepts.map(c => c.concept.id)
+    expect(bundle1.concepts.map((c: any) => c.concept.id)).toEqual(
+      bundle2.concepts.map((c: any) => c.concept.id)
     );
   });
 });
