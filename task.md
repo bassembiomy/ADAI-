@@ -141,12 +141,12 @@
   - [x] Step 3: Implement strict Zod schemas and exported TypeScript types
   - [x] Step 4: Run `npx vitest run src/services/ai/engineering/contracts`
   - [x] Step 5: Commit `feat(ai): define engineering intelligence contracts`
-- [ ] Task 2: Build versioned concept, fact, relationship, and source stores
-  - [ ] Step 1: Define repository interfaces independent of filesystem implementation
-  - [ ] Step 2: Implement strict manifests, atomic writes, hashes, version links, lifecycle filters, and deterministic listing
-  - [ ] Step 3: Verify corrupt records, path traversal, oversized records, and hash mismatches fail closed
-  - [ ] Step 4: Run `npx vitest run src/services/ai/engineering/knowledge src/services/ai/engineering/graph`
-  - [ ] Step 5: Commit `feat(ai): add provenance-aware engineering knowledge stores`
+- [x] Task 2: Build versioned concept, fact, relationship, and source stores
+  - [x] Step 1: Define repository interfaces independent of filesystem implementation
+  - [x] Step 2: Implement strict manifests, atomic writes, hashes, version links, lifecycle filters, and deterministic listing
+  - [x] Step 3: Verify corrupt records, path traversal, oversized records, and hash mismatches fail closed
+  - [x] Step 4: Run `npx vitest run src/services/ai/engineering/knowledge src/services/ai/engineering/graph`
+  - [x] Step 5: Commit `feat(ai): add provenance-aware engineering knowledge stores`
 - [ ] Task 3: Implement concept-graph validation and traversal
   - [ ] Step 1: Validate endpoints, relation taxonomy, cycles, confidence, and lifecycle eligibility
   - [ ] Step 2: Implement bounded neighbors, ancestors, requirements closure, alternatives, and shortest evidence path
