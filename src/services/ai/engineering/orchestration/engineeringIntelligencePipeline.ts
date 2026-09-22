@@ -109,31 +109,43 @@ export class EngineeringIntelligencePipeline {
       const confidenceOutcome = this.confidencePolicy.evaluate(intentResult.structuredRequest);
       if (confidenceOutcome.status === 'clarification_required') {
         const blockingSlot = confidenceOutcome.clarificationQuestion;
+        const infoReq: InformationRequirement = {
+          id: blockingSlot.targetSlotId,
+          slotName: blockingSlot.targetSlotId,
+          classification: 'REQUIRED',
+          reason: blockingSlot.reason,
+          affectedDecisions: [],
+          candidateValues: [],
+          resolutionState: 'unresolved'
+        };
         const archPlan: EngineeringArchitecturePlan = {
           schemaVersion: '1.0.0',
           planId: `arch_plan_${intentResult.structuredRequest.requestId}`,
           intentId: intentResult.intent.id,
-          objective: intentResult.intent.objective,
-          decisions: [],
-          unresolvedRequirements: [
-            {
-              id: blockingSlot.targetSlotId,
-              name: blockingSlot.targetSlotId,
-              type: 'value',
-              prompt: blockingSlot.question,
-              reason: blockingSlot.reason,
-              affectedDecisionIds: [],
-              status: 'unresolved'
-            }
-          ],
-          confidence: confidenceOutcome.confidence,
-          citations: []
+          system: {
+            name: 'Engineering System',
+            conceptId: 'concept_system',
+            description: intentResult.intent.objective
+          },
+          subsystems: [],
+          components: [],
+          connections: [],
+          designDecisions: [],
+          informationRequirements: [infoReq],
+          assumptions: [],
+          knowledgeEvidence: [],
+          capabilityAssessment: {
+            feasible: false,
+            coveredConceptIds: [],
+            unsupportedConceptIds: []
+          },
+          rationale: `Clarification required: ${blockingSlot.reason}`
         };
 
         return {
           status: 'clarification_required',
           architecturePlan: archPlan,
-          question: archPlan.unresolvedRequirements[0],
+          question: infoReq,
           prompt: blockingSlot.question
         };
       }

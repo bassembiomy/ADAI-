@@ -38,7 +38,6 @@ import {
   ExtendedApprovalRequest
 } from './approvalGate';
 import { XbridgesAgentTransaction } from '../services/ai/execution/xbridgesAgentTransaction';
-import * as path from 'path';
 import {
   EngineeringIntelligencePipeline,
   PipelineOutcome
@@ -183,14 +182,16 @@ export class AgentOrchestrator {
       const runtimeProcess = (globalThis as typeof globalThis & {
         process?: { cwd?: () => string };
       }).process;
-      const conceptStore = runtimeProcess?.cwd
-        ? new ConceptStore({ storageDir: path.join(runtimeProcess.cwd(), 'data', 'engineering-knowledge') })
+      const cwd = runtimeProcess?.cwd ? runtimeProcess.cwd().replace(/\\/g, '/') : undefined;
+      const storageDir = cwd ? `${cwd}/data/engineering-knowledge` : undefined;
+      const conceptStore = storageDir
+        ? new ConceptStore({ storageDir })
         : new InMemoryConceptStore();
-      const factStore = runtimeProcess?.cwd
-        ? new FactStore({ storageDir: path.join(runtimeProcess.cwd(), 'data', 'engineering-knowledge') })
+      const factStore = storageDir
+        ? new FactStore({ storageDir })
         : new InMemoryFactStore();
-      const conceptGraphStore = runtimeProcess?.cwd
-        ? new ConceptGraphStore({ storageDir: path.join(runtimeProcess.cwd(), 'data', 'engineering-knowledge') })
+      const conceptGraphStore = storageDir
+        ? new ConceptGraphStore({ storageDir })
         : new InMemoryRelationshipStore();
       const retriever = new HybridRetriever({ conceptStore, factStore, conceptGraphStore });
       this.engineeringConceptStore = conceptStore;

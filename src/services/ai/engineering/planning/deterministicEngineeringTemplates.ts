@@ -160,7 +160,7 @@ export class DeterministicEngineeringTemplates {
       knowledgeEvidence: [
         {
           conceptId: opConceptId,
-          sourceType: 'seed',
+          factIds: [],
           confidence: 1.0,
           citation: 'X-Bridges Mathematical Block Library'
         }
@@ -313,12 +313,12 @@ export class DeterministicEngineeringTemplates {
       {
         id: 'asm_pid_default_gains',
         statement: 'PID controller initialized with nominal tuning gains (Kp=1.0, Ki=0.1, Kd=0.01) pending dynamic tuning.',
-        rationale: 'Catalog nominal default gains applied for closed-loop stability.'
+        source: 'defaulted'
       },
       {
         id: 'asm_setpoint_default',
         statement: 'Setpoint reference initialized to step unit input (value=1.0).',
-        rationale: 'Standard reference benchmark for step response evaluation.'
+        source: 'defaulted'
       }
     ];
 
@@ -349,13 +349,13 @@ export class DeterministicEngineeringTemplates {
       knowledgeEvidence: [
         {
           conceptId: 'concept_transfer_function',
-          sourceType: 'seed',
+          factIds: [],
           confidence: 1.0,
           citation: 'X-Bridges Control & Feedback Library'
         },
         {
           conceptId: 'concept_pid_controller',
-          sourceType: 'seed',
+          factIds: [],
           confidence: 1.0,
           citation: 'IEEE Standard Feedback Architecture'
         }
@@ -463,7 +463,7 @@ export class DeterministicEngineeringTemplates {
       knowledgeEvidence: [
         {
           conceptId: 'concept_integrator',
-          sourceType: 'seed',
+          factIds: [],
           confidence: 1.0,
           citation: 'X-Bridges Core Dynamic Library'
         }

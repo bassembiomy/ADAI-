@@ -280,11 +280,11 @@
   - [x] Step 2: Preserve existing approval, proof, transaction, rollback, and simulation boundaries
   - [x] Step 3: Lock route for lifetime of request; test Add 10 and 20, transfer function + PID, Scope
   - [x] Step 4: Commit `feat(ai): integrate structured request understanding`
-- [ ] Task 9: Enforce browser/Electron runtime boundaries
-  - [ ] Step 1: Use browser-safe in-memory/read-only repositories from renderer-reachable code
-  - [ ] Step 2: Prohibit renderer execution of process.cwd(), fs, path, and unguarded Buffer usage
-  - [ ] Step 3: Test with globalThis.process = undefined and verify build
-  - [ ] Step 4: Commit `fix(ai): enforce browser-safe engineering knowledge access`
+- [x] Task 9: Enforce browser/Electron runtime boundaries
+  - [x] Step 1: Use browser-safe in-memory/read-only repositories from renderer-reachable code
+  - [x] Step 2: Prohibit renderer execution of process.cwd(), fs, path, and unguarded Buffer usage
+  - [x] Step 3: Test with globalThis.process = undefined and verify build
+  - [x] Step 4: Commit `fix(ai): enforce browser-safe engineering knowledge access`
 - [ ] Task 10: Guarantee transaction-local topology consistency
   - [ ] Step 1: Maintain transaction-local mirror of nodes and edges for sequential action visibility before React commits
   - [ ] Step 2: Validate edges against mirror immediately; test deferred React commits and concurrent user edits

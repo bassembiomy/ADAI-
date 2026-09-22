@@ -152,7 +152,7 @@ describe('RequirementAnswerResolver', () => {
 
       const result = resolver.resolveAnswer('test_session_cancel', 'cancel');
       expect(result.status).toBe('cancelled');
-      expect(result.session.state).toBe('cancelled');
+      expect(result.session?.state).toBe('cancelled');
     });
 
     it('supports explicit "restart" command', () => {
@@ -193,7 +193,7 @@ describe('RequirementAnswerResolver', () => {
       // Resolve it
       const firstAnswer = resolver.resolveAnswer('test_session_repeat', '10 and 20');
       expect(firstAnswer.status).toBe('resolved');
-      expect(firstAnswer.session.answeredSlotIds).toContain(slotId);
+      expect(firstAnswer.session?.answeredSlotIds).toContain(slotId);
 
       // If extractor or caller asks about the slot again, resolver confirms it is already resolved
       expect(resolver.isSlotAnswered('test_session_repeat', slotId)).toBe(true);
