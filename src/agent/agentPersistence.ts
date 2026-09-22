@@ -5,7 +5,7 @@ import {
   ApprovalRequest
 } from './types';
 
-export const AGENT_PERSISTENCE_SCHEMA_VERSION = 1;
+export const AGENT_PERSISTENCE_SCHEMA_VERSION = 2;
 
 export interface PersistedActionResult {
   readonly actionId: string;
@@ -28,6 +28,8 @@ export interface AgentPersistenceData {
   actionResults?: PersistedActionResult[];
   auditTrail: AuditRecord[];
   lastSavedAt: string;
+  projectMemory?: Record<string, unknown>;
+  modelMemory?: Record<string, unknown>;
 }
 
 export class AgentPersistence {
@@ -44,7 +46,8 @@ export class AgentPersistence {
   }
 
   /**
-   * Deserializes session data with strict version and schema checks.
+   * Deserializes session data with strict version and schema checks,
+   * providing backwards-compatible fail-safe migration from Version 1.
    */
   public static deserialize(json: string): AgentPersistenceData {
     let parsed: any;
@@ -58,7 +61,12 @@ export class AgentPersistence {
       throw new Error('Persistence payload must be an object');
     }
 
-    if (parsed.version !== AGENT_PERSISTENCE_SCHEMA_VERSION) {
+    if (parsed.version === 1) {
+      // Deterministic fail-safe migration from V1 to V2
+      parsed.version = AGENT_PERSISTENCE_SCHEMA_VERSION;
+      parsed.projectMemory = parsed.projectMemory || {};
+      parsed.modelMemory = parsed.modelMemory || {};
+    } else if (parsed.version !== AGENT_PERSISTENCE_SCHEMA_VERSION) {
       throw new Error(
         `Incompatible persistence version: expected ${AGENT_PERSISTENCE_SCHEMA_VERSION}, received ${parsed.version}`
       );

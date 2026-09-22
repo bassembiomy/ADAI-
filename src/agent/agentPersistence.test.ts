@@ -56,10 +56,10 @@ describe('AgentPersistence', () => {
 
     const serialized = AgentPersistence.serialize(data);
     expect(typeof serialized).toBe('string');
-    expect(serialized).toContain('"version": 1');
+    expect(serialized).toContain(`"version": ${AGENT_PERSISTENCE_SCHEMA_VERSION}`);
 
     const deserialized = AgentPersistence.deserialize(serialized);
-    expect(deserialized.version).toBe(1);
+    expect(deserialized.version).toBe(AGENT_PERSISTENCE_SCHEMA_VERSION);
     expect(deserialized.taskState.id).toBe('task-100');
     expect(deserialized.pendingApprovals).toHaveLength(1);
     expect(deserialized.auditTrail).toHaveLength(1);

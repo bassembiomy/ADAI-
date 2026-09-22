@@ -177,12 +177,12 @@
   - [x] Step 4: Route using typed intent fields, not substring checks
   - [x] Step 5: Acceptance: addition maps to two numeric operands and sum; BLDC speed control maps to plant/actuator/controller/feedback concepts without selecting blocks
   - [x] Step 6: Commit `feat(ai): add semantic engineering intent interpretation`
-- [ ] Task 8: Separate the four memory layers
-  - [ ] Step 1: Store current dialogue in conversation memory, reusable engineering truth only in verified knowledge stores, approved project decisions in project memory, and graph/revision state in model memory
-  - [ ] Step 2: Give every decision provenance, timestamp, scope, and supersession metadata
-  - [ ] Step 3: Ensure new chats do not silently inherit conversation memory; project decisions may be explicitly attached by project ID
-  - [ ] Step 4: Migrate persistence schema version with fail-safe restoration and approval invalidation
-  - [ ] Step 5: Commit `feat(ai): separate conversation project and model memory`
+- [x] Task 8: Separate the four memory layers
+  - [x] Step 1: Store current dialogue in conversation memory, reusable engineering truth only in verified knowledge stores, approved project decisions in project memory, and graph/revision state in model memory
+  - [x] Step 2: Give every decision provenance, timestamp, scope, and supersession metadata
+  - [x] Step 3: Ensure new chats do not silently inherit conversation memory; project decisions may be explicitly attached by project ID
+  - [x] Step 4: Migrate persistence schema version with fail-safe restoration and approval invalidation
+  - [x] Step 5: Commit `feat(ai): separate conversation project and model memory`
 - [ ] Task 9: Implement generic engineering planning and information classification
   - [ ] Step 1: Expand retrieved concept requirements into a hierarchical functional architecture before block selection
   - [ ] Step 2: Classify missing information as REQUIRED/OPTIONAL/INFERABLE/DEFAULTABLE using concept rules and affected-decision analysis
