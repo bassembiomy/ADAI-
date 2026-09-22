@@ -41,6 +41,11 @@ export class CompositionResolver {
       parameterMapping: { kp: 'Kp', ki: 'Ki', kd: 'Kd' },
       portMapping: { in: 'in1', out: 'out' }
     },
+    concept_pid_loop: {
+      blockId: 'PID_CONTROLLER',
+      parameterMapping: { kp: 'Kp', ki: 'Ki', kd: 'Kd' },
+      portMapping: { setpoint: 'in1', process_variable: 'in1', control_effort: 'out' }
+    },
     concept_inverter: {
       blockId: 'THREE_PHASE_INVERTER',
       parameterMapping: { dc_bus_voltage: 'dc_bus_voltage' },
@@ -54,6 +59,22 @@ export class CompositionResolver {
     concept_integrator: {
       blockId: 'Integrator',
       portMapping: { in: 'in', out: 'out' }
+    },
+    concept_bldc_motor: {
+      blockId: 'AC_INDUCTION_MOTOR',
+      portMapping: { va: 'va', vb: 'vb', vc: 'vc', speed: 'omega', angle: 'theta' }
+    },
+    concept_hall_sensor: {
+      blockId: 'ROTOR_POSITION_ESTIMATOR',
+      portMapping: { angle_in: 'theta', angle_out: 'theta' }
+    },
+    concept_smo_observer: {
+      blockId: 'ROTOR_POSITION_ESTIMATOR',
+      portMapping: { i_alpha: 'ia', i_beta: 'ib', estimated_pos: 'theta' }
+    },
+    concept_foc: {
+      blockId: 'FIELD_ORIENTED_CONTROL',
+      portMapping: {}
     }
   };
 
@@ -91,11 +112,13 @@ export class CompositionResolver {
 
     // 3. Match from verified engineering patterns
     for (const pat of patterns) {
-      if (pat.patternId.toLowerCase().includes(conceptId.toLowerCase()) && pat.primaryBlockId) {
-        if (catalog.blocks.has(pat.primaryBlockId)) {
+      const patId = pat.id || '';
+      const primaryBlock = pat.templateGraph?.blocks?.[0]?.type || pat.requiredBlocks?.[0];
+      if (patId.toLowerCase().includes(conceptId.toLowerCase()) && primaryBlock) {
+        if (catalog.blocks.has(primaryBlock)) {
           return {
-            blockId: pat.primaryBlockId,
-            blockType: pat.primaryBlockId,
+            blockId: primaryBlock,
+            blockType: primaryBlock,
             confidence: 0.9,
             parameterMapping: {},
             portMapping: {}

@@ -84,7 +84,7 @@ export class EngineeringPlanner {
     } else if (
       primaryConcept.domain === 'motor_control' ||
       primaryConcept.id.includes('bldc') ||
-      intent.operations.includes('speed_control')
+      intent.operations.some(op => op.type === 'speed_control')
     ) {
       // Motor Control domain: power, control, sensing, plant
       const subPower: ArchitectureSubsystem = {
@@ -195,7 +195,7 @@ export class EngineeringPlanner {
         const paramName = p.name;
         const userProvided =
           memory.resolvedSlots[paramName] ??
-          intent.inputs.find(i => i.name === paramName)?.type;
+          intent.inputs.find(i => i.toLowerCase().includes(paramName.toLowerCase()));
 
         const slot = this.classifier.classifySlot({
           slotName: paramName,

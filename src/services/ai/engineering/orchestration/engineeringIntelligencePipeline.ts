@@ -88,7 +88,16 @@ export class EngineeringIntelligencePipeline {
 
     // 1. Semantic Intent Interpretation
     const conversationSnapshot = this.config.conversationMemory.getSnapshot(request.sessionId);
-    const intentResult = await this.interpreter.interpret(request.input, conversationSnapshot);
+    const intentResult = await this.interpreter.interpret(
+      request.input,
+      conversationSnapshot ?? undefined
+    );
+    if (intentResult.status === 'unsupported') {
+      return {
+        status: 'fallback_to_legacy',
+        reason: intentResult.reason
+      };
+    }
     const intent = intentResult.intent;
 
     // Record turn in conversation memory

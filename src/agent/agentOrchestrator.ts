@@ -73,7 +73,6 @@ import { EngineeringModelPlanV2 } from '../services/ai/contracts/engineeringMode
 import { TransactionStatus } from '../services/ai/execution/xbridgesAgentTransaction';
 import { LiveXbridgesModelAdapter } from '../services/ai/adapters/liveXbridgesModelAdapter';
 import { sha256Hex, canonicalJson, computeModelFingerprint } from '../engine/opm/canonicalHash';
-import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
 import { resolveRequirements } from '../services/ai/planner/requirementResolver';
 import { EngineeringPattern } from '../services/ai/knowledge/patternSchemas';
 import { loadVerifiedRuntimePatterns } from '../services/ai/knowledge/runtimePatternGateway';

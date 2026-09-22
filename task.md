@@ -230,11 +230,11 @@
   - [x] Step 3: Feature-flag the new pipeline; retain current planner for unsupported/migration cases during rollout
   - [x] Step 4: Prevent fallback after the new pipeline has made architecture decisions unless the user explicitly restarts
   - [x] Step 5: Commit `feat(ai): integrate engineering intelligence workflow`
-- [ ] Task 17: Seed cross-domain knowledge and acceptance benchmarks
-  - [ ] Step 1: Seed small reviewed concepts for addition, PID loop, BLDC drive, FOC, six-step commutation, buck/boost converter, thermal loop, hydraulic actuator, differential drive, state machine, Kalman filter, and vibration system
-  - [ ] Step 2: Do not seed unsupported ADIA mappings; represent them as capability gaps
-  - [ ] Step 3: Implement acceptance A (addition), B (BLDC architecture clarification/hierarchy/IR), and C (sensorless modification by IR diff)
-  - [ ] Step 4: Add negative tests for invented facts, fake citations, unverified retrieval, hallucinated blocks/ports, ambiguous pronouns, invalid units, and repeated questions
-  - [ ] Step 5: Run full AI, X-Bridges, security, persistence, and TypeScript gates
-  - [ ] Step 6: Commit `test(ai): certify general engineering intelligence pipeline`
+- [x] Task 17: Seed cross-domain knowledge and acceptance benchmarks
+  - [x] Step 1: Seed small reviewed concepts for addition, PID loop, BLDC drive, FOC, six-step commutation, buck/boost converter, thermal loop, hydraulic actuator, differential drive, state machine, Kalman filter, and vibration system
+  - [x] Step 2: Do not seed unsupported ADIA mappings; represent them as capability gaps
+  - [x] Step 3: Implement acceptance A (addition), B (BLDC architecture clarification/hierarchy/IR), and C (sensorless modification by IR diff)
+  - [x] Step 4: Add negative tests for invented facts, fake citations, unverified retrieval, hallucinated blocks/ports, ambiguous pronouns, invalid units, and repeated questions
+  - [x] Step 5: Run full AI, X-Bridges, security, persistence, and TypeScript gates
+  - [x] Step 6: Commit `test(ai): certify general engineering intelligence pipeline`
 

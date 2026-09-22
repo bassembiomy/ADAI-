@@ -103,7 +103,10 @@ export class EngineeringIntentInterpreter {
         intent: intentKind,
         objective: trimmed,
         domainCandidates: ['arithmetic'],
-        systemConceptIds: [opType === 'add' ? 'concept_addition' : 'concept_subtraction'],
+        systemConceptIds: [
+          opType === 'add' ? 'concept_addition' : 'concept_subtraction',
+          opType === 'add' ? 'concept.math.addition' : 'concept.math.subtraction'
+        ],
         operations: [
           {
             type: opType,

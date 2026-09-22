@@ -191,21 +191,21 @@ describe('EngineeringPlanner', () => {
     schemaVersion: '1.0.0',
     id: 'concept_addition',
     canonicalName: 'Addition',
-    aliases: ['add', 'sum'],
+    aliases: ['sum', 'plus'],
     domain: 'arithmetic',
     description: 'Computes sum of two inputs',
     functionalRoles: ['calculation'],
     requiredConcepts: [],
     optionalConcepts: [],
     alternatives: [],
-    inputs: {
-      a: { type: 'number', required: true },
-      b: { type: 'number', required: true }
-    },
-    outputs: {
-      sum: { type: 'number' }
-    },
-    designParameters: {},
+    inputs: [
+      { name: 'a', type: 'number' },
+      { name: 'b', type: 'number' }
+    ],
+    outputs: [
+      { name: 'sum', type: 'number' }
+    ],
+    designParameters: [],
     constraints: [],
     assumptions: [],
     applicableMethods: ['algebraic'],
@@ -225,14 +225,16 @@ describe('EngineeringPlanner', () => {
       objective: 'Add two numbers',
       domainCandidates: ['arithmetic'],
       systemConceptIds: ['concept_addition'],
-      operations: ['addition'],
+      operations: [{ type: 'add', parameters: { a: 1, b: 2 } }],
       controlledVariables: [],
       actuators: [],
       plants: [],
       sensors: [],
-      inputs: [{ name: 'in1', type: 'number' }, { name: 'in2', type: 'number' }],
-      outputs: [{ name: 'sum', type: 'number' }],
+      inputs: ['in1', 'in2'],
+      outputs: ['sum'],
       constraints: [],
+      requestedFidelity: 'symbolic',
+      references: [],
       confidence: 0.95,
       unknownTerms: [],
       unresolvedReferences: [],
@@ -240,19 +242,22 @@ describe('EngineeringPlanner', () => {
     };
 
     const bundle: RetrievedKnowledgeBundle = {
-      query: { text: 'add two numbers' },
-      rankedConcepts: [
+      concepts: [
         {
           concept: mockAdditionConcept,
           score: 1.0,
-          lexicalScore: 1.0,
-          evidenceFactIds: [],
-          citations: ['Math std']
+          scoreBreakdown: {
+            lexicalScore: 1.0,
+            exactAliasBonus: 0,
+            sourceWeightBonus: 0,
+            graphBonus: 0
+          },
+          evidence: 'Math std'
         }
       ],
-      retrievedFacts: [],
-      graphNeighbors: [],
-      provenanceCitations: ['Math std']
+      facts: [],
+      relationships: [],
+      runtimeEligibleOnly: true
     };
 
     const memory: ProjectMemorySnapshot = {
@@ -283,14 +288,16 @@ describe('EngineeringPlanner', () => {
       objective: 'Design a BLDC motor speed control loop',
       domainCandidates: ['motor_control', 'electrical'],
       systemConceptIds: ['concept_bldc_drive'],
-      operations: ['speed_control'],
+      operations: [{ type: 'speed_control' }],
       controlledVariables: ['rotor_speed'],
       actuators: ['concept_inverter'],
       plants: ['concept_bldc_motor'],
       sensors: ['concept_hall_sensor'],
-      inputs: [{ name: 'speed_setpoint', type: 'number', unit: 'rpm' }],
-      outputs: [{ name: 'measured_speed', type: 'number', unit: 'rpm' }],
+      inputs: ['speed_setpoint'],
+      outputs: ['measured_speed'],
       constraints: [],
+      requestedFidelity: 'dynamic',
+      references: [],
       confidence: 0.9,
       unknownTerms: [],
       unresolvedReferences: [],
@@ -312,22 +319,24 @@ describe('EngineeringPlanner', () => {
       ],
       optionalConcepts: ['concept_hall_sensor'],
       alternatives: [],
-      inputs: { speed_setpoint: { type: 'number', unit: 'rpm', required: true } },
-      outputs: { measured_speed: { type: 'number', unit: 'rpm' } },
-      designParameters: {
-        commutation_strategy: {
+      inputs: [{ name: 'speed_setpoint', type: 'number', unit: 'rpm' }],
+      outputs: [{ name: 'measured_speed', type: 'number', unit: 'rpm' }],
+      designParameters: [
+        {
+          name: 'commutation_strategy',
           type: 'string',
           description: 'Commutation method: foc or six_step',
           required: true
         },
-        supply_voltage: {
+        {
+          name: 'supply_voltage',
           type: 'number',
-          default: 24,
+          defaultValue: 24,
           unit: 'V',
           description: 'DC bus voltage',
           required: true
         }
-      },
+      ],
       constraints: ['supply_voltage > 0'],
       assumptions: ['Balanced 3-phase winding'],
       applicableMethods: ['foc', 'six_step'],
@@ -340,19 +349,22 @@ describe('EngineeringPlanner', () => {
     };
 
     const bundle: RetrievedKnowledgeBundle = {
-      query: { text: 'bldc motor speed control' },
-      rankedConcepts: [
+      concepts: [
         {
           concept: bldcConcept,
           score: 1.0,
-          lexicalScore: 1.0,
-          evidenceFactIds: [],
-          citations: ['Motor Control Handbook']
+          scoreBreakdown: {
+            lexicalScore: 1.0,
+            exactAliasBonus: 0,
+            sourceWeightBonus: 0,
+            graphBonus: 0
+          },
+          evidence: 'Motor Control Handbook'
         }
       ],
-      retrievedFacts: [],
-      graphNeighbors: [],
-      provenanceCitations: ['Motor Control Handbook']
+      facts: [],
+      relationships: [],
+      runtimeEligibleOnly: true
     };
 
     const memory: ProjectMemorySnapshot = {
