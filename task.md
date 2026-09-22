@@ -132,3 +132,109 @@
   - [x] Step 3: Run typecheck with tsc --noEmit
   - [x] Step 4: Run git diff --check and verify no browser storage APIs
   - [x] Step 5: Commit final integration fixes
+
+# ADIA Engineering Intelligence Layer Implementation Plan
+
+- [x] Task 1: Freeze engineering-intelligence contracts
+  - [x] Step 1: Write schema tests for valid cross-domain examples: arithmetic, motor control, thermal, hydraulic, state machine, and signal processing
+  - [x] Step 2: Add negative tests for unknown fields, invalid confidence, dangling IDs, unresolved required values marked resolved, and malformed units
+  - [x] Step 3: Implement strict Zod schemas and exported TypeScript types
+  - [x] Step 4: Run `npx vitest run src/services/ai/engineering/contracts`
+  - [x] Step 5: Commit `feat(ai): define engineering intelligence contracts`
+- [ ] Task 2: Build versioned concept, fact, relationship, and source stores
+  - [ ] Step 1: Define repository interfaces independent of filesystem implementation
+  - [ ] Step 2: Implement strict manifests, atomic writes, hashes, version links, lifecycle filters, and deterministic listing
+  - [ ] Step 3: Verify corrupt records, path traversal, oversized records, and hash mismatches fail closed
+  - [ ] Step 4: Run `npx vitest run src/services/ai/engineering/knowledge src/services/ai/engineering/graph`
+  - [ ] Step 5: Commit `feat(ai): add provenance-aware engineering knowledge stores`
+- [ ] Task 3: Implement concept-graph validation and traversal
+  - [ ] Step 1: Validate endpoints, relation taxonomy, cycles, confidence, and lifecycle eligibility
+  - [ ] Step 2: Implement bounded neighbors, ancestors, requirements closure, alternatives, and shortest evidence path
+  - [ ] Step 3: Return traversal evidence with every result
+  - [ ] Step 4: Run focused graph tests and commit `feat(ai): add bounded engineering concept graph`
+- [ ] Task 4: Add trusted document-ingestion pipeline
+  - [ ] Step 1: Expand source taxonomy to approved documentation, standard, textbook, application note, manufacturer document, paper, and internal document
+  - [ ] Step 2: Store document identity, version/date, section locators, license decision, retrieval timestamp, checksum, and source reliability
+  - [ ] Step 3: Extract text/sections without executing active content, macros, scripts, embedded binaries, or arbitrary code
+  - [ ] Step 4: Use schema-constrained LLM extraction only to create quarantined candidates; deterministic validation and human review control promotion
+  - [ ] Step 5: Preserve extracted fact-to-section provenance and reject unsupported citations
+  - [ ] Step 6: Run ingestion/source-policy tests and commit `feat(ai): ingest quarantined engineering knowledge`
+- [ ] Task 5: Implement review and promotion gates
+  - [ ] Step 1: Require license approval, source reliability threshold, reviewer identity, fact/relationship validation, and conflict checks
+  - [ ] Step 2: Promote atomically from quarantined to reviewed/verified; retain superseded history
+  - [ ] Step 3: Prevent runtime retrieval of unverified facts
+  - [ ] Step 4: Commit `feat(ai): add verified knowledge promotion workflow`
+- [ ] Task 6: Build hybrid retrieval and evidence reranking
+  - [ ] Step 1: Implement lexical token/BM25-style scoring, exact aliases, domain/version/lifecycle/source filters, graph-neighborhood expansion, and optional cosine similarity
+  - [ ] Step 2: Combine scores with an explicit formula and stable ID tie-breaker
+  - [ ] Step 3: Weight verified ADIA knowledge, standards, manufacturer docs, textbooks, and peer-reviewed sources above uncontrolled sources
+  - [ ] Step 4: Return cited evidence and score breakdown; never return quarantined knowledge to runtime planning
+  - [ ] Step 5: Run retrieval/provider tests and commit `feat(ai): add hybrid engineering knowledge retrieval`
+- [ ] Task 7: Replace keyword routing with typed semantic interpretation
+  - [ ] Step 1: Parse deterministic entities/units/operations first, then use schema-constrained Qwen output for unresolved semantics
+  - [ ] Step 2: Resolve pronouns such as “it” against project/conversation memory with explicit confidence and ambiguity diagnostics
+  - [ ] Step 3: Preserve unknowns instead of inventing parameters
+  - [ ] Step 4: Route using typed intent fields, not substring checks
+  - [ ] Step 5: Acceptance: addition maps to two numeric operands and sum; BLDC speed control maps to plant/actuator/controller/feedback concepts without selecting blocks
+  - [ ] Step 6: Commit `feat(ai): add semantic engineering intent interpretation`
+- [ ] Task 8: Separate the four memory layers
+  - [ ] Step 1: Store current dialogue in conversation memory, reusable engineering truth only in verified knowledge stores, approved project decisions in project memory, and graph/revision state in model memory
+  - [ ] Step 2: Give every decision provenance, timestamp, scope, and supersession metadata
+  - [ ] Step 3: Ensure new chats do not silently inherit conversation memory; project decisions may be explicitly attached by project ID
+  - [ ] Step 4: Migrate persistence schema version with fail-safe restoration and approval invalidation
+  - [ ] Step 5: Commit `feat(ai): separate conversation project and model memory`
+- [ ] Task 9: Implement generic engineering planning and information classification
+  - [ ] Step 1: Expand retrieved concept requirements into a hierarchical functional architecture before block selection
+  - [ ] Step 2: Classify missing information as REQUIRED/OPTIONAL/INFERABLE/DEFAULTABLE using concept rules and affected-decision analysis
+  - [ ] Step 3: Require evidence for inferred/defaulted values and record them as assumptions
+  - [ ] Step 4: Validate architecture completeness, contradictions, unsupported concepts, and traceability
+  - [ ] Step 5: Acceptance: BLDC request produces power/control/sensing/plant/load functions; FOC and six-step remain alternatives rather than hard-coded choices
+  - [ ] Step 6: Commit `feat(ai): add evidence-backed engineering architecture planner`
+- [ ] Task 10: Replace question loops with a generic clarification manager
+  - [ ] Step 1: Rank unresolved REQUIRED slots by architecture impact and dependency order
+  - [ ] Step 2: Parse answers through each slot's declared value schema and update project memory
+  - [ ] Step 3: Never repeat a resolved question; reject invalid answers with a precise correction request
+  - [ ] Step 4: Present architecture alternatives with short engineering rationale
+  - [ ] Step 5: Commit `feat(ai): add slot-driven engineering clarification`
+- [ ] Task 11: Build hierarchical Model IR and diff support
+  - [ ] Step 1: Convert an approved architecture plan into subsystem/component/connection IR with trace links
+  - [ ] Step 2: Validate stable IDs, ownership, subsystem boundaries, semantic ports, dimensions, units, required references, unresolved required parameters, and invalid cycles
+  - [ ] Step 3: Implement semantic IR diffs so “make it sensorless” changes affected sensing/control subsystems instead of rebuilding the project
+  - [ ] Step 4: Commit `feat(ai): add hierarchical engineering Model IR`
+- [ ] Task 12: Implement deterministic concept-to-ADIA capability mapping
+  - [ ] Step 1: Resolve semantic concepts only to catalog IDs and verified compatible compositions
+  - [ ] Step 2: Validate ports, parameters, domains, solver features, and catalog fingerprint
+  - [ ] Step 3: Return structured `BLOCK_CAPABILITY_GAP` when no valid implementation exists
+  - [ ] Step 4: Keep candidate compositions unselected until validated and evidenced
+  - [ ] Step 5: Commit `feat(ai): map concepts to verified ADIA capabilities`
+- [ ] Task 13: Compile Model IR through existing plans and transactions
+  - [ ] Step 1: Compile bound IR to `EngineeringModelPlanV2` and existing actions with stable ordering
+  - [ ] Step 2: Compile hierarchy to supported subsystem constructs; otherwise return an explicit hierarchy capability gap
+  - [ ] Step 3: Pass output through existing plan validation, preflight, isolated proof, approval, and transactions
+  - [ ] Step 4: Prove identical IR/catalog inputs produce identical plan fingerprints
+  - [ ] Step 5: Commit `feat(ai): compile engineering Model IR deterministically`
+- [ ] Task 14: Compose the engineering validation pipeline
+  - [ ] Step 1: Validate IR schema, hierarchy, semantic completeness, capability bindings, ports, dimensions, data types, physical domains, parameter completeness, references, unconnected outputs, controller/plant relationships, feedback, algebraic loops, and unsupported blocks
+  - [ ] Step 2: Normalize results into structured diagnostics with affected component, evidence, required values, and remediation
+  - [ ] Step 3: Keep validation, compilation, proof, and simulation statuses distinct
+  - [ ] Step 4: Commit `feat(ai): add staged engineering validation pipeline`
+- [ ] Task 15: Expose explicit planner tools
+  - [ ] Step 1: Add read tools: `search_engineering_knowledge`, `get_concept`, `find_related_concepts`, `get_fact_evidence`, existing block/schema tools, model inspection
+  - [ ] Step 2: Add controlled transformations: `validate_architecture_plan`, `build_model_ir`, `validate_model_ir`, `map_concepts`, `compile_model_ir`
+  - [ ] Step 3: Keep mutation/simulation tools behind existing approval and transaction gates
+  - [ ] Step 4: Log tool input hashes, outputs, evidence IDs, and diagnostics
+  - [ ] Step 5: Commit `feat(ai): expose bounded engineering intelligence tools`
+- [ ] Task 16: Integrate the pipeline into the orchestrator with compatibility fallback
+  - [ ] Step 1: Add explicit stages: interpret → retrieve → plan architecture → clarify → build IR → map → validate → compile → proof → approve → execute → verify
+  - [ ] Step 2: Present concise cited rationale, assumptions, unresolved requirements, capability gaps, and validation results without hidden chain-of-thought
+  - [ ] Step 3: Feature-flag the new pipeline; retain current planner for unsupported/migration cases during rollout
+  - [ ] Step 4: Prevent fallback after the new pipeline has made architecture decisions unless the user explicitly restarts
+  - [ ] Step 5: Commit `feat(ai): integrate engineering intelligence workflow`
+- [ ] Task 17: Seed cross-domain knowledge and acceptance benchmarks
+  - [ ] Step 1: Seed small reviewed concepts for addition, PID loop, BLDC drive, FOC, six-step commutation, buck/boost converter, thermal loop, hydraulic actuator, differential drive, state machine, Kalman filter, and vibration system
+  - [ ] Step 2: Do not seed unsupported ADIA mappings; represent them as capability gaps
+  - [ ] Step 3: Implement acceptance A (addition), B (BLDC architecture clarification/hierarchy/IR), and C (sensorless modification by IR diff)
+  - [ ] Step 4: Add negative tests for invented facts, fake citations, unverified retrieval, hallucinated blocks/ports, ambiguous pronouns, invalid units, and repeated questions
+  - [ ] Step 5: Run full AI, X-Bridges, security, persistence, and TypeScript gates
+  - [ ] Step 6: Commit `test(ai): certify general engineering intelligence pipeline`
+
