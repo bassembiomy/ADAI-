@@ -297,10 +297,10 @@
   - [x] Step 1: Add at least 200 reviewed examples across arithmetic, transfer functions, PID, Scope, units, typos
   - [x] Step 2: Split into 70% dev, 15% validation, 15% holdout; enforce release metric thresholds
   - [x] Step 3: Commit `test(ai): add request understanding evaluation corpus`
-- [ ] Task 13: Add observability for failed understanding
-  - [ ] Step 1: Log normalized request hash, extractor outcome, unresolved slot IDs, catalog outcome, and plan hash
-  - [ ] Step 2: Redact sensitive content; record stage durations and reasons without hidden reasoning
-  - [ ] Step 3: Commit `feat(ai): audit request understanding decisions`
+- [x] Task 13: Add observability for failed understanding
+  - [x] Step 1: Log normalized request hash, extractor outcome, unresolved slot IDs, catalog outcome, and plan hash
+  - [x] Step 2: Redact sensitive content; record stage durations and reasons without hidden reasoning
+  - [x] Step 3: Commit `feat(ai): audit request understanding decisions`
 - [ ] Task 14: Define timeout and degraded-mode behavior
   - [ ] Step 1: Apply bounded timeout to optional LLM interpretation; continue deterministically when resolvable
   - [ ] Step 2: Fail closed on invalid structured LLM output, catalog unavailability, or stale fingerprints

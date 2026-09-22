@@ -80,6 +80,7 @@ import { RankedPatternMatch, retrieveCompatiblePatterns, isPatternCatalogCompati
 import { loadSeedConcepts } from '../services/ai/engineering/benchmarks/engineeringIntelligenceCorpus';
 import { InMemoryConceptStore, InMemoryFactStore, InMemoryRelationshipStore } from '../services/ai/engineering/knowledge/inMemoryKnowledgeStores';
 import { ConceptRepository } from '../services/ai/engineering/knowledge/contentAddressedStore';
+import { requestUnderstandingAuditor, RequestUnderstandingAuditor } from '../services/ai/engineering/observability/requestUnderstandingAuditor';
 
 
 export interface OrchestratorResponse {
@@ -257,17 +258,36 @@ export class AgentOrchestrator {
     await this.engineeringKnowledgeReady;
   }
 
+  public getRequestUnderstandingAuditor(): RequestUnderstandingAuditor {
+    return requestUnderstandingAuditor;
+  }
+
   private async handleEngineeringPipelineRequest(input: string): Promise<OrchestratorResponse | undefined> {
     if (!this.enableEngineeringIntelligence) return undefined;
+    const startTime = Date.now();
+    const normalizedHash = sha256Hex(input.trim().toLowerCase());
+
     if (!this.engineeringSessionId) {
-      this.engineeringSessionId = `engineering_${sha256Hex(input.trim().toLowerCase()).slice(0, 16)}`;
+      this.engineeringSessionId = `engineering_${normalizedHash.slice(0, 16)}`;
       this.engineeringRequestInput = input;
     }
 
     const outcome = await this.processWithEngineeringIntelligence(input);
+    const durationMs = Date.now() - startTime;
+
     if (outcome.status === 'fallback_to_legacy') {
       this.engineeringSessionId = undefined;
       this.engineeringRequestInput = undefined;
+      requestUnderstandingAuditor.recordEvent({
+        normalizedRequestHash: normalizedHash,
+        extractorOutcome: 'unsupported',
+        routeSource: 'legacy_fallback',
+        unresolvedSlotIds: [],
+        catalogResolutionOutcome: { totalEntities: 0, resolvedCount: 0, gapCount: 0 },
+        stageDurationsMs: { totalMs: durationMs },
+        fallbackReason: 'fallback_to_legacy outcome from engineering pipeline',
+        redactedInput: input
+      });
       return undefined;
     }
 
@@ -279,10 +299,29 @@ export class AgentOrchestrator {
       && outcome.plan.actions.length < 4) {
       this.engineeringSessionId = undefined;
       this.engineeringRequestInput = undefined;
+      requestUnderstandingAuditor.recordEvent({
+        normalizedRequestHash: normalizedHash,
+        extractorOutcome: 'ready',
+        routeSource: 'legacy_fallback',
+        unresolvedSlotIds: [],
+        catalogResolutionOutcome: { totalEntities: 1, resolvedCount: 1, gapCount: 0 },
+        stageDurationsMs: { totalMs: durationMs },
+        fallbackReason: 'Omitted requested observable output in compiled actions',
+        redactedInput: input
+      });
       return undefined;
     }
 
     if (outcome.status === 'clarification_required') {
+      requestUnderstandingAuditor.recordEvent({
+        normalizedRequestHash: normalizedHash,
+        extractorOutcome: 'clarification_required',
+        routeSource: 'deterministic',
+        unresolvedSlotIds: [outcome.question.id],
+        catalogResolutionOutcome: { totalEntities: 1, resolvedCount: 1, gapCount: 0 },
+        stageDurationsMs: { totalMs: durationMs },
+        redactedInput: input
+      });
       if (!this.taskState) {
         this.taskState = createTaskState(input, 'engineering');
       }
@@ -302,8 +341,38 @@ export class AgentOrchestrator {
       if (/\b(scope|display|plot|observe|output)\b/i.test(this.engineeringRequestInput || input)) {
         this.engineeringSessionId = undefined;
         this.engineeringRequestInput = undefined;
+        requestUnderstandingAuditor.recordEvent({
+          normalizedRequestHash: normalizedHash,
+          extractorOutcome: 'invalid',
+          routeSource: 'legacy_fallback',
+          unresolvedSlotIds: [],
+          catalogResolutionOutcome: {
+            totalEntities: 1,
+            resolvedCount: 0,
+            gapCount: 1,
+            gaps: [{ entityId: 'capability_gap', semanticType: 'UNKNOWN', reason: outcome.notes }]
+          },
+          stageDurationsMs: { totalMs: durationMs },
+          fallbackReason: outcome.notes,
+          redactedInput: input
+        });
         return undefined;
       }
+      requestUnderstandingAuditor.recordEvent({
+        normalizedRequestHash: normalizedHash,
+        extractorOutcome: 'invalid',
+        routeSource: 'deterministic',
+        unresolvedSlotIds: [],
+        catalogResolutionOutcome: {
+          totalEntities: 1,
+          resolvedCount: 0,
+          gapCount: 1,
+          gaps: [{ entityId: 'capability_gap', semanticType: 'UNKNOWN', reason: outcome.notes }]
+        },
+        stageDurationsMs: { totalMs: durationMs },
+        fallbackReason: outcome.notes,
+        redactedInput: input
+      });
       if (!this.taskState) {
         this.taskState = createTaskState(input, 'engineering');
       }
@@ -324,10 +393,20 @@ export class AgentOrchestrator {
         this.engineeringRequestInput = undefined;
         return undefined;
       }
+      const message = outcome.diagnostics.map(d => d.message).join('; ') || 'Engineering validation failed';
+      requestUnderstandingAuditor.recordEvent({
+        normalizedRequestHash: normalizedHash,
+        extractorOutcome: 'invalid',
+        routeSource: 'deterministic',
+        unresolvedSlotIds: [],
+        catalogResolutionOutcome: { totalEntities: 1, resolvedCount: 0, gapCount: 1 },
+        stageDurationsMs: { totalMs: durationMs },
+        fallbackReason: message,
+        redactedInput: input
+      });
       if (!this.taskState) {
         this.taskState = createTaskState(input, 'engineering');
       }
-      const message = outcome.diagnostics.map(d => d.message).join('; ') || 'Engineering validation failed';
       this.taskState = transitionState(this.taskState, 'blocked', message);
       this.engineeringSessionId = undefined;
       this.engineeringRequestInput = undefined;
@@ -404,6 +483,25 @@ export class AgentOrchestrator {
     this.taskState = transitionState(this.taskState, 'awaiting_plan_approval', 'Verified engineering plan ready for approval');
     this.engineeringSessionId = undefined;
     this.engineeringRequestInput = undefined;
+
+    requestUnderstandingAuditor.recordEvent({
+      normalizedRequestHash: normalizedHash,
+      extractorOutcome: 'ready',
+      routeSource: 'deterministic',
+      unresolvedSlotIds: [],
+      catalogResolutionOutcome: {
+        totalEntities: outcome.architecturePlan.components.length,
+        resolvedCount: outcome.architecturePlan.components.length,
+        gapCount: 0
+      },
+      planHash: outcome.plan.planId,
+      stageDurationsMs: {
+        planningMs: durationMs,
+        totalMs: durationMs
+      },
+      redactedInput: input
+    });
+
     return {
       status: 'awaiting_plan_approval',
       message: 'Verified engineering plan prepared. Please review and approve the execution plan.',

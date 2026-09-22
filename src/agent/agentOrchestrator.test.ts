@@ -966,6 +966,38 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       expect(payload?.interpretationEvidence).toBeDefined();
       expect(payload?.interpretationEvidence?.template).toMatch(/Arithmetic/i);
     });
+
+    it('records structured request understanding audit events with redacted input and stage durations', async () => {
+      let nodesState: any[] = [];
+      let edgesState: any[] = [];
+      const liveDelegate = createXbridgesDelegate({
+        getNodes: () => nodesState,
+        getEdges: () => edgesState,
+        setNodes: updater => { nodesState = updater(nodesState); },
+        setEdges: updater => { edgesState = updater(edgesState); },
+        onSave: (n, e) => { nodesState = [...n]; edgesState = [...e]; }
+      });
+      const tools = new ToolGateway({ xbridges: liveDelegate } as any);
+      const orch = new AgentOrchestrator(new MockLlmProvider(), tools);
+
+      const auditor = orch.getRequestUnderstandingAuditor();
+      auditor.clear();
+
+      const res = await orch.handle('Add 10 and 20 with api_key=AIzaSyD-secret1234567890abcdef');
+      expect(res.status).toBe('awaiting_plan_approval');
+
+      const events = auditor.getEvents();
+      expect(events.length).toBeGreaterThan(0);
+      const latest = auditor.getLatestEvent()!;
+      expect(latest.extractorOutcome).toBe('ready');
+      expect(latest.routeSource).toBe('deterministic');
+      expect(latest.planHash).toBeDefined();
+      expect(latest.catalogResolutionOutcome.resolvedCount).toBeGreaterThanOrEqual(3);
+      expect(latest.stageDurationsMs.totalMs).toBeGreaterThanOrEqual(0);
+      expect(latest.redactedInput).not.toContain('AIzaSyD-secret1234567890abcdef');
+      expect(latest.redactedInput).toContain('[REDACTED_');
+      expect((latest as any).reasoning).toBeUndefined();
+    });
   });
 });
 
