@@ -190,3 +190,9 @@ export class RequestNormalizer {
     };
   }
 }
+
+export const requestNormalizer = new RequestNormalizer();
+
+export function normalizeEngineeringRequest(text: string): NormalizationResult {
+  return requestNormalizer.normalize(text);
+}

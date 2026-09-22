@@ -9,11 +9,14 @@ import {
 } from '../../planner/engineeringEntityParser';
 import { ReferenceResolver, MemoryContextForResolution } from './referenceResolver';
 import { sha256Hex } from '../../../../engine/opm/canonicalHash';
+import { StructuredEngineeringRequest } from '../contracts/structuredEngineeringRequest';
+import { StructuredRequestExtractor } from './structuredRequestExtractor';
 
 export type EngineeringIntentResult =
   | {
       status: 'ok';
       intent: EngineeringIntent;
+      structuredRequest?: StructuredEngineeringRequest;
     }
   | {
       status: 'unsupported';
@@ -72,7 +75,8 @@ export class EngineeringIntentInterpreter {
       intentKind = 'optimize';
     }
 
-    // 4. Deterministic entity & operand extraction
+    // 4. Structured Request extraction & deterministic entity/operand extraction
+    const structuredResult = new StructuredRequestExtractor().extract(trimmed);
     const arithmetic = parseArithmeticOperands(trimmed);
     const parsedEntities = parseEngineeringEntities(trimmed);
 
@@ -94,8 +98,8 @@ export class EngineeringIntentInterpreter {
     // 5A. Handle arithmetic path
     const isArithmeticWord = /\b(?:add|adding|addition|sum|plus|subtract|subtracting|minus|multiply|multiplying|product|divide|dividing|division)\b/i.test(lower);
     if (isArithmeticWord) {
-      const op1 = arithmetic.operands[0]?.value ?? 0;
-      const op2 = arithmetic.operands[1]?.value ?? 0;
+      const op1 = arithmetic.operands[0]?.value;
+      const op2 = arithmetic.operands[1]?.value;
       const opType = lower.includes('subtract') || lower.includes('minus')
         ? 'subtract'
         : lower.includes('multiply') || lower.includes('product')
@@ -104,6 +108,14 @@ export class EngineeringIntentInterpreter {
             ? 'divide'
             : 'add';
       const operationId = sha256Hex(trimmed.trim().toLowerCase()).slice(0, 16);
+
+      const parameters: Record<string, unknown> = {};
+      if (op1 !== undefined && op2 !== undefined) {
+        parameters.operand1 = op1;
+        parameters.operand2 = op2;
+      } else if (op1 !== undefined) {
+        parameters.operand1 = op1;
+      }
 
       const intent: EngineeringIntent = {
         schemaVersion: '1.0.0',
@@ -118,7 +130,7 @@ export class EngineeringIntentInterpreter {
         operations: [
           {
             type: opType,
-            parameters: arithmetic.operands.length >= 2 ? { operand1: op1, operand2: op2 } : {},
+            parameters,
             targetConceptId: opType === 'add' ? 'concept_addition' : `concept_${opType}`
           }
         ],
@@ -138,7 +150,13 @@ export class EngineeringIntentInterpreter {
           { sourceId: 'user_prompt', description: 'Arithmetic intent detected', score: 1.0 }
         ]
       };
-      return { status: 'ok', intent };
+      return {
+        status: 'ok',
+        intent,
+        structuredRequest: structuredResult.status === 'ready' || structuredResult.status === 'clarification_required'
+          ? structuredResult.request
+          : undefined
+      };
     }
 
     // 5B. Handle motor control & electromechanical systems

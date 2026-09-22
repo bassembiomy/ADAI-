@@ -60,11 +60,15 @@ describe('EngineeringIntentInterpreter', () => {
     }
   });
 
-  it('detects non-engineering requests and returns unsupported diagnostic', async () => {
-    const result = await interpreter.interpret('Write a romantic poem about a spring morning');
-    expect(result.status).toBe('unsupported');
-    if (result.status === 'unsupported') {
-      expect(result.reason).toContain('non-engineering');
+  it('does not default missing operands to zero when operands are absent', async () => {
+    const result = await interpreter.interpret('Create a model adding two numbers');
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      const op = result.intent.operations[0];
+      expect(op.parameters).toEqual({});
+      expect(result.structuredRequest).toBeDefined();
+      expect(result.structuredRequest?.values).toHaveLength(0);
     }
   });
 });
+

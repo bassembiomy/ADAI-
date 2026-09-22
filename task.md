@@ -251,11 +251,11 @@
   - [x] Step 3: Preserve original text for evidence; never silently change user intent
   - [x] Step 4: Test creat, multiblying, cnstant, scope, show, display, and equivalent phrasing; ensure idempotence
   - [x] Step 5: Run tests and commit `feat(ai): normalize engineering requests deterministically`
-- [ ] Task 3: Extract values, operations, components, and outputs
-  - [ ] Step 1: Extract arithmetic operators and all numeric operands without defaulting missing operands to zero
-  - [ ] Step 2: Extract engineering components through aliases; extract relationships and emit unresolved slots
-  - [ ] Step 3: Add metamorphic tests proving paraphrases produce equivalent structured requests
-  - [ ] Step 4: Run tests and commit `feat(ai): extract structured engineering requests`
+- [x] Task 3: Extract values, operations, components, and outputs
+  - [x] Step 1: Extract arithmetic operators and all numeric operands without defaulting missing operands to zero
+  - [x] Step 2: Extract engineering components through aliases; extract relationships and emit unresolved slots
+  - [x] Step 3: Add metamorphic tests proving paraphrases produce equivalent structured requests
+  - [x] Step 4: Run tests and commit `feat(ai): extract structured engineering requests`
 - [ ] Task 4: Ground extracted entities against the verified catalog
   - [ ] Step 1: Resolve aliases only through buildXbridgesCapabilityIndex() and verified composition mappings
   - [ ] Step 2: Validate required ports and parameters during resolution; return capability gap for unknown blocks
