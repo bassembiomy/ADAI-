@@ -76,6 +76,7 @@ export class StructuredRequestExtractor {
     // e.g. "adding two numbers" -> "two" / "2" is count of numbers, not operand
     const countPatterns = [
       /\b(?:(\d+)|two|three|four|five)\s+(?:numbers|values|operands|inputs|signals)\b/gi,
+      /\b(?:(\d+)|two|three|four|five)\s+(?:user\s+)?(?:supplied\s+)?(?:numbers|values|operands|inputs|signals)\b/gi,
       /\ba\s+pair\s+of\s+(?:numbers|values|operands)\b/gi
     ];
     let strippedForNumbers = normalizedText;
@@ -86,10 +87,10 @@ export class StructuredRequestExtractor {
     // 5. Operations
     const operations: string[] = [];
     const isTfOrPid = /\b(?:transfer function|transfer_function|tf|pid|controller|plant)\b/i.test(lower);
-    const isAdd = !isTfOrPid && /(?:\b(?:add|adding|addition|sum|plus)\b|\+)/i.test(lower);
-    const isSub = !isTfOrPid && /(?:\b(?:subtract|subtracting|subtraction|minus|difference)\b|(?<=\w\s+)-(?=\s+\w))/i.test(lower);
+    const isAdd = !isTfOrPid && /(?:\b(?:add|adder|adding|addition|sum|plus|total)\b|\+)/i.test(lower);
+    const isSub = !isTfOrPid && /(?:\b(?:subtract|subtracting|subtraction|minus|difference|take\s+.+?\s+away\s+from)\b|(?<=\w\s+)-(?=\s+\w))/i.test(lower);
     const isMul = /(?:\b(?:multiply|multiplying|multiplication|product|times|vectormul)\b|\*)/i.test(lower);
-    const isDiv = /(?:\b(?:divide|dividing|division|quotient)\b|(?<=\d|\s)\/(?=\s|\d))/i.test(lower.replace(/rad\/s/g, ''));
+    const isDiv = /(?:\b(?:divide|divided|dividing|division|quotient)\b|(?<=\d|\s)\/(?=\s|\d))/i.test(lower.replace(/rad\/s/g, ''));
 
     if (isAdd) operations.push('add');
     if (isSub) operations.push('subtract');

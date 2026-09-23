@@ -70,6 +70,25 @@ describe('Request Understanding Auditor & Observability', () => {
       expect(event.catalogResolutionOutcome.resolvedCount).toBe(3);
       expect(event.stageDurationsMs.totalMs).toBe(20);
       expect(auditor.getEvents()).toHaveLength(1);
+      expect(event).not.toHaveProperty('redactedInput');
+    });
+
+    it('never retains raw prompt text when unknown PII is present', () => {
+      const rawInput = 'Call Alice on +20 101 234 5678 at 203.0.113.42 about PID gain 10';
+      const event = auditor.recordEvent({
+        normalizedRequestHash: 'privacy_hash',
+        extractorOutcome: 'ready',
+        routeSource: 'deterministic',
+        unresolvedSlotIds: [],
+        catalogResolutionOutcome: { totalEntities: 1, resolvedCount: 1, gapCount: 0 },
+        stageDurationsMs: { totalMs: 1 },
+        redactedInput: rawInput
+      });
+
+      expect(JSON.stringify(event)).not.toContain('Alice');
+      expect(JSON.stringify(event)).not.toContain('101 234 5678');
+      expect(JSON.stringify(event)).not.toContain('203.0.113.42');
+      expect(event.normalizedRequestHash).toBe('privacy_hash');
     });
 
     it('records failed understanding and legacy fallback with reason without hidden reasoning', () => {

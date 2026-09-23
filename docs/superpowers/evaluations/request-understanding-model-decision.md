@@ -1,92 +1,62 @@
-# Generic Request Understanding: Model Decision & Evaluation Report
+# Generic Request Understanding: Model Decision and Evaluation Report
 
-**Date:** 2026-09-22  
-**Evaluation Dataset:** 210 Reviewed Engineering Requests (`src/services/ai/engineering/benchmarks/requestUnderstandingCorpus.ts`)  
-**Harness Test:** `src/services/ai/engineering/benchmarks/requestUnderstandingHarness.test.ts`  
-**Architecture:** Typed Request Understanding Layer (Normalization -> Extraction -> Verified Catalog Grounding -> Deterministic Templates -> Validation -> Proof)
+**Date:** 2026-09-23
 
----
+**Development/regression corpus:** 210 reviewed requests in `requestUnderstandingCorpus.ts`
 
-## 1. Executive Summary & Model Decision
+**Frozen release holdout:** 30 requests in `requestUnderstandingReleaseHoldout.ts`
 
-**Decision: NO FINE-TUNING REQUIRED (PASS WITH DETERMINISTIC GROUNDING).**
+**Frozen holdout version:** `2026-09-23.v2`
 
-Per the policy defined in the Generic Request Understanding Accuracy Implementation Plan:
-> *"Fine-tuning is permitted only if deterministic + prompt-based performance misses a release threshold by at least two percentage points on the untouched holdout set."*
+**Frozen holdout SHA-256:** `a3d9cc3eaf50fb1e549674508d64c06b0b6bc64a2c25cafebc6b0a3b8337e8ec`
 
-The evaluation results across all 210 reviewed test cases demonstrate that the deterministic normalization, typed extraction, and verified catalog grounding layer achieves **100% accuracy across every target metric** on Dev, Validation, and untouched Holdout sets. Therefore, fine-tuning is unnecessary and avoided, eliminating model drift, fine-tuning infrastructure overhead, cold-start latency, and hallucination risks.
+## Model decision
 
----
+**Decision: no fine-tuning is currently justified.**
 
-## 2. Evaluation Results Across Splits
+The deterministic normalization, typed extraction, verified catalog grounding, and deterministic template path meets the release thresholds on the frozen v2 holdout. Fine-tuning would add model drift and operational complexity without addressing a measured threshold failure.
 
-### 2.1 Metric Thresholds vs. Achieved Results
+This decision must be revisited when the frozen holdout changes or production audit metrics reveal a threshold regression. Model weights are not stored in this repository.
 
-| Metric | Target Threshold | Dev Split (148 cases) | Validation Split (33 cases) | Holdout Split (29 cases) | Overall (210 cases) | Status |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Operation Identification Accuracy** | $\ge 98.0\%$ | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **PASSED** |
-| **Entity Identification Precision** | $\ge 95.0\%$ | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **PASSED** |
-| **Entity Identification Recall** | $\ge 95.0\%$ | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **PASSED** |
-| **Numeric Value & Unit Normalization** | $100.0\%$ | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **PASSED** |
-| **Hallucinated Blocks** | $0$ | **0** | **0** | **0** | **0** | **PASSED** |
+## Evaluation methodology
 
-### 2.2 Coverage by Domain & Category
+The original 210-case corpus is treated as development and regression evidence, not as an untouched holdout. It was available while the extractor was developed.
 
-1. **Arithmetic (50 cases):**
-   - Operations: Addition (`add`), Subtraction (`subtract`), Multiplication (`multiply`), Division (`divide`).
-   - Grounding: Constant blocks (`Constant`), Summing junctions (`Sum`), Vector multipliers (`VectorMul`), and Dividers (`VectorDiv`).
-   - Missing operand detection: Emits required clarification slots (`slot_operands_*`) without fabricating default zeroes.
+An initial frozen v1 set exposed generic paraphrase gaps such as `total`, `take ... away from`, `divided`, `adder`, and bounded spelling errors. Because its results informed implementation changes, v1 is retained as validation evidence and is not used for final certification.
 
-2. **Continuous & Discrete Transfer Functions (35 cases):**
-   - Polynomial extraction: Accurately parses numerator and denominator polynomial arrays (e.g., `numerator: [1]`, `denominator: [1, 2, 1]`).
-   - Grounding: `TRANSFER_FUNCTION` with verified parameter schemas.
+The v2 release holdout was authored and cryptographically frozen only after those changes. Its hash is enforced by `requestUnderstandingReleaseHoldout.test.ts`; changing any case requires a new version, hash, baseline, and model decision.
 
-3. **PID & Closed-Loop Feedback Control (35 cases):**
-   - Controller & plant pairing: Correctly identifies `PID_CONTROLLER` and `TRANSFER_FUNCTION`.
-   - Topological relationships: Extracts `controls` and `feedback` relationships without hallucinating block ports.
+The strict evaluator:
 
-4. **Scope & Observability (30 cases):**
-   - Sinks: Identifies display, plotting, and monitoring terms (`scope`, `display`, `plot`, `observe`, `view`, `monitor`) as `Scope`.
-   - Wiring: Establishes `observes` relationships between producer blocks and the `Scope` block.
+- compares operation multisets exactly, so extra operations fail;
+- supports explicit entity multiplicity and does not hide missing duplicate operands;
+- validates every extracted entity through its canonical `catalogBlockId` in the active X-Bridges catalog;
+- matches expected values one-to-one, including normalized units when specified;
+- excludes requests with no structured request from operation scoring when their expected status is `unsupported`;
+- reports status accuracy, invented-capability count, and catalog validity separately.
 
-5. **Engineering Units & SI Prefixes (30 cases):**
-   - Frequency: `kHz`, `Hz`, `MHz` normalized to base unit `Hz` with exact numeric multipliers ($10\text{ kHz} \to 10000\text{ Hz}$, $1\text{ MHz} \to 10^6\text{ Hz}$).
-   - Voltage: `V`, `mV`, `kV` normalized to base unit `V`.
-   - Resistance, Capacitance, Inductance: `ohm` / `Ω`, `uF`, `nF`, `pF`, `uH`, `mH` with high-precision IEEE 754 float rounding.
-   - Power & Current: `W`, `A`, `rad/s`, `%`.
+## Recorded results
 
-6. **Typo Tolerance & Natural Language Phrasing (20 cases):**
-   - Common typos: `creat`, `craete`, `multiblying`, `cnstant`, `scop`, `disply`.
-   - Word numbers: `ten`, `twenty`, `one hundred` normalized to numeric strings before extraction.
+| Metric | Release threshold | Regression corpus (210) | Frozen v2 holdout (30) |
+| --- | ---: | ---: | ---: |
+| Exact operation accuracy | >= 98% | 100% | 100% |
+| Entity precision | >= 95% | 99.50% | 100% |
+| Entity recall | >= 95% | 100% | 100% |
+| Value normalization | 100% | 100% | 100% |
+| Status accuracy | >= 95% | 99.52% | 100% |
+| Catalog validity | 100% | 100% | 100% |
+| Invented capabilities | 0 | 0 | 0 |
 
-7. **Domain Boundary & Unsupported Filtering (10 cases):**
-   - Non-engineering prompts (e.g. poetry, recipes, vacation plans) and out-of-scope 3D CFD/FEA are safely identified as `unsupported`, cleanly delegating or rejecting before action synthesis.
+These figures are generated by `requestUnderstandingEvaluation.ts`; they are not inferred from test-file pass counts.
 
----
+## Safety and runtime evidence
 
-## 3. Key Architectural Safeguards Verified
+- Renderer-reachable orchestration uses only browser-safe in-memory knowledge repositories. File-backed stores remain outside the renderer composition boundary.
+- Bundled seed concepts are validated with `EngineeringConceptSchema` before entering the in-memory store.
+- Topology writes use transaction-local state and reject concurrent external updates or removals instead of overwriting user changes.
+- Request audit events retain hashes, outcomes, catalog evidence, slot IDs, and timings, but never retain raw prompt text.
+- Timeout, malformed-provider-output, catalog-fingerprint, approval, rollback, and persistence protections remain covered by their dedicated suites.
 
-1. **Deterministic Catalog Grounding:**
-   - Every semantic entity is grounded against `buildXbridgesCapabilityIndex()` and verified composition mappings.
-   - Block or port invention is strictly impossible: zero hallucinated blocks observed across all 210 test runs.
+## Release interpretation
 
-2. **Degraded-Mode & Timeout Resilience:**
-   - LLM generation coordinator enforces bounded timeouts (`PROVIDER_TIMEOUT`) and structured schema repair (`MALFORMED_JSON`, `PROVIDER_OFFLINE`).
-   - Engineering pipeline fails closed when the catalog is unavailable or the catalog fingerprint is stale.
-   - Validation failures are never downgraded into unverified legacy plans.
-
-3. **Observability & Privacy:**
-   - Full audit trail recorded for request hashes, stage durations, slot IDs, and catalog resolution outcomes.
-   - Credentials, API keys, passwords, and PII are redacted before persisting or logging audit events.
-   - No hidden chain-of-thought or opaque reasoning traces are exposed to renderer layers.
-
-4. **Persistence Migration & Rollout Gating:**
-   - Schema version incremented to V3 with backward-compatible migrations for V1 and V2 sessions.
-   - Multi-stage rollout controls supported: `shadow`, `selected_project`, `general`, and `disabled`.
-   - Instant rollback disables new routing without deleting persisted knowledge or active session evidence.
-
----
-
-## 4. Conclusion & Certification
-
-The Generic Request Understanding layer is **certified for general deployment**. All 16 tasks in the implementation plan have been completed, verified with comprehensive automated test suites (175+ engineering tests, 34 orchestrator tests, 0 TypeScript errors), and benchmarked on 210 reviewed cases.
+The metrics certify the tested request-understanding scope; they are not a claim that arbitrary natural language can be understood with 100% accuracy. Unknown entities, ports, units, and unsupported domains must continue to fail closed or request clarification. General rollout remains subject to the complete release gates in the implementation plan.

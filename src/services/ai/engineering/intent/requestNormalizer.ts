@@ -17,6 +17,7 @@ const OPERATION_TYPOS: Record<string, string> = {
   crate: 'create',
   generat: 'generate',
   multiblying: 'multiplying',
+  multibly: 'multiply',
   multipliing: 'multiplying',
   mutliply: 'multiply',
   multply: 'multiply',
@@ -37,7 +38,9 @@ const COMPONENT_TYPOS: Record<string, string> = {
   invertor: 'inverter',
   senser: 'sensor',
   senosr: 'sensor',
-  motorr: 'motor'
+  motorr: 'motor',
+  controler: 'controller',
+  trasfer: 'transfer'
 };
 
 const OBSERVABILITY_TYPOS: Record<string, string> = {

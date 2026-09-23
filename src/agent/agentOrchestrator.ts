@@ -48,9 +48,6 @@ import { ModelMemoryManager } from '../services/ai/engineering/memory/modelMemor
 import { buildXbridgesCapabilityIndex } from '../services/ai/catalog/xbridgesCapabilityIndex';
 import { extractStructuredEngineeringRequest } from '../services/ai/engineering/intent/structuredRequestExtractor';
 import { HybridRetriever } from '../services/ai/engineering/retrieval/hybridRetriever';
-import { ConceptStore } from '../services/ai/engineering/knowledge/conceptStore';
-import { FactStore } from '../services/ai/engineering/knowledge/factStore';
-import { ConceptGraphStore } from '../services/ai/engineering/graph/conceptGraphStore';
 import {
   ToolGateway,
   toolGateway as defaultToolGateway,
@@ -77,9 +74,8 @@ import { resolveRequirements } from '../services/ai/planner/requirementResolver'
 import { EngineeringPattern } from '../services/ai/knowledge/patternSchemas';
 import { loadVerifiedRuntimePatterns } from '../services/ai/knowledge/runtimePatternGateway';
 import { RankedPatternMatch, retrieveCompatiblePatterns, isPatternCatalogCompatible } from '../services/ai/knowledge/patternRetrieval';
-import { loadSeedConcepts } from '../services/ai/engineering/benchmarks/engineeringIntelligenceCorpus';
 import { InMemoryConceptStore, InMemoryFactStore, InMemoryRelationshipStore } from '../services/ai/engineering/knowledge/inMemoryKnowledgeStores';
-import { ConceptRepository } from '../services/ai/engineering/knowledge/contentAddressedStore';
+import type { ConceptRepository } from '../services/ai/engineering/knowledge/contentAddressedStore';
 import { requestUnderstandingAuditor, RequestUnderstandingAuditor } from '../services/ai/engineering/observability/requestUnderstandingAuditor';
 
 
@@ -214,20 +210,11 @@ export class AgentOrchestrator {
 
   public getEngineeringPipeline(): EngineeringIntelligencePipeline {
     if (!this.engineeringPipeline) {
-      const runtimeProcess = (globalThis as typeof globalThis & {
-        process?: { cwd?: () => string };
-      }).process;
-      const cwd = runtimeProcess?.cwd ? runtimeProcess.cwd().replace(/\\/g, '/') : undefined;
-      const storageDir = cwd ? `${cwd}/data/engineering-knowledge` : undefined;
-      const conceptStore = storageDir
-        ? new ConceptStore({ storageDir })
-        : new InMemoryConceptStore();
-      const factStore = storageDir
-        ? new FactStore({ storageDir })
-        : new InMemoryFactStore();
-      const conceptGraphStore = storageDir
-        ? new ConceptGraphStore({ storageDir })
-        : new InMemoryRelationshipStore();
+      // AgentOrchestrator is renderer-reachable. Node-backed repositories are
+      // deliberately composed only beyond the Electron main-process boundary.
+      const conceptStore = new InMemoryConceptStore();
+      const factStore = new InMemoryFactStore();
+      const conceptGraphStore = new InMemoryRelationshipStore();
       const retriever = new HybridRetriever({ conceptStore, factStore, conceptGraphStore });
       this.engineeringConceptStore = conceptStore;
 
@@ -267,9 +254,9 @@ export class AgentOrchestrator {
         this.getEngineeringPipeline();
         const store = this.engineeringConceptStore;
         if (!store) throw new Error('Engineering concept store was not initialized');
-        if ((await store.list()).length > 0) return;
-        for (const concept of loadSeedConcepts()) {
-          await store.put(concept);
+        await store.init();
+        if ((await store.list()).length === 0) {
+          throw new Error('Bundled engineering concept catalog is empty');
         }
       })();
     }

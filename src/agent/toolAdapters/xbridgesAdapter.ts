@@ -163,26 +163,84 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
   // mirror so sequential agent actions observe their own writes immediately.
   let localNodes = [...getNodes()];
   let localEdges = [...getEdges()];
+  let observedExternalNodes = [...localNodes];
+  let observedExternalEdges = [...localEdges];
+
+  const itemFingerprint = (value: ReactFlowXbridgesNode | ReactFlowXbridgesEdge): string =>
+    computeModelFingerprint({ nodes: 'position' in value ? [value] : [], edges: 'source' in value ? [value] : [] });
+
+  const reconcileExternal = <T extends { id: string }>(
+    external: T[],
+    observed: T[],
+    local: T[],
+    locallyDeletedIds: Set<string>,
+    kind: 'node' | 'edge'
+  ): { local: T[]; observed: T[] } => {
+    const collectionFingerprint = (items: T[]) => items
+      .map(item => `${item.id}:${itemFingerprint(item as any)}`)
+      .sort()
+      .join('|');
+    if (collectionFingerprint(external) === collectionFingerprint(local)) {
+      return { local, observed: [...external] };
+    }
+    const externalById = new Map(external.map(item => [item.id, item]));
+    const localById = new Map(local.map(item => [item.id, item]));
+
+    for (const previous of observed) {
+      const current = externalById.get(previous.id);
+      if (!current) {
+        if (!locallyDeletedIds.has(previous.id)) {
+          throw new XbridgesAdapterError(`Concurrent external topology change detected: ${kind} '${previous.id}' was removed.`);
+        }
+        continue;
+      }
+      if (itemFingerprint(current as any) !== itemFingerprint(previous as any)) {
+        const localItem = localById.get(previous.id);
+        if (!localItem || itemFingerprint(current as any) !== itemFingerprint(localItem as any)) {
+          throw new XbridgesAdapterError(`Concurrent external topology change detected: ${kind} '${previous.id}' was updated.`);
+        }
+      }
+    }
+
+    const known = new Set(local.map(item => item.id));
+    const additions = external.filter(item => !known.has(item.id) && !locallyDeletedIds.has(item.id));
+    return { local: [...local, ...additions], observed: [...external] };
+  };
+
+  const synchronizeNodes = () => {
+    const result = reconcileExternal(
+      getNodes(), observedExternalNodes, localNodes, deletedNodeIds, 'node'
+    );
+    localNodes = result.local;
+    observedExternalNodes = result.observed;
+  };
+
+  const synchronizeEdges = () => {
+    const result = reconcileExternal(
+      getEdges(), observedExternalEdges, localEdges, deletedEdgeIds, 'edge'
+    );
+    localEdges = result.local;
+    observedExternalEdges = result.observed;
+  };
+
   const readNodes = () => {
     // External additions (for example a user edit between transaction and
     // undo) must remain visible, while stale React snapshots must not erase
     // nodes created by the current transaction or re-add deleted nodes.
-    const external = getNodes();
-    const known = new Set(localNodes.map(node => node.id));
-    localNodes = [...localNodes, ...external.filter(node => !known.has(node.id) && !deletedNodeIds.has(node.id))];
+    synchronizeNodes();
     return localNodes;
   };
   const readEdges = () => {
-    const external = getEdges();
-    const known = new Set(localEdges.map(edge => edge.id));
-    localEdges = [...localEdges, ...external.filter(edge => !known.has(edge.id) && !deletedEdgeIds.has(edge.id))];
+    synchronizeEdges();
     return localEdges;
   };
   const writeNodes = (updater: (previous: ReactFlowXbridgesNode[]) => ReactFlowXbridgesNode[]) => {
+    synchronizeNodes();
     localNodes = updater(localNodes);
     setNodes(() => localNodes);
   };
   const writeEdges = (updater: (previous: ReactFlowXbridgesEdge[]) => ReactFlowXbridgesEdge[]) => {
+    synchronizeEdges();
     localEdges = updater(localEdges);
     setEdges(() => localEdges);
   };
@@ -589,7 +647,7 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
     },
 
     async restoreSnapshot(nodes: readonly XbridgesNode[], edges: readonly XbridgesEdge[]): Promise<void> {
-      writeNodes(() => nodes.map(n => ({
+      const restoredNodes = nodes.map(n => ({
         ...n,
         id: n.id,
         type: n.position ? 'xblock' : n.type,
@@ -599,16 +657,29 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
           id: n.id,
           type: n.type,
         }
-      } as unknown as ReactFlowXbridgesNode)));
+      } as unknown as ReactFlowXbridgesNode));
 
-      writeEdges(() => edges.map(e => ({
+      const restoredEdges = edges.map(e => ({
         ...e,
         id: e.id,
         source: e.source,
         target: e.target,
         sourceHandle: e.sourceHandle,
         targetHandle: e.targetHandle
-      } as ReactFlowXbridgesEdge)));
+      } as ReactFlowXbridgesEdge));
+
+      // Restore is an explicit transaction boundary, not a normal agent edit.
+      // Reset both mirrors atomically so rollback/undo can intentionally
+      // replace topology without being mistaken for a concurrent user change.
+      observedExternalNodes = [...getNodes()];
+      observedExternalEdges = [...getEdges()];
+      localNodes = restoredNodes;
+      localEdges = restoredEdges;
+      recentlyCreatedNodes.clear();
+      deletedNodeIds.clear();
+      deletedEdgeIds.clear();
+      setNodes(() => localNodes);
+      setEdges(() => localEdges);
     },
   };
 }

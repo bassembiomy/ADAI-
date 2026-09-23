@@ -692,6 +692,85 @@ describe('validate, saveAndReadBack, getRevisionFingerprint', () => {
       expect(allNodes.some(n => n.id === 'user-block-2')).toBe(true);
     });
 
+    it('rejects an agent write after a concurrent user update and preserves the user change', async () => {
+      let committedNodes: ReactFlowXbridgesNode[] = [makeNode(VALID_TYPE_1, 'shared-node')];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: updater => { committedNodes = updater(committedNodes); },
+        setEdges: updater => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      committedNodes = committedNodes.map(node =>
+        node.id === 'shared-node' ? { ...node, position: { x: 900, y: 700 } } : node
+      );
+
+      await expect(delegate.addBlock(VALID_TYPE_2, { id: 'agent-node' }))
+        .rejects.toThrow(/concurrent external topology change/i);
+      expect(committedNodes.find(node => node.id === 'shared-node')?.position).toEqual({ x: 900, y: 700 });
+      expect(committedNodes.some(node => node.id === 'agent-node')).toBe(false);
+    });
+
+    it('rejects an agent write after a concurrent user deletion without restoring the node', async () => {
+      let committedNodes: ReactFlowXbridgesNode[] = [makeNode(VALID_TYPE_1, 'deleted-by-user')];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: updater => { committedNodes = updater(committedNodes); },
+        setEdges: updater => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      committedNodes = [];
+
+      await expect(delegate.addBlock(VALID_TYPE_2, { id: 'agent-node' }))
+        .rejects.toThrow(/concurrent external topology change/i);
+      expect(committedNodes).toEqual([]);
+    });
+
+    it('rejects a write after a concurrent user edge update and preserves the edge', async () => {
+      const source = makeNode(VALID_TYPE_1, 'source');
+      const target = makeNode(VALID_TYPE_2, 'target');
+      let committedNodes: ReactFlowXbridgesNode[] = [source, target];
+      let committedEdges: ReactFlowXbridgesEdge[] = [{
+        id: 'shared-edge', source: 'source', sourceHandle: 'y', target: 'target', targetHandle: 'in1'
+      }];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: updater => { committedNodes = updater(committedNodes); },
+        setEdges: updater => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      committedEdges = committedEdges.map(edge => ({ ...edge, targetHandle: 'user-edited-port' }));
+
+      await expect(delegate.disconnectPorts('shared-edge'))
+        .rejects.toThrow(/concurrent external topology change/i);
+      expect(committedEdges[0].targetHandle).toBe('user-edited-port');
+    });
+
+    it('allows an explicit transaction restore to replace topology and reset conflict tracking', async () => {
+      const original = makeNode(VALID_TYPE_1, 'original');
+      let committedNodes: ReactFlowXbridgesNode[] = [original];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: updater => { committedNodes = updater(committedNodes); },
+        setEdges: updater => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      committedNodes = [];
+      await expect(delegate.restoreSnapshot!([original], [])).resolves.toBeUndefined();
+      expect(committedNodes.map(node => node.id)).toEqual(['original']);
+      await expect(delegate.addBlock(VALID_TYPE_2, { id: 'after-restore' })).resolves.toBeDefined();
+    });
+
     it('reflects removeBlock and disconnectPorts immediately in local mirror before React commits', async () => {
       const committedNodes: ReactFlowXbridgesNode[] = [
         makeNode(VALID_TYPE_1, 'block-a'),

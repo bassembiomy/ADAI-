@@ -1,5 +1,5 @@
 import seedConcepts from '../../../../../resources/engineering-knowledge/verified_concepts.json';
-import {
+import type {
   ConceptRepository,
   ConceptFilter,
   FactRepository,
@@ -7,14 +7,20 @@ import {
   RelationshipRepository,
   RelationshipFilter
 } from './contentAddressedStore';
-import { EngineeringConcept, EngineeringFact } from '../contracts/engineeringKnowledge';
-import { ConceptRelationship } from '../contracts/conceptGraph';
+import { EngineeringConceptSchema, type EngineeringConcept, type EngineeringFact } from '../contracts/engineeringKnowledge';
+import type { ConceptRelationship } from '../contracts/conceptGraph';
 
 /** Browser-safe knowledge repositories used by the renderer process. */
 export class InMemoryConceptStore implements ConceptRepository {
-  private readonly records = new Map<string, EngineeringConcept>(
-    (seedConcepts as EngineeringConcept[]).map(concept => [concept.id, concept])
-  );
+  private readonly records: Map<string, EngineeringConcept>;
+
+  constructor(seed: unknown = seedConcepts) {
+    const parsed = EngineeringConceptSchema.array().safeParse(seed);
+    if (!parsed.success) {
+      throw new Error(`Invalid bundled seed concept data: ${parsed.error.message}`);
+    }
+    this.records = new Map(parsed.data.map(concept => [concept.id, concept]));
+  }
 
   async init(): Promise<void> {}
   async has(id: string): Promise<boolean> { return this.records.has(id); }

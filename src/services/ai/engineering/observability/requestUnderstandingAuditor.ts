@@ -24,8 +24,14 @@ export interface RequestUnderstandingAuditEvent {
     totalMs: number;
   };
   fallbackReason?: string;
-  redactedInput: string;
 }
+
+type RequestUnderstandingAuditInput = Omit<RequestUnderstandingAuditEvent, 'eventId' | 'timestamp'> & {
+  eventId?: string;
+  timestamp?: string;
+  /** Accepted for caller compatibility, but deliberately never retained. */
+  redactedInput?: string;
+};
 
 const API_KEY_PATTERNS = [
   /\b(?:AIza[0-9A-Za-z-_]{35})\b/g,
@@ -73,10 +79,7 @@ export class RequestUnderstandingAuditor {
   }
 
   public recordEvent(
-    data: Omit<RequestUnderstandingAuditEvent, 'eventId' | 'timestamp'> & {
-      eventId?: string;
-      timestamp?: string;
-    }
+    data: RequestUnderstandingAuditInput
   ): RequestUnderstandingAuditEvent {
     const timestamp = data.timestamp || new Date().toISOString();
     const eventId =
@@ -98,8 +101,7 @@ export class RequestUnderstandingAuditor {
       },
       planHash: data.planHash,
       stageDurationsMs: { ...data.stageDurationsMs },
-      fallbackReason: data.fallbackReason,
-      redactedInput: redactSensitiveContent(data.redactedInput)
+      fallbackReason: data.fallbackReason
     };
 
     if (this.events.length >= this.maxEvents) {

@@ -1,128 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { REQUEST_UNDERSTANDING_CORPUS, RequestUnderstandingTestCase } from './requestUnderstandingCorpus';
+import { REQUEST_UNDERSTANDING_CORPUS } from './requestUnderstandingCorpus';
 import { extractStructuredEngineeringRequest } from '../intent/structuredRequestExtractor';
-import { buildXbridgesCapabilityIndex } from '../../catalog/xbridgesCapabilityIndex';
+import { evaluateRequestUnderstandingCases } from './requestUnderstandingEvaluation';
 
-interface SplitEvaluationMetrics {
-  totalCases: number;
-  operationMatches: number;
-  operationAccuracy: number;
-  totalExpectedEntities: number;
-  totalExtractedEntities: number;
-  truePositiveEntities: number;
-  entityPrecision: number;
-  entityRecall: number;
-  totalValueChecks: number;
-  matchedValueChecks: number;
-  valueNormalizationAccuracy: number;
-  hallucinatedBlocks: number;
-  statusMatches: number;
-  statusAccuracy: number;
-}
-
-function evaluateSplit(cases: RequestUnderstandingTestCase[]): SplitEvaluationMetrics {
-  let operationMatches = 0;
-  let totalExpectedEntities = 0;
-  let totalExtractedEntities = 0;
-  let truePositiveEntities = 0;
-  let totalValueChecks = 0;
-  let matchedValueChecks = 0;
-  let hallucinatedBlocks = 0;
-  let statusMatches = 0;
-
-  const validCatalogBlocks = new Set([
-    ...Array.from(buildXbridgesCapabilityIndex().blocks.values()).map(b => b.type),
-    'Constant', 'Sum', 'VectorMul', 'TRANSFER_FUNCTION', 'PID_CONTROLLER', 'Scope'
-  ]);
-
-  for (const testCase of cases) {
-    const result = extractStructuredEngineeringRequest(testCase.input);
-
-    // Status match
-    if (result.status === testCase.expectedStatus) {
-      statusMatches++;
-    }
-
-    const req = result.request;
-
-    // Operation check
-    if (req) {
-      const allOpsMatched = testCase.expectedOperations.every(expOp =>
-        req.operations.includes(expOp)
-      );
-      if (allOpsMatched) {
-        operationMatches++;
-      }
-    } else if (testCase.expectedOperations.length === 0) {
-      operationMatches++;
-    }
-
-    // Entity check (distinct entity types recognized)
-    const expectedSet = new Set(testCase.expectedEntityTypes);
-    totalExpectedEntities += expectedSet.size;
-
-    if (req) {
-      const extractedEntityTypes = req.entities.map(e => e.catalogBlockId || e.semanticType);
-      const extractedSet = new Set(extractedEntityTypes);
-      totalExtractedEntities += extractedSet.size;
-
-      // Check hallucinated blocks
-      for (const ent of req.entities) {
-        const typeToCheck = ent.catalogBlockId || ent.semanticType;
-        if (!validCatalogBlocks.has(typeToCheck)) {
-          hallucinatedBlocks++;
-        }
-      }
-
-      // Count TP matches
-      for (const expType of expectedSet) {
-        if (extractedSet.has(expType)) {
-          truePositiveEntities++;
-        }
-      }
-    }
-
-    // Value normalization check
-    if (testCase.expectedValues && testCase.expectedValues.length > 0) {
-      for (const expVal of testCase.expectedValues) {
-        totalValueChecks++;
-        if (req) {
-          const matchFound = req.values.some(v => {
-            const valMatch = JSON.stringify(v.normalizedValue) === JSON.stringify(expVal.normalizedValue);
-            const unitMatch = expVal.unit === undefined || v.unit === expVal.unit;
-            return valMatch && unitMatch;
-          });
-          if (matchFound) {
-            matchedValueChecks++;
-          }
-        }
-      }
-    }
-  }
-
-  const operationAccuracy = cases.length > 0 ? (operationMatches / cases.length) * 100 : 100;
-  const entityPrecision = totalExtractedEntities > 0 ? (truePositiveEntities / totalExtractedEntities) * 100 : 100;
-  const entityRecall = totalExpectedEntities > 0 ? (truePositiveEntities / totalExpectedEntities) * 100 : 100;
-  const valueNormalizationAccuracy = totalValueChecks > 0 ? (matchedValueChecks / totalValueChecks) * 100 : 100;
-  const statusAccuracy = cases.length > 0 ? (statusMatches / cases.length) * 100 : 100;
-
-  return {
-    totalCases: cases.length,
-    operationMatches,
-    operationAccuracy,
-    totalExpectedEntities,
-    totalExtractedEntities,
-    truePositiveEntities,
-    entityPrecision,
-    entityRecall,
-    totalValueChecks,
-    matchedValueChecks,
-    valueNormalizationAccuracy,
-    hallucinatedBlocks,
-    statusMatches,
-    statusAccuracy
-  };
-}
+const evaluateSplit = (cases: typeof REQUEST_UNDERSTANDING_CORPUS) =>
+  evaluateRequestUnderstandingCases(cases, extractStructuredEngineeringRequest);
 
 describe('Request Understanding Evaluation Corpus and Regression Harness', () => {
   it('contains at least 200 reviewed test cases with valid distribution', () => {
@@ -155,8 +37,9 @@ describe('Request Understanding Evaluation Corpus and Regression Harness', () =>
       expect(metrics.valueNormalizationAccuracy).toBe(100);
     });
 
-    it('has zero hallucinated blocks', () => {
-      expect(metrics.hallucinatedBlocks).toBe(0);
+    it('has zero invented capabilities and 100% catalog validity', () => {
+      expect(metrics.inventedCapabilities).toBe(0);
+      expect(metrics.catalogValidity).toBe(100);
     });
   });
 
@@ -177,8 +60,9 @@ describe('Request Understanding Evaluation Corpus and Regression Harness', () =>
       expect(metrics.valueNormalizationAccuracy).toBe(100);
     });
 
-    it('has zero hallucinated blocks', () => {
-      expect(metrics.hallucinatedBlocks).toBe(0);
+    it('has zero invented capabilities and 100% catalog validity', () => {
+      expect(metrics.inventedCapabilities).toBe(0);
+      expect(metrics.catalogValidity).toBe(100);
     });
   });
 
@@ -199,8 +83,9 @@ describe('Request Understanding Evaluation Corpus and Regression Harness', () =>
       expect(metrics.valueNormalizationAccuracy).toBe(100);
     });
 
-    it('has zero hallucinated blocks', () => {
-      expect(metrics.hallucinatedBlocks).toBe(0);
+    it('has zero invented capabilities and 100% catalog validity', () => {
+      expect(metrics.inventedCapabilities).toBe(0);
+      expect(metrics.catalogValidity).toBe(100);
     });
   });
 
@@ -212,7 +97,9 @@ describe('Request Understanding Evaluation Corpus and Regression Harness', () =>
       expect(metrics.entityPrecision).toBeGreaterThanOrEqual(95.0);
       expect(metrics.entityRecall).toBeGreaterThanOrEqual(95.0);
       expect(metrics.valueNormalizationAccuracy).toBe(100);
-      expect(metrics.hallucinatedBlocks).toBe(0);
+      expect(metrics.inventedCapabilities).toBe(0);
+      expect(metrics.catalogValidity).toBe(100);
+      expect(metrics.statusAccuracy).toBeGreaterThanOrEqual(95);
     });
   });
 });

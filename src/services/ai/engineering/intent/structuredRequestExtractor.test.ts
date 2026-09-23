@@ -76,6 +76,28 @@ describe('StructuredRequestExtractor', () => {
       expect(val2?.unit).toBe('Hz');
       expect(val2?.kind).toBe('unit_value');
     });
+
+    it.each([
+      ['Please total 13.5 and -2.25', 'add', [13.5, -2.25]],
+      ['Take 8 away from 31', 'subtract', [8, 31]],
+      ['Observe 81 divided by 9', 'divide', [81, 9]],
+      ['creat an adder for 17 and 25', 'add', [17, 25]],
+      ['multibly 14 by 6 and disply it', 'multiply', [14, 6]]
+    ])('extracts bounded arithmetic paraphrase %s', (input, operation, operands) => {
+      const result = extractor.extract(input);
+      expect(result.status).toBe('ready');
+      if (result.status !== 'ready') return;
+      expect(result.request.operations).toEqual([operation]);
+      expect(result.request.values.map(value => value.normalizedValue)).toEqual(operands);
+    });
+
+    it('treats "two user supplied values" as a count rather than an operand', () => {
+      const result = extractor.extract('Build an adder for two user supplied values');
+      expect(result.status).toBe('clarification_required');
+      if (result.status !== 'clarification_required') return;
+      expect(result.request.operations).toEqual(['add']);
+      expect(result.request.values).toEqual([]);
+    });
   });
 
   describe('Control systems and components', () => {
@@ -99,6 +121,15 @@ describe('StructuredRequestExtractor', () => {
       );
       expect(rel).toBeDefined();
       expect(rel?.sourceText).toMatch(/for it/i);
+    });
+
+    it('normalizes common controller and transfer-function spelling errors', () => {
+      const result = extractor.extract('pid controler for a trasfer function');
+      expect(result.status).toBe('ready');
+      if (result.status !== 'ready') return;
+      expect(result.request.entities.map(entity => entity.semanticType)).toEqual(
+        expect.arrayContaining(['PID_CONTROLLER', 'TRANSFER_FUNCTION'])
+      );
     });
 
     it('extracts multiplication with scope output and observation relationship', () => {

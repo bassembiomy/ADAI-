@@ -11,6 +11,7 @@ import {
   ReactFlowXbridgesNode,
   ReactFlowXbridgesEdge
 } from './toolAdapters/xbridgesAdapter';
+import { readFileSync } from 'node:fs';
 
 class MockLlmProvider implements LlmProvider {
   public mockResponse: any = {
@@ -77,6 +78,14 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     } finally {
       (globalThis as any).process = nodeProcess;
     }
+  });
+
+  it('keeps renderer orchestration free of Node-backed knowledge imports', () => {
+    const source = readFileSync(new URL('./agentOrchestrator.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/knowledge\/(?:conceptStore|factStore)/);
+    expect(source).not.toMatch(/graph\/conceptGraphStore/);
+    expect(source).not.toMatch(/benchmarks\/engineeringIntelligenceCorpus/);
+    expect(source).not.toMatch(/process\.cwd\s*\(/);
   });
 
   it('creates a fresh session with shared dependencies and copied project context', async () => {
@@ -994,8 +1003,7 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
       expect(latest.planHash).toBeDefined();
       expect(latest.catalogResolutionOutcome.resolvedCount).toBeGreaterThanOrEqual(3);
       expect(latest.stageDurationsMs.totalMs).toBeGreaterThanOrEqual(0);
-      expect(latest.redactedInput).not.toContain('AIzaSyD-secret1234567890abcdef');
-      expect(latest.redactedInput).toContain('[REDACTED_');
+      expect(latest).not.toHaveProperty('redactedInput');
       expect((latest as any).reasoning).toBeUndefined();
     });
 
@@ -1076,4 +1084,3 @@ describe('AgentOrchestrator (Central Workflow Coordinator)', () => {
     });
   });
 });
-
