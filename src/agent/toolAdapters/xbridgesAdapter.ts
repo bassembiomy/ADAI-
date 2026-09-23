@@ -166,8 +166,38 @@ export function createXbridgesDelegate(opts: XbridgesAdapterOptions): XbridgesAp
   let observedExternalNodes = [...localNodes];
   let observedExternalEdges = [...localEdges];
 
-  const itemFingerprint = (value: ReactFlowXbridgesNode | ReactFlowXbridgesEdge): string =>
-    computeModelFingerprint({ nodes: 'position' in value ? [value] : [], edges: 'source' in value ? [value] : [] });
+  const itemFingerprint = (value: ReactFlowXbridgesNode | ReactFlowXbridgesEdge): string => {
+    if ('source' in value) {
+      return computeModelFingerprint({
+        id: value.id,
+        source: value.source,
+        sourceHandle: value.sourceHandle,
+        target: value.target,
+        targetHandle: value.targetHandle
+      });
+    }
+
+    const semanticPort = (port: Record<string, unknown>) => ({
+      id: port.id,
+      direction: port.direction,
+      type: port.type,
+      dataType: port.dataType,
+      unit: port.unit,
+      sampleRate: port.sampleRate,
+      frame: port.frame
+    });
+    return computeModelFingerprint({
+      id: value.id,
+      blockType: value.data?.type ?? value.type,
+      position: value.position,
+      parentId: value.parentId,
+      extent: value.extent,
+      instanceName: value.data?.instanceName,
+      params: value.data?.params ?? {},
+      inputs: (value.data?.inputs ?? []).map(port => semanticPort(port as Record<string, unknown>)),
+      outputs: (value.data?.outputs ?? []).map(port => semanticPort(port as Record<string, unknown>))
+    });
+  };
 
   const reconcileExternal = <T extends { id: string }>(
     external: T[],

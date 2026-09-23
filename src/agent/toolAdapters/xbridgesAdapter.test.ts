@@ -713,6 +713,57 @@ describe('validate, saveAndReadBack, getRevisionFingerprint', () => {
       expect(committedNodes.some(node => node.id === 'agent-node')).toBe(false);
     });
 
+    it('accepts React Flow presentation enrichment between sequential agent actions', async () => {
+      let committedNodes: ReactFlowXbridgesNode[] = [];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: updater => { committedNodes = updater(committedNodes); },
+        setEdges: updater => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      await delegate.addBlock('Constant', { id: 'comp_const_1', value: 10 });
+      // Post-action validation observes the committed node before React Flow
+      // adds its renderer-owned measurements and selection metadata.
+      await delegate.getNodes();
+      committedNodes = committedNodes.map(node => ({
+        ...node,
+        selected: false,
+        dragging: false,
+        measured: { width: 160, height: 80 },
+        width: 160,
+        height: 80,
+        data: { ...node.data, selected: true }
+      }));
+
+      await expect(delegate.addBlock('Constant', { id: 'comp_const_2', value: 200 }))
+        .resolves.toMatchObject({ id: 'comp_const_2' });
+      expect(committedNodes.map(node => node.id)).toEqual(['comp_const_1', 'comp_const_2']);
+    });
+
+    it('still rejects a concurrent engineering parameter change', async () => {
+      let committedNodes: ReactFlowXbridgesNode[] = [makeNode(VALID_TYPE_1, 'shared-gain')];
+      let committedEdges: ReactFlowXbridgesEdge[] = [];
+      const delegate = createXbridgesDelegate({
+        getNodes: () => committedNodes,
+        getEdges: () => committedEdges,
+        setNodes: updater => { committedNodes = updater(committedNodes); },
+        setEdges: updater => { committedEdges = updater(committedEdges); },
+        onSave: vi.fn()
+      });
+
+      committedNodes = committedNodes.map(node => ({
+        ...node,
+        data: { ...node.data, params: { ...node.data.params, gain: 42 } }
+      }));
+
+      await expect(delegate.addBlock('Constant', { id: 'agent-constant', value: 1 }))
+        .rejects.toThrow(/concurrent external topology change/i);
+      expect(committedNodes[0].data.params.gain).toBe(42);
+    });
+
     it('rejects an agent write after a concurrent user deletion without restoring the node', async () => {
       let committedNodes: ReactFlowXbridgesNode[] = [makeNode(VALID_TYPE_1, 'deleted-by-user')];
       let committedEdges: ReactFlowXbridgesEdge[] = [];
