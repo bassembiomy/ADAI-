@@ -313,3 +313,85 @@
   - [x] Step 1: Run corpus against current model and prompts; improve few-shot examples
   - [x] Step 2: Verify holdout set and regression gate; commit model decision report
 
+# Professional State Machine and SysML Model Explorer Implementation Tasks
+
+- [x] Task 1: Lock the explorer contracts and normalized projection
+  - [x] Step 1: Write failing projection tests (`src/features/modelExplorer/modelExplorerProjection.test.ts`)
+  - [x] Step 2: Run the test and verify the missing-module failure
+  - [x] Step 3: Add the contracts (`src/features/modelExplorer/modelExplorerTypes.ts`)
+  - [x] Step 4: Implement deterministic flattening and ancestor-preserving filtering (`src/features/modelExplorer/modelExplorerProjection.ts`, `src/features/modelExplorer/index.ts`)
+  - [x] Step 5: Run tests and typecheck
+  - [x] Step 6: Commit
+- [ ] Task 2: Add explicit SysML ownership and safe persistence migration
+  - [ ] Step 1: Add failing migration and reparent tests
+  - [ ] Step 2: Verify failures
+  - [ ] Step 3: Extend the canonical model (`model.ts`, `persistence.ts`)
+  - [ ] Step 4: Add cycle-safe batch reparent commands (`sysmlCommandGateway.ts`, `normalizedStore.ts`)
+  - [ ] Step 5: Run focused and release tests
+  - [ ] Step 6: Commit
+- [ ] Task 3: Implement SysML projection and capabilities
+  - [ ] Step 1: Write failing capability tests (`sysmlExplorerAdapter.test.ts`)
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement declarative capability tables (`modelExplorerCapabilities.ts`, `modelExplorerFactories.ts`)
+  - [ ] Step 4: Implement projection branches (`sysmlExplorerAdapter.ts`)
+  - [ ] Step 5: Run tests
+  - [ ] Step 6: Commit
+- [ ] Task 4: Implement immutable State Machine commands and projection
+  - [ ] Step 1: Write failing hierarchy tests (`stateMachineExplorerAdapter.test.ts`)
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Complete supported pseudostate metadata (`src/types/sm_types.ts`)
+  - [ ] Step 4: Implement move analysis and immutable application (`smStatePruner.ts`)
+  - [ ] Step 5: Implement capabilities and commands (`stateMachineExplorerAdapter.ts`)
+  - [ ] Step 6: Run State Machine regression tests
+  - [ ] Step 7: Commit
+- [ ] Task 5: Add the command bus, explorer state, and clipboard engine
+  - [ ] Step 1: Write failing atomicity, reducer, and ID-remapping tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement dispatch semantics (`modelExplorerCommandBus.ts`, `modelExplorerUiState.ts`, `modelDiagramRegistry.ts`)
+  - [ ] Step 4: Implement clipboard ownership-forest rules (`modelExplorerClipboard.ts`)
+  - [ ] Step 5: Run tests and commit
+- [ ] Task 6: Build the accessible virtualized tree shell
+  - [ ] Step 1: Write failing keyboard and virtualization tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement fixed-row virtualization (`VirtualTree.tsx`, `modelExplorer.css`)
+  - [ ] Step 4: Implement tree semantics and toolbar (`ModelTreeRow.tsx`, `ModelExplorerToolbar.tsx`, `ModelExplorer.tsx`)
+  - [ ] Step 5: Run tests and commit
+- [ ] Task 7: Add searchable context menus and inline rename
+  - [ ] Step 1: Write failing interaction tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement menus and rename (`ModelExplorerMenu.tsx`, inline rename in `ModelTreeRow.tsx`)
+  - [ ] Step 4: Run tests and commit
+- [ ] Task 8: Add relationship authoring and impact confirmation
+  - [ ] Step 1: Write failing wizard tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement the wizard (`RelationshipWizard.tsx`)
+  - [ ] Step 4: Implement the generic impact dialog (`MoveImpactDialog.tsx`)
+  - [ ] Step 5: Run tests and commit
+- [ ] Task 9: Add tree reparenting and tree-to-diagram presentation drag/drop
+  - [ ] Step 1: Write failing drop-classification tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement drag payload and target feedback (`modelExplorerDragDrop.ts`)
+  - [ ] Step 4: Preserve semantic/presentation deletion distinction
+  - [ ] Step 5: Run tests and commit
+- [ ] Task 10: Integrate Model Explorer into App and remove the inline tree
+  - [ ] Step 1: Write failing integration tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Extract and mount (`App.tsx`)
+  - [ ] Step 4: Synchronize navigation and selection
+  - [ ] Step 5: Run integration and release checks
+  - [ ] Step 6: Commit
+- [ ] Task 11: Complete multi-selection, copy/paste, duplicate, favorites, and recents
+  - [ ] Step 1: Write failing command tests
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Implement complete selection and clipboard behavior
+  - [ ] Step 4: Persist explorer UI state separately
+  - [ ] Step 5: Run tests and commit
+- [ ] Task 12: Add end-to-end authoring and performance gates
+  - [ ] Step 1: Write the State Machine E2E scenario
+  - [ ] Step 2: Write the SysML E2E scenario
+  - [ ] Step 3: Add deterministic performance gates
+  - [ ] Step 4: Write the user guide (`docs/guides/model-explorer.md`)
+  - [ ] Step 5: Run the complete verification matrix
+  - [ ] Step 6: Commit
+
+
