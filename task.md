@@ -14,14 +14,14 @@
   - [x] Step 5: Migrate existing rows and downgrade claims that lack evidence
   - [x] Step 6: Run compliance and conformance-manifest tests
   - [x] Step 7: Commit `feat(sysml): enforce provenance and four-level compliance`
-- [ ] Task 3: Canonical schema v4 metamodel
-  - [ ] Step 1: Test stable IDs, explicit ownership, namespaces, metaclass discrimination, and global ID collision rejection
-  - [ ] Step 2: Add first-class Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, QuantityKind, Unit, Operation, Parameter, Reception, Constraint, Comment, Rationale, Requirement, and TestCase
-  - [ ] Step 3: Add first-class PartProperty, ReferenceProperty, ValueProperty, ConstraintProperty, FlowProperty, and typed ValueSpecification variants
-  - [ ] Step 4: Add typed Diagram and DiagramPresentation entities; do not store semantic compartment content as strings
-  - [ ] Step 5: Retain deprecated v3 compatibility exports until migration completes
-  - [ ] Step 6: Run model, normalized-store tests, and `npx tsc --noEmit`
-  - [ ] Step 7: Commit `feat(sysml): add canonical v4 semantic metamodel`
+- [x] Task 3: Canonical schema v4 metamodel
+  - [x] Step 1: Test stable IDs, explicit ownership, namespaces, metaclass discrimination, and global ID collision rejection
+  - [x] Step 2: Add first-class Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, QuantityKind, Unit, Operation, Parameter, Reception, Constraint, Comment, Rationale, Requirement, and TestCase
+  - [x] Step 3: Add first-class PartProperty, ReferenceProperty, ValueProperty, ConstraintProperty, FlowProperty, and typed ValueSpecification variants
+  - [x] Step 4: Add typed Diagram and DiagramPresentation entities; do not store semantic compartment content as strings
+  - [x] Step 5: Retain deprecated v3 compatibility exports until migration completes
+  - [x] Step 6: Run model, normalized-store tests, and `npx tsc --noEmit`
+  - [x] Step 7: Commit `feat(sysml): add canonical v4 semantic metamodel`
 - [ ] Task 4: UML and SysML Port hierarchy
   - [ ] Step 1: Test that generic CreatePort creates umlPort with no implicit SysML stereotype
   - [ ] Step 2: Test mutual exclusion of ProxyPort and FullPort

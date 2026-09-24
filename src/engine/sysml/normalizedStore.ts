@@ -50,7 +50,7 @@ export interface StoreIndexes {
 }
 
 export interface NormalizedSysmlStore {
-  schemaVersion: 2 | 3;
+  schemaVersion: 2 | 3 | 4;
   profileId: 'OMG-SysML-1.6-ADIA';
   revision: number;
   packages: Map<string, PackageDefinition>;

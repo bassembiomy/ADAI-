@@ -1,3 +1,5 @@
+export * from './domain';
+
 export interface Multiplicity {
   lower: number;
   upper: number | '*';
