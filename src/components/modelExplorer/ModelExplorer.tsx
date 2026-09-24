@@ -11,6 +11,10 @@ import {
   classifyTreeDropTarget,
   MIME_TYPE_MODEL_ELEMENT,
 } from '../../features/modelExplorer/modelExplorerDragDrop';
+import {
+  loadPersistedExplorerUiState,
+  persistExplorerUiState,
+} from '../../features/modelExplorer/modelExplorerMultiSelect';
 import { VirtualTree } from './VirtualTree';
 import { ModelTreeRow } from './ModelTreeRow';
 import { ModelExplorerToolbar } from './ModelExplorerToolbar';
@@ -34,6 +38,7 @@ export interface ModelExplorerProps {
   onRenameCancel?: () => void;
   favoriteNodeIds?: Set<string>;
   onToggleFavorite?: (nodeId: string) => void;
+  projectId?: string;
   className?: string;
   height?: number;
 }
@@ -53,15 +58,47 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   renamingNodeId,
   onRenameCommit,
   onRenameCancel,
-  favoriteNodeIds = new Set(),
+  favoriteNodeIds,
   onToggleFavorite,
+  projectId,
   className = '',
   height,
 }) => {
-  const [viewMode, setViewMode] = useState<ExplorerView>('containment');
+  const persistedState = useMemo(() => {
+    return projectId ? loadPersistedExplorerUiState(projectId) : null;
+  }, [projectId]);
+
+  const [viewMode, setViewMode] = useState<ExplorerView>(() => {
+    return persistedState?.activeView || 'containment';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set(rootNodeIds));
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => {
+    if (persistedState?.expandedNodeIds && persistedState.expandedNodeIds.length > 0) {
+      return new Set(persistedState.expandedNodeIds);
+    }
+    return new Set(rootNodeIds);
+  });
+  const [internalFavorites, setInternalFavorites] = useState<Set<string>>(() => {
+    if (persistedState?.favorites && persistedState.favorites.length > 0) {
+      return new Set(persistedState.favorites);
+    }
+    return favoriteNodeIds ?? new Set();
+  });
+
+  const effectiveFavorites = favoriteNodeIds ?? internalFavorites;
+
+  useEffect(() => {
+    if (projectId) {
+      persistExplorerUiState(projectId, {
+        favorites: Array.from(effectiveFavorites),
+        recentSemanticIds: Array.from(selectedNodeIds),
+        expandedNodeIds: Array.from(expandedNodeIds),
+        activeView: viewMode,
+      });
+    }
+  }, [projectId, effectiveFavorites, selectedNodeIds, expandedNodeIds, viewMode]);
+
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [localRenamingNodeId, setLocalRenamingNodeId] = useState<string | null>(null);
   const [draggedNode, setDraggedNode] = useState<ModelTreeNode | null>(null);
@@ -111,7 +148,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
       filterQuery: searchQuery,
       diagramNodeIds: diagramFilter,
       favoritesOnly: showFavoritesOnly,
-      favoriteNodeIds,
+      favoriteNodeIds: effectiveFavorites,
     });
   }, [
     nodesById,
@@ -121,7 +158,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     viewMode,
     activeDiagramNodeIds,
     showFavoritesOnly,
-    favoriteNodeIds,
+    effectiveFavorites,
   ]);
 
   // Adjust focused index if out of bounds

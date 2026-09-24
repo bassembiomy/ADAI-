@@ -21,6 +21,12 @@ import { executeSysmlCommand } from '../../services/sysmlCommandGateway';
 import { fromRepository } from '../../engine/sysml/normalizedStore';
 import { createHistory } from '../../engine/sysml/mutations';
 
+import {
+  computeRangeSelection,
+  computeToggleSelection,
+} from '../../features/modelExplorer/modelExplorerMultiSelect';
+import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
+
 export interface AppModelExplorerProps {
   diagramMode: string;
   states: StateData[];
@@ -34,12 +40,14 @@ export interface AppModelExplorerProps {
   canonicalSysmlRepository?: SysmlRepository;
   selectedIds: string[];
   onSelect: (id: string, multiSelect?: boolean) => void;
+  onSelectMultiple?: (ids: string[]) => void;
   onDoubleClick: (id: string) => void;
   onUpdateStates?: (states: StateData[]) => void;
   onUpdateLayers?: (layers: Layer[]) => void;
   onUpdateTransitions?: (transitions: TransitionData[]) => void;
   onUpdateJunctions?: (junctions: JunctionData[]) => void;
   onExecuteSysmlCommand?: (command: SysmlEditorCommand) => SysmlCommandResult;
+  projectId?: string;
   className?: string;
   height?: number;
 }
@@ -56,16 +64,19 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   canonicalSysmlRepository,
   selectedIds,
   onSelect,
+  onSelectMultiple,
   onDoubleClick,
   onUpdateStates,
   onUpdateLayers,
   onUpdateTransitions,
   onUpdateJunctions,
   onExecuteSysmlCommand,
+  projectId,
   className = '',
   height,
 }) => {
   const isStateMachine = diagramMode === 'statemachine';
+  const [lastSelectedSemanticId, setLastSelectedSemanticId] = useState<string | null>(null);
 
   // Impact dialog state
   const [pendingImpact, setPendingImpact] = useState<{
@@ -172,10 +183,25 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   }, [projection.nodes, selectedIds]);
 
   const handleSelectNode = useCallback(
-    (node: ModelTreeNode, multiSelect?: boolean) => {
-      onSelect(node.semanticId, multiSelect);
+    (node: ModelTreeNode, multiSelect?: boolean, rangeSelect?: boolean) => {
+      if (rangeSelect && lastSelectedSemanticId && onSelectMultiple) {
+        const visibleRows = projectModelTree({
+          nodesById: projection.nodes,
+          rootNodeIds: projection.roots,
+          expandedNodeIds: new Set(Object.keys(projection.nodes)),
+        });
+        const range = computeRangeSelection(visibleRows, lastSelectedSemanticId, node.semanticId);
+        onSelectMultiple(range);
+      } else if (multiSelect && onSelectMultiple) {
+        const next = computeToggleSelection(selectedIds, node.semanticId);
+        onSelectMultiple(next);
+        setLastSelectedSemanticId(node.semanticId);
+      } else {
+        setLastSelectedSemanticId(node.semanticId);
+        onSelect(node.semanticId, multiSelect);
+      }
     },
-    [onSelect]
+    [lastSelectedSemanticId, onSelectMultiple, onSelect, projection.nodes, projection.roots, selectedIds]
   );
 
   const handleActivateNode = useCallback(
@@ -298,6 +324,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           });
         }}
         height={height}
+        projectId={projectId}
       />
 
       {pendingImpact && (

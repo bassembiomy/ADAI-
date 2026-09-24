@@ -380,12 +380,12 @@
   - [x] Step 4: Synchronize navigation and selection
   - [x] Step 5: Run integration and release checks
   - [x] Step 6: Commit
-- [ ] Task 11: Complete multi-selection, copy/paste, duplicate, favorites, and recents
-  - [ ] Step 1: Write failing command tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement complete selection and clipboard behavior
-  - [ ] Step 4: Persist explorer UI state separately
-  - [ ] Step 5: Run tests and commit
+- [x] Task 11: Complete multi-selection, copy/paste, duplicate, favorites, and recents
+  - [x] Step 1: Write failing command tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement complete selection and clipboard behavior
+  - [x] Step 4: Persist explorer UI state separately
+  - [x] Step 5: Run tests and commit
 - [ ] Task 12: Add end-to-end authoring and performance gates
   - [ ] Step 1: Write the State Machine E2E scenario
   - [ ] Step 2: Write the SysML E2E scenario
