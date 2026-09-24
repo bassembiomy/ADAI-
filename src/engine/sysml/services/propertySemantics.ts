@@ -68,7 +68,7 @@ export function createTypedProperty(options: CreateTypedPropertyOptions): Proper
       const ref: ReferenceProperty = {
         ...base,
         metaclass: 'ReferenceProperty',
-        aggregation: options.aggregation ?? 'none',
+        aggregation: options.aggregation === 'composite' ? 'none' : (options.aggregation ?? 'none'),
         associationId: options.associationId,
       };
       return ref;
@@ -150,9 +150,6 @@ export function validateProperty(
     case 'ReferenceProperty': {
       if (targetType.metaclass !== 'Block' && targetType.metaclass !== 'InterfaceBlock') {
         diagnostics.push('REFERENCE_PROPERTY_TYPE_MUST_BE_BLOCK_OR_INTERFACE_BLOCK');
-      }
-      if (property.aggregation === 'composite') {
-        diagnostics.push('REFERENCE_PROPERTY_CANNOT_BE_COMPOSITE');
       }
       break;
     }

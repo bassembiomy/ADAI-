@@ -45,7 +45,7 @@ describe('Canonical Repository Projections (Task 11)', () => {
     const pres: DiagramPresentation = {
       id: 'pres-1',
       diagramId: 'bdd-1',
-      elementId: 'blk-motor',
+      semanticElementId: 'blk-motor',
       bounds: { x: 100, y: 120, width: 200, height: 150 },
       visibleCompartments: ['values'],
     };
@@ -88,6 +88,9 @@ describe('Canonical Repository Projections (Task 11)', () => {
       namespace: [],
       ownerId: 'b-m',
       typeId: 'b-m',
+      direction: 'in',
+      isConjugated: false,
+      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
 
     repo.elements[bVehicle.id] = bVehicle;
@@ -101,7 +104,7 @@ describe('Canonical Repository Projections (Task 11)', () => {
     const presPart: DiagramPresentation = {
       id: 'pres-part',
       diagramId: 'ibd-1',
-      elementId: 'p-m',
+      semanticElementId: 'p-m',
       bounds: { x: 50, y: 50, width: 220, height: 180 },
     };
     repo.presentations[presPart.id] = presPart;
@@ -134,7 +137,7 @@ describe('Canonical Repository Projections (Task 11)', () => {
     const presReq: DiagramPresentation = {
       id: 'pres-req',
       diagramId: 'req-diag-1',
-      elementId: 'r1',
+      semanticElementId: 'r1',
       bounds: { x: 300, y: 100, width: 250, height: 120 },
     };
     repo.presentations[presReq.id] = presReq;

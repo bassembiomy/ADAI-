@@ -71,6 +71,9 @@ describe('Relationship, Connector-End, Flow, and Allocation Foundations (Task 9)
       namespace: [],
       ownerId: 'b-inv',
       typeId: 'b-inv',
+      direction: 'out',
+      isConjugated: false,
+      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
 
     // Part in Vehicle: powertrain : Powertrain

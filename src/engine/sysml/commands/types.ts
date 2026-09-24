@@ -29,7 +29,7 @@ export interface CreateElementCommand {
 export interface UpdateElementCommand {
   type: 'UpdateElement';
   elementId: string;
-  patch: Partial<SemanticElement>;
+  patch: Record<string, unknown> | Partial<SemanticElement>;
 }
 
 export interface RenameElementCommand {
