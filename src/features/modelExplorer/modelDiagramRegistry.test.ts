@@ -33,7 +33,7 @@ describe('modelDiagramRegistry', () => {
     const registry = createModelDiagramRegistry({
       adapter,
       listDiagrams: () => Object.values(diagrams),
-      getPresentedIds: (id) => presentations[id]?.elementIds ?? [],
+      getPresentedIds: (id: string) => presentations[id]?.elementIds ?? [],
     });
 
     const diagram = registry.create({ ownerId: 'block-1', diagramKind: 'ibd', name: 'Power IBD' });

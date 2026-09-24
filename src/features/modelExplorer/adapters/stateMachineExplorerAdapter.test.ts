@@ -197,7 +197,7 @@ describe('stateMachineExplorerAdapter', () => {
       confirmedImpactHash: hashImpact(preflight.impact!),
     });
     expect(result.committed).toBe(true);
-    expect(harness.snapshot!.layers.find(x => x.id === 'region-b')?.stateIds).toContain('idle');
-    expect(harness.snapshot!.transitions.map(t => t.id)).not.toContain('t1');
+    expect(harness.snapshot!.layers.find((x: any) => x.id === 'region-b')?.stateIds).toContain('idle');
+    expect(harness.snapshot!.transitions.map((t: any) => t.id)).not.toContain('t1');
   });
 });

@@ -48,9 +48,9 @@ describe('VirtualTree', () => {
         rowHeight={30}
         focusedIndex={0}
         onFocusIndex={() => {}}
-        isExpanded={row => row.node.nodeId === 'root'}
+        isExpanded={(row: VisibleTreeRow) => row.node.nodeId === 'root'}
         onToggleExpand={() => {}}
-        renderRow={row => <div>{row.node.label}</div>}
+        renderRow={(row: VisibleTreeRow) => <div>{row.node.label}</div>}
       />
     );
 

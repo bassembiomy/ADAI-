@@ -16,8 +16,8 @@ describe('modelExplorerClipboard', () => {
     const payload = copyOwnershipForest(
       'sysml',
       ['parent', 'child'], // child is already descendant of parent
-      id => elements[id],
-      id => (id === 'parent' ? [elements.child, elements.grandchild] : id === 'child' ? [elements.grandchild] : []),
+      (id: string) => elements[id],
+      (id: string) => (id === 'parent' ? [elements.child, elements.grandchild] : id === 'child' ? [elements.grandchild] : []),
       1
     );
 
