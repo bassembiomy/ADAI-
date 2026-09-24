@@ -344,12 +344,12 @@
   - [x] Step 5: Implement capabilities and commands (`stateMachineExplorerAdapter.ts`)
   - [x] Step 6: Run State Machine regression tests
   - [x] Step 7: Commit
-- [ ] Task 5: Add the command bus, explorer state, and clipboard engine
-  - [ ] Step 1: Write failing atomicity, reducer, and ID-remapping tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement dispatch semantics (`modelExplorerCommandBus.ts`, `modelExplorerUiState.ts`, `modelDiagramRegistry.ts`)
-  - [ ] Step 4: Implement clipboard ownership-forest rules (`modelExplorerClipboard.ts`)
-  - [ ] Step 5: Run tests and commit
+- [x] Task 5: Add the command bus, explorer state, and clipboard engine
+  - [x] Step 1: Write failing atomicity, reducer, and ID-remapping tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement dispatch semantics (`modelExplorerCommandBus.ts`, `modelExplorerUiState.ts`, `modelDiagramRegistry.ts`)
+  - [x] Step 4: Implement clipboard ownership-forest rules (`modelExplorerClipboard.ts`)
+  - [x] Step 5: Run tests and commit
 - [ ] Task 6: Build the accessible virtualized tree shell
   - [ ] Step 1: Write failing keyboard and virtualization tests
   - [ ] Step 2: Verify failure
