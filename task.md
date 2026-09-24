@@ -41,12 +41,12 @@
   - [x] Step 3: Implement the controller
   - [x] Step 4: Replace direct setBlocks, setRelationships, and presentation mutations in affected toolbar handlers
   - [x] Step 5: Verify and commit
-- [ ] Task 8: Feature Editing and Specification Panels
-  - [ ] Step 1: Write feature identity tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Implement controller commands and type resolution
-  - [ ] Step 4: Replace affected direct property/port array mutations in App.tsx
-  - [ ] Step 5: Verify and commit
+- [x] Task 8: Feature Editing and Specification Panels
+  - [x] Step 1: Write feature identity tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Implement controller commands and type resolution
+  - [x] Step 4: Replace affected direct property/port array mutations in App.tsx
+  - [x] Step 5: Verify and commit
 - [ ] Task 9: Persistence, Migration, and Read-Only Legacy Projections
   - [ ] Step 1: Write save/load and migration tests
   - [ ] Step 2: Verify RED
