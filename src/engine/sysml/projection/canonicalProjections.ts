@@ -41,7 +41,8 @@ export function projectBddDiagram(
   for (const presId of presIds) {
     const pres = repo.presentations[presId];
     if (!pres) continue;
-    const element = repo.elements[pres.elementId];
+    const elemId = pres.semanticElementId ?? (pres as any).elementId;
+    const element = repo.elements[elemId];
     if (!element) continue;
 
     const parts: string[] = [];
@@ -119,7 +120,8 @@ export function projectIbdDiagram(
   for (const presId of presIds) {
     const pres = repo.presentations[presId];
     if (!pres) continue;
-    const element = repo.elements[pres.elementId];
+    const elemId = pres.semanticElementId ?? (pres as any).elementId;
+    const element = repo.elements[elemId];
     if (!element || element.metaclass !== 'PartProperty') continue;
 
     const part = element as PartProperty;
@@ -188,7 +190,8 @@ export function projectRequirementsDiagram(
   for (const presId of presIds) {
     const pres = repo.presentations[presId];
     if (!pres) continue;
-    const element = repo.elements[pres.elementId];
+    const elemId = pres.semanticElementId ?? (pres as any).elementId;
+    const element = repo.elements[elemId];
     if (!element || element.metaclass !== 'Requirement') continue;
 
     const req = element as Requirement;
