@@ -32,6 +32,11 @@ const ELEMENT_CATALOG: readonly ElementCapabilityDefinition[] = [
   { metaclass: 'TestCase', label: 'Test Case', authority: 'OMG_SYSML_1_6', category: 'element' },
   { metaclass: 'VerificationCase', label: 'Verification Case', authority: 'ADIA_EXTENSION', category: 'element' },
 
+  // Behaviors
+  { metaclass: 'UseCase', label: 'Use Case', authority: 'OMG_SYSML_1_6', category: 'element' },
+  { metaclass: 'Activity', label: 'Activity', authority: 'OMG_SYSML_1_6', category: 'element' },
+  { metaclass: 'ActivityPartition', label: 'Activity Partition', authority: 'OMG_SYSML_1_6', category: 'element' },
+
   // Annotations & Constraints
   { metaclass: 'Comment', label: 'Comment', authority: 'UML_FOUNDATION', category: 'element' },
   { metaclass: 'Rationale', label: 'Rationale', authority: 'OMG_SYSML_1_6', category: 'element' },

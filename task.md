@@ -6,12 +6,12 @@
   - [x] Step 3: Implement the typed catalog and policy
   - [x] Step 4: Replace SYSML_CHILDREN consumers with catalog projections
   - [x] Step 5: Run tests and commit
-- [ ] Task 2: Complete Canonical Element and Feature Types
-  - [ ] Step 1: Write a failing metamodel construction test
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Add focused behavior-domain types
-  - [ ] Step 4: Run domain and migration tests
-  - [ ] Step 5: Commit
+- [x] Task 2: Complete Canonical Element and Feature Types
+  - [x] Step 1: Write a failing metamodel construction test
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Add focused behavior-domain types
+  - [x] Step 4: Run domain and migration tests
+  - [x] Step 5: Commit
 - [ ] Task 3: Atomic Create-and-Present Command
   - [ ] Step 1: Write atomicity and identity tests
   - [ ] Step 2: Verify RED
