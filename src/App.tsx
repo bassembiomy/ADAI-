@@ -9679,6 +9679,9 @@ const ADIA = () => {
   const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
     addToHistory();
     const newId = uuidv4();
+    const parentRequirement = diagramMode === 'requirements'
+      ? blocks.find(block => block.id === currentLayerId && block.stereotype === 'requirement')
+      : undefined;
     // For requirements diagram, store which layer this block was created in
     const blockLayerId = (diagramMode === 'requirements') ? currentLayerId : undefined;
     const newBlock: BlockData = {
@@ -9709,9 +9712,23 @@ const ADIA = () => {
       layerId: blockLayerId,
     };
     setBlocks(prev => [...prev, newBlock]);
+    if (stereotype === 'requirement' && parentRequirement) {
+      setRelationships(prev => [
+        ...prev,
+        {
+          id: uuidv4(),
+          sourceId: parentRequirement.id,
+          targetId: newBlock.id,
+          type: 'requirementContainment',
+          label: '',
+        },
+      ]);
+    }
 
     setSelectedIds([newBlock.id]);
-    addError('info', `Created ${stereotype}: ${newBlock.name}`);
+    addError('info', parentRequirement && stereotype === 'requirement'
+      ? `Created contained requirement: ${newBlock.name}`
+      : `Created ${stereotype}: ${newBlock.name}`);
   }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
@@ -9761,8 +9778,13 @@ const ADIA = () => {
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
+    if (deletedIds.has(currentLayerId) || [...layerStack].some(id => deletedIds.has(id))) {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath([]);
+    }
     addError('info', msg);
-  }, [addToHistory, addError, parts]);
+  }, [addToHistory, addError, currentLayerId, layerStack, parts]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
