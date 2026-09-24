@@ -361,12 +361,12 @@
   - [x] Step 2: Verify failure
   - [x] Step 3: Implement menus and rename (`ModelExplorerMenu.tsx`, inline rename in `ModelTreeRow.tsx`)
   - [x] Step 4: Run tests and commit
-- [ ] Task 8: Add relationship authoring and impact confirmation
-  - [ ] Step 1: Write failing wizard tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement the wizard (`RelationshipWizard.tsx`)
-  - [ ] Step 4: Implement the generic impact dialog (`MoveImpactDialog.tsx`)
-  - [ ] Step 5: Run tests and commit
+- [x] Task 8: Add relationship authoring and impact confirmation
+  - [x] Step 1: Write failing wizard tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement the wizard (`RelationshipWizard.tsx`)
+  - [x] Step 4: Implement the generic impact dialog (`MoveImpactDialog.tsx`)
+  - [x] Step 5: Run tests and commit
 - [ ] Task 9: Add tree reparenting and tree-to-diagram presentation drag/drop
   - [ ] Step 1: Write failing drop-classification tests
   - [ ] Step 2: Verify failure
