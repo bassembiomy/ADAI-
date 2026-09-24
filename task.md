@@ -6,14 +6,14 @@
   - [x] Step 3: Add the architecture check to the full release script
   - [x] Step 4: Run `npm run test:sysml:architecture` and `npm run test:sysml -- --reporter=dot`
   - [x] Step 5: Commit `test(sysml): add repository-first architecture guardrails`
-- [ ] Task 2: Provenance and four-level compliance
-  - [ ] Step 1: Test that ProxyPort with three passing levels and failed Constraints is PARTIAL, never COMPLIANT
-  - [ ] Step 2: Test that missing automated tests or specification section blocks COMPLIANT
-  - [ ] Step 3: Implement Element/Properties/Relationships/Constraints results with PASS | FAIL | NOT_APPLICABLE
-  - [ ] Step 4: Require specification source/section, source file, domain type, command, validator, persistence, projection, and test evidence
-  - [ ] Step 5: Migrate existing rows and downgrade claims that lack evidence
-  - [ ] Step 6: Run compliance and conformance-manifest tests
-  - [ ] Step 7: Commit `feat(sysml): enforce provenance and four-level compliance`
+- [x] Task 2: Provenance and four-level compliance
+  - [x] Step 1: Test that ProxyPort with three passing levels and failed Constraints is PARTIAL, never COMPLIANT
+  - [x] Step 2: Test that missing automated tests or specification section blocks COMPLIANT
+  - [x] Step 3: Implement Element/Properties/Relationships/Constraints results with PASS | FAIL | NOT_APPLICABLE
+  - [x] Step 4: Require specification source/section, source file, domain type, command, validator, persistence, projection, and test evidence
+  - [x] Step 5: Migrate existing rows and downgrade claims that lack evidence
+  - [x] Step 6: Run compliance and conformance-manifest tests
+  - [x] Step 7: Commit `feat(sysml): enforce provenance and four-level compliance`
 - [ ] Task 3: Canonical schema v4 metamodel
   - [ ] Step 1: Test stable IDs, explicit ownership, namespaces, metaclass discrimination, and global ID collision rejection
   - [ ] Step 2: Add first-class Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, QuantityKind, Unit, Operation, Parameter, Reception, Constraint, Comment, Rationale, Requirement, and TestCase

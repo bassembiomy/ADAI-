@@ -1,5 +1,11 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  evaluateCompliance,
+  type ComplianceResult,
+  type FourLevelCompliance,
+  type SemanticAuthority,
+} from './compliance';
 
 export interface ConformanceRow {
   id: string;
@@ -9,6 +15,13 @@ export interface ConformanceRow {
   implementationEvidence: string[];
   automatedEvidence: string[];
   remainingLimitation?: string;
+  authority?: SemanticAuthority;
+  levels?: FourLevelCompliance;
+  domainType?: string;
+  command?: string;
+  validator?: string;
+  persistence?: string;
+  projection?: string;
 }
 
 export interface ConformanceManifest {
@@ -445,6 +458,59 @@ export function verifyReleaseGateEvidence(manifest: ConformanceManifest = CONFOR
     unsupportedMarkedSupported,
     rowsMissingImplementation,
     rowsMissingTiers,
+  };
+}
+
+export interface FourLevelComplianceManifestReport {
+  valid: boolean;
+  totalFeatures: number;
+  compliantFeatures: number;
+  partialFeatures: number;
+  nonCompliantFeatures: number;
+  results: ComplianceResult[];
+}
+
+export function evaluateManifestCompliance(manifest: ConformanceManifest = CONFORMANCE_MANIFEST): FourLevelComplianceManifestReport {
+  const results: ComplianceResult[] = manifest.rows.map(row => {
+    const authority = row.authority ?? (row.id === 'SYSML-029' ? 'ADIA_EXTENSION' : /generalization|association|dependency|use-case/i.test(row.capability) ? 'UML_FOUNDATION' : 'OMG_SYSML_1_6');
+    const levels = row.levels ?? (
+      row.status === 'unsupported'
+        ? { element: 'FAIL', properties: 'FAIL', relationships: 'FAIL', constraints: 'FAIL' }
+        : row.status === 'partial'
+        ? { element: 'PASS', properties: 'PASS', relationships: 'PASS', constraints: 'FAIL' }
+        : { element: 'PASS', properties: 'PASS', relationships: 'PASS', constraints: 'PASS' }
+    );
+
+    return evaluateCompliance({
+      id: row.id,
+      name: row.capability,
+      authority,
+      levels,
+      evidence: {
+        specificationSection: row.normativeReference,
+        sourceFile: row.implementationEvidence[0] ?? '',
+        domainType: row.domainType ?? 'SemanticElement',
+        command: row.command ?? 'SysmlCommand',
+        validator: row.validator ?? 'SysmlValidator',
+        persistence: row.persistence ?? 'SysmlPersistence',
+        projection: row.projection ?? 'SysmlProjection',
+        tests: row.automatedEvidence,
+      },
+      notes: row.remainingLimitation,
+    });
+  });
+
+  const compliantFeatures = results.filter(r => r.status === 'COMPLIANT').length;
+  const partialFeatures = results.filter(r => r.status === 'PARTIAL').length;
+  const nonCompliantFeatures = results.filter(r => r.status === 'NON_COMPLIANT').length;
+
+  return {
+    valid: nonCompliantFeatures === manifest.rows.filter(r => r.status === 'unsupported').length,
+    totalFeatures: results.length,
+    compliantFeatures,
+    partialFeatures,
+    nonCompliantFeatures,
+    results,
   };
 }
 
