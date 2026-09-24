@@ -43,7 +43,8 @@ describe('modelExplorerClipboard', () => {
 
     expect(remapped.snapshots.newRoot).toBeDefined();
     expect(remapped.snapshots.newChild).toBeDefined();
-    expect(remapped.snapshots.newChild.ownerId).toBe('newRoot');
-    expect(remapped.snapshots.newRoot.externalTypeId).toBe('library-block');
+    const snapshots = remapped.snapshots as Record<string, any>;
+    expect(snapshots.newChild.ownerId).toBe('newRoot');
+    expect(snapshots.newRoot.externalTypeId).toBe('library-block');
   });
 });

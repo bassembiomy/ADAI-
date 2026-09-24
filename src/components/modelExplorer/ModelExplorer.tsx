@@ -1,0 +1,226 @@
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import type {
+  ModelTreeNode,
+  ExplorerView,
+  VisibleTreeRow,
+} from '../../features/modelExplorer/modelExplorerTypes';
+import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
+import { VirtualTree } from './VirtualTree';
+import { ModelTreeRow } from './ModelTreeRow';
+import { ModelExplorerToolbar } from './ModelExplorerToolbar';
+import './modelExplorer.css';
+
+export interface ModelExplorerProps {
+  nodesById: Map<string, ModelTreeNode> | Record<string, ModelTreeNode>;
+  rootNodeIds: string[];
+  activeDiagramNodeIds?: Set<string>;
+  activeDiagramName?: string;
+  selectedNodeIds: Set<string>;
+  onSelectNode: (node: ModelTreeNode, multiSelect?: boolean, rangeSelect?: boolean) => void;
+  onActivateNode?: (node: ModelTreeNode) => void;
+  onContextMenuNode?: (node: ModelTreeNode, event: React.MouseEvent) => void;
+  renamingNodeId?: string | null;
+  onRenameCommit?: (nodeId: string, newName: string) => void;
+  onRenameCancel?: () => void;
+  favoriteNodeIds?: Set<string>;
+  onToggleFavorite?: (nodeId: string) => void;
+  className?: string;
+  height?: number;
+}
+
+export const ModelExplorer: React.FC<ModelExplorerProps> = ({
+  nodesById,
+  rootNodeIds,
+  activeDiagramNodeIds,
+  activeDiagramName,
+  selectedNodeIds,
+  onSelectNode,
+  onActivateNode,
+  onContextMenuNode,
+  renamingNodeId = null,
+  onRenameCommit,
+  onRenameCancel,
+  favoriteNodeIds = new Set(),
+  onToggleFavorite,
+  className = '',
+  height,
+}) => {
+  const [viewMode, setViewMode] = useState<ExplorerView>('containment');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set(rootNodeIds));
+  const [focusedIndex, setFocusedIndex] = useState(0);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(400);
+
+  // Measure tree viewport height
+  useEffect(() => {
+    if (height) return;
+    if (!containerRef.current) return;
+
+    const updateHeight = () => {
+      if (containerRef.current) {
+        // Toolbar is approx 75px
+        const totalH = containerRef.current.clientHeight;
+        setMeasuredHeight(Math.max(150, totalH - 75));
+      }
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [height]);
+
+  const treeHeight = height ?? measuredHeight;
+
+  // Project visible tree rows according to active viewMode and filters
+  const visibleRows = useMemo(() => {
+    const isDiagramMode = viewMode === 'diagramContext';
+    const diagramFilter = isDiagramMode ? activeDiagramNodeIds : undefined;
+
+    return projectModelTree({
+      nodesById,
+      rootNodeIds,
+      expandedNodeIds,
+      filterQuery: searchQuery,
+      diagramNodeIds: diagramFilter,
+      favoritesOnly: showFavoritesOnly,
+      favoriteNodeIds,
+    });
+  }, [
+    nodesById,
+    rootNodeIds,
+    expandedNodeIds,
+    searchQuery,
+    viewMode,
+    activeDiagramNodeIds,
+    showFavoritesOnly,
+    favoriteNodeIds,
+  ]);
+
+  // Adjust focused index if out of bounds
+  useEffect(() => {
+    if (focusedIndex >= visibleRows.length) {
+      setFocusedIndex(Math.max(0, visibleRows.length - 1));
+    }
+  }, [visibleRows.length, focusedIndex]);
+
+  const handleToggleExpand = useCallback((row: VisibleTreeRow) => {
+    const nodeId = row.node.nodeId;
+    setExpandedNodeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    const allParentIds = new Set<string>();
+    const nodeMap = nodesById instanceof Map ? nodesById : new Map(Object.entries(nodesById));
+    nodeMap.forEach(n => {
+      if (n.hasChildren) {
+        allParentIds.add(n.nodeId);
+      }
+    });
+    setExpandedNodeIds(allParentIds);
+  }, [nodesById]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedNodeIds(new Set());
+  }, []);
+
+  const isRowExpanded = useCallback(
+    (row: VisibleTreeRow) => expandedNodeIds.has(row.node.nodeId),
+    [expandedNodeIds]
+  );
+
+  const handleRowClick = useCallback(
+    (row: VisibleTreeRow, e: React.MouseEvent) => {
+      const isMulti = e.ctrlKey || e.metaKey;
+      const isRange = e.shiftKey;
+      onSelectNode(row.node, isMulti, isRange);
+    },
+    [onSelectNode]
+  );
+
+  const handleRowDoubleClick = useCallback(
+    (row: VisibleTreeRow) => {
+      if (row.node.hasChildren) {
+        handleToggleExpand(row);
+      }
+      onActivateNode?.(row.node);
+    },
+    [handleToggleExpand, onActivateNode]
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      className={`model-explorer-container flex flex-col h-full w-full bg-slate-900 border-r border-slate-800 ${className}`}
+    >
+      <ModelExplorerToolbar
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onExpandAll={handleExpandAll}
+        onCollapseAll={handleCollapseAll}
+        showFavoritesOnly={showFavoritesOnly}
+        onToggleFavoritesOnly={() => setShowFavoritesOnly(prev => !prev)}
+        activeDiagramName={activeDiagramName}
+      />
+
+      <div className="flex-1 min-h-0 w-full relative">
+        {visibleRows.length === 0 ? (
+          <div className="p-4 text-center text-xs text-slate-500">
+            {searchQuery
+              ? `No model elements matching "${searchQuery}"`
+              : viewMode === 'diagramContext'
+              ? 'No elements in the active diagram context'
+              : showFavoritesOnly
+              ? 'No favorite elements marked'
+              : 'Model is empty'}
+          </div>
+        ) : (
+          <VirtualTree
+            rows={visibleRows}
+            height={treeHeight}
+            rowHeight={26}
+            focusedIndex={focusedIndex}
+            onFocusIndex={setFocusedIndex}
+            isExpanded={isRowExpanded}
+            onToggleExpand={handleToggleExpand}
+            selectedNodeIds={selectedNodeIds}
+            onActivateRow={(row) => onActivateNode?.(row.node)}
+            renderRow={(row, idx) => (
+              <ModelTreeRow
+                node={row.node}
+                depth={row.depth}
+                index={idx}
+                isExpanded={isRowExpanded(row)}
+                isSelected={selectedNodeIds.has(row.node.nodeId)}
+                isFocused={idx === focusedIndex}
+                isRenaming={renamingNodeId === row.node.nodeId}
+                onToggleExpand={() => handleToggleExpand(row)}
+                onSelect={(e) => {
+                  setFocusedIndex(idx);
+                  handleRowClick(row, e);
+                }}
+                onDoubleClick={() => handleRowDoubleClick(row)}
+                onContextMenu={(e) => onContextMenuNode?.(row.node, e)}
+                onRenameCommit={(newName) => onRenameCommit?.(row.node.nodeId, newName)}
+                onRenameCancel={onRenameCancel}
+              />
+            )}
+          />
+        )}
+      </div>
+    </div>
+  );
+};

@@ -350,12 +350,12 @@
   - [x] Step 3: Implement dispatch semantics (`modelExplorerCommandBus.ts`, `modelExplorerUiState.ts`, `modelDiagramRegistry.ts`)
   - [x] Step 4: Implement clipboard ownership-forest rules (`modelExplorerClipboard.ts`)
   - [x] Step 5: Run tests and commit
-- [ ] Task 6: Build the accessible virtualized tree shell
-  - [ ] Step 1: Write failing keyboard and virtualization tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement fixed-row virtualization (`VirtualTree.tsx`, `modelExplorer.css`)
-  - [ ] Step 4: Implement tree semantics and toolbar (`ModelTreeRow.tsx`, `ModelExplorerToolbar.tsx`, `ModelExplorer.tsx`)
-  - [ ] Step 5: Run tests and commit
+- [x] Task 6: Build the accessible virtualized tree shell
+  - [x] Step 1: Write failing keyboard and virtualization tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement fixed-row virtualization (`VirtualTree.tsx`, `modelExplorer.css`)
+  - [x] Step 4: Implement tree semantics and toolbar (`ModelTreeRow.tsx`, `ModelExplorerToolbar.tsx`, `ModelExplorer.tsx`)
+  - [x] Step 5: Run tests and commit
 - [ ] Task 7: Add searchable context menus and inline rename
   - [ ] Step 1: Write failing interaction tests
   - [ ] Step 2: Verify failure

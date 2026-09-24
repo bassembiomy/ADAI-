@@ -109,3 +109,117 @@ export function filterProjection(
     revision: projection.revision,
   };
 }
+
+export interface ProjectModelTreeOptions {
+  nodesById: Map<string, ModelTreeNode> | Record<string, ModelTreeNode>;
+  rootNodeIds: string[];
+  expandedNodeIds: Set<string> | Iterable<string>;
+  filterQuery?: string;
+  diagramNodeIds?: Set<string> | Iterable<string>;
+  favoritesOnly?: boolean;
+  favoriteNodeIds?: Set<string> | Iterable<string>;
+}
+
+export function projectModelTree(options: ProjectModelTreeOptions): VisibleTreeRow[] {
+  const nodesRecord: Record<string, ModelTreeNode> =
+    options.nodesById instanceof Map
+      ? Object.fromEntries(options.nodesById.entries())
+      : { ...options.nodesById };
+
+  let currentProjection: ModelTreeProjection = {
+    roots: [...options.rootNodeIds],
+    nodes: nodesRecord,
+    revision: 1,
+  };
+
+  // Diagram context filter
+  if (options.diagramNodeIds) {
+    const diagramSet =
+      options.diagramNodeIds instanceof Set
+        ? options.diagramNodeIds
+        : new Set(options.diagramNodeIds);
+
+    const includedIds = new Set<string>();
+    for (const [id, node] of Object.entries(currentProjection.nodes)) {
+      if (diagramSet.has(id) || diagramSet.has(node.semanticId)) {
+        includedIds.add(id);
+        let cur = node;
+        while (cur && cur.parentNodeId) {
+          includedIds.add(cur.parentNodeId);
+          cur = currentProjection.nodes[cur.parentNodeId];
+        }
+      }
+    }
+
+    const filteredNodes: Record<string, ModelTreeNode> = {};
+    for (const id of includedIds) {
+      const orig = currentProjection.nodes[id];
+      if (!orig) continue;
+      const filteredChildren = orig.childNodeIds.filter(cid => includedIds.has(cid));
+      filteredNodes[id] = {
+        ...orig,
+        childNodeIds: filteredChildren,
+        hasChildren: filteredChildren.length > 0,
+      };
+    }
+
+    currentProjection = {
+      roots: currentProjection.roots.filter(rid => includedIds.has(rid)),
+      nodes: filteredNodes,
+      revision: currentProjection.revision,
+    };
+  }
+
+  // Favorites filter
+  if (options.favoritesOnly && options.favoriteNodeIds) {
+    const favSet =
+      options.favoriteNodeIds instanceof Set
+        ? options.favoriteNodeIds
+        : new Set(options.favoriteNodeIds);
+
+    const includedIds = new Set<string>();
+    for (const [id, node] of Object.entries(currentProjection.nodes)) {
+      if (favSet.has(id) || favSet.has(node.semanticId)) {
+        includedIds.add(id);
+        let cur = node;
+        while (cur && cur.parentNodeId) {
+          includedIds.add(cur.parentNodeId);
+          cur = currentProjection.nodes[cur.parentNodeId];
+        }
+      }
+    }
+
+    const filteredNodes: Record<string, ModelTreeNode> = {};
+    for (const id of includedIds) {
+      const orig = currentProjection.nodes[id];
+      if (!orig) continue;
+      const filteredChildren = orig.childNodeIds.filter(cid => includedIds.has(cid));
+      filteredNodes[id] = {
+        ...orig,
+        childNodeIds: filteredChildren,
+        hasChildren: filteredChildren.length > 0,
+      };
+    }
+
+    currentProjection = {
+      roots: currentProjection.roots.filter(rid => includedIds.has(rid)),
+      nodes: filteredNodes,
+      revision: currentProjection.revision,
+    };
+  }
+
+  // Search query filter
+  const expandedSet = new Set(options.expandedNodeIds);
+  if (options.filterQuery && options.filterQuery.trim()) {
+    currentProjection = filterProjection(currentProjection, options.filterQuery);
+    // When filtering, expand all parent nodes in the result so matches are visible
+    for (const [id, node] of Object.entries(currentProjection.nodes)) {
+      if (node.hasChildren) {
+        expandedSet.add(id);
+      }
+    }
+  }
+
+  return flattenVisibleTree(currentProjection, expandedSet);
+}
+
