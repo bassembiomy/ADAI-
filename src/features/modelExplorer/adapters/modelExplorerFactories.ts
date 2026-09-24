@@ -9,7 +9,29 @@ import type {
   PortDefinition,
   PropertyDefinition,
   ModelDiagramDefinition,
+  SysmlRepository,
 } from '../../../engine/sysml/model';
+import type {
+  Block,
+  InterfaceBlock,
+  Requirement,
+  TestCase,
+  PartProperty,
+  ValueProperty,
+  Port,
+  ValueType,
+} from '../../../engine/sysml/domain';
+import { createSemanticElement } from '../../../engine/sysml/services/elementFactory';
+
+const DUMMY_REPO: SysmlRepository = {
+  definitions: {},
+  usages: {},
+  connectors: {},
+  relationships: {},
+  requirements: {},
+  diagrams: {},
+  revision: 0,
+};
 
 export function generateUniqueName(baseName: string, existingNames: Iterable<string>): string {
   const set = new Set(existingNames);
@@ -36,12 +58,21 @@ export function createPackage(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): PackageDefinition {
-  const name = options.name ?? generateUniqueName('Package', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'Package',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? outcome.element : null;
   return {
-    id: options.id ?? generateId('pkg'),
-    name,
+    id: el?.id ?? options.id ?? generateId('pkg'),
+    name: el?.name ?? options.name ?? 'Package',
     kind: 'package',
-    namespace: [],
+    namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
   };
 }
@@ -52,15 +83,24 @@ export function createBlock(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): BlockDefinition {
-  const name = options.name ?? generateUniqueName('Block', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'Block',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as Block) : null;
   return {
-    id: options.id ?? generateId('blk'),
-    name,
+    id: el?.id ?? options.id ?? generateId('blk'),
+    name: el?.name ?? options.name ?? 'Block',
     kind: 'block',
-    namespace: [],
+    namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
-    isAbstract: false,
-    isLeaf: false,
+    isAbstract: el?.isAbstract ?? false,
+    isLeaf: el?.isLeaf ?? false,
     properties: [],
     ports: [],
     operations: [],
@@ -76,12 +116,21 @@ export function createValueType(options: {
   unit?: string;
   dimension?: string;
 }): ValueTypeDefinition {
-  const name = options.name ?? generateUniqueName('ValueType', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'ValueType',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as ValueType) : null;
   return {
-    id: options.id ?? generateId('vt'),
-    name,
+    id: el?.id ?? options.id ?? generateId('vt'),
+    name: el?.name ?? options.name ?? 'ValueType',
     kind: 'valueType',
-    namespace: [],
+    namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
     unit: options.unit,
     dimension: options.dimension,
@@ -94,12 +143,21 @@ export function createInterface(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): InterfaceDefinition {
-  const name = options.name ?? generateUniqueName('Interface', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'InterfaceBlock',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as InterfaceBlock) : null;
   return {
-    id: options.id ?? generateId('if'),
-    name,
+    id: el?.id ?? options.id ?? generateId('if'),
+    name: el?.name ?? options.name ?? 'Interface',
     kind: 'interface',
-    namespace: [],
+    namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
     features: [],
   };
@@ -112,20 +170,29 @@ export function createRequirement(options: {
   existingNames?: Iterable<string>;
   text?: string;
 }): RequirementDefinition {
-  const name = options.name ?? generateUniqueName('Requirement', options.existingNames ?? []);
-  const reqNum = Math.floor(100 + Math.random() * 900);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'Requirement',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+      text: options.text,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as Requirement) : null;
   return {
-    id: options.id ?? generateId('req'),
-    name,
+    id: el?.id ?? options.id ?? generateId('req'),
+    name: el?.name ?? options.name ?? 'Requirement',
     kind: 'requirement',
-    namespace: [],
+    namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
-    requirementId: `REQ-${reqNum}`,
-    text: options.text ?? '',
-    status: 'draft',
-    version: '1.0',
-    priority: 'medium',
-    risk: 'low',
+    requirementId: el?.requirementId ?? 'REQ-001',
+    text: el?.text ?? options.text ?? '',
+    status: el?.status ?? 'draft',
+    version: el?.version ?? '1.0',
+    priority: el?.priority ?? 'medium',
+    risk: el?.risk ?? 'low',
   };
 }
 
@@ -135,15 +202,24 @@ export function createVerificationCase(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): VerificationCase {
-  const name = options.name ?? generateUniqueName('VerificationCase', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'TestCase',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as TestCase) : null;
   return {
-    id: options.id ?? generateId('vc'),
-    name,
+    id: el?.id ?? options.id ?? generateId('vc'),
+    name: el?.name ?? options.name ?? 'VerificationCase',
     kind: 'verificationCase',
-    namespace: [],
+    namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
     method: 'Test',
-    verifiesRequirementIds: [],
+    verifiesRequirementIds: el?.verifiesRequirementIds ?? [],
   };
 }
 
@@ -155,15 +231,25 @@ export function createPartUsage(options: {
   aggregation?: 'composite' | 'shared' | 'reference';
   existingNames?: Iterable<string>;
 }): PartUsage {
-  const name = options.name ?? generateUniqueName('part', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'PartProperty',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+      typeId: options.typeId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as PartProperty) : null;
   return {
-    id: options.id ?? generateId('part'),
-    name,
+    id: el?.id ?? options.id ?? generateId('part'),
+    name: el?.name ?? options.name ?? 'part',
     kind: 'part',
     ownerId: options.ownerId,
     typeId: options.typeId,
     aggregation: options.aggregation ?? 'composite',
-    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    multiplicity: el?.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
   };
 }
 
@@ -175,15 +261,24 @@ export function createPortDefinition(options: {
   existingNames?: Iterable<string>;
 }): PortDefinition {
   const kind = options.kind ?? 'proxy';
-  const name = options.name ?? generateUniqueName(kind === 'proxy' ? 'proxyPort' : 'fullPort', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'Port',
+      id: options.id,
+      name: options.name,
+      typeId: options.typeId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as Port) : null;
   return {
-    id: options.id ?? generateId('port'),
-    name,
+    id: el?.id ?? options.id ?? generateId('port'),
+    name: el?.name ?? options.name ?? (kind === 'proxy' ? 'proxyPort' : 'fullPort'),
     kind,
-    typeId: options.typeId ?? '',
-    direction: 'inout',
+    typeId: el?.typeId ?? options.typeId ?? '',
+    direction: el?.direction ?? 'inout',
     isConjugated: false,
-    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    multiplicity: el?.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
   };
 }
 
@@ -193,13 +288,22 @@ export function createValueProperty(options: {
   typeId?: string;
   existingNames?: Iterable<string>;
 }): PropertyDefinition {
-  const name = options.name ?? generateUniqueName('property', options.existingNames ?? []);
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'ValueProperty',
+      id: options.id,
+      name: options.name,
+      typeId: options.typeId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as ValueProperty) : null;
   return {
-    id: options.id ?? generateId('prop'),
-    name,
+    id: el?.id ?? options.id ?? generateId('prop'),
+    name: el?.name ?? options.name ?? 'property',
     kind: 'value',
-    typeId: options.typeId ?? 'Real',
-    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    typeId: el?.typeId ?? options.typeId ?? 'Real',
+    multiplicity: el?.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
   };
 }
 

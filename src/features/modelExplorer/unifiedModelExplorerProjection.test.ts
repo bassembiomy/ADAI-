@@ -74,6 +74,7 @@ describe('buildUnifiedModelProjection', () => {
       isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
       ports: [{ id: 'port-def', name: 'command', kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
     };
+    repository.definitions.signal = { id: 'signal', name: 'CommandSignal', namespace: ['model'], ownerId: 'model', kind: 'interface', features: [] };
     repository.usages.part = { id: 'part', name: 'controller', kind: 'part', ownerId: 'model', typeId: 'block', aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } };
     repository.usages.port = { id: 'port', name: 'port', kind: 'port', ownerId: 'part', definitionId: 'port-def' };
     const projection = buildUnifiedModelProjection({

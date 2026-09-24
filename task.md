@@ -18,12 +18,12 @@
   - [x] Step 3: Implement the command
   - [x] Step 4: Enforce duplicate-presentation policy
   - [x] Step 5: Run command tests and commit
-- [ ] Task 4: Canonical Element Factory and No-Silent-Type Resolution
-  - [ ] Step 1: Write failing factory tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Implement factory dispatch by metaclass
-  - [ ] Step 4: Make legacy explorer factories wrappers over the canonical factory
-  - [ ] Step 5: Run tests and commit
+- [x] Task 4: Canonical Element Factory and No-Silent-Type Resolution
+  - [x] Step 1: Write failing factory tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Implement factory dispatch by metaclass
+  - [x] Step 4: Make legacy explorer factories wrappers over the canonical factory
+  - [x] Step 5: Run tests and commit
 - [ ] Task 5: Repository-First Model Tree Context Menu
   - [ ] Step 1: Write failing menu and adapter tests
   - [ ] Step 2: Verify RED
