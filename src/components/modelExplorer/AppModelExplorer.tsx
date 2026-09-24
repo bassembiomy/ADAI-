@@ -170,6 +170,7 @@ export interface AppModelExplorerProps {
   onUpdateJunctions?: (junctions: JunctionData[]) => void;
   onExecuteSysmlCommand?: (command: SysmlEditorCommand) => SysmlCommandResult;
   activeDiagramId?: string;
+  activeDiagramContext?: ActiveDiagramContext;
   onAddToDiagram?: (elementIds: string[], diagramId: string) => void;
   onRevealInContainment?: (semanticId: string) => void;
   onOpenSpecification?: (semanticId: string) => void;

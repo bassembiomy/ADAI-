@@ -100,6 +100,7 @@ import { HELP_DATA } from './HelpData';
 import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
 import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
 import { parseModelExplorerDragData } from './features/modelExplorer/modelExplorerDragDrop';
+import type { ActiveDiagramContext } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -485,6 +486,7 @@ const HierarchyTree: React.FC<any> = (props) => (
 
     onExecuteSysmlCommand={props.onExecuteSysmlCommand}
     activeDiagramId={props.activeDiagramId}
+    activeDiagramContext={props.activeDiagramContext as ActiveDiagramContext | undefined}
   />
 );
 
@@ -15857,7 +15859,7 @@ const ADIA = () => {
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+          {![ 'hil', 'entropy'].includes(diagramMode) && (
             <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
@@ -15902,6 +15904,20 @@ const ADIA = () => {
 
                   onExecuteSysmlCommand={handleExecuteSysmlCommand}
                   activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode}
+                  activeDiagramContext={(() => {
+                    const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+                    const presented = diagramMode === 'statemachine'
+                      ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
+                      : diagramPresentations[contextId]?.elementIds ?? [];
+                    return {
+                      diagramId: contextId,
+                      name: contextId,
+                      kind: diagramMode,
+                      domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
+                      presentedSemanticIds: presented,
+                      contextSemanticIds: [],
+                    } as ActiveDiagramContext;
+                  })()}
                 />
               )}
             </aside>
