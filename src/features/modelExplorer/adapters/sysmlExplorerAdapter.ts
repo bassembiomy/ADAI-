@@ -30,10 +30,12 @@ import {
   generateId,
   generateUniqueName,
 } from './modelExplorerFactories';
+import { copyOwnershipForest, remapClipboardPayload } from '../modelExplorerClipboard';
 import type {
   SysmlGatewayState,
   SysmlCommandResult,
   SysmlEditorCommand,
+  SysmlMutationCommand,
 } from '../../../services/sysmlCommandGateway';
 import { executeSysmlCommand } from '../../../services/sysmlCommandGateway';
 import type {
@@ -97,6 +99,49 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       repo.connectors[id] ??
       repo.relationships[id]
     );
+  };
+  const getSysmlDescendants = (id: string, repo: SysmlRepository): any[] => {
+    const descendants: any[] = [];
+    const queue = [id];
+    while (queue.length > 0) {
+      const curId = queue.shift()!;
+      for (const pkg of Object.values(repo.packages)) {
+        if (pkg.ownerId === curId) {
+          descendants.push(pkg);
+          queue.push(pkg.id);
+        }
+      }
+      for (const def of Object.values(repo.definitions)) {
+        if (def.ownerId === curId) {
+          descendants.push(def);
+          queue.push(def.id);
+        }
+      }
+      for (const usage of Object.values(repo.usages)) {
+        if (usage.ownerId === curId) {
+          descendants.push(usage);
+          queue.push(usage.id);
+        }
+      }
+      for (const req of Object.values(repo.requirements)) {
+        if (req.ownerId === curId) {
+          descendants.push(req);
+          queue.push(req.id);
+        }
+      }
+      for (const vc of Object.values(repo.verificationCases)) {
+        if (vc.ownerId === curId) {
+          descendants.push(vc);
+          queue.push(vc.id);
+        }
+      }
+      for (const diag of Object.values(repo.diagrams)) {
+        if (diag.ownerId === curId) {
+          descendants.push(diag);
+        }
+      }
+    }
+    return descendants;
   };
 
   return {
@@ -586,6 +631,30 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           return { committed: false, revision: repo.revision, diagnostics: [] };
         }
 
+        case 'duplicate': {
+          if (command.elementIds.includes(command.targetOwnerId)) {
+            diagnostics.push({
+              code: 'SELF_OWNERSHIP_CYCLE',
+              severity: 'error',
+              message: 'Cannot duplicate an element into itself.',
+            });
+            return { committed: false, revision: repo.revision, diagnostics };
+          }
+          return { committed: false, revision: repo.revision, diagnostics: [] };
+        }
+
+        case 'paste': {
+          if (command.payload.domain !== 'sysml') {
+            diagnostics.push({
+              code: 'CROSS_DOMAIN_PASTE',
+              severity: 'error',
+              message: 'Cannot paste state machine elements into a SysML model.',
+            });
+            return { committed: false, revision: repo.revision, diagnostics };
+          }
+          return { committed: false, revision: repo.revision, diagnostics: [] };
+        }
+
         default:
           return { committed: false, revision: repo.revision, diagnostics: [] };
       }
@@ -843,6 +912,91 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             revision: result.repository.revision,
             diagnostics: [],
             selectedIds: command.elementIds,
+          };
+        }
+
+        case 'duplicate': {
+          const existingNames = [
+            ...Object.values(repo.packages).map(x => x.name),
+            ...Object.values(repo.definitions).map(x => x.name),
+            ...Object.values(repo.requirements).map(x => x.name),
+            ...Object.values(repo.verificationCases).map(x => x.name),
+            ...Object.values(repo.usages).map(x => x.name),
+          ];
+          const payload = copyOwnershipForest(
+            'sysml',
+            command.elementIds,
+            id => getElementById(id, repo),
+            id => getSysmlDescendants(id, repo),
+            repo.revision
+          );
+          const remapped = remapClipboardPayload(payload, oldId => generateId(oldId.split('-')[0] || 'copy'));
+          const commands: SysmlMutationCommand[] = [];
+          const createdRootIds: string[] = [];
+
+          for (const rootId of remapped.rootIds) {
+            const rootSnapshot = remapped.snapshots[rootId] as any;
+            if (rootSnapshot) {
+              rootSnapshot.ownerId = command.targetOwnerId || 'model';
+              rootSnapshot.name = generateUniqueName(rootSnapshot.name || 'Copy', existingNames);
+              existingNames.push(rootSnapshot.name);
+              createdRootIds.push(rootId);
+            }
+          }
+
+          for (const snapshot of Object.values(remapped.snapshots)) {
+            if ((snapshot as any).kind === 'diagram') {
+              commands.push({ type: 'createDiagram', diagram: snapshot as any });
+            } else {
+              commands.push({ type: 'createElement', element: snapshot as any });
+            }
+          }
+
+          const result = dispatchCommand({ type: 'batch', commands });
+          return {
+            committed: result.committed,
+            revision: result.repository.revision,
+            diagnostics: [],
+            selectedIds: createdRootIds,
+          };
+        }
+
+        case 'paste': {
+          const existingNames = [
+            ...Object.values(repo.packages).map(x => x.name),
+            ...Object.values(repo.definitions).map(x => x.name),
+            ...Object.values(repo.requirements).map(x => x.name),
+            ...Object.values(repo.verificationCases).map(x => x.name),
+            ...Object.values(repo.usages).map(x => x.name),
+          ];
+          const remapped = remapClipboardPayload(command.payload, oldId => generateId(oldId.split('-')[0] || 'paste'));
+          const commands: SysmlMutationCommand[] = [];
+          const createdRootIds: string[] = [];
+
+          for (const rootId of remapped.rootIds) {
+            const rootSnapshot = remapped.snapshots[rootId] as any;
+            if (rootSnapshot) {
+              rootSnapshot.ownerId = command.targetOwnerId || 'model';
+              rootSnapshot.name = generateUniqueName(rootSnapshot.name || 'Pasted', existingNames);
+              existingNames.push(rootSnapshot.name);
+              createdRootIds.push(rootId);
+            }
+          }
+
+          for (const snapshot of Object.values(remapped.snapshots)) {
+            if ((snapshot as any).kind === 'diagram') {
+              commands.push({ type: 'createDiagram', diagram: snapshot as any });
+            } else {
+              commands.push({ type: 'createElement', element: snapshot as any });
+            }
+          }
+
+          const result = dispatchCommand({ type: 'batch', commands });
+          return {
+            committed: result.committed,
+            revision: result.repository.revision,
+            diagnostics: [],
+            selectedIds: createdRootIds,
           };
         }
 

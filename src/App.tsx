@@ -99,6 +99,7 @@ import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
 import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
 import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
+import { parseModelExplorerDragData } from './features/modelExplorer/modelExplorerDragDrop';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -483,6 +484,7 @@ const HierarchyTree: React.FC<any> = (props) => (
 
 
     onExecuteSysmlCommand={props.onExecuteSysmlCommand}
+    activeDiagramId={props.activeDiagramId}
   />
 );
 
@@ -6173,6 +6175,27 @@ const ADIA = () => {
         setConnectors(result.view.connectors);
       },
     });
+  }, [canonicalSysmlRepository, sysmlStore]);
+
+  const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
+    const currentState = createSysmlGatewayState(
+      canonicalSysmlRepository,
+      Object.fromEntries(sysmlStore.coordinates.entries()),
+      Object.fromEntries(sysmlStore.diagramPresentations.entries())
+    );
+    currentState.store = sysmlStore;
+    const result = executeSysmlCommand(currentState, cmd);
+    if (result.committed) {
+      setCanonicalSysmlRepository(result.repository);
+      if (result.store) {
+        setSysmlStore(result.store);
+      }
+      setBlocks(result.view.blocks);
+      setRelationships(result.view.relationships);
+      setParts(result.view.parts);
+      setConnectors(result.view.connectors);
+    }
+    return result;
   }, [canonicalSysmlRepository, sysmlStore]);
 
   // Report Application Delegate connected to the real report export pipeline
@@ -15877,7 +15900,8 @@ const ADIA = () => {
 
 
 
-                  onExecuteSysmlCommand={sysmlApplicationDelegate ? (cmd: any) => sysmlApplicationDelegate.executeCommand(cmd) as any : undefined}
+                  onExecuteSysmlCommand={handleExecuteSysmlCommand}
+                  activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode}
                 />
               )}
             </aside>
@@ -16508,6 +16532,33 @@ const ADIA = () => {
                 onDoubleClick={handleDoubleClick}
                 onWheel={handleWheel}
                 onContextMenu={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('application/x-adia-model-element')) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                  }
+                }}
+                onDrop={(e) => {
+                  const payload = parseModelExplorerDragData(e.dataTransfer);
+                  if (!payload) return;
+                  e.preventDefault();
+                  const rect = canvasRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  const worldPoint = {
+                    x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+                    y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+                  };
+                  const activeDiagId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+                  const elemIds = payload.semanticIds ?? [payload.semanticId];
+                  handleExecuteSysmlCommand({
+                    type: 'addToDiagram',
+                    diagramId: activeDiagId,
+                    elementIds: elemIds,
+                    coordinates: {
+                      [payload.semanticId]: worldPoint,
+                    },
+                  });
+                }}
               >
                 <svg className="sysml-diagram-canvas" width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>

@@ -14,6 +14,7 @@ import {
   getRelationshipKindLabel,
 } from '../modelExplorerCapabilities';
 import { generateId, generateUniqueName } from './modelExplorerFactories';
+import { copyOwnershipForest, remapClipboardPayload } from '../modelExplorerClipboard';
 import type {
   StateData,
   Layer,
@@ -76,6 +77,48 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
         revision: (harness.snapshot.revision ?? 1) + 1,
       };
     }
+  };
+
+  const getStateMachineElement = (id: string, snapshot: StateMachineExplorerSnapshot) => {
+    return (
+      snapshot.states.find(s => s.id === id) ||
+      snapshot.layers.find(l => l.id === id) ||
+      snapshot.junctions.find(j => j.id === id) ||
+      snapshot.transitions.find(t => t.id === id)
+    );
+  };
+
+  const getStateMachineDescendants = (id: string, snapshot: StateMachineExplorerSnapshot): any[] => {
+    const descendants: any[] = [];
+    const queue = [id];
+    while (queue.length > 0) {
+      const curId = queue.shift()!;
+      const layer = snapshot.layers.find(l => l.id === curId);
+      if (layer) {
+        for (const sId of layer.stateIds) {
+          const s = snapshot.states.find(x => x.id === sId);
+          if (s) { descendants.push(s); queue.push(s.id); }
+        }
+        for (const jId of layer.junctionIds) {
+          const j = snapshot.junctions.find(x => x.id === jId);
+          if (j) descendants.push(j);
+        }
+        for (const tId of layer.transitionIds) {
+          const t = snapshot.transitions.find(x => x.id === tId);
+          if (t) descendants.push(t);
+        }
+      }
+      const state = snapshot.states.find(s => s.id === curId);
+      if (state) {
+        for (const l of snapshot.layers) {
+          if (l.id !== curId && (l.parentStateId === curId || (state.children && state.children.includes(l.id)))) {
+            descendants.push(l);
+            queue.push(l.id);
+          }
+        }
+      }
+    }
+    return descendants;
   };
 
   return {
@@ -409,6 +452,22 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
           return { committed: false, revision, diagnostics: [] };
         }
 
+        case 'duplicate': {
+          return { committed: false, revision, diagnostics: [] };
+        }
+
+        case 'paste': {
+          if (command.payload.domain !== 'stateMachine') {
+            diagnostics.push({
+              code: 'CROSS_DOMAIN_PASTE',
+              severity: 'error',
+              message: 'Cannot paste SysML elements into a State Machine.',
+            });
+            return { committed: false, revision, diagnostics };
+          }
+          return { committed: false, revision, diagnostics: [] };
+        }
+
         default:
           return { committed: false, revision, diagnostics: [] };
       }
@@ -660,6 +719,147 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
             revision: this.getRevision(),
             diagnostics: [],
             selectedIds: [diagId],
+          };
+        }
+
+        case 'duplicate': {
+          const payload = copyOwnershipForest(
+            'stateMachine',
+            command.elementIds,
+            id => getStateMachineElement(id, snapshot),
+            id => getStateMachineDescendants(id, snapshot),
+            this.getRevision()
+          );
+          const remapped = remapClipboardPayload(payload, oldId => generateId(oldId.split('-')[0] || 'copy'));
+          const targetOwnerId = command.targetOwnerId || 'root';
+          const targetLayer = snapshot.layers.find(l => l.id === targetOwnerId) || snapshot.layers[0];
+
+          const newStates: StateData[] = [];
+          const newLayers: Layer[] = [];
+          const newJunctions: JunctionData[] = [];
+          const newTransitions: TransitionData[] = [];
+          const createdRootIds: string[] = [];
+
+          for (const rootId of remapped.rootIds) {
+            createdRootIds.push(rootId);
+            const snap = remapped.snapshots[rootId] as any;
+            if (snap) {
+              snap.parentId = targetLayer.id;
+              if (snap.name) {
+                snap.name = generateUniqueName(snap.name, existingNames);
+                existingNames.push(snap.name);
+              }
+            }
+          }
+
+          for (const snap of Object.values(remapped.snapshots) as any[]) {
+            if (snap.x !== undefined && snap.width !== undefined) {
+              newStates.push(snap);
+            } else if (snap.stateIds !== undefined) {
+              newLayers.push(snap);
+            } else if (snap.sourceId !== undefined && snap.targetId !== undefined) {
+              newTransitions.push(snap);
+            } else if (snap.type !== undefined || snap.color !== undefined) {
+              newJunctions.push(snap);
+            }
+          }
+
+          const updatedLayers = snapshot.layers.map(l => {
+            if (l.id === targetLayer.id) {
+              const addedStates = newStates.filter(s => s.parentId === l.id).map(s => s.id);
+              const addedJunctions = newJunctions.filter(j => j.parentId === l.id).map(j => j.id);
+              const addedTransitions = newTransitions.map(t => t.id);
+              return {
+                ...l,
+                stateIds: [...l.stateIds, ...addedStates],
+                junctionIds: [...l.junctionIds, ...addedJunctions],
+                transitionIds: [...l.transitionIds, ...addedTransitions],
+              };
+            }
+            return l;
+          });
+
+          const nextSnapshot: StateMachineExplorerSnapshot = {
+            ...snapshot,
+            states: [...snapshot.states, ...newStates],
+            layers: [...updatedLayers, ...newLayers],
+            junctions: [...snapshot.junctions, ...newJunctions],
+            transitions: [...snapshot.transitions, ...newTransitions],
+          };
+
+          commitSnapshot(nextSnapshot, 'Duplicate elements');
+          return {
+            committed: true,
+            revision: this.getRevision(),
+            diagnostics: [],
+            selectedIds: createdRootIds,
+          };
+        }
+
+        case 'paste': {
+          const remapped = remapClipboardPayload(command.payload, oldId => generateId(oldId.split('-')[0] || 'paste'));
+          const targetOwnerId = command.targetOwnerId || 'root';
+          const targetLayer = snapshot.layers.find(l => l.id === targetOwnerId) || snapshot.layers[0];
+
+          const newStates: StateData[] = [];
+          const newLayers: Layer[] = [];
+          const newJunctions: JunctionData[] = [];
+          const newTransitions: TransitionData[] = [];
+          const createdRootIds: string[] = [];
+
+          for (const rootId of remapped.rootIds) {
+            createdRootIds.push(rootId);
+            const snap = remapped.snapshots[rootId] as any;
+            if (snap) {
+              snap.parentId = targetLayer.id;
+              if (snap.name) {
+                snap.name = generateUniqueName(snap.name, existingNames);
+                existingNames.push(snap.name);
+              }
+            }
+          }
+
+          for (const snap of Object.values(remapped.snapshots) as any[]) {
+            if (snap.x !== undefined && snap.width !== undefined) {
+              newStates.push(snap);
+            } else if (snap.stateIds !== undefined) {
+              newLayers.push(snap);
+            } else if (snap.sourceId !== undefined && snap.targetId !== undefined) {
+              newTransitions.push(snap);
+            } else if (snap.type !== undefined || snap.color !== undefined) {
+              newJunctions.push(snap);
+            }
+          }
+
+          const updatedLayers = snapshot.layers.map(l => {
+            if (l.id === targetLayer.id) {
+              const addedStates = newStates.filter(s => s.parentId === l.id).map(s => s.id);
+              const addedJunctions = newJunctions.filter(j => j.parentId === l.id).map(j => j.id);
+              const addedTransitions = newTransitions.map(t => t.id);
+              return {
+                ...l,
+                stateIds: [...l.stateIds, ...addedStates],
+                junctionIds: [...l.junctionIds, ...addedJunctions],
+                transitionIds: [...l.transitionIds, ...addedTransitions],
+              };
+            }
+            return l;
+          });
+
+          const nextSnapshot: StateMachineExplorerSnapshot = {
+            ...snapshot,
+            states: [...snapshot.states, ...newStates],
+            layers: [...updatedLayers, ...newLayers],
+            junctions: [...snapshot.junctions, ...newJunctions],
+            transitions: [...snapshot.transitions, ...newTransitions],
+          };
+
+          commitSnapshot(nextSnapshot, 'Paste elements');
+          return {
+            committed: true,
+            revision: this.getRevision(),
+            diagnostics: [],
+            selectedIds: createdRootIds,
           };
         }
 

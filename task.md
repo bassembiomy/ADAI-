@@ -403,14 +403,14 @@
   - [x] Step 4: Replace raw State Machine setters with one snapshot transaction (`onCommitStateMachineSnapshot`)
   - [x] Step 5: Persist State Machine diagram metadata
   - [x] Step 6: Run focused verification and commit
-- [ ] Task 14: Wire every advertised professional action
-  - [ ] Step 1: Add a failing capability-coverage test (`src/components/modelExplorer/AppModelExplorer.actions.test.tsx`)
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Mount the relationship workflow (`RelationshipWizard`)
-  - [ ] Step 4: Connect copy, cut, paste, and duplicate
-  - [ ] Step 5: Connect Add to Active Diagram and canvas drop
-  - [ ] Step 6: Connect reveal/open actions
-  - [ ] Step 7: Run tests and commit
+- [x] Task 14: Wire every advertised professional action
+  - [x] Step 1: Add a failing capability-coverage test (`src/components/modelExplorer/AppModelExplorer.actions.test.tsx`)
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Mount the relationship workflow (`RelationshipWizard`)
+  - [x] Step 4: Connect copy, cut, paste, and duplicate
+  - [x] Step 5: Connect Add to Active Diagram and canvas drop
+  - [x] Step 6: Connect reveal/open actions
+  - [x] Step 7: Run tests and commit
 - [ ] Task 15: Close persistence and canonical ownership integrity gaps
   - [ ] Step 1: Write failing chunk round-trip tests
   - [ ] Step 2: Write failing ownership-gateway tests

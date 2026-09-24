@@ -6,6 +6,7 @@ export const MIME_TYPE_MODEL_ELEMENT = 'application/x-adia-model-element';
 export interface ModelExplorerDragPayload {
   nodeId: string;
   semanticId: string;
+  semanticIds?: string[];
   domain: ExplorerDomain;
   kind: string;
   label: string;
@@ -138,11 +139,16 @@ export function classifyTreeDropTarget({
  * Creates standardized drag payload for cross-component / canvas drops.
  */
 export function createModelExplorerDragPayload(
-  node: ModelTreeNode
+  node: ModelTreeNode,
+  selectedSemanticIds?: string[]
 ): ModelExplorerDragPayload {
+  const ids = selectedSemanticIds && selectedSemanticIds.includes(node.semanticId)
+    ? selectedSemanticIds
+    : [node.semanticId];
   return {
     nodeId: node.nodeId,
     semanticId: node.semanticId,
+    semanticIds: ids,
     domain: node.domain,
     kind: node.kind,
     label: node.label,
@@ -163,7 +169,13 @@ export function parseModelExplorerDragData(dataTransfer: {
     const raw = dataTransfer.getData(MIME_TYPE_MODEL_ELEMENT);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && parsed.source === 'modelExplorer' && parsed.semanticId) {
+    if (parsed && (parsed.source === 'modelExplorer' || parsed.domain) && (parsed.semanticId || parsed.semanticIds)) {
+      if (!parsed.semanticIds && parsed.semanticId) {
+        parsed.semanticIds = [parsed.semanticId];
+      }
+      if (!parsed.semanticId && parsed.semanticIds?.[0]) {
+        parsed.semanticId = parsed.semanticIds[0];
+      }
       return parsed as ModelExplorerDragPayload;
     }
   } catch {
