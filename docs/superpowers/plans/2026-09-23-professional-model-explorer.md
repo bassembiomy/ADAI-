@@ -20,6 +20,9 @@
 - Preserve unrelated changes already present in the working tree.
 - Do not add a tree-widget dependency; use the fixed-row virtualization implementation in this plan.
 - Use semantic IDs for commands and selection; view-node IDs may be projection-specific.
+- The Hierarchy tree and every child surface must use ADIA's shared theme contract from `src/styles/theme-contract.css`; no Slate/blue private palette or dark-only literal may remain.
+- Use `--surface-canvas`, `--surface-panel`, and `--surface-raised` for hierarchy backgrounds; `--text-primary`, `--text-secondary`, and `--text-muted` for copy; `--border-default` and `--border-strong` for boundaries; `--focus-ring` and `--diagram-node-selected` for focus/selection; and `--status-success`, `--status-warning`, and `--status-danger` for diagnostics.
+- Both `:root[data-theme='dark']` and `:root[data-theme='light']` must remain readable at WCAG AA contrast for ordinary tree text and controls.
 
 ---
 
@@ -979,6 +982,414 @@ git commit -m "test(model-explorer): certify authoring and large-model behavior"
 
 ---
 
+## Mandatory post-review completion work
+
+Tasks 13-18 supersede any conflicting implementation detail in Tasks 1-12. They close verified gaps in commits `70eadb6..2090bb8`; the feature is not complete until all six tasks pass their gates.
+
+### Task 13: Repair mounted command dispatch and State Machine history
+
+**Files:**
+- Modify: `src/components/modelExplorer/AppModelExplorer.tsx`
+- Modify: `src/App.tsx`
+- Modify: `src/features/modelExplorer/modelExplorerCommandBus.ts`
+- Test: `src/components/modelExplorer/AppModelExplorer.test.tsx`
+- Create: `src/components/modelExplorer/AppModelExplorer.commands.test.tsx`
+
+**Interfaces:**
+- Consumes: `createModelExplorerCommandBus()`, `applyStateMachineSnapshot()`, and `addToHistory()`.
+- Produces: `onCommitStateMachineSnapshot(snapshot, description)` and one authoritative command-dispatch path.
+
+- [ ] **Step 1: Write failing mounted-command tests**
+
+```tsx
+it('executes a valid create after a non-committing preflight', () => {
+  const preflight = vi.fn(() => ({ committed: false, revision: 1, diagnostics: [] }));
+  const execute = vi.fn(() => ({ committed: true, revision: 2, diagnostics: [], selectedIds: ['state-new'] }));
+  renderExplorerWithAdapter({ preflight, execute });
+  chooseContextCapability('Create Element', 'State');
+  expect(execute).toHaveBeenCalledWith(expect.objectContaining({ type: 'createElement', elementKind: 'state' }));
+});
+
+it('records one history snapshot for a complete State Machine command', () => {
+  createStateFromTree('root');
+  expect(addToHistory).toHaveBeenCalledTimes(1);
+  expect(applyStateMachineSnapshot).toHaveBeenCalledTimes(1);
+  undo();
+  expect(findStateByName('State')).toBeUndefined();
+});
+```
+
+- [ ] **Step 2: Verify both failures**
+
+Run: `npx vitest run src/components/modelExplorer/AppModelExplorer.commands.test.tsx`
+
+Expected: FAIL because valid preflight results are not executed and App history is bypassed.
+
+- [ ] **Step 3: Make command-bus semantics explicit**
+
+```ts
+export function isPreflightClear(result: ExplorerCommandResult): boolean {
+  return !result.impact && !result.diagnostics.some(item => item.severity === 'error');
+}
+
+dispatch(command: ModelExplorerCommand): ExplorerCommandResult {
+  const checked = adapter.preflight(command);
+  return isPreflightClear(checked) ? adapter.execute(command) : checked;
+}
+```
+
+`AppModelExplorer` must call `bus.dispatch(command)` instead of checking `preflight.committed`. Only `bus.confirm(command, hash)` may execute an impact-bearing command.
+
+- [ ] **Step 4: Replace raw State Machine setters with one snapshot transaction**
+
+Add this prop and pass it from `App.tsx`:
+
+```ts
+onCommitStateMachineSnapshot: (snapshot: StateMachineExplorerSnapshot, description: string) => void;
+```
+
+The App callback must call `addToHistory()` once, then apply `states`, `layers`, `transitions`, `junctions`, and `diagrams` as one logical update through `applyStateMachineSnapshot()`. Remove `onUpdateStates`, `onUpdateLayers`, `onUpdateTransitions`, and `onUpdateJunctions` from the production integration.
+
+- [ ] **Step 5: Persist State Machine diagram metadata**
+
+Extend the App/project State Machine snapshot with `diagrams: StateMachineDiagramData[]`. Stop deriving diagrams from `layers.map(...)`; migration creates one root diagram only when old projects have no diagram metadata.
+
+- [ ] **Step 6: Run focused verification and commit**
+
+Run: `npx vitest run src/components/modelExplorer/AppModelExplorer.commands.test.tsx src/features/modelExplorer/modelExplorerCommandBus.test.ts src/utils/stateMachine/smModelMigration.test.ts && npx tsc --noEmit`
+
+```bash
+git add src/components/modelExplorer/AppModelExplorer.tsx src/components/modelExplorer/AppModelExplorer.commands.test.tsx src/features/modelExplorer/modelExplorerCommandBus.ts src/App.tsx src/utils/stateMachine/smModelMigration.ts
+git commit -m "fix(model-explorer): execute commands through transactional history"
+```
+
+---
+
+### Task 14: Wire every advertised professional action
+
+**Files:**
+- Modify: `src/components/modelExplorer/AppModelExplorer.tsx`
+- Modify: `src/components/modelExplorer/ModelExplorer.tsx`
+- Modify: `src/components/modelExplorer/ModelExplorerMenu.tsx`
+- Modify: `src/components/modelExplorer/RelationshipWizard.tsx`
+- Modify: `src/features/modelExplorer/modelExplorerClipboard.ts`
+- Modify: `src/features/modelExplorer/adapters/stateMachineExplorerAdapter.ts`
+- Modify: `src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts`
+- Modify: `src/App.tsx`
+- Create: `src/components/modelExplorer/AppModelExplorer.actions.test.tsx`
+
+**Interfaces:**
+- Consumes: all capability kinds emitted by both adapters.
+- Produces: a total `capabilityToAction()` mapping; no visible enabled capability may be a no-op.
+
+- [ ] **Step 1: Add a failing capability-coverage test**
+
+```ts
+it.each([
+  'createElement', 'createDiagram', 'createRelationship', 'rename', 'move',
+  'copy', 'paste', 'duplicate', 'delete', 'addToDiagram', 'openSpecification', 'reveal',
+] as const)('handles enabled %s capabilities', capabilityKind => {
+  const result = capabilityToAction(enabledCapability(capabilityKind), selectedNode, context);
+  expect(result.kind).not.toBe('unhandled');
+});
+```
+
+- [ ] **Step 2: Verify failure**
+
+Run: `npx vitest run src/components/modelExplorer/AppModelExplorer.actions.test.tsx`
+
+Expected: FAIL for relationships, clipboard actions, add-to-diagram, open specification, and reveal.
+
+- [ ] **Step 3: Mount the relationship workflow**
+
+Selecting an incoming/outgoing relationship capability must open `RelationshipWizard` with a fixed endpoint, adapter-provided legal types, and `relationshipTargets()`. Completing the wizard dispatches exactly one `createRelationship` command. When requested, follow it with one presentation batch only if both endpoints have active-diagram presentations.
+
+- [ ] **Step 4: Connect copy, cut, paste, and duplicate**
+
+Use `copyOwnershipForest()` and `remapClipboardPayload()`. Add `duplicate` and `paste` cases to both adapters. Copy is UI-only; cut mutates only after a successful paste; duplicate and paste commit as one semantic transaction and select newly created roots.
+
+- [ ] **Step 5: Connect Add to Active Diagram and canvas drop**
+
+Pass `activeDiagramId` and the canvas drop callback into `AppModelExplorer`. In `App.tsx`, parse `application/x-adia-model-element` with `parseModelExplorerDragData()`, convert client coordinates through the existing viewport transform, and dispatch:
+
+```ts
+{ type: 'addToDiagram', elementIds: payload.semanticIds, diagramId: activeDiagramId, position: worldPoint }
+```
+
+Reject unsupported metatypes and reveal an existing presentation instead of duplicating it.
+
+- [ ] **Step 6: Connect reveal/open actions**
+
+`Reveal in Containment` switches views and expands the projected ancestor chain. `Open Specification` selects the semantic element and focuses the existing properties panel. Diagram nodes activate the associated diagram rather than attempting semantic selection.
+
+- [ ] **Step 7: Run tests and commit**
+
+Run: `npx vitest run src/components/modelExplorer/AppModelExplorer.actions.test.tsx src/components/modelExplorer/RelationshipWizard.test.tsx src/features/modelExplorer/modelExplorerClipboard.test.ts src/features/modelExplorer/modelExplorerDragDrop.test.ts && npx tsc --noEmit`
+
+```bash
+git add src/components/modelExplorer src/features/modelExplorer src/App.tsx
+git commit -m "feat(model-explorer): wire complete professional authoring actions"
+```
+
+---
+
+### Task 15: Close persistence and canonical ownership integrity gaps
+
+**Files:**
+- Modify: `src/engine/sysml/persistence.ts`
+- Modify: `src/services/sysmlCommandGateway.ts`
+- Modify: `src/engine/sysml/validation.ts`
+- Test: `src/engine/sysml/persistence.test.ts`
+- Test: `src/services/sysmlCommandGateway.test.ts`
+- Test: `src/engine/sysml/validation.test.ts`
+
+**Interfaces:**
+- Produces: schema-3 chunk manifests and `validateOwnershipMove(repository, elementIds, targetOwnerId)`.
+- Consumes: the schema-3 `packages` and `diagrams` collections.
+
+- [ ] **Step 1: Write failing chunk round-trip tests**
+
+```ts
+it('round-trips packages and diagrams through chunked persistence', () => {
+  const source = repositoryWithNestedPackageAndDiagram();
+  const exported = serializeToChunks(source);
+  expect(exported.manifest.schemaVersion).toBe(3);
+  const loaded = hydrateRepositoryFromChunks(exported.manifest, key => exported.chunks[key].json);
+  expect(loaded.repository.packages).toEqual(source.packages);
+  expect(loaded.repository.diagrams).toEqual(source.diagrams);
+});
+```
+
+- [ ] **Step 2: Write failing ownership-gateway tests**
+
+```ts
+it('rejects moving a Block beneath another Block', () => {
+  const result = executeSysmlCommand(state, { type: 'moveElements', elementIds: ['motor'], targetOwnerId: 'controller' });
+  expect(result.committed).toBe(false);
+  expect(result.diagnostics.map(x => x.code)).toContain('INVALID_OWNER_KIND');
+});
+
+it('rejects an unknown source without advancing revision', () => {
+  const result = executeSysmlCommand(state, { type: 'moveElements', elementIds: ['missing'], targetOwnerId: 'model' });
+  expect(result.committed).toBe(false);
+  expect(result.repository.revision).toBe(state.repository.revision);
+});
+```
+
+- [ ] **Step 3: Fix all chunked persistence paths**
+
+Add `packages` and `diagrams` to `PERSISTENCE_COLLECTIONS`. Emit `schemaVersion: 3` from full, incremental, active-diagram, and streamed manifests. Hydration must initialize missing schema-2 collections through migration before validation.
+
+- [ ] **Step 4: Enforce ownership at the gateway boundary**
+
+`validateOwnershipMove()` must require:
+
+- Package, Block, Requirement, Value Type, Interface, Verification Case, and Diagram owners to be Model or Package, except IBD diagrams whose context owner may be a Block.
+- Part Usage and Port Usage owners to be compatible Blocks/usages according to existing canonical rules.
+- Every source ID to exist.
+- No duplicate sibling name, self-parenting, or descendant cycle.
+- No patch, revision increment, audit entry, or history entry on failure.
+
+- [ ] **Step 5: Run persistence and release tests; commit**
+
+Run: `npx vitest run src/engine/sysml/persistence.test.ts src/services/sysmlCommandGateway.test.ts src/engine/sysml/validation.test.ts && npm run test:sysml:release`
+
+```bash
+git add src/engine/sysml/persistence.ts src/engine/sysml/persistence.test.ts src/services/sysmlCommandGateway.ts src/services/sysmlCommandGateway.test.ts src/engine/sysml/validation.ts src/engine/sysml/validation.test.ts
+git commit -m "fix(model-explorer): preserve schema three ownership and diagrams"
+```
+
+---
+
+### Task 16: Align the complete Hierarchy UI with ADIA's application palette
+
+**Files:**
+- Modify: `src/components/modelExplorer/ModelExplorer.tsx`
+- Modify: `src/components/modelExplorer/ModelExplorerToolbar.tsx`
+- Modify: `src/components/modelExplorer/ModelTreeRow.tsx`
+- Modify: `src/components/modelExplorer/ModelExplorerMenu.tsx`
+- Modify: `src/components/modelExplorer/RelationshipWizard.tsx`
+- Modify: `src/components/modelExplorer/MoveImpactDialog.tsx`
+- Modify: `src/components/modelExplorer/VirtualTree.tsx`
+- Rewrite: `src/components/modelExplorer/modelExplorer.css`
+- Modify: `src/styles/theme-contract.css`
+- Create: `src/components/modelExplorer/modelExplorerTheme.test.tsx`
+- Create: `tests/e2e/model-explorer-theme.spec.ts`
+
+**Interfaces:**
+- Consumes: ADIA's shared semantic theme tokens.
+- Produces: `model-explorer-*` semantic tokens derived exclusively from the shared palette.
+
+- [ ] **Step 1: Add failing source-contract tests**
+
+```ts
+it('contains no private Slate/blue or dark-only palette classes', () => {
+  for (const source of modelExplorerSources()) {
+    expect(source).not.toMatch(/(?:bg|text|border|ring)-(?:slate|blue|gray)-/);
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}|rgba?\(/);
+  }
+});
+
+it('binds explorer surfaces to ADIA semantic tokens', () => {
+  expect(css).toContain('--model-explorer-bg: var(--surface-panel)');
+  expect(css).toContain('--model-explorer-selection: var(--diagram-node-selected)');
+  expect(css).toContain('--model-explorer-focus: var(--focus-ring)');
+});
+```
+
+- [ ] **Step 2: Verify failure**
+
+Run: `npx vitest run src/components/modelExplorer/modelExplorerTheme.test.tsx`
+
+Expected: FAIL on the current `slate-*`, `blue-*`, white/black, hex, and RGBA literals.
+
+- [ ] **Step 3: Define the explorer token bridge**
+
+Add to `modelExplorer.css`:
+
+```css
+.model-explorer-container {
+  --model-explorer-bg: var(--surface-panel);
+  --model-explorer-raised: var(--surface-raised);
+  --model-explorer-canvas: var(--surface-canvas);
+  --model-explorer-text: var(--text-primary);
+  --model-explorer-text-secondary: var(--text-secondary);
+  --model-explorer-text-muted: var(--text-muted);
+  --model-explorer-border: var(--border-default);
+  --model-explorer-border-strong: var(--border-strong);
+  --model-explorer-selection: var(--diagram-node-selected);
+  --model-explorer-focus: var(--focus-ring);
+  --model-explorer-success: var(--status-success);
+  --model-explorer-warning: var(--status-warning);
+  --model-explorer-danger: var(--status-danger);
+  background: var(--model-explorer-bg);
+  color: var(--model-explorer-text);
+}
+```
+
+Derived translucent states must use `color-mix(in srgb, var(--token) <percentage>, transparent)` so dark and light themes share one rule.
+
+- [ ] **Step 4: Replace every hard-coded UI color**
+
+Use the mapping below across TSX and CSS:
+
+| Existing visual role | Required token |
+|---|---|
+| Explorer/sidebar background | `--surface-panel` |
+| Toolbar/menu/dialog raised surface | `--surface-raised` |
+| Search/inline-edit recessed surface | `--surface-canvas` |
+| Main/secondary/muted text | `--text-primary` / `--text-secondary` / `--text-muted` |
+| Row hover | `color-mix(... --surface-raised 85% ...)` |
+| Selected row and active tab | orange `--diagram-node-selected` tint and border |
+| Keyboard focus | `--focus-ring` |
+| Default/strong borders | `--border-default` / `--border-strong` |
+| Error/warning/success badges | corresponding `--status-*` token |
+| Scrollbar | existing `--scrollbar-thumb` and `--scrollbar-thumb-hover` |
+
+Keep element-type icon colors semantic, but derive them from existing application accents or `--text-secondary`; do not restore a blue selection palette.
+
+- [ ] **Step 5: Add dark/light browser visual assertions**
+
+The Playwright test switches the existing theme control and captures the Hierarchy panel, open context menu, Relationship Wizard, and Move Impact dialog. Assert computed backgrounds/text/borders equal current CSS variables and ordinary text contrast is at least 4.5:1. Save snapshots beside existing light-mode snapshots.
+
+- [ ] **Step 6: Run theme and accessibility gates; commit**
+
+Run: `npx vitest run src/components/modelExplorer/modelExplorerTheme.test.tsx src/components/modelExplorer && npx playwright test tests/e2e/model-explorer-theme.spec.ts tests/e2e/light-mode-visual.spec.ts`
+
+```bash
+git add src/components/modelExplorer src/styles/theme-contract.css tests/e2e/model-explorer-theme.spec.ts tests/e2e/light-mode-visual.spec.ts-snapshots
+git commit -m "style(model-explorer): align hierarchy with ADIA palette"
+```
+
+---
+
+### Task 17: Replace smoke E2E tests with real authoring scenarios
+
+**Files:**
+- Rewrite: `tests/e2e/model-explorer-statemachine.spec.ts`
+- Rewrite: `tests/e2e/model-explorer-sysml.spec.ts`
+- Create: `tests/e2e/model-explorer-undo-persistence.spec.ts`
+- Create: `tests/e2e/model-explorer-performance.spec.ts`
+
+**Interfaces:**
+- Consumes: mounted application behavior only; no adapter-level shortcuts.
+- Produces: release evidence covering the approved acceptance criteria.
+
+- [ ] **Step 1: Remove conditional assertions**
+
+Replace every `if (await locator.isVisible())` around required behavior with direct `await expect(locator).toBeVisible()`. Optional welcome-overlay dismissal may remain conditional.
+
+- [ ] **Step 2: Implement the State Machine authoring scenario**
+
+Create a State, composite child Region, initial pseudostate, nested State, and Transition from tree menus. Rename and reparent the State, confirm impact, undo, redo, save, reload, and assert stable semantic IDs and hierarchy membership.
+
+- [ ] **Step 3: Implement the SysML authoring scenario**
+
+Create Package, Blocks, typed Part, ports, Requirement, satisfy relationship, BDD, and IBD from the tree. Assert tree creation creates no symbol; drag the same ID to the active diagram; remove only its presentation; then delete semantically and verify impact cleanup.
+
+- [ ] **Step 4: Add persistence and 10,000-element performance scenarios**
+
+Exercise schema-3 full and chunked save/load in the browser path. Enforce the budgets already defined in Task 12 and assert fewer than 100 rendered tree rows at a 900 px viewport.
+
+- [ ] **Step 5: Run and commit**
+
+Run: `npx playwright test tests/e2e/model-explorer-statemachine.spec.ts tests/e2e/model-explorer-sysml.spec.ts tests/e2e/model-explorer-undo-persistence.spec.ts tests/e2e/model-explorer-performance.spec.ts`
+
+```bash
+git add tests/e2e/model-explorer-*.spec.ts
+git commit -m "test(model-explorer): verify complete professional authoring flows"
+```
+
+---
+
+### Task 18: Final regression, accessibility, and release certification
+
+**Files:**
+- Modify: `docs/guides/model-explorer.md`
+- Create: `docs/model-explorer-release-report.md`
+
+**Interfaces:**
+- Consumes: Tasks 13-17.
+- Produces: a reproducible release report with commands, versions, outcomes, and known limitations.
+
+- [ ] **Step 1: Verify the full test matrix**
+
+Run:
+
+```bash
+npx vitest run src/features/modelExplorer src/components/modelExplorer
+npm run test:sysml:release
+npx vitest run src/utils/stateMachine/smStatePruner.test.ts src/utils/stateMachine/smModelMigration.test.ts src/utils/stateMachine/smSemanticBuilder.test.ts
+npx playwright test tests/e2e/model-explorer-statemachine.spec.ts tests/e2e/model-explorer-sysml.spec.ts tests/e2e/model-explorer-undo-persistence.spec.ts tests/e2e/model-explorer-performance.spec.ts tests/e2e/model-explorer-theme.spec.ts
+npm run test:freeze-gate
+npm run lint:theme
+npm run build
+```
+
+Expected: every command exits 0; no skipped required assertion; no dark-only Hierarchy surface; no semantic/presentation identity duplication; production Electron build succeeds.
+
+- [ ] **Step 2: Perform the final source audit**
+
+Run:
+
+```bash
+rg -n "slate-|blue-|gray-|#[0-9a-fA-F]{3,8}|rgba?\(" src/components/modelExplorer
+rg -n "if \(await .*isVisible\(\)\)" tests/e2e/model-explorer-*.spec.ts
+```
+
+Expected: the first command reports no private palette literals except approved test fixtures; the second reports only optional overlay handling.
+
+- [ ] **Step 3: Update documentation and commit certification**
+
+Document the exact model-versus-presentation behavior, all keyboard commands, relationship workflow, undo/redo, schema-3 migration, light/dark theme support, and any intentionally unsupported metatypes.
+
+```bash
+git add docs/guides/model-explorer.md docs/model-explorer-release-report.md
+git commit -m "docs(model-explorer): certify completed professional hierarchy"
+```
+
+---
+
 ## Final review checklist
 
 - [ ] Compare every design acceptance criterion with at least one unit, integration, or E2E assertion above.
@@ -990,3 +1401,9 @@ git commit -m "test(model-explorer): certify authoring and large-model behavior"
 - [ ] Confirm presentation deletion and semantic deletion remain distinct.
 - [ ] Confirm 10,000-element interaction budgets pass on the supported Windows test host.
 - [ ] Confirm existing uncommitted user work was not overwritten or staged accidentally.
+- [ ] Confirm every enabled context-menu action reaches a tested handler; no visible action is a no-op.
+- [ ] Confirm valid preflight results execute even though preflight itself is non-committing.
+- [ ] Confirm State Machine explorer commands create exactly one App undo entry.
+- [ ] Confirm schema-3 packages and diagrams survive full, chunked, incremental, streamed, and active-diagram persistence.
+- [ ] Confirm the Hierarchy panel, toolbar, rows, menus, inline editor, Relationship Wizard, and impact dialog use ADIA theme tokens in dark and light modes.
+- [ ] Confirm no required E2E assertion is hidden behind conditional visibility checks.
