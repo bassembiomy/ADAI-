@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { flattenVisibleTree, filterProjection } from './modelExplorerProjection';
-import type { ModelTreeProjection } from './modelExplorerTypes';
+import type { ModelTreeNode, ModelTreeProjection } from './modelExplorerTypes';
 
 const projection: ModelTreeProjection = {
   roots: ['root'],
@@ -40,6 +40,24 @@ const projection: ModelTreeProjection = {
 };
 
 describe('modelExplorerProjection', () => {
+  it('supports unified project pillar metadata', () => {
+    const pillar: ModelTreeNode = {
+      nodeId: 'project:pillar:behavior',
+      semanticId: 'project:pillar:behavior',
+      domain: 'project',
+      kind: 'pillar',
+      virtualKind: 'behavior',
+      label: 'Behavior',
+      parentNodeId: 'project:model',
+      ownerSemanticId: 'project:model',
+      childNodeIds: [],
+      hasChildren: false,
+      readOnly: true,
+    };
+
+    expect(pillar.virtualKind).toBe('behavior');
+  });
+
   it('flattens expanded nodes in deterministic label order', () => {
     expect(flattenVisibleTree(projection, new Set(['root'])).map(row => [row.node.semanticId, row.depth]))
       .toEqual([['model', 0], ['a', 1], ['b', 1]]);

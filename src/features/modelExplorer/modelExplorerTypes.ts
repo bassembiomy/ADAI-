@@ -1,4 +1,15 @@
-export type ExplorerDomain = 'stateMachine' | 'sysml';
+export type ExplorerDomain = 'project' | 'stateMachine' | 'sysml' | 'xbridges' | 'vlab';
+
+export type ModelPillar = 'structural' | 'behavior' | 'parametric' | 'requirements';
+
+export interface ActiveDiagramContext {
+  diagramId: string;
+  name: string;
+  kind: string;
+  domain: Exclude<ExplorerDomain, 'project'>;
+  presentedSemanticIds: string[];
+  contextSemanticIds?: string[];
+}
 
 export type ExplorerView = 'containment' | 'diagramContext' | 'search';
 
@@ -29,6 +40,9 @@ export interface ModelTreeNode {
   icon?: string;
   badges?: Array<{ kind: 'error' | 'warning' | 'info'; label: string }>;
   readOnly?: boolean;
+  virtualKind?: 'model' | ModelPillar | 'group' | 'unresolved' | 'unclassified';
+  ownerSemanticId?: string | null;
+  diagramId?: string;
 }
 
 export interface ModelTreeProjection {
