@@ -56,6 +56,7 @@ import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } f
 export { resolveType, type ResolvedTypeOutcome, type TypeResolutionOptions } from '../engine/sysml/services/typeResolution';
 export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 export * from '../engine/sysml/commands/presentationCommands';
+export * from '../engine/sysml/commands/dispatcher';
 import {
   type NormalizedSysmlStore,
   fromRepository,
