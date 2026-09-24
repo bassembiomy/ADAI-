@@ -10,3 +10,4 @@ export * from './adapters/sysmlExplorerAdapter';
 export * from './adapters/stateMachineExplorerAdapter';
 export * from './modelExplorerDragDrop';
 export * from './modelExplorerMultiSelect';
+export * from './unifiedModelExplorerProjection';
