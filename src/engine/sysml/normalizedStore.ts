@@ -1459,8 +1459,8 @@ export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
   }
 
   const snap = snapshot as WorkerStoreSnapshot;
-  if (snap.schemaVersion !== 2) {
-    throw new Error(`Unsupported worker snapshot schemaVersion: ${snap.schemaVersion} (expected 2)`);
+  if (snap.schemaVersion !== 2 && snap.schemaVersion !== 3) {
+    throw new Error(`Unsupported worker snapshot schemaVersion: ${snap.schemaVersion} (expected 2 or 3)`);
   }
 
   if (typeof snap.revision !== 'number' || isNaN(snap.revision)) {
@@ -1471,6 +1471,8 @@ export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
     schemaVersion: snap.schemaVersion,
     profileId: snap.profileId ?? 'OMG-SysML-1.6-ADIA',
     revision: snap.revision,
+    packages: (snap as any).packages ?? { model: { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' } },
+    diagrams: (snap as any).diagrams ?? {},
     definitions: snap.definitions ?? {},
     usages: snap.usages ?? {},
     connectors: snap.connectors ?? {},

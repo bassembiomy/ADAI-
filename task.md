@@ -329,13 +329,13 @@
   - [x] Step 4: Add cycle-safe batch reparent commands (`sysmlCommandGateway.ts`, `normalizedStore.ts`)
   - [x] Step 5: Run focused and release tests
   - [x] Step 6: Commit
-- [ ] Task 3: Implement SysML projection and capabilities
-  - [ ] Step 1: Write failing capability tests (`sysmlExplorerAdapter.test.ts`)
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement declarative capability tables (`modelExplorerCapabilities.ts`, `modelExplorerFactories.ts`)
-  - [ ] Step 4: Implement projection branches (`sysmlExplorerAdapter.ts`)
-  - [ ] Step 5: Run tests
-  - [ ] Step 6: Commit
+- [x] Task 3: Implement SysML projection and capabilities
+  - [x] Step 1: Write failing capability tests (`sysmlExplorerAdapter.test.ts`)
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement declarative capability tables (`modelExplorerCapabilities.ts`, `modelExplorerFactories.ts`)
+  - [x] Step 4: Implement projection branches (`sysmlExplorerAdapter.ts`)
+  - [x] Step 5: Run tests
+  - [x] Step 6: Commit
 - [ ] Task 4: Implement immutable State Machine commands and projection
   - [ ] Step 1: Write failing hierarchy tests (`stateMachineExplorerAdapter.test.ts`)
   - [ ] Step 2: Verify failure

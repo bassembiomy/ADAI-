@@ -1,5 +1,6 @@
 import type {
   SysmlRepository,
+  SysmlDefinition,
   BlockDefinition,
   ValueTypeDefinition,
   InterfaceDefinition,
@@ -1502,8 +1503,8 @@ export function executeSysmlCommand(
       }
       let curr: string | undefined = targetOwnerId;
       while (curr && curr !== 'model') {
-        const parentPkg = state.repository.packages?.[curr];
-        const parentDef = state.repository.definitions?.[curr];
+        const parentPkg: PackageDefinition | undefined = state.repository.packages?.[curr];
+        const parentDef: SysmlDefinition | undefined = state.repository.definitions?.[curr];
         const nextParent: string | undefined = parentPkg?.ownerId ?? parentDef?.ownerId;
         if (nextParent === elemId) {
           const view = getView(state.repository, coordinates, diagramPresentations);
@@ -1743,7 +1744,25 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'batch') {
+    if (command.commands.length === 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: [],
+        committed: true,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     let currentState: SysmlGatewayState = state;
+    let lastResult: SysmlCommandResult | undefined;
     for (const subCmd of command.commands) {
       const res = executeSysmlCommand(currentState, subCmd);
       if (!res.committed || res.diagnostics.some(d => d.severity === 'error')) {
@@ -1763,10 +1782,11 @@ export function executeSysmlCommand(
           redoStack: state.redoStack,
         };
       }
+      lastResult = res;
       currentState = res;
     }
     return {
-      ...currentState,
+      ...lastResult!,
       actionStack: [...(state.actionStack ?? []), 'semantic'],
     };
   }

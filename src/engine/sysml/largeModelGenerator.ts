@@ -318,9 +318,11 @@ export function generateSysmlModel(options: GeneratorOptions): LargeModelResult 
   }
 
   const repository: SysmlRepository = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     profileId: 'OMG-SysML-1.6-ADIA',
     revision: 1,
+    packages: { model: { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' } },
+    diagrams: {},
     definitions,
     usages,
     connectors,
