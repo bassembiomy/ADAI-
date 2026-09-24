@@ -3,11 +3,13 @@ import type {
   ModelTreeNode,
   ExplorerView,
   VisibleTreeRow,
+  ExplorerCapability,
 } from '../../features/modelExplorer/modelExplorerTypes';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { VirtualTree } from './VirtualTree';
 import { ModelTreeRow } from './ModelTreeRow';
 import { ModelExplorerToolbar } from './ModelExplorerToolbar';
+import { ModelExplorerMenu } from './ModelExplorerMenu';
 import './modelExplorer.css';
 
 export interface ModelExplorerProps {
@@ -19,6 +21,8 @@ export interface ModelExplorerProps {
   onSelectNode: (node: ModelTreeNode, multiSelect?: boolean, rangeSelect?: boolean) => void;
   onActivateNode?: (node: ModelTreeNode) => void;
   onContextMenuNode?: (node: ModelTreeNode, event: React.MouseEvent) => void;
+  getCapabilities?: (node: ModelTreeNode) => ExplorerCapability[];
+  onExecuteCapability?: (capability: ExplorerCapability, node: ModelTreeNode) => void;
   renamingNodeId?: string | null;
   onRenameCommit?: (nodeId: string, newName: string) => void;
   onRenameCancel?: () => void;
@@ -37,7 +41,9 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   onSelectNode,
   onActivateNode,
   onContextMenuNode,
-  renamingNodeId = null,
+  getCapabilities,
+  onExecuteCapability,
+  renamingNodeId,
   onRenameCommit,
   onRenameCancel,
   favoriteNodeIds = new Set(),
@@ -50,6 +56,15 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set(rootNodeIds));
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [localRenamingNodeId, setLocalRenamingNodeId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    node: ModelTreeNode;
+    capabilities: ExplorerCapability[];
+  } | null>(null);
+
+  const effectiveRenamingId = renamingNodeId !== undefined ? renamingNodeId : localRenamingNodeId;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState(400);
@@ -159,10 +174,63 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     [handleToggleExpand, onActivateNode]
   );
 
+  const handleContextMenu = useCallback(
+    (node: ModelTreeNode, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const caps = getCapabilities ? getCapabilities(node) : [];
+      if (caps.length > 0) {
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          node,
+          capabilities: caps,
+        });
+      }
+      onContextMenuNode?.(node, e);
+    },
+    [getCapabilities, onContextMenuNode]
+  );
+
+  const handleSelectCapability = useCallback(
+    (capability: ExplorerCapability) => {
+      if (!contextMenu) return;
+      const targetNode = contextMenu.node;
+      if (capability.kind === 'rename') {
+        setLocalRenamingNodeId(targetNode.nodeId);
+      }
+      onExecuteCapability?.(capability, targetNode);
+      setContextMenu(null);
+    },
+    [contextMenu, onExecuteCapability]
+  );
+
+  const handleRenameCommit = useCallback(
+    (nodeId: string, newName: string) => {
+      setLocalRenamingNodeId(null);
+      onRenameCommit?.(nodeId, newName);
+    },
+    [onRenameCommit]
+  );
+
+  const handleRenameCancel = useCallback(() => {
+    setLocalRenamingNodeId(null);
+    onRenameCancel?.();
+  }, [onRenameCancel]);
+
   return (
     <div
       ref={containerRef}
       className={`model-explorer-container flex flex-col h-full w-full bg-slate-900 border-r border-slate-800 ${className}`}
+      onKeyDown={(e) => {
+        if (e.key === 'F2') {
+          const focusedRow = visibleRows[focusedIndex];
+          if (focusedRow && !focusedRow.node.readOnly) {
+            e.preventDefault();
+            setLocalRenamingNodeId(focusedRow.node.nodeId);
+          }
+        }
+      }}
     >
       <ModelExplorerToolbar
         viewMode={viewMode}
@@ -206,21 +274,32 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
                 isExpanded={isRowExpanded(row)}
                 isSelected={selectedNodeIds.has(row.node.nodeId)}
                 isFocused={idx === focusedIndex}
-                isRenaming={renamingNodeId === row.node.nodeId}
+                isRenaming={effectiveRenamingId === row.node.nodeId}
                 onToggleExpand={() => handleToggleExpand(row)}
                 onSelect={(e) => {
                   setFocusedIndex(idx);
                   handleRowClick(row, e);
                 }}
                 onDoubleClick={() => handleRowDoubleClick(row)}
-                onContextMenu={(e) => onContextMenuNode?.(row.node, e)}
-                onRenameCommit={(newName) => onRenameCommit?.(row.node.nodeId, newName)}
-                onRenameCancel={onRenameCancel}
+                onContextMenu={(e) => handleContextMenu(row.node, e)}
+                onRenameCommit={(newName) => handleRenameCommit(row.node.nodeId, newName)}
+                onRenameCancel={handleRenameCancel}
               />
             )}
           />
         )}
       </div>
+
+      {contextMenu && (
+        <ModelExplorerMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          targetNode={contextMenu.node}
+          capabilities={contextMenu.capabilities}
+          onSelectCapability={handleSelectCapability}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 };

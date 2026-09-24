@@ -53,6 +53,22 @@ describe('ModelExplorer', () => {
     expect(html).toContain('aria-selected="true"');
   });
 
+  it('renders inline rename input when renamingNodeId matches a visible node', () => {
+    const html = renderToStaticMarkup(
+      <ModelExplorer
+        nodesById={nodesById}
+        rootNodeIds={['root']}
+        selectedNodeIds={new Set(['block-a'])}
+        onSelectNode={vi.fn()}
+        renamingNodeId="block-a"
+        height={400}
+      />
+    );
+
+    expect(html).toContain('<input');
+    expect(html).toContain('value="FlightController"');
+  });
+
   it('renders empty placeholder when no nodes match', () => {
     const html = renderToStaticMarkup(
       <ModelExplorer

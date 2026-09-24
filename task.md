@@ -356,11 +356,11 @@
   - [x] Step 3: Implement fixed-row virtualization (`VirtualTree.tsx`, `modelExplorer.css`)
   - [x] Step 4: Implement tree semantics and toolbar (`ModelTreeRow.tsx`, `ModelExplorerToolbar.tsx`, `ModelExplorer.tsx`)
   - [x] Step 5: Run tests and commit
-- [ ] Task 7: Add searchable context menus and inline rename
-  - [ ] Step 1: Write failing interaction tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement menus and rename (`ModelExplorerMenu.tsx`, inline rename in `ModelTreeRow.tsx`)
-  - [ ] Step 4: Run tests and commit
+- [x] Task 7: Add searchable context menus and inline rename
+  - [x] Step 1: Write failing interaction tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement menus and rename (`ModelExplorerMenu.tsx`, inline rename in `ModelTreeRow.tsx`)
+  - [x] Step 4: Run tests and commit
 - [ ] Task 8: Add relationship authoring and impact confirmation
   - [ ] Step 1: Write failing wizard tests
   - [ ] Step 2: Verify failure
