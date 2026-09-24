@@ -45,6 +45,38 @@ const register = (nodes: Record<string, ModelTreeNode>, node: ModelTreeNode) => 
   if (node.parentNodeId) addChild(nodes, node.parentNodeId, node.nodeId);
 };
 
+const rebuildChildren = (nodes: Record<string, ModelTreeNode>) => {
+  for (const node of Object.values(nodes)) {
+    node.childNodeIds = [];
+    node.hasChildren = false;
+  }
+  for (const node of Object.values(nodes)) {
+    if (node.parentNodeId) addChild(nodes, node.parentNodeId, node.nodeId);
+  }
+};
+
+const requirementContainmentParents = (sysml: SysmlRepository) => {
+  const parents = new Map<string, string>();
+  for (const relationship of Object.values(sysml.relationships)) {
+    if (relationship.kind !== 'requirementContainment') continue;
+    if (!sysml.requirements[relationship.sourceId] || !sysml.requirements[relationship.targetId]) continue;
+    if (parents.has(relationship.targetId)) continue;
+    let ancestor: string | undefined = relationship.sourceId;
+    const seen = new Set<string>();
+    let createsCycle = false;
+    while (ancestor && !seen.has(ancestor)) {
+      if (ancestor === relationship.targetId) {
+        createsCycle = true;
+        break;
+      }
+      seen.add(ancestor);
+      ancestor = parents.get(ancestor);
+    }
+    if (!createsCycle) parents.set(relationship.targetId, relationship.sourceId);
+  }
+  return parents;
+};
+
 export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelTreeProjection {
   const nodes: Record<string, ModelTreeNode> = {};
   const modelId = 'project:model';
@@ -78,6 +110,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   }
 
   const sysmlNodeId = (id: string) => `sysml:element:${id}`;
+  const requirementParents = requirementContainmentParents(input.sysml);
   const ownerNodeId = (ownerId: string | undefined, pillar: ModelPillar) => {
     if (ownerId && nodes[sysmlNodeId(ownerId)]) return sysmlNodeId(ownerId);
     return `project:pillar:${pillar}`;
@@ -91,14 +124,17 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   ];
   for (const item of sysmlEntries) {
     const pillar = pillarForSysmlKind(item.kind);
+    const ownerId = item.kind === 'requirement'
+      ? requirementParents.get(item.id) ?? item.ownerId
+      : item.ownerId;
     register(nodes, {
       nodeId: sysmlNodeId(item.id),
       semanticId: item.id,
       domain: 'sysml',
       kind: item.kind,
       label: item.name,
-      parentNodeId: ownerNodeId(item.ownerId, pillar),
-      ownerSemanticId: item.ownerId || 'model',
+      parentNodeId: ownerNodeId(ownerId, pillar),
+      ownerSemanticId: ownerId || 'model',
       childNodeIds: [],
       hasChildren: false,
     });
@@ -190,6 +226,6 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     });
   }
 
+  rebuildChildren(nodes);
   return { roots: [modelId], nodes, revision: input.revision };
 }
-

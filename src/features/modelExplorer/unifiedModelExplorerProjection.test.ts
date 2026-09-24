@@ -37,4 +37,33 @@ describe('buildUnifiedModelProjection', () => {
     expect(projection.nodes['project:pillar:parametric'].childNodeIds).not.toContain('vlab:model:state-vlab');
     expect(projection.nodes['project:pillar:requirements'].childNodeIds).toContain('sysml:element:req-1');
   });
+
+  it('nests requirements according to requirement containment relationships', () => {
+    const repository = createEmptyRepository();
+    repository.requirements.parent = {
+      id: 'parent', name: 'Parent', namespace: ['model'], ownerId: 'model', kind: 'requirement',
+      requirementId: 'REQ-P', text: 'parent', status: 'draft', version: '1',
+    };
+    repository.requirements.child = {
+      id: 'child', name: 'Child', namespace: ['model'], ownerId: 'model', kind: 'requirement',
+      requirementId: 'REQ-C', text: 'child', status: 'draft', version: '1',
+    };
+    repository.relationships.contains = {
+      id: 'contains', kind: 'requirementContainment', sourceId: 'parent', targetId: 'child',
+    };
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 },
+      externalModels: [],
+      revision: 1,
+    });
+
+    const parent = projection.nodes['sysml:element:parent'];
+    const child = projection.nodes['sysml:element:child'];
+    const requirements = projection.nodes['project:pillar:requirements'];
+    expect(parent.parentNodeId).toBe(requirements.nodeId);
+    expect(parent.childNodeIds).toContain(child.nodeId);
+    expect(child.parentNodeId).toBe(parent.nodeId);
+    expect(requirements.childNodeIds).not.toContain(child.nodeId);
+  });
 });

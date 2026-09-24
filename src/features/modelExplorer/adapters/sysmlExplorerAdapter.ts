@@ -44,6 +44,16 @@ import type {
   PartUsage,
 } from '../../../engine/sysml/model';
 
+const getRequirementContainmentParents = (repo: SysmlRepository) => {
+  const parents = new Map<string, string>();
+  for (const relationship of Object.values(repo.relationships)) {
+    if (relationship.kind !== 'requirementContainment') continue;
+    if (!repo.requirements[relationship.sourceId] || !repo.requirements[relationship.targetId]) continue;
+    if (!parents.has(relationship.targetId)) parents.set(relationship.targetId, relationship.sourceId);
+  }
+  return parents;
+};
+
 export type SysmlExplorerAdapterHarness = {
   getState: () => SysmlGatewayState;
   executeCommand?: (cmd: SysmlEditorCommand) => SysmlCommandResult;
@@ -308,8 +318,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       }
 
       // 4. Requirements
+      const requirementParents = getRequirementContainmentParents(repo);
       for (const req of Object.values(repo.requirements)) {
-        const parentOwnerId = req.ownerId || 'model';
+        const parentOwnerId = requirementParents.get(req.id) ?? req.ownerId ?? 'model';
         const parentId = nodes[`sysml:element:${parentOwnerId}`] ? `sysml:element:${parentOwnerId}` : modelNodeId;
         registerNode({
           nodeId: `sysml:element:${req.id}`,
@@ -355,6 +366,20 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           childNodeIds: [],
           hasChildren: false,
         });
+      }
+
+      // Rebuild links after registration so containment is independent of object insertion order.
+      for (const node of Object.values(nodes)) {
+        node.childNodeIds = [];
+        node.hasChildren = false;
+      }
+      for (const node of Object.values(nodes)) {
+        if (!node.parentNodeId) continue;
+        const parent = nodes[node.parentNodeId];
+        if (parent && !parent.childNodeIds.includes(node.nodeId)) {
+          parent.childNodeIds.push(node.nodeId);
+          parent.hasChildren = true;
+        }
       }
 
       // If diagramContext view, filter or focus on presented element IDs
