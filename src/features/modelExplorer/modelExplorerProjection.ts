@@ -4,6 +4,8 @@ import type {
   VisibleTreeRow,
 } from './modelExplorerTypes';
 
+const treeCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
 /**
  * Flattens visible rows in deterministic label order based on current expansion state.
  */
@@ -29,7 +31,7 @@ export function flattenVisibleTree(
         const rightNode = projection.nodes[right];
         const leftLabel = leftNode?.label ?? left;
         const rightLabel = rightNode?.label ?? right;
-        return leftLabel.localeCompare(rightLabel) || left.localeCompare(right);
+        return treeCollator.compare(leftLabel, rightLabel) || (left < right ? -1 : left > right ? 1 : 0);
       })
       .forEach(childId => visit(childId, depth + 1));
   };

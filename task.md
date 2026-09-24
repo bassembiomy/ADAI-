@@ -386,12 +386,12 @@
   - [x] Step 3: Implement complete selection and clipboard behavior
   - [x] Step 4: Persist explorer UI state separately
   - [x] Step 5: Run tests and commit
-- [ ] Task 12: Add end-to-end authoring and performance gates
-  - [ ] Step 1: Write the State Machine E2E scenario
-  - [ ] Step 2: Write the SysML E2E scenario
-  - [ ] Step 3: Add deterministic performance gates
-  - [ ] Step 4: Write the user guide (`docs/guides/model-explorer.md`)
-  - [ ] Step 5: Run the complete verification matrix
-  - [ ] Step 6: Commit
+- [x] Task 12: Add end-to-end authoring and performance gates
+  - [x] Step 1: Write the State Machine E2E scenario
+  - [x] Step 2: Write the SysML E2E scenario
+  - [x] Step 3: Add deterministic performance gates
+  - [x] Step 4: Write the user guide (`docs/guides/model-explorer.md`)
+  - [x] Step 5: Run the complete verification matrix
+  - [x] Step 6: Commit
 
 
