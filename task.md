@@ -12,12 +12,12 @@
   - [x] Step 3: Add focused behavior-domain types
   - [x] Step 4: Run domain and migration tests
   - [x] Step 5: Commit
-- [ ] Task 3: Atomic Create-and-Present Command
-  - [ ] Step 1: Write atomicity and identity tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Implement the command
-  - [ ] Step 4: Enforce duplicate-presentation policy
-  - [ ] Step 5: Run command tests and commit
+- [x] Task 3: Atomic Create-and-Present Command
+  - [x] Step 1: Write atomicity and identity tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Implement the command
+  - [x] Step 4: Enforce duplicate-presentation policy
+  - [x] Step 5: Run command tests and commit
 - [ ] Task 4: Canonical Element Factory and No-Silent-Type Resolution
   - [ ] Step 1: Write failing factory tests
   - [ ] Step 2: Verify RED

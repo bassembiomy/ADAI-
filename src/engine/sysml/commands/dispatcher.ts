@@ -7,6 +7,7 @@ import type {
 } from './types';
 import {
   handleCreateElement,
+  handleCreateAndPresentElement,
   handleUpdateElement,
   handleRenameElement,
   handleMoveElement,
@@ -45,6 +46,9 @@ export function dispatchSysmlCommand(
   switch (command.type) {
     case 'CreateElement':
       result = handleCreateElement(state, command);
+      break;
+    case 'CreateAndPresentElement':
+      result = handleCreateAndPresentElement(state, command);
       break;
     case 'UpdateElement':
       result = handleUpdateElement(state, command);
