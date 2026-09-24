@@ -51,7 +51,7 @@ describe('NormalizedSysmlStore', () => {
     expect(store.requirements.size).toBe(Object.keys(repository.requirements).length);
 
     const roundtrip = toRepository(store);
-    expect(roundtrip.schemaVersion).toBe(2);
+    expect(roundtrip.schemaVersion).toBe(repository.schemaVersion);
     expect(roundtrip.revision).toBe(repository.revision);
     expect(Object.keys(roundtrip.definitions).sort()).toEqual(Object.keys(repository.definitions).sort());
     expect(Object.keys(roundtrip.usages).sort()).toEqual(Object.keys(repository.usages).sort());

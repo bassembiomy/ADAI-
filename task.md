@@ -411,12 +411,12 @@
   - [x] Step 5: Connect Add to Active Diagram and canvas drop
   - [x] Step 6: Connect reveal/open actions
   - [x] Step 7: Run tests and commit
-- [ ] Task 15: Close persistence and canonical ownership integrity gaps
-  - [ ] Step 1: Write failing chunk round-trip tests
-  - [ ] Step 2: Write failing ownership-gateway tests
-  - [ ] Step 3: Fix all chunked persistence paths (`packages` and `diagrams` in `PERSISTENCE_COLLECTIONS`, `schemaVersion: 3`)
-  - [ ] Step 4: Enforce ownership at the gateway boundary (`validateOwnershipMove`)
-  - [ ] Step 5: Run persistence and release tests; commit
+- [x] Task 15: Close persistence and canonical ownership integrity gaps
+  - [x] Step 1: Write failing chunk round-trip tests
+  - [x] Step 2: Write failing ownership-gateway tests
+  - [x] Step 3: Fix all chunked persistence paths (`packages` and `diagrams` in `PERSISTENCE_COLLECTIONS`, `schemaVersion: 3`)
+  - [x] Step 4: Enforce ownership at the gateway boundary (`validateOwnershipMove`)
+  - [x] Step 5: Run persistence and release tests; commit
 - [ ] Task 16: Align the complete Hierarchy UI with ADIA's application palette
   - [ ] Step 1: Add failing source-contract tests (`src/components/modelExplorer/modelExplorerTheme.test.tsx`)
   - [ ] Step 2: Verify failure

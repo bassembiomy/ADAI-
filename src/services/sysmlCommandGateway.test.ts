@@ -866,6 +866,51 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     const undone = executeSysmlCommand(result, { type: 'undo' });
     expect((undone.repository.definitions.motor as any).ownerId).toBe('model');
   });
+
+  it('rejects moving the root model package', () => {
+    const repo = createEmptyRepository();
+    repo.packages['pkg-sub'] = { id: 'pkg-sub', name: 'Sub', namespace: [], ownerId: 'model', kind: 'package' };
+    const state = createSysmlGatewayState(repo);
+    const result = executeSysmlCommand(state, {
+      type: 'moveElements',
+      elementIds: ['model'],
+      targetOwnerId: 'pkg-sub',
+    } as any);
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'ROOT_PACKAGE_MOVE_PROHIBITED')).toBe(true);
+  });
+
+  it('rejects deleting the root model package', () => {
+    const repo = createEmptyRepository();
+    const state = createSysmlGatewayState(repo);
+    const result = executeSysmlCommand(state, {
+      type: 'deleteElements',
+      elementIds: ['model'],
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'ROOT_PACKAGE_DELETION_PROHIBITED')).toBe(true);
+  });
+
+  it('rejects moving an element into an incompatible parent metatype', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.b1 = {
+      id: 'b1', name: 'B1', namespace: [], kind: 'block', ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repo.usages.p1 = {
+      id: 'p1', name: 'part1', ownerId: 'b1', kind: 'part', typeId: 'b1',
+      aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+    const state = createSysmlGatewayState(repo);
+    // Attempt to move part1 directly under root package 'model'
+    const result = executeSysmlCommand(state, {
+      type: 'moveElements',
+      elementIds: ['p1'],
+      targetOwnerId: 'model',
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'DISALLOWED_OWNERSHIP')).toBe(true);
+  });
 });
 
 

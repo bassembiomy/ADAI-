@@ -776,6 +776,117 @@ function gateUpdateElement(
   return null;
 }
 
+export function validateOwnershipMove(
+  repo: SysmlRepository,
+  elementId: string,
+  targetOwnerId: string
+): SysmlDiagnostic | null {
+  if (elementId === 'model') {
+    return {
+      code: 'ROOT_PACKAGE_MOVE_PROHIBITED',
+      severity: 'error',
+      elementId,
+      message: 'The root model package cannot be moved',
+    };
+  }
+
+  if (elementId === targetOwnerId) {
+    return {
+      code: 'CIRCULAR_OWNERSHIP',
+      severity: 'error',
+      elementId,
+      message: `Cannot move element ${elementId} into itself`,
+    };
+  }
+
+  // Descendant check
+  let curr: string | undefined = targetOwnerId;
+  while (curr && curr !== 'model') {
+    const parentPkg: PackageDefinition | undefined = repo.packages?.[curr];
+    const parentDef: SysmlDefinition | undefined = repo.definitions?.[curr];
+    const parentReq: RequirementDefinition | undefined = repo.requirements?.[curr];
+    const nextParent: string | undefined = parentPkg?.ownerId ?? parentDef?.ownerId ?? parentReq?.ownerId;
+    if (nextParent === elementId) {
+      return {
+        code: 'CIRCULAR_OWNERSHIP',
+        severity: 'error',
+        elementId,
+        message: `Cannot move element ${elementId} into its own descendant`,
+      };
+    }
+    curr = nextParent;
+  }
+
+  // Metatype compatibility check
+  const targetPkg = targetOwnerId === 'model' ? repo.packages.model : repo.packages?.[targetOwnerId];
+  const targetDef = repo.definitions?.[targetOwnerId];
+  const targetReq = repo.requirements?.[targetOwnerId];
+
+  // Determine source element kind
+  const sourceDef = repo.definitions?.[elementId];
+  const sourcePkg = repo.packages?.[elementId];
+  const sourceDiag = repo.diagrams?.[elementId];
+  const sourceReq = repo.requirements?.[elementId];
+  const sourceUsage = repo.usages?.[elementId];
+  const sourceVC = repo.verificationCases?.[elementId];
+
+  const sourceKind =
+    sourcePkg ? 'package' :
+    sourceDiag ? 'diagram' :
+    sourceDef ? sourceDef.kind :
+    sourceReq ? 'requirement' :
+    sourceUsage ? sourceUsage.kind :
+    sourceVC ? 'verificationCase' :
+    'unknown';
+
+  if (targetOwnerId === 'model' || Boolean(targetPkg)) {
+    // Model or package target
+    const allowed = ['package', 'diagram', 'block', 'valueType', 'interface', 'requirement', 'verificationCase', 'stateMachine'];
+    if (!allowed.includes(sourceKind)) {
+      return {
+        code: 'DISALLOWED_OWNERSHIP',
+        severity: 'error',
+        elementId,
+        message: `Target package '${targetOwnerId}' cannot contain element '${elementId}' of kind '${sourceKind}'`,
+      };
+    }
+    return null;
+  }
+
+  if (targetDef && targetDef.kind === 'block') {
+    // Block target: can contain parts, ports, properties, constraints
+    const allowed = ['part', 'reference', 'shared', 'port', 'property', 'constraint'];
+    if (!allowed.includes(sourceKind)) {
+      return {
+        code: 'DISALLOWED_OWNERSHIP',
+        severity: 'error',
+        elementId,
+        message: `Target block '${targetOwnerId}' cannot contain element '${elementId}' of kind '${sourceKind}'`,
+      };
+    }
+    return null;
+  }
+
+  if (targetReq) {
+    if (sourceKind !== 'requirement') {
+      return {
+        code: 'DISALLOWED_OWNERSHIP',
+        severity: 'error',
+        elementId,
+        message: `Target requirement '${targetOwnerId}' cannot contain element '${elementId}' of kind '${sourceKind}'`,
+      };
+    }
+    return null;
+  }
+
+  return {
+    code: 'DISALLOWED_OWNERSHIP',
+    severity: 'error',
+    elementId,
+    message: `Target '${targetOwnerId}' cannot contain element '${elementId}'`,
+  };
+}
+
 export function executeSysmlCommand(
   state: SysmlGatewayState,
   command: SysmlEditorCommand,
@@ -1236,6 +1347,28 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'deleteElements') {
+    if (command.elementIds.includes('model')) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: [{
+          code: 'ROOT_PACKAGE_DELETION_PROHIBITED',
+          severity: 'error' as const,
+          elementId: 'model',
+          message: 'The root model package cannot be deleted',
+        }],
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
     // Policy boundary: classify every requested deletion target through the
     // central policy. Unknown ids are rejected with a typed code before any
     // impact analysis or mutation; known targets flow into analyzeMutation
@@ -1464,7 +1597,8 @@ export function executeSysmlCommand(
     const targetOwnerId = command.targetOwnerId;
     const targetPkg = state.repository.packages?.[targetOwnerId];
     const targetDef = state.repository.definitions?.[targetOwnerId];
-    const targetExists = targetOwnerId === 'model' || Boolean(targetPkg) || Boolean(targetDef);
+    const targetReq = state.repository.requirements?.[targetOwnerId];
+    const targetExists = targetOwnerId === 'model' || Boolean(targetPkg) || Boolean(targetDef) || Boolean(targetReq);
     if (!targetExists) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -1484,14 +1618,15 @@ export function executeSysmlCommand(
     }
 
     for (const elemId of command.elementIds) {
-      if (elemId === targetOwnerId) {
+      const diag = validateOwnershipMove(state.repository, elemId, targetOwnerId);
+      if (diag) {
         const view = getView(state.repository, coordinates, diagramPresentations);
         return {
           repository: state.repository,
           store,
           patchHistory,
           view,
-          diagnostics: [{ code: 'CIRCULAR_OWNERSHIP', severity: 'error', message: `Cannot move element ${elemId} into itself` }],
+          diagnostics: [diag],
           committed: false,
           history: state.history,
           coordinates,
@@ -1500,30 +1635,6 @@ export function executeSysmlCommand(
           actionStack: state.actionStack,
           redoStack: state.redoStack,
         };
-      }
-      let curr: string | undefined = targetOwnerId;
-      while (curr && curr !== 'model') {
-        const parentPkg: PackageDefinition | undefined = state.repository.packages?.[curr];
-        const parentDef: SysmlDefinition | undefined = state.repository.definitions?.[curr];
-        const nextParent: string | undefined = parentPkg?.ownerId ?? parentDef?.ownerId;
-        if (nextParent === elemId) {
-          const view = getView(state.repository, coordinates, diagramPresentations);
-          return {
-            repository: state.repository,
-            store,
-            patchHistory,
-            view,
-            diagnostics: [{ code: 'CIRCULAR_OWNERSHIP', severity: 'error', message: `Cannot move element ${elemId} into its own descendant` }],
-            committed: false,
-            history: state.history,
-            coordinates,
-            diagramPresentations,
-            presentationHistory: state.presentationHistory,
-            actionStack: state.actionStack,
-            redoStack: state.redoStack,
-          };
-        }
-        curr = nextParent;
       }
     }
 

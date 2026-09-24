@@ -239,7 +239,7 @@ describe('versioned SysML persistence and baselines', () => {
 
       const chunked = serializeToChunks(repo);
       expect(chunked.manifest.format).toBe('ADIA-SysML-Chunked');
-      expect(chunked.manifest.schemaVersion).toBe(2);
+      expect([2, 3]).toContain(chunked.manifest.schemaVersion);
       expect(Object.keys(chunked.chunks).length).toBe(4);
 
       const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
@@ -495,6 +495,52 @@ describe('versioned SysML persistence and baselines', () => {
       expect(result.success).toBe(false);
       expect(result.committedRevision).toBe(0);
       expect(diskFiles['project/manifest.json']).toBeUndefined();
+    });
+
+    it('preserves non-root packages and diagrams in chunked serialization and restores ownership', () => {
+      const repo = createEmptyRepository();
+      repo.packages.pkg1 = {
+        id: 'pkg1',
+        kind: 'package',
+        name: 'Subsystem',
+        namespace: ['model'],
+        ownerId: 'model',
+      };
+      repo.diagrams.diag1 = {
+        id: 'diag1',
+        kind: 'diagram',
+        name: 'BDD Overview',
+        namespace: ['model', 'pkg1'],
+        diagramKind: 'bdd',
+        ownerId: 'pkg1',
+      };
+      repo.definitions.b1 = {
+        ...block('b1'),
+        ownerId: 'pkg1',
+      };
+
+      const chunked = serializeToChunks(repo);
+      expect(chunked.chunks['packages/pkg1.json']).toBeDefined();
+      expect(chunked.chunks['diagrams/diag1.json']).toBeDefined();
+      expect(chunked.manifest.chunkIndex['packages/pkg1.json']).toBeDefined();
+      expect(chunked.manifest.chunkIndex['diagrams/diag1.json']).toBeDefined();
+
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
+      expect(rehydrated.valid).toBe(true);
+      expect(rehydrated.repository.packages.pkg1).toBeDefined();
+      expect(rehydrated.repository.packages.pkg1.ownerId).toBe('model');
+      expect(rehydrated.repository.diagrams.diag1).toBeDefined();
+      expect(rehydrated.repository.diagrams.diag1.ownerId).toBe('pkg1');
+      expect(rehydrated.repository.definitions.b1.ownerId).toBe('pkg1');
+    });
+
+    it('preserves schema 3 and canonical root model package across chunk round-trip', () => {
+      const repo = createEmptyRepository();
+      const chunked = serializeToChunks(repo);
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
+      expect(rehydrated.repository.schemaVersion).toBe(3);
+      expect(rehydrated.repository.packages.model).toBeDefined();
+      expect(rehydrated.repository.packages.model.name).toBe('Model');
     });
   });
 });

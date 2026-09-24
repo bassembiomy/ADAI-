@@ -734,6 +734,8 @@ export interface ChunkedRepositoryExport {
 }
 
 const PERSISTENCE_COLLECTIONS = [
+  'packages',
+  'diagrams',
   'definitions',
   'usages',
   'connectors',
@@ -779,6 +781,7 @@ export function serializeToChunks(
     const collRecord = repo[collName] as Record<string, { id: string }>;
     if (!collRecord) continue;
     for (const [id, entity] of Object.entries(collRecord)) {
+      if (collName === 'packages' && id === 'model') continue;
       const chunk = serializeSingleEntityChunk(collName, entity);
       chunks[chunk.chunkKey] = chunk;
       chunkIndex[chunk.chunkKey] = {
@@ -792,7 +795,7 @@ export function serializeToChunks(
 
   const manifestContent = {
     format: 'ADIA-SysML-Chunked' as const,
-    schemaVersion: 2 as const,
+    schemaVersion: (repo.schemaVersion === 2 ? 2 : 3) as (2 | 3),
     profileId: repo.profileId ?? 'OMG-SysML-1.6-ADIA',
     revision: repo.revision ?? 0,
     auditTrail: [...(repo.auditTrail ?? [])],
@@ -839,6 +842,7 @@ export function serializeIncrementalChunks(
     if (!collRecord) continue;
 
     for (const id of changedSet) {
+      if (collName === 'packages' && id === 'model') continue;
       const entity = collRecord[id];
       const key = createChunkKey(collName, id);
 
@@ -862,7 +866,7 @@ export function serializeIncrementalChunks(
   const nextRevision = (repo.revision ?? baseManifest.revision) + 1;
   const manifestContent = {
     format: 'ADIA-SysML-Chunked' as const,
-    schemaVersion: 2 as const,
+    schemaVersion: (repo.schemaVersion === 2 ? 2 : 3) as (2 | 3),
     profileId: repo.profileId ?? baseManifest.profileId,
     revision: nextRevision,
     auditTrail: [...(repo.auditTrail ?? [])],
@@ -928,6 +932,17 @@ export function hydrateRepositoryFromChunks(
     }
   }
 
+  if (!repo.packages) {
+    repo.packages = {};
+  }
+  if (!repo.packages.model) {
+    repo.packages.model = { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' };
+  }
+  if (!repo.diagrams) {
+    repo.diagrams = {};
+  }
+  repo.schemaVersion = 3;
+
   freezeBaselines(repo);
   const quarantined = quarantineUnresolvedEndpoints(repo);
   diagnostics.push(...quarantined.report.diagnostics);
@@ -958,6 +973,7 @@ export async function streamExportChunks(
     const collRecord = repo[collName] as Record<string, { id: string }>;
     if (!collRecord) continue;
     for (const [id, entity] of Object.entries(collRecord)) {
+      if (collName === 'packages' && id === 'model') continue;
       const chunk = serializeSingleEntityChunk(collName, entity);
       await onChunk(chunk);
       totalBytes += chunk.json.length;
@@ -972,7 +988,7 @@ export async function streamExportChunks(
 
   const manifestContent = {
     format: 'ADIA-SysML-Chunked' as const,
-    schemaVersion: 2 as const,
+    schemaVersion: (repo.schemaVersion === 2 ? 2 : 3) as (2 | 3),
     profileId: repo.profileId ?? 'OMG-SysML-1.6-ADIA',
     revision: repo.revision ?? 0,
     auditTrail: [...(repo.auditTrail ?? [])],
