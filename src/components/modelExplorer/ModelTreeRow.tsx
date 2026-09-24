@@ -15,6 +15,8 @@ import {
   GitCommit,
   ArrowRight,
   FileCode,
+  FlaskConical,
+  Workflow,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
@@ -69,6 +71,10 @@ export function getNodeKindIcon(kind: string, _domain: string): React.ReactEleme
       return <LayoutGrid {...iconProps} className="shrink-0 text-violet-400" />;
     case 'state':
       return <Square {...iconProps} className="shrink-0 text-teal-400" />;
+    case 'xbridgesModel':
+      return <Workflow {...iconProps} className="shrink-0 text-amber-400" />;
+    case 'vlabModel':
+      return <FlaskConical {...iconProps} className="shrink-0 text-purple-400" />;
     case 'pseudostate':
       return <Disc {...iconProps} className="shrink-0 text-orange-400" />;
     case 'junction':

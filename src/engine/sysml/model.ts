@@ -85,6 +85,8 @@ export interface DiagramReference {
 
 export interface SysmlRelationship {
   id: string;
+  /** Human-readable relationship label/signature shown on diagrams. */
+  name?: string;
   kind:
     | 'association'
     | 'sharedAggregation'

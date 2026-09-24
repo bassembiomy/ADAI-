@@ -74,8 +74,7 @@ describe('buildUnifiedModelProjection', () => {
       isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
       ports: [{ id: 'port-def', name: 'command', kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
     };
-    repository.definitions.signal = { id: 'signal', name: 'CommandSignal', namespace: ['model'], ownerId: 'model', kind: 'interface', features: [] };
-    repository.usages.part = { id: 'part', name: 'controller', kind: 'part', ownerId: 'model', typeId: 'block' };
+    repository.usages.part = { id: 'part', name: 'controller', kind: 'part', ownerId: 'model', typeId: 'block', aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } };
     repository.usages.port = { id: 'port', name: 'port', kind: 'port', ownerId: 'part', definitionId: 'port-def' };
     const projection = buildUnifiedModelProjection({
       sysml: repository,
@@ -99,7 +98,7 @@ describe('buildUnifiedModelProjection', () => {
       ports: [{ id: uuid, name: uuid, kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
     };
     repository.definitions.signal = { id: 'signal', name: 'CommandSignal', namespace: ['model'], ownerId: 'model', kind: 'interface', features: [] };
-    repository.usages.part = { id: 'part', name: 'part_3', kind: 'part', ownerId: 'block', typeId: 'block' };
+    repository.usages.part = { id: 'part', name: 'part_3', kind: 'part', ownerId: 'block', typeId: 'block', aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } };
     repository.usages[uuid] = { id: uuid, name: uuid, kind: 'port', ownerId: 'part', definitionId: uuid };
     const projection = buildUnifiedModelProjection({
       sysml: repository,

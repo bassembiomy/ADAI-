@@ -476,6 +476,7 @@ const HierarchyTree: React.FC<any> = (props) => (
     currentLayerId={props.currentLayerId}
     blocks={props.blocks}
     parts={props.parts}
+    externalModels={props.externalModels}
     canonicalSysmlRepository={props.canonicalSysmlRepository}
     selectedIds={props.selectedIds}
     onSelect={props.onSelect}
@@ -6335,6 +6336,14 @@ const ADIA = () => {
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
   const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
+  const hierarchyExternalModels = useMemo(() => workspaceFiles
+    .filter(file => file.type === 'xbridges' || file.type === 'vlab')
+    .map(file => ({
+      id: file.id,
+      name: file.name,
+      domain: file.type as 'xbridges' | 'vlab',
+      diagramId: file.id,
+    })), [workspaceFiles]);
   const [showWorkspaceFileDialog, setShowWorkspaceFileDialog] = useState(false);
   const [sharedClipboard, setSharedClipboard] = useState<{
     nodes: any[];
@@ -9865,6 +9874,61 @@ const ADIA = () => {
     addError('info', `Created ${type}`);
   }, [addError, addToHistory, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
 
+  type BddFeatureDrag =
+    | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }
+    | { kind: 'operation'; ownerId: string; name: string };
+  const [bddFeatureDrag, setBddFeatureDrag] = useState<BddFeatureDrag | null>(null);
+
+  const startBddFeatureDrag = useCallback((e: MouseEvent<SVGTextElement>, feature: BddFeatureDrag) => {
+    if (diagramMode !== 'bdd' || e.button !== 0) return;
+    e.stopPropagation();
+    setSelectedIds([feature.ownerId]);
+    setBddFeatureDrag(feature);
+  }, [diagramMode]);
+
+  const dropBddFeatureOnBlock = useCallback((e: MouseEvent<SVGGElement>, targetId: string) => {
+    if (diagramMode !== 'bdd' || !bddFeatureDrag) return;
+    const source = blocks.find(block => block.id === bddFeatureDrag.ownerId);
+    const target = blocks.find(block => block.id === targetId);
+    if (!source || !target || source.id === target.id) {
+      setBddFeatureDrag(null);
+      return;
+    }
+
+    let type: RelationshipData['type'];
+    let label: string;
+    let sourceMultiplicity = '1';
+    if (bddFeatureDrag.kind === 'property') {
+      const typeMatchesTarget = bddFeatureDrag.typeId === target.id || bddFeatureDrag.typeName === target.name;
+      if (!typeMatchesTarget) {
+        addError('warning', `This property is typed by ${bddFeatureDrag.typeName}; drop it onto that Block to create its association.`);
+        setBddFeatureDrag(null);
+        return;
+      }
+      type = 'association';
+      label = `${bddFeatureDrag.name} : ${target.name}`;
+      sourceMultiplicity = bddFeatureDrag.multiplicity || '1';
+    } else {
+      type = 'dependency';
+      label = bddFeatureDrag.name;
+    }
+
+    const candidate: RelationshipData = {
+      id: uuidv4(), sourceId: source.id, targetId: target.id, type, label,
+      sourceMultiplicity, targetMultiplicity: '1',
+    };
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection);
+    } else {
+      addToHistory();
+      setRelationships(prev => [...prev, candidate]);
+      setSelectedIds([candidate.id]);
+      addError('info', `Created ${type} from ${bddFeatureDrag.kind}: ${bddFeatureDrag.name}`);
+    }
+    setBddFeatureDrag(null);
+  }, [diagramMode, bddFeatureDrag, blocks, addError, relationships, parts, showConnectionPolicyError, addToHistory]);
+
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
     const current = relationships.find(relationship => relationship.id === id);
     if (!current) return;
@@ -10628,6 +10692,7 @@ const ADIA = () => {
   }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    setBddFeatureDrag(null);
     if (e.button === 1) {
       midDown.current = false;
     }
@@ -14599,6 +14664,7 @@ const ADIA = () => {
           key={block.id}
           transform={`translate(${block.x}, ${block.y})`}
           onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+          onMouseUp={(e) => dropBddFeatureOnBlock(e, block.id)}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
             if (diagramMode === 'requirements') {
@@ -14607,7 +14673,7 @@ const ADIA = () => {
               enterBlock(block.id);
             }
           }}
-          style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
+          style={{ cursor: bddFeatureDrag ? 'copy' : isCreatingTransition ? 'crosshair' : 'move' }}
         >
           {isSelected && (
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
@@ -14657,7 +14723,20 @@ const ADIA = () => {
               ) : (
                 <g transform="translate(5, 45)">
                   {block.properties.slice(0, 3).map((prop, i) => (
-                    <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
+                    <text
+                      key={prop.id}
+                      y={i * 12}
+                      fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'property' && bddFeatureDrag.featureId === prop.id ? '#f97316' : '#aaa'}
+                      fontSize={10}
+                      fontFamily="monospace"
+                      style={{ cursor: diagramMode === 'bdd' ? 'grab' : 'default', userSelect: 'none' }}
+                      onMouseDown={(e) => startBddFeatureDrag(e, {
+                        kind: 'property', ownerId: block.id, featureId: prop.id, name: prop.name,
+                        typeId: prop.typeId,
+                        typeName: blocks.find(candidate => candidate.id === prop.typeId)?.name ?? prop.type,
+                        multiplicity: prop.multiplicity ?? '1',
+                      })}
+                    >
                       {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
@@ -14680,7 +14759,15 @@ const ADIA = () => {
                   <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
                   <g transform={`translate(5, ${displayHeight - 15})`}>
                     {block.operations.slice(0, 2).map((op, i) => (
-                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
+                      <text
+                        key={`${op}-${i}`}
+                        y={i * 12}
+                        fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'operation' && bddFeatureDrag.name === op ? '#f97316' : '#aaa'}
+                        fontSize={10}
+                        fontFamily="monospace"
+                        style={{ cursor: diagramMode === 'bdd' ? 'grab' : 'default', userSelect: 'none' }}
+                        onMouseDown={(e) => startBddFeatureDrag(e, { kind: 'operation', ownerId: block.id, name: op })}
+                      >{op}</text>
                     ))}
                   </g>
                 </>
@@ -14743,7 +14830,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope]);
+  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
@@ -14788,7 +14875,7 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(rel.id);
       const isSuspect = Boolean((rel as any).suspect);
       const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
-      const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
+      const strokeDash = ['allocation', 'dependency'].includes(rel.type) ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
       const isReqContainment = rel.type === 'requirementContainment';
       const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
@@ -14833,6 +14920,9 @@ const ADIA = () => {
           )}
           {rel.type === 'allocation' && (
             <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+          )}
+          {rel.type === 'dependency' && (
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#141414" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {isTrace && (
             <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
@@ -15919,10 +16009,14 @@ const ADIA = () => {
                   diagramMode={diagramMode}
                   blocks={blocks}
                   parts={parts}
+                  externalModels={hierarchyExternalModels}
                   canonicalSysmlRepository={canonicalSysmlRepository}
                   onSelect={(id: string) => setSelectedIds([id])}
                   onDoubleClick={(id: string) => {
-                    if (diagramMode === "statemachine") {
+                    const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
+                    if (externalModelFile) {
+                      openFileInTab(externalModelFile.id);
+                    } else if (diagramMode === "statemachine") {
                       enterLayer(id);
                     }
                   }}
@@ -16658,6 +16752,22 @@ const ADIA = () => {
                         <g style={{ pointerEvents: 'all' }}>
                           {renderRelationships()}
                         </g>
+                        {diagramMode === 'bdd' && bddFeatureDrag && (() => {
+                          const source = blocks.find(block => block.id === bddFeatureDrag.ownerId);
+                          if (!source) return null;
+                          const bounds = computeBlockDisplayBounds(source);
+                          const featureY = bddFeatureDrag.kind === 'property'
+                            ? 45 + Math.max(0, source.properties.findIndex(property => property.id === bddFeatureDrag.featureId)) * 12
+                            : bounds.height - 15 + Math.max(0, source.operations.findIndex(operation => operation === bddFeatureDrag.name)) * 12;
+                          const startX = source.x + bounds.width;
+                          const startY = source.y + featureY;
+                          return (
+                            <g pointerEvents="none">
+                              <path d={`M ${startX} ${startY} L ${mousePos.x} ${mousePos.y}`} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="6 4" />
+                              <circle cx={mousePos.x} cy={mousePos.y} r={4} fill="#f97316" />
+                            </g>
+                          );
+                        })()}
                       </>
                     ) : (
                       diagramMode === 'ibd' ? (

@@ -1,13 +1,46 @@
 import { parseMultiplicity } from '../engine/sysml/model';
-import type { BlockData, RelationshipData, ValuePropertyData } from '../types/sysml_types';
+import type { BlockData, PartData, RelationshipData, ValuePropertyData } from '../types/sysml_types';
 
 export interface PropertyValidationResult { valid: boolean; codes: string[]; messages: string[]; }
+
+/** Return true only when an edit introduces a validation category that was not already present. */
+export function introducesNewValidationCodes(
+  current: PropertyValidationResult,
+  candidate: PropertyValidationResult,
+): boolean {
+  const existingCodes = new Set(current.codes);
+  return candidate.codes.some(code => !existingCodes.has(code));
+}
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const OPERATION = /^[A-Za-z_][A-Za-z0-9_]*(?:\s*\([^\n]*\))?(?:\s*:\s*[A-Za-z_][A-Za-z0-9_:]*)?$/;
 const REQUIREMENT_ID = /^[A-Za-z][A-Za-z0-9._-]*$/;
 const PORT_DIRECTIONS = new Set(['in', 'out', 'inout']);
 const REQUIREMENT_STATUSES = new Set(['Draft', 'Approved', 'Implemented', 'Verified', 'Failed', 'Stale', 'Retired']);
+
+/** Project a typed part usage into its owning block's SysML part property. */
+export function syncPartProperty(blocks: readonly BlockData[], part: PartData): BlockData[] {
+  if (!part.blockId || !part.typeId) return [...blocks];
+  const type = blocks.find(item => item.id === part.typeId);
+  if (!type) return [...blocks];
+  return blocks.map(block => {
+    if (block.id !== part.blockId) return block;
+    const projected: ValuePropertyData = {
+      id: part.id,
+      name: part.name,
+      type: type.name,
+      typeId: type.id,
+      kind: 'part',
+      multiplicity: part.multiplicity || '1',
+    };
+    const properties = block.properties.filter(property => property.id !== part.id);
+    return { ...block, properties: [...properties, projected] };
+  });
+}
+
+export function removePartProperty(blocks: readonly BlockData[], partId: string): BlockData[] {
+  return blocks.map(block => ({ ...block, properties: block.properties.filter(property => property.id !== partId) }));
+}
 
 export function validateLegacyBlockEdit(
   blocks: readonly BlockData[], relationships: readonly RelationshipData[], blockId: string,
@@ -59,7 +92,11 @@ export function validateLegacyBlockProperties(
     try { parsed = parseMultiplicity(property.multiplicity || '1'); } catch { add('INVALID_MULTIPLICITY', `${property.name} has invalid multiplicity ${property.multiplicity}`); }
     const typeId = property.typeId || property.type;
     const type = blocks.find(item => item.id === typeId || item.name === typeId);
-    if (!type || !validType(property.kind || 'value', type.stereotype)) add('INVALID_PROPERTY_TYPE', `${property.name} has incompatible type ${typeId}`);
+    if (!type) {
+      add('INVALID_PROPERTY_TYPE', `${property.name || 'Property'} references non-existent type ${typeId || '(unresolved)'}`);
+    } else if (!validType(property.kind || 'value', type.stereotype)) {
+      add('INVALID_PROPERTY_TYPE', `${property.name || 'Property'} has incompatible type ${type.name} «${type.stereotype}» for ${property.kind || 'value'} property`);
+    }
     if (property.redefinesId) {
       const original = inherited.find(item => item.id === property.redefinesId);
       if (!original || (original.kind || 'value') !== (property.kind || 'value') || (original.typeId || original.type) !== typeId || !parsed || !multiplicityAtMost(parsed, safeParse(original.multiplicity))) {

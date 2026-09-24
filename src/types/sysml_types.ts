@@ -81,6 +81,8 @@ export interface RelationshipData {
 
 export interface PartData {
   id: string;
+  /** Stable identity of the owning Block property projected by this IBD usage. */
+  propertyId?: string;
   name: string;
   blockId: string | null;
   typeId?: string | null;

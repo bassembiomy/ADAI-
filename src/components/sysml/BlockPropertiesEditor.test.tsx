@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BlockPropertiesEditor, createDefaultProperty } from './BlockPropertiesEditor';
+import { BlockPropertiesEditor, adaptPropertyKindForType, createDefaultProperty } from './BlockPropertiesEditor';
 
 describe('BlockPropertiesEditor', () => {
   it('creates a valid default property when the first available type is a block', () => {
@@ -118,5 +118,28 @@ describe('BlockPropertiesEditor', () => {
     expect(capped).toContain('120 total');
     expect(capped).toContain('more inherited features');
     expect(capped).not.toContain('prop119');
+  });
+
+  it('adapts property kind appropriately when a block or valueType is selected', () => {
+    expect(adaptPropertyKindForType('value', 'block')).toBe('part');
+    expect(adaptPropertyKindForType('part', 'valueType')).toBe('value');
+    expect(adaptPropertyKindForType('part', 'enumeration')).toBe('value');
+    expect(adaptPropertyKindForType('reference', 'block')).toBe('reference');
+    expect(adaptPropertyKindForType('flow', 'valueType')).toBe('flow');
+  });
+
+  it('shows structural controls without value-only fields for part properties', () => {
+    const html = renderToStaticMarkup(
+      <BlockPropertiesEditor
+        properties={[{ id: 'part', name: 'motor', type: 'Motor', typeId: 'motor', kind: 'part', multiplicity: '1' }]}
+        typeOptions={[{ id: 'motor', name: 'Motor', stereotype: 'block' }]}
+        inheritedProperties={[]}
+        onChange={() => {}}
+      />
+    );
+    expect(html).toContain('Composite part');
+    expect(html).not.toContain('Default value');
+    expect(html).not.toContain('Unit');
+    expect(html).not.toContain('Dimension');
   });
 });

@@ -37,6 +37,7 @@ import {
 } from '../../features/modelExplorer/modelExplorerMultiSelect';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
+import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 
 export interface CapabilityActionContext {
   activeDiagramId?: string;
@@ -166,6 +167,7 @@ export interface AppModelExplorerProps {
   currentLayerId?: string;
   blocks: BlockData[];
   parts: PartData[];
+  externalModels?: ExternalModelDescriptor[];
   canonicalSysmlRepository?: SysmlRepository;
   selectedIds: string[];
   onSelect: (id: string, multiSelect?: boolean) => void;
@@ -197,6 +199,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   currentLayerId = 'root',
   blocks,
   parts,
+  externalModels = [],
   canonicalSysmlRepository,
   selectedIds,
   onSelect,
@@ -346,10 +349,10 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     return buildUnifiedModelProjection({
       sysml: repository,
       stateMachine: { states, layers, transitions, junctions, diagrams: diagrams ?? [], revision: smAdapter.getRevision() },
-      externalModels: [],
+      externalModels,
       revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision()),
     });
-  }, [blocks, canonicalSysmlRepository, diagrams, junctions, layers, parts, smAdapter, states, sysmlAdapter, transitions]);
+  }, [blocks, canonicalSysmlRepository, diagrams, externalModels, junctions, layers, parts, smAdapter, states, sysmlAdapter, transitions]);
 
   const selectedNodeIds = useMemo(() => {
     const set = new Set<string>();

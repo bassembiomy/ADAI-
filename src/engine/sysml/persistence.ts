@@ -393,6 +393,9 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrat
     }
     repo.relationships[id] = {
       id, sourceId, targetId, kind,
+      name: optionalText(legacy.label),
+      sourceMultiplicity: legacy.sourceMultiplicity ? safeMultiplicity(legacy.sourceMultiplicity) : undefined,
+      targetMultiplicity: legacy.targetMultiplicity ? safeMultiplicity(legacy.targetMultiplicity) : undefined,
     };
     if (kind === 'verify' && repo.verificationCases[sourceId] && repo.requirements[targetId]) {
       repo.verificationCases[sourceId].verifiesRequirementIds.push(targetId);

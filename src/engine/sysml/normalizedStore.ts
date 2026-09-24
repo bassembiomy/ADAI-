@@ -886,7 +886,7 @@ export function projectNormalizedDiagram(
       sourceId: rel.sourceId,
       targetId: rel.targetId,
       type: legacyType,
-      label: (rel as any).name ?? '',
+      label: rel.name ?? '',
       sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
       targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
     };
@@ -1249,7 +1249,7 @@ export function selectRelationshipsForVisibleNodes(
                   sourceId: rel.sourceId,
                   targetId: rel.targetId,
                   type: legacyType,
-                  label: (rel as any).name ?? '',
+                  label: rel.name ?? '',
                   sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
                   targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
                 };

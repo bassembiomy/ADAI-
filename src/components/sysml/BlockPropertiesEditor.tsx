@@ -52,6 +52,20 @@ export function createDefaultProperty(typeOptions: Pick<BlockData, 'id' | 'name'
   };
 }
 
+export function adaptPropertyKindForType(
+  currentKind: ValuePropertyData['kind'] = 'value',
+  typeStereotype?: string
+): ValuePropertyData['kind'] {
+  if (!typeStereotype) return currentKind;
+  if (typeStereotype === 'valueType' || typeStereotype === 'enumeration') {
+    if (currentKind === 'part') return 'value';
+  } else if (typeStereotype === 'block') {
+    if (currentKind === 'value') return 'part';
+  }
+  return currentKind;
+}
+
+
 type OriginView = ValuePropertyData & { originId: string; originName: string };
 
 function withOrigin(property: ValuePropertyData): OriginView {
@@ -134,55 +148,68 @@ export function BlockPropertiesEditor({
 
   const diagnosticsFor = (elementId: string) => diagnostics.filter(d => d.elementId === elementId);
 
-  return <div className="sysml-editor space-y-3" aria-label="Block properties">
-    {properties.map((property, index) => <fieldset key={property.id} className="rounded border border-gray-700 p-2 space-y-2">
+  return <div className="sysml-editor w-full min-w-0 space-y-3" aria-label="Block properties">
+    {properties.map((property, index) => <fieldset key={property.id} className="w-full min-w-0 rounded border border-gray-700 p-3 space-y-2">
       <legend className="px-1 text-xs">Property {index + 1}</legend>
       <label className="block text-xs">Name
-        <input aria-label={`Property ${index + 1} name`} value={property.name} onChange={event => update(index, { name: event.target.value })} className="w-full rounded border bg-transparent px-2 py-1" />
+        <input aria-label={`Property ${index + 1} name`} value={property.name} onChange={event => update(index, { name: event.target.value })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
       </label>
       <label className="block text-xs">Property kind
-        <select aria-label={`Property ${index + 1} kind`} value={property.kind || 'value'} onChange={event => update(index, { kind: event.target.value as ValuePropertyData['kind'] })} className="w-full rounded border bg-transparent px-2 py-1">
+        <select aria-label={`Property ${index + 1} kind`} value={property.kind || 'value'} onChange={event => update(index, { kind: event.target.value as ValuePropertyData['kind'] })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
           {PROPERTY_KINDS.map(kind => <option key={kind} value={kind}>{kind}</option>)}
         </select>
       </label>
       <label className="block text-xs">Type
         <select aria-label={`Property ${index + 1} type`} value={property.typeId || property.type} onChange={event => {
           const selected = typeOptions.find(option => option.id === event.target.value);
-          update(index, { typeId: event.target.value, type: selected?.name || event.target.value });
-        }} className="w-full rounded border bg-transparent px-2 py-1">
+          const nextKind = adaptPropertyKindForType(property.kind, selected?.stereotype);
+          update(index, { typeId: event.target.value, type: selected?.name || event.target.value, kind: nextKind });
+        }} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
           <option value="">Select a type</option>
           {typeOptions.map(option => <option key={option.id} value={option.id}>{option.name} «{option.stereotype}»</option>)}
         </select>
       </label>
       <label className="block text-xs">Multiplicity
-        <input aria-label={`Property ${index + 1} multiplicity`} value={property.multiplicity || '1'} onChange={event => update(index, { multiplicity: event.target.value })} className="w-full rounded border bg-transparent px-2 py-1" />
+        <input aria-label={`Property ${index + 1} multiplicity`} value={property.multiplicity || '1'} onChange={event => update(index, { multiplicity: event.target.value })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
       </label>
+      {(property.kind === 'part' || property.kind === 'reference') && (
+        <div className="rounded border border-sky-900/60 bg-sky-950/20 px-2 py-1.5 text-[11px] text-sky-300">
+          {property.kind === 'part' ? 'Composite part' : 'Reference property'} · represented in the owning Block IBD
+        </div>
+      )}
       <div className="flex flex-wrap gap-3 text-xs">
         <label><input type="checkbox" checked={!!property.ordered} onChange={event => update(index, { ordered: event.target.checked })} /> ordered</label>
         <label><input type="checkbox" checked={property.unique === false} onChange={event => update(index, { unique: !event.target.checked })} /> nonunique</label>
         <label><input type="checkbox" checked={!!property.isDerived} onChange={event => update(index, { isDerived: event.target.checked })} /> derived</label>
       </div>
-      <label className="block text-xs">Default value
-        <input value={property.defaultValue || ''} onChange={event => update(index, { defaultValue: event.target.value || undefined })} className="w-full rounded border bg-transparent px-2 py-1" />
-      </label>
-      <label className="block text-xs">Unit
-        <input value={property.unit || ''} onChange={event => update(index, { unit: event.target.value || undefined })} className="w-full rounded border bg-transparent px-2 py-1" />
-      </label>
-      <label className="block text-xs">Dimension
-        <input value={property.dimension || ''} onChange={event => update(index, { dimension: event.target.value || undefined })} className="w-full rounded border bg-transparent px-2 py-1" />
-      </label>
-      <label className="block text-xs">Redefines
-        <select value={property.redefinesId || ''} onChange={event => update(index, { redefinesId: event.target.value || undefined })} className="w-full rounded border bg-transparent px-2 py-1">
-          <option value="">None</option>
-          {inheritedProperties.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-        </select>
-      </label>
-      <label className="block text-xs">Subsets
-        <select value={property.subsetsId || ''} onChange={event => update(index, { subsetsId: event.target.value || undefined })} className="w-full rounded border bg-transparent px-2 py-1">
-          <option value="">None</option>
-          {inheritedProperties.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-        </select>
-      </label>
+      {property.kind !== 'part' && property.kind !== 'reference' && <>
+        <label className="block text-xs">Default value
+          <input value={property.defaultValue || ''} onChange={event => update(index, { defaultValue: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+        </label>
+        <label className="block text-xs">Unit
+          <input value={property.unit || ''} onChange={event => update(index, { unit: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+        </label>
+        <label className="block text-xs">Dimension
+          <input value={property.dimension || ''} onChange={event => update(index, { dimension: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+        </label>
+      </>}
+      <details className="rounded border border-gray-800 bg-black/10 px-2 py-1 text-xs">
+        <summary className="cursor-pointer text-gray-400">Advanced inheritance</summary>
+        <div className="mt-2 space-y-2">
+          <label className="block text-xs">Redefines
+            <select value={property.redefinesId || ''} onChange={event => update(index, { redefinesId: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
+              <option value="">None</option>
+              {inheritedProperties.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+          </label>
+          <label className="block text-xs">Subsets
+            <select value={property.subsetsId || ''} onChange={event => update(index, { subsetsId: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
+              <option value="">None</option>
+              {inheritedProperties.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+          </label>
+        </div>
+      </details>
       {diagnosticsFor(property.id).length > 0 && (
         <div role="alert" className="space-y-1 rounded border border-red-700 bg-red-950/40 p-1.5 text-xs text-red-300">
           {diagnosticsFor(property.id).map((d, i) => (
@@ -197,8 +224,8 @@ export function BlockPropertiesEditor({
     </fieldset>)}
     <button type="button" onClick={add} className="rounded border px-2 py-1 text-xs">Add property</button>
 
-    <div className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs" aria-label="Inheritance panel">
-      <h4 className="font-semibold uppercase text-gray-400">Inheritance panel</h4>
+    <details className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs" aria-label="Inheritance panel">
+      <summary className="cursor-pointer font-semibold uppercase text-gray-400">Inheritance panel</summary>
       <div aria-label="Parent chain" className="text-gray-300">
         {(parentChain ?? []).length > 0
           ? parentChain!.map(ancestor => ancestor.name).join(' → ')
@@ -223,10 +250,10 @@ export function BlockPropertiesEditor({
       {!hasInheritanceSignal && (
         <div className="text-gray-500">No inheritance issues detected</div>
       )}
-    </div>
+    </details>
 
-    <div className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs">
-      <h4 className="font-semibold uppercase text-gray-400">Inherited Features</h4>
+    <details className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs">
+      <summary className="cursor-pointer font-semibold uppercase text-gray-400">Inherited Features</summary>
       {sortedInherited.length === 0 ? (
         <div className="text-gray-500">No inherited features to display</div>
       ) : (
@@ -276,6 +303,6 @@ export function BlockPropertiesEditor({
           )}
         </div>
       )}
-    </div>
+    </details>
   </div>;
 }

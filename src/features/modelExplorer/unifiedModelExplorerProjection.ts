@@ -243,6 +243,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       domain: external.domain,
       kind: `${external.domain}Model`,
       label: external.name,
+      secondaryLabel: external.domain === 'xbridges' ? '[X-Bridges Model]' : '[V-Lab Model]',
       parentNodeId: parentId,
       ownerSemanticId: external.ownerStateId ?? null,
       diagramId: external.diagramId,
