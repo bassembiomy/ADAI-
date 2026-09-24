@@ -5,6 +5,7 @@ import type {
   ExplorerCapability,
   ExplorerImpact,
   ExplorerClipboardPayload,
+  ActiveDiagramContext,
 } from '../../features/modelExplorer/modelExplorerTypes';
 import { hashImpact } from '../../features/modelExplorer/modelExplorerTypes';
 import { ModelExplorer } from './ModelExplorer';
@@ -35,9 +36,11 @@ import {
   computeToggleSelection,
 } from '../../features/modelExplorer/modelExplorerMultiSelect';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
+import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 
 export interface CapabilityActionContext {
   activeDiagramId?: string;
+  activeDiagramContext?: ActiveDiagramContext;
   selectedSemanticIds?: string[];
   hasClipboard?: boolean;
 }
@@ -197,6 +200,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   onUpdateJunctions,
   onExecuteSysmlCommand,
   activeDiagramId,
+  activeDiagramContext,
   onAddToDiagram,
   onRevealInContainment,
   onOpenSpecification,
@@ -315,8 +319,28 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   // Project tree
   const projection = useMemo(() => {
-    return activeAdapter.project('containment');
-  }, [activeAdapter]);
+    const repository = canonicalSysmlRepository ?? createEmptyRepository();
+    if (!canonicalSysmlRepository) {
+      for (const block of blocks) {
+        repository.definitions[block.id] = {
+          id: block.id, name: block.name, namespace: ['model'], ownerId: 'model', kind: 'block',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        };
+      }
+      for (const part of parts) {
+        repository.usages[part.id] = {
+          id: part.id, name: part.name, ownerId: part.blockId || 'model', kind: 'part', typeId: part.typeId || '',
+          aggregation: 'composite', multiplicity: parseMultiplicity(part.multiplicity || '1'),
+        };
+      }
+    }
+    return buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: { states, layers, transitions, junctions, diagrams: diagrams ?? [], revision: smAdapter.getRevision() },
+      externalModels: [],
+      revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision()),
+    });
+  }, [blocks, canonicalSysmlRepository, diagrams, junctions, layers, parts, smAdapter, states, sysmlAdapter, transitions]);
 
   const selectedNodeIds = useMemo(() => {
     const set = new Set<string>();
@@ -544,6 +568,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         nodesById={projection.nodes}
         rootNodeIds={projection.roots}
         selectedNodeIds={selectedNodeIds}
+        activeDiagramContext={activeDiagramContext}
         onSelectNode={handleSelectNode}
         onActivateNode={handleActivateNode}
         getCapabilities={(node) => activeAdapter.capabilities([node.semanticId])}

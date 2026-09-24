@@ -25,15 +25,16 @@ export function flattenVisibleTree(
 
     if (!expanded.has(nodeId)) return;
 
-    [...node.childNodeIds]
-      .sort((left, right) => {
+    const childIds = node.virtualKind === 'model'
+      ? [...node.childNodeIds]
+      : [...node.childNodeIds].sort((left, right) => {
         const leftNode = projection.nodes[left];
         const rightNode = projection.nodes[right];
         const leftLabel = leftNode?.label ?? left;
         const rightLabel = rightNode?.label ?? right;
         return treeCollator.compare(leftLabel, rightLabel) || (left < right ? -1 : left > right ? 1 : 0);
-      })
-      .forEach(childId => visit(childId, depth + 1));
+      });
+    childIds.forEach(childId => visit(childId, depth + 1));
   };
 
   projection.roots.forEach(rootId => visit(rootId, 0));
@@ -224,4 +225,3 @@ export function projectModelTree(options: ProjectModelTreeOptions): VisibleTreeR
 
   return flattenVisibleTree(currentProjection, expandedSet);
 }
-

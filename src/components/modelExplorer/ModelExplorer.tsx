@@ -79,7 +79,14 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     if (persistedState?.expandedNodeIds && persistedState.expandedNodeIds.length > 0) {
       return new Set(persistedState.expandedNodeIds);
     }
-    return new Set(rootNodeIds);
+    const expanded = new Set(rootNodeIds);
+    const nodeMap = nodesById instanceof Map ? nodesById : new Map(Object.entries(nodesById));
+    nodeMap.forEach(node => {
+      if (node.virtualKind === 'model' || node.virtualKind === 'structural' || node.virtualKind === 'behavior' || node.virtualKind === 'parametric' || node.virtualKind === 'requirements' || node.kind === 'stateMachine' || node.kind === 'region') {
+        expanded.add(node.nodeId);
+      }
+    });
+    return expanded;
   });
   const [internalFavorites, setInternalFavorites] = useState<Set<string>>(() => {
     if (persistedState?.favorites && persistedState.favorites.length > 0) {
@@ -111,9 +118,16 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
           changed = true;
         }
       }
+      const nodeMap = nodesById instanceof Map ? nodesById : new Map(Object.entries(nodesById));
+      nodeMap.forEach(node => {
+        if ((node.virtualKind === 'model' || node.virtualKind === 'structural' || node.virtualKind === 'behavior' || node.virtualKind === 'parametric' || node.virtualKind === 'requirements' || node.kind === 'stateMachine' || node.kind === 'region') && !next.has(node.nodeId)) {
+          next.add(node.nodeId);
+          changed = true;
+        }
+      });
       return changed ? next : prev;
     });
-  }, [rootNodeIds]);
+  }, [nodesById, rootNodeIds]);
 
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [localRenamingNodeId, setLocalRenamingNodeId] = useState<string | null>(null);
