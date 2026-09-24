@@ -336,14 +336,14 @@
   - [x] Step 4: Implement projection branches (`sysmlExplorerAdapter.ts`)
   - [x] Step 5: Run tests
   - [x] Step 6: Commit
-- [ ] Task 4: Implement immutable State Machine commands and projection
-  - [ ] Step 1: Write failing hierarchy tests (`stateMachineExplorerAdapter.test.ts`)
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Complete supported pseudostate metadata (`src/types/sm_types.ts`)
-  - [ ] Step 4: Implement move analysis and immutable application (`smStatePruner.ts`)
-  - [ ] Step 5: Implement capabilities and commands (`stateMachineExplorerAdapter.ts`)
-  - [ ] Step 6: Run State Machine regression tests
-  - [ ] Step 7: Commit
+- [x] Task 4: Implement immutable State Machine commands and projection
+  - [x] Step 1: Write failing hierarchy tests (`stateMachineExplorerAdapter.test.ts`)
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Complete supported pseudostate metadata (`src/types/sm_types.ts`)
+  - [x] Step 4: Implement move analysis and immutable application (`smStatePruner.ts`)
+  - [x] Step 5: Implement capabilities and commands (`stateMachineExplorerAdapter.ts`)
+  - [x] Step 6: Run State Machine regression tests
+  - [x] Step 7: Commit
 - [ ] Task 5: Add the command bus, explorer state, and clipboard engine
   - [ ] Step 1: Write failing atomicity, reducer, and ID-remapping tests
   - [ ] Step 2: Verify failure

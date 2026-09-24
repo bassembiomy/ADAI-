@@ -103,3 +103,18 @@ export interface ModelExplorerAdapter {
   execute(command: ModelExplorerCommand): ExplorerCommandResult;
   relationshipTargets(sourceId: string, relationshipKind: string, direction: 'incoming' | 'outgoing'): ModelTreeNode[];
 }
+
+export function hashImpact(impact: ExplorerImpact): string {
+  const key = JSON.stringify({
+    descendants: [...impact.descendants].sort(),
+    relationships: [...impact.relationships].sort(),
+    presentations: [...impact.presentations].sort(),
+    invalidated: [...impact.invalidated].sort(),
+  });
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
