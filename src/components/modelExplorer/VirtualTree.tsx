@@ -105,7 +105,8 @@ export function handleTreeKeyNavigation({
       return true;
     }
     case 'Enter':
-    case ' ': {
+    case ' ':
+    case 'F2': {
       if (onActivate) {
         onActivate();
         return true;

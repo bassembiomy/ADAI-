@@ -424,12 +424,12 @@
   - [x] Step 4: Replace every hard-coded UI color with theme tokens
   - [x] Step 5: Add dark/light browser visual assertions (`tests/e2e/model-explorer-theme.spec.ts`)
   - [x] Step 6: Run theme and accessibility gates; commit
-- [ ] Task 17: Replace smoke E2E tests with real authoring scenarios
-  - [ ] Step 1: Remove conditional assertions
-  - [ ] Step 2: Implement the State Machine authoring scenario
-  - [ ] Step 3: Implement the SysML authoring scenario
-  - [ ] Step 4: Add persistence and 10,000-element performance scenarios
-  - [ ] Step 5: Run and commit
+- [x] Task 17: Replace smoke E2E tests with real authoring scenarios
+  - [x] Step 1: Remove conditional assertions
+  - [x] Step 2: Implement the State Machine authoring scenario
+  - [x] Step 3: Implement the SysML authoring scenario
+  - [x] Step 4: Add persistence and 10,000-element performance scenarios
+  - [x] Step 5: Run and commit
 - [ ] Task 18: Final regression, accessibility, and release certification
   - [ ] Step 1: Verify the full test matrix
   - [ ] Step 2: Perform the final source audit

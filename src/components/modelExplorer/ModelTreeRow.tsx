@@ -36,6 +36,7 @@ export interface ModelTreeRowProps {
   onRenameChange?: (val: string) => void;
   onRenameCommit?: (val: string) => void;
   onRenameCancel?: () => void;
+  onStartRename?: () => void;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -95,6 +96,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
   onRenameChange,
   onRenameCommit,
   onRenameCancel,
+  onStartRename,
   draggable = false,
   onDragStart,
   onDragOver,
@@ -135,6 +137,14 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
 
   return (
     <div
+      tabIndex={isFocused ? 0 : -1}
+      onKeyDown={(e) => {
+        if (e.key === 'F2' && !node.readOnly) {
+          e.preventDefault();
+          e.stopPropagation();
+          onStartRename?.();
+        }
+      }}
       className={`model-tree-row flex items-center h-full w-full pr-2 text-xs select-none cursor-pointer transition-colors ${
         isSelected
           ? 'bg-[var(--diagram-node-selected)] text-white font-medium border-l-2 border-[var(--focus-ring)]'

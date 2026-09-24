@@ -99,6 +99,20 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     }
   }, [projectId, effectiveFavorites, selectedNodeIds, expandedNodeIds, viewMode]);
 
+  useEffect(() => {
+    setExpandedNodeIds(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const rootId of rootNodeIds) {
+        if (!next.has(rootId)) {
+          next.add(rootId);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [rootNodeIds]);
+
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [localRenamingNodeId, setLocalRenamingNodeId] = useState<string | null>(null);
   const [draggedNode, setDraggedNode] = useState<ModelTreeNode | null>(null);
@@ -245,6 +259,9 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
       if (capability.kind === 'rename') {
         setLocalRenamingNodeId(targetNode.nodeId);
       }
+      if (capability.kind === 'createElement' || capability.kind === 'createDiagram') {
+        setExpandedNodeIds(prev => new Set([...prev, targetNode.nodeId]));
+      }
       onExecuteCapability?.(capability, targetNode);
       setContextMenu(null);
     },
@@ -263,6 +280,20 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     setLocalRenamingNodeId(null);
     onRenameCancel?.();
   }, [onRenameCancel]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') {
+        const focusedRow = visibleRows[focusedIndex];
+        if (focusedRow && !focusedRow.node.readOnly) {
+          e.preventDefault();
+          setLocalRenamingNodeId(focusedRow.node.nodeId);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [visibleRows, focusedIndex]);
 
   return (
     <div
@@ -311,7 +342,12 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
             isExpanded={isRowExpanded}
             onToggleExpand={handleToggleExpand}
             selectedNodeIds={selectedNodeIds}
-            onActivateRow={(row) => onActivateNode?.(row.node)}
+            onActivateRow={(row) => {
+              if (!row.node.readOnly) {
+                setLocalRenamingNodeId(row.node.nodeId);
+              }
+              onActivateNode?.(row.node);
+            }}
             renderRow={(row, idx) => (
               <ModelTreeRow
                 node={row.node}
@@ -330,6 +366,11 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
                 onContextMenu={(e) => handleContextMenu(row.node, e)}
                 onRenameCommit={(newName) => handleRenameCommit(row.node.nodeId, newName)}
                 onRenameCancel={handleRenameCancel}
+                onStartRename={() => {
+                  if (!row.node.readOnly) {
+                    setLocalRenamingNodeId(row.node.nodeId);
+                  }
+                }}
                 draggable={!effectiveRenamingId}
                 onDragStart={(e) => {
                   setDraggedNode(row.node);
