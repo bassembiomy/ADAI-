@@ -114,7 +114,7 @@ export function createElementOnDiagram(
     ownerId: legalOwnerId,
     typeId: request.typeId,
     portKind: request.portKind,
-    aggregation: request.aggregation,
+    aggregation: (request.aggregation === 'reference' ? 'none' : request.aggregation) as any,
   };
 
   const outcome = createSemanticElement(factoryInput, repo);
@@ -124,8 +124,8 @@ export function createElementOnDiagram(
     emptyAffected.presentationId = '';
     return {
       success: false,
-      code: outcome.code,
-      message: outcome.message,
+      code: (outcome as any).code,
+      message: (outcome as any).message,
       revision: repo.revision,
       state: repo,
       affectedIds: emptyAffected,

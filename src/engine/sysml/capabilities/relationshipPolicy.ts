@@ -239,8 +239,8 @@ export function getLegalRelationshipTargets(
     if (element.id === source.id) continue;
 
     const testRel: SemanticRelationship = direction === 'outgoing'
-      ? { id: '__test__', metaclass: normKind, sourceId: source.id, targetId: element.id }
-      : { id: '__test__', metaclass: normKind, sourceId: element.id, targetId: source.id };
+      ? { id: '__test__', metaclass: normKind as any, sourceId: source.id, targetId: element.id }
+      : { id: '__test__', metaclass: normKind as any, sourceId: element.id, targetId: source.id };
 
     if (validateRelationshipEndpoints(testRel, repo).allowed) {
       targets.push(element);

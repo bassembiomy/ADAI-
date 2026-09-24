@@ -99,15 +99,16 @@ export function createOwnedFeature(
 
   const outcome = createSemanticElement(factoryInput, repo);
   if (!outcome.ok) {
+    const failed = outcome as any;
     return {
       success: false,
-      code: outcome.code,
-      message: outcome.message,
+      code: failed.code,
+      message: failed.message,
       revision: repo.revision,
       state: repo,
       affectedIds: [],
-      candidates: outcome.candidates,
-      createNewTypeAction: outcome.createNewTypeAction,
+      candidates: failed.candidates,
+      createNewTypeAction: failed.createNewTypeAction,
     };
   }
 

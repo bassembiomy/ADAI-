@@ -113,7 +113,7 @@ export class SysmlWorkerClient {
     if (response.success) {
       pending.resolve(response.result);
     } else {
-      pending.reject(new Error(response.error || 'Worker request failed'));
+      pending.reject(new Error((response as any).error || 'Worker request failed'));
     }
   }
 
@@ -174,7 +174,7 @@ export class SysmlWorkerClient {
       if (response.success) {
         return response.result as T;
       }
-      throw new Error(response.error || 'Execution failed');
+      throw new Error((response as any).error || 'Execution failed');
     }
 
     // Off-thread path via WebWorker

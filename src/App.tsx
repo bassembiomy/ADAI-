@@ -9748,38 +9748,21 @@ const ADIA = () => {
           constraints: [],
         };
 
-    const cmdRes = handleExecuteSysmlCommand({
+    handleExecuteSysmlCommand({
       type: 'createElement',
       element: cmdElement as any,
     });
 
-    if (!cmdRes.committed) {
-      setBlocks(prev => [...prev, newBlock]);
-    }
-
     if (stereotype === 'requirement' && parentRequirement) {
-      const relId = uuidv4();
-      const relCmd = handleExecuteSysmlCommand({
+      handleExecuteSysmlCommand({
         type: 'createRelationship',
         relationship: {
-          id: relId,
+          id: uuidv4(),
           sourceId: parentRequirement.id,
           targetId: newBlock.id,
           kind: 'requirementContainment',
         },
       });
-      if (!relCmd.committed) {
-        setRelationships(prev => [
-          ...prev,
-          {
-            id: relId,
-            sourceId: parentRequirement.id,
-            targetId: newBlock.id,
-            type: 'requirementContainment',
-            label: '',
-          },
-        ]);
-      }
     }
 
     setSelectedIds([newBlock.id]);

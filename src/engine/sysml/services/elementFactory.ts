@@ -40,6 +40,7 @@ export interface CreateElementInput {
   requestedTypeName?: string;
   aggregation?: 'composite' | 'shared' | 'none';
   direction?: 'in' | 'out' | 'inout';
+  portKind?: string;
   requirementId?: string;
   text?: string;
   verifiesRequirementIds?: string[];
@@ -117,10 +118,10 @@ export function createSemanticElement(
       return {
         ok: false,
         code: 'TYPE_NOT_FOUND',
-        message: outcome.message,
-        searchedType: outcome.searchedType,
-        candidates: outcome.candidates,
-        createNewTypeAction: outcome.action,
+        message: (outcome as any).message,
+        searchedType: (outcome as any).searchedType,
+        candidates: (outcome as any).candidates,
+        createNewTypeAction: (outcome as any).action,
       };
     }
     resolvedTypeId = outcome.element.id;
@@ -140,10 +141,6 @@ export function createSemanticElement(
         ownerId,
         isAbstract: input.isAbstract ?? false,
         isLeaf: input.isLeaf ?? false,
-        ownedPropertyIds: [],
-        ownedPortIds: [],
-        ownedOperationIds: [],
-        ownedConstraintIds: [],
       };
       return { ok: true, element: block };
     }
@@ -387,6 +384,7 @@ export function createSemanticElement(
         id: elementId,
         name: finalName,
         metaclass: 'Port',
+        portKind: (input.portKind as any) ?? 'umlPort',
         namespace,
         ownerId,
         typeId: resolvedTypeId,

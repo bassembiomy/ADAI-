@@ -159,7 +159,7 @@ export function loadRepository(input: string | unknown): LoadRepositoryResult {
   let repository: SysmlRepository;
   if (isEnvelope(raw)) {
     if ((raw as any).schemaVersion === 4 || (raw.repository as any)?.schemaVersion === 4) {
-      const v4 = (raw.repository as any)?.schemaVersion === 4 ? raw.repository : raw;
+      const v4: any = (raw.repository as any)?.schemaVersion === 4 ? (raw as any).repository : raw;
       const res: any = {
         repository: v4,
         elements: v4.elements,

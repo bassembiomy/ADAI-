@@ -52,9 +52,9 @@
   - [x] Step 2: Verify RED
   - [x] Step 3: Implement presentation migration and projection-only adapters
   - [x] Step 4: Verify and commit
-- [ ] Task 10: Release Gates, Evidence, and Compliance Status
-  - [ ] Step 1: Add the repository-first release scenarios
-  - [ ] Step 2: Verify the new tests fail before final wiring
-  - [ ] Step 3: Complete remaining wiring until all gates pass
-  - [ ] Step 4: Run full verification
-  - [ ] Step 5: Update evidence and commit
+- [x] Task 10: Release Gates, Evidence, and Compliance Status
+  - [x] Step 1: Add the repository-first release scenarios
+  - [x] Step 2: Verify the new tests fail before final wiring
+  - [x] Step 3: Complete remaining wiring until all gates pass
+  - [x] Step 4: Run full verification
+  - [x] Step 5: Update evidence and commit
