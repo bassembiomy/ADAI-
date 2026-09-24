@@ -5,7 +5,13 @@ export interface Multiplicity {
   unique: boolean;
 }
 
-export interface NamedElement { id: string; name: string; namespace: string[]; }
+export interface NamedElement { id: string; name: string; namespace: string[]; ownerId?: string; }
+export interface PackageDefinition extends NamedElement { kind: 'package'; }
+export interface ModelDiagramDefinition extends NamedElement {
+  kind: 'diagram';
+  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine';
+  contextElementId?: string;
+}
 export interface ValueTypeDefinition extends NamedElement { kind: 'valueType'; unit?: string; dimension?: string; }
 export interface InterfaceDefinition extends NamedElement { kind: 'interface'; features: string[]; }
 export interface PropertyDefinition { id: string; name: string; kind: 'value' | 'part' | 'reference' | 'flow'; typeId: string; multiplicity: Multiplicity; unit?: string; dimension?: string; defaultValue?: string; isDerived?: boolean; redefinesId?: string; subsetsId?: string; inheritedFromId?: string; }
@@ -106,9 +112,11 @@ export interface SysmlRelationship {
 }
 
 export interface SysmlRepository {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   profileId: 'OMG-SysML-1.6-ADIA';
   revision: number;
+  packages: Record<string, PackageDefinition>;
+  diagrams: Record<string, ModelDiagramDefinition>;
   definitions: Record<string, SysmlDefinition>;
   usages: Record<string, SysmlUsage>;
   connectors: Record<string, ConnectorUsage>;
@@ -128,9 +136,13 @@ export interface SysmlRepository {
 
 export function createEmptyRepository(): SysmlRepository {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     profileId: 'OMG-SysML-1.6-ADIA',
     revision: 0,
+    packages: {
+      model: { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' },
+    },
+    diagrams: {},
     definitions: {},
     usages: {},
     connectors: {},
@@ -166,6 +178,8 @@ export function parseMultiplicity(input: string): Multiplicity {
 }
 
 export type SysmlEntityCollection =
+  | 'packages'
+  | 'diagrams'
   | 'definitions'
   | 'usages'
   | 'connectors'
@@ -182,6 +196,8 @@ export type SysmlEntityCollection =
   | 'diagramReferences';
 
 export type SysmlEntity =
+  | PackageDefinition
+  | ModelDiagramDefinition
   | SysmlDefinition
   | SysmlUsage
   | ConnectorUsage

@@ -20,6 +20,8 @@ import type {
   Multiplicity,
   SysmlEntityCollection,
   SysmlEntity,
+  PackageDefinition,
+  ModelDiagramDefinition,
 } from '../engine/sysml/model';
 import { createEmptyRepository } from '../engine/sysml/model';
 import {
@@ -145,6 +147,8 @@ export interface LegacySysmlView {
 }
 
 export type SysmlElement =
+  | PackageDefinition
+  | ModelDiagramDefinition
   | BlockDefinition
   | ValueTypeDefinition
   | InterfaceDefinition
@@ -173,12 +177,19 @@ export interface PresentationSnapshot {
   diagramPresentations: Record<string, { elementIds: string[] }>;
 }
 
-export type SysmlEditorCommand =
+export type SysmlMutationCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
   | { type: 'updatePresentation'; elementId: string; presentation: PresentationCoordinates; coalesceKey?: string }
+  | { type: 'moveElements'; elementIds: string[]; targetOwnerId: string; confirmedImpactHash?: string }
+  | { type: 'createDiagram'; diagram: ModelDiagramDefinition }
+  | { type: 'addToDiagram'; diagramId: string; elementIds: string[]; coordinates?: Record<string, PresentationCoordinates> };
+
+export type SysmlEditorCommand =
+  | SysmlMutationCommand
+  | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string }
   | { type: 'undo' }
   | { type: 'redo' };
 
@@ -606,6 +617,8 @@ function findAndPatchElement(repo: SysmlRepository, elementId: string, patch: Re
 
 function getCollectionFromElement(element: SysmlElement): SysmlEntityCollection {
   if ('kind' in element) {
+    if (element.kind === 'package') return 'packages';
+    if (element.kind === 'diagram') return 'diagrams';
     if (element.kind === 'block' || element.kind === 'valueType' || element.kind === 'interface') return 'definitions';
     if (element.kind === 'part' || element.kind === 'port') return 'usages';
     if (element.kind === 'assembly' || element.kind === 'delegation' || element.kind === 'binding') return 'connectors';
@@ -1047,6 +1060,8 @@ export function executeSysmlCommand(
     const nextRepo: SysmlRepository = {
       ...state.repository,
       revision: state.repository.revision + 1,
+      packages: collection === 'packages' ? { ...state.repository.packages, [command.element.id]: command.element as any } : (state.repository.packages || {}),
+      diagrams: collection === 'diagrams' ? { ...state.repository.diagrams, [command.element.id]: command.element as any } : (state.repository.diagrams || {}),
       definitions: collection === 'definitions' ? { ...state.repository.definitions, [command.element.id]: command.element as any } : state.repository.definitions,
       usages: collection === 'usages' ? { ...state.repository.usages, [command.element.id]: command.element as any } : state.repository.usages,
       connectors: collection === 'connectors' ? { ...state.repository.connectors, [command.element.id]: command.element as any } : state.repository.connectors,
@@ -1441,6 +1456,318 @@ export function executeSysmlCommand(
       presentationHistory: nextPresentationHistory,
       actionStack: nextActionStack,
       redoStack: [],
+    };
+  }
+
+  if (command.type === 'moveElements') {
+    const targetOwnerId = command.targetOwnerId;
+    const targetPkg = state.repository.packages?.[targetOwnerId];
+    const targetDef = state.repository.definitions?.[targetOwnerId];
+    const targetExists = targetOwnerId === 'model' || Boolean(targetPkg) || Boolean(targetDef);
+    if (!targetExists) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: [{ code: 'TARGET_OWNER_NOT_FOUND', severity: 'error', message: `Target owner ${targetOwnerId} not found` }],
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    for (const elemId of command.elementIds) {
+      if (elemId === targetOwnerId) {
+        const view = getView(state.repository, coordinates, diagramPresentations);
+        return {
+          repository: state.repository,
+          store,
+          patchHistory,
+          view,
+          diagnostics: [{ code: 'CIRCULAR_OWNERSHIP', severity: 'error', message: `Cannot move element ${elemId} into itself` }],
+          committed: false,
+          history: state.history,
+          coordinates,
+          diagramPresentations,
+          presentationHistory: state.presentationHistory,
+          actionStack: state.actionStack,
+          redoStack: state.redoStack,
+        };
+      }
+      let curr: string | undefined = targetOwnerId;
+      while (curr && curr !== 'model') {
+        const parentPkg = state.repository.packages?.[curr];
+        const parentDef = state.repository.definitions?.[curr];
+        const nextParent: string | undefined = parentPkg?.ownerId ?? parentDef?.ownerId;
+        if (nextParent === elemId) {
+          const view = getView(state.repository, coordinates, diagramPresentations);
+          return {
+            repository: state.repository,
+            store,
+            patchHistory,
+            view,
+            diagnostics: [{ code: 'CIRCULAR_OWNERSHIP', severity: 'error', message: `Cannot move element ${elemId} into its own descendant` }],
+            committed: false,
+            history: state.history,
+            coordinates,
+            diagramPresentations,
+            presentationHistory: state.presentationHistory,
+            actionStack: state.actionStack,
+            redoStack: state.redoStack,
+          };
+        }
+        curr = nextParent;
+      }
+    }
+
+    const forwardOps: import('../engine/sysml/patches').PatchOperation[] = [];
+    const inverseOps: import('../engine/sysml/patches').PatchOperation[] = [];
+    const nextRepo: SysmlRepository = {
+      ...state.repository,
+      revision: state.repository.revision + 1,
+      definitions: { ...(state.repository.definitions || {}) },
+      packages: { ...(state.repository.packages || {}) },
+      diagrams: { ...(state.repository.diagrams || {}) },
+      requirements: { ...(state.repository.requirements || {}) },
+      usages: { ...(state.repository.usages || {}) },
+      auditTrail: [...(state.repository.auditTrail || [])],
+    };
+
+    for (const elemId of command.elementIds) {
+      if (nextRepo.definitions[elemId]) {
+        const prevDef = nextRepo.definitions[elemId];
+        const updatedDef = { ...prevDef, ownerId: targetOwnerId };
+        nextRepo.definitions[elemId] = updatedDef;
+        upsertEntity(store, 'definitions', updatedDef);
+        forwardOps.push({ op: 'replace', collection: 'definitions', id: elemId, oldValue: prevDef, value: updatedDef });
+        inverseOps.unshift({ op: 'replace', collection: 'definitions', id: elemId, oldValue: updatedDef, value: prevDef });
+      } else if (nextRepo.packages[elemId]) {
+        const prevPkg = nextRepo.packages[elemId];
+        const updatedPkg = { ...prevPkg, ownerId: targetOwnerId };
+        nextRepo.packages[elemId] = updatedPkg;
+        upsertEntity(store, 'packages', updatedPkg);
+        forwardOps.push({ op: 'replace', collection: 'packages', id: elemId, oldValue: prevPkg, value: updatedPkg });
+        inverseOps.unshift({ op: 'replace', collection: 'packages', id: elemId, oldValue: updatedPkg, value: prevPkg });
+      } else if (nextRepo.diagrams[elemId]) {
+        const prevDiag = nextRepo.diagrams[elemId];
+        const updatedDiag = { ...prevDiag, ownerId: targetOwnerId };
+        nextRepo.diagrams[elemId] = updatedDiag;
+        upsertEntity(store, 'diagrams', updatedDiag);
+        forwardOps.push({ op: 'replace', collection: 'diagrams', id: elemId, oldValue: prevDiag, value: updatedDiag });
+        inverseOps.unshift({ op: 'replace', collection: 'diagrams', id: elemId, oldValue: updatedDiag, value: prevDiag });
+      } else if (nextRepo.requirements[elemId]) {
+        const prevReq = nextRepo.requirements[elemId];
+        const updatedReq = { ...prevReq, ownerId: targetOwnerId, owner: targetOwnerId };
+        nextRepo.requirements[elemId] = updatedReq;
+        upsertEntity(store, 'requirements', updatedReq);
+        forwardOps.push({ op: 'replace', collection: 'requirements', id: elemId, oldValue: prevReq, value: updatedReq });
+        inverseOps.unshift({ op: 'replace', collection: 'requirements', id: elemId, oldValue: updatedReq, value: prevReq });
+      } else if (nextRepo.usages[elemId]) {
+        const prevUsage = nextRepo.usages[elemId];
+        const updatedUsage = { ...prevUsage, ownerId: targetOwnerId };
+        nextRepo.usages[elemId] = updatedUsage;
+        upsertEntity(store, 'usages', updatedUsage);
+        forwardOps.push({ op: 'replace', collection: 'usages', id: elemId, oldValue: prevUsage, value: updatedUsage });
+        inverseOps.unshift({ op: 'replace', collection: 'usages', id: elemId, oldValue: updatedUsage, value: prevUsage });
+      }
+    }
+
+    const patch = createSysmlPatch({
+      revision: nextRepo.revision,
+      forward: forwardOps,
+      inverse: inverseOps,
+      description: `moveElements to ${targetOwnerId}`,
+    });
+    pushPatch(patchHistory, patch, store);
+
+    nextRepo.auditTrail.push({
+      id: `change-${nextRepo.revision}-move`,
+      revision: nextRepo.revision,
+      timestamp: new Date().toISOString(),
+      command: 'moveElements',
+      elementIds: command.elementIds,
+    });
+
+    const nextHistory: MutationHistory = {
+      past: [...state.history.past, state.repository],
+      present: nextRepo,
+      future: [],
+    };
+
+    const validation = validateSysmlRepository(nextRepo);
+    const view = getView(nextRepo, coordinates, diagramPresentations);
+    return {
+      repository: nextRepo,
+      store,
+      patchHistory,
+      view,
+      diagnostics: validation.diagnostics,
+      committed: true,
+      history: nextHistory,
+      coordinates,
+      diagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
+      redoStack: [],
+    };
+  }
+
+  if (command.type === 'createDiagram') {
+    const diagram = command.diagram;
+    const nextRepo: SysmlRepository = {
+      ...state.repository,
+      revision: state.repository.revision + 1,
+      diagrams: {
+        ...(state.repository.diagrams || {}),
+        [diagram.id]: diagram,
+      },
+      auditTrail: [...(state.repository.auditTrail || [])],
+    };
+    upsertEntity(store, 'diagrams', diagram);
+    const nextDiagramPresentations = {
+      ...diagramPresentations,
+      [diagram.id]: { elementIds: [] },
+    };
+    store.diagramPresentations.set(diagram.id, { elementIds: [] });
+
+    const patch = createSysmlPatch({
+      revision: nextRepo.revision,
+      forward: [{ op: 'add', collection: 'diagrams', id: diagram.id, value: diagram }],
+      inverse: [{ op: 'remove', collection: 'diagrams', id: diagram.id, oldValue: diagram }],
+      description: `createDiagram ${diagram.name}`,
+    });
+    pushPatch(patchHistory, patch, store);
+
+    nextRepo.auditTrail.push({
+      id: `change-${nextRepo.revision}-createDiagram`,
+      revision: nextRepo.revision,
+      timestamp: new Date().toISOString(),
+      command: 'createDiagram',
+      elementIds: [diagram.id],
+    });
+
+    const nextHistory: MutationHistory = {
+      past: [...state.history.past, state.repository],
+      present: nextRepo,
+      future: [],
+    };
+
+    const validation = validateSysmlRepository(nextRepo);
+    const view = getView(nextRepo, coordinates, nextDiagramPresentations);
+    return {
+      repository: nextRepo,
+      store,
+      patchHistory,
+      view,
+      diagnostics: validation.diagnostics,
+      committed: true,
+      history: nextHistory,
+      coordinates,
+      diagramPresentations: nextDiagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
+      redoStack: [],
+    };
+  }
+
+  if (command.type === 'addToDiagram') {
+    const currentPres = diagramPresentations[command.diagramId] ?? { elementIds: [] };
+    const existingSet = new Set(currentPres.elementIds);
+    const alreadyPresent = command.elementIds.filter(id => existingSet.has(id));
+    if (alreadyPresent.length > 0 && alreadyPresent.length === command.elementIds.length) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: [{ code: 'PRESENTATION_ALREADY_EXISTS', severity: 'warning', message: `Element(s) already presented in diagram` }],
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    const addedIds = command.elementIds.filter(id => !existingSet.has(id));
+    const nextPres = {
+      elementIds: [...currentPres.elementIds, ...addedIds],
+    };
+    const nextDiagramPresentations = {
+      ...diagramPresentations,
+      [command.diagramId]: nextPres,
+    };
+    store.diagramPresentations.set(command.diagramId, nextPres);
+
+    const nextCoords = { ...coordinates };
+    if (command.coordinates) {
+      for (const [id, coord] of Object.entries(command.coordinates)) {
+        nextCoords[id] = { ...coord };
+        store.coordinates.set(id, { ...coord });
+      }
+    }
+
+    const patch = createSysmlPatch({
+      revision: store.revision + 1,
+      forward: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: currentPres, value: nextPres }],
+      inverse: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: nextPres, value: currentPres }],
+      description: `addToDiagram ${command.diagramId}`,
+    });
+    pushPatch(patchHistory, patch, store);
+
+    const validation = validateSysmlRepository(state.repository);
+    const view = getView(state.repository, nextCoords, nextDiagramPresentations, command.diagramId);
+    return {
+      repository: state.repository,
+      store,
+      patchHistory,
+      view,
+      diagnostics: validation.diagnostics,
+      committed: true,
+      history: state.history,
+      coordinates: nextCoords,
+      diagramPresentations: nextDiagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'presentation'],
+      redoStack: [],
+    };
+  }
+
+  if (command.type === 'batch') {
+    let currentState: SysmlGatewayState = state;
+    for (const subCmd of command.commands) {
+      const res = executeSysmlCommand(currentState, subCmd);
+      if (!res.committed || res.diagnostics.some(d => d.severity === 'error')) {
+        const view = getView(state.repository, coordinates, diagramPresentations);
+        return {
+          repository: state.repository,
+          store,
+          patchHistory,
+          view,
+          diagnostics: res.diagnostics,
+          committed: false,
+          history: state.history,
+          coordinates,
+          diagramPresentations,
+          presentationHistory: state.presentationHistory,
+          actionStack: state.actionStack,
+          redoStack: state.redoStack,
+        };
+      }
+      currentState = res;
+    }
+    return {
+      ...currentState,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
     };
   }
 

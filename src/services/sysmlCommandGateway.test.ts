@@ -839,6 +839,33 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(result.repository.revision).toBe(before.revision);
     expect(result.repository.auditTrail).toHaveLength(before.audit);
   });
+
+  it('moves definitions atomically and undo restores their owners', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.motor = {
+      id: 'motor',
+      name: 'Motor',
+      namespace: [],
+      kind: 'block',
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    } as any;
+    (repo as any).packages = {
+      model: { id: 'model', name: 'Model', namespace: [], ownerId: '', kind: 'package' },
+      'pkg-power': { id: 'pkg-power', name: 'Power', namespace: [], ownerId: 'model', kind: 'package' },
+    };
+    const state = createSysmlGatewayState(repo);
+    const result = executeSysmlCommand(state, { type: 'moveElements', elementIds: ['motor'], targetOwnerId: 'pkg-power' } as any);
+    expect(result.committed).toBe(true);
+    expect((result.repository.definitions.motor as any).ownerId).toBe('pkg-power');
+    const undone = executeSysmlCommand(result, { type: 'undo' });
+    expect((undone.repository.definitions.motor as any).ownerId).toBe('model');
+  });
 });
 
 

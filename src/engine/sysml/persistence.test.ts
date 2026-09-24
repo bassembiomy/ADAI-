@@ -5,6 +5,7 @@ import {
   createBaseline,
   loadRepository,
   serializeRepository,
+  deserializeSysmlRepository,
   serializeToChunks,
   serializeIncrementalChunks,
   hydrateRepositoryFromChunks,
@@ -16,10 +17,45 @@ import {
 
 const block = (id: string): BlockDefinition => ({
   id, name: id, namespace: [], kind: 'block', isAbstract: false, isLeaf: false,
+  ownerId: 'model',
   properties: [], ports: [], operations: [], constraints: [],
 });
 
 describe('versioned SysML persistence and baselines', () => {
+  it('migrates schema 2 definitions into the model root without changing IDs', () => {
+    const schema2Fixture = {
+      schemaVersion: 2,
+      profileId: 'OMG-SysML-1.6-ADIA',
+      revision: 1,
+      definitions: {
+        motor: {
+          id: 'motor',
+          name: 'Motor',
+          namespace: [],
+          kind: 'block',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        },
+      },
+      usages: {},
+      connectors: {},
+      relationships: {},
+      requirements: {},
+      verificationCases: {},
+      evidence: {},
+      baselines: {},
+      artifacts: {},
+      auditTrail: [],
+    };
+    const loaded = deserializeSysmlRepository(JSON.stringify(schema2Fixture));
+    expect(loaded.schemaVersion).toBe(3);
+    expect(loaded.packages.model.name).toBe('Model');
+    expect(loaded.definitions.motor.ownerId).toBe('model');
+  });
   it('serializes deterministically and round-trips all canonical records', () => {
     const repo = createEmptyRepository();
     repo.definitions.z = block('z');

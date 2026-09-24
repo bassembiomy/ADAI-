@@ -322,13 +322,13 @@
   - [x] Step 4: Implement deterministic flattening and ancestor-preserving filtering (`src/features/modelExplorer/modelExplorerProjection.ts`, `src/features/modelExplorer/index.ts`)
   - [x] Step 5: Run tests and typecheck
   - [x] Step 6: Commit
-- [ ] Task 2: Add explicit SysML ownership and safe persistence migration
-  - [ ] Step 1: Add failing migration and reparent tests
-  - [ ] Step 2: Verify failures
-  - [ ] Step 3: Extend the canonical model (`model.ts`, `persistence.ts`)
-  - [ ] Step 4: Add cycle-safe batch reparent commands (`sysmlCommandGateway.ts`, `normalizedStore.ts`)
-  - [ ] Step 5: Run focused and release tests
-  - [ ] Step 6: Commit
+- [x] Task 2: Add explicit SysML ownership and safe persistence migration
+  - [x] Step 1: Add failing migration and reparent tests
+  - [x] Step 2: Verify failures
+  - [x] Step 3: Extend the canonical model (`model.ts`, `persistence.ts`)
+  - [x] Step 4: Add cycle-safe batch reparent commands (`sysmlCommandGateway.ts`, `normalizedStore.ts`)
+  - [x] Step 5: Run focused and release tests
+  - [x] Step 6: Commit
 - [ ] Task 3: Implement SysML projection and capabilities
   - [ ] Step 1: Write failing capability tests (`sysmlExplorerAdapter.test.ts`)
   - [ ] Step 2: Verify failure

@@ -23,7 +23,7 @@ import {
 
 interface PersistenceEnvelope {
   format: 'ADIA-SysML';
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   checksum: string;
   repository: SysmlRepository;
 }
@@ -48,11 +48,21 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
     Object.fromEntries(
       Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
     );
+  const definitions = Object.fromEntries(
+    Object.values(repository.definitions ?? {})
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(def => [def.id, def.ownerId ? def : { ...def, ownerId: 'model' }]),
+  );
+  const packages = repository.packages && Object.keys(repository.packages).length > 0
+    ? sorted(repository.packages)
+    : { model: { id: 'model', kind: 'package' as const, name: 'Model', namespace: [], ownerId: '' } };
   return {
     ...repository,
-    schemaVersion: 2,
+    schemaVersion: 3,
     profileId: 'OMG-SysML-1.6-ADIA',
-    definitions: sorted(repository.definitions ?? {}),
+    packages,
+    diagrams: sorted(repository.diagrams ?? {}),
+    definitions,
     usages: sorted(repository.usages ?? {}),
     connectors: sorted(repository.connectors ?? {}),
     relationships: sorted(repository.relationships ?? {}),
@@ -74,9 +84,43 @@ export function serializeRepository(repository: SysmlRepository): string {
   const canonicalRepo = canonicalizeRepository(repository);
   const canonical = stableStringify(canonicalRepo);
   const envelope: PersistenceEnvelope = {
-    format: 'ADIA-SysML', schemaVersion: 2, checksum: hash(canonical), repository: canonicalRepo,
+    format: 'ADIA-SysML', schemaVersion: 3, checksum: hash(canonical), repository: canonicalRepo,
   };
   return stableStringify(envelope);
+}
+
+export function deserializeSysmlRepository(input: string | unknown): SysmlRepository {
+  return loadRepository(input).repository;
+}
+
+function canonicalizeRepositoryForChecksum(repository: any): any {
+  if (repository.schemaVersion === 2) {
+    const sorted = <T extends { id: string }>(record?: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(
+        Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
+      );
+    return {
+      ...repository,
+      schemaVersion: 2,
+      profileId: 'OMG-SysML-1.6-ADIA',
+      definitions: sorted(repository.definitions ?? {}),
+      usages: sorted(repository.usages ?? {}),
+      connectors: sorted(repository.connectors ?? {}),
+      relationships: sorted(repository.relationships ?? {}),
+      requirements: sorted(repository.requirements ?? {}),
+      verificationCases: sorted(repository.verificationCases ?? {}),
+      evidence: sorted(repository.evidence ?? {}),
+      baselines: sorted(repository.baselines ?? {}),
+      artifacts: sorted(repository.artifacts ?? {}),
+      actors: sorted(repository.actors ?? {}),
+      subjects: sorted(repository.subjects ?? {}),
+      useCases: sorted(repository.useCases ?? {}),
+      extensionPoints: sorted(repository.extensionPoints ?? {}),
+      diagramReferences: sorted(repository.diagramReferences ?? {}),
+      auditTrail: [...(repository.auditTrail ?? [])],
+    };
+  }
+  return canonicalizeRepository(repository);
 }
 
 export function loadRepository(input: string | unknown): LoadRepositoryResult {
@@ -92,12 +136,21 @@ export function loadRepository(input: string | unknown): LoadRepositoryResult {
   let migrated = false;
   let repository: SysmlRepository;
   if (isEnvelope(raw)) {
-    repository = hydrateCanonical(raw.repository);
-    if (hash(stableStringify(canonicalizeRepository(raw.repository as SysmlRepository))) !== raw.checksum
-      && hash(stableStringify(raw.repository)) !== raw.checksum) diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
+    const rawRepo = raw.repository;
+    const checksumMatches =
+      hash(stableStringify(rawRepo)) === raw.checksum ||
+      hash(stableStringify(canonicalizeRepository(rawRepo as SysmlRepository))) === raw.checksum ||
+      hash(stableStringify(canonicalizeRepositoryForChecksum(rawRepo))) === raw.checksum;
+    if (!checksumMatches) {
+      diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
+    }
+    repository = hydrateCanonical(rawRepo);
+    if ((raw.repository as any)?.schemaVersion === 2 || raw.schemaVersion === 2) {
+      migrated = true;
+    }
   } else if (isCanonical(raw)) {
     repository = hydrateCanonical(raw);
-    migrated = !('artifacts' in raw) || !('auditTrail' in raw);
+    migrated = !('artifacts' in raw) || !('auditTrail' in raw) || (raw as any).schemaVersion === 2;
   } else {
     repository = migrateLegacy(raw, diagnostics, migrationReport);
     migrated = true;
@@ -156,11 +209,14 @@ export function compareBaselines(repository: SysmlRepository, fromId: string, to
 }
 
 function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
-  return {
-    ...createEmptyRepository(),
+  const empty = createEmptyRepository();
+  const repo: SysmlRepository = {
+    ...empty,
     ...structuredClone(raw),
-    schemaVersion: 2,
+    schemaVersion: 3,
     profileId: 'OMG-SysML-1.6-ADIA',
+    packages: structuredClone(raw.packages ?? empty.packages),
+    diagrams: structuredClone(raw.diagrams ?? empty.diagrams),
     definitions: structuredClone(raw.definitions ?? {}),
     usages: structuredClone(raw.usages ?? {}),
     connectors: structuredClone(raw.connectors ?? {}),
@@ -177,6 +233,18 @@ function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
     diagramReferences: structuredClone(raw.diagramReferences ?? {}),
     auditTrail: structuredClone(raw.auditTrail ?? []),
   };
+
+  if (!repo.packages.model) {
+    repo.packages.model = { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' };
+  }
+
+  for (const def of Object.values(repo.definitions)) {
+    if (!def.ownerId) {
+      def.ownerId = 'model';
+    }
+  }
+
+  return repo;
 }
 
 function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrationReport = createEmptyInterchangeReport()): SysmlRepository {
@@ -531,6 +599,12 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrat
     }
   }
 
+  for (const def of Object.values(repo.definitions)) {
+    if (!def.ownerId) {
+      def.ownerId = 'model';
+    }
+  }
+
   repo.auditTrail.push({ id: 'change-0-legacy-import', revision: 0, timestamp: new Date(0).toISOString(), command: 'migrateLegacy', elementIds: [] });
   return repo;
 }
@@ -577,7 +651,7 @@ function deepFreeze<T>(value: T): T {
 }
 function isRecord(value: unknown): value is Record<string, any> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
 function isEnvelope(value: unknown): value is PersistenceEnvelope { return isRecord(value) && value.format === 'ADIA-SysML' && isRecord(value.repository) && typeof value.checksum === 'string'; }
-function isCanonical(value: unknown): value is SysmlRepository { return isRecord(value) && value.schemaVersion === 2 && value.profileId === 'OMG-SysML-1.6-ADIA'; }
+function isCanonical(value: unknown): value is SysmlRepository { return isRecord(value) && (value.schemaVersion === 2 || value.schemaVersion === 3) && value.profileId === 'OMG-SysML-1.6-ADIA'; }
 function arrayOfRecords(value: unknown): Record<string, any>[] { return Array.isArray(value) ? value.filter(isRecord) : []; }
 function text(value: unknown): string { return typeof value === 'string' ? value : value == null ? '' : String(value); }
 function optionalText(value: unknown): string | undefined { const result = text(value).trim(); return result || undefined; }
@@ -634,7 +708,7 @@ export interface EntityChunkMeta {
 
 export interface ChunkManifest {
   format: 'ADIA-SysML-Chunked';
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   profileId: string;
   revision: number;
   checksum: string;

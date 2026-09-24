@@ -88,7 +88,7 @@ describe('SysML Worker Protocol & Execution', () => {
     if (response.success) {
       expect(typeof response.result).toBe('string');
       const parsed = JSON.parse(response.result as string);
-      expect(parsed.schemaVersion).toBe(2);
+      expect(parsed.schemaVersion).toBe(3);
     }
   });
 

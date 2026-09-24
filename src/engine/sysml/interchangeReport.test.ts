@@ -78,7 +78,7 @@ describe('sysml persistence + interchange qualification (Task 7)', () => {
     const loaded = loadRepository(first);
     expect(loaded.valid).toBe(true);
     expect(loaded.migrated).toBe(false);
-    expect(loaded.repository.schemaVersion).toBe(2);
+    expect(loaded.repository.schemaVersion).toBe(3);
     expect(loaded.repository.profileId).toBe('OMG-SysML-1.6-ADIA');
     // Semantic IDs preserved across every collection.
     for (const id of ['blk-base', 'blk-child', 'IF']) expect(loaded.repository.definitions[id]?.id).toBe(id);
@@ -188,7 +188,7 @@ describe('sysml persistence + interchange qualification (Task 7)', () => {
     };
     const loaded = loadRepository(legacy);
     expect(loaded.migrated).toBe(true);
-    expect(loaded.repository.schemaVersion).toBe(2);
+    expect(loaded.repository.schemaVersion).toBe(3);
     expect(loaded.repository.profileId).toBe('OMG-SysML-1.6-ADIA');
     expect(loaded.repository.definitions['b']?.id).toBe('b');
     expect(loaded.repository.usages['p']?.id).toBe('p');

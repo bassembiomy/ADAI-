@@ -15,6 +15,8 @@ import type {
   PartUsage,
   SysmlEntity,
   SysmlEntityCollection,
+  PackageDefinition,
+  ModelDiagramDefinition,
   ActorDefinition,
   SubjectDefinition,
   UseCaseDefinition,
@@ -48,9 +50,11 @@ export interface StoreIndexes {
 }
 
 export interface NormalizedSysmlStore {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   profileId: 'OMG-SysML-1.6-ADIA';
   revision: number;
+  packages: Map<string, PackageDefinition>;
+  diagrams: Map<string, ModelDiagramDefinition>;
   definitions: Map<string, SysmlDefinition>;
   usages: Map<string, SysmlUsage>;
   connectors: Map<string, ConnectorUsage>;
@@ -110,6 +114,8 @@ export function createEmptyNormalizedStore(): NormalizedSysmlStore {
     schemaVersion: 2,
     profileId: 'OMG-SysML-1.6-ADIA',
     revision: 0,
+    packages: new Map(),
+    diagrams: new Map(),
     definitions: new Map(),
     usages: new Map(),
     connectors: new Map(),
@@ -261,6 +267,14 @@ export function fromRepository(
   store.revision = repo.revision ?? 0;
   store.auditTrail = [...(repo.auditTrail ?? [])];
 
+  for (const [id, pkg] of Object.entries(repo.packages ?? {})) {
+    store.packages.set(id, pkg);
+    indexEntity(store, 'packages', id, pkg);
+  }
+  for (const [id, diag] of Object.entries(repo.diagrams ?? {})) {
+    store.diagrams.set(id, diag);
+    indexEntity(store, 'diagrams', id, diag);
+  }
   for (const [id, def] of Object.entries(repo.definitions ?? {})) {
     store.definitions.set(id, def);
     indexEntity(store, 'definitions', id, def);
@@ -345,9 +359,11 @@ export function toRepository(store: NormalizedSysmlStore): SysmlRepository {
   const sortedEntries = <T>(entries: Iterable<[string, T]>): Record<string, T> =>
     Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b)));
   return {
-    schemaVersion: 2,
+    schemaVersion: (store.schemaVersion ?? 3) as 2 | 3,
     profileId: store.profileId,
     revision: store.revision,
+    packages: sortedEntries(store.packages),
+    diagrams: sortedEntries(store.diagrams),
     definitions: sortedEntries(store.definitions),
     usages: sortedEntries(store.usages),
     connectors: sortedEntries(store.connectors),
@@ -373,6 +389,10 @@ export function getById(store: NormalizedSysmlStore, id: string): SysmlEntity | 
   const meta = store.indexes.byId.get(id);
   if (!meta) return undefined;
   switch (meta.collection) {
+    case 'packages':
+      return store.packages.get(id);
+    case 'diagrams':
+      return store.diagrams.get(id);
     case 'definitions':
       return store.definitions.get(id);
     case 'usages':
@@ -445,6 +465,12 @@ export function upsertEntity(
   }
 
   switch (collection) {
+    case 'packages':
+      store.packages.set(entity.id, entity as PackageDefinition);
+      break;
+    case 'diagrams':
+      store.diagrams.set(entity.id, entity as ModelDiagramDefinition);
+      break;
     case 'definitions':
       store.definitions.set(entity.id, entity as SysmlDefinition);
       break;
@@ -505,6 +531,12 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
 
   if (collection) {
     switch (collection) {
+      case 'packages':
+        store.packages.delete(id);
+        break;
+      case 'diagrams':
+        store.diagrams.delete(id);
+        break;
       case 'definitions':
         store.definitions.delete(id);
         break;
