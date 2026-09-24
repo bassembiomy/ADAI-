@@ -6,6 +6,11 @@ import type {
   ExplorerCapability,
 } from '../../features/modelExplorer/modelExplorerTypes';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
+import {
+  createModelExplorerDragPayload,
+  classifyTreeDropTarget,
+  MIME_TYPE_MODEL_ELEMENT,
+} from '../../features/modelExplorer/modelExplorerDragDrop';
 import { VirtualTree } from './VirtualTree';
 import { ModelTreeRow } from './ModelTreeRow';
 import { ModelExplorerToolbar } from './ModelExplorerToolbar';
@@ -23,6 +28,7 @@ export interface ModelExplorerProps {
   onContextMenuNode?: (node: ModelTreeNode, event: React.MouseEvent) => void;
   getCapabilities?: (node: ModelTreeNode) => ExplorerCapability[];
   onExecuteCapability?: (capability: ExplorerCapability, node: ModelTreeNode) => void;
+  onMoveNode?: (draggedNode: ModelTreeNode, targetNode: ModelTreeNode) => void;
   renamingNodeId?: string | null;
   onRenameCommit?: (nodeId: string, newName: string) => void;
   onRenameCancel?: () => void;
@@ -43,6 +49,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   onContextMenuNode,
   getCapabilities,
   onExecuteCapability,
+  onMoveNode,
   renamingNodeId,
   onRenameCommit,
   onRenameCancel,
@@ -57,6 +64,8 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set(rootNodeIds));
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [localRenamingNodeId, setLocalRenamingNodeId] = useState<string | null>(null);
+  const [draggedNode, setDraggedNode] = useState<ModelTreeNode | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -284,6 +293,34 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
                 onContextMenu={(e) => handleContextMenu(row.node, e)}
                 onRenameCommit={(newName) => handleRenameCommit(row.node.nodeId, newName)}
                 onRenameCancel={handleRenameCancel}
+                draggable={!effectiveRenamingId}
+                onDragStart={(e) => {
+                  setDraggedNode(row.node);
+                  const payload = createModelExplorerDragPayload(row.node);
+                  e.dataTransfer.setData(MIME_TYPE_MODEL_ELEMENT, JSON.stringify(payload));
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(e) => {
+                  if (!draggedNode) return;
+                  const classification = classifyTreeDropTarget({
+                    draggedNode,
+                    targetNode: row.node,
+                    nodesById,
+                  });
+                  if (classification.allowed) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    setDropTargetId(row.node.nodeId);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedNode && dropTargetId === row.node.nodeId) {
+                    onMoveNode?.(draggedNode, row.node);
+                  }
+                  setDraggedNode(null);
+                  setDropTargetId(null);
+                }}
               />
             )}
           />

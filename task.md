@@ -367,12 +367,12 @@
   - [x] Step 3: Implement the wizard (`RelationshipWizard.tsx`)
   - [x] Step 4: Implement the generic impact dialog (`MoveImpactDialog.tsx`)
   - [x] Step 5: Run tests and commit
-- [ ] Task 9: Add tree reparenting and tree-to-diagram presentation drag/drop
-  - [ ] Step 1: Write failing drop-classification tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Implement drag payload and target feedback (`modelExplorerDragDrop.ts`)
-  - [ ] Step 4: Preserve semantic/presentation deletion distinction
-  - [ ] Step 5: Run tests and commit
+- [x] Task 9: Add tree reparenting and tree-to-diagram presentation drag/drop
+  - [x] Step 1: Write failing drop-classification tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Implement drag payload and target feedback (`modelExplorerDragDrop.ts`)
+  - [x] Step 4: Preserve semantic/presentation deletion distinction
+  - [x] Step 5: Run tests and commit
 - [ ] Task 10: Integrate Model Explorer into App and remove the inline tree
   - [ ] Step 1: Write failing integration tests
   - [ ] Step 2: Verify failure
