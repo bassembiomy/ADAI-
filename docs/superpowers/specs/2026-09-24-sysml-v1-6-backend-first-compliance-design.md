@@ -44,7 +44,7 @@ The canvas stores no authoritative SysML semantics. Coordinates, size, routing, 
 
 ### Domain model
 
-The domain layer defines stable IDs, metaclasses, ownership, namespaces, types, features, relationships, diagrams, and presentations. It introduces explicit semantic types for Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, Unit, QuantityKind, Property subtypes, Port subtypes, Operation, Parameter, Reception, Constraint, Requirement specializations, VerificationCase, Comment, and Rationale.
+The domain layer defines stable IDs, metaclasses, ownership, namespaces, types, features, relationships, diagrams, and presentations. It introduces explicit semantic types for Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, Unit, QuantityKind, Property subtypes, Port subtypes, Operation, Parameter, Reception, Constraint, Requirement specializations, TestCase, Comment, and Rationale. The existing ADIA `VerificationCase` is either migrated to `TestCase` or retained only as an explicitly labeled `ADIA_EXTENSION` specialization; it is never reported as a normative SysML metaclass.
 
 Operations, constraints, units, flow items, and compartment entries may not be stored as display strings. Human-readable notation is generated from typed entities.
 
@@ -54,11 +54,11 @@ The repository owns normalized collections and indexes by ID, owner, namespace, 
 
 ### Services
 
-Focused services implement ownership, namespaces, type resolution, inheritance, property-specific types, relationship legality, connector-path resolution, port compatibility, effective conjugated flow direction, traceability, notation, and deletion impact. Services return typed results and diagnostics; they do not update React state.
+Focused services implement ownership, namespaces, type resolution, inheritance, property-specific types, relationship legality, connector-path resolution, port compatibility, effective conjugated flow direction, traceability, allocation queries, notation, and deletion impact. Services return typed results and diagnostics; they do not update React state.
 
 ### Commands and transactions
 
-Every mutation is a command. Commands validate intent, operate atomically, increment repository revision, record audit metadata, and produce undo/redo patches. Separate commands handle `CreateElement`, `DisplayExistingElement`, `RemovePresentation`, and `DeleteModelElement`. Unknown types are rejected or returned as an explicit decision; they are never silently created.
+Every mutation is a command. Commands validate intent, operate atomically, increment repository revision, record audit metadata, and produce undo/redo patches. Separate commands handle `CreateElement`, `CreateNewType`, `DisplayExistingElement`, `RemovePresentation`, and `DeleteModelElement`. If a referenced semantic type does not exist, every entry point returns `TYPE_NOT_FOUND` with candidate existing elements and an explicit `CreateNewType` action. UI commands, importers, migrations, scripts, and AI agents all use the same policy and none has a privileged creation path.
 
 ### Validation
 
@@ -80,7 +80,7 @@ A Block is a reusable definition. A PartProperty, ReferenceProperty, ValueProper
 
 ### Ports and interfaces
 
-ProxyPort, FullPort, and legacy FlowPort remain distinct. ProxyPort and FullPort reference existing types; InterfaceBlock owns FlowProperties. Conjugation is represented semantically and effective direction is calculated recursively for nested ports. Provided/required interfaces are semantic references, not lollipop/socket decorations.
+The port hierarchy contains a standard UML Port plus SysML ProxyPort, FullPort, and legacy FlowPort representations. Creating a generic Port creates a standard UML Port and applies no SysML port stereotype automatically. ProxyPort and FullPort remain mutually exclusive specializations. A ProxyPort must be typed by an InterfaceBlock, must satisfy nested ProxyPort constraints, and must preserve proxy semantics rather than represent a separate system element. These constraints are repository-level validation rules with semantic tests independent of diagram rendering. InterfaceBlock owns FlowProperties. Conjugation is represented semantically and effective direction is calculated recursively for nested ports. Provided/required interfaces are semantic references, not lollipop/socket decorations.
 
 ### Connectors and flows
 
@@ -88,7 +88,19 @@ Connector is owned by an internal structure context and owns two typed Connector
 
 ### Requirements
 
-Requirement has an internal UUID and a separate human-facing requirement ID. Containment, deriveReqt, satisfy, verify, refine, trace, and copy are distinct relationships with explicit endpoint and direction rules. Requirement definitions and relationships can have multiple presentations. Test cases, rationale, evidence, baselines, suspect links, and traceability queries remain repository-backed.
+Requirement has an internal UUID and a separate human-facing requirement ID. Containment, deriveReqt, satisfy, verify, refine, trace, and copy are distinct relationships with explicit endpoint and direction rules. Requirement definitions and relationships can have multiple presentations. SysML `TestCase`, rationale, evidence, baselines, suspect links, and traceability queries remain repository-backed. Any ADIA-specific verification workflow is labeled `ADIA_EXTENSION` and mapped to the normative TestCase concept where applicable.
+
+### Allocation foundation
+
+The shared relationship architecture includes SysML `Allocate` now, with typed source/target endpoint rules and repository indexes. It reserves explicit extension points for `AllocateActivityPartition`, allocation queries, allocation matrices, and derived `allocatedFrom`/`allocatedTo` presentation. Full allocation UI is outside this program, but enabling it later must not require a repository or relationship-model redesign.
+
+## Provenance and compliance evidence
+
+Every modeled feature and compliance definition declares one semantic authority: `OMG_SYSML_1_6`, `UML_FOUNDATION`, `CAMEO_TOOLING`, or `ADIA_EXTENSION`. Provenance is stored in the conformance catalog and emitted in compliance reports. Tooling behavior is not attributed to OMG unless supported independently by the normative specification.
+
+Compliance is evaluated at four levels: Level 1 Element, Level 2 Properties, Level 3 Relationships, and Level 4 Constraints. Overall `COMPLIANT` requires all applicable levels to pass and requires automated semantic evidence. A feature with a valid entity but a failed constraint is `PARTIAL` or `NON_COMPLIANT`, never `COMPLIANT`.
+
+Each compliance record contains: specification source, specification section, ADIA source file, domain type/class, command, validator, persistence mapping, projection, automated test, the four level results, and overall status. Missing automated semantic evidence prohibits `COMPLIANT` status.
 
 ## Cameo-style workflows
 
@@ -112,8 +124,13 @@ A capability is complete only when:
 8. Legacy files migrate deterministically.
 9. The compliance matrix links the capability to code and tests.
 10. No UI-only state is required to reconstruct its semantics.
+11. Its conformance record declares authority, specification section, implementation evidence, and all four compliance levels.
+12. `COMPLIANT` is impossible without passing automated semantic evidence.
+
+## Mandatory repository identity release gate
+
+The release suite creates one `Motor` Block, displays it on BDD-A and BDD-B, creates one `leftMotor : Motor` PartProperty inside `Vehicle`, displays it on the Vehicle IBD, creates one `REQ-001`, creates one `Motor «satisfy» REQ-001`, and displays the relationship on a Requirement Diagram. The repository must contain exactly one Motor definition, one leftMotor PartProperty, one requirement, and one satisfy relationship while allowing multiple presentations. Renaming `Motor` to `BLDCMotor` must update every projection by reference without duplicating or rewriting semantic entities. This integration test is a blocking repository-first release gate.
 
 ## Out of scope for this implementation program
 
 Complete Activity, Sequence, Parametric, Package, and Use Case diagram implementations are not part of this program. The semantic core must provide extension points for them without creating a second repository. Existing Use Case work is preserved but is not expanded unless needed for shared repository compatibility.
-
