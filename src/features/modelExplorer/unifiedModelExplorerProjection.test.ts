@@ -66,4 +66,27 @@ describe('buildUnifiedModelProjection', () => {
     expect(child.parentNodeId).toBe(parent.nodeId);
     expect(requirements.childNodeIds).not.toContain(child.nodeId);
   });
+
+  it('shows a port usage name with its resolved type and direction', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.block = {
+      id: 'block', name: 'Controller', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
+      ports: [{ id: 'port-def', name: 'command', kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+    };
+    repository.definitions.signal = { id: 'signal', name: 'CommandSignal', namespace: ['model'], ownerId: 'model', kind: 'interface', features: [] };
+    repository.usages.part = { id: 'part', name: 'controller', kind: 'part', ownerId: 'model', typeId: 'block' };
+    repository.usages.port = { id: 'port', name: 'port', kind: 'port', ownerId: 'part', definitionId: 'port-def' };
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 },
+      externalModels: [],
+      revision: 1,
+    });
+
+    expect(projection.nodes['sysml:element:port']).toMatchObject({
+      label: 'command',
+      secondaryLabel: ': CommandSignal · in',
+    });
+  });
 });

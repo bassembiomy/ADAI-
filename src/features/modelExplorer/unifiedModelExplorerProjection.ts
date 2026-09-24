@@ -1,4 +1,5 @@
 import type { SysmlRepository } from '../../engine/sysml/model';
+import { resolvePortUsage } from '../../engine/sysml/ibd';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 import type {
   ModelPillar,
@@ -132,7 +133,17 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       semanticId: item.id,
       domain: 'sysml',
       kind: item.kind,
-      label: item.name,
+      label: item.kind === 'port' && resolvePortUsage(input.sysml, item.id)?.definition
+        ? (item.name && item.name !== item.id ? item.name : resolvePortUsage(input.sysml, item.id)!.definition.name)
+        : item.name,
+      secondaryLabel: item.kind === 'port'
+        ? (() => {
+            const resolved = resolvePortUsage(input.sysml, item.id);
+            if (!resolved) return '[unresolved port definition]';
+            const typeName = input.sysml.definitions[resolved.definition.typeId]?.name ?? resolved.definition.typeId;
+            return `: ${typeName} · ${resolved.effectiveDirection}`;
+          })()
+        : undefined,
       parentNodeId: ownerNodeId(ownerId, pillar),
       ownerSemanticId: ownerId || 'model',
       childNodeIds: [],
