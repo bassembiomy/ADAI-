@@ -10065,7 +10065,7 @@ const ADIA = () => {
     if (part) {
       const originalTypeId = part.typeId;
 
-      if (!originalTypeId) {
+      if (!originalTypeId || !blocks.some(block => block.id === originalTypeId && block.stereotype === 'block')) {
         const newBlockId = uuidv4();
         const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
         const newBlock: BlockData = {
@@ -10080,11 +10080,7 @@ const ADIA = () => {
       }
 
       const isShared = parts.some(p => p.id !== part.id && p.typeId === originalTypeId);
-      const originalBlock = blocks.find(b => b.id === originalTypeId);
-      if (!originalBlock) {
-        addError('error', `Could not find block definition with ID ${originalTypeId}`);
-        return;
-      }
+      const originalBlock = blocks.find(b => b.id === originalTypeId && b.stereotype === 'block')!;
 
       if (isShared) {
         addError('info', `Specializing definition for '${part.name}'...`);
@@ -17776,8 +17772,7 @@ const ADIA = () => {
                             <option value="flow">Flow</option>
                             <option value="proxy">Proxy</option>
                           </select>
-                          {port.kind === 'flow' && (
-                            <>
+                          <>
                               <select
                                 value={port.direction || 'in'}
                                 onChange={(e) => {
@@ -17791,7 +17786,7 @@ const ADIA = () => {
                                 <option value="out">Out</option>
                                 <option value="inout">I/O</option>
                               </select>
-                              <Input
+                              {port.kind === 'flow' && <Input
                                 value={port.unit || ''}
                                 onChange={(e) => {
                                   const newPorts = [...selectedBlock.ports];
@@ -17799,9 +17794,8 @@ const ADIA = () => {
                                   updateBlock(selectedBlock.id, { ports: newPorts });
                                 }}
                                 className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
-                              />
-                            </>
-                          )}
+                              />}
+                          </>
                           <button
                             onClick={() => {
                               const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
@@ -18060,6 +18054,20 @@ const ADIA = () => {
                                   <option value="standard">Std</option>
                                   <option value="flow">Flow</option>
                                   <option value="proxy">Proxy</option>
+                                </select>
+                                <select
+                                  aria-label={`Direction for ${port.name || port.id}`}
+                                  value={port.direction || 'inout'}
+                                  onChange={(e) => {
+                                    const newPorts = [...block.ports];
+                                    newPorts[i] = { ...port, direction: e.target.value as any };
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-12 px-0 text-[#e0e0e0]"
+                                >
+                                  <option value="in">In</option>
+                                  <option value="out">Out</option>
+                                  <option value="inout">I/O</option>
                                 </select>
                                 <button
                                   onClick={() => {
