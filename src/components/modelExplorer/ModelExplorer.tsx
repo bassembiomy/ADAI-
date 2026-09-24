@@ -4,8 +4,10 @@ import type {
   ExplorerView,
   VisibleTreeRow,
   ExplorerCapability,
+  ActiveDiagramContext,
 } from '../../features/modelExplorer/modelExplorerTypes';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
+import { projectDiagramContext } from '../../features/modelExplorer/modelExplorerDiagramContext';
 import {
   createModelExplorerDragPayload,
   classifyTreeDropTarget,
@@ -24,8 +26,8 @@ import './modelExplorer.css';
 export interface ModelExplorerProps {
   nodesById: Map<string, ModelTreeNode> | Record<string, ModelTreeNode>;
   rootNodeIds: string[];
-  activeDiagramNodeIds?: Set<string>;
-  activeDiagramName?: string;
+  activeDiagramContext?: ActiveDiagramContext;
+  onRevealInContainment?: (semanticId: string) => void;
   selectedNodeIds: Set<string>;
   onSelectNode: (node: ModelTreeNode, multiSelect?: boolean, rangeSelect?: boolean) => void;
   onActivateNode?: (node: ModelTreeNode) => void;
@@ -46,8 +48,8 @@ export interface ModelExplorerProps {
 export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   nodesById,
   rootNodeIds,
-  activeDiagramNodeIds,
-  activeDiagramName,
+  activeDiagramContext,
+  onRevealInContainment,
   selectedNodeIds,
   onSelectNode,
   onActivateNode,
@@ -153,14 +155,21 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   // Project visible tree rows according to active viewMode and filters
   const visibleRows = useMemo(() => {
     const isDiagramMode = viewMode === 'diagramContext';
-    const diagramFilter = isDiagramMode ? activeDiagramNodeIds : undefined;
+    const contextProjection = isDiagramMode && activeDiagramContext
+      ? projectDiagramContext({
+          roots: rootNodeIds,
+          nodes: nodesById instanceof Map ? Object.fromEntries(nodesById.entries()) : nodesById,
+          revision: 1,
+        }, activeDiagramContext)
+      : null;
+    const projectedNodes = contextProjection?.nodes ?? nodesById;
+    const projectedRoots = contextProjection?.roots ?? rootNodeIds;
 
     return projectModelTree({
-      nodesById,
-      rootNodeIds,
+      nodesById: projectedNodes,
+      rootNodeIds: projectedRoots,
       expandedNodeIds,
       filterQuery: searchQuery,
-      diagramNodeIds: diagramFilter,
       favoritesOnly: showFavoritesOnly,
       favoriteNodeIds: effectiveFavorites,
     });
@@ -170,7 +179,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     expandedNodeIds,
     searchQuery,
     viewMode,
-    activeDiagramNodeIds,
+    activeDiagramContext,
     showFavoritesOnly,
     effectiveFavorites,
   ]);
@@ -318,7 +327,8 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
         onCollapseAll={handleCollapseAll}
         showFavoritesOnly={showFavoritesOnly}
         onToggleFavoritesOnly={() => setShowFavoritesOnly(prev => !prev)}
-        activeDiagramName={activeDiagramName}
+        activeDiagramName={activeDiagramContext?.name}
+        diagramAvailable={Boolean(activeDiagramContext)}
       />
 
       <div className="flex-1 min-h-0 w-full relative">
@@ -327,7 +337,9 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
             {searchQuery
               ? `No model elements matching "${searchQuery}"`
               : viewMode === 'diagramContext'
-              ? 'No elements in the active diagram context'
+              ? activeDiagramContext
+                ? `No model elements are presented in ${activeDiagramContext.name}`
+                : 'No active diagram context'
               : showFavoritesOnly
               ? 'No favorite elements marked'
               : 'Model is empty'}

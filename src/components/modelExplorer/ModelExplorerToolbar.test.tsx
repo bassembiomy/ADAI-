@@ -44,4 +44,21 @@ describe('ModelExplorerToolbar', () => {
     expect(html).toContain('aria-label="Toggle Favorites"');
     expect(html).toContain('aria-pressed="true"');
   });
+
+  it('disables Diagram when there is no active diagram', () => {
+    const html = renderToStaticMarkup(
+      <ModelExplorerToolbar
+        viewMode="containment"
+        onViewModeChange={vi.fn()}
+        searchQuery=""
+        onSearchQueryChange={vi.fn()}
+        onExpandAll={vi.fn()}
+        onCollapseAll={vi.fn()}
+        diagramAvailable={false}
+      />
+    );
+
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('title="No active diagram"');
+  });
 });

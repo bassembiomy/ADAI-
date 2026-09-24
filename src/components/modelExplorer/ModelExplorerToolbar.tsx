@@ -20,6 +20,7 @@ export interface ModelExplorerToolbarProps {
   showFavoritesOnly?: boolean;
   onToggleFavoritesOnly?: () => void;
   activeDiagramName?: string;
+  diagramAvailable?: boolean;
   className?: string;
 }
 
@@ -33,6 +34,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
   showFavoritesOnly = false,
   onToggleFavoritesOnly,
   activeDiagramName,
+  diagramAvailable = true,
   className = '',
 }) => {
   return (
@@ -64,13 +66,15 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             type="button"
             role="tab"
             aria-selected={viewMode === 'diagramContext'}
+            aria-disabled={!diagramAvailable}
+            disabled={!diagramAvailable}
             onClick={() => onViewModeChange('diagramContext')}
             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
               viewMode === 'diagramContext'
                 ? 'bg-[var(--diagram-node-selected)] text-white shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
             }`}
-            title={
+            title={!diagramAvailable ? 'No active diagram' :
               activeDiagramName
                 ? `Diagram Context (${activeDiagramName})`
                 : 'Diagram Context (Elements visible in active diagram)'
