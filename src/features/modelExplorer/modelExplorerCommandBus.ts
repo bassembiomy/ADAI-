@@ -9,14 +9,15 @@ export interface ModelExplorerCommandBus {
   confirm(command: ModelExplorerCommand, impactHash: string): ExplorerCommandResult;
 }
 
+export function isPreflightClear(result: ExplorerCommandResult): boolean {
+  return !result.impact && !result.diagnostics.some(item => item.severity === 'error');
+}
+
 export function createModelExplorerCommandBus(adapter: ModelExplorerAdapter): ModelExplorerCommandBus {
   return {
     dispatch(command: ModelExplorerCommand): ExplorerCommandResult {
       const checked = adapter.preflight(command);
-      if (checked.diagnostics.some(d => d.severity === 'error') || checked.impact) {
-        return checked;
-      }
-      return adapter.execute(command);
+      return isPreflightClear(checked) ? adapter.execute(command) : checked;
     },
     confirm(command: ModelExplorerCommand, impactHash: string): ExplorerCommandResult {
       return adapter.execute({ ...command, confirmedImpactHash: impactHash } as ModelExplorerCommand);

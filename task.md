@@ -394,4 +394,46 @@
   - [x] Step 5: Run the complete verification matrix
   - [x] Step 6: Commit
 
+## Mandatory post-review completion work
+
+- [x] Task 13: Repair mounted command dispatch and State Machine history
+  - [x] Step 1: Write failing mounted-command tests (`src/components/modelExplorer/AppModelExplorer.commands.test.tsx`)
+  - [x] Step 2: Verify both failures
+  - [x] Step 3: Make command-bus semantics explicit (`isPreflightClear`)
+  - [x] Step 4: Replace raw State Machine setters with one snapshot transaction (`onCommitStateMachineSnapshot`)
+  - [x] Step 5: Persist State Machine diagram metadata
+  - [x] Step 6: Run focused verification and commit
+- [ ] Task 14: Wire every advertised professional action
+  - [ ] Step 1: Add a failing capability-coverage test (`src/components/modelExplorer/AppModelExplorer.actions.test.tsx`)
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Mount the relationship workflow (`RelationshipWizard`)
+  - [ ] Step 4: Connect copy, cut, paste, and duplicate
+  - [ ] Step 5: Connect Add to Active Diagram and canvas drop
+  - [ ] Step 6: Connect reveal/open actions
+  - [ ] Step 7: Run tests and commit
+- [ ] Task 15: Close persistence and canonical ownership integrity gaps
+  - [ ] Step 1: Write failing chunk round-trip tests
+  - [ ] Step 2: Write failing ownership-gateway tests
+  - [ ] Step 3: Fix all chunked persistence paths (`packages` and `diagrams` in `PERSISTENCE_COLLECTIONS`, `schemaVersion: 3`)
+  - [ ] Step 4: Enforce ownership at the gateway boundary (`validateOwnershipMove`)
+  - [ ] Step 5: Run persistence and release tests; commit
+- [ ] Task 16: Align the complete Hierarchy UI with ADIA's application palette
+  - [ ] Step 1: Add failing source-contract tests (`src/components/modelExplorer/modelExplorerTheme.test.tsx`)
+  - [ ] Step 2: Verify failure
+  - [ ] Step 3: Define the explorer token bridge (`modelExplorer.css`)
+  - [ ] Step 4: Replace every hard-coded UI color with theme tokens
+  - [ ] Step 5: Add dark/light browser visual assertions (`tests/e2e/model-explorer-theme.spec.ts`)
+  - [ ] Step 6: Run theme and accessibility gates; commit
+- [ ] Task 17: Replace smoke E2E tests with real authoring scenarios
+  - [ ] Step 1: Remove conditional assertions
+  - [ ] Step 2: Implement the State Machine authoring scenario
+  - [ ] Step 3: Implement the SysML authoring scenario
+  - [ ] Step 4: Add persistence and 10,000-element performance scenarios
+  - [ ] Step 5: Run and commit
+- [ ] Task 18: Final regression, accessibility, and release certification
+  - [ ] Step 1: Verify the full test matrix
+  - [ ] Step 2: Perform the final source audit
+  - [ ] Step 3: Update documentation and commit certification
+
+
 

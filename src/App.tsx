@@ -478,10 +478,10 @@ const HierarchyTree: React.FC<any> = (props) => (
     selectedIds={props.selectedIds}
     onSelect={props.onSelect}
     onDoubleClick={props.onDoubleClick}
-    onUpdateStates={props.onUpdateStates}
-    onUpdateLayers={props.onUpdateLayers}
-    onUpdateTransitions={props.onUpdateTransitions}
-    onUpdateJunctions={props.onUpdateJunctions}
+    onCommitStateMachineSnapshot={props.onCommitStateMachineSnapshot}
+
+
+
     onExecuteSysmlCommand={props.onExecuteSysmlCommand}
   />
 );
@@ -8302,6 +8302,15 @@ const ADIA = () => {
     }
   }, [history, historyIndex, addError, applyStateMachineSnapshot]);
 
+  const handleCommitStateMachineSnapshot = useCallback((snapshot: any, description: string) => {
+    addToHistory();
+    setStates(snapshot.states);
+    setLayers(snapshot.layers);
+    setTransitions(snapshot.transitions);
+    setJunctions(snapshot.junctions);
+    addError('info', description || 'Model update');
+  }, [addToHistory, addError]);
+
   // VALIDATION
   // VALIDATION
   const performValidation = useCallback(() => {
@@ -15864,10 +15873,10 @@ const ADIA = () => {
                     }
                   }}
                   selectedIds={selectedIds}
-                  onUpdateStates={setStates}
-                  onUpdateLayers={setLayers}
-                  onUpdateTransitions={setTransitions}
-                  onUpdateJunctions={setJunctions}
+                  onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
+
+
+
                   onExecuteSysmlCommand={sysmlApplicationDelegate ? (cmd: any) => sysmlApplicationDelegate.executeCommand(cmd) as any : undefined}
                 />
               )}

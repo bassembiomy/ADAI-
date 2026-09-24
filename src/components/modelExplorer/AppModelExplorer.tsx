@@ -13,7 +13,11 @@ import {
   type StateMachineExplorerSnapshot,
 } from '../../features/modelExplorer/adapters/stateMachineExplorerAdapter';
 import { createSysmlExplorerAdapter } from '../../features/modelExplorer/adapters/sysmlExplorerAdapter';
-import type { StateData, Layer, TransitionData, JunctionData } from '../../types/sm_types';
+import {
+  createModelExplorerCommandBus,
+  isPreflightClear,
+} from '../../features/modelExplorer/modelExplorerCommandBus';
+import type { StateData, Layer, TransitionData, JunctionData, StateMachineDiagramData } from '../../types/sm_types';
 import type { BlockData, PartData } from '../../types/sysml_types';
 import { createEmptyRepository, parseMultiplicity, type SysmlRepository } from '../../engine/sysml/model';
 import type { SysmlGatewayState, SysmlEditorCommand, SysmlCommandResult } from '../../services/sysmlCommandGateway';
@@ -33,6 +37,7 @@ export interface AppModelExplorerProps {
   layers: Layer[];
   transitions: TransitionData[];
   junctions: JunctionData[];
+  diagrams?: StateMachineDiagramData[];
   activeStates?: Record<string, string>;
   currentLayerId?: string;
   blocks: BlockData[];
@@ -42,6 +47,7 @@ export interface AppModelExplorerProps {
   onSelect: (id: string, multiSelect?: boolean) => void;
   onSelectMultiple?: (ids: string[]) => void;
   onDoubleClick: (id: string) => void;
+  onCommitStateMachineSnapshot?: (snapshot: StateMachineExplorerSnapshot, description: string) => void;
   onUpdateStates?: (states: StateData[]) => void;
   onUpdateLayers?: (layers: Layer[]) => void;
   onUpdateTransitions?: (transitions: TransitionData[]) => void;
@@ -58,6 +64,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   layers,
   transitions,
   junctions,
+  diagrams,
   currentLayerId = 'root',
   blocks,
   parts,
@@ -66,6 +73,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   onSelect,
   onSelectMultiple,
   onDoubleClick,
+  onCommitStateMachineSnapshot,
   onUpdateStates,
   onUpdateLayers,
   onUpdateTransitions,
@@ -93,7 +101,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         layers,
         transitions,
         junctions,
-        diagrams: layers.map(l => ({
+        diagrams: diagrams && diagrams.length > 0 ? diagrams : layers.map(l => ({
           id: l.id,
           name: l.name,
           layerId: l.id,
@@ -101,11 +109,15 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           contextRegionId: l.id,
         })),
       }),
-      onCommit: (nextSnapshot) => {
-        onUpdateStates?.(nextSnapshot.states);
-        onUpdateLayers?.(nextSnapshot.layers);
-        onUpdateTransitions?.(nextSnapshot.transitions);
-        onUpdateJunctions?.(nextSnapshot.junctions);
+      onCommit: (nextSnapshot, description) => {
+        if (onCommitStateMachineSnapshot) {
+          onCommitStateMachineSnapshot(nextSnapshot, description);
+        } else {
+          onUpdateStates?.(nextSnapshot.states);
+          onUpdateLayers?.(nextSnapshot.layers);
+          onUpdateTransitions?.(nextSnapshot.transitions);
+          onUpdateJunctions?.(nextSnapshot.junctions);
+        }
       },
     });
   }, [
@@ -113,6 +125,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     layers,
     transitions,
     junctions,
+    diagrams,
+    onCommitStateMachineSnapshot,
     onUpdateStates,
     onUpdateLayers,
     onUpdateTransitions,
@@ -243,6 +257,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       if (!cmd) return;
 
+      const bus = createModelExplorerCommandBus(activeAdapter);
       const preflight = activeAdapter.preflight(cmd);
       const hasImpact = preflight.impact && preflight.impact.invalidated && preflight.impact.invalidated.length > 0;
       if (hasImpact && preflight.impact) {
@@ -254,9 +269,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return;
       }
 
-      if (preflight.committed) {
-        activeAdapter.execute(cmd);
-      }
+      bus.dispatch(cmd);
     },
     [activeAdapter]
   );
@@ -269,6 +282,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         targetOwnerId: targetNode.semanticId,
       };
 
+      const bus = createModelExplorerCommandBus(activeAdapter);
       const preflight = activeAdapter.preflight(cmd);
       const hasImpact = preflight.impact && preflight.impact.invalidated && preflight.impact.invalidated.length > 0;
       if (hasImpact && preflight.impact) {
@@ -280,9 +294,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return;
       }
 
-      if (preflight.committed) {
-        activeAdapter.execute(cmd);
-      }
+      bus.dispatch(cmd);
     },
     [activeAdapter]
   );
@@ -290,14 +302,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   const handleConfirmImpact = useCallback(
     (confirmedImpactHash: string) => {
       if (!pendingImpact) return;
-      if (pendingImpact.command.type === 'move') {
-        activeAdapter.execute({
-          ...pendingImpact.command,
-          confirmedImpactHash,
-        });
-      } else {
-        activeAdapter.execute(pendingImpact.command);
-      }
+      const bus = createModelExplorerCommandBus(activeAdapter);
+      bus.confirm(pendingImpact.command, confirmedImpactHash);
       setPendingImpact(null);
     },
     [activeAdapter, pendingImpact]
@@ -317,7 +323,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         onRenameCommit={(nodeId, newName) => {
           const node = projection.nodes[nodeId];
           if (!node) return;
-          activeAdapter.execute({
+          const bus = createModelExplorerCommandBus(activeAdapter);
+          bus.dispatch({
             type: 'rename',
             elementId: node.semanticId,
             name: newName,
