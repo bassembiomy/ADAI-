@@ -91,7 +91,11 @@ async function verifyRelease() {
   }
   log('EVIDENCE', 'Release evidence tiers verified for every supported manifest row.');
 
-  // 3. SysML Unit & Integration Gate
+  // 3. SysML Repository Architecture Gate
+  log('TEST:SYSML:ARCHITECTURE', 'Executing repository-first architecture guardrails...');
+  runCommand('npm', ['run', 'test:sysml:architecture']);
+
+  // 4. SysML Unit & Integration Gate
   log('TEST:SYSML', 'Executing unit and integration suites...');
   runCommand('npm', ['run', 'test:sysml']);
 
