@@ -59,6 +59,10 @@ export type CapabilityActionResult =
   | { kind: 'reveal'; semanticId: string }
   | { kind: 'unhandled' };
 
+export function explorerAdapterDomain(node: ModelTreeNode): 'stateMachine' | 'sysml' {
+  return node.domain === 'stateMachine' ? 'stateMachine' : 'sysml';
+}
+
 export function capabilityToAction(
   capability: ExplorerCapability,
   node: ModelTreeNode,
@@ -384,6 +388,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   const handleExecuteCapability = useCallback(
     (capability: ExplorerCapability, node: ModelTreeNode) => {
+      const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter;
       if (capability.kind === 'rename') return;
 
       if (capability.kind === 'openSpecification') {
@@ -418,7 +423,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       if (capability.kind === 'copy') {
         const selectedSemanticIds = selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId];
-        if (isStateMachine) {
+        if (node.domain === 'stateMachine') {
           clipboardRef.current = copyOwnershipForest(
             'stateMachine',
             selectedSemanticIds,
@@ -492,8 +497,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       if (!cmd) return;
 
-      const bus = createModelExplorerCommandBus(activeAdapter);
-      const preflight = activeAdapter.preflight(cmd);
+      const bus = createModelExplorerCommandBus(nodeAdapter);
+      const preflight = nodeAdapter.preflight(cmd);
       const hasImpact = preflight.impact && preflight.impact.invalidated && preflight.impact.invalidated.length > 0;
       if (hasImpact && preflight.impact) {
         setPendingImpact({
@@ -507,7 +512,6 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       bus.dispatch(cmd);
     },
     [
-      activeAdapter,
       activeDiagramId,
       canonicalSysmlRepository,
       currentLayerId,
@@ -572,13 +576,13 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         activeDiagramContext={activeDiagramContext}
         onSelectNode={handleSelectNode}
         onActivateNode={handleActivateNode}
-        getCapabilities={(node) => activeAdapter.capabilities([node.semanticId])}
+        getCapabilities={(node) => (explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter).capabilities([node.semanticId])}
         onExecuteCapability={handleExecuteCapability}
         onMoveNode={handleMoveNode}
         onRenameCommit={(nodeId, newName) => {
           const node = projection.nodes[nodeId];
           if (!node) return;
-          const bus = createModelExplorerCommandBus(activeAdapter);
+          const bus = createModelExplorerCommandBus(explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter);
           bus.dispatch({
             type: 'rename',
             elementId: node.semanticId,
