@@ -430,10 +430,10 @@
   - [x] Step 3: Implement the SysML authoring scenario
   - [x] Step 4: Add persistence and 10,000-element performance scenarios
   - [x] Step 5: Run and commit
-- [ ] Task 18: Final regression, accessibility, and release certification
-  - [ ] Step 1: Verify the full test matrix
-  - [ ] Step 2: Perform the final source audit
-  - [ ] Step 3: Update documentation and commit certification
+- [x] Task 18: Final regression, accessibility, and release certification
+  - [x] Step 1: Verify the full test matrix
+  - [x] Step 2: Perform the final source audit
+  - [x] Step 3: Update documentation and commit certification
 
 
 

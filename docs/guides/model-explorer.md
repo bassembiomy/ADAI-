@@ -97,3 +97,12 @@ For operations that invalidate or cascade across other elements (such as moving 
 - **Fixed-Row Virtualization:** The Model Explorer uses fixed-row (26px) virtualization capable of rendering 10,000+ elements with smooth 60 FPS scrolling and low memory footprint.
 - **Sub-50ms Projection:** Tree flattening, search filtering, and multi-selection forest operations complete in under 50ms even on large-scale models.
 - **Per-Project State Persistence:** Tree expansion states, active view mode, and starred favorites are automatically persisted per project in local storage.
+
+---
+
+## 8. Theme Architecture & Accessibility Contract
+
+- **Zero Hard-Coded Palette Colors:** All Model Explorer components strictly consume ADIA CSS design tokens (`var(--surface-panel)`, `var(--surface-canvas)`, `var(--surface-raised)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-muted)`, `var(--border-default)`, `var(--focus-ring)`, `var(--diagram-node-selected)`).
+- **Dynamic Dark/Light Mode:** Seamlessly adapts to theme toggles without hard-coded Slate, Gray, or Zinc classes.
+- **WAI-ARIA Tree Compliance:** Complete `role="tree"` and `role="treeitem"` semantic markup with `aria-expanded`, `aria-selected`, `aria-level`, and keyboard roving tabIndex navigation.
+- **Deterministic E2E Verification:** Automated Playwright authoring and theme verification suites guarantee zero regressions.
