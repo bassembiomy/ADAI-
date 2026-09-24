@@ -47,85 +47,85 @@
   - [x] Step 5: Keep legacy getters as read-only adapters until React migration
   - [x] Step 6: Run presentation, persistence, and normalized-store tests
   - [x] Step 7: Commit `feat(sysml): persist typed diagram presentations`
-- [ ] Task 7: Command and transaction boundary
-  - [ ] Step 1: Test create, update, rename, owner move, relationship creation, deletion impact, undo, redo, and rejected-command atomicity
-  - [ ] Step 2: Move gateway switch branches into focused handlers without breaking its public API
-  - [ ] Step 3: Validate before commit; rejected commands preserve revision and state
-  - [ ] Step 4: Record caller source (ui, ai, import, migration, script) without semantic privilege differences
-  - [ ] Step 5: Run command, gateway, mutation, and patch tests
-  - [ ] Step 6: Commit `refactor(sysml): centralize semantic transactions`
-- [ ] Task 8: Property, value, and inheritance semantics
-  - [ ] Step 1: Test distinctions and legal owner/type combinations for all property kinds
-  - [ ] Step 2: Test structured multiplicity and typed ValueSpecification variants
-  - [ ] Step 3: Resolve inherited features without cloning and reject inheritance cycles
-  - [ ] Step 4: Preserve property-specific type links to the owning property and general type
-  - [ ] Step 5: Replace string operations/constraints and legacy property writes with commands
-  - [ ] Step 6: Make the editor render generated notation and dispatch commands only
-  - [ ] Step 7: Run property, sync, editor, and type-check tests
-  - [ ] Step 8: Commit `feat(sysml): implement typed property semantics`
-- [ ] Task 9: Relationship, connector-end, flow, and allocation foundations
-  - [ ] Step 1: Test Association versus Connector ownership and endpoint rules
-  - [ ] Step 2: Resolve nested connector paths across properties and ports; reject broken/context-invalid paths
-  - [ ] Step 3: Store ItemFlow independently with realizing relationship and conveyed classifier IDs
-  - [ ] Step 4: Keep BindingConnector distinct from Connector and InformationFlow
-  - [ ] Step 5: Test Allocate endpoint indexing and derived allocatedFrom/allocatedTo results
-  - [ ] Step 6: Reserve a typed AllocateActivityPartition extension point; do not build its UI
-  - [ ] Step 7: Run relationship, BDD, and IBD tests
-  - [ ] Step 8: Commit `feat(sysml): add connector flow and allocation semantics`
-- [ ] Task 10: Requirement and TestCase normalization
-  - [ ] Step 1: Test migration of verificationCases to testCases without losing evidence links
-  - [ ] Step 2: Enforce unique human-facing requirement IDs independently of UUIDs
-  - [ ] Step 3: Test direction, endpoints, ownership, and persistence for containment, deriveReqt, satisfy, verify, refine, trace, and copy
-  - [ ] Step 4: Use TestCase wording in normative UI/reporting and label extensions explicitly
-  - [ ] Step 5: Preserve baseline, suspect-link, evidence-revision, and RTM behavior
-  - [ ] Step 6: Run requirement, RTM, persistence, and governance-panel tests
-  - [ ] Step 7: Commit `feat(sysml): align verification semantics with TestCase`
-- [ ] Task 11: Canonical projections
-  - [ ] Step 1: Test compartments, inherited features, IBD context, nested paths, requirement hierarchy, and browser ownership
-  - [ ] Step 2: Compare canonical projections with legacy output for supported fixtures
-  - [ ] Step 3: Resolve labels dynamically so rename never rewrites presentation semantics
-  - [ ] Step 4: Make legacy projections wrappers around canonical selectors
-  - [ ] Step 5: Run projection and model-explorer tests
-  - [ ] Step 6: Commit `feat(sysml): add repository-native projections`
-- [ ] Task 12: Cameo-style command-only UI workflows
-  - [ ] Step 1: Test browser drag emits DisplayExistingElement and creates no duplicate semantic element
-  - [ ] Step 2: Implement explicit "Use Existing Type" and "Create New Type" workflows with TYPE_NOT_FOUND candidates
-  - [ ] Step 3: Separate "Remove from Diagram" from "Delete from Model" with impact preview
-  - [ ] Step 4: Route property, port, relationship, connector, and requirement editors through commands
-  - [ ] Step 5: Remove direct semantic setBlocks, setParts, setConnectors, and setRelationships writes from migrated flows
-  - [ ] Step 6: Run component tests, `npx tsc --noEmit`, and SysML/model-explorer E2E tests
-  - [ ] Step 7: Commit `refactor(sysml): make UI a command-driven projection`
-- [ ] Task 13: Schema v4 persistence and migration
-  - [ ] Step 1: Add fixtures for legacy definitions, usages, ports, connectors, requirements, verification cases, coordinates, and memberships
-  - [ ] Step 2: Migrate generic ports to UML Port unless explicit evidence identifies a SysML specialization
-  - [ ] Step 3: Map VerificationCase to TestCase or a labeled extension based on source metadata
-  - [ ] Step 4: Persist provenance, presentations, connector paths, ItemFlows, allocations, and evidence
-  - [ ] Step 5: Verify deterministic serialization, checksums, chunks, abort rollback, and identity-preserving round trips
-  - [ ] Step 6: Run persistence/migration/import tests
-  - [ ] Step 7: Commit `feat(sysml): migrate projects to canonical schema v4`
-- [ ] Task 14: One writable model across all integrations
-  - [ ] Step 1: Test that UI, AI, reports, and scripts observe the same revision and IDs
-  - [ ] Step 2: Replace bidirectional legacy merges with one-way compatibility projections
-  - [ ] Step 3: Empty the production architecture-guard allowlist
-  - [ ] Step 4: Remove duplicated writable BDD/IBD/Requirement semantic arrays
-  - [ ] Step 5: Run architecture, SysML release, reporting, and type-check suites
-  - [ ] Step 6: Commit `refactor(sysml): enforce one writable semantic repository`
-- [ ] Task 15: Mandatory semantic identity release gate
-  - [ ] Step 1: Through public commands, create Motor and Vehicle Blocks plus BDD-A, BDD-B, Vehicle IBD, and a Requirement Diagram
-  - [ ] Step 2: Display the same Motor ID on both BDDs
-  - [ ] Step 3: Create one `leftMotor : Motor` PartProperty owned by Vehicle and display it on the Vehicle IBD
-  - [ ] Step 4: Create one Requirement with requirement ID REQ-001
-  - [ ] Step 5: Create one `Motor «satisfy» REQ-001` relationship and display it on the Requirement Diagram
-  - [ ] Step 6: Assert exactly one Motor definition, one leftMotor property, one REQ-001, and one satisfy relationship; allow multiple presentations
-  - [ ] Step 7: Rename Motor to BLDCMotor and assert every projection resolves the new name with unchanged IDs and counts
-  - [ ] Step 8: Serialize/reload and repeat every assertion
-  - [ ] Step 9: Add the test as blocking release and compliance evidence
-  - [ ] Step 10: Commit `test(sysml): gate release on semantic identity`
-- [ ] Task 16: Remove compatibility semantics and close compliance
-  - [ ] Step 1: Delete legacy mutation branches only after Tasks 12-15 pass
-  - [ ] Step 2: Rename retained import/export shapes with Legacy...Dto and prohibit domain dependencies on them
-  - [ ] Step 3: Re-evaluate every feature at all four compliance levels
-  - [ ] Step 4: Assign COMPLIANT only with complete source/type/command/validator/persistence/projection/test evidence
-  - [ ] Step 5: Publish unsupported and ADIA-extension behavior without inflating compliance
-  - [ ] Step 6: Run the complete release verification
-  - [ ] Step 7: Commit `docs(sysml): publish evidence-backed v1.6 compliance`
+- [x] Task 7: Command and transaction boundary
+  - [x] Step 1: Test create, update, rename, owner move, relationship creation, deletion impact, undo, redo, and rejected-command atomicity
+  - [x] Step 2: Move gateway switch branches into focused handlers without breaking its public API
+  - [x] Step 3: Validate before commit; rejected commands preserve revision and state
+  - [x] Step 4: Record caller source (ui, ai, import, migration, script) without semantic privilege differences
+  - [x] Step 5: Run command, gateway, mutation, and patch tests
+  - [x] Step 6: Commit `refactor(sysml): centralize semantic transactions`
+- [x] Task 8: Property, value, and inheritance semantics
+  - [x] Step 1: Test distinctions and legal owner/type combinations for all property kinds
+  - [x] Step 2: Test structured multiplicity and typed ValueSpecification variants
+  - [x] Step 3: Resolve inherited features without cloning and reject inheritance cycles
+  - [x] Step 4: Preserve property-specific type links to the owning property and general type
+  - [x] Step 5: Replace string operations/constraints and legacy property writes with commands
+  - [x] Step 6: Make the editor render generated notation and dispatch commands only
+  - [x] Step 7: Run property, sync, editor, and type-check tests
+  - [x] Step 8: Commit `feat(sysml): implement typed property semantics`
+- [x] Task 9: Relationship, connector-end, flow, and allocation foundations
+  - [x] Step 1: Test Association versus Connector ownership and endpoint rules
+  - [x] Step 2: Resolve nested connector paths across properties and ports; reject broken/context-invalid paths
+  - [x] Step 3: Store ItemFlow independently with realizing relationship and conveyed classifier IDs
+  - [x] Step 4: Keep BindingConnector distinct from Connector and InformationFlow
+  - [x] Step 5: Test Allocate endpoint indexing and derived allocatedFrom/allocatedTo results
+  - [x] Step 6: Reserve a typed AllocateActivityPartition extension point; do not build its UI
+  - [x] Step 7: Run relationship, BDD, and IBD tests
+  - [x] Step 8: Commit `feat(sysml): add connector flow and allocation semantics`
+- [x] Task 10: Requirement and TestCase normalization
+  - [x] Step 1: Test migration of verificationCases to testCases without losing evidence links
+  - [x] Step 2: Enforce unique human-facing requirement IDs independently of UUIDs
+  - [x] Step 3: Test direction, endpoints, ownership, and persistence for containment, deriveReqt, satisfy, verify, refine, trace, and copy
+  - [x] Step 4: Use TestCase wording in normative UI/reporting and label extensions explicitly
+  - [x] Step 5: Preserve baseline, suspect-link, evidence-revision, and RTM behavior
+  - [x] Step 6: Run requirement, RTM, persistence, and governance-panel tests
+  - [x] Step 7: Commit `feat(sysml): align verification semantics with TestCase`
+- [x] Task 11: Canonical projections
+  - [x] Step 1: Test compartments, inherited features, IBD context, nested paths, requirement hierarchy, and browser ownership
+  - [x] Step 2: Compare canonical projections with legacy output for supported fixtures
+  - [x] Step 3: Resolve labels dynamically so rename never rewrites presentation semantics
+  - [x] Step 4: Make legacy projections wrappers around canonical selectors
+  - [x] Step 5: Run projection and model-explorer tests
+  - [x] Step 6: Commit `feat(sysml): add repository-native projections`
+- [x] Task 12: Cameo-style command-only UI workflows
+  - [x] Step 1: Test browser drag emits DisplayExistingElement and creates no duplicate semantic element
+  - [x] Step 2: Implement explicit "Use Existing Type" and "Create New Type" workflows with TYPE_NOT_FOUND candidates
+  - [x] Step 3: Separate "Remove from Diagram" from "Delete from Model" with impact preview
+  - [x] Step 4: Route property, port, relationship, connector, and requirement editors through commands
+  - [x] Step 5: Remove direct semantic setBlocks, setParts, setConnectors, and setRelationships writes from migrated flows
+  - [x] Step 6: Run component tests, `npx tsc --noEmit`, and SysML/model-explorer E2E tests
+  - [x] Step 7: Commit `refactor(sysml): make UI a command-driven projection`
+- [x] Task 13: Schema v4 persistence and migration
+  - [x] Step 1: Add fixtures for legacy definitions, usages, ports, connectors, requirements, verification cases, coordinates, and memberships
+  - [x] Step 2: Migrate generic ports to UML Port unless explicit evidence identifies a SysML specialization
+  - [x] Step 3: Map VerificationCase to TestCase or a labeled extension based on source metadata
+  - [x] Step 4: Persist provenance, presentations, connector paths, ItemFlows, allocations, and evidence
+  - [x] Step 5: Verify deterministic serialization, checksums, chunks, abort rollback, and identity-preserving round trips
+  - [x] Step 6: Run persistence/migration/import tests
+  - [x] Step 7: Commit `feat(sysml): migrate projects to canonical schema v4`
+- [x] Task 14: One writable model across all integrations
+  - [x] Step 1: Test that UI, AI, reports, and scripts observe the same revision and IDs
+  - [x] Step 2: Replace bidirectional legacy merges with one-way compatibility projections
+  - [x] Step 3: Empty the production architecture-guard allowlist
+  - [x] Step 4: Remove duplicated writable BDD/IBD/Requirement semantic arrays
+  - [x] Step 5: Run architecture, SysML release, reporting, and type-check suites
+  - [x] Step 6: Commit `refactor(sysml): enforce one writable semantic repository`
+- [x] Task 15: Mandatory semantic identity release gate
+  - [x] Step 1: Through public commands, create Motor and Vehicle Blocks plus BDD-A, BDD-B, Vehicle IBD, and a Requirement Diagram
+  - [x] Step 2: Display the same Motor ID on both BDDs
+  - [x] Step 3: Create one `leftMotor : Motor` PartProperty owned by Vehicle and display it on the Vehicle IBD
+  - [x] Step 4: Create one Requirement with requirement ID REQ-001
+  - [x] Step 5: Create one `Motor «satisfy» REQ-001` relationship and display it on the Requirement Diagram
+  - [x] Step 6: Assert exactly one Motor definition, one leftMotor property, one REQ-001, and one satisfy relationship; allow multiple presentations
+  - [x] Step 7: Rename Motor to BLDCMotor and assert every projection resolves the new name with unchanged IDs and counts
+  - [x] Step 8: Serialize/reload and repeat every assertion
+  - [x] Step 9: Add the test as blocking release and compliance evidence
+  - [x] Step 10: Commit `test(sysml): gate release on semantic identity`
+- [x] Task 16: Remove compatibility semantics and close compliance
+  - [x] Step 1: Delete legacy mutation branches only after Tasks 12-15 pass
+  - [x] Step 2: Rename retained import/export shapes with Legacy...Dto and prohibit domain dependencies on them
+  - [x] Step 3: Re-evaluate every feature at all four compliance levels
+  - [x] Step 4: Assign COMPLIANT only with complete source/type/command/validator/persistence/projection/test evidence
+  - [x] Step 5: Publish unsupported and ADIA-extension behavior without inflating compliance
+  - [x] Step 6: Run the complete release verification
+  - [x] Step 7: Commit `docs(sysml): publish evidence-backed v1.6 compliance`
