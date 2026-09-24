@@ -13,4 +13,10 @@ export interface Port extends SemanticElement {
   isService?: boolean;
   providedInterfaceIds?: string[];
   requiredInterfaceIds?: string[];
+  /** Required for legacy FlowPort representations. */
+  flowSpecificationId?: string;
+  /** SysML v1 legacy atomic/non-atomic FlowPort distinction. */
+  isAtomicFlowPort?: boolean;
+  /** Resolved semantic nesting path, root-to-leaf, for nested ports. */
+  nestedPortPathIds?: string[];
 }

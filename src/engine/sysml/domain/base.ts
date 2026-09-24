@@ -32,6 +32,7 @@ export type MetaclassKind =
   // Classifiers
   | 'Block'
   | 'InterfaceBlock'
+  | 'FlowSpecification'
   | 'ConstraintBlock'
   | 'AssociationBlock'
   | 'DataType'

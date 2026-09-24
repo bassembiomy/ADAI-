@@ -1,6 +1,7 @@
 import type { Port, PortKind } from '../domain/ports';
 import type { Multiplicity, SemanticElement } from '../domain/base';
-import type { InterfaceBlock } from '../domain/classifiers';
+import type { FlowSpecification, InterfaceBlock } from '../domain/classifiers';
+import type { FlowProperty } from '../domain/properties';
 
 export interface CreatePortInput {
   id: string;
@@ -13,6 +14,8 @@ export interface CreatePortInput {
   isConjugated?: boolean;
   multiplicity?: Multiplicity;
   appliedStereotypeIds?: string[];
+  flowSpecificationId?: string;
+  isAtomicFlowPort?: boolean;
 }
 
 export function createPort(input: CreatePortInput): Port {
@@ -28,6 +31,8 @@ export function createPort(input: CreatePortInput): Port {
     isConjugated: input.isConjugated ?? false,
     multiplicity: input.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
     appliedStereotypeIds: input.appliedStereotypeIds ?? [],
+    ...(input.flowSpecificationId ? { flowSpecificationId: input.flowSpecificationId } : {}),
+    ...(input.isAtomicFlowPort === undefined ? {} : { isAtomicFlowPort: input.isAtomicFlowPort }),
   };
 }
 
@@ -44,6 +49,43 @@ export function effectiveFlowDirection(port: Port, isParentConjugated = false): 
 
 export interface PortSemanticContext {
   getElement: (id: string) => SemanticElement | undefined;
+  getOwnedElements?: (ownerId: string) => SemanticElement[];
+}
+
+export function validatePortName(
+  port: Port,
+  context: PortSemanticContext,
+): { code: 'PORT_NAME_REQUIRED' | 'PORT_NAME_NOT_UNIQUE'; message: string } | null {
+  const name = port.name.trim();
+  if (!name) return { code: 'PORT_NAME_REQUIRED', message: `Port "${port.id}" must have a non-empty name.` };
+  const siblings = context.getOwnedElements?.(port.ownerId ?? '') ?? [];
+  const duplicate = siblings.some(element => element.id !== port.id && element.metaclass === 'Port' && element.name === name);
+  return duplicate
+    ? { code: 'PORT_NAME_NOT_UNIQUE', message: `Port name "${name}" is already used by another port in the same owner.` }
+    : null;
+}
+
+export function validateNestedPortPath(
+  pathIds: readonly string[],
+  leafPortId: string,
+  context: PortSemanticContext,
+): { code: 'NESTED_PORT_PATH_EMPTY' | 'NESTED_PORT_PATH_INVALID'; message: string } | null {
+  if (pathIds.length === 0) {
+    return { code: 'NESTED_PORT_PATH_EMPTY', message: `Nested port "${leafPortId}" requires a non-empty semantic path.` };
+  }
+  const path = pathIds.map(id => context.getElement(id));
+  if (path.some(element => !element || element.metaclass !== 'Port')) {
+    return { code: 'NESTED_PORT_PATH_INVALID', message: `Nested port path for "${leafPortId}" contains a missing or non-port element.` };
+  }
+  for (let i = 1; i < path.length; i += 1) {
+    if (path[i]?.ownerId !== path[i - 1]?.id) {
+      return { code: 'NESTED_PORT_PATH_INVALID', message: `Nested port path for "${leafPortId}" is not an ownership chain.` };
+    }
+  }
+  if (path[path.length - 1]?.id !== leafPortId) {
+    return { code: 'NESTED_PORT_PATH_INVALID', message: `Nested port path does not terminate at "${leafPortId}".` };
+  }
+  return null;
 }
 
 export function getProvidedRequiredInterfaces(
@@ -58,19 +100,22 @@ export function getProvidedRequiredInterfaces(
     return { provided: [], required: [] };
   }
 
-  // Extract declared interfaces from InterfaceBlock
+  // Extract declared interfaces and semantic FlowProperties from InterfaceBlock.
   let baseProvided: string[] = [];
   let baseRequired: string[] = [];
 
   if (typeElement.metaclass === 'InterfaceBlock') {
     const ifBlock = typeElement as InterfaceBlock;
     const custom = ifBlock.customProperties ?? {};
-    if (Array.isArray(custom.providedInterfaceIds)) {
-      baseProvided = custom.providedInterfaceIds as string[];
-    }
-    if (Array.isArray(custom.requiredInterfaceIds)) {
-      baseRequired = custom.requiredInterfaceIds as string[];
-    }
+    baseProvided = [...(ifBlock.providedInterfaceIds ?? (Array.isArray(custom.providedInterfaceIds) ? custom.providedInterfaceIds as string[] : []))];
+    baseRequired = [...(ifBlock.requiredInterfaceIds ?? (Array.isArray(custom.requiredInterfaceIds) ? custom.requiredInterfaceIds as string[] : []))];
+  } else if (typeElement.metaclass === 'FlowSpecification') {
+    const flow = typeElement as FlowSpecification;
+    const flowProperties = (flow.flowPropertyIds ?? [])
+      .map(id => context.getElement(id))
+      .filter((element): element is FlowProperty => element?.metaclass === 'FlowProperty');
+    baseProvided = flowProperties.filter(property => property.direction === 'out').map(property => property.id);
+    baseRequired = flowProperties.filter(property => property.direction === 'in').map(property => property.id);
   }
 
   if (port.isConjugated) {

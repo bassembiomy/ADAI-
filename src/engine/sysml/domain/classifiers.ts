@@ -1,4 +1,5 @@
 import type { Multiplicity, SemanticElement, ValueSpecification } from './base';
+import type { FlowProperty } from './properties';
 
 export interface Classifier extends SemanticElement {
   isAbstract?: boolean;
@@ -13,6 +14,15 @@ export interface Block extends Classifier {
 
 export interface InterfaceBlock extends Classifier {
   metaclass: 'InterfaceBlock';
+  flowPropertyIds?: string[];
+  providedInterfaceIds?: string[];
+  requiredInterfaceIds?: string[];
+}
+
+/** SysML v1.6 legacy flow specification (UML Interface specialization). */
+export interface FlowSpecification extends Classifier {
+  metaclass: 'FlowSpecification';
+  flowPropertyIds: string[];
 }
 
 export interface ConstraintBlock extends Classifier {
