@@ -205,7 +205,8 @@ export function handleDeleteElement(
   // Cascade to presentations displaying any deleted element
   const toDeletePresentations = new Set<string>();
   for (const [presId, pres] of Object.entries(state.presentations)) {
-    if (toDeleteElements.has(pres.elementId)) {
+    const presentedId = pres.semanticElementId || (pres as any).elementId;
+    if (toDeleteElements.has(presentedId)) {
       toDeletePresentations.add(presId);
     }
   }

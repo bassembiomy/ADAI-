@@ -70,52 +70,117 @@ export function dispatchSysmlCommand(
       break;
 
     case 'DisplayExistingElement': {
-      const presResult = executeDisplayExistingElement(state, command.presentation);
-      result = {
-        success: presResult.success,
-        code: presResult.error ? 'PRESENTATION_ERROR' : undefined,
-        message: presResult.error,
-        nextState: presResult.repository,
-        affectedIds: [command.presentation.id],
-      };
+      try {
+        const repoCopy = structuredClone(state);
+        // Ensure diagram exists in repoCopy
+        if (!repoCopy.diagrams[command.presentation.diagramId]) {
+          repoCopy.diagrams[command.presentation.diagramId] = {
+            id: command.presentation.diagramId,
+            name: command.presentation.diagramId,
+            metaclass: 'Diagram',
+            diagramKind: 'bdd',
+            namespace: [],
+            ownerId: 'pkg-root',
+            presentationIds: [],
+          };
+        }
+        executeDisplayExistingElement(repoCopy, {
+          type: 'DisplayExistingElement',
+          diagramId: command.presentation.diagramId,
+          semanticElementId: command.presentation.semanticElementId,
+          id: command.presentation.id,
+          bounds: command.presentation.bounds,
+          visibleCompartments: command.presentation.visibleCompartments,
+          style: command.presentation.style,
+          zIndex: command.presentation.zIndex,
+        });
+        repoCopy.revision = state.revision + 1;
+        result = {
+          success: true,
+          nextState: repoCopy,
+          affectedIds: [command.presentation.id],
+        };
+      } catch (err: any) {
+        result = {
+          success: false,
+          code: 'PRESENTATION_ERROR',
+          message: err?.message || String(err),
+          nextState: state,
+        };
+      }
       break;
     }
     case 'RemovePresentation': {
-      const presResult = executeRemovePresentation(state, command.presentationId);
-      result = {
-        success: presResult.success,
-        code: presResult.error ? 'PRESENTATION_ERROR' : undefined,
-        message: presResult.error,
-        nextState: presResult.repository,
-        affectedIds: [command.presentationId],
-      };
+      try {
+        const repoCopy = structuredClone(state);
+        executeRemovePresentation(repoCopy, {
+          type: 'RemovePresentation',
+          presentationId: command.presentationId,
+        });
+        repoCopy.revision = state.revision + 1;
+        result = {
+          success: true,
+          nextState: repoCopy,
+          affectedIds: [command.presentationId],
+        };
+      } catch (err: any) {
+        result = {
+          success: false,
+          code: 'PRESENTATION_ERROR',
+          message: err?.message || String(err),
+          nextState: state,
+        };
+      }
       break;
     }
     case 'MovePresentation': {
-      const presResult = executeMovePresentation(state, command.presentationId, command.x, command.y);
-      result = {
-        success: presResult.success,
-        code: presResult.error ? 'PRESENTATION_ERROR' : undefined,
-        message: presResult.error,
-        nextState: presResult.repository,
-        affectedIds: [command.presentationId],
-      };
+      try {
+        const repoCopy = structuredClone(state);
+        executeMovePresentation(repoCopy, {
+          type: 'MovePresentation',
+          presentationId: command.presentationId,
+          x: command.x,
+          y: command.y,
+        });
+        repoCopy.revision = state.revision + 1;
+        result = {
+          success: true,
+          nextState: repoCopy,
+          affectedIds: [command.presentationId],
+        };
+      } catch (err: any) {
+        result = {
+          success: false,
+          code: 'PRESENTATION_ERROR',
+          message: err?.message || String(err),
+          nextState: state,
+        };
+      }
       break;
     }
     case 'ResizePresentation': {
-      const presResult = executeResizePresentation(
-        state,
-        command.presentationId,
-        command.width,
-        command.height
-      );
-      result = {
-        success: presResult.success,
-        code: presResult.error ? 'PRESENTATION_ERROR' : undefined,
-        message: presResult.error,
-        nextState: presResult.repository,
-        affectedIds: [command.presentationId],
-      };
+      try {
+        const repoCopy = structuredClone(state);
+        executeResizePresentation(repoCopy, {
+          type: 'ResizePresentation',
+          presentationId: command.presentationId,
+          width: command.width,
+          height: command.height,
+        });
+        repoCopy.revision = state.revision + 1;
+        result = {
+          success: true,
+          nextState: repoCopy,
+          affectedIds: [command.presentationId],
+        };
+      } catch (err: any) {
+        result = {
+          success: false,
+          code: 'PRESENTATION_ERROR',
+          message: err?.message || String(err),
+          nextState: state,
+        };
+      }
       break;
     }
 
