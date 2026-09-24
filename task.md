@@ -1,131 +1,60 @@
-# ADIA SysML v1.6 Backend-First Implementation Plan Tasks
+# Repository-First Model Tree and Diagram Viewpoints Implementation Plan Tasks
 
-- [x] Task 1: Baseline and architecture guardrails
-  - [x] Step 1: Write a failing scanner test for direct UI/AI writes to legacy semantic arrays and command bypasses
-  - [x] Step 2: Implement stable diagnostics `SYSML_ARCH_DIRECT_MUTATION`, `SYSML_ARCH_UI_SEMANTIC_STORAGE`, `SYSML_ARCH_SILENT_CREATION` with temporary compatibility allowlist
-  - [x] Step 3: Add the architecture check to the full release script
-  - [x] Step 4: Run `npm run test:sysml:architecture` and `npm run test:sysml -- --reporter=dot`
-  - [x] Step 5: Commit `test(sysml): add repository-first architecture guardrails`
-- [x] Task 2: Provenance and four-level compliance
-  - [x] Step 1: Test that ProxyPort with three passing levels and failed Constraints is PARTIAL, never COMPLIANT
-  - [x] Step 2: Test that missing automated tests or specification section blocks COMPLIANT
-  - [x] Step 3: Implement Element/Properties/Relationships/Constraints results with PASS | FAIL | NOT_APPLICABLE
-  - [x] Step 4: Require specification source/section, source file, domain type, command, validator, persistence, projection, and test evidence
-  - [x] Step 5: Migrate existing rows and downgrade claims that lack evidence
-  - [x] Step 6: Run compliance and conformance-manifest tests
-  - [x] Step 7: Commit `feat(sysml): enforce provenance and four-level compliance`
-- [x] Task 3: Canonical schema v4 metamodel
-  - [x] Step 1: Test stable IDs, explicit ownership, namespaces, metaclass discrimination, and global ID collision rejection
-  - [x] Step 2: Add first-class Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, QuantityKind, Unit, Operation, Parameter, Reception, Constraint, Comment, Rationale, Requirement, and TestCase
-  - [x] Step 3: Add first-class PartProperty, ReferenceProperty, ValueProperty, ConstraintProperty, FlowProperty, and typed ValueSpecification variants
-  - [x] Step 4: Add typed Diagram and DiagramPresentation entities; do not store semantic compartment content as strings
-  - [x] Step 5: Retain deprecated v3 compatibility exports until migration completes
-  - [x] Step 6: Run model, normalized-store tests, and `npx tsc --noEmit`
-  - [x] Step 7: Commit `feat(sysml): add canonical v4 semantic metamodel`
-- [x] Task 4: UML and SysML Port hierarchy
-  - [x] Step 1: Test that generic CreatePort creates umlPort with no implicit SysML stereotype
-  - [x] Step 2: Test mutual exclusion of ProxyPort and FullPort
-  - [x] Step 3: Reject ProxyPort typed by Block; accept InterfaceBlock
-  - [x] Step 4: Test nested ProxyPort rules and recursive conjugation without UI
-  - [x] Step 5: Implement provided/required semantic references and legacy FlowPort representation
-  - [x] Step 6: Add diagnostics `PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK`, `PORT_SPECIALIZATION_CONFLICT`, `INVALID_NESTED_PROXY_PORT`
-  - [x] Step 7: Run port, IBD, and profile tests
-  - [x] Step 8: Commit `feat(sysml): implement UML and SysML port semantics`
-- [x] Task 5: Global type resolution and no silent creation
-  - [x] Step 1: Test UI, AI, import, migration, and script paths: unknown type creates zero entities and returns the same typed result
-  - [x] Step 2: Rank candidates by qualified-name exact match, simple-name exact match, then normalized prefix
-  - [x] Step 3: Route every typed property/port/connector command through the resolver
-  - [x] Step 4: Remove placeholder type synthesis from import and migration
-  - [x] Step 5: Ensure AI surfaces CreateNewType through normal approval and command handling
-  - [x] Step 6: Run resolver, creation-rule, AI-adapter, and persistence tests
-  - [x] Step 7: Commit `feat(sysml): reject silent semantic type creation`
-- [x] Task 6: Repository-owned presentations
-  - [x] Step 1: Test one Block displayed on two diagrams: one definition, two presentations
-  - [x] Step 2: Test RemovePresentation preserves semantics and DeleteModelElement requires impact handling
-  - [x] Step 3: Move coordinate and membership side maps into typed presentation collections
-  - [x] Step 4: Add deterministic v3-to-v4 migration for coordinates and diagram membership
-  - [x] Step 5: Keep legacy getters as read-only adapters until React migration
-  - [x] Step 6: Run presentation, persistence, and normalized-store tests
-  - [x] Step 7: Commit `feat(sysml): persist typed diagram presentations`
-- [x] Task 7: Command and transaction boundary
-  - [x] Step 1: Test create, update, rename, owner move, relationship creation, deletion impact, undo, redo, and rejected-command atomicity
-  - [x] Step 2: Move gateway switch branches into focused handlers without breaking its public API
-  - [x] Step 3: Validate before commit; rejected commands preserve revision and state
-  - [x] Step 4: Record caller source (ui, ai, import, migration, script) without semantic privilege differences
-  - [x] Step 5: Run command, gateway, mutation, and patch tests
-  - [x] Step 6: Commit `refactor(sysml): centralize semantic transactions`
-- [x] Task 8: Property, value, and inheritance semantics
-  - [x] Step 1: Test distinctions and legal owner/type combinations for all property kinds
-  - [x] Step 2: Test structured multiplicity and typed ValueSpecification variants
-  - [x] Step 3: Resolve inherited features without cloning and reject inheritance cycles
-  - [x] Step 4: Preserve property-specific type links to the owning property and general type
-  - [x] Step 5: Replace string operations/constraints and legacy property writes with commands
-  - [x] Step 6: Make the editor render generated notation and dispatch commands only
-  - [x] Step 7: Run property, sync, editor, and type-check tests
-  - [x] Step 8: Commit `feat(sysml): implement typed property semantics`
-- [x] Task 9: Relationship, connector-end, flow, and allocation foundations
-  - [x] Step 1: Test Association versus Connector ownership and endpoint rules
-  - [x] Step 2: Resolve nested connector paths across properties and ports; reject broken/context-invalid paths
-  - [x] Step 3: Store ItemFlow independently with realizing relationship and conveyed classifier IDs
-  - [x] Step 4: Keep BindingConnector distinct from Connector and InformationFlow
-  - [x] Step 5: Test Allocate endpoint indexing and derived allocatedFrom/allocatedTo results
-  - [x] Step 6: Reserve a typed AllocateActivityPartition extension point; do not build its UI
-  - [x] Step 7: Run relationship, BDD, and IBD tests
-  - [x] Step 8: Commit `feat(sysml): add connector flow and allocation semantics`
-- [x] Task 10: Requirement and TestCase normalization
-  - [x] Step 1: Test migration of verificationCases to testCases without losing evidence links
-  - [x] Step 2: Enforce unique human-facing requirement IDs independently of UUIDs
-  - [x] Step 3: Test direction, endpoints, ownership, and persistence for containment, deriveReqt, satisfy, verify, refine, trace, and copy
-  - [x] Step 4: Use TestCase wording in normative UI/reporting and label extensions explicitly
-  - [x] Step 5: Preserve baseline, suspect-link, evidence-revision, and RTM behavior
-  - [x] Step 6: Run requirement, RTM, persistence, and governance-panel tests
-  - [x] Step 7: Commit `feat(sysml): align verification semantics with TestCase`
-- [x] Task 11: Canonical projections
-  - [x] Step 1: Test compartments, inherited features, IBD context, nested paths, requirement hierarchy, and browser ownership
-  - [x] Step 2: Compare canonical projections with legacy output for supported fixtures
-  - [x] Step 3: Resolve labels dynamically so rename never rewrites presentation semantics
-  - [x] Step 4: Make legacy projections wrappers around canonical selectors
-  - [x] Step 5: Run projection and model-explorer tests
-  - [x] Step 6: Commit `feat(sysml): add repository-native projections`
-- [x] Task 12: Cameo-style command-only UI workflows
-  - [x] Step 1: Test browser drag emits DisplayExistingElement and creates no duplicate semantic element
-  - [x] Step 2: Implement explicit "Use Existing Type" and "Create New Type" workflows with TYPE_NOT_FOUND candidates
-  - [x] Step 3: Separate "Remove from Diagram" from "Delete from Model" with impact preview
-  - [x] Step 4: Route property, port, relationship, connector, and requirement editors through commands
-  - [x] Step 5: Remove direct semantic setBlocks, setParts, setConnectors, and setRelationships writes from migrated flows
-  - [x] Step 6: Run component tests, `npx tsc --noEmit`, and SysML/model-explorer E2E tests
-  - [x] Step 7: Commit `refactor(sysml): make UI a command-driven projection`
-- [x] Task 13: Schema v4 persistence and migration
-  - [x] Step 1: Add fixtures for legacy definitions, usages, ports, connectors, requirements, verification cases, coordinates, and memberships
-  - [x] Step 2: Migrate generic ports to UML Port unless explicit evidence identifies a SysML specialization
-  - [x] Step 3: Map VerificationCase to TestCase or a labeled extension based on source metadata
-  - [x] Step 4: Persist provenance, presentations, connector paths, ItemFlows, allocations, and evidence
-  - [x] Step 5: Verify deterministic serialization, checksums, chunks, abort rollback, and identity-preserving round trips
-  - [x] Step 6: Run persistence/migration/import tests
-  - [x] Step 7: Commit `feat(sysml): migrate projects to canonical schema v4`
-- [x] Task 14: One writable model across all integrations
-  - [x] Step 1: Test that UI, AI, reports, and scripts observe the same revision and IDs
-  - [x] Step 2: Replace bidirectional legacy merges with one-way compatibility projections
-  - [x] Step 3: Empty the production architecture-guard allowlist
-  - [x] Step 4: Remove duplicated writable BDD/IBD/Requirement semantic arrays
-  - [x] Step 5: Run architecture, SysML release, reporting, and type-check suites
-  - [x] Step 6: Commit `refactor(sysml): enforce one writable semantic repository`
-- [x] Task 15: Mandatory semantic identity release gate
-  - [x] Step 1: Through public commands, create Motor and Vehicle Blocks plus BDD-A, BDD-B, Vehicle IBD, and a Requirement Diagram
-  - [x] Step 2: Display the same Motor ID on both BDDs
-  - [x] Step 3: Create one `leftMotor : Motor` PartProperty owned by Vehicle and display it on the Vehicle IBD
-  - [x] Step 4: Create one Requirement with requirement ID REQ-001
-  - [x] Step 5: Create one `Motor «satisfy» REQ-001` relationship and display it on the Requirement Diagram
-  - [x] Step 6: Assert exactly one Motor definition, one leftMotor property, one REQ-001, and one satisfy relationship; allow multiple presentations
-  - [x] Step 7: Rename Motor to BLDCMotor and assert every projection resolves the new name with unchanged IDs and counts
-  - [x] Step 8: Serialize/reload and repeat every assertion
-  - [x] Step 9: Add the test as blocking release and compliance evidence
-  - [x] Step 10: Commit `test(sysml): gate release on semantic identity`
-- [x] Task 16: Remove compatibility semantics and close compliance
-  - [x] Step 1: Delete legacy mutation branches only after Tasks 12-15 pass
-  - [x] Step 2: Rename retained import/export shapes with Legacy...Dto and prohibit domain dependencies on them
-  - [x] Step 3: Re-evaluate every feature at all four compliance levels
-  - [x] Step 4: Assign COMPLIANT only with complete source/type/command/validator/persistence/projection/test evidence
-  - [x] Step 5: Publish unsupported and ADIA-extension behavior without inflating compliance
-  - [x] Step 6: Run the complete release verification
-  - [x] Step 7: Commit `docs(sysml): publish evidence-backed v1.6 compliance`
+- [x] Task 1: Central Capability and Ownership Catalog
+  - [x] Step 1: Write failing ownership-policy tests
+  - [x] Step 2: Run the test and verify RED
+  - [x] Step 3: Implement the typed catalog and policy
+  - [x] Step 4: Replace SYSML_CHILDREN consumers with catalog projections
+  - [x] Step 5: Run tests and commit
+- [ ] Task 2: Complete Canonical Element and Feature Types
+  - [ ] Step 1: Write a failing metamodel construction test
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Add focused behavior-domain types
+  - [ ] Step 4: Run domain and migration tests
+  - [ ] Step 5: Commit
+- [ ] Task 3: Atomic Create-and-Present Command
+  - [ ] Step 1: Write atomicity and identity tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Implement the command
+  - [ ] Step 4: Enforce duplicate-presentation policy
+  - [ ] Step 5: Run command tests and commit
+- [ ] Task 4: Canonical Element Factory and No-Silent-Type Resolution
+  - [ ] Step 1: Write failing factory tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Implement factory dispatch by metaclass
+  - [ ] Step 4: Make legacy explorer factories wrappers over the canonical factory
+  - [ ] Step 5: Run tests and commit
+- [ ] Task 5: Repository-First Model Tree Context Menu
+  - [ ] Step 1: Write failing menu and adapter tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Project capabilities from backend policy
+  - [ ] Step 4: Render grouped actions and "All Types…"
+  - [ ] Step 5: Verify and commit
+- [ ] Task 6: Relationship Capability and Target Policy
+  - [ ] Step 1: Write endpoint parity tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Implement one shared policy and use it in commands/UI
+  - [ ] Step 4: Verify and commit
+- [ ] Task 7: Diagram Toolbars as Semantic-and-Presentation Commands
+  - [ ] Step 1: Write cross-diagram identity tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Implement the controller
+  - [ ] Step 4: Replace direct setBlocks, setRelationships, and presentation mutations in affected toolbar handlers
+  - [ ] Step 5: Verify and commit
+- [ ] Task 8: Feature Editing and Specification Panels
+  - [ ] Step 1: Write feature identity tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Implement controller commands and type resolution
+  - [ ] Step 4: Replace affected direct property/port array mutations in App.tsx
+  - [ ] Step 5: Verify and commit
+- [ ] Task 9: Persistence, Migration, and Read-Only Legacy Projections
+  - [ ] Step 1: Write save/load and migration tests
+  - [ ] Step 2: Verify RED
+  - [ ] Step 3: Implement presentation migration and projection-only adapters
+  - [ ] Step 4: Verify and commit
+- [ ] Task 10: Release Gates, Evidence, and Compliance Status
+  - [ ] Step 1: Add the repository-first release scenarios
+  - [ ] Step 2: Verify the new tests fail before final wiring
+  - [ ] Step 3: Complete remaining wiring until all gates pass
+  - [ ] Step 4: Run full verification
+  - [ ] Step 5: Update evidence and commit
