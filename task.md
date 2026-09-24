@@ -22,15 +22,15 @@
   - [x] Step 5: Retain deprecated v3 compatibility exports until migration completes
   - [x] Step 6: Run model, normalized-store tests, and `npx tsc --noEmit`
   - [x] Step 7: Commit `feat(sysml): add canonical v4 semantic metamodel`
-- [ ] Task 4: UML and SysML Port hierarchy
-  - [ ] Step 1: Test that generic CreatePort creates umlPort with no implicit SysML stereotype
-  - [ ] Step 2: Test mutual exclusion of ProxyPort and FullPort
-  - [ ] Step 3: Reject ProxyPort typed by Block; accept InterfaceBlock
-  - [ ] Step 4: Test nested ProxyPort rules and recursive conjugation without UI
-  - [ ] Step 5: Implement provided/required semantic references and legacy FlowPort representation
-  - [ ] Step 6: Add diagnostics `PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK`, `PORT_SPECIALIZATION_CONFLICT`, `INVALID_NESTED_PROXY_PORT`
-  - [ ] Step 7: Run port, IBD, and profile tests
-  - [ ] Step 8: Commit `feat(sysml): implement UML and SysML port semantics`
+- [x] Task 4: UML and SysML Port hierarchy
+  - [x] Step 1: Test that generic CreatePort creates umlPort with no implicit SysML stereotype
+  - [x] Step 2: Test mutual exclusion of ProxyPort and FullPort
+  - [x] Step 3: Reject ProxyPort typed by Block; accept InterfaceBlock
+  - [x] Step 4: Test nested ProxyPort rules and recursive conjugation without UI
+  - [x] Step 5: Implement provided/required semantic references and legacy FlowPort representation
+  - [x] Step 6: Add diagnostics `PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK`, `PORT_SPECIALIZATION_CONFLICT`, `INVALID_NESTED_PROXY_PORT`
+  - [x] Step 7: Run port, IBD, and profile tests
+  - [x] Step 8: Commit `feat(sysml): implement UML and SysML port semantics`
 - [ ] Task 5: Global type resolution and no silent creation
   - [ ] Step 1: Test UI, AI, import, migration, and script paths: unknown type creates zero entities and returns the same typed result
   - [ ] Step 2: Rank candidates by qualified-name exact match, simple-name exact match, then normalized prefix
