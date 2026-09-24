@@ -40,7 +40,7 @@ import { executeAiActions } from './utils/aiActionProcessor';
 import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { LiveFpsMonitor } from './components/LiveFpsMonitor';
 import { 
-  VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
+  VariableType, VariableDef, VariableOverflowPolicy, StateData, JunctionData, TransitionData, Layer, ErrorItem
 } from './types/sm_types';
 import {
   calculateControlPointFromMidpoint,
@@ -59,6 +59,7 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { coerceTypedValue } from './utils/stateMachine/smTypedValue';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
 import {
@@ -97,6 +98,7 @@ import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBun
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
 import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
+import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -147,7 +149,8 @@ import { computeViewportBounds, cullElements } from './components/sysml/Virtuali
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
-import { formatLegacyProperty, inheritedProperties, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { reconcileAllPropertyUsages, reconcilePropertyUsages } from './services/sysmlPropertyUsageSync';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 
@@ -292,22 +295,9 @@ const normalizeNumerals = (val: string) => {
 const parseValue = (type: VariableType, value: string): number | boolean => {
   const trimmed = value.trim().toLowerCase();
   if (type === 'bool') return ['1', 'true', 't', 'yes', 'y', 'on'].includes(trimmed);
-  if (['float', 'single', 'double'].includes(type)) {
-    const parsed = parseFloat(trimmed);
-    return isNaN(parsed) ? 0 : parsed;
-  }
-  const parsed = parseInt(trimmed, 10);
-  if (isNaN(parsed)) return 0;
-  switch (type) {
-    case 'int8': return Math.max(-128, Math.min(127, parsed));
-    case 'uint8': return Math.max(0, Math.min(255, parsed));
-    case 'int16': return Math.max(-32768, Math.min(32767, parsed));
-    case 'uint16': return Math.max(0, Math.min(65535, parsed));
-    case 'int32': return Math.max(-2147483648, Math.min(2147483647, parsed));
-    case 'uint32': return Math.max(0, Math.min(4294967295, parsed));
-    case 'uint': return Math.max(0, parsed);
-    default: return parsed;
-  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return 0;
+  return coerceTypedValue(parsed, type).value;
 };
 
 const getDefaultValue = (type: VariableType): string => {
@@ -473,66 +463,28 @@ class Plant {
   }
 };
 
-const HierarchyTree = ({
-  states,
-  layers,
-  activeStates,
-  currentLayerId,
-  onSelect,
-  onDoubleClick,
-  selectedIds,
-}: {
-  states: StateData[];
-  layers: Layer[];
-  activeStates: Record<string, string>;
-  currentLayerId: string;
-  onSelect: (id: string) => void;
-  onDoubleClick: (id: string) => void;
-  selectedIds: string[];
-}): React.ReactNode => {
-  const renderNode = (state: StateData, level: number): React.ReactNode => {
-    const isActive = Object.values(activeStates).includes(state.id);
-    const isSelected = selectedIds.includes(state.id);
-
-    const childLayer = layers.find(l => l.parentStateId === state.id);
-    const childStates = childLayer
-      ? states.filter(s => childLayer.stateIds.includes(s.id))
-      : [];
-
-    return (
-      <div key={state.id}>
-        <div
-          onClick={(e) => { e.stopPropagation(); onSelect(state.id); }}
-          onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(state.id); }}
-          className={`flex items-center p-1 rounded cursor-pointer hover:bg-[#2a2a2a] ${isSelected ? 'bg-[#f97316]/30' : ''
-            } ${isActive ? 'font-bold' : ''}`}
-          style={{ paddingLeft: `${level * 16 + 8}px` }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill={isActive ? '#4ade80' : 'none'} stroke={state.color} strokeWidth="2" className="mr-2 shrink-0">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          </svg>
-          <span className="text-sm truncate" title={state.name}>{state.name}</span>
-        </div>
-        {childStates.length > 0 && (
-          <div>
-            {childStates.map(childState => renderNode(childState, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const rootLayer = layers.find(l => l.id === 'root');
-  const rootStates = rootLayer ? states.filter(s => rootLayer.stateIds.includes(s.id)) : [];
-
-  return (
-    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-      {rootStates.length > 0 ? rootStates.sort((a, b) => a.name.localeCompare(b.name)).map(state => renderNode(state, 0)) : (
-        <div className="text-center text-xs text-[#666] p-4">No states in root.</div>
-      )}
-    </div>
-  );
-};
+const HierarchyTree: React.FC<any> = (props) => (
+  <AppModelExplorer
+    diagramMode={props.diagramMode}
+    states={props.states}
+    layers={props.layers}
+    transitions={props.transitions ?? []}
+    junctions={props.junctions ?? []}
+    activeStates={props.activeStates}
+    currentLayerId={props.currentLayerId}
+    blocks={props.blocks}
+    parts={props.parts}
+    canonicalSysmlRepository={props.canonicalSysmlRepository}
+    selectedIds={props.selectedIds}
+    onSelect={props.onSelect}
+    onDoubleClick={props.onDoubleClick}
+    onUpdateStates={props.onUpdateStates}
+    onUpdateLayers={props.onUpdateLayers}
+    onUpdateTransitions={props.onUpdateTransitions}
+    onUpdateJunctions={props.onUpdateJunctions}
+    onExecuteSysmlCommand={props.onExecuteSysmlCommand}
+  />
+);
 
 const findPeaks = (y: number[]): { peaks: number[] } => {
   const peaks: number[] = [];
@@ -6277,14 +6229,6 @@ const ADIA = () => {
     return map;
   }, [parts]);
 
-  const partTypeIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of parts) {
-      if (p.typeId) set.add(p.typeId);
-    }
-    return set;
-  }, [parts]);
-
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
     const w = rect?.width || 1200;
@@ -8139,6 +8083,29 @@ const ADIA = () => {
   const selectedBlock = useMemo(() => selectedIds.length === 1 ? blocks.find(b => b.id === selectedIds[0]) : null, [selectedIds, blocks]);
   const selectedRelationship = useMemo(() => selectedIds.length === 1 ? relationships.find(r => r.id === selectedIds[0]) : null, [selectedIds, relationships]);
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
+
+  const sysmlStructureSignature = useMemo(() => JSON.stringify({
+    blocks: blocks.map(block => ({ id: block.id, stereotype: block.stereotype, properties: block.properties })),
+    parts: parts.map(part => ({
+      id: part.id,
+      propertyId: part.propertyId,
+      name: part.name,
+      blockId: part.blockId,
+      typeId: part.typeId,
+      aggregation: part.aggregation,
+      multiplicity: part.multiplicity,
+    })),
+  }), [blocks, parts]);
+
+  useEffect(() => {
+    if (diagramMode !== 'bdd' && diagramMode !== 'ibd') return;
+    const reconciled = reconcileAllPropertyUsages(blocks, parts, connectors);
+    const blocksChanged = JSON.stringify(reconciled.blocks) !== JSON.stringify(blocks);
+    const partsChanged = JSON.stringify(reconciled.parts) !== JSON.stringify(parts);
+    if (!blocksChanged && !partsChanged) return;
+    if (blocksChanged) setBlocks(reconciled.blocks);
+    if (partsChanged) setParts(reconciled.parts);
+  }, [diagramMode, sysmlStructureSignature]);
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
   const currentLayer = useMemo(() => layers.find(l => l.id === currentLayerId) || layers[0], [layers, currentLayerId]);
@@ -8188,6 +8155,7 @@ const ADIA = () => {
       id: uuidv4(),
       name: newVarName,
       type: newVarType,
+      overflowPolicy: 'saturate',
       initialValue: newVarValue,
       currentValue: parseValue(newVarType, newVarValue),
       visibleInScope: true
@@ -8206,7 +8174,12 @@ const ADIA = () => {
   const updateVariableValue = useCallback((idOrName: string, value: string) => {
     setVariables(prev => prev.map(v => {
       if (v.id === idOrName || v.name === idOrName) {
-        const parsed = parseValue(v.type, value);
+        const result = coerceTypedValue(Number(value), v.type, v.overflowPolicy ?? 'saturate');
+        if (result.error !== undefined) {
+          addError('error', `${v.name}: ${result.error}`, 'Variable Runtime');
+          return v;
+        }
+        const parsed = result.value;
         if (simulationSessionRef.current) {
           setSessionVariableValue(simulationSessionRef.current, v.id, parsed);
         }
@@ -8214,6 +8187,22 @@ const ADIA = () => {
       }
       return v;
     }));
+  }, [addError]);
+
+  const updateVariableType = useCallback((id: string, type: VariableType) => {
+    setVariables(prev => prev.map(v => {
+      if (v.id !== id) return v;
+      const initial = validateInitialValue({ type, initialValue: v.initialValue });
+      if (initial === null) {
+        addError('error', `Cannot change '${v.name}' to ${type}: initial value is invalid.`, 'Variable Type');
+        return v;
+      }
+      return { ...v, type, initialValue: initial, currentValue: parseValue(type, initial) };
+    }));
+  }, [addError]);
+
+  const updateVariableOverflowPolicy = useCallback((id: string, overflowPolicy: VariableOverflowPolicy) => {
+    setVariables(prev => prev.map(v => v.id === id ? { ...v, overflowPolicy } : v));
   }, []);
 
   const updateVariableInitValue = useCallback((id: string, value: string) => {
@@ -9704,25 +9693,42 @@ const ADIA = () => {
       addError('error', 'A SysML requirement cannot be changed to an unrelated stereotype.', 'SysML', id);
       return;
     }
+    const currentValidation = validateLegacyBlockEdit(blocks, relationships, id);
     const validation = validateLegacyBlockEdit([...blocks.filter(block => block.id !== id), candidate], relationships, id);
-    if (!validation.valid) {
+    if (!validation.valid && (currentValidation.valid || introducesNewValidationCodes(currentValidation, validation))) {
       addError('error', `Invalid SysML attribute: ${validation.messages[0] || validation.codes[0]}`, 'SysML', id);
       return;
     }
-    setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
-  }, [addError, blocks, parts, relationships, showConnectionPolicyError]);
+    if (Object.prototype.hasOwnProperty.call(updates, 'properties')) {
+      const reconciled = reconcilePropertyUsages(
+        blocks.map(block => block.id === id ? candidate : block),
+        parts,
+        connectors,
+        id,
+        'property',
+      );
+      setBlocks(reconciled.blocks);
+      setParts(reconciled.parts);
+      setConnectors(reconciled.connectors);
+    } else {
+      setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
+    }
+  }, [addError, blocks, connectors, parts, relationships, showConnectionPolicyError]);
 
   const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setBlocks(transaction.model.blocks);
+    const deletedPartIds = transaction.model.parts.length === 0
+      ? new Set(parts.filter(part => deletedIds.has(part.id)).map(part => part.id))
+      : new Set(parts.filter(part => deletedIds.has(part.id) && !transaction.model.parts.some(next => next.id === part.id)).map(part => part.id));
+    setBlocks([...deletedPartIds].reduce((current, partId) => removePartProperty(current, partId), transaction.model.blocks));
     setRelationships(transaction.model.relationships);
     setParts(transaction.model.parts);
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     addError('info', msg);
-  }, [addToHistory, addError]);
+  }, [addToHistory, addError, parts]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
@@ -9827,26 +9833,55 @@ const ADIA = () => {
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
     addToHistory();
+    const defId = uuidv4();
+    const defName = `Part_${parts.length + 1}_Def`;
+    const defBlock: BlockData = {
+      id: defId,
+      name: defName,
+      stereotype: 'block',
+      classes: [],
+      x: 100,
+      y: 100,
+      width: 150,
+      height: 100,
+      properties: [],
+      operations: [],
+      constraints: [],
+      ports: []
+    };
+    const nextBlocks = [...blocks, defBlock];
+
     const newPart: PartData = {
       id: uuidv4(),
       name: `part_${parts.length + 1}`,
       blockId: currentLayerId,
-      typeId: null,
+      typeId: defId,
+      aggregation: 'composite',
       x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
       y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
       width: 150,
       height: 100,
       multiplicity: '1'
     };
-    setParts(prev => [...prev, newPart]);
+    const reconciled = reconcilePropertyUsages(nextBlocks, [...parts, newPart], connectors, currentLayerId, 'usage');
+    setParts(reconciled.parts);
+    setConnectors(reconciled.connectors);
+    setBlocks(reconciled.blocks);
     setSelectedIds([newPart.id]);
     addError('info', `Created part: ${newPart.name}`);
-  }, [parts.length, currentLayerId, snapEnabled, addError, addToHistory]);
+  }, [parts, connectors, currentLayerId, snapEnabled, addError, addToHistory, blocks]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
     const current = parts.find(part => part.id === id);
     if (!current) return;
     const candidate = { ...current, ...updates };
+
+    const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
+    if (isPureGeometricUpdate) {
+      setParts(prev => prev.map(p => p.id === id ? candidate : p));
+      return;
+    }
+
     const validName = /^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate.name.trim());
     const validType = Boolean(candidate.typeId && blocks.some(block => block.id === candidate.typeId && block.stereotype === 'block'));
     let validMultiplicity = true;
@@ -9859,8 +9894,17 @@ const ADIA = () => {
           : `Invalid multiplicity "${candidate.multiplicity || ''}" for part ${candidate.name || id}.`, 'SysML', id);
       return;
     }
-    setParts(prev => prev.map(p => p.id === id ? candidate : p));
-  }, [addError, blocks, parts]);
+    const reconciled = reconcilePropertyUsages(
+      blocks,
+      parts.map(p => p.id === id ? candidate : p),
+      connectors,
+      candidate.blockId || currentLayerId,
+      'usage',
+    );
+    setParts(reconciled.parts);
+    setBlocks(reconciled.blocks);
+    setConnectors(reconciled.connectors);
+  }, [addError, blocks, connectors, currentLayerId, parts]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
@@ -14483,11 +14527,6 @@ const ADIA = () => {
 
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
-      // In BDD mode, hide any block that is being used as a type for a part.
-      if (diagramMode === 'bdd' && partTypeIds.has(block.id)) {
-        return null;
-      }
-
       const isSelected = selectedIds.includes(block.id);
 
       const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
@@ -15810,11 +15849,26 @@ const ADIA = () => {
                 <HierarchyTree
                   states={states}
                   layers={layers}
+                  transitions={transitions}
+                  junctions={junctions}
                   activeStates={activeStates}
                   currentLayerId={currentLayerId}
+                  diagramMode={diagramMode}
+                  blocks={blocks}
+                  parts={parts}
+                  canonicalSysmlRepository={canonicalSysmlRepository}
                   onSelect={(id: string) => setSelectedIds([id])}
-                  onDoubleClick={(id: string) => enterLayer(id)}
+                  onDoubleClick={(id: string) => {
+                    if (diagramMode === "statemachine") {
+                      enterLayer(id);
+                    }
+                  }}
                   selectedIds={selectedIds}
+                  onUpdateStates={setStates}
+                  onUpdateLayers={setLayers}
+                  onUpdateTransitions={setTransitions}
+                  onUpdateJunctions={setJunctions}
+                  onExecuteSysmlCommand={sysmlApplicationDelegate ? (cmd: any) => sysmlApplicationDelegate.executeCommand(cmd) as any : undefined}
                 />
               )}
             </aside>
@@ -15917,6 +15971,21 @@ const ADIA = () => {
                             </div>
 
                             <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
+                              <select
+                                value={variable.type}
+                                onChange={(e) => updateVariableType(variable.id, e.target.value as VariableType)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+                              >
+                                {ALLOWED_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                              </select>
+                              <select
+                                value={variable.overflowPolicy ?? 'saturate'}
+                                onChange={(e) => updateVariableOverflowPolicy(variable.id, e.target.value as VariableOverflowPolicy)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+                              >
+                                <option value="saturate">saturate</option>
+                                <option value="error">error</option>
+                              </select>
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
                                 <Input
@@ -17788,6 +17857,68 @@ const ADIA = () => {
                   <div>
                     <Label>Multiplicity</Label>
                     <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label>Block Type</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defId = uuidv4();
+                          const defName = `${selectedPart.name}_Def`;
+                          const defBlock: BlockData = {
+                            id: defId,
+                            name: defName,
+                            stereotype: 'block',
+                            classes: [],
+                            x: 100,
+                            y: 100,
+                            width: 150,
+                            height: 100,
+                            properties: [],
+                            operations: [],
+                            constraints: [],
+                            ports: []
+                          };
+                          const candidate = { ...selectedPart, typeId: defId };
+                          const reconciled = reconcilePropertyUsages(
+                            [...blocks, defBlock],
+                            parts.map(part => part.id === selectedPart.id ? candidate : part),
+                            connectors,
+                            candidate.blockId || currentLayerId,
+                            'usage',
+                          );
+                          setBlocks(reconciled.blocks);
+                          setParts(reconciled.parts);
+                          setConnectors(reconciled.connectors);
+                          addError('info', `Created definition '${defName}' for part.`);
+                        }}
+                        className="text-[10px] text-[#f97316] hover:underline cursor-pointer"
+                      >
+                        + New Block Def
+                      </button>
+                    </div>
+                    <select
+                      value={selectedPart.typeId || ''}
+                      onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value || null })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="">Select a Block...</option>
+                      {blocks.filter(b => b.stereotype === 'block').map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Property Semantics</Label>
+                    <select
+                      value={selectedPart.aggregation === 'reference' ? 'reference' : 'composite'}
+                      onChange={(e) => updatePart(selectedPart.id, { aggregation: e.target.value as 'composite' | 'reference' })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="composite">Composite Part</option>
+                      <option value="reference">Reference Property</option>
+                    </select>
                   </div>
 
                   {/* Ports Editor for the underlying Block */}

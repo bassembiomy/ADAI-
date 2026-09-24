@@ -130,7 +130,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
         });
 
         // 1. Child states
-        for (const stateId of layer.stateIds) {
+        for (const stateId of (layer.stateIds ?? [])) {
           const state = snapshot.states.find(s => s.id === stateId);
           if (!state) continue;
           const stateNodeId = `sm:state:${state.id}`;
@@ -154,7 +154,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
         }
 
         // 2. Child junctions / pseudostates
-        for (const junctionId of layer.junctionIds) {
+        for (const junctionId of (layer.junctionIds ?? [])) {
           const junction = snapshot.junctions.find(j => j.id === junctionId);
           if (!junction) continue;
           const jNodeId = `sm:junction:${junction.id}`;
@@ -172,7 +172,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
         }
 
         // 3. Child transitions
-        if (layer.transitionIds.length > 0) {
+        if (layer.transitionIds && layer.transitionIds.length > 0) {
           const transGroupId = `sm:group:${layer.id}:transitions`;
           registerNode({
             nodeId: transGroupId,

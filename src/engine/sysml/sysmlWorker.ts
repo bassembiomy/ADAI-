@@ -116,13 +116,13 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
     };
   }
 
-  if ('schemaVersion' in payload && payload.schemaVersion !== 2) {
+  if ('schemaVersion' in payload && payload.schemaVersion !== 2 && payload.schemaVersion !== 3) {
     return {
       requestId,
       revision,
       taskType,
       success: false,
-      error: `Unsupported schemaVersion: ${(payload as any).schemaVersion} (expected 2)`,
+      error: `Unsupported schemaVersion: ${(payload as any).schemaVersion} (expected 2 or 3)`,
     };
   }
 

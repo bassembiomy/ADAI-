@@ -373,13 +373,13 @@
   - [x] Step 3: Implement drag payload and target feedback (`modelExplorerDragDrop.ts`)
   - [x] Step 4: Preserve semantic/presentation deletion distinction
   - [x] Step 5: Run tests and commit
-- [ ] Task 10: Integrate Model Explorer into App and remove the inline tree
-  - [ ] Step 1: Write failing integration tests
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Extract and mount (`App.tsx`)
-  - [ ] Step 4: Synchronize navigation and selection
-  - [ ] Step 5: Run integration and release checks
-  - [ ] Step 6: Commit
+- [x] Task 10: Integrate Model Explorer into App and remove the inline tree
+  - [x] Step 1: Write failing integration tests
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Extract and mount (`App.tsx`)
+  - [x] Step 4: Synchronize navigation and selection
+  - [x] Step 5: Run integration and release checks
+  - [x] Step 6: Commit
 - [ ] Task 11: Complete multi-selection, copy/paste, duplicate, favorites, and recents
   - [ ] Step 1: Write failing command tests
   - [ ] Step 2: Verify failure
