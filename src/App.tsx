@@ -9763,6 +9763,17 @@ const ADIA = () => {
       setConnectors(reconciled.connectors);
     } else {
       setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
+      if (Object.prototype.hasOwnProperty.call(updates, 'ports')) {
+        const validPortIds = new Set((candidate.ports ?? []).map(port => port.id));
+        const affectedPartIds = new Set(parts.filter(part => part.typeId === id).map(part => part.id));
+        setConnectors(prev => prev.filter(connector => {
+          const sourceAffected = connector.sourcePartId === id || affectedPartIds.has(connector.sourcePartId);
+          const targetAffected = connector.targetPartId === id || affectedPartIds.has(connector.targetPartId);
+          const sourceValid = !sourceAffected || validPortIds.has(connector.sourcePortId);
+          const targetValid = !targetAffected || validPortIds.has(connector.targetPortId);
+          return sourceValid && targetValid;
+        }));
+      }
     }
   }, [addError, blocks, connectors, parts, relationships, showConnectionPolicyError]);
 
@@ -18126,14 +18137,21 @@ const ADIA = () => {
                       itemProperty: (selectedConnector as any).itemProperty,
                       itemUnit: (selectedConnector as any).itemUnit,
                     }}
-                    availablePorts={parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
-                      const b = blocks.find(b => b.id === p.typeId);
-                      return (b?.ports || []).map(port => ({
-                        id: `${p.id}::${port.id}`,
+                    availablePorts={[
+                      ...((blocks.find(block => block.id === currentLayerId)?.ports ?? []).map(port => ({
+                        id: `${currentLayerId}::${port.id}`,
                         name: port.name,
-                        ownerName: p.name,
-                      }));
-                    })}
+                        ownerName: blocks.find(block => block.id === currentLayerId)?.name,
+                      }))),
+                      ...parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
+                        const b = blocks.find(b => b.id === p.typeId);
+                        return (b?.ports || []).map(port => ({
+                          id: `${p.id}::${port.id}`,
+                          name: port.name,
+                          ownerName: p.name,
+                        }));
+                      }),
+                    ]}
                     definitions={canonicalSysmlRepository.definitions}
                     diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
                     onChange={(updatedConn) => {
