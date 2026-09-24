@@ -452,19 +452,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       }
 
       let cmd: ModelExplorerCommand | null = null;
-      if (capability.kind === 'createElement' && capability.elementKind) {
-        cmd = {
-          type: 'createElement',
-          ownerId: node.semanticId,
-          elementKind: capability.elementKind,
-        };
-      } else if (capability.kind === 'createDiagram' && capability.elementKind) {
-        cmd = {
-          type: 'createDiagram',
-          ownerId: node.semanticId,
-          diagramKind: capability.elementKind,
-        };
-      } else if (capability.kind === 'delete') {
+      if (capability.kind === 'delete') {
         cmd = {
           type: 'delete',
           elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
