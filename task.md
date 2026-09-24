@@ -30,11 +30,11 @@
   - [x] Step 3: Project capabilities from backend policy
   - [x] Step 4: Render grouped actions and "All Types…"
   - [x] Step 5: Verify and commit
-- [ ] Task 6: Relationship Capability and Target Policy
-  - [ ] Step 1: Write endpoint parity tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Implement one shared policy and use it in commands/UI
-  - [ ] Step 4: Verify and commit
+- [x] Task 6: Relationship Capability and Target Policy
+  - [x] Step 1: Write endpoint parity tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Implement one shared policy and use it in commands/UI
+  - [x] Step 4: Verify and commit
 - [ ] Task 7: Diagram Toolbars as Semantic-and-Presentation Commands
   - [ ] Step 1: Write cross-diagram identity tests
   - [ ] Step 2: Verify RED

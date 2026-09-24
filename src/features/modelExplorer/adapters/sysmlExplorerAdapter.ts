@@ -12,7 +12,10 @@ import type { SemanticElement, MetaclassKind } from '../../../engine/sysml/domai
 import {
   evaluateOwnership,
   getOwnedElementCapabilities,
+  getLegalRelationshipTargets,
 } from '../../../engine/sysml/capabilities';
+import { migrateV3ToV4 } from '../../../engine/sysml/persistence/migrateV3ToV4';
+import type { SysmlRepositoryV4 } from '../../../engine/sysml/domain';
 import { createSemanticElement } from '../../../engine/sysml/services/elementFactory';
 import {
   SYSML_CHILDREN,
@@ -1171,40 +1174,17 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
     relationshipTargets(sourceId: string, relationshipKind: string, direction: 'incoming' | 'outgoing'): ModelTreeNode[] {
       const state = getState();
       const repo = state.repository;
-      const candidates: ModelTreeNode[] = [];
+      const canonicalRepo: SysmlRepositoryV4 = (repo as any).elements ? (repo as any) : migrateV3ToV4(repo);
+      const source = canonicalRepo.elements[sourceId];
+      if (!source) return [];
 
-      // Determine valid target kinds based on relationship kind & direction
-      let allowedKinds: string[] = [];
-
-      if (relationshipKind === 'satisfy') {
-        // Satisfy connects block/part (source) -> requirement (target)
-        if (direction === 'incoming') {
-          // looking for sources that satisfy this requirement: blocks or parts
-          allowedKinds = ['block', 'part'];
-        } else {
-          // outgoing from block/part -> target is requirement
-          allowedKinds = ['requirement'];
-        }
-      } else if (relationshipKind === 'verify') {
-        // Verify connects verificationCase (source) -> requirement (target)
-        if (direction === 'incoming') {
-          allowedKinds = ['verificationCase'];
-        } else {
-          allowedKinds = ['requirement'];
-        }
-      } else if (['deriveReqt', 'requirementContainment', 'copy'].includes(relationshipKind)) {
-        allowedKinds = ['requirement'];
-      } else if (['generalization', 'composition', 'sharedAggregation', 'association'].includes(relationshipKind)) {
-        allowedKinds = ['block'];
-      } else if (['refine', 'trace'].includes(relationshipKind)) {
-        allowedKinds = ['requirement', 'block', 'part'];
-      } else {
-        allowedKinds = ['block', 'requirement', 'part', 'package'];
-      }
+      const legalTargets = getLegalRelationshipTargets(source, relationshipKind, direction, canonicalRepo);
+      const legalTargetIds = new Set(legalTargets.map(t => t.id));
 
       const projection = this.project('containment');
+      const candidates: ModelTreeNode[] = [];
       for (const node of Object.values(projection.nodes)) {
-        if (node.semanticId !== sourceId && allowedKinds.includes(node.kind)) {
+        if (node.semanticId && node.semanticId !== sourceId && legalTargetIds.has(node.semanticId)) {
           candidates.push(node);
         }
       }
