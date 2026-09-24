@@ -8,6 +8,12 @@ import type {
   ExplorerView,
   ExplorerDiagnostic,
 } from '../modelExplorerTypes';
+import type { SemanticElement, MetaclassKind } from '../../../engine/sysml/domain';
+import {
+  evaluateOwnership,
+  getOwnedElementCapabilities,
+} from '../../../engine/sysml/capabilities';
+import { createSemanticElement } from '../../../engine/sysml/services/elementFactory';
 import {
   SYSML_CHILDREN,
   SYSML_RELATIONSHIPS,
@@ -16,6 +22,46 @@ import {
   getRelationshipKindLabel,
   getDiagramKindLabel,
 } from '../modelExplorerCapabilities';
+
+function explorerKindToMetaclass(kind: string): MetaclassKind {
+  switch (kind) {
+    case 'part':
+    case 'sharedPart':
+      return 'PartProperty';
+    case 'reference':
+      return 'ReferenceProperty';
+    case 'valueProperty':
+      return 'ValueProperty';
+    case 'constraintProperty':
+      return 'ConstraintProperty';
+    case 'flowProperty':
+      return 'FlowProperty';
+    case 'fullPort':
+    case 'proxyPort':
+    case 'port':
+      return 'Port';
+    case 'package':
+      return 'Package';
+    case 'block':
+      return 'Block';
+    case 'interface':
+      return 'InterfaceBlock';
+    case 'valueType':
+      return 'ValueType';
+    case 'requirement':
+      return 'Requirement';
+    case 'testCase':
+      return 'TestCase';
+    case 'verificationCase':
+      return 'VerificationCase';
+    case 'useCase':
+      return 'UseCase';
+    case 'activity':
+      return 'Activity';
+    default:
+      return kind as MetaclassKind;
+  }
+}
 import {
   createPackage,
   createBlock,
@@ -407,7 +453,11 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       };
     },
 
-    capabilities(elementIds: readonly string[], activeDiagramId?: string): ExplorerCapability[] {
+    capabilities(
+      elementIds: readonly string[],
+      activeDiagramId?: string,
+      options?: { includeAllTypes?: boolean }
+    ): ExplorerCapability[] {
       const state = getState();
       const repo = state.repository;
       const caps: ExplorerCapability[] = [];
@@ -421,16 +471,67 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         const el = getElementById(id, repo);
         const kind = el?.kind ?? (id === 'model' ? 'model' : 'unknown');
 
-        // Create element capabilities
+        // Resolve semantic owner
+        const ownerMetaclass = explorerKindToMetaclass(kind);
+        const ownerSemanticElement: SemanticElement | null =
+          (state.gatewayState?.repository as any)?.elements?.[id] ??
+          (id === 'model' || id === ''
+            ? null
+            : {
+                id,
+                name: el?.name ?? 'Element',
+                metaclass: ownerMetaclass,
+                namespace: el?.namespace ?? [],
+                ownerId: el?.ownerId ?? null,
+              });
+
+        // 1. Canonical backend element and feature capabilities
+        const backendCaps = getOwnedElementCapabilities(
+          ownerSemanticElement,
+          (state.gatewayState?.repository as any)
+        );
+
+        for (const cap of backendCaps) {
+          if (cap.allowed) {
+            caps.push({
+              id: `create:${cap.metaclass}`,
+              kind: cap.category === 'feature' ? 'createOwnedFeature' : 'createElement',
+              label: cap.label,
+              enabled: true,
+              elementKind: cap.metaclass,
+              capabilityGroup: cap.category === 'feature' ? 'feature' : 'child',
+              authority: cap.authority,
+              catalogVisibility: 'direct',
+            });
+          } else if (options?.includeAllTypes) {
+            caps.push({
+              id: `create:${cap.metaclass}`,
+              kind: cap.category === 'feature' ? 'createOwnedFeature' : 'createElement',
+              label: cap.label,
+              enabled: false,
+              elementKind: cap.metaclass,
+              diagnosticCode: cap.diagnosticCode ?? 'ILLEGAL_OWNERSHIP',
+              reason: cap.reason,
+              capabilityGroup: 'allTypes',
+              authority: cap.authority,
+              catalogVisibility: 'allTypes',
+            });
+          }
+        }
+
+        // 2. Convenience explorer children mappings
         const allowedChildren = SYSML_CHILDREN[kind] ?? [];
         for (const childKind of allowedChildren) {
-          caps.push({
-            id: `create:${childKind}`,
-            kind: 'createElement',
-            label: getElementKindLabel(childKind),
-            enabled: true,
-            elementKind: childKind,
-          });
+          if (!caps.some((c) => c.elementKind === childKind)) {
+            caps.push({
+              id: `create:${childKind}`,
+              kind: 'createElement',
+              label: getElementKindLabel(childKind),
+              enabled: true,
+              elementKind: childKind,
+              capabilityGroup: 'child',
+            });
+          }
         }
 
         // Create diagram capabilities
@@ -565,13 +666,25 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             return { committed: false, revision: repo.revision, diagnostics };
           }
 
-          const ownerKind = owner?.kind ?? (command.ownerId === 'model' ? 'model' : 'unknown');
-          const allowed = SYSML_CHILDREN[ownerKind] ?? [];
-          if (!allowed.includes(command.elementKind)) {
+          const targetMetaclass = explorerKindToMetaclass(command.elementKind);
+          const ownerSemanticElement: SemanticElement | null =
+            (state.gatewayState?.repository as any)?.elements?.[command.ownerId] ??
+            (command.ownerId === 'model' || command.ownerId === ''
+              ? null
+              : {
+                  id: command.ownerId,
+                  name: owner?.name ?? 'Element',
+                  metaclass: explorerKindToMetaclass(owner?.kind ?? 'Package'),
+                  namespace: owner?.namespace ?? [],
+                  ownerId: owner?.ownerId ?? null,
+                });
+
+          const decision = evaluateOwnership(ownerSemanticElement, targetMetaclass);
+          if (!decision.allowed) {
             diagnostics.push({
-              code: 'DISALLOWED_CHILD_KIND',
+              code: decision.code ?? 'ILLEGAL_OWNERSHIP',
               severity: 'error',
-              message: `Kind '${command.elementKind}' is not allowed under '${ownerKind}'.`,
+              message: decision.message ?? `Kind '${command.elementKind}' is not allowed under '${owner?.kind ?? command.ownerId}'.`,
             });
             return { committed: false, revision: repo.revision, diagnostics };
           }
@@ -843,6 +956,25 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 selectedIds: [prop.id],
               };
             }
+          }
+
+          const targetMetaclass = explorerKindToMetaclass(command.elementKind);
+          const outcome = createSemanticElement(
+            {
+              metaclass: targetMetaclass,
+              name: command.name,
+              ownerId,
+            },
+            (state.gatewayState?.repository as any) ?? repo
+          );
+          if (outcome.ok) {
+            const result = dispatchCommand({ type: 'createElement', element: outcome.element as any });
+            return {
+              committed: result.committed,
+              revision: result.repository.revision,
+              diagnostics: [],
+              selectedIds: [outcome.element.id],
+            };
           }
 
           return {

@@ -46,13 +46,19 @@ interface CapabilityGroup {
 }
 
 function groupCapabilities(caps: ExplorerCapability[]): CapabilityGroup[] {
+  const features: ExplorerCapability[] = [];
   const creates: ExplorerCapability[] = [];
   const edits: ExplorerCapability[] = [];
   const diagramOps: ExplorerCapability[] = [];
   const clipboard: ExplorerCapability[] = [];
+  const allTypes: ExplorerCapability[] = [];
 
   for (const c of caps) {
-    if (c.kind === 'createElement' || c.kind === 'createRelationship' || c.kind === 'createDiagram') {
+    if (c.capabilityGroup === 'allTypes' || c.catalogVisibility === 'allTypes') {
+      allTypes.push(c);
+    } else if (c.capabilityGroup === 'feature' || c.kind === 'createOwnedFeature') {
+      features.push(c);
+    } else if (c.kind === 'createElement' || c.kind === 'createRelationship' || c.kind === 'createDiagram') {
       creates.push(c);
     } else if (c.kind === 'copy' || c.kind === 'paste' || c.kind === 'duplicate') {
       clipboard.push(c);
@@ -64,10 +70,12 @@ function groupCapabilities(caps: ExplorerCapability[]): CapabilityGroup[] {
   }
 
   const groups: CapabilityGroup[] = [];
+  if (features.length) groups.push({ title: 'Features', items: features });
   if (creates.length) groups.push({ title: 'New', items: creates });
   if (diagramOps.length) groups.push({ title: 'Diagram', items: diagramOps });
   if (clipboard.length) groups.push({ title: 'Clipboard', items: clipboard });
   if (edits.length) groups.push({ title: 'Edit', items: edits });
+  if (allTypes.length) groups.push({ title: 'All Types (Disallowed)', items: allTypes });
 
   return groups;
 }
@@ -277,9 +285,16 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
                         : 'text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {getCapabilityIcon(cap.kind)}
-                      <span className="truncate">{cap.label}</span>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        {getCapabilityIcon(cap.kind)}
+                        <span className="truncate">{cap.label}</span>
+                      </div>
+                      {cap.reason && !cap.enabled && (
+                        <span className="text-[10px] text-amber-400/80 truncate pl-5">
+                          {cap.reason}
+                        </span>
+                      )}
                     </div>
                     {shortcut && (
                       <span

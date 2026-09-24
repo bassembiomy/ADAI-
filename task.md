@@ -24,12 +24,12 @@
   - [x] Step 3: Implement factory dispatch by metaclass
   - [x] Step 4: Make legacy explorer factories wrappers over the canonical factory
   - [x] Step 5: Run tests and commit
-- [ ] Task 5: Repository-First Model Tree Context Menu
-  - [ ] Step 1: Write failing menu and adapter tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Project capabilities from backend policy
-  - [ ] Step 4: Render grouped actions and "All Types…"
-  - [ ] Step 5: Verify and commit
+- [x] Task 5: Repository-First Model Tree Context Menu
+  - [x] Step 1: Write failing menu and adapter tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Project capabilities from backend policy
+  - [x] Step 4: Render grouped actions and "All Types…"
+  - [x] Step 5: Verify and commit
 - [ ] Task 6: Relationship Capability and Target Policy
   - [ ] Step 1: Write endpoint parity tests
   - [ ] Step 2: Verify RED

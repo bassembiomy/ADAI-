@@ -95,4 +95,40 @@ describe('ModelExplorerMenu', () => {
     const filteredDiagram = filterMenuCapabilities(sampleCapabilities, 'diagram');
     expect(filteredDiagram.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('renders disabled All Types entries with backend diagnostic message', () => {
+    const capabilitiesWithDisabled: ExplorerCapability[] = [
+      {
+        id: 'create:PartProperty',
+        kind: 'createElement',
+        label: 'Part Property',
+        enabled: true,
+        elementKind: 'PartProperty',
+      },
+      {
+        id: 'create:Requirement',
+        kind: 'createElement',
+        label: 'Requirement',
+        enabled: false,
+        elementKind: 'Requirement',
+        diagnosticCode: 'ILLEGAL_OWNERSHIP',
+        reason: 'Requirement cannot be owned by Block.',
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <ModelExplorerMenu
+        x={100}
+        y={150}
+        targetNode={targetNode}
+        capabilities={capabilitiesWithDisabled}
+        onSelectCapability={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Requirement');
+    expect(html).toContain('Requirement cannot be owned by Block.');
+    expect(html).toContain('aria-disabled="true"');
+  });
 });

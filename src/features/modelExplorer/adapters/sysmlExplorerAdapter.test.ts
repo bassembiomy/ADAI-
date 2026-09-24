@@ -69,6 +69,37 @@ describe('sysmlExplorerAdapter', () => {
     expect(harness.state.diagramPresentations['bdd-1']?.elementIds).not.toContain(result.selectedIds?.[0]);
   });
 
+  it('shows legal Block children and disabled illegal All Types entries', () => {
+    const harness = createTestHarness();
+    const block: BlockDefinition = {
+      id: 'block-1',
+      name: 'Block1',
+      kind: 'block',
+      namespace: [],
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    harness.executeCommand({
+      type: 'createElement',
+      element: block,
+    });
+    const adapter = createSysmlExplorerAdapter(harness);
+    const capabilities = adapter.capabilities(['block-1'], 'bdd-1', { includeAllTypes: true });
+    expect(capabilities).toContainEqual(expect.objectContaining({ elementKind: 'PartProperty', enabled: true }));
+    expect(capabilities).toContainEqual(
+      expect.objectContaining({
+        elementKind: 'Requirement',
+        enabled: false,
+        diagnosticCode: 'ILLEGAL_OWNERSHIP',
+      })
+    );
+  });
+
   it('filters relationship targets by canonical policy', () => {
     const harness = createTestHarness();
     const req: RequirementDefinition = {
