@@ -6275,8 +6275,13 @@ const ADIA = () => {
   }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
 
   const requirementsDiagramScope = useMemo(
-    () => getRequirementsDiagramScope(blocks, relationships, currentLayerId),
-    [blocks, relationships, currentLayerId],
+    () => getRequirementsDiagramScope(
+      blocks,
+      relationships,
+      currentLayerId,
+      new Set(diagramPresentations.requirements?.elementIds ?? []),
+    ),
+    [blocks, relationships, currentLayerId, diagramPresentations],
   );
 
   // Schedule large validation asynchronously after edits with revision-based cancellation
@@ -9721,6 +9726,17 @@ const ADIA = () => {
       layerId: blockLayerId,
     };
     setBlocks(prev => [...prev, newBlock]);
+    if (diagramMode === 'requirements') {
+      setDiagramPresentations(prev => {
+        const existing = prev.requirements?.elementIds ?? [];
+        return {
+          ...prev,
+          requirements: {
+            elementIds: existing.includes(newBlock.id) ? existing : [...existing, newBlock.id],
+          },
+        };
+      });
+    }
     if (stereotype === 'requirement' && parentRequirement) {
       setRelationships(prev => [
         ...prev,
