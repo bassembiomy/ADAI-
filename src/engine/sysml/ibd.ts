@@ -10,6 +10,10 @@ import type {
 import type { SysmlDiagnostic } from './validation';
 import { classifyRelationship as classifyRelationshipPolicy } from './policy';
 
+export { effectiveFlowDirection } from './services/portSemantics';
+export { validatePort, PORT_DIAGNOSTICS } from './validation/portRules';
+export type { PortKind } from './domain/ports';
+
 export type IbdConnectorKind = ConnectorUsage['kind'];
 
 export type IbdConnectorNotation = 'assembly-solid' | 'delegation-solid' | 'binding-dashed';

@@ -1,439 +1,131 @@
-# X-Bridges Agent Safety Gate Implementation Tasks
+# ADIA SysML v1.6 Backend-First Implementation Plan Tasks
 
-- [x] Task 1: Add the generated-graph validator (`src/services/ai/planner/generatedGraphValidator.ts`)
-  - [x] Step 1: Write failing validator tests (`generatedGraphValidator.test.ts`)
-  - [x] Step 2: Run focused test and verify failures
-  - [x] Step 3: Implement pure validator with stable diagnostic codes
-  - [x] Step 4: Add graph-size limits and non-finite parameter validation
-  - [x] Step 5: Run focused validator tests and confirm all pass
-  - [x] Step 6: Commit
-- [x] Task 2: Route deterministic plans through validation (`src/services/ai/planner/generalGraphPlanner.ts`)
-  - [x] Step 1: Add failing tests for catalog mutation / invalid deterministic graphs
-  - [x] Step 2: Run planner tests to confirm failures
-  - [x] Step 3: Call validator immediately after archetype resolution before diff/action creation
-  - [x] Step 4: Ensure deterministic plan hashes remain stable
-  - [x] Step 5: Run planner tests and confirm pass
-  - [x] Step 6: Commit
-- [x] Task 3: Validate and constrain LLM synthesis (`src/services/ai/planner/generalGraphPlanner.ts`)
-  - [x] Step 1: Add failing tests for malformed, unknown ports, duplicate IDs, oversized LLM graphs
-  - [x] Step 2: Run planner tests to confirm failures
-  - [x] Step 3: Replace `allValid` with schema normalization + `validateGeneratedGraph`
-  - [x] Step 4: Validate and bound each generated block, connection, parameter, position
-  - [x] Step 5: Replace `.slice(0, 40)` with deterministic complete or domain-filtered capability summary
-  - [x] Step 6: Return `LLM_GRAPH_INVALID` diagnostics and never return a plan for invalid output
-  - [x] Step 7: Run planner tests and commit
-- [x] Task 4: Remove misleading generic fallback behavior (`src/services/ai/planner/generalGraphPlanner.ts`)
-  - [x] Step 1: Add failing tests asserting unrecognized requests do not generate `canonical_generic_model`
-  - [x] Step 2: Run planner tests and verify failure
-  - [x] Step 3: Replace generic fallback with `UNSUPPORTED_ENGINEERING_REQUEST` and clarification diagnostic
-  - [x] Step 4: Preserve explicit arithmetic and canonical archetype paths
-  - [x] Step 5: Run focused planner/orchestrator tests and commit
-- [x] Task 5: Connect verified pattern evidence to planning (`src/agent/agentOrchestrator.ts`, `planningCollaborator.ts`, `generalGraphPlanner.ts`)
-  - [x] Step 1: Add failing test proving compatible verified pattern is in planner context and selected before LLM
-  - [x] Step 2: Run targeted tests and confirm failure
-  - [x] Step 3: Pass `currentPatternEvidence` instead of `patterns: []`
-  - [x] Step 4: Add deterministic pattern ranking by quality score, capability coverage, ID tie-breaker
-  - [x] Step 5: Reject unverified or incompatible pattern templates
-  - [x] Step 6: Run tests and commit
-- [x] Task 6: Improve numeric and unit-aware request handling (`src/services/ai/planner/engineeringEntityParser.ts`, `generalGraphPlanner.ts`)
-  - [x] Step 1: Add failing tests for negative, fractional, scientific, unit-bearing, missing-value arithmetic
-  - [x] Step 2: Run parser/planner tests and confirm failures
-  - [x] Step 3: Replace arithmetic regex extraction with entity parser + strict numeric path
-  - [x] Step 4: Reject non-finite values, missing operands, incompatible units, division by zero
-  - [x] Step 5: Preserve exact numeric values in canonical plan JSON and verify hashes
-  - [x] Step 6: Run focused tests and commit
-- [x] Task 7: Add semantic simulation assertions (`src/services/ai/benchmarks/generalXbridgesCorpus.test.ts`)
-  - [x] Step 1: Add failing tests for arithmetic simulation assertions
-  - [x] Step 2: Run targeted benchmark tests and confirm failures
-  - [x] Step 3: Execute validated arithmetic plans through proof runner, assert Scope observables
-  - [x] Step 4: Assert genuine engine run IDs, reject unavailable observables
-  - [x] Step 5: Run benchmark tests and commit
-- [x] Task 8: Full regression and release evidence (`docs/AI_AGENT_CODE_REVIEW.md`, `task.md`)
-  - [x] Step 1: Add end-to-end adversarial lifecycle tests
-  - [x] Step 2: Run focused suites
-  - [x] Step 3: Run typecheck `npx tsc --noEmit`
-  - [x] Step 4: Run production build `npm run build`
-  - [x] Step 5: Run relevant X-Bridges E2E tests
-  - [x] Step 6: Update release review with exact command output
-  - [x] Step 7: Commit
-
-# VLab Magnetic Circuit & Control Port Fixes
-- [x] Task 1: TDD tests for magnetic sensors, control ports, permanent magnet, and reluctance force (`src/engine/vlab/vlab_magnetic_fixes.test.ts`)
-- [x] Task 2: Fix magnetic sensors signal branches & scopeOutputs (`src/engine/vlab/DAEAssembler.ts`, `src/engine/vlab/vlabEquations.ts`, `src/utils/vlabLibrary.ts`)
-- [x] Task 3: Fix physical control ports domain representation & indeterminate equations (`src/engine/vlab/DAEAssembler.ts`, `src/engine/vlab/vlabEquations.ts`, `src/utils/vlabLibrary.ts`)
-- [x] Task 4: Add Lm and Rm to Permanent Magnet parameters and equations (`src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabEquations.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`)
-- [x] Task 5: Unify Reluctance Force parameters (R0, K) between UI and equations (`src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabEquations.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`)
-- [x] Task 6: Run full verification suite and update documentation
-
-# VLab MMF Sensor, Angular Velocity Source, and Gear Box Port Alignment
-- [x] Task 1: Write TDD tests for `mag_mmf_sensor` in series path, `ang_vel_source` omega parameter, and `gear_box` s1/s2 ports
-- [x] Task 2: Update `mag_mmf_sensor` equation in `vlabEquations.ts` to enforce zero MMF drop across sensor instead of `fluxThru = 0`
-- [x] Task 3: Update `ang_vel_source` equation in `vlabEquations.ts` and DAEAssembler to support `omega` with fallback to `w` and register branch
-- [x] Task 4: Unify `gear_box` port definitions (`s1, s2`) across `vlabLibrary.ts`, `DAEAssembler.ts`, `vlabEquations.ts`, and `vlabComponentDefinitions.ts`
-- [x] Task 5: Verify all tests pass, run full test suite, and document results
-
-# Deterministic Generic Agent Routing Implementation Plan
-- [x] Task 1: Define the routing contract and failing tests
-  - [x] Step 1: Write failing tests for routing contract
-  - [x] Step 2: Run focused test and verify failures
-  - [x] Step 3: Define minimal TypeScript/Zod-compatible routing types
-  - [x] Step 4: Run focused test to confirm compilation and expected failures
-  - [x] Step 5: Commit
-- [x] Task 2: Implement bounded normalization and intent candidate detection
-  - [x] Step 1: Add failing tests for architecture prose and explicit arithmetic phrases
-  - [x] Step 2: Run focused tests and confirm broad substring behavior is rejected
-  - [x] Step 3: Implement normalization and bounded candidate detection
-  - [x] Step 4: Run focused tests and confirm all detector tests pass
-  - [x] Step 5: Commit
-- [x] Task 3: Add deterministic preconditions and clarification diagnostics
-  - [x] Step 1: Add failing tests for preconditions and diagnostics
-  - [x] Step 2: Run focused tests and verify diagnostics
-  - [x] Step 3: Implement precondition table and stable precedence order
-  - [x] Step 4: Run focused tests and confirm invalid cases return deterministic diagnostics
-  - [x] Step 5: Commit
-- [x] Task 4: Integrate routing before general graph planning
-  - [x] Step 1: Add regression tests for conversation isolation and explicit add without operands
-  - [x] Step 2: Run regression tests to verify current implementation fails/misroutes
-  - [x] Step 3: Insert routeDeterministically at planner boundary
-  - [x] Step 4: Run planner and router tests and confirm regressions pass
-  - [x] Step 5: Commit
-- [x] Task 5: Verify cross-system compatibility and complete handoff
-  - [x] Step 1: Run focused planner and ingestion suites
-  - [x] Step 2: Run full project test command
-  - [x] Step 3: Fix any compatibility issues if found
-  - [x] Step 4: Run git diff --check and complete verification
-  - [x] Step 5: Commit final compatibility fixes
-
-# Agent Multi-Chat Session Implementation Plan
-- [x] Task 1: Add a safe fresh-orchestrator factory
-  - [x] Step 1: Write a failing test for createFreshSession()
-  - [x] Step 2: Run focused test to confirm failure
-  - [x] Step 3: Implement createFreshSession()
-  - [x] Step 4: Run focused tests to confirm pass
-  - [x] Step 5: Commit
-- [x] Task 2: Introduce the in-memory chat-session model
-  - [x] Step 1: Write failing unit tests for session helpers
-  - [x] Step 2: Run focused tests to confirm failure
-  - [x] Step 3: Implement pure session helpers
-  - [x] Step 4: Replace panel-global state with sessions and active session ID
-  - [x] Step 5: Run helper and panel tests to confirm pass
-  - [x] Step 6: Commit
-- [x] Task 3: Add New Chat and history switching UI
-  - [x] Step 1: Write failing component tests for New Chat and history switching
-  - [x] Step 2: Add failing concurrency test for late orchestrator response
-  - [x] Step 3: Run focused tests to confirm failures
-  - [x] Step 4: Implement header control and history list UI
-  - [x] Step 5: Add focused CSS for compact history layout
-  - [x] Step 6: Run focused tests to confirm pass
-  - [x] Step 7: Commit
-- [x] Task 4: Integrate and verify the complete feature
-  - [x] Step 1: Run agent and components suites
-  - [x] Step 2: Fix any compatibility failures
-  - [x] Step 3: Run typecheck with tsc --noEmit
-  - [x] Step 4: Run git diff --check and verify no browser storage APIs
-  - [x] Step 5: Commit final integration fixes
-
-# ADIA Engineering Intelligence Layer Implementation Plan
-
-- [x] Task 1: Freeze engineering-intelligence contracts
-  - [x] Step 1: Write schema tests for valid cross-domain examples: arithmetic, motor control, thermal, hydraulic, state machine, and signal processing
-  - [x] Step 2: Add negative tests for unknown fields, invalid confidence, dangling IDs, unresolved required values marked resolved, and malformed units
-  - [x] Step 3: Implement strict Zod schemas and exported TypeScript types
-  - [x] Step 4: Run `npx vitest run src/services/ai/engineering/contracts`
-  - [x] Step 5: Commit `feat(ai): define engineering intelligence contracts`
-- [x] Task 2: Build versioned concept, fact, relationship, and source stores
-  - [x] Step 1: Define repository interfaces independent of filesystem implementation
-  - [x] Step 2: Implement strict manifests, atomic writes, hashes, version links, lifecycle filters, and deterministic listing
-  - [x] Step 3: Verify corrupt records, path traversal, oversized records, and hash mismatches fail closed
-  - [x] Step 4: Run `npx vitest run src/services/ai/engineering/knowledge src/services/ai/engineering/graph`
-  - [x] Step 5: Commit `feat(ai): add provenance-aware engineering knowledge stores`
-- [x] Task 3: Implement concept-graph validation and traversal
-  - [x] Step 1: Validate endpoints, relation taxonomy, cycles, confidence, and lifecycle eligibility
-  - [x] Step 2: Implement bounded neighbors, ancestors, requirements closure, alternatives, and shortest evidence path
-  - [x] Step 3: Return traversal evidence with every result
-  - [x] Step 4: Run focused graph tests and commit `feat(ai): add bounded engineering concept graph`
-- [x] Task 4: Add trusted document-ingestion pipeline
-  - [x] Step 1: Expand source taxonomy to approved documentation, standard, textbook, application note, manufacturer document, paper, and internal document
-  - [x] Step 2: Store document identity, version/date, section locators, license decision, retrieval timestamp, checksum, and source reliability
-  - [x] Step 3: Extract text/sections without executing active content, macros, scripts, embedded binaries, or arbitrary code
-  - [x] Step 4: Use schema-constrained LLM extraction only to create quarantined candidates; deterministic validation and human review control promotion
-  - [x] Step 5: Preserve extracted fact-to-section provenance and reject unsupported citations
-  - [x] Step 6: Run ingestion/source-policy tests and commit `feat(ai): ingest quarantined engineering knowledge`
-- [x] Task 5: Implement review and promotion gates
-  - [x] Step 1: Require license approval, source reliability threshold, reviewer identity, fact/relationship validation, and conflict checks
-  - [x] Step 2: Promote atomically from quarantined to reviewed/verified; retain superseded history
-  - [x] Step 3: Prevent runtime retrieval of unverified facts
-  - [x] Step 4: Commit `feat(ai): add verified knowledge promotion workflow`
-- [x] Task 6: Build hybrid retrieval and evidence reranking
-  - [x] Step 1: Implement lexical token/BM25-style scoring, exact aliases, domain/version/lifecycle/source filters, graph-neighborhood expansion, and optional cosine similarity
-  - [x] Step 2: Combine scores with an explicit formula and stable ID tie-breaker
-  - [x] Step 3: Weight verified ADIA knowledge, standards, manufacturer docs, textbooks, and peer-reviewed sources above uncontrolled sources
-  - [x] Step 4: Return cited evidence and score breakdown; never return quarantined knowledge to runtime planning
-  - [x] Step 5: Run retrieval/provider tests and commit `feat(ai): add hybrid engineering knowledge retrieval`
-- [x] Task 7: Replace keyword routing with typed semantic interpretation
-  - [x] Step 1: Parse deterministic entities/units/operations first, then use schema-constrained Qwen output for unresolved semantics
-  - [x] Step 2: Resolve pronouns such as “it” against project/conversation memory with explicit confidence and ambiguity diagnostics
-  - [x] Step 3: Preserve unknowns instead of inventing parameters
-  - [x] Step 4: Route using typed intent fields, not substring checks
-  - [x] Step 5: Acceptance: addition maps to two numeric operands and sum; BLDC speed control maps to plant/actuator/controller/feedback concepts without selecting blocks
-  - [x] Step 6: Commit `feat(ai): add semantic engineering intent interpretation`
-- [x] Task 8: Separate the four memory layers
-  - [x] Step 1: Store current dialogue in conversation memory, reusable engineering truth only in verified knowledge stores, approved project decisions in project memory, and graph/revision state in model memory
-  - [x] Step 2: Give every decision provenance, timestamp, scope, and supersession metadata
-  - [x] Step 3: Ensure new chats do not silently inherit conversation memory; project decisions may be explicitly attached by project ID
-  - [x] Step 4: Migrate persistence schema version with fail-safe restoration and approval invalidation
-  - [x] Step 5: Commit `feat(ai): separate conversation project and model memory`
-- [x] Task 9: Implement generic engineering planning and information classification
-  - [x] Step 1: Expand retrieved concept requirements into a hierarchical functional architecture before block selection
-  - [x] Step 2: Classify missing information as REQUIRED/OPTIONAL/INFERABLE/DEFAULTABLE using concept rules and affected-decision analysis
-  - [x] Step 3: Require evidence for inferred/defaulted values and record them as assumptions
-  - [x] Step 4: Validate architecture completeness, contradictions, unsupported concepts, and traceability
-  - [x] Step 5: Acceptance: BLDC request produces power/control/sensing/plant/load functions; FOC and six-step remain alternatives rather than hard-coded choices
-  - [x] Step 6: Commit `feat(ai): add evidence-backed engineering architecture planner`
-- [x] Task 10: Replace question loops with a generic clarification manager
-  - [x] Step 1: Rank unresolved REQUIRED slots by architecture impact and dependency order
-  - [x] Step 2: Parse answers through each slot's declared value schema and update project memory
-  - [x] Step 3: Never repeat a resolved question; reject invalid answers with a precise correction request
-  - [x] Step 4: Present architecture alternatives with short engineering rationale
-  - [x] Step 5: Commit `feat(ai): add slot-driven engineering clarification`
-- [x] Task 11: Build hierarchical Model IR and diff support
-  - [x] Step 1: Convert an approved architecture plan into subsystem/component/connection IR with trace links
-  - [x] Step 2: Validate stable IDs, ownership, subsystem boundaries, semantic ports, dimensions, units, required references, unresolved required parameters, and invalid cycles
-  - [x] Step 3: Implement semantic IR diffs so “make it sensorless” changes affected sensing/control subsystems instead of rebuilding the project
-  - [x] Step 4: Commit `feat(ai): add hierarchical engineering Model IR`
-- [x] Task 12: Implement deterministic concept-to-ADIA capability mapping
-  - [x] Step 1: Resolve semantic concepts only to catalog IDs and verified compatible compositions
-  - [x] Step 2: Validate ports, parameters, domains, solver features, and catalog fingerprint
-  - [x] Step 3: Return structured `BLOCK_CAPABILITY_GAP` when no valid implementation exists
-  - [x] Step 4: Keep candidate compositions unselected until validated and evidenced
-  - [x] Step 5: Commit `feat(ai): map concepts to verified ADIA capabilities`
-- [x] Task 13: Compile Model IR through existing plans and transactions
-  - [x] Step 1: Compile bound IR to `EngineeringModelPlanV2` and existing actions with stable ordering
-  - [x] Step 2: Compile hierarchy to supported subsystem constructs; otherwise return an explicit hierarchy capability gap
-  - [x] Step 3: Pass output through existing plan validation, preflight, isolated proof, approval, and transactions
-  - [x] Step 4: Prove identical IR/catalog inputs produce identical plan fingerprints
-  - [x] Step 5: Commit `feat(ai): compile engineering Model IR deterministically`
-- [x] Task 14: Compose the engineering validation pipeline
-  - [x] Step 1: Validate IR schema, hierarchy, semantic completeness, capability bindings, ports, dimensions, data types, physical domains, parameter completeness, references, unconnected outputs, controller/plant relationships, feedback, algebraic loops, and unsupported blocks
-  - [x] Step 2: Normalize results into structured diagnostics with affected component, evidence, required values, and remediation
-  - [x] Step 3: Keep validation, compilation, proof, and simulation statuses distinct
-  - [x] Step 4: Commit `feat(ai): add staged engineering validation pipeline`
-- [x] Task 15: Expose explicit planner tools
-  - [x] Step 1: Add read tools: `search_engineering_knowledge`, `get_concept`, `find_related_concepts`, `get_fact_evidence`, existing block/schema tools, model inspection
-  - [x] Step 2: Add controlled transformations: `validate_architecture_plan`, `build_model_ir`, `validate_model_ir`, `map_concepts`, `compile_model_ir`
-  - [x] Step 3: Keep mutation/simulation tools behind existing approval and transaction gates
-  - [x] Step 4: Log tool input hashes, outputs, evidence IDs, and diagnostics
-  - [x] Step 5: Commit `feat(ai): expose bounded engineering intelligence tools`
-- [x] Task 16: Integrate the pipeline into the orchestrator with compatibility fallback
-  - [x] Step 1: Add explicit stages: interpret → retrieve → plan architecture → clarify → build IR → map → validate → compile → proof → approve → execute → verify
-  - [x] Step 2: Present concise cited rationale, assumptions, unresolved requirements, capability gaps, and validation results without hidden chain-of-thought
-  - [x] Step 3: Feature-flag the new pipeline; retain current planner for unsupported/migration cases during rollout
-  - [x] Step 4: Prevent fallback after the new pipeline has made architecture decisions unless the user explicitly restarts
-  - [x] Step 5: Commit `feat(ai): integrate engineering intelligence workflow`
-- [x] Task 17: Seed cross-domain knowledge and acceptance benchmarks
-  - [x] Step 1: Seed small reviewed concepts for addition, PID loop, BLDC drive, FOC, six-step commutation, buck/boost converter, thermal loop, hydraulic actuator, differential drive, state machine, Kalman filter, and vibration system
-  - [x] Step 2: Do not seed unsupported ADIA mappings; represent them as capability gaps
-  - [x] Step 3: Implement acceptance A (addition), B (BLDC architecture clarification/hierarchy/IR), and C (sensorless modification by IR diff)
-  - [x] Step 4: Add negative tests for invented facts, fake citations, unverified retrieval, hallucinated blocks/ports, ambiguous pronouns, invalid units, and repeated questions
-  - [x] Step 5: Run full AI, X-Bridges, security, persistence, and TypeScript gates
-
-# Generic Request Understanding Accuracy Implementation Plan
-
-- [x] Task 1: Define the structured request contract
-  - [x] Step 1: Define Zod schemas for operation, entities, numericValues, units, relationships, outputs, constraints, unresolvedRequirements, confidence, and evidence
-  - [x] Step 2: Use discriminated outcomes: ready, clarification_required, unsupported, and invalid
-  - [x] Step 3: Require each extracted value to include source text and normalized value
-  - [x] Step 4: Add tests for addition, multiplication, PID/transfer-function, Scope output, malformed values, and missing operands
-  - [x] Step 5: Run tests and commit `feat(ai): define structured engineering request contract`
-- [x] Task 2: Implement deterministic normalization and typo handling
-  - [x] Step 1: Normalize case, whitespace, punctuation, common spelling errors, number words, and unit spellings
-  - [x] Step 2: Add bounded synonym dictionaries for operations, components, and observability terms
-  - [x] Step 3: Preserve original text for evidence; never silently change user intent
-  - [x] Step 4: Test creat, multiblying, cnstant, scope, show, display, and equivalent phrasing; ensure idempotence
-  - [x] Step 5: Run tests and commit `feat(ai): normalize engineering requests deterministically`
-- [x] Task 3: Extract values, operations, components, and outputs
-  - [x] Step 1: Extract arithmetic operators and all numeric operands without defaulting missing operands to zero
-  - [x] Step 2: Extract engineering components through aliases; extract relationships and emit unresolved slots
-  - [x] Step 3: Add metamorphic tests proving paraphrases produce equivalent structured requests
-  - [x] Step 4: Run tests and commit `feat(ai): extract structured engineering requests`
-- [x] Task 4: Ground extracted entities against the verified catalog
-  - [x] Step 1: Resolve aliases only through buildXbridgesCapabilityIndex() and verified composition mappings
-  - [x] Step 2: Validate required ports and parameters during resolution; return capability gap for unknown blocks
-  - [x] Step 3: Add catalog-backed mappings for transfer functions, PID controllers, arithmetic, constants, Scope
-  - [x] Step 4: Run tests and commit `feat(ai): ground request entities in verified catalog`
-- [x] Task 5: Make follow-up answers resolve conversation slots
-  - [x] Step 1: Store unresolved slots with type, prompt, affected decisions, and original evidence
-  - [x] Step 2: Parse answers (e.g. 10 and 20, display on Scope, use FOC) against active slot; reject invalid answers
-  - [x] Step 3: Prevent repeated questions; permit exactly one active request per session; apply answers atomically
-  - [x] Step 4: Run tests and commit `feat(ai): resolve clarification answers against active request slots`
-- [x] Task 6: Add confidence and clarification policy
-  - [x] Step 1: Define thresholds for ready, clarification-required, unsupported, and invalid outcomes
-  - [x] Step 2: Treat missing REQUIRED values as blocking; ensure one actionable question per clarification response
-  - [x] Step 3: Run tests and commit `feat(ai): add request confidence and clarification policy`
-- [x] Task 7: Add deterministic engineering templates
-  - [x] Step 1: Implement templates for arithmetic, PID/feedback/transfer-function, source/plant/Scope
-  - [x] Step 2: Resolve every template port through the catalog before producing an architecture plan
-  - [x] Step 3: Add deterministic snapshot tests for block IDs, ports, parameters, connections, and plan hashes
-  - [x] Step 4: Commit `feat(ai): add deterministic engineering architecture templates`
-- [x] Task 8: Integrate structured understanding before legacy planning
-  - [x] Step 1: Route supported structured requests into the engineering pipeline with fallback for unsupported capabilities
-  - [x] Step 2: Preserve existing approval, proof, transaction, rollback, and simulation boundaries
-  - [x] Step 3: Lock route for lifetime of request; test Add 10 and 20, transfer function + PID, Scope
-  - [x] Step 4: Commit `feat(ai): integrate structured request understanding`
-- [x] Task 9: Enforce browser/Electron runtime boundaries
-  - [x] Step 1: Use browser-safe in-memory/read-only repositories from renderer-reachable code
-  - [x] Step 2: Prohibit renderer execution of process.cwd(), fs, path, and unguarded Buffer usage
-  - [x] Step 3: Test with globalThis.process = undefined and verify build
-  - [x] Step 4: Commit `fix(ai): enforce browser-safe engineering knowledge access`
-- [x] Task 10: Guarantee transaction-local topology consistency
-  - [x] Step 1: Maintain transaction-local mirror of nodes and edges for sequential action visibility before React commits
-  - [x] Step 2: Validate edges against mirror immediately; test deferred React commits and concurrent user edits
-  - [x] Step 3: Commit `fix(agent): preserve topology consistency across deferred React commits`
-- [x] Task 11: Improve explainability without exposing hidden reasoning
-  - [x] Step 1: Return concise interpretation, extracted values, assumptions, unresolved requirements, mappings, citations
-  - [x] Step 2: Make every clarification and capability gap actionable; display template in approval summary
-  - [x] Step 3: Commit `feat(ai): expose request interpretation evidence`
-- [x] Task 12: Build the evaluation corpus and regression harness
-  - [x] Step 1: Add at least 200 reviewed examples across arithmetic, transfer functions, PID, Scope, units, typos
-  - [x] Step 2: Split into 70% dev, 15% validation, 15% holdout; enforce release metric thresholds
-  - [x] Step 3: Commit `test(ai): add request understanding evaluation corpus`
-- [x] Task 13: Add observability for failed understanding
-  - [x] Step 1: Log normalized request hash, extractor outcome, unresolved slot IDs, catalog outcome, and plan hash
-  - [x] Step 2: Redact sensitive content; record stage durations and reasons without hidden reasoning
-  - [x] Step 3: Commit `feat(ai): audit request understanding decisions`
-- [x] Task 14: Define timeout and degraded-mode behavior
-  - [x] Step 1: Apply bounded timeout to optional LLM interpretation; continue deterministically when resolvable
-  - [x] Step 2: Fail closed on invalid structured LLM output, catalog unavailability, or stale fingerprints
-  - [x] Step 3: Commit `fix(ai): add deterministic degraded-mode request handling`
-- [x] Task 15: Add persistence migration and rollout controls
-  - [x] Step 1: Increment persisted request/session schema version; migrate old sessions deterministically
-  - [x] Step 2: Add feature flags for shadow, selected-project, and general rollout stages
-  - [x] Step 3: Commit `feat(ai): migrate and gate structured request sessions`
-- [x] Task 16: Evaluate prompt improvements and optional fine-tuning
-  - [x] Step 1: Run corpus against current model and prompts; improve few-shot examples
-  - [x] Step 2: Verify holdout set and regression gate; commit model decision report
-
-# Professional State Machine and SysML Model Explorer Implementation Tasks
-
-- [x] Task 1: Lock the explorer contracts and normalized projection
-  - [x] Step 1: Write failing projection tests (`src/features/modelExplorer/modelExplorerProjection.test.ts`)
-  - [x] Step 2: Run the test and verify the missing-module failure
-  - [x] Step 3: Add the contracts (`src/features/modelExplorer/modelExplorerTypes.ts`)
-  - [x] Step 4: Implement deterministic flattening and ancestor-preserving filtering (`src/features/modelExplorer/modelExplorerProjection.ts`, `src/features/modelExplorer/index.ts`)
-  - [x] Step 5: Run tests and typecheck
-  - [x] Step 6: Commit
-- [x] Task 2: Add explicit SysML ownership and safe persistence migration
-  - [x] Step 1: Add failing migration and reparent tests
-  - [x] Step 2: Verify failures
-  - [x] Step 3: Extend the canonical model (`model.ts`, `persistence.ts`)
-  - [x] Step 4: Add cycle-safe batch reparent commands (`sysmlCommandGateway.ts`, `normalizedStore.ts`)
-  - [x] Step 5: Run focused and release tests
-  - [x] Step 6: Commit
-- [x] Task 3: Implement SysML projection and capabilities
-  - [x] Step 1: Write failing capability tests (`sysmlExplorerAdapter.test.ts`)
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement declarative capability tables (`modelExplorerCapabilities.ts`, `modelExplorerFactories.ts`)
-  - [x] Step 4: Implement projection branches (`sysmlExplorerAdapter.ts`)
-  - [x] Step 5: Run tests
-  - [x] Step 6: Commit
-- [x] Task 4: Implement immutable State Machine commands and projection
-  - [x] Step 1: Write failing hierarchy tests (`stateMachineExplorerAdapter.test.ts`)
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Complete supported pseudostate metadata (`src/types/sm_types.ts`)
-  - [x] Step 4: Implement move analysis and immutable application (`smStatePruner.ts`)
-  - [x] Step 5: Implement capabilities and commands (`stateMachineExplorerAdapter.ts`)
-  - [x] Step 6: Run State Machine regression tests
-  - [x] Step 7: Commit
-- [x] Task 5: Add the command bus, explorer state, and clipboard engine
-  - [x] Step 1: Write failing atomicity, reducer, and ID-remapping tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement dispatch semantics (`modelExplorerCommandBus.ts`, `modelExplorerUiState.ts`, `modelDiagramRegistry.ts`)
-  - [x] Step 4: Implement clipboard ownership-forest rules (`modelExplorerClipboard.ts`)
-  - [x] Step 5: Run tests and commit
-- [x] Task 6: Build the accessible virtualized tree shell
-  - [x] Step 1: Write failing keyboard and virtualization tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement fixed-row virtualization (`VirtualTree.tsx`, `modelExplorer.css`)
-  - [x] Step 4: Implement tree semantics and toolbar (`ModelTreeRow.tsx`, `ModelExplorerToolbar.tsx`, `ModelExplorer.tsx`)
-  - [x] Step 5: Run tests and commit
-- [x] Task 7: Add searchable context menus and inline rename
-  - [x] Step 1: Write failing interaction tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement menus and rename (`ModelExplorerMenu.tsx`, inline rename in `ModelTreeRow.tsx`)
-  - [x] Step 4: Run tests and commit
-- [x] Task 8: Add relationship authoring and impact confirmation
-  - [x] Step 1: Write failing wizard tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement the wizard (`RelationshipWizard.tsx`)
-  - [x] Step 4: Implement the generic impact dialog (`MoveImpactDialog.tsx`)
-  - [x] Step 5: Run tests and commit
-- [x] Task 9: Add tree reparenting and tree-to-diagram presentation drag/drop
-  - [x] Step 1: Write failing drop-classification tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement drag payload and target feedback (`modelExplorerDragDrop.ts`)
-  - [x] Step 4: Preserve semantic/presentation deletion distinction
-  - [x] Step 5: Run tests and commit
-- [x] Task 10: Integrate Model Explorer into App and remove the inline tree
-  - [x] Step 1: Write failing integration tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Extract and mount (`App.tsx`)
-  - [x] Step 4: Synchronize navigation and selection
-  - [x] Step 5: Run integration and release checks
-  - [x] Step 6: Commit
-- [x] Task 11: Complete multi-selection, copy/paste, duplicate, favorites, and recents
-  - [x] Step 1: Write failing command tests
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Implement complete selection and clipboard behavior
-  - [x] Step 4: Persist explorer UI state separately
-  - [x] Step 5: Run tests and commit
-- [x] Task 12: Add end-to-end authoring and performance gates
-  - [x] Step 1: Write the State Machine E2E scenario
-  - [x] Step 2: Write the SysML E2E scenario
-  - [x] Step 3: Add deterministic performance gates
-  - [x] Step 4: Write the user guide (`docs/guides/model-explorer.md`)
-  - [x] Step 5: Run the complete verification matrix
-  - [x] Step 6: Commit
-
-## Mandatory post-review completion work
-
-- [x] Task 13: Repair mounted command dispatch and State Machine history
-  - [x] Step 1: Write failing mounted-command tests (`src/components/modelExplorer/AppModelExplorer.commands.test.tsx`)
-  - [x] Step 2: Verify both failures
-  - [x] Step 3: Make command-bus semantics explicit (`isPreflightClear`)
-  - [x] Step 4: Replace raw State Machine setters with one snapshot transaction (`onCommitStateMachineSnapshot`)
-  - [x] Step 5: Persist State Machine diagram metadata
-  - [x] Step 6: Run focused verification and commit
-- [x] Task 14: Wire every advertised professional action
-  - [x] Step 1: Add a failing capability-coverage test (`src/components/modelExplorer/AppModelExplorer.actions.test.tsx`)
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Mount the relationship workflow (`RelationshipWizard`)
-  - [x] Step 4: Connect copy, cut, paste, and duplicate
-  - [x] Step 5: Connect Add to Active Diagram and canvas drop
-  - [x] Step 6: Connect reveal/open actions
-  - [x] Step 7: Run tests and commit
-- [x] Task 15: Close persistence and canonical ownership integrity gaps
-  - [x] Step 1: Write failing chunk round-trip tests
-  - [x] Step 2: Write failing ownership-gateway tests
-  - [x] Step 3: Fix all chunked persistence paths (`packages` and `diagrams` in `PERSISTENCE_COLLECTIONS`, `schemaVersion: 3`)
-  - [x] Step 4: Enforce ownership at the gateway boundary (`validateOwnershipMove`)
-  - [x] Step 5: Run persistence and release tests; commit
-- [x] Task 16: Align the complete Hierarchy UI with ADIA's application palette
-  - [x] Step 1: Add failing source-contract tests (`src/components/modelExplorer/modelExplorerTheme.test.tsx`)
-  - [x] Step 2: Verify failure
-  - [x] Step 3: Define the explorer token bridge (`modelExplorer.css`)
-  - [x] Step 4: Replace every hard-coded UI color with theme tokens
-  - [x] Step 5: Add dark/light browser visual assertions (`tests/e2e/model-explorer-theme.spec.ts`)
-  - [x] Step 6: Run theme and accessibility gates; commit
-- [x] Task 17: Replace smoke E2E tests with real authoring scenarios
-  - [x] Step 1: Remove conditional assertions
-  - [x] Step 2: Implement the State Machine authoring scenario
-  - [x] Step 3: Implement the SysML authoring scenario
-  - [x] Step 4: Add persistence and 10,000-element performance scenarios
-  - [x] Step 5: Run and commit
-- [x] Task 18: Final regression, accessibility, and release certification
-  - [x] Step 1: Verify the full test matrix
-  - [x] Step 2: Perform the final source audit
-  - [x] Step 3: Update documentation and commit certification
-
-
-
+- [x] Task 1: Baseline and architecture guardrails
+  - [x] Step 1: Write a failing scanner test for direct UI/AI writes to legacy semantic arrays and command bypasses
+  - [x] Step 2: Implement stable diagnostics `SYSML_ARCH_DIRECT_MUTATION`, `SYSML_ARCH_UI_SEMANTIC_STORAGE`, `SYSML_ARCH_SILENT_CREATION` with temporary compatibility allowlist
+  - [x] Step 3: Add the architecture check to the full release script
+  - [x] Step 4: Run `npm run test:sysml:architecture` and `npm run test:sysml -- --reporter=dot`
+  - [x] Step 5: Commit `test(sysml): add repository-first architecture guardrails`
+- [x] Task 2: Provenance and four-level compliance
+  - [x] Step 1: Test that ProxyPort with three passing levels and failed Constraints is PARTIAL, never COMPLIANT
+  - [x] Step 2: Test that missing automated tests or specification section blocks COMPLIANT
+  - [x] Step 3: Implement Element/Properties/Relationships/Constraints results with PASS | FAIL | NOT_APPLICABLE
+  - [x] Step 4: Require specification source/section, source file, domain type, command, validator, persistence, projection, and test evidence
+  - [x] Step 5: Migrate existing rows and downgrade claims that lack evidence
+  - [x] Step 6: Run compliance and conformance-manifest tests
+  - [x] Step 7: Commit `feat(sysml): enforce provenance and four-level compliance`
+- [x] Task 3: Canonical schema v4 metamodel
+  - [x] Step 1: Test stable IDs, explicit ownership, namespaces, metaclass discrimination, and global ID collision rejection
+  - [x] Step 2: Add first-class Block, InterfaceBlock, ConstraintBlock, AssociationBlock, ValueType, DataType, Enumeration, Signal, QuantityKind, Unit, Operation, Parameter, Reception, Constraint, Comment, Rationale, Requirement, and TestCase
+  - [x] Step 3: Add first-class PartProperty, ReferenceProperty, ValueProperty, ConstraintProperty, FlowProperty, and typed ValueSpecification variants
+  - [x] Step 4: Add typed Diagram and DiagramPresentation entities; do not store semantic compartment content as strings
+  - [x] Step 5: Retain deprecated v3 compatibility exports until migration completes
+  - [x] Step 6: Run model, normalized-store tests, and `npx tsc --noEmit`
+  - [x] Step 7: Commit `feat(sysml): add canonical v4 semantic metamodel`
+- [x] Task 4: UML and SysML Port hierarchy
+  - [x] Step 1: Test that generic CreatePort creates umlPort with no implicit SysML stereotype
+  - [x] Step 2: Test mutual exclusion of ProxyPort and FullPort
+  - [x] Step 3: Reject ProxyPort typed by Block; accept InterfaceBlock
+  - [x] Step 4: Test nested ProxyPort rules and recursive conjugation without UI
+  - [x] Step 5: Implement provided/required semantic references and legacy FlowPort representation
+  - [x] Step 6: Add diagnostics `PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK`, `PORT_SPECIALIZATION_CONFLICT`, `INVALID_NESTED_PROXY_PORT`
+  - [x] Step 7: Run port, IBD, and profile tests
+  - [x] Step 8: Commit `feat(sysml): implement UML and SysML port semantics`
+- [x] Task 5: Global type resolution and no silent creation
+  - [x] Step 1: Test UI, AI, import, migration, and script paths: unknown type creates zero entities and returns the same typed result
+  - [x] Step 2: Rank candidates by qualified-name exact match, simple-name exact match, then normalized prefix
+  - [x] Step 3: Route every typed property/port/connector command through the resolver
+  - [x] Step 4: Remove placeholder type synthesis from import and migration
+  - [x] Step 5: Ensure AI surfaces CreateNewType through normal approval and command handling
+  - [x] Step 6: Run resolver, creation-rule, AI-adapter, and persistence tests
+  - [x] Step 7: Commit `feat(sysml): reject silent semantic type creation`
+- [x] Task 6: Repository-owned presentations
+  - [x] Step 1: Test one Block displayed on two diagrams: one definition, two presentations
+  - [x] Step 2: Test RemovePresentation preserves semantics and DeleteModelElement requires impact handling
+  - [x] Step 3: Move coordinate and membership side maps into typed presentation collections
+  - [x] Step 4: Add deterministic v3-to-v4 migration for coordinates and diagram membership
+  - [x] Step 5: Keep legacy getters as read-only adapters until React migration
+  - [x] Step 6: Run presentation, persistence, and normalized-store tests
+  - [x] Step 7: Commit `feat(sysml): persist typed diagram presentations`
+- [x] Task 7: Command and transaction boundary
+  - [x] Step 1: Test create, update, rename, owner move, relationship creation, deletion impact, undo, redo, and rejected-command atomicity
+  - [x] Step 2: Move gateway switch branches into focused handlers without breaking its public API
+  - [x] Step 3: Validate before commit; rejected commands preserve revision and state
+  - [x] Step 4: Record caller source (ui, ai, import, migration, script) without semantic privilege differences
+  - [x] Step 5: Run command, gateway, mutation, and patch tests
+  - [x] Step 6: Commit `refactor(sysml): centralize semantic transactions`
+- [x] Task 8: Property, value, and inheritance semantics
+  - [x] Step 1: Test distinctions and legal owner/type combinations for all property kinds
+  - [x] Step 2: Test structured multiplicity and typed ValueSpecification variants
+  - [x] Step 3: Resolve inherited features without cloning and reject inheritance cycles
+  - [x] Step 4: Preserve property-specific type links to the owning property and general type
+  - [x] Step 5: Replace string operations/constraints and legacy property writes with commands
+  - [x] Step 6: Make the editor render generated notation and dispatch commands only
+  - [x] Step 7: Run property, sync, editor, and type-check tests
+  - [x] Step 8: Commit `feat(sysml): implement typed property semantics`
+- [x] Task 9: Relationship, connector-end, flow, and allocation foundations
+  - [x] Step 1: Test Association versus Connector ownership and endpoint rules
+  - [x] Step 2: Resolve nested connector paths across properties and ports; reject broken/context-invalid paths
+  - [x] Step 3: Store ItemFlow independently with realizing relationship and conveyed classifier IDs
+  - [x] Step 4: Keep BindingConnector distinct from Connector and InformationFlow
+  - [x] Step 5: Test Allocate endpoint indexing and derived allocatedFrom/allocatedTo results
+  - [x] Step 6: Reserve a typed AllocateActivityPartition extension point; do not build its UI
+  - [x] Step 7: Run relationship, BDD, and IBD tests
+  - [x] Step 8: Commit `feat(sysml): add connector flow and allocation semantics`
+- [x] Task 10: Requirement and TestCase normalization
+  - [x] Step 1: Test migration of verificationCases to testCases without losing evidence links
+  - [x] Step 2: Enforce unique human-facing requirement IDs independently of UUIDs
+  - [x] Step 3: Test direction, endpoints, ownership, and persistence for containment, deriveReqt, satisfy, verify, refine, trace, and copy
+  - [x] Step 4: Use TestCase wording in normative UI/reporting and label extensions explicitly
+  - [x] Step 5: Preserve baseline, suspect-link, evidence-revision, and RTM behavior
+  - [x] Step 6: Run requirement, RTM, persistence, and governance-panel tests
+  - [x] Step 7: Commit `feat(sysml): align verification semantics with TestCase`
+- [x] Task 11: Canonical projections
+  - [x] Step 1: Test compartments, inherited features, IBD context, nested paths, requirement hierarchy, and browser ownership
+  - [x] Step 2: Compare canonical projections with legacy output for supported fixtures
+  - [x] Step 3: Resolve labels dynamically so rename never rewrites presentation semantics
+  - [x] Step 4: Make legacy projections wrappers around canonical selectors
+  - [x] Step 5: Run projection and model-explorer tests
+  - [x] Step 6: Commit `feat(sysml): add repository-native projections`
+- [x] Task 12: Cameo-style command-only UI workflows
+  - [x] Step 1: Test browser drag emits DisplayExistingElement and creates no duplicate semantic element
+  - [x] Step 2: Implement explicit "Use Existing Type" and "Create New Type" workflows with TYPE_NOT_FOUND candidates
+  - [x] Step 3: Separate "Remove from Diagram" from "Delete from Model" with impact preview
+  - [x] Step 4: Route property, port, relationship, connector, and requirement editors through commands
+  - [x] Step 5: Remove direct semantic setBlocks, setParts, setConnectors, and setRelationships writes from migrated flows
+  - [x] Step 6: Run component tests, `npx tsc --noEmit`, and SysML/model-explorer E2E tests
+  - [x] Step 7: Commit `refactor(sysml): make UI a command-driven projection`
+- [x] Task 13: Schema v4 persistence and migration
+  - [x] Step 1: Add fixtures for legacy definitions, usages, ports, connectors, requirements, verification cases, coordinates, and memberships
+  - [x] Step 2: Migrate generic ports to UML Port unless explicit evidence identifies a SysML specialization
+  - [x] Step 3: Map VerificationCase to TestCase or a labeled extension based on source metadata
+  - [x] Step 4: Persist provenance, presentations, connector paths, ItemFlows, allocations, and evidence
+  - [x] Step 5: Verify deterministic serialization, checksums, chunks, abort rollback, and identity-preserving round trips
+  - [x] Step 6: Run persistence/migration/import tests
+  - [x] Step 7: Commit `feat(sysml): migrate projects to canonical schema v4`
+- [x] Task 14: One writable model across all integrations
+  - [x] Step 1: Test that UI, AI, reports, and scripts observe the same revision and IDs
+  - [x] Step 2: Replace bidirectional legacy merges with one-way compatibility projections
+  - [x] Step 3: Empty the production architecture-guard allowlist
+  - [x] Step 4: Remove duplicated writable BDD/IBD/Requirement semantic arrays
+  - [x] Step 5: Run architecture, SysML release, reporting, and type-check suites
+  - [x] Step 6: Commit `refactor(sysml): enforce one writable semantic repository`
+- [x] Task 15: Mandatory semantic identity release gate
+  - [x] Step 1: Through public commands, create Motor and Vehicle Blocks plus BDD-A, BDD-B, Vehicle IBD, and a Requirement Diagram
+  - [x] Step 2: Display the same Motor ID on both BDDs
+  - [x] Step 3: Create one `leftMotor : Motor` PartProperty owned by Vehicle and display it on the Vehicle IBD
+  - [x] Step 4: Create one Requirement with requirement ID REQ-001
+  - [x] Step 5: Create one `Motor «satisfy» REQ-001` relationship and display it on the Requirement Diagram
+  - [x] Step 6: Assert exactly one Motor definition, one leftMotor property, one REQ-001, and one satisfy relationship; allow multiple presentations
+  - [x] Step 7: Rename Motor to BLDCMotor and assert every projection resolves the new name with unchanged IDs and counts
+  - [x] Step 8: Serialize/reload and repeat every assertion
+  - [x] Step 9: Add the test as blocking release and compliance evidence
+  - [x] Step 10: Commit `test(sysml): gate release on semantic identity`
+- [x] Task 16: Remove compatibility semantics and close compliance
+  - [x] Step 1: Delete legacy mutation branches only after Tasks 12-15 pass
+  - [x] Step 2: Rename retained import/export shapes with Legacy...Dto and prohibit domain dependencies on them
+  - [x] Step 3: Re-evaluate every feature at all four compliance levels
+  - [x] Step 4: Assign COMPLIANT only with complete source/type/command/validator/persistence/projection/test evidence
+  - [x] Step 5: Publish unsupported and ADIA-extension behavior without inflating compliance
+  - [x] Step 6: Run the complete release verification
+  - [x] Step 7: Commit `docs(sysml): publish evidence-backed v1.6 compliance`
