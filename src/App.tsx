@@ -9720,25 +9720,73 @@ const ADIA = () => {
       isLeaf: false,
       layerId: blockLayerId,
     };
-    setBlocks(prev => [...prev, newBlock]);
+    const cmdElement = stereotype === 'requirement'
+      ? {
+          id: newId,
+          kind: 'requirement' as const,
+          name: newBlock.name,
+          requirementId: newBlock.reqId || `REQ-${blocks.filter(b => b.stereotype === 'requirement').length + 1}`,
+          text: newBlock.description || '',
+          status: 'draft' as const,
+          priority: 'medium' as const,
+          risk: 'medium' as const,
+          version: '1.0',
+          ownerId: parentRequirement ? parentRequirement.id : 'pkg-root',
+          namespace: [],
+        }
+      : {
+          id: newId,
+          kind: (stereotype === 'interface' ? 'interface' : stereotype === 'valuetype' ? 'valueType' : 'block') as any,
+          name: newBlock.name,
+          namespace: [],
+          ownerId: 'pkg-root',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        };
+
+    const cmdRes = handleExecuteSysmlCommand({
+      type: 'createElement',
+      element: cmdElement as any,
+    });
+
+    if (!cmdRes.committed) {
+      setBlocks(prev => [...prev, newBlock]);
+    }
+
     if (stereotype === 'requirement' && parentRequirement) {
-      setRelationships(prev => [
-        ...prev,
-        {
-          id: uuidv4(),
+      const relId = uuidv4();
+      const relCmd = handleExecuteSysmlCommand({
+        type: 'createRelationship',
+        relationship: {
+          id: relId,
           sourceId: parentRequirement.id,
           targetId: newBlock.id,
-          type: 'requirementContainment',
-          label: '',
+          kind: 'requirementContainment',
         },
-      ]);
+      });
+      if (!relCmd.committed) {
+        setRelationships(prev => [
+          ...prev,
+          {
+            id: relId,
+            sourceId: parentRequirement.id,
+            targetId: newBlock.id,
+            type: 'requirementContainment',
+            label: '',
+          },
+        ]);
+      }
     }
 
     setSelectedIds([newBlock.id]);
     addError('info', parentRequirement && stereotype === 'requirement'
       ? `Created contained requirement: ${newBlock.name}`
       : `Created ${stereotype}: ${newBlock.name}`);
-  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
+  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId, handleExecuteSysmlCommand]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
     const current = blocks.find(block => block.id === id);

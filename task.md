@@ -35,12 +35,12 @@
   - [x] Step 2: Verify RED
   - [x] Step 3: Implement one shared policy and use it in commands/UI
   - [x] Step 4: Verify and commit
-- [ ] Task 7: Diagram Toolbars as Semantic-and-Presentation Commands
-  - [ ] Step 1: Write cross-diagram identity tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Implement the controller
-  - [ ] Step 4: Replace direct setBlocks, setRelationships, and presentation mutations in affected toolbar handlers
-  - [ ] Step 5: Verify and commit
+- [x] Task 7: Diagram Toolbars as Semantic-and-Presentation Commands
+  - [x] Step 1: Write cross-diagram identity tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Implement the controller
+  - [x] Step 4: Replace direct setBlocks, setRelationships, and presentation mutations in affected toolbar handlers
+  - [x] Step 5: Verify and commit
 - [ ] Task 8: Feature Editing and Specification Panels
   - [ ] Step 1: Write feature identity tests
   - [ ] Step 2: Verify RED
