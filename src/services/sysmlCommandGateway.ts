@@ -52,6 +52,9 @@ import {
 } from './sysmlCreationRules';
 import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
+
+export { resolveType, type ResolvedTypeOutcome, type TypeResolutionOptions } from '../engine/sysml/services/typeResolution';
+export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 import {
   type NormalizedSysmlStore,
   fromRepository,

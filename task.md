@@ -31,14 +31,14 @@
   - [x] Step 6: Add diagnostics `PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK`, `PORT_SPECIALIZATION_CONFLICT`, `INVALID_NESTED_PROXY_PORT`
   - [x] Step 7: Run port, IBD, and profile tests
   - [x] Step 8: Commit `feat(sysml): implement UML and SysML port semantics`
-- [ ] Task 5: Global type resolution and no silent creation
-  - [ ] Step 1: Test UI, AI, import, migration, and script paths: unknown type creates zero entities and returns the same typed result
-  - [ ] Step 2: Rank candidates by qualified-name exact match, simple-name exact match, then normalized prefix
-  - [ ] Step 3: Route every typed property/port/connector command through the resolver
-  - [ ] Step 4: Remove placeholder type synthesis from import and migration
-  - [ ] Step 5: Ensure AI surfaces CreateNewType through normal approval and command handling
-  - [ ] Step 6: Run resolver, creation-rule, AI-adapter, and persistence tests
-  - [ ] Step 7: Commit `feat(sysml): reject silent semantic type creation`
+- [x] Task 5: Global type resolution and no silent creation
+  - [x] Step 1: Test UI, AI, import, migration, and script paths: unknown type creates zero entities and returns the same typed result
+  - [x] Step 2: Rank candidates by qualified-name exact match, simple-name exact match, then normalized prefix
+  - [x] Step 3: Route every typed property/port/connector command through the resolver
+  - [x] Step 4: Remove placeholder type synthesis from import and migration
+  - [x] Step 5: Ensure AI surfaces CreateNewType through normal approval and command handling
+  - [x] Step 6: Run resolver, creation-rule, AI-adapter, and persistence tests
+  - [x] Step 7: Commit `feat(sysml): reject silent semantic type creation`
 - [ ] Task 6: Repository-owned presentations
   - [ ] Step 1: Test one Block displayed on two diagrams: one definition, two presentations
   - [ ] Step 2: Test RemovePresentation preserves semantics and DeleteModelElement requires impact handling
