@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { CapabilityKind, ExplorerCapability, ModelTreeNode } from '../../features/modelExplorer/modelExplorerTypes';
-import { capabilityToAction, explorerAdapterDomain, type CapabilityActionContext } from './AppModelExplorer';
+import { capabilityToAction, explorerAdapterDomain, filterNonCreatingCapabilities, type CapabilityActionContext } from './AppModelExplorer';
 
 describe('AppModelExplorer Capability Coverage', () => {
   it('routes a State Machine node by its domain even in a SysML editor', () => {
     expect(explorerAdapterDomain({ ...selectedNode, domain: 'stateMachine' })).toBe('stateMachine');
     expect(explorerAdapterDomain({ ...selectedNode, domain: 'sysml' })).toBe('sysml');
+  });
+
+  it('removes context-menu actions that create new workspace entities', () => {
+    const capabilities: ExplorerCapability[] = [
+      enabledCapability('createElement'),
+      enabledCapability('createDiagram'),
+      enabledCapability('rename'),
+      enabledCapability('addToDiagram'),
+    ];
+    expect(filterNonCreatingCapabilities(capabilities).map(capability => capability.kind)).toEqual([
+      'rename',
+      'addToDiagram',
+    ]);
   });
   const selectedNode: ModelTreeNode = {
     nodeId: 'block-1',

@@ -63,6 +63,10 @@ export function explorerAdapterDomain(node: ModelTreeNode): 'stateMachine' | 'sy
   return node.domain === 'stateMachine' ? 'stateMachine' : 'sysml';
 }
 
+export function filterNonCreatingCapabilities(capabilities: ExplorerCapability[]): ExplorerCapability[] {
+  return capabilities.filter(capability => capability.kind !== 'createElement' && capability.kind !== 'createDiagram');
+}
+
 export function capabilityToAction(
   capability: ExplorerCapability,
   node: ModelTreeNode,
@@ -388,6 +392,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   const handleExecuteCapability = useCallback(
     (capability: ExplorerCapability, node: ModelTreeNode) => {
+      if (capability.kind === 'createElement' || capability.kind === 'createDiagram') return;
       const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter;
       if (capability.kind === 'rename') return;
 
@@ -576,7 +581,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         activeDiagramContext={activeDiagramContext}
         onSelectNode={handleSelectNode}
         onActivateNode={handleActivateNode}
-        getCapabilities={(node) => (explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter).capabilities([node.semanticId])}
+        getCapabilities={(node) => filterNonCreatingCapabilities((explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter).capabilities([node.semanticId]))}
         onExecuteCapability={handleExecuteCapability}
         onMoveNode={handleMoveNode}
         onRenameCommit={(nodeId, newName) => {
