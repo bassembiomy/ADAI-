@@ -128,11 +128,11 @@ describe('getRequirementsDiagramScope', () => {
     expect(scope.visibleRelationshipIds).toEqual(new Set(['verify-root']));
   });
 
-  it('includes blocks presented explicitly via presentedElementIds even if unconnected', () => {
-    const blocks = [block('req-1', 'requirement'), block('blk-standalone', 'block')];
-    const scope = getRequirementsDiagramScope(blocks, [], 'root', ['blk-standalone']);
+  it('renders explicitly presented Blocks and TestCases before relationships exist', () => {
+    const blocks = [block('req-root', 'requirement'), block('block-root', 'block'), block('test-root', 'testCase')];
 
-    expect(scope.visibleBlockIds).toContain('blk-standalone');
-    expect(scope.visibleBlockIds).toContain('req-1');
+    const scope = getRequirementsDiagramScope(blocks, [], 'root', ['block-root', 'test-root']);
+
+    expect(scope.visibleBlockIds).toEqual(new Set(['req-root', 'block-root', 'test-root']));
   });
 });

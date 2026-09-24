@@ -6275,8 +6275,13 @@ const ADIA = () => {
   }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
 
   const requirementsDiagramScope = useMemo(
-    () => getRequirementsDiagramScope(blocks, relationships, currentLayerId),
-    [blocks, relationships, currentLayerId],
+    () => getRequirementsDiagramScope(
+      blocks,
+      relationships,
+      currentLayerId,
+      new Set(diagramPresentations.requirements?.elementIds ?? []),
+    ),
+    [blocks, relationships, currentLayerId, diagramPresentations],
   );
 
   // Schedule large validation asynchronously after edits with revision-based cancellation
@@ -9720,39 +9725,18 @@ const ADIA = () => {
       isLeaf: false,
       layerId: blockLayerId,
     };
-    const cmdElement = stereotype === 'requirement'
-      ? {
-          id: newId,
-          kind: 'requirement' as const,
-          name: newBlock.name,
-          requirementId: newBlock.reqId || `REQ-${blocks.filter(b => b.stereotype === 'requirement').length + 1}`,
-          text: newBlock.description || '',
-          status: 'draft' as const,
-          priority: 'medium' as const,
-          risk: 'medium' as const,
-          version: '1.0',
-          ownerId: parentRequirement ? parentRequirement.id : 'pkg-root',
-          namespace: [],
-        }
-      : {
-          id: newId,
-          kind: (stereotype === 'interface' ? 'interface' : stereotype === 'valuetype' ? 'valueType' : 'block') as any,
-          name: newBlock.name,
-          namespace: [],
-          ownerId: 'pkg-root',
-          isAbstract: false,
-          isLeaf: false,
-          properties: [],
-          ports: [],
-          operations: [],
-          constraints: [],
+    setBlocks(prev => [...prev, newBlock]);
+    if (diagramMode === 'requirements') {
+      setDiagramPresentations(prev => {
+        const existing = prev.requirements?.elementIds ?? [];
+        return {
+          ...prev,
+          requirements: {
+            elementIds: existing.includes(newBlock.id) ? existing : [...existing, newBlock.id],
+          },
         };
-
-    handleExecuteSysmlCommand({
-      type: 'createElement',
-      element: cmdElement as any,
-    });
-
+      });
+    }
     if (stereotype === 'requirement' && parentRequirement) {
       handleExecuteSysmlCommand({
         type: 'createRelationship',
@@ -10160,7 +10144,7 @@ const ADIA = () => {
     addError('info', 'Auto-layout applied to current layer.');
   }, [blocks, relationships, currentLayerId, addError]);
 
-  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy') => {
+  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
     if (selectedIds.length !== 1) {
       addError('warning', 'Select exactly one Block or Part to add a port.');
       return;
@@ -16485,6 +16469,7 @@ const ADIA = () => {
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
                     </div>
                   </>
                 )}
@@ -16560,6 +16545,7 @@ const ADIA = () => {
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
                     </div>
                     <Button
                       variant="secondary"
@@ -17923,6 +17909,7 @@ const ADIA = () => {
                             <option value="standard">Std</option>
                             <option value="flow">Flow</option>
                             <option value="proxy">Proxy</option>
+                            <option value="full">Full</option>
                           </select>
                           <>
                               <select
@@ -17964,6 +17951,7 @@ const ADIA = () => {
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50">+ Full</Button>
                     </div>
                   </div>
                   <div>
@@ -18203,9 +18191,10 @@ const ADIA = () => {
                                   }}
                                   className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
                                 >
-                                  <option value="standard">Std</option>
-                                  <option value="flow">Flow</option>
-                                  <option value="proxy">Proxy</option>
+                                <option value="standard">Std</option>
+                                <option value="flow">Flow</option>
+                                <option value="proxy">Proxy</option>
+                                <option value="full">Full</option>
                                 </select>
                                 <select
                                   aria-label={`Direction for ${port.name || port.id}`}
@@ -18237,6 +18226,7 @@ const ADIA = () => {
                             <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
                             <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
                             <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50">+ Full</Button>
                           </div>
                         </div>
                       );

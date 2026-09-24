@@ -4,7 +4,8 @@ export interface PortData {
   id: string;
   name: string;
   type: string; // e.g. 'int', 'float', 'signal'
-  kind?: 'standard' | 'flow' | 'proxy';
+  /** UML Port and SysML v1 legacy/SysML port usages. */
+  kind?: 'standard' | 'flow' | 'proxy' | 'full';
   direction?: 'in' | 'out' | 'inout';
   unit?: string;
   side?: 'top' | 'bottom' | 'left' | 'right';
