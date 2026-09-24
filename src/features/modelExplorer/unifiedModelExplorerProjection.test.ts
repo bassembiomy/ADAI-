@@ -89,4 +89,28 @@ describe('buildUnifiedModelProjection', () => {
       secondaryLabel: ': CommandSignal · in',
     });
   });
+
+  it('does not expose a UUID as the port name when the port definition name is missing', () => {
+    const repository = createEmptyRepository();
+    const uuid = 'e6871056-81d2-429a-9597-48ce068bcdef';
+    repository.definitions.block = {
+      id: 'block', name: 'Controller', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
+      ports: [{ id: uuid, name: uuid, kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+    };
+    repository.definitions.signal = { id: 'signal', name: 'CommandSignal', namespace: ['model'], ownerId: 'model', kind: 'interface', features: [] };
+    repository.usages.part = { id: 'part', name: 'part_3', kind: 'part', ownerId: 'block', typeId: 'block' };
+    repository.usages[uuid] = { id: uuid, name: uuid, kind: 'port', ownerId: 'part', definitionId: uuid };
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 },
+      externalModels: [],
+      revision: 1,
+    });
+
+    expect(projection.nodes[`sysml:element:${uuid}`]).toMatchObject({
+      label: 'Port 1',
+      secondaryLabel: `: CommandSignal · in · ID ${uuid}`,
+    });
+  });
 });

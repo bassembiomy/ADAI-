@@ -123,25 +123,39 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     ...Object.values(input.sysml.requirements),
     ...Object.values(input.sysml.verificationCases),
   ];
+  const portUsageOrdinal = new Map<string, number>();
+  for (const usage of Object.values(input.sysml.usages).filter(item => item.kind === 'port')) {
+    const count = portUsageOrdinal.get(usage.ownerId) ?? 0;
+    portUsageOrdinal.set(usage.ownerId, count + 1);
+    portUsageOrdinal.set(usage.id, count + 1);
+  }
   for (const item of sysmlEntries) {
     const pillar = pillarForSysmlKind(item.kind);
     const ownerId = item.kind === 'requirement'
       ? requirementParents.get(item.id) ?? item.ownerId
       : item.ownerId;
+    const resolvedPort = item.kind === 'port' ? resolvePortUsage(input.sysml, item.id) : undefined;
+    const isUuid = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{8,}$/i.test(value);
+    const hasOpaqueName = item.name === item.id || isUuid(item.name);
+    const readableLabel = item.kind === 'port'
+      ? (hasOpaqueName
+          ? resolvedPort?.definition.name && !isUuid(resolvedPort.definition.name)
+            ? resolvedPort.definition.name
+            : `Port ${portUsageOrdinal.get(item.id) ?? 1}`
+          : item.name)
+      : item.name;
     register(nodes, {
       nodeId: sysmlNodeId(item.id),
       semanticId: item.id,
       domain: 'sysml',
       kind: item.kind,
-      label: item.kind === 'port' && resolvePortUsage(input.sysml, item.id)?.definition
-        ? (item.name && item.name !== item.id ? item.name : resolvePortUsage(input.sysml, item.id)!.definition.name)
-        : item.name,
+      label: readableLabel,
       secondaryLabel: item.kind === 'port'
         ? (() => {
-            const resolved = resolvePortUsage(input.sysml, item.id);
-            if (!resolved) return '[unresolved port definition]';
-            const typeName = input.sysml.definitions[resolved.definition.typeId]?.name ?? resolved.definition.typeId;
-            return `: ${typeName} · ${resolved.effectiveDirection}`;
+            if (!resolvedPort) return hasOpaqueName ? `(${item.id}) · [unresolved port definition]` : '[unresolved port definition]';
+            const typeName = input.sysml.definitions[resolvedPort.definition.typeId]?.name ?? resolvedPort.definition.typeId;
+            const idSuffix = hasOpaqueName && isUuid(item.id) ? ` · ID ${item.id}` : '';
+            return `: ${typeName} · ${resolvedPort.effectiveDirection}${idSuffix}`;
           })()
         : undefined,
       parentNodeId: ownerNodeId(ownerId, pillar),

@@ -272,13 +272,15 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               hasChildren: true,
             });
             for (const port of ports) {
+              const portNameIsUuid = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(port.name) || port.name === port.id;
+              const portOrdinal = ports.findIndex(candidate => candidate.id === port.id) + 1;
               registerNode({
                 nodeId: `sysml:element:${port.id}`,
                 semanticId: port.id,
                 domain: 'sysml',
                 kind: port.kind === 'proxy' ? 'proxyPort' : 'fullPort',
-                label: port.name,
-                secondaryLabel: port.typeId ? `: ${port.typeId}` : undefined,
+                label: portNameIsUuid ? `Port ${portOrdinal}` : port.name,
+                secondaryLabel: `${port.typeId ? `: ${repo.definitions[port.typeId]?.name ?? port.typeId}` : ''}${port.direction ? ` · ${port.direction}` : ''}${portNameIsUuid ? ` · ID ${port.id}` : ''}` || undefined,
                 parentNodeId: portsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
