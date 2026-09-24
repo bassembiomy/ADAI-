@@ -1,22 +1,22 @@
 import React, { useRef, useEffect, useState } from 'react';
 import {
-  ChevronRight,
-  ChevronDown,
   Folder,
+  Layers,
   Box,
   Component,
   CircleDot,
-  ShieldAlert,
   CheckSquare,
-  Layers,
+  ShieldAlert,
   Layout,
   Activity,
   LayoutGrid,
   Square,
   Disc,
-  ArrowRight,
   GitCommit,
+  ArrowRight,
   FileCode,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import type { ModelTreeNode } from '../../features/modelExplorer/modelExplorerTypes';
 
@@ -33,8 +33,8 @@ export interface ModelTreeRowProps {
   onSelect: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
-  onRenameChange?: (value: string) => void;
-  onRenameCommit?: (value: string) => void;
+  onRenameChange?: (val: string) => void;
+  onRenameCommit?: (val: string) => void;
   onRenameCancel?: () => void;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
@@ -42,12 +42,12 @@ export interface ModelTreeRowProps {
   onDrop?: (e: React.DragEvent) => void;
 }
 
-export function getNodeKindIcon(kind: string, domain: string): React.ReactElement {
+export function getNodeKindIcon(kind: string, _domain: string): React.ReactElement {
   const iconProps = { size: 14, className: 'shrink-0' };
 
   switch (kind) {
     case 'model':
-      return <Layers {...iconProps} className="shrink-0 text-blue-400" />;
+      return <Layers {...iconProps} className="shrink-0 text-[var(--diagram-node-selected)]" />;
     case 'package':
       return <Folder {...iconProps} className="shrink-0 text-amber-400" />;
     case 'block':
@@ -75,14 +75,14 @@ export function getNodeKindIcon(kind: string, domain: string): React.ReactElemen
     case 'transition':
       return <ArrowRight {...iconProps} className="shrink-0 text-lime-400" />;
     default:
-      return <FileCode {...iconProps} className="shrink-0 text-slate-400" />;
+      return <FileCode {...iconProps} className="shrink-0 text-[var(--text-muted)]" />;
   }
 }
 
 export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
   node,
   depth,
-  index,
+  index: _index,
   isExpanded,
   isSelected,
   isFocused,
@@ -100,8 +100,8 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
   onDragOver,
   onDrop,
 }) => {
-  const [localRename, setLocalRename] = useState(renameValue ?? node.label);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [localRename, setLocalRename] = useState(renameValue ?? node.label);
 
   useEffect(() => {
     if (isRenaming) {
@@ -113,11 +113,13 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
     }
   }, [isRenaming, renameValue, node.label]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.stopPropagation();
       e.preventDefault();
       onRenameCommit?.(localRename.trim() || node.label);
     } else if (e.key === 'Escape') {
+      e.stopPropagation();
       e.preventDefault();
       onRenameCancel?.();
     }
@@ -135,10 +137,10 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
     <div
       className={`model-tree-row flex items-center h-full w-full pr-2 text-xs select-none cursor-pointer transition-colors ${
         isSelected
-          ? 'bg-blue-600/30 text-white font-medium border-l-2 border-blue-500'
+          ? 'bg-[var(--diagram-node-selected)] text-white font-medium border-l-2 border-[var(--focus-ring)]'
           : isFocused
-          ? 'bg-white/10 text-slate-200'
-          : 'text-slate-300 hover:bg-white/5'
+          ? 'bg-[var(--surface-raised)] text-[var(--text-primary)]'
+          : 'text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
       }`}
       style={{ paddingLeft: `${indentPx}px` }}
       onClick={onSelect}
@@ -158,7 +160,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
           <button
             type="button"
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
-            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-white rounded focus:outline-none"
+            className="w-4 h-4 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded focus:outline-none"
             onClick={e => {
               e.stopPropagation();
               onToggleExpand(e);
@@ -182,7 +184,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
           <input
             ref={inputRef}
             type="text"
-            className="w-full bg-slate-800 text-white px-1.5 py-0.5 rounded border border-blue-500 text-xs outline-none shadow-inner"
+            className="w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] px-1.5 py-0.5 rounded border border-[var(--focus-ring)] text-xs outline-none shadow-inner"
             value={localRename}
             onChange={e => {
               setLocalRename(e.target.value);
@@ -200,7 +202,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
 
         {/* Secondary label (e.g., ": Block", ": Real [1]") */}
         {!isRenaming && node.secondaryLabel && (
-          <span className="ml-1 text-[10px] text-slate-400/80 truncate shrink-0">
+          <span className="ml-1 text-[10px] text-[var(--text-muted)] truncate shrink-0">
             {node.secondaryLabel}
           </span>
         )}
@@ -209,15 +211,15 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
       {/* Badges / Stereotypes */}
       {!isRenaming && node.badges && node.badges.length > 0 && (
         <div className="flex items-center gap-1 ml-1.5 shrink-0">
-          {node.badges.map((b, idx) => (
+          {node.badges.map((b: { kind: string; label: string }, idx: number) => (
             <span
               key={idx}
               className={`px-1 py-0.2 rounded text-[9px] uppercase tracking-wider font-mono ${
                 b.kind === 'error'
-                  ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                  ? 'bg-[var(--surface-raised)] text-[var(--status-danger)] border border-[var(--status-danger)]'
                   : b.kind === 'warning'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'bg-slate-700/60 text-slate-300 border border-slate-600/40'
+                  ? 'bg-[var(--surface-raised)] text-[var(--status-warning)] border border-[var(--status-warning)]'
+                  : 'bg-[var(--surface-raised)] text-[var(--text-secondary)] border border-[var(--border-default)]'
               }`}
             >
               {b.label}

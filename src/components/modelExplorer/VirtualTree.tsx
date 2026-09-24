@@ -223,7 +223,7 @@ export const VirtualTree: React.FC<VirtualTreeProps> = ({
       tabIndex={0}
       onScroll={handleScroll}
       onKeyDown={handleKeyDown}
-      className={`model-virtual-tree-container outline-none focus:ring-1 focus:ring-blue-500/40 ${className}`}
+      className={`model-virtual-tree-container outline-none focus:ring-1 focus:ring-[var(--focus-ring)] ${className}`}
       style={{
         height,
         overflowY: 'auto',

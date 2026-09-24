@@ -417,13 +417,13 @@
   - [x] Step 3: Fix all chunked persistence paths (`packages` and `diagrams` in `PERSISTENCE_COLLECTIONS`, `schemaVersion: 3`)
   - [x] Step 4: Enforce ownership at the gateway boundary (`validateOwnershipMove`)
   - [x] Step 5: Run persistence and release tests; commit
-- [ ] Task 16: Align the complete Hierarchy UI with ADIA's application palette
-  - [ ] Step 1: Add failing source-contract tests (`src/components/modelExplorer/modelExplorerTheme.test.tsx`)
-  - [ ] Step 2: Verify failure
-  - [ ] Step 3: Define the explorer token bridge (`modelExplorer.css`)
-  - [ ] Step 4: Replace every hard-coded UI color with theme tokens
-  - [ ] Step 5: Add dark/light browser visual assertions (`tests/e2e/model-explorer-theme.spec.ts`)
-  - [ ] Step 6: Run theme and accessibility gates; commit
+- [x] Task 16: Align the complete Hierarchy UI with ADIA's application palette
+  - [x] Step 1: Add failing source-contract tests (`src/components/modelExplorer/modelExplorerTheme.test.tsx`)
+  - [x] Step 2: Verify failure
+  - [x] Step 3: Define the explorer token bridge (`modelExplorer.css`)
+  - [x] Step 4: Replace every hard-coded UI color with theme tokens
+  - [x] Step 5: Add dark/light browser visual assertions (`tests/e2e/model-explorer-theme.spec.ts`)
+  - [x] Step 6: Run theme and accessibility gates; commit
 - [ ] Task 17: Replace smoke E2E tests with real authoring scenarios
   - [ ] Step 1: Remove conditional assertions
   - [ ] Step 2: Implement the State Machine authoring scenario

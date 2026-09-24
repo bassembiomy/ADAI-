@@ -64,7 +64,7 @@ describe('ModelTreeRow', () => {
     );
 
     expect(html).toContain('aria-label="Collapse"');
-    expect(html).toContain('border-blue-500'); // Selected styling
+    expect(html).toContain('border-[var(--focus-ring)]'); // Selected styling
   });
 
   it('renders leaf node without expand button', () => {

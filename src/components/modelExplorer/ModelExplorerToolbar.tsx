@@ -39,11 +39,11 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
     <div
       role="toolbar"
       aria-label="Model Explorer Toolbar"
-      className={`model-explorer-toolbar flex flex-col gap-1.5 p-2 bg-slate-900 border-b border-slate-800 text-xs ${className}`}
+      className={`model-explorer-toolbar flex flex-col gap-1.5 p-2 bg-[var(--surface-panel)] border-b border-[var(--border-default)] text-xs text-[var(--text-primary)] ${className}`}
     >
       {/* Top row: View Switcher tabs */}
       <div className="flex items-center justify-between gap-1">
-        <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
+        <div className="flex items-center gap-0.5 bg-[var(--surface-canvas)] p-0.5 rounded border border-[var(--border-default)]">
           <button
             type="button"
             role="tab"
@@ -51,8 +51,8 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             onClick={() => onViewModeChange('containment')}
             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
               viewMode === 'containment'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-[var(--diagram-node-selected)] text-white shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
             }`}
             title="Containment Tree (Full Semantic Hierarchy)"
           >
@@ -67,8 +67,8 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             onClick={() => onViewModeChange('diagramContext')}
             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
               viewMode === 'diagramContext'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-[var(--diagram-node-selected)] text-white shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
             }`}
             title={
               activeDiagramName
@@ -87,8 +87,8 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             onClick={() => onViewModeChange('search')}
             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
               viewMode === 'search'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-[var(--diagram-node-selected)] text-white shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
             }`}
             title="Search & Filtered View"
           >
@@ -105,8 +105,8 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
               aria-label="Toggle Favorites"
               aria-pressed={showFavoritesOnly}
               onClick={onToggleFavoritesOnly}
-              className={`p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors ${
-                showFavoritesOnly ? 'text-amber-400 bg-amber-500/10' : ''
+              className={`p-1 rounded text-[var(--text-muted)] hover:text-[var(--status-warning)] hover:bg-[var(--surface-raised)] transition-colors ${
+                showFavoritesOnly ? 'text-[var(--status-warning)] bg-[var(--surface-raised)]' : ''
               }`}
               title="Show Favorites Only"
             >
@@ -118,7 +118,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             type="button"
             aria-label="Expand All"
             onClick={onExpandAll}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors"
             title="Expand All"
           >
             <ChevronsDown size={13} />
@@ -128,7 +128,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             type="button"
             aria-label="Collapse All"
             onClick={onCollapseAll}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors"
             title="Collapse All"
           >
             <ChevronsUp size={13} />
@@ -138,20 +138,20 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
 
       {/* Bottom row: Search input */}
       <div className="relative flex items-center w-full">
-        <Search size={12} className="absolute left-2 text-slate-500 pointer-events-none" />
+        <Search size={12} className="absolute left-2 text-[var(--text-muted)] pointer-events-none" />
         <input
           type="text"
           value={searchQuery}
           onChange={e => onSearchQueryChange(e.target.value)}
           placeholder="Filter model (e.g. Engine, :Block)..."
-          className="w-full bg-slate-950 text-slate-200 pl-7 pr-6 py-1 rounded border border-slate-800 text-[11px] placeholder:text-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/40"
+          className="w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] pl-7 pr-6 py-1 rounded border border-[var(--border-default)] text-[11px] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
         />
         {searchQuery && (
           <button
             type="button"
             aria-label="Clear Search"
             onClick={() => onSearchQueryChange('')}
-            className="absolute right-1.5 p-0.5 text-slate-400 hover:text-white rounded"
+            className="absolute right-1.5 p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded"
           >
             <X size={12} />
           </button>

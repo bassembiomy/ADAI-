@@ -1,55 +1,75 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Plus,
-  Layout,
-  Link2,
-  Edit2,
   Trash2,
+  Edit2,
   Copy,
-  Scissors,
   ClipboardPaste,
   CopyPlus,
+  Link2,
+  Layout,
   ExternalLink,
   Search,
   Check,
 } from 'lucide-react';
-import type {
-  ModelTreeNode,
-  ExplorerCapability,
-  CapabilityKind,
-} from '../../features/modelExplorer/modelExplorerTypes';
+import type { ModelTreeNode, ExplorerCapability, CapabilityKind } from '../../features/modelExplorer/modelExplorerTypes';
 
-export interface MenuActionItem {
-  capability: ExplorerCapability;
-  icon?: React.ReactNode;
-  shortcut?: string;
-}
-
-export interface ModelExplorerMenuProps {
-  x: number;
-  y: number;
-  targetNode: ModelTreeNode;
-  capabilities: ExplorerCapability[];
-  onSelectCapability: (capability: ExplorerCapability) => void;
-  onClose: () => void;
-  filterText?: string;
-  className?: string;
-}
+export type MenuActionItem = ExplorerCapability;
 
 export function filterMenuCapabilities(
   capabilities: ExplorerCapability[],
   query: string
 ): ExplorerCapability[] {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return capabilities;
+  if (!query) return capabilities;
+  const q = query.toLowerCase();
+  return capabilities.filter(c =>
+    c.label.toLowerCase().includes(q) ||
+    c.kind.toLowerCase().includes(q) ||
+    (c.elementKind && c.elementKind.toLowerCase().includes(q))
+  );
+}
 
-  return capabilities.filter(cap => {
-    if (cap.label.toLowerCase().includes(trimmed)) return true;
-    if (cap.elementKind && cap.elementKind.toLowerCase().includes(trimmed)) return true;
-    if (cap.relationshipKind && cap.relationshipKind.toLowerCase().includes(trimmed)) return true;
-    if (cap.kind.toLowerCase().includes(trimmed)) return true;
-    return false;
-  });
+export interface ModelExplorerMenuProps {
+  targetNode: ModelTreeNode;
+  capabilities: ExplorerCapability[];
+  anchorPosition?: { x: number; y: number };
+  x?: number;
+  y?: number;
+  onClose: () => void;
+  onSelectCapability: (cap: ExplorerCapability) => void;
+  className?: string;
+}
+
+interface CapabilityGroup {
+  title: string;
+  items: ExplorerCapability[];
+}
+
+function groupCapabilities(caps: ExplorerCapability[]): CapabilityGroup[] {
+  const creates: ExplorerCapability[] = [];
+  const edits: ExplorerCapability[] = [];
+  const diagramOps: ExplorerCapability[] = [];
+  const clipboard: ExplorerCapability[] = [];
+
+  for (const c of caps) {
+    if (c.kind === 'createElement' || c.kind === 'createRelationship' || c.kind === 'createDiagram') {
+      creates.push(c);
+    } else if (c.kind === 'copy' || c.kind === 'paste' || c.kind === 'duplicate') {
+      clipboard.push(c);
+    } else if (c.kind === 'addToDiagram' || c.kind === 'openSpecification') {
+      diagramOps.push(c);
+    } else {
+      edits.push(c);
+    }
+  }
+
+  const groups: CapabilityGroup[] = [];
+  if (creates.length) groups.push({ title: 'New', items: creates });
+  if (diagramOps.length) groups.push({ title: 'Diagram', items: diagramOps });
+  if (clipboard.length) groups.push({ title: 'Clipboard', items: clipboard });
+  if (edits.length) groups.push({ title: 'Edit', items: edits });
+
+  return groups;
 }
 
 function getCapabilityIcon(kind: CapabilityKind): React.ReactElement {
@@ -62,21 +82,21 @@ function getCapabilityIcon(kind: CapabilityKind): React.ReactElement {
     case 'createRelationship':
       return <Link2 {...iconProps} className="text-amber-400" />;
     case 'rename':
-      return <Edit2 {...iconProps} className="text-blue-400" />;
+      return <Edit2 {...iconProps} className="text-[var(--diagram-node-selected)]" />;
     case 'delete':
-      return <Trash2 {...iconProps} className="text-red-400" />;
+      return <Trash2 {...iconProps} className="text-[var(--status-danger)]" />;
     case 'copy':
-      return <Copy {...iconProps} className="text-slate-400" />;
+      return <Copy {...iconProps} className="text-[var(--text-muted)]" />;
     case 'paste':
-      return <ClipboardPaste {...iconProps} className="text-slate-400" />;
+      return <ClipboardPaste {...iconProps} className="text-[var(--text-muted)]" />;
     case 'duplicate':
-      return <CopyPlus {...iconProps} className="text-slate-400" />;
+      return <CopyPlus {...iconProps} className="text-[var(--text-muted)]" />;
     case 'addToDiagram':
       return <Plus {...iconProps} className="text-indigo-400" />;
     case 'openSpecification':
       return <ExternalLink {...iconProps} className="text-violet-400" />;
     default:
-      return <Check {...iconProps} className="text-slate-400" />;
+      return <Check {...iconProps} className="text-[var(--text-muted)]" />;
   }
 }
 
@@ -98,75 +118,47 @@ function getCapabilityShortcut(kind: CapabilityKind): string | undefined {
 }
 
 export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
-  x,
-  y,
   targetNode,
   capabilities,
-  onSelectCapability,
+  anchorPosition,
+  x,
+  y,
   onClose,
-  filterText: initialFilter = '',
+  onSelectCapability,
   className = '',
 }) => {
+  const anchorX = anchorPosition?.x ?? x ?? 0;
+  const anchorY = anchorPosition?.y ?? y ?? 0;
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [filterQuery, setFilterQuery] = useState(initialFilter);
+  const [filterQuery, setFilterQuery] = useState('');
   const [focusedIndex, setFocusedIndex] = useState(0);
 
-  // Filter capabilities
-  const filteredCapabilities = useMemo(
-    () => filterMenuCapabilities(capabilities, filterQuery),
-    [capabilities, filterQuery]
-  );
+  const filteredCapabilities = filterMenuCapabilities(capabilities, filterQuery);
 
-  // Group capabilities by category
-  const groupedCapabilities = useMemo(() => {
-    const groups: { title: string; items: ExplorerCapability[] }[] = [];
-    const elements = filteredCapabilities.filter(c => c.kind === 'createElement');
-    const diagrams = filteredCapabilities.filter(c => c.kind === 'createDiagram');
-    const relationships = filteredCapabilities.filter(c => c.kind === 'createRelationship');
-    const edits = filteredCapabilities.filter(c =>
-      ['rename', 'duplicate', 'delete'].includes(c.kind)
-    );
-    const clipboards = filteredCapabilities.filter(c => ['copy', 'paste'].includes(c.kind));
-    const views = filteredCapabilities.filter(c =>
-      ['addToDiagram', 'openSpecification', 'reveal'].includes(c.kind)
-    );
+  const groupedCapabilities = groupCapabilities(filteredCapabilities);
 
-    if (elements.length > 0) groups.push({ title: 'New Element', items: elements });
-    if (diagrams.length > 0) groups.push({ title: 'New Diagram', items: diagrams });
-    if (relationships.length > 0) groups.push({ title: 'Relationships', items: relationships });
-    if (edits.length > 0) groups.push({ title: 'Edit', items: edits });
-    if (clipboards.length > 0) groups.push({ title: 'Clipboard', items: clipboards });
-    if (views.length > 0) groups.push({ title: 'View & Context', items: views });
-
-    return groups;
-  }, [filteredCapabilities]);
-
-  // Close on click outside or Escape
+  // Close on outside click or escape
   useEffect(() => {
     const handlePointerDown = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        e.preventDefault();
         onClose();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setFocusedIndex(prev => (prev + 1) % Math.max(1, filteredCapabilities.length));
+        setFocusedIndex(prev => Math.min(prev + 1, filteredCapabilities.length - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setFocusedIndex(prev =>
-          prev === 0 ? filteredCapabilities.length - 1 : prev - 1
-        );
+        setFocusedIndex(prev => Math.max(prev - 1, 0));
       } else if (e.key === 'Enter') {
-        const item = filteredCapabilities[focusedIndex];
-        if (item && item.enabled) {
-          e.preventDefault();
-          onSelectCapability(item);
+        e.preventDefault();
+        const cap = filteredCapabilities[focusedIndex];
+        if (cap && cap.enabled) {
+          onSelectCapability(cap);
           onClose();
         }
       }
@@ -180,13 +172,35 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
     };
   }, [onClose, filteredCapabilities, focusedIndex, onSelectCapability]);
 
-  // Adjust positioning to stay within viewport
-  const positionStyle: React.CSSProperties = {
+  // Viewport clamping
+  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({
     position: 'fixed',
-    left: Math.max(8, Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 1000) - 260)),
-    top: Math.max(8, Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 340)),
+    left: anchorX,
+    top: anchorY,
     zIndex: 9999,
-  };
+  });
+
+  useEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      let left = anchorX;
+      let top = anchorY;
+
+      if (left + rect.width > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - rect.width - 8);
+      }
+      if (top + rect.height > window.innerHeight - 8) {
+        top = Math.max(8, window.innerHeight - rect.height - 8);
+      }
+
+      setPositionStyle({
+        position: 'fixed',
+        left,
+        top,
+        zIndex: 9999,
+      });
+    }
+  }, [anchorX, anchorY]);
 
   return (
     <div
@@ -194,20 +208,20 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
       role="menu"
       aria-label={`Context menu for ${targetNode.label}`}
       style={positionStyle}
-      className={`model-explorer-context-menu w-64 bg-slate-900 border border-slate-700/80 rounded-md shadow-2xl overflow-hidden flex flex-col text-xs select-none backdrop-blur-sm ${className}`}
+      className={`model-explorer-context-menu w-64 bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-md shadow-2xl overflow-hidden flex flex-col text-xs select-none backdrop-blur-sm ${className}`}
     >
       {/* Menu Header with node label */}
-      <div className="px-3 py-2 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
-        <span className="font-semibold text-slate-200 truncate">{targetNode.label}</span>
-        <span className="text-[10px] text-slate-400 font-mono uppercase bg-slate-800 px-1 py-0.5 rounded">
+      <div className="px-3 py-2 bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center justify-between">
+        <span className="font-semibold text-[var(--text-primary)] truncate">{targetNode.label}</span>
+        <span className="text-[10px] text-[var(--text-muted)] font-mono uppercase bg-[var(--surface-raised)] border border-[var(--border-default)] px-1 py-0.5 rounded">
           {targetNode.kind}
         </span>
       </div>
 
       {/* Filter search if many capabilities */}
       {capabilities.length > 5 && (
-        <div className="px-2 py-1.5 border-b border-slate-800 bg-slate-950/40 flex items-center gap-1.5">
-          <Search size={12} className="text-slate-400 shrink-0" />
+        <div className="px-2 py-1.5 border-b border-[var(--border-default)] bg-[var(--surface-canvas)] flex items-center gap-1.5">
+          <Search size={12} className="text-[var(--text-muted)] shrink-0" />
           <input
             ref={searchInputRef}
             type="text"
@@ -217,22 +231,22 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
               setFocusedIndex(0);
             }}
             placeholder="Search action..."
-            className="w-full bg-transparent text-slate-200 placeholder:text-slate-500 text-[11px] outline-none"
+            className="w-full bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] text-[11px] outline-none"
             autoFocus
           />
         </div>
       )}
 
       {/* Action items list */}
-      <div className="max-h-72 overflow-y-auto py-1 divide-y divide-slate-800/60">
+      <div className="max-h-72 overflow-y-auto py-1 divide-y divide-[var(--border-default)]">
         {groupedCapabilities.length === 0 ? (
-          <div className="px-3 py-3 text-center text-slate-400 text-xs">
+          <div className="px-3 py-3 text-center text-[var(--text-muted)] text-xs">
             No matching actions
           </div>
         ) : (
           groupedCapabilities.map(group => (
             <div key={group.title} className="py-1">
-              <div className="px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <div className="px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                 {group.title}
               </div>
               {group.items.map(cap => {
@@ -257,10 +271,10 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
                     title={cap.reason || cap.label}
                     className={`w-full flex items-center justify-between px-2.5 py-1 text-left transition-colors ${
                       !cap.enabled
-                        ? 'opacity-40 cursor-not-allowed text-slate-400'
+                        ? 'opacity-40 cursor-not-allowed text-[var(--text-muted)]'
                         : isFocused
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-200 hover:bg-white/10'
+                        ? 'bg-[var(--diagram-node-selected)] text-white'
+                        : 'text-[var(--text-primary)] hover:bg-[var(--surface-raised)]'
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -270,7 +284,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
                     {shortcut && (
                       <span
                         className={`text-[10px] font-mono ml-2 shrink-0 ${
-                          isFocused ? 'text-blue-200' : 'text-slate-400'
+                          isFocused ? 'text-white/80' : 'text-[var(--text-muted)]'
                         }`}
                       >
                         {shortcut}

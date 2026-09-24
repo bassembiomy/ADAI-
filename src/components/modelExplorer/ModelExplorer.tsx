@@ -267,7 +267,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`model-explorer-container flex flex-col h-full w-full bg-slate-900 border-r border-slate-800 ${className}`}
+      className={`model-explorer-container flex flex-col h-full w-full bg-[var(--surface-panel)] border-r border-[var(--border-default)] ${className}`}
       onKeyDown={(e) => {
         if (e.key === 'F2') {
           const focusedRow = visibleRows[focusedIndex];
@@ -292,7 +292,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
 
       <div className="flex-1 min-h-0 w-full relative">
         {visibleRows.length === 0 ? (
-          <div className="p-4 text-center text-xs text-slate-500">
+          <div className="p-4 text-center text-xs text-[var(--text-muted)]">
             {searchQuery
               ? `No model elements matching "${searchQuery}"`
               : viewMode === 'diagramContext'

@@ -1,19 +1,19 @@
 import React from 'react';
-import { AlertTriangle, X, Check, ShieldAlert, ArrowRight } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, Check, X } from 'lucide-react';
 import type { ExplorerImpact } from '../../features/modelExplorer/modelExplorerTypes';
 
 export interface MoveImpactDialogProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   impact: ExplorerImpact;
   impactHash: string;
-  onConfirm: (confirmedImpactHash: string) => void;
+  onConfirm: (hash: string) => void;
   onCancel: () => void;
   operationTitle?: string;
   className?: string;
 }
 
 export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
-  isOpen,
+  isOpen = true,
   impact,
   impactHash,
   onConfirm,
@@ -21,9 +21,8 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
   operationTitle = 'Confirm Structural Move',
   className = '',
 }) => {
-  if (!isOpen) return null;
-
-  const hasInvalidations = impact.invalidated && impact.invalidated.length > 0;
+  if (isOpen === false) return null;
+  const hasInvalidations = impact.invalidated.length > 0;
 
   return (
     <div
@@ -33,13 +32,13 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
     >
       <div
-        className={`bg-slate-900 border border-slate-700 rounded-lg shadow-2xl w-full max-w-lg overflow-hidden flex flex-col text-xs text-slate-200 ${className}`}
+        className={`bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg shadow-2xl w-full max-w-lg overflow-hidden flex flex-col text-xs text-[var(--text-primary)] ${className}`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-slate-800">
+        <div className="flex items-center justify-between px-4 py-3 bg-[var(--surface-canvas)] border-b border-[var(--border-default)]">
           <div className="flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-400" />
-            <span id="move-impact-dialog-title" className="font-semibold text-sm text-slate-100">
+            <span id="move-impact-dialog-title" className="font-semibold text-sm text-[var(--text-primary)]">
               {operationTitle}
             </span>
           </div>
@@ -47,7 +46,7 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
             type="button"
             aria-label="Close"
             onClick={onCancel}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors"
           >
             <X size={15} />
           </button>
@@ -55,10 +54,10 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
 
         {/* Impact Warning Banner */}
         <div className="p-4 flex flex-col gap-3">
-          <div className="flex items-start gap-2.5 p-3 rounded bg-amber-500/10 border border-amber-500/30 text-amber-200">
-            <ShieldAlert size={16} className="text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-3 rounded bg-[var(--surface-raised)] border border-[var(--status-warning)] text-[var(--status-warning)]">
+            <ShieldAlert size={16} className="text-[var(--status-warning)] shrink-0 mt-0.5" />
             <div className="flex flex-col gap-1 text-[11px] leading-relaxed">
-              <span className="font-semibold text-amber-100">
+              <span className="font-semibold">
                 Structural relocation requires confirmation
               </span>
               <span>
@@ -71,13 +70,13 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
           {/* Invalidations */}
           {hasInvalidations && (
             <div className="flex flex-col gap-1.5">
-              <span className="font-medium text-red-300 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span className="font-medium text-[var(--status-danger)] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-danger)]" />
                 Invalidated Transitions & Relationships ({impact.invalidated.length})
               </span>
-              <div className="max-h-28 overflow-y-auto bg-slate-950/80 rounded border border-red-500/30 p-2 divide-y divide-red-500/20">
-                {impact.invalidated.map((inv, idx) => (
-                  <div key={idx} className="py-1 text-[11px] text-red-200/90 font-mono">
+              <div className="max-h-28 overflow-y-auto bg-[var(--surface-canvas)] rounded border border-[var(--status-danger)] p-2 divide-y divide-[var(--border-default)]">
+                {impact.invalidated.map((inv: string, idx: number) => (
+                  <div key={idx} className="py-1 text-[11px] text-[var(--status-danger)] font-mono">
                     {inv}
                   </div>
                 ))}
@@ -88,10 +87,10 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
           {/* Descendants affected */}
           {impact.descendants.length > 0 && (
             <div className="flex flex-col gap-1">
-              <span className="font-medium text-slate-300">
+              <span className="font-medium text-[var(--text-secondary)]">
                 Included Descendant Elements ({impact.descendants.length})
               </span>
-              <div className="max-h-20 overflow-y-auto bg-slate-950/50 rounded border border-slate-800 p-2 text-slate-400 text-[11px] font-mono">
+              <div className="max-h-20 overflow-y-auto bg-[var(--surface-canvas)] rounded border border-[var(--border-default)] p-2 text-[var(--text-muted)] text-[11px] font-mono">
                 {impact.descendants.join(', ')}
               </div>
             </div>
@@ -100,35 +99,35 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
           {/* Presentations affected */}
           {impact.presentations.length > 0 && (
             <div className="flex flex-col gap-1">
-              <span className="font-medium text-slate-300">
+              <span className="font-medium text-[var(--text-secondary)]">
                 Affected Diagram Presentations ({impact.presentations.length})
               </span>
-              <div className="max-h-16 overflow-y-auto bg-slate-950/50 rounded border border-slate-800 p-2 text-slate-400 text-[11px] font-mono">
+              <div className="max-h-16 overflow-y-auto bg-[var(--surface-canvas)] rounded border border-[var(--border-default)] p-2 text-[var(--text-muted)] text-[11px] font-mono">
                 {impact.presentations.join(', ')}
               </div>
             </div>
           )}
 
           {/* Confirmation Hash Display */}
-          <div className="flex items-center justify-between p-2 rounded bg-slate-950 border border-slate-800 text-[11px]">
-            <span className="text-slate-400">Impact Verification Hash:</span>
-            <span className="font-mono text-blue-400 select-all">{impactHash}</span>
+          <div className="flex items-center justify-between p-2 rounded bg-[var(--surface-canvas)] border border-[var(--border-default)] text-[11px]">
+            <span className="text-[var(--text-muted)]">Impact Verification Hash:</span>
+            <span className="font-mono text-[var(--diagram-node-selected)] select-all">{impactHash}</span>
           </div>
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-end gap-2 px-4 py-3 bg-slate-950 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-2 px-4 py-3 bg-[var(--surface-canvas)] border-t border-[var(--border-default)]">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3.5 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+            className="px-3.5 py-1.5 rounded bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] hover:bg-[var(--surface-canvas)] transition-colors"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => onConfirm(impactHash)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-amber-600 text-white font-medium hover:bg-amber-500 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-[var(--status-warning)] text-white font-medium hover:opacity-90 transition-colors shadow-sm"
           >
             <Check size={14} />
             <span>Confirm</span>
