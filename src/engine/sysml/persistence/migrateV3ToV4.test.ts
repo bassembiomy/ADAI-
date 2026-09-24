@@ -3,7 +3,16 @@ import {
   migrateV3ToV4,
   serializeRepositoryV4,
   deserializeRepositoryV4,
+  elementsOfKind,
+  presentationsForElement,
 } from './migrateV3ToV4';
+import { serializeRepository, loadRepository } from '../persistence';
+import {
+  createEmptyRepositoryV4,
+  addSemanticElementV4,
+  type Block,
+  type DiagramPresentation,
+} from '../domain';
 import { createEmptyRepository, type SysmlRepository } from '../model';
 
 describe('Schema v4 Persistence and Migration (Task 13)', () => {
@@ -116,5 +125,44 @@ describe('Schema v4 Persistence and Migration (Task 13)', () => {
     expect(reloaded.schemaVersion).toBe(4);
     expect(reloaded.elements['blk-sensor'].name).toBe('RadarSensor');
     expect(reloaded.elements['blk-sensor'].id).toBe('blk-sensor');
+  });
+
+  it('round-trips one Block with two presentations without duplication', () => {
+    let repository = createEmptyRepositoryV4();
+    const motor: Block = {
+      id: 'motor',
+      name: 'BLDCMotor',
+      metaclass: 'Block',
+      namespace: [],
+      ownerId: 'pkg-root',
+      isAbstract: false,
+      isLeaf: false,
+      ownedPropertyIds: [],
+      ownedPortIds: [],
+      ownedOperationIds: [],
+      ownedConstraintIds: [],
+    };
+    addSemanticElementV4(repository, motor);
+
+    const pres1: DiagramPresentation = {
+      id: 'pres-1',
+      diagramId: 'bdd-1',
+      semanticElementId: 'motor',
+      bounds: { x: 0, y: 0, width: 100, height: 100 },
+    };
+    const pres2: DiagramPresentation = {
+      id: 'pres-2',
+      diagramId: 'ibd-1',
+      semanticElementId: 'motor',
+      bounds: { x: 10, y: 10, width: 100, height: 100 },
+    };
+    repository.presentations['pres-1'] = pres1;
+    repository.presentations['pres-2'] = pres2;
+    repository.indexes.byDiagram['bdd-1'] = ['pres-1'];
+    repository.indexes.byDiagram['ibd-1'] = ['pres-2'];
+
+    const loaded = loadRepository(serializeRepository(repository));
+    expect(elementsOfKind(loaded, 'Block')).toHaveLength(1);
+    expect(presentationsForElement(loaded, 'motor')).toHaveLength(2);
   });
 });

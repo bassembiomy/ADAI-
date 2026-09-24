@@ -20,6 +20,8 @@ import {
   quarantineUnresolvedEndpoints,
   type InterchangeReport,
 } from './interchangeReport';
+import { elementsOfKind, presentationsForElement, serializeRepositoryV4 } from './persistence/migrateV3ToV4';
+export { elementsOfKind, presentationsForElement };
 
 interface PersistenceEnvelope {
   format: 'ADIA-SysML';
@@ -80,7 +82,10 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
   };
 }
 
-export function serializeRepository(repository: SysmlRepository): string {
+export function serializeRepository(repository: SysmlRepository | any): string {
+  if (repository && (repository as any).schemaVersion === 4) {
+    return serializeRepositoryV4(repository);
+  }
   const canonicalRepo = canonicalizeRepository(repository);
   const canonical = stableStringify(canonicalRepo);
   const envelope: PersistenceEnvelope = {
@@ -133,9 +138,41 @@ export function loadRepository(input: string | unknown): LoadRepositoryResult {
     return { repository: createEmptyRepository(), diagnostics: [diag('PERSISTENCE_PARSE_ERROR', `Invalid JSON: ${String(cause)}`)], valid: false, migrated: false, interchangeReport: migrationReport };
   }
 
+  if (raw && typeof raw === 'object') {
+    if ((raw as any).schemaVersion === 4) {
+      const res: any = {
+        repository: raw,
+        elements: (raw as any).elements,
+        presentations: (raw as any).presentations,
+        diagrams: (raw as any).diagrams,
+        relationships: (raw as any).relationships,
+        diagnostics: [],
+        valid: true,
+        migrated: false,
+        interchangeReport: migrationReport,
+      };
+      return res;
+    }
+  }
+
   let migrated = false;
   let repository: SysmlRepository;
   if (isEnvelope(raw)) {
+    if ((raw as any).schemaVersion === 4 || (raw.repository as any)?.schemaVersion === 4) {
+      const v4 = (raw.repository as any)?.schemaVersion === 4 ? raw.repository : raw;
+      const res: any = {
+        repository: v4,
+        elements: v4.elements,
+        presentations: v4.presentations,
+        diagrams: v4.diagrams,
+        relationships: v4.relationships,
+        diagnostics: [],
+        valid: true,
+        migrated: false,
+        interchangeReport: migrationReport,
+      };
+      return res;
+    }
     const rawRepo = raw.repository;
     const checksumMatches =
       hash(stableStringify(rawRepo)) === raw.checksum ||

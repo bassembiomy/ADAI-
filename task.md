@@ -47,11 +47,11 @@
   - [x] Step 3: Implement controller commands and type resolution
   - [x] Step 4: Replace affected direct property/port array mutations in App.tsx
   - [x] Step 5: Verify and commit
-- [ ] Task 9: Persistence, Migration, and Read-Only Legacy Projections
-  - [ ] Step 1: Write save/load and migration tests
-  - [ ] Step 2: Verify RED
-  - [ ] Step 3: Implement presentation migration and projection-only adapters
-  - [ ] Step 4: Verify and commit
+- [x] Task 9: Persistence, Migration, and Read-Only Legacy Projections
+  - [x] Step 1: Write save/load and migration tests
+  - [x] Step 2: Verify RED
+  - [x] Step 3: Implement presentation migration and projection-only adapters
+  - [x] Step 4: Verify and commit
 - [ ] Task 10: Release Gates, Evidence, and Compliance Status
   - [ ] Step 1: Add the repository-first release scenarios
   - [ ] Step 2: Verify the new tests fail before final wiring
