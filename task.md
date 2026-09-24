@@ -39,14 +39,14 @@
   - [x] Step 5: Ensure AI surfaces CreateNewType through normal approval and command handling
   - [x] Step 6: Run resolver, creation-rule, AI-adapter, and persistence tests
   - [x] Step 7: Commit `feat(sysml): reject silent semantic type creation`
-- [ ] Task 6: Repository-owned presentations
-  - [ ] Step 1: Test one Block displayed on two diagrams: one definition, two presentations
-  - [ ] Step 2: Test RemovePresentation preserves semantics and DeleteModelElement requires impact handling
-  - [ ] Step 3: Move coordinate and membership side maps into typed presentation collections
-  - [ ] Step 4: Add deterministic v3-to-v4 migration for coordinates and diagram membership
-  - [ ] Step 5: Keep legacy getters as read-only adapters until React migration
-  - [ ] Step 6: Run presentation, persistence, and normalized-store tests
-  - [ ] Step 7: Commit `feat(sysml): persist typed diagram presentations`
+- [x] Task 6: Repository-owned presentations
+  - [x] Step 1: Test one Block displayed on two diagrams: one definition, two presentations
+  - [x] Step 2: Test RemovePresentation preserves semantics and DeleteModelElement requires impact handling
+  - [x] Step 3: Move coordinate and membership side maps into typed presentation collections
+  - [x] Step 4: Add deterministic v3-to-v4 migration for coordinates and diagram membership
+  - [x] Step 5: Keep legacy getters as read-only adapters until React migration
+  - [x] Step 6: Run presentation, persistence, and normalized-store tests
+  - [x] Step 7: Commit `feat(sysml): persist typed diagram presentations`
 - [ ] Task 7: Command and transaction boundary
   - [ ] Step 1: Test create, update, rename, owner move, relationship creation, deletion impact, undo, redo, and rejected-command atomicity
   - [ ] Step 2: Move gateway switch branches into focused handlers without breaking its public API
