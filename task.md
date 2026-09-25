@@ -13,12 +13,12 @@
   - [x] Step 4: Implement `createAndPresent` as one gateway transaction
   - [x] Step 5: Run gateway and undo tests
   - [x] Step 6: Commit
-- [ ] Task 3: Build Diagram Creation Intents from Canonical Factories
-  - [ ] Step 1: Write failing creation-intent tests
-  - [ ] Step 2: Run the test and verify the module is missing
-  - [ ] Step 3: Implement the pure builder
-  - [ ] Step 4: Run creation tests
-  - [ ] Step 5: Commit
+- [x] Task 3: Build Diagram Creation Intents from Canonical Factories
+  - [x] Step 1: Write failing creation-intent tests
+  - [x] Step 2: Run the test and verify the module is missing
+  - [x] Step 3: Implement the pure builder
+  - [x] Step 4: Run creation tests
+  - [x] Step 5: Commit
 - [ ] Task 4: Route Diagram Palette Creation Through the Repository
   - [ ] Step 1: Write a failing repository-first application projection test
   - [ ] Step 2: Run the new test and verify it fails

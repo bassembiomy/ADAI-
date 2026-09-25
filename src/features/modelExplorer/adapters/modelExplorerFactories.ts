@@ -53,10 +53,11 @@ export function createPackage(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): PackageDefinition {
+  const chosenId = options.id ?? generateId('pkg');
   const outcome = createSemanticElement(
     {
       metaclass: 'Package',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
     },
@@ -64,7 +65,7 @@ export function createPackage(options: {
   );
   const el = outcome.ok ? outcome.element : null;
   return {
-    id: el?.id ?? options.id ?? generateId('pkg'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'Package',
     kind: 'package',
     namespace: el?.namespace ?? [],
@@ -78,10 +79,11 @@ export function createBlock(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): BlockDefinition {
+  const chosenId = options.id ?? generateId('blk');
   const outcome = createSemanticElement(
     {
       metaclass: 'Block',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
     },
@@ -89,7 +91,7 @@ export function createBlock(options: {
   );
   const el = outcome.ok ? (outcome.element as Block) : null;
   return {
-    id: el?.id ?? options.id ?? generateId('blk'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'Block',
     kind: 'block',
     namespace: el?.namespace ?? [],
@@ -111,10 +113,11 @@ export function createValueType(options: {
   unit?: string;
   dimension?: string;
 }): ValueTypeDefinition {
+  const chosenId = options.id ?? generateId('vt');
   const outcome = createSemanticElement(
     {
       metaclass: 'ValueType',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
     },
@@ -122,7 +125,7 @@ export function createValueType(options: {
   );
   const el = outcome.ok ? (outcome.element as ValueType) : null;
   return {
-    id: el?.id ?? options.id ?? generateId('vt'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'ValueType',
     kind: 'valueType',
     namespace: el?.namespace ?? [],
@@ -138,10 +141,11 @@ export function createInterface(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): InterfaceDefinition {
+  const chosenId = options.id ?? generateId('if');
   const outcome = createSemanticElement(
     {
       metaclass: 'InterfaceBlock',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
     },
@@ -149,7 +153,7 @@ export function createInterface(options: {
   );
   const el = outcome.ok ? (outcome.element as InterfaceBlock) : null;
   return {
-    id: el?.id ?? options.id ?? generateId('if'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'Interface',
     kind: 'interface',
     namespace: el?.namespace ?? [],
@@ -165,10 +169,11 @@ export function createRequirement(options: {
   existingNames?: Iterable<string>;
   text?: string;
 }): RequirementDefinition {
+  const chosenId = options.id ?? generateId('req');
   const outcome = createSemanticElement(
     {
       metaclass: 'Requirement',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
       text: options.text,
@@ -177,7 +182,7 @@ export function createRequirement(options: {
   );
   const el = outcome.ok ? (outcome.element as Requirement) : null;
   return {
-    id: el?.id ?? options.id ?? generateId('req'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'Requirement',
     kind: 'requirement',
     namespace: el?.namespace ?? [],
@@ -197,10 +202,11 @@ export function createVerificationCase(options: {
   ownerId: string;
   existingNames?: Iterable<string>;
 }): VerificationCase {
+  const chosenId = options.id ?? generateId('vc');
   const outcome = createSemanticElement(
     {
       metaclass: 'TestCase',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
     },
@@ -208,7 +214,7 @@ export function createVerificationCase(options: {
   );
   const el = outcome.ok ? (outcome.element as TestCase) : null;
   return {
-    id: el?.id ?? options.id ?? generateId('vc'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'VerificationCase',
     kind: 'verificationCase',
     namespace: el?.namespace ?? [],
@@ -223,10 +229,11 @@ export function createUseCase(options: {
   name?: string;
   ownerId: string;
 }): UseCaseDefinition {
+  const chosenId = options.id ?? generateId('uc');
   const outcome = createSemanticElement(
     {
       metaclass: 'UseCase',
-      id: options.id,
+      id: chosenId,
       name: options.name,
       ownerId: options.ownerId,
     },
@@ -234,7 +241,7 @@ export function createUseCase(options: {
   );
   const el = outcome.ok ? (outcome.element as UseCase) : null;
   return {
-    id: el?.id ?? options.id ?? generateId('use-case'),
+    id: el?.id ?? chosenId,
     name: el?.name ?? options.name ?? 'Use Case',
     kind: 'useCase',
     namespace: el?.namespace ?? [],
