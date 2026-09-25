@@ -170,6 +170,7 @@ export interface AppModelExplorerProps {
   parts: PartData[];
   externalModels?: ExternalModelDescriptor[];
   canonicalSysmlRepository?: SysmlRepository;
+  diagramPresentations?: Record<string, { elementIds: string[] }>;
   selectedIds: string[];
   onSelect: (id: string, multiSelect?: boolean) => void;
   onSelectMultiple?: (ids: string[]) => void;
@@ -202,6 +203,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   parts,
   externalModels = [],
   canonicalSysmlRepository,
+  diagramPresentations = {},
   selectedIds,
   onSelect,
   onSelectMultiple,
@@ -318,15 +320,16 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     const state: SysmlGatewayState = {
       repository: repo,
       history: createHistory(repo),
-      store: fromRepository(repo),
+      store: fromRepository(repo, {}, diagramPresentations),
       coordinates: {},
+      diagramPresentations,
     };
 
     return createSysmlExplorerAdapter({
       getState: () => state,
       executeCommand: onExecuteSysmlCommand || ((cmd) => executeSysmlCommand(state, cmd)),
     });
-  }, [canonicalSysmlRepository, blocks, parts, onExecuteSysmlCommand]);
+  }, [canonicalSysmlRepository, blocks, parts, diagramPresentations, onExecuteSysmlCommand]);
 
   const activeAdapter = isStateMachine ? smAdapter : sysmlAdapter;
 

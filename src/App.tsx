@@ -478,6 +478,7 @@ const HierarchyTree: React.FC<any> = (props) => (
     parts={props.parts}
     externalModels={props.externalModels}
     canonicalSysmlRepository={props.canonicalSysmlRepository}
+    diagramPresentations={props.diagramPresentations}
     selectedIds={props.selectedIds}
     onSelect={props.onSelect}
     onDoubleClick={props.onDoubleClick}
@@ -16031,6 +16032,7 @@ const ADIA = () => {
                   diagramMode={diagramMode}
                   blocks={blocks}
                   parts={parts}
+                  diagramPresentations={sysmlDiagramPresentations}
                   externalModels={hierarchyExternalModels}
                   canonicalSysmlRepository={canonicalSysmlRepository}
                   onSelect={(id: string) => setSelectedIds([id])}
@@ -16053,7 +16055,7 @@ const ADIA = () => {
                     const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
                     const presented = diagramMode === 'statemachine'
                       ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
-                      : diagramPresentations[contextId]?.elementIds ?? [];
+                      : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
                     return {
                       diagramId: contextId,
                       name: contextId,
