@@ -98,8 +98,14 @@ test.describe('Cameo-style repository presentation and tree workflows', () => {
     await expect(partTreeNode).toHaveCount(1);
     const partId = await partTreeNode.getAttribute('data-semantic-id');
     if (!partId) throw new Error('Created Part Property is missing its semantic identity');
+    const partName = (await partTreeNode.textContent())?.trim();
+    if (!partName) throw new Error('Created Part Property is missing its repository name');
 
+    // On a BDD the same semantic PartProperty is an owned feature row of its
+    // Block, not a second standalone part box.
     await filterTree(page, '');
+    await expect(vehicleCanvasNode.getByText(new RegExp(partName))).toBeVisible();
+
     await vehicleCanvasNode.dblclick();
     await expect(page.locator('#adia-diagram-canvas').getByText(/ibd \[Block\]/)).toBeVisible();
     await filterTree(page, 'part');
@@ -117,6 +123,40 @@ test.describe('Cameo-style repository presentation and tree workflows', () => {
     expect(afterDrag.x - beforeDrag.x).toBeLessThanOrEqual(45);
     expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
     expect(afterDrag.y - beforeDrag.y).toBeLessThanOrEqual(45);
+  });
+
+  test('adds and moves a repository Package as a Package presentation, not a Block', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+
+    const model = page.locator('.model-tree-row[data-semantic-id="model"]');
+    await model.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package', exact: true }).first().click();
+
+    await filterTree(page, 'Package');
+    const packageTreeNode = page.locator('.model-tree-row[data-kind="package"][data-semantic-id]:not([data-semantic-id="model"])');
+    await expect(packageTreeNode).toHaveCount(1);
+    const packageId = await packageTreeNode.getAttribute('data-semantic-id');
+    if (!packageId) throw new Error('Created Package is missing its semantic identity');
+
+    await packageTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    const packageCanvasNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${packageId}"][data-presentation-kind="package"]`);
+    await expect(packageCanvasNode).toBeVisible();
+    await expect(packageCanvasNode.getByText('«package»', { exact: true })).toBeVisible();
+
+    const beforeDrag = await packageCanvasNode.boundingBox();
+    if (!beforeDrag) throw new Error('Package presentation has no browser bounds before drag');
+    await movePresentation(page, packageCanvasNode, 60, 40);
+    const afterDrag = await packageCanvasNode.boundingBox();
+    if (!afterDrag) throw new Error('Package presentation has no browser bounds after drag');
+    expect(afterDrag.x - beforeDrag.x).toBeGreaterThanOrEqual(55);
+    expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
+
+    // Canvas creation traverses the same repository-first command path.
+    await page.getByRole('button', { name: 'Package', exact: true }).click();
+    await expect(packageTreeNode).toHaveCount(2);
+    await expect(page.locator('#adia-diagram-canvas [data-presentation-kind="package"]')).toHaveCount(2);
   });
 
   test('one semantic Block keeps independent Requirements and BDD positions', async ({ page }) => {

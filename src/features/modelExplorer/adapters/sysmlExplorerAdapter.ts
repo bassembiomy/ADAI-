@@ -139,9 +139,11 @@ import type {
   SysmlMutationCommand,
 } from '../../../services/sysmlCommandGateway';
 import { computeImpactHash, executeSysmlCommand } from '../../../services/sysmlCommandGateway';
+import { buildCreatePartUsageCommand } from '../../../services/sysmlPropertyCommands';
 import type {
   SysmlRepository,
   SysmlRelationship,
+  BlockDefinition,
   PartUsage,
 } from '../../../engine/sysml/model';
 
@@ -161,6 +163,28 @@ export type SysmlExplorerAdapterHarness = {
   execute?: (cmd: SysmlEditorCommand) => SysmlCommandResult;
   state?: SysmlGatewayState;
 };
+
+function appendPartUsageCreationPlan(
+  commands: SysmlMutationCommand[],
+  planningRepository: SysmlRepository,
+  part: PartUsage,
+): void {
+  const plan = buildCreatePartUsageCommand(planningRepository, part);
+  const plannedCommands = plan.type === 'batch' ? plan.commands : [plan];
+  commands.push(...plannedCommands);
+  // Keep planning state in step with the still-atomic outer batch so multiple
+  // standalone PartProperties pasted into one owner accumulate safely.
+  for (const command of plannedCommands) {
+    if (command.type === 'createElement' && 'kind' in command.element && command.element.kind === 'part') {
+      planningRepository.usages[command.element.id] = command.element as PartUsage;
+    } else if (command.type === 'updateElement') {
+      const owner = planningRepository.definitions[command.elementId];
+      if (owner?.kind === 'block' && Array.isArray(command.patch.properties)) {
+        planningRepository.definitions[owner.id] = { ...owner, properties: command.patch.properties as BlockDefinition['properties'] };
+      }
+    }
+  }
+}
 
 
 function toExplorerImpact(result: SysmlCommandResult): ExplorerCommandResult['impact'] {
@@ -733,15 +757,23 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         // Diagram presentation capabilities
         if (activeDiagramId) {
           const presentation = state.diagramPresentations?.[activeDiagramId];
-          const alreadyPresented = presentation ? presentation.elementIds.includes(id) : false;
+          const diagramKind = repo.diagrams[activeDiagramId]?.diagramKind
+            ?? (activeDiagramId === 'bdd' || activeDiagramId === 'requirements' || activeDiagramId === 'rtm' || activeDiagramId === 'ibd' ? activeDiagramId : undefined);
+          const representedId = (String(kind) === 'part' && ['bdd', 'requirements', 'rtm'].includes(diagramKind ?? ''))
+            ? el?.ownerId ?? id
+            : id;
+          const alreadyPresented = presentation ? presentation.elementIds.includes(representedId) : false;
+          const unsupportedPackageView = kind === 'package' && !['bdd', 'requirements'].includes(diagramKind ?? '');
           caps.push({
             id: 'addToDiagram',
             kind: 'addToDiagram',
             label: 'Add to Diagram',
-            enabled: !alreadyPresented && !isRoot,
-            reason: alreadyPresented ? 'Element is already presented on the active diagram' : undefined,
+            enabled: !alreadyPresented && !isRoot && !unsupportedPackageView,
+            reason: unsupportedPackageView
+              ? 'Package symbols are supported on Block Definition and Requirement diagrams.'
+              : alreadyPresented ? 'Element is already presented on the active diagram' : undefined,
           });
-          if (alreadyPresented && !isRoot) {
+          if (alreadyPresented && !isRoot && representedId === id) {
             caps.push({
               id: 'removeFromDiagram',
               kind: 'removeFromDiagram',
@@ -932,6 +964,16 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         }
 
         case 'addToDiagram': {
+          const diagramKind = repo.diagrams[command.diagramId]?.diagramKind
+            ?? (command.diagramId === 'bdd' || command.diagramId === 'requirements' || command.diagramId === 'rtm' || command.diagramId === 'ibd' ? command.diagramId : undefined);
+          const unsupportedPackageId = command.elementIds.find(id => Boolean(repo.packages[id]) && !['bdd', 'requirements'].includes(diagramKind ?? ''));
+          if (unsupportedPackageId) {
+            diagnostics.push({
+              code: 'INVALID_DIAGRAM_ELEMENT', severity: 'error',
+              message: 'Package symbols are supported on Block Definition and Requirement diagrams.',
+            });
+            return { committed: false, revision: repo.revision, diagnostics };
+          }
           const presentation = state.diagramPresentations?.[command.diagramId];
           if (presentation) {
             const alreadyPresent = command.elementIds.filter(id => presentation.elementIds.includes(id));
@@ -1084,7 +1126,11 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               aggregation: agg,
               existingNames,
             });
-            const result = dispatchCommand({ type: 'createElement', element: part });
+            // A SysML PartProperty is one semantic feature viewed in two ways:
+            // as an owned Block property on a BDD and as a typed usage on an IBD.
+            // Use the same atomic command as canvas creation so neither entry
+            // path can create an orphan usage or a display-only property row.
+            const result = dispatchCommand(buildCreatePartUsageCommand(repo, part));
             return toExplorerResult(result, [part.id]);
           }
 
@@ -1250,6 +1296,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           );
           const remapped = remapClipboardPayload(payload, oldId => generateId(oldId.split('-')[0] || 'copy'));
           const commands: SysmlMutationCommand[] = [];
+          const planningRepository = structuredClone(repo);
           const createdRootIds: string[] = [];
 
           for (const rootId of remapped.rootIds) {
@@ -1265,6 +1312,16 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           for (const snapshot of Object.values(remapped.snapshots)) {
             if ((snapshot as any).kind === 'diagram') {
               commands.push({ type: 'createDiagram', diagram: snapshot as any });
+            } else if ((snapshot as any).kind === 'part') {
+              const part = snapshot as PartUsage;
+              const copiedOwner = remapped.snapshots[part.ownerId] as any;
+              const ownerAlreadyCarriesProperty = copiedOwner?.kind === 'block'
+                && copiedOwner.properties?.some((property: { id: string }) => property.id === part.propertyId);
+              if (ownerAlreadyCarriesProperty) {
+                commands.push({ type: 'createElement', element: part });
+              } else {
+                appendPartUsageCreationPlan(commands, planningRepository, part);
+              }
             } else {
               commands.push({ type: 'createElement', element: snapshot as any });
             }
@@ -1284,6 +1341,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           ];
           const remapped = remapClipboardPayload(command.payload, oldId => generateId(oldId.split('-')[0] || 'paste'));
           const commands: SysmlMutationCommand[] = [];
+          const planningRepository = structuredClone(repo);
           const createdRootIds: string[] = [];
 
           for (const rootId of remapped.rootIds) {
@@ -1299,6 +1357,16 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           for (const snapshot of Object.values(remapped.snapshots)) {
             if ((snapshot as any).kind === 'diagram') {
               commands.push({ type: 'createDiagram', diagram: snapshot as any });
+            } else if ((snapshot as any).kind === 'part') {
+              const part = snapshot as PartUsage;
+              const copiedOwner = remapped.snapshots[part.ownerId] as any;
+              const ownerAlreadyCarriesProperty = copiedOwner?.kind === 'block'
+                && copiedOwner.properties?.some((property: { id: string }) => property.id === part.propertyId);
+              if (ownerAlreadyCarriesProperty) {
+                commands.push({ type: 'createElement', element: part });
+              } else {
+                appendPartUsageCreationPlan(commands, planningRepository, part);
+              }
             } else {
               commands.push({ type: 'createElement', element: snapshot as any });
             }

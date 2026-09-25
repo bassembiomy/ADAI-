@@ -1,6 +1,7 @@
 import type { SysmlRepository } from '../engine/sysml/model';
 import type { PresentationCoordinates, SysmlElement } from './sysmlCommandGateway';
 import {
+  createPackage,
   createBlock,
   createRequirement,
   createVerificationCase,
@@ -11,7 +12,7 @@ import {
  * Public normative creation kinds for SysML diagrams.
  * Note: 'TestCase' maps to persisted 'verificationCase' in SysmlRepository (ADIA_EXTENSION).
  */
-export type DiagramCreationKind = 'Block' | 'Requirement' | 'TestCase' | 'UseCase';
+export type DiagramCreationKind = 'Package' | 'Block' | 'Requirement' | 'TestCase' | 'UseCase';
 
 export interface DiagramCreationInput {
   repository: SysmlRepository;
@@ -85,7 +86,8 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
   if (!input.diagramId) return failure('DIAGRAM_NOT_FOUND', 'An active diagram is required.');
 
   const names = collectRepositoryNames(input.repository);
-  const element = input.kind === 'Block' ? createBlock({ ownerId: input.ownerId, existingNames: names })
+  const element = input.kind === 'Package' ? createPackage({ ownerId: input.ownerId, existingNames: names })
+    : input.kind === 'Block' ? createBlock({ ownerId: input.ownerId, existingNames: names })
     : input.kind === 'Requirement' ? createRequirement({ ownerId: input.ownerId, existingNames: names })
     : input.kind === 'TestCase' ? createVerificationCase({ ownerId: input.ownerId, existingNames: names })
     : createUseCase({ ownerId: input.ownerId });
@@ -97,7 +99,12 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
       type: 'createAndPresent',
       element,
       diagramId: input.diagramId,
-      presentation: { x: input.position.x, y: input.position.y, width: 150, height: 100 },
+      presentation: {
+        x: input.position.x,
+        y: input.position.y,
+        width: input.kind === 'Package' ? 220 : 150,
+        height: input.kind === 'Package' ? 140 : 100,
+      },
     },
   };
 }

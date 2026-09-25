@@ -113,7 +113,7 @@ describe('renderBddDiagram', () => {
       }] })],
       relationships: [],
     });
-    expect(html).toContain('/speed: velocity [0..*]');
+    expect(html).toContain('/speed: Velocity [0..*]');
     expect(html).toContain('{ordered,');
     expect(html).toContain('nonunique}');
     expect(html).toContain('«flow»');

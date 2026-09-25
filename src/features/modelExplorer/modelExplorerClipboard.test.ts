@@ -47,4 +47,29 @@ describe('modelExplorerClipboard', () => {
     expect(snapshots.newChild.ownerId).toBe('newRoot');
     expect(snapshots.newRoot.externalTypeId).toBe('library-block');
   });
+
+  it('remaps nested feature identities and inheritance references', () => {
+    const payload: ExplorerClipboardPayload = {
+      domain: 'sysml', rootIds: ['base', 'child'], copiedAtRevision: 1,
+      snapshots: {
+        base: {
+          id: 'base', kind: 'block', name: 'Base', ownerId: 'model', supertypeIds: [],
+          properties: [{ id: 'base-prop', name: 'motor', typeId: 'external-type' }],
+          ports: [{ id: 'base-port', name: 'power', typeId: 'external-interface' }],
+        },
+        child: {
+          id: 'child', kind: 'block', name: 'Child', ownerId: 'model', supertypeIds: ['base'],
+          properties: [{ id: 'child-prop', name: 'motor', typeId: 'external-type', redefinesId: 'base-prop', inheritedFromId: 'base-prop' }],
+          ports: [{ id: 'child-port', name: 'power', typeId: 'external-interface', inheritedFromId: 'base-port' }],
+        },
+      },
+    };
+
+    const remapped = remapClipboardPayload(payload, oldId => `new-${oldId}`);
+    const child = remapped.snapshots['new-child'] as any;
+    expect(child.supertypeIds).toEqual(['new-base']);
+    expect(child.properties[0]).toMatchObject({ id: 'new-child-prop', redefinesId: 'new-base-prop', inheritedFromId: 'new-base-prop' });
+    expect(child.ports[0]).toMatchObject({ id: 'new-child-port', inheritedFromId: 'new-base-port' });
+    expect(child.properties[0].typeId).toBe('external-type');
+  });
 });

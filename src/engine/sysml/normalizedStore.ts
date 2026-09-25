@@ -33,6 +33,7 @@ import {
 import type {
   BlockData,
   ConnectorData,
+  PackageData,
   PartData,
   RelationshipData,
   PortData,
@@ -604,6 +605,7 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
   store.revision += 1;
   const cache = entityProjectionCaches.get(store);
   if (cache) {
+    cache.packages.delete(id);
     cache.blocks.delete(id);
     cache.parts.delete(id);
     cache.connectors.delete(id);
@@ -629,7 +631,8 @@ function formatMultiplicityText(m?: Multiplicity): string {
 }
 
 interface EntityProjectionCache {
-  blocks: Map<string, { entity: SysmlEntity; coords?: PresentationCoordinates; result: BlockData }>;
+  packages: Map<string, { entity: PackageDefinition; coords?: PresentationCoordinates; result: PackageData }>;
+  blocks: Map<string, { entity: SysmlEntity; coords?: PresentationCoordinates; dependencyKey?: string; result: BlockData }>;
   parts: Map<string, { entity: SysmlUsage; coords?: PresentationCoordinates; result: PartData }>;
   relationships: Map<string, { entity: SysmlRelationship; result: RelationshipData }>;
   connectors: Map<string, { entity: ConnectorUsage; result: ConnectorData }>;
@@ -641,6 +644,7 @@ function getEntityProjectionCache(store: NormalizedSysmlStore): EntityProjection
   let cache = entityProjectionCaches.get(store);
   if (!cache) {
     cache = {
+      packages: new Map(),
       blocks: new Map(),
       parts: new Map(),
       relationships: new Map(),
@@ -660,6 +664,7 @@ export function projectNormalizedDiagram(
   store: NormalizedSysmlStore,
   diagramId?: string,
 ): LegacySysmlView {
+  const packages: PackageData[] = [];
   const blocks: BlockData[] = [];
   const parts: PartData[] = [];
   const relationships: RelationshipData[] = [];
@@ -678,11 +683,36 @@ export function projectNormalizedDiagram(
     return scoped ?? store.coordinates.get(semanticElementId);
   };
 
+  const projectPackage = (pkg: PackageDefinition) => {
+    if (pkg.id === 'model') return;
+    const coords = coordinatesFor(pkg.id);
+    const cached = entityCache.packages.get(pkg.id);
+    if (cached && cached.entity === pkg && cached.coords === coords) {
+      packages.push(cached.result);
+      return;
+    }
+    const result: PackageData = {
+      id: pkg.id,
+      name: pkg.name,
+      ownerId: pkg.ownerId,
+      namespace: pkg.namespace,
+      x: coords?.x ?? 0,
+      y: coords?.y ?? 0,
+      width: coords?.width ?? 220,
+      height: coords?.height ?? 140,
+    };
+    entityCache.packages.set(pkg.id, { entity: pkg, coords, result });
+    packages.push(result);
+  };
+
   // Helper to project a definition
   const projectDef = (def: SysmlDefinition) => {
     const coords = coordinatesFor(def.id);
+    const dependencyKey = def.kind === 'block'
+      ? def.properties.map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')
+      : undefined;
     const cached = entityCache.blocks.get(def.id);
-    if (cached && cached.entity === def && cached.coords === coords) {
+    if (cached && cached.entity === def && cached.coords === coords && cached.dependencyKey === dependencyKey) {
       blocks.push(cached.result);
       return;
     }
@@ -714,7 +744,7 @@ export function projectNormalizedDiagram(
           id: prop.id,
           name: prop.name,
           kind: prop.kind,
-          type: prop.typeId,
+          type: store.definitions.get(prop.typeId)?.name ?? prop.typeId,
           typeId: prop.typeId,
           multiplicity: formatMultiplicityText(prop.multiplicity),
           unit: (prop as any).unit,
@@ -744,7 +774,7 @@ export function projectNormalizedDiagram(
         ports: [],
       };
     }
-    entityCache.blocks.set(def.id, { entity: def, coords, result });
+    entityCache.blocks.set(def.id, { entity: def, coords, dependencyKey, result });
     blocks.push(result);
   };
 
@@ -931,6 +961,11 @@ export function projectNormalizedDiagram(
       const meta = store.indexes.byId.get(elemId);
       if (!meta) continue;
       switch (meta.collection) {
+        case 'packages': {
+          const pkg = store.packages.get(elemId);
+          if (pkg) projectPackage(pkg);
+          break;
+        }
         case 'definitions': {
           const def = store.definitions.get(elemId);
           if (def) projectDef(def);
@@ -997,6 +1032,7 @@ export function projectNormalizedDiagram(
     }
   } else {
     // FULL MODEL PATH
+    for (const pkg of store.packages.values()) projectPackage(pkg);
     for (const def of store.definitions.values()) projectDef(def);
     for (const req of store.requirements.values()) projectReq(req);
     for (const vc of store.verificationCases.values()) projectVc(vc);
@@ -1005,7 +1041,7 @@ export function projectNormalizedDiagram(
     for (const rel of store.relationships.values()) projectRel(rel);
   }
 
-  return { blocks, relationships, parts, connectors };
+  return { packages, blocks, relationships, parts, connectors };
 }
 
 const legacyViewCache = new WeakMap<

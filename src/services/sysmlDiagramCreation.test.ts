@@ -4,6 +4,7 @@ import { buildDiagramCreationCommand } from './sysmlDiagramCreation';
 
 describe('sysmlDiagramCreation', () => {
   it.each([
+    ['Package', 'package', 'pkg-'],
     ['Block', 'block', 'blk-'],
     ['Requirement', 'requirement', 'req-'],
     ['TestCase', 'verificationCase', 'vc-'],

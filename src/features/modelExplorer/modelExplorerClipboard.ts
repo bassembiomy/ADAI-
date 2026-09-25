@@ -60,6 +60,14 @@ export function remapClipboardPayload(
   for (const oldId of Object.keys(payload.snapshots)) {
     idMap.set(oldId, idGenerator(oldId));
   }
+  // Block-owned properties and ports are semantic elements with globally
+  // unique identities even though they are stored inline. Copying a Block
+  // must therefore remap those identities together with top-level entities.
+  for (const snapshot of Object.values(payload.snapshots) as Array<Record<string, any>>) {
+    for (const feature of [...(snapshot?.properties ?? []), ...(snapshot?.ports ?? [])]) {
+      if (feature?.id && !idMap.has(feature.id)) idMap.set(feature.id, idGenerator(feature.id));
+    }
+  }
 
   const remappedSnapshots: Record<string, any> = {};
 
@@ -74,6 +82,18 @@ export function remapClipboardPayload(
     }
     if (cloned.typeId && idMap.has(cloned.typeId)) {
       cloned.typeId = idMap.get(cloned.typeId);
+    }
+    if (cloned.propertyId && idMap.has(cloned.propertyId)) {
+      cloned.propertyId = idMap.get(cloned.propertyId);
+    }
+    if (cloned.definitionId && idMap.has(cloned.definitionId)) {
+      cloned.definitionId = idMap.get(cloned.definitionId);
+    }
+    if (cloned.inheritedFromId && idMap.has(cloned.inheritedFromId)) {
+      cloned.inheritedFromId = idMap.get(cloned.inheritedFromId);
+    }
+    if (Array.isArray(cloned.supertypeIds)) {
+      cloned.supertypeIds = cloned.supertypeIds.map((id: string) => idMap.get(id) ?? id);
     }
     if (cloned.parentId && idMap.has(cloned.parentId)) {
       cloned.parentId = idMap.get(cloned.parentId);
@@ -95,6 +115,24 @@ export function remapClipboardPayload(
     }
     if (Array.isArray(cloned.junctionIds)) {
       cloned.junctionIds = cloned.junctionIds.map((jid: string) => idMap.get(jid) ?? jid);
+    }
+    if (Array.isArray(cloned.properties)) {
+      cloned.properties = cloned.properties.map((property: Record<string, any>) => ({
+        ...property,
+        id: idMap.get(property.id) ?? property.id,
+        typeId: idMap.get(property.typeId) ?? property.typeId,
+        redefinesId: idMap.get(property.redefinesId) ?? property.redefinesId,
+        subsetsId: idMap.get(property.subsetsId) ?? property.subsetsId,
+        inheritedFromId: idMap.get(property.inheritedFromId) ?? property.inheritedFromId,
+      }));
+    }
+    if (Array.isArray(cloned.ports)) {
+      cloned.ports = cloned.ports.map((port: Record<string, any>) => ({
+        ...port,
+        id: idMap.get(port.id) ?? port.id,
+        typeId: idMap.get(port.typeId) ?? port.typeId,
+        inheritedFromId: idMap.get(port.inheritedFromId) ?? port.inheritedFromId,
+      }));
     }
 
     remappedSnapshots[newId] = cloned;

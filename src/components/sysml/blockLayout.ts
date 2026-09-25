@@ -12,10 +12,10 @@ export interface BlockDisplayBounds {
  * row and with the number of rows that can be rendered.
  */
 export function computeBlockDisplayBounds(block: BlockData): BlockDisplayBounds {
-  const propertyLines = block.properties.slice(0, 3).map(property =>
+  const propertyLines = block.properties.map(property =>
     `${formatLegacyProperty(property)}${property.defaultValue ? ` = ${property.defaultValue}` : ''}`,
   );
-  const classLines = (block.classes ?? []).slice(0, 3);
+  const classLines = block.classes ?? [];
   const operationLines = block.operations.slice(0, 2);
   const constraintLines = (block.constraints ?? []).slice(0, 2).map(constraint => `{${constraint}}`);
   const visibleLines = [
@@ -29,9 +29,8 @@ export function computeBlockDisplayBounds(block: BlockData): BlockDisplayBounds 
   const longestLine = visibleLines.reduce((max, line) => Math.max(max, line.length), 0);
   const width = Math.max(block.width || 150, Math.ceil(longestLine * 6.2 + 20));
 
-  const propertyRows = Math.max(propertyLines.length, classLines.length);
-  const contentRows = Math.max(propertyRows, operationLines.length, constraintLines.length, 1);
-  const heightFromContent = 45 + contentRows * 12 + (classLines.length > 0 ? 7 : 0) +
+  const ownedFeatureRows = Math.max(1, propertyLines.length + classLines.length);
+  const heightFromContent = 45 + ownedFeatureRows * 12 + 10 + (classLines.length > 0 ? 7 : 0) +
     (operationLines.length > 0 ? 25 : 0) + (constraintLines.length > 0 ? 25 : 0);
   const heightFromPorts = 35 + block.ports.length * 15;
   return { width, height: Math.max(block.height || 100, heightFromContent, heightFromPorts) };

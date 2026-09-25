@@ -124,6 +124,43 @@ describe('sysmlExplorerAdapter', () => {
       ownerId: owner.id,
       kind: 'part',
     });
+    const usage = harness.state.repository.usages[result.selectedIds![0]] as PartUsage;
+    expect(usage.propertyId).toEqual(expect.any(String));
+    expect(harness.state.repository.definitions[owner.id].kind).toBe('block');
+    expect((harness.state.repository.definitions[owner.id] as BlockDefinition).properties).toContainEqual(expect.objectContaining({
+      id: usage.propertyId,
+      name: 'part1',
+      kind: 'part',
+      typeId: type.id,
+    }));
+
+    const undone = harness.executeCommand({ type: 'undo' });
+    expect(undone.committed).toBe(true);
+    expect(undone.repository.usages[usage.id]).toBeUndefined();
+    expect((undone.repository.definitions[owner.id] as BlockDefinition).properties).toEqual([]);
+  });
+
+  it('pastes a standalone PartProperty through the atomic owner-property command', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+    const ownerId = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Vehicle' }).selectedIds![0];
+    adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Motor' });
+    const targetId = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Fleet' }).selectedIds![0];
+    const originalId = adapter.execute({ type: 'createElement', ownerId, elementKind: 'PartProperty', name: 'leftMotor' }).selectedIds![0];
+    const original = harness.state.repository.usages[originalId] as PartUsage;
+    const copied = adapter.execute({ type: 'copy', elementIds: [originalId] }).clipboard!;
+
+    const pasted = adapter.execute({ type: 'paste', payload: copied, targetOwnerId: targetId, mode: 'copy' });
+
+    expect(pasted.committed).toBe(true);
+    const pastedUsage = harness.state.repository.usages[pasted.selectedIds![0]] as PartUsage;
+    expect(pastedUsage.ownerId).toBe(targetId);
+    expect(pastedUsage.propertyId).not.toBe(original.propertyId);
+    expect((harness.state.repository.definitions[targetId] as BlockDefinition).properties).toContainEqual(expect.objectContaining({
+      id: pastedUsage.propertyId,
+      name: pastedUsage.name,
+      typeId: pastedUsage.typeId,
+    }));
   });
 
   it('creates and projects normative TestCase and UML UseCase entities', () => {

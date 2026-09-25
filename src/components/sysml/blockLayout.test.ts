@@ -25,4 +25,12 @@ describe('computeBlockDisplayBounds', () => {
     }));
     expect(bounds.height).toBeGreaterThan(100);
   });
+
+  it('keeps every owned property visible instead of truncating the Block compartment', () => {
+    const bounds = computeBlockDisplayBounds(block({
+      height: 60,
+      properties: Array.from({ length: 8 }, (_, index) => ({ id: `p-${index}`, name: `part${index}`, type: 'Motor', kind: 'part' as const })),
+    }));
+    expect(bounds.height).toBeGreaterThanOrEqual(145);
+  });
 });

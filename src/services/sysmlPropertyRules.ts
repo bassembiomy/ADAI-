@@ -131,7 +131,7 @@ export function inheritedProperties(blocks: readonly BlockData[], relationships:
 export function formatLegacyProperty(property: ValuePropertyData): string {
   const modifiers = [property.ordered ? 'ordered' : '', property.unique === false ? 'nonunique' : property.unique ? 'unique' : ''].filter(Boolean);
   return [
-    `${property.isDerived ? '/' : ''}${property.name}: ${property.typeId || property.type} [${property.multiplicity || '1'}]`,
+    `${property.isDerived ? '/' : ''}${property.name}: ${property.type || property.typeId} [${property.multiplicity || '1'}]`,
     modifiers.length ? `{${modifiers.join(', ')}}` : '',
     `«${property.kind || 'value'}»`,
     property.unit ? `{unit=${property.unit}}` : '',

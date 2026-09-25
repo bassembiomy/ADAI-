@@ -6150,7 +6150,7 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const { blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
+  const { packages, blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
   const pendingPresentationUpdatesRef = useRef<Map<string, PresentationCoordinates>>(new Map());
   const presentationDraftsRef = useRef<Record<string, PresentationCoordinates>>({});
   const [presentationDrafts, setPresentationDrafts] = useState<Record<string, PresentationCoordinates>>({});
@@ -6185,12 +6185,12 @@ const ADIA = () => {
   }, [applyCanonicalSysmlResult]);
   const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
   const sysmlCanvasView = useMemo(() => projectDiagramScopedCanvasView(
-    { blocks, relationships, parts, connectors },
+    { packages, blocks, relationships, parts, connectors },
     activeSysmlDiagramId,
     sysmlDiagramPresentations,
     diagramMode === 'ibd' ? [currentLayerId] : [],
     presentationDrafts,
-  ), [blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId, presentationDrafts]);
+  ), [packages, blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId, presentationDrafts]);
   // Explicit per-baseline deletion authorizations granted from the governance
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
@@ -10742,6 +10742,21 @@ const ADIA = () => {
           }
         }
 
+        // UML Package presentations use the same diagram-scoped movement
+        // command as every other semantic element. Moving the notation never
+        // changes package ownership or creates a Block surrogate.
+        const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
+        if (packageNode) {
+          const currentPackage = { ...packageNode, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPackage.x, y: currentPackage.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+          updateBlock(id, {
+            x: snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
+            y: snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
+          });
+        }
+
         // IBD Parts
         const part = sysmlCanvasView.parts.find(p => p.id === id);
         if (part) {
@@ -14668,6 +14683,37 @@ const ADIA = () => {
     });
   }, [currentTransitions, states, junctions, view, selectedIds, hoveredTransitionId, firedTransitions, startTransitionDrag, resetTransitionCurve, errors]);
 
+  const renderPackages = useCallback((): React.ReactNode => {
+    if (diagramMode === 'ibd') return null;
+    return sysmlCanvasView.packages.map(pkg => {
+      const isSelected = selectedIds.includes(pkg.id);
+      const tabWidth = Math.min(Math.max(72, pkg.name.length * 7 + 20), pkg.width - 16);
+      return (
+        <g
+          key={pkg.id}
+          data-semantic-id={pkg.id}
+          data-presentation-kind="package"
+          transform={`translate(${pkg.x}, ${pkg.y})`}
+          onMouseDown={(event) => handleBlockMouseDown(event, pkg.id)}
+          style={{ cursor: 'move' }}
+        >
+          {isSelected && (
+            <rect x={-4} y={-4} width={pkg.width + 8} height={pkg.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={3} />
+          )}
+          <path
+            d={`M 0 22 L 0 0 L ${tabWidth} 0 L ${tabWidth + 12} 14 L ${pkg.width} 14 L ${pkg.width} ${pkg.height} L 0 ${pkg.height} Z`}
+            fill="var(--sysml-block-fill)"
+            fillOpacity={0.42}
+            stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'}
+            strokeWidth={1.2}
+          />
+          <text x={10} y={12} fill="var(--sysml-block-meta)" fontSize={9} fontFamily="monospace">«package»</text>
+          <text x={10} y={34} fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{pkg.name}</text>
+        </g>
+      );
+    });
+  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown]);
+
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
@@ -14828,7 +14874,7 @@ const ADIA = () => {
                 </g>
               ) : (
                 <g transform="translate(5, 45)">
-                  {block.properties.slice(0, 3).map((prop, i) => (
+                  {block.properties.map((prop, i) => (
                     <text
                       key={prop.id}
                       y={i * 12}
@@ -14849,7 +14895,7 @@ const ADIA = () => {
                   {block.classes && block.classes.length > 0 && (
                     <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
                       <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                      {block.classes.slice(0, 3).map((cls, i) => (
+                      {block.classes.map((cls, i) => (
                         <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
                           {cls}
                         </text>
@@ -16553,6 +16599,17 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Package');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Package
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
                         if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
@@ -16570,6 +16627,17 @@ const ADIA = () => {
 
                 {diagramMode === 'requirements' && (
                   <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Package');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Package
+                    </Button>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -16857,6 +16925,9 @@ const ADIA = () => {
                       </>
                     ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
                       <>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderPackages()}
+                        </g>
                         <g style={{ pointerEvents: 'all' }}>
                           {renderBlocks()}
                         </g>

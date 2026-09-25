@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 import type { DiagramPresentation } from '../engine/sysml/presentationState';
 import type { LegacySysmlView, SysmlCommandResult } from './sysmlCommandGateway';
-import type { BlockData, PartData } from '../types/sysml_types';
+import type { BlockData, PackageData, PartData } from '../types/sysml_types';
 
 const EMPTY_PROJECTION: LegacySysmlView = {
+  packages: [],
   blocks: [],
   relationships: [],
   parts: [],
@@ -12,7 +13,7 @@ const EMPTY_PROJECTION: LegacySysmlView = {
 
 export type SysmlProjectionUpdate =
   | Pick<SysmlCommandResult, 'view'>
-  | { delta: { type: 'block'; id: string; bounds: Partial<BlockData> } | { type: 'part'; id: string; bounds: Partial<PartData> } };
+  | { delta: { type: 'package'; id: string; bounds: Partial<PackageData> } | { type: 'block'; id: string; bounds: Partial<BlockData> } | { type: 'part'; id: string; bounds: Partial<PartData> } };
 
 /** The single adapter boundary from canonical repository results to shared semantic lookup projections. */
 export function applyCanonicalSysmlResult(
@@ -28,6 +29,12 @@ export function applyCanonicalSysmlResult(
         return {
           ...prev,
           blocks: prev.blocks.map(b => b.id === delta.id ? { ...b, ...delta.bounds } : b),
+        };
+      }
+      if (delta.type === 'package') {
+        return {
+          ...prev,
+          packages: prev.packages.map(pkg => pkg.id === delta.id ? { ...pkg, ...delta.bounds } : pkg),
         };
       }
       return {
@@ -51,6 +58,10 @@ export function projectDiagramScopedCanvasView(
   const isPresented = (elementId: string) => visibleIds.has(elementId);
   return {
     ...complete,
+    packages: complete.packages.filter(pkg => isPresented(pkg.id)).map(pkg => {
+      const bounds = diagram?.presentations[pkg.id]?.bounds;
+      return { ...pkg, ...(bounds ?? {}), ...(presentationDrafts[pkg.id] ?? {}) };
+    }),
     blocks: complete.blocks.filter(block => isPresented(block.id)).map(block => {
       const bounds = diagram?.presentations[block.id]?.bounds;
       return { ...block, ...(bounds ?? {}), ...(presentationDrafts[block.id] ?? {}) };
@@ -80,6 +91,10 @@ export function useSysmlProjectionState() {
     applyCanonicalSysmlResult({ delta: { type: 'block', id, bounds } }, setProjection);
   }, []);
 
+  const updatePackageBounds = useCallback((id: string, bounds: Partial<PackageData>) => {
+    applyCanonicalSysmlResult({ delta: { type: 'package', id, bounds } }, setProjection);
+  }, []);
+
   const updatePartBounds = useCallback((id: string, bounds: Partial<PartData>) => {
     applyCanonicalSysmlResult({ delta: { type: 'part', id, bounds } }, setProjection);
   }, []);
@@ -87,6 +102,7 @@ export function useSysmlProjectionState() {
   return {
     ...projection,
     applyCanonicalSysmlResult: applyResult,
+    updatePackageBounds,
     updateBlockBounds,
     updatePartBounds,
   };

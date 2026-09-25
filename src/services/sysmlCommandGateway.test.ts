@@ -9,11 +9,118 @@ import {
   fromRepository,
   type SysmlGatewayState,
 } from './sysmlCommandGateway';
-import { createEmptyRepository, type BlockDefinition, type ConnectorUsage, type PartUsage, type PortDefinition, type PortUsage, type RequirementDefinition, type SysmlRelationship } from '../engine/sysml/model';
+import { createEmptyRepository, type BlockDefinition, type ConnectorUsage, type PackageDefinition, type PartUsage, type PortDefinition, type PortUsage, type RequirementDefinition, type SysmlRelationship } from '../engine/sysml/model';
 import { serializeRepository } from '../engine/sysml/persistence';
 import type { SysmlElement } from './sysmlCommandGateway';
 
 describe('sysmlCommandGateway', () => {
+  it('projects a presented UML Package as a package presentation without inventing a Block', () => {
+    const repository = createEmptyRepository();
+    const powertrain: PackageDefinition = {
+      id: 'pkg-powertrain', kind: 'package', name: 'Powertrain', namespace: ['model'], ownerId: 'model',
+    };
+    repository.packages[powertrain.id] = powertrain;
+
+    const view = projectLegacyDiagram(repository, {}, {
+      bdd: { elementIds: [powertrain.id] },
+    }, 'bdd');
+
+    expect(view.packages).toEqual([expect.objectContaining({
+      id: powertrain.id,
+      name: 'Powertrain',
+      x: 0,
+      y: 0,
+    })]);
+    expect(view.blocks).toEqual([]);
+    expect(repository.definitions[powertrain.id]).toBeUndefined();
+
+    const normalizedResult = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'bdd', elementIds: [powertrain.id],
+    });
+    expect(normalizedResult.view.packages).toContainEqual(expect.objectContaining({ id: powertrain.id, name: 'Powertrain' }));
+  });
+
+  it('creates, moves, and undoes a Package presentation without changing semantic identity', () => {
+    const powertrain: PackageDefinition = {
+      id: 'pkg-powertrain', kind: 'package', name: 'Powertrain', namespace: ['model'], ownerId: 'model',
+    };
+    let state = executeSysmlCommand(createSysmlGatewayState(), {
+      type: 'createAndPresent', element: powertrain, diagramId: 'bdd', presentation: { x: 20, y: 30, width: 220, height: 140 },
+    });
+    state = executeSysmlCommand(state, { type: 'addToDiagram', diagramId: 'requirements', elementIds: [powertrain.id] });
+    state = executeSysmlCommand(state, {
+      type: 'updatePresentation', diagramId: 'requirements', elementId: powertrain.id, presentation: { x: 400, y: 500 },
+    });
+    expect(Object.keys(state.repository.packages).filter(id => id === powertrain.id)).toHaveLength(1);
+    expect(state.diagramPresentations.bdd.presentations[powertrain.id].bounds).toMatchObject({ x: 20, y: 30 });
+    expect(state.diagramPresentations.requirements.presentations[powertrain.id].bounds).toMatchObject({ x: 400, y: 500 });
+
+    const undoneMove = executeSysmlCommand(state, { type: 'undo' });
+    const undoneAdd = executeSysmlCommand(undoneMove, { type: 'undo' });
+    const undoneCreate = executeSysmlCommand(undoneAdd, { type: 'undo' });
+    expect(undoneCreate.repository.packages[powertrain.id]).toBeUndefined();
+    expect(undoneCreate.diagramPresentations.bdd?.elementIds ?? []).not.toContain(powertrain.id);
+  });
+
+  it('adds a PartProperty to a BDD through its owning Block presentation', () => {
+    const repository = createEmptyRepository();
+    const vehicle: BlockDefinition = {
+      id: 'blk-vehicle', name: 'Vehicle', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [{
+        id: 'property-left-motor', name: 'leftMotor', kind: 'part', typeId: 'blk-motor',
+        multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+      }], ports: [], operations: [], constraints: [],
+    };
+    const motor: BlockDefinition = {
+      id: 'blk-motor', name: 'Motor', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const part: PartUsage = {
+      id: 'part-left-motor', propertyId: 'property-left-motor', kind: 'part', name: 'leftMotor',
+      ownerId: vehicle.id, typeId: motor.id, aggregation: 'composite',
+      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+    repository.definitions[vehicle.id] = vehicle;
+    repository.definitions[motor.id] = motor;
+    repository.usages[part.id] = part;
+
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'bdd', elementIds: [part.id],
+    });
+
+    expect(result.committed).toBe(true);
+    expect(result.diagramPresentations.bdd.elementIds).toEqual([vehicle.id]);
+    expect(result.view.blocks).toContainEqual(expect.objectContaining({
+      id: vehicle.id,
+      properties: [expect.objectContaining({ id: 'property-left-motor', name: 'leftMotor', type: 'Motor', typeId: motor.id })],
+    }));
+    expect(result.view.parts).toEqual([]);
+
+    const renamed = executeSysmlCommand(result, {
+      type: 'updateElement', elementId: motor.id, patch: { name: 'BLDCMotor' },
+    });
+    expect(renamed.view.blocks.find(block => block.id === vehicle.id)?.properties[0]).toMatchObject({
+      type: 'BLDCMotor',
+      typeId: motor.id,
+    });
+  });
+
+  it('rejects a Package presentation on an IBD instead of committing an invisible symbol', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-powertrain'] = {
+      id: 'pkg-powertrain', kind: 'package', name: 'Powertrain', namespace: ['model'], ownerId: 'model',
+    };
+    repository.diagrams['ibd-vehicle'] = {
+      id: 'ibd-vehicle', kind: 'diagram', diagramKind: 'ibd', name: 'Vehicle IBD', namespace: ['model'], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'ibd-vehicle', elementIds: ['pkg-powertrain'],
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('INVALID_DIAGRAM_ELEMENT');
+    expect(result.diagramPresentations['ibd-vehicle']).toBeUndefined();
+  });
+
   it('keeps one semantic element at independent diagram positions across persistence', () => {
     const repository = createEmptyRepository();
     const motor: BlockDefinition = {

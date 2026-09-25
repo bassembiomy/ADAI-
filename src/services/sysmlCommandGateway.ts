@@ -51,7 +51,7 @@ import {
   validateCanonicalRelationshipCandidate,
 } from './sysmlCreationRules';
 import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
-import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
+import type { BlockData, ConnectorData, PackageData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 
 import { resolveType } from '../engine/sysml/services/typeResolution';
 import {
@@ -165,6 +165,7 @@ export function getDefaultSysmlWorkerClient(): SysmlWorkerClient {
 }
 
 export interface LegacySysmlView {
+  packages: PackageData[];
   blocks: BlockData[];
   relationships: RelationshipData[];
   parts: PartData[];
@@ -323,6 +324,7 @@ export function projectLegacyDiagram(
   diagramPresentations: Record<string, DiagramPresentationInput> = {},
   diagramId?: string,
 ): LegacySysmlView {
+  const packages: PackageData[] = [];
   const blocks: BlockData[] = [];
   const parts: PartData[] = [];
   const relationships: RelationshipData[] = [];
@@ -336,6 +338,24 @@ export function projectLegacyDiagram(
     (diagramId ? diagramPresentations[diagramId]?.presentations?.[semanticElementId]?.bounds : undefined)
       ?? coordinates[semanticElementId]
       ?? {};
+
+  // Project UML Packages as their own presentation kind. A package shown on
+  // a SysML diagram remains the same repository Package; it is never converted
+  // into or duplicated as a Block.
+  for (const pkg of Object.values(repository.packages)) {
+    if (pkg.id === 'model' || !isVisible(pkg.id)) continue;
+    const coords = coordinatesFor(pkg.id);
+    packages.push({
+      id: pkg.id,
+      name: pkg.name,
+      ownerId: pkg.ownerId,
+      namespace: pkg.namespace,
+      x: coords.x ?? 0,
+      y: coords.y ?? 0,
+      width: coords.width ?? 220,
+      height: coords.height ?? 140,
+    });
+  }
 
   // Project definitions (blocks, valueTypes, interfaces)
   for (const def of Object.values(repository.definitions)) {
@@ -367,7 +387,7 @@ export function projectLegacyDiagram(
           id: prop.id,
           name: prop.name,
           kind: prop.kind,
-          type: prop.typeId,
+          type: repository.definitions[prop.typeId]?.name ?? prop.typeId,
           typeId: prop.typeId,
           multiplicity: formatMultiplicityText(prop.multiplicity),
           unit: (prop as any).unit,
@@ -457,6 +477,7 @@ export function projectLegacyDiagram(
     const coords = coordinatesFor(usage.id);
       parts.push({
         id: usage.id,
+        propertyId: usage.propertyId,
         name: usage.name,
         blockId: usage.ownerId,
         parentBlockId: usage.ownerId,
@@ -534,7 +555,7 @@ export function projectLegacyDiagram(
     });
   }
 
-  return { blocks, relationships, parts, connectors };
+  return { packages, blocks, relationships, parts, connectors };
 }
 
 function storeElementInRepository(repo: SysmlRepository, element: SysmlElement): void {
@@ -1945,10 +1966,36 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'addToDiagram') {
+    const diagramKind = state.repository.diagrams[command.diagramId]?.diagramKind
+      ?? (command.diagramId === 'bdd' || command.diagramId === 'requirements' || command.diagramId === 'rtm' || command.diagramId === 'ibd'
+        ? command.diagramId
+        : undefined);
+    const requestedElementIds: string[] = [];
+    for (const elementId of command.elementIds) {
+      const isPackage = Boolean(state.repository.packages[elementId]);
+      if (isPackage && !['bdd', 'requirements'].includes(diagramKind ?? '')) {
+        const view = getView(state.repository, coordinates, diagramPresentations);
+        return {
+          repository: state.repository, store, patchHistory, view,
+          diagnostics: [{
+            code: 'INVALID_DIAGRAM_ELEMENT', severity: 'error', elementId,
+            message: 'Package symbols are supported on Block Definition and Requirement diagrams.',
+          }],
+          committed: false, history: state.history, coordinates, diagramPresentations,
+          presentationHistory: state.presentationHistory, actionStack: state.actionStack, redoStack: state.redoStack,
+        };
+      }
+      const usage = state.repository.usages[elementId];
+      if ((diagramKind === 'bdd' || diagramKind === 'requirements' || diagramKind === 'rtm') && usage?.kind === 'part') {
+        if (!requestedElementIds.includes(usage.ownerId)) requestedElementIds.push(usage.ownerId);
+      } else if (!requestedElementIds.includes(elementId)) {
+        requestedElementIds.push(elementId);
+      }
+    }
     const currentPres = diagramPresentations[command.diagramId] ?? { elementIds: [], presentations: {} };
     const existingSet = new Set(currentPres.elementIds);
-    const alreadyPresent = command.elementIds.filter(id => existingSet.has(id));
-    if (alreadyPresent.length > 0 && alreadyPresent.length === command.elementIds.length) {
+    const alreadyPresent = requestedElementIds.filter(id => existingSet.has(id));
+    if (alreadyPresent.length > 0 && alreadyPresent.length === requestedElementIds.length) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
         repository: state.repository,
@@ -1966,7 +2013,7 @@ export function executeSysmlCommand(
       };
     }
 
-    const addedIds = command.elementIds.filter(id => !existingSet.has(id));
+    const addedIds = requestedElementIds.filter(id => !existingSet.has(id));
     const newRecords = Object.fromEntries(addedIds.map(semanticElementId => {
       const explicit = command.coordinates?.[semanticElementId];
       const existing = coordinates[semanticElementId] ?? currentPres.presentations[semanticElementId]?.bounds;

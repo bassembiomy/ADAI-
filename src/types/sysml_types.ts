@@ -80,6 +80,18 @@ export interface RelationshipData {
   targetMultiplicity?: string;
 }
 
+/** UML Package notation projected from the semantic repository for a diagram. */
+export interface PackageData {
+  id: string;
+  name: string;
+  ownerId?: string;
+  namespace?: string[];
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface PartData {
   id: string;
   /** Stable identity of the owning Block property projected by this IBD usage. */
