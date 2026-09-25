@@ -92,7 +92,7 @@ describe('AppModelExplorer Command Dispatch & State Machine History', () => {
     };
     const part: PartUsage = {
       id: 'part-left-motor', name: 'leftMotor', kind: 'part', ownerId: motor.id, typeId: vehicle.id,
-      aggregation: 'composite', multiplicity: { lower: 1, upper: 1 },
+      aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
     const requirement: RequirementDefinition = {
       id: 'req-001', name: 'REQ-001', kind: 'requirement', namespace: [], requirementId: 'REQ-001',
