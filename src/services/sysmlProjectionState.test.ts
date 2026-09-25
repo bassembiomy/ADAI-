@@ -67,4 +67,27 @@ describe('applyCanonicalSysmlResult', () => {
       .toEqual(['vehicle']);
     expect(projectDiagramScopedCanvasView(complete, 'bdd', diagrams).blocks).toEqual([]);
   });
+
+  it('keeps repository Block choices complete while producing a scoped IBD canvas projection', () => {
+    const repositoryProjection: LegacySysmlView = {
+      blocks: [
+        { id: 'vehicle', name: 'Vehicle', stereotype: 'block', x: 0, y: 0, width: 10, height: 10, properties: [], operations: [], constraints: [], classes: [], ports: [] },
+        { id: 'motor', name: 'Motor', stereotype: 'block', x: 0, y: 0, width: 10, height: 10, properties: [], operations: [], constraints: [], classes: [], ports: [] },
+      ],
+      relationships: [],
+      parts: [{ id: 'left-motor', name: 'leftMotor', blockId: 'vehicle', typeId: 'motor', x: 0, y: 0, width: 10, height: 10 }],
+      connectors: [],
+    };
+    let sharedRepositoryView: LegacySysmlView | undefined;
+    applyCanonicalSysmlResult({ view: repositoryProjection }, view => { sharedRepositoryView = view; });
+
+    const ibdCanvasView = projectDiagramScopedCanvasView(sharedRepositoryView!, 'vehicle-ibd', {
+      'vehicle-ibd': { elementIds: ['left-motor'], presentations: {} },
+    }, ['vehicle']);
+
+    expect(sharedRepositoryView?.blocks.filter(block => block.stereotype === 'block').map(block => block.id))
+      .toEqual(['vehicle', 'motor']);
+    expect(ibdCanvasView.blocks.map(block => block.id)).toEqual(['vehicle']);
+    expect(ibdCanvasView.parts.map(part => part.id)).toEqual(['left-motor']);
+  });
 });

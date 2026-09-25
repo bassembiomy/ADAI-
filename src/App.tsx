@@ -6162,14 +6162,16 @@ const ADIA = () => {
     coordinates: Record<string, PresentationCoordinates>,
     diagramPresentations: typeof sysmlDiagramPresentations,
   ) => {
-    const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
     const complete = projectLegacyDiagram(repository, coordinates, diagramPresentations);
-    const contextElementIds = diagramMode === 'ibd' ? [currentLayerId] : [];
-    applyCanonicalSysmlResult({ view: projectDiagramScopedCanvasView(complete, activeDiagramId, diagramPresentations, contextElementIds) });
-  }, [diagramMode, currentLayerId, applyCanonicalSysmlResult]);
-  useEffect(() => {
-    projectCanonicalAppView(canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations);
-  }, [canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations, projectCanonicalAppView]);
+    applyCanonicalSysmlResult({ view: complete });
+  }, [applyCanonicalSysmlResult]);
+  const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+  const sysmlCanvasView = useMemo(() => projectDiagramScopedCanvasView(
+    { blocks, relationships, parts, connectors },
+    activeSysmlDiagramId,
+    sysmlDiagramPresentations,
+    diagramMode === 'ibd' ? [currentLayerId] : [],
+  ), [blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId]);
   // Explicit per-baseline deletion authorizations granted from the governance
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
@@ -6282,14 +6284,14 @@ const ADIA = () => {
   const culledDiagram = useMemo(() => {
     const limits = loadStoredPerformanceLimits();
     const threshold = limits.virtualizationThreshold ?? 150;
-    if (!limits.forcePerformanceMode && blocks.length < threshold && parts.length < threshold) {
+    if (!limits.forcePerformanceMode && sysmlCanvasView.blocks.length < threshold && sysmlCanvasView.parts.length < threshold) {
       return null;
     }
-    return cullElements(diagramViewport, blocks, relationships, parts, connectors, undefined, 500, {
+    return cullElements(diagramViewport, sysmlCanvasView.blocks, sysmlCanvasView.relationships, sysmlCanvasView.parts, sysmlCanvasView.connectors, undefined, 500, {
       storeRevision: sysmlStore.revision,
       ibdContextBlockId: currentLayerId,
     });
-  }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
+  }, [diagramViewport, sysmlCanvasView, sysmlStore.revision, currentLayerId]);
 
   const requirementsDiagramScope = useMemo(
     () => getRequirementsDiagramScope(
@@ -14588,7 +14590,7 @@ const ADIA = () => {
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
-    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : sysmlCanvasView.blocks;
     const isDegraded = Boolean(culledDiagram?.isDegradedMode && view.scale < 0.7);
 
     return targetBlocks.map(block => {
@@ -14852,10 +14854,10 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
-    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
+    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
     const isInteracting = isDragging || isPanning;
 
     const pairGroups = new Map<string, string[]>();
@@ -14993,12 +14995,12 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
+  }, [relationships, sysmlCanvasView, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
     return targetParts.filter(p => p.blockId === currentLayerId).map(part => {
       const block = part.typeId ? blocksById.get(part.typeId) : undefined;
       const isSelected = selectedIds.includes(part.id);
@@ -15093,13 +15095,13 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
+  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
-    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : connectors;
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
+    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : sysmlCanvasView.connectors;
     const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
     const isInteracting = isDragging || isPanning;
@@ -15168,7 +15170,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [connectors, parts, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
+  }, [connectors, parts, sysmlCanvasView, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
 
   const renderInterfaceRealizations = useCallback((): React.ReactNode => {
     if (diagramMode !== 'ibd') return null;

@@ -9,7 +9,7 @@ const EMPTY_PROJECTION: LegacySysmlView = {
   connectors: [],
 };
 
-/** The single adapter boundary from canonical repository results to canvas projections. */
+/** The single adapter boundary from canonical repository results to shared semantic lookup projections. */
 export function applyCanonicalSysmlResult(
   result: Pick<SysmlCommandResult, 'view'>,
   setProjection: (view: LegacySysmlView) => void,
