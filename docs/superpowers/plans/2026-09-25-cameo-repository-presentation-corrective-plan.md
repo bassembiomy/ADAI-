@@ -8,6 +8,8 @@
 
 **Tech Stack:** TypeScript, React 18, Vitest, Testing Library, Playwright, existing SysML command gateway and normalized store.
 
+**Execution status (2026-09-25):** IMPLEMENTED. The task checklists below are retained as the original execution runbook; the authoritative final evidence is recorded in **Final Execution Record** at the end of this document.
+
 ## Global Constraints
 
 - One semantic element may have multiple diagram presentations without duplicated semantic identity.
@@ -211,3 +213,27 @@ npx tsc --noEmit
 - [ ] Mandatory code-generation gates remain mandatory.
 - [ ] Every compliance claim cites real, passing evidence and a single authority.
 - [ ] The full release commands above pass from the final commit.
+
+## Final Execution Record
+
+All five implementation tasks and the reported follow-up defects are implemented on `co-work`.
+
+- Explorer impacts, diagnostics, ownership-aware duplicate/paste/delete behavior, and confirmation flows are connected to the canonical gateway.
+- Diagram presentations have stable diagram-scoped identity, persistence, independent geometry, and separate remove-from-diagram/delete-from-model behavior.
+- Runtime SysML mutation paths use the repository gateway; the architecture gate reports zero unallowlisted violations.
+- The Model Explorer Structural pillar creates a real repository-owned BDD under semantic owner `model`.
+- Blocks and Part Properties drag from their active diagram presentation, accumulate raw pointer movement before grid snapping, and commit presentation geometry on drop.
+- Code-generation repository isolation, golden output, strict host compilation/runtime, statement/branch coverage, and differential verification pass. Mandatory sanitizer evidence remains `NOT_RUN` because the bundled Windows compiler does not support `-fsanitize=address,undefined`; acceptance correctly remains rejected rather than bypassing the gate.
+
+Final verification evidence:
+
+- `npm run test:sysml:release` — PASS: 77 SysML files / 643 tests, 19 reporting files / 78 tests, TypeScript PASS.
+- `npm run test:sysml:architecture` — PASS: zero unallowlisted violations; two notices are confined to the named canonical projection boundary.
+- `npm run test:sysml:release-gate` — PASS: 15 tests, including semantic identity, repository/presentation lifecycle, conformance evidence, and large-model benchmarks.
+- Focused Explorer/projection regression suite — PASS: 11 tests.
+- Required Playwright workflows — PASS: 16 tests across Chromium and Chromium Benchmark.
+- `npm run test:sm:verification` — PASS: 111 tests, 1 intentionally skipped.
+- Repository code-generation isolation/golden tests — PASS: 4 tests.
+- `npm run verify:repository-codegen-isolation` — generator checks PASS; final certification intentionally REJECTED only because mandatory sanitizer tooling is unavailable on this host. No gate was weakened.
+
+Independent Sol review was requested twice after implementation. Both review processes were terminated by the external reviewer service's usage limit before returning findings. This is recorded as an unavailable external review, not as a successful review.
