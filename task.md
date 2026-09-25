@@ -73,4 +73,3 @@
   - [x] Confirm `Delete from Model` removes semantic closure and all presentations.
   - [x] Confirm every enabled tree action produces a commit, clipboard result, impact request, or diagnostic.
   - [x] Confirm state-machine generated artifacts are unchanged by SysML presentation operations.
-
