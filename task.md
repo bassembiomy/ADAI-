@@ -6,12 +6,12 @@
   - [x] Step 3: Update `normalizedStore.ts` and `sysmlCommandGateway.ts`
   - [x] Step 4: Run tests to verify they pass
   - [x] Step 5: Commit
-- [ ] Task 2: Smooth Canvas Movement and Drag Decoupling
-  - [ ] Step 1: Write an automated test asserting smooth canvas dragging persistence
-  - [ ] Step 2: Run test to verify current state
-  - [ ] Step 3: Update `App.tsx` canvas mouse handlers
-  - [ ] Step 4: Verify with TypeScript and Vitest
-  - [ ] Step 5: Commit
+- [x] Task 2: Smooth Canvas Movement and Drag Decoupling
+  - [x] Step 1: Write an automated test asserting smooth canvas dragging persistence
+  - [x] Step 2: Run test to verify current state
+  - [x] Step 3: Update `App.tsx` canvas mouse handlers
+  - [x] Step 4: Verify with TypeScript and Vitest
+  - [x] Step 5: Commit
 - [ ] Task 3: State Machine State Requirement Connection Backend & Connection Policy
   - [ ] Step 1: Write failing unit tests for State to Requirement relationship evaluation
   - [ ] Step 2: Run test to verify it fails

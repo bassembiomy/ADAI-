@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { DiagramPresentation } from '../engine/sysml/presentationState';
 import type { LegacySysmlView, SysmlCommandResult } from './sysmlCommandGateway';
+import type { BlockData, PartData } from '../types/sysml_types';
 
 const EMPTY_PROJECTION: LegacySysmlView = {
   blocks: [],
@@ -9,12 +10,32 @@ const EMPTY_PROJECTION: LegacySysmlView = {
   connectors: [],
 };
 
+export type SysmlProjectionUpdate =
+  | Pick<SysmlCommandResult, 'view'>
+  | { delta: { type: 'block'; id: string; bounds: Partial<BlockData> } | { type: 'part'; id: string; bounds: Partial<PartData> } };
+
 /** The single adapter boundary from canonical repository results to shared semantic lookup projections. */
 export function applyCanonicalSysmlResult(
-  result: Pick<SysmlCommandResult, 'view'>,
-  setProjection: (view: LegacySysmlView) => void,
+  result: SysmlProjectionUpdate,
+  setProjection: (view: LegacySysmlView | ((prev: LegacySysmlView) => LegacySysmlView)) => void,
 ): void {
-  setProjection(result.view);
+  if ('view' in result) {
+    setProjection(result.view);
+  } else if ('delta' in result) {
+    const { delta } = result;
+    setProjection((prev: LegacySysmlView) => {
+      if (delta.type === 'block') {
+        return {
+          ...prev,
+          blocks: prev.blocks.map(b => b.id === delta.id ? { ...b, ...delta.bounds } : b),
+        };
+      }
+      return {
+        ...prev,
+        parts: prev.parts.map(p => p.id === delta.id ? { ...p, ...delta.bounds } : p),
+      };
+    });
+  }
 }
 
 /** Overlay only the active diagram's presentation data onto the full semantic projection. */
@@ -49,9 +70,22 @@ export function projectDiagramScopedCanvasView(
 
 export function useSysmlProjectionState() {
   const [projection, setProjection] = useState<LegacySysmlView>(EMPTY_PROJECTION);
-  const applyResult = useCallback((result: Pick<SysmlCommandResult, 'view'>) => {
+  const applyResult = useCallback((result: SysmlProjectionUpdate) => {
     applyCanonicalSysmlResult(result, setProjection);
   }, []);
 
-  return { ...projection, applyCanonicalSysmlResult: applyResult };
+  const updateBlockBounds = useCallback((id: string, bounds: Partial<BlockData>) => {
+    applyCanonicalSysmlResult({ delta: { type: 'block', id, bounds } }, setProjection);
+  }, []);
+
+  const updatePartBounds = useCallback((id: string, bounds: Partial<PartData>) => {
+    applyCanonicalSysmlResult({ delta: { type: 'part', id, bounds } }, setProjection);
+  }, []);
+
+  return {
+    ...projection,
+    applyCanonicalSysmlResult: applyResult,
+    updateBlockBounds,
+    updatePartBounds,
+  };
 }

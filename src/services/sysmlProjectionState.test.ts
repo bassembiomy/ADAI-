@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type { LegacySysmlView } from './sysmlCommandGateway';
 import { applyCanonicalSysmlResult, projectDiagramScopedCanvasView } from './sysmlProjectionState';
@@ -90,4 +91,35 @@ describe('applyCanonicalSysmlResult', () => {
     expect(ibdCanvasView.blocks.map(block => block.id)).toEqual(['vehicle']);
     expect(ibdCanvasView.parts.map(part => part.id)).toEqual(['left-motor']);
   });
+
+  it('allows decoupling drag movement via updateBlockBounds and updatePartBounds in useSysmlProjectionState', async () => {
+    const { renderHook, act } = await import('@testing-library/react');
+    const { useSysmlProjectionState } = await import('./sysmlProjectionState');
+
+    const { result } = renderHook(() => useSysmlProjectionState());
+    const initialView: LegacySysmlView = {
+      blocks: [{ id: 'b1', name: 'B1', stereotype: 'block', x: 10, y: 20, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] }],
+      relationships: [],
+      parts: [{ id: 'p1', name: 'P1', blockId: 'b1', typeId: 'b1', x: 30, y: 40, width: 80, height: 60 }],
+      connectors: [],
+    };
+
+    act(() => {
+      result.current.applyCanonicalSysmlResult({ view: initialView });
+    });
+
+    expect(result.current.blocks[0]).toMatchObject({ x: 10, y: 20 });
+    expect(result.current.parts[0]).toMatchObject({ x: 30, y: 40 });
+
+    act(() => {
+      result.current.updateBlockBounds('b1', { x: 150, y: 250 });
+    });
+    expect(result.current.blocks[0]).toMatchObject({ x: 150, y: 250, width: 100, height: 80 });
+
+    act(() => {
+      result.current.updatePartBounds('p1', { x: 300, y: 400 });
+    });
+    expect(result.current.parts[0]).toMatchObject({ x: 300, y: 400, width: 80, height: 60 });
+  });
 });
+

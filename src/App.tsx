@@ -6145,7 +6145,13 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const { blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
+  const { blocks, relationships, parts, connectors, applyCanonicalSysmlResult, updateBlockBounds, updatePartBounds } = useSysmlProjectionState();
+  const pendingPresentationUpdatesRef = useRef<Map<string, PresentationCoordinates>>(new Map());
+  const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
   const sysmlGatewayStateRef = useRef(createSysmlGatewayState());
@@ -7053,6 +7059,9 @@ const ADIA = () => {
 
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
+  useEffect(() => {
+    isResizingRef.current = isResizing;
+  }, [isResizing]);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' | 'part' } | null>(null);
 
@@ -9736,7 +9745,19 @@ const ADIA = () => {
       if (updates.y !== undefined) presentation.y = updates.y;
       if (updates.width !== undefined) presentation.width = updates.width;
       if (updates.height !== undefined) presentation.height = updates.height;
-      handleExecuteSysmlCommand({ type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation });
+      if (isDraggingRef.current || isResizingRef.current) {
+        updateBlockBounds(id, updates);
+        const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
+        pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
+        return;
+      }
+      handleExecuteSysmlCommand({
+        type: 'updatePresentation',
+        diagramId: activeDiagramId,
+        elementId: id,
+        presentation,
+        coalesceKey: `drag-${id}`,
+      });
       return;
     }
 
@@ -10009,7 +10030,19 @@ const ADIA = () => {
       if (updates.y !== undefined) presentation.y = updates.y;
       if (updates.width !== undefined) presentation.width = updates.width;
       if (updates.height !== undefined) presentation.height = updates.height;
-      handleExecuteSysmlCommand({ type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation });
+      if (isDraggingRef.current || isResizingRef.current) {
+        updatePartBounds(id, updates);
+        const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
+        pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
+        return;
+      }
+      handleExecuteSysmlCommand({
+        type: 'updatePresentation',
+        diagramId: activeDiagramId,
+        elementId: id,
+        presentation,
+        coalesceKey: `drag-${id}`,
+      });
       return;
     }
 
@@ -10743,10 +10776,23 @@ const ADIA = () => {
       setIsDragging(false);
       setDraggedPort(null);
     }
+    if (pendingPresentationUpdatesRef.current.size > 0) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      for (const [elemId, pres] of pendingPresentationUpdatesRef.current.entries()) {
+        handleExecuteSysmlCommand({
+          type: 'updatePresentation',
+          diagramId: activeDiagramId,
+          elementId: elemId,
+          presentation: pres,
+          coalesceKey: `drag-${elemId}`,
+        });
+      }
+      pendingPresentationUpdatesRef.current.clear();
+    }
     if (isPanning) {
       setIsPanning(false);
     }
-  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds]);
+  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, handleExecuteSysmlCommand]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();

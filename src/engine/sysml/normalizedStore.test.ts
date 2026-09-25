@@ -382,6 +382,10 @@ describe('NormalizedSysmlStore', () => {
       namespace: [],
       isAbstract: false,
       isLeaf: false,
+      properties: [],
+      operations: [],
+      constraints: [],
+      ports: [],
     };
     const store = fromRepository(repo);
 
