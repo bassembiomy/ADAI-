@@ -36,9 +36,11 @@
 - If execution returns material impact after a clean adapter preflight, `AppModelExplorer` opens `MoveImpactDialog` instead of silently returning.
 - Confirmed deletion uses the gateway-provided impact hash, not a hash of an empty adapter placeholder.
 - `App` supplies `onCommandResult` and displays every diagnostic through `addError`.
+- Duplicate resolves its target from `node.ownerSemanticId` (or the parent projection node's `semanticId`), never from the UI-only `parentNodeId`.
 
 - [ ] Add a failing adapter test that deletes a Block owning a PartProperty and asserts the first result is uncommitted with non-empty descendants/presentations.
 - [ ] Add a failing component test that dispatches delete, receives material impact from execution, opens confirmation, confirms, and observes a committed second command.
+- [ ] Add a failing component test that duplicates a Block under Model and asserts the dispatched `targetOwnerId` is `model`, not `sysml:element:model`.
 - [ ] Map mutation impact fields explicitly:
 
 ```ts
