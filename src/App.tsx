@@ -129,7 +129,7 @@ import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, clon
 import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
 import { analyzeMutation, createHistory } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
-import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
@@ -6191,9 +6191,7 @@ const ADIA = () => {
     const result = executeSysmlCommand(currentState, cmd);
     if (result.committed) {
       setCanonicalSysmlRepository(result.repository);
-      if (result.store) {
-        setSysmlStore(result.store);
-      }
+      setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations));
       // Keep the application-wide projection complete. A command may return a
       // diagram-scoped view for the active canvas, but that view must never
       // replace the repository-wide model used by other viewpoints.
@@ -9748,6 +9746,18 @@ const ADIA = () => {
           },
         };
       });
+      setSysmlStore(current => {
+        const existing = current.diagramPresentations.get('requirements')?.elementIds ?? [];
+        const nextPresentations = Object.fromEntries(current.diagramPresentations.entries());
+        nextPresentations.requirements = {
+          elementIds: existing.includes(newBlock.id) ? existing : [...existing, newBlock.id],
+        };
+        return fromRepository(
+          canonicalSysmlRepository,
+          Object.fromEntries(current.coordinates.entries()),
+          nextPresentations,
+        );
+      });
     }
     if (stereotype === 'requirement' && parentRequirement) {
       handleExecuteSysmlCommand({
@@ -9765,7 +9775,7 @@ const ADIA = () => {
     addError('info', parentRequirement && stereotype === 'requirement'
       ? `Created contained requirement: ${newBlock.name}`
       : `Created ${stereotype}: ${newBlock.name}`);
-  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId, handleExecuteSysmlCommand]);
+  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId, canonicalSysmlRepository, handleExecuteSysmlCommand]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
     const current = blocks.find(block => block.id === id);
@@ -9823,6 +9833,26 @@ const ADIA = () => {
     setRelationships(transaction.model.relationships);
     setParts(transaction.model.parts);
     setConnectors(transaction.model.connectors);
+    setCanonicalSysmlRepository(transaction.repository);
+    setSysmlStore(current => {
+      const nextPresentations = Object.fromEntries(
+        [...current.diagramPresentations.entries()].map(([diagramId, presentation]) => [
+          diagramId,
+          { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
+        ]),
+      );
+      return fromRepository(
+        transaction.repository,
+        Object.fromEntries(current.coordinates.entries()),
+        nextPresentations,
+      );
+    });
+    setDiagramPresentations(prev => Object.fromEntries(
+      Object.entries(prev).map(([diagramId, presentation]) => [
+        diagramId,
+        { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
+      ]),
+    ));
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     if (deletedIds.has(currentLayerId) || [...layerStack].some(id => deletedIds.has(id))) {
@@ -9891,11 +9921,23 @@ const ADIA = () => {
       showConnectionPolicyError(rejection);
       return;
     }
-    addToHistory();
-    setRelationships(prev => [...prev, newRel]);
+    const result = handleExecuteSysmlCommand({
+      type: 'createElement',
+      element: {
+        id: newRel.id,
+        sourceId: newRel.sourceId,
+        targetId: newRel.targetId,
+        kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
+        name: newRel.label,
+      } satisfies SysmlRelationship,
+    });
+    if (!result.committed) {
+      addError('error', result.diagnostics.map(diagnostic => diagnostic.message).join('; ') || `Unable to create ${type}`);
+      return;
+    }
     setSelectedIds([newRel.id]);
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
+  }, [addError, blocks, parts, relationships, diagramMode, handleExecuteSysmlCommand, showConnectionPolicyError]);
 
   type BddFeatureDrag =
     | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }

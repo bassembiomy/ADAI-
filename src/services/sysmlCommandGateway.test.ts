@@ -911,6 +911,33 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(result.committed).toBe(false);
     expect(result.diagnostics.some(d => d.code === 'DISALLOWED_OWNERSHIP')).toBe(true);
   });
+
+  it('creates a Requirements Diagram satisfy relationship in the canonical repository', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.motor = {
+      id: 'motor', name: 'Motor', namespace: [], kind: 'block', ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repo.requirements['req-001'] = {
+      id: 'req-001', name: 'REQ-001', requirementId: 'REQ-001', text: 'The motor shall operate.',
+      namespace: [], kind: 'requirement', status: 'draft', priority: 'medium', risk: 'medium', version: '1.0',
+    };
+
+    const result = executeSysmlCommand(createSysmlGatewayState(repo), {
+      type: 'createElement',
+      element: {
+        id: 'satisfy-001', kind: 'satisfy', sourceId: 'motor', targetId: 'req-001', name: '',
+      },
+    });
+
+    expect(result.committed).toBe(true);
+    expect(result.repository.relationships['satisfy-001']).toMatchObject({
+      kind: 'satisfy', sourceId: 'motor', targetId: 'req-001',
+    });
+    expect(result.view.relationships).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'satisfy-001', type: 'satisfy' }),
+    ]));
+  });
 });
 
 
