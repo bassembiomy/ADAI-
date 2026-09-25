@@ -9784,81 +9784,60 @@ const ADIA = () => {
   }, [createSysmlElementOnActiveDiagram]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
-    const current = blocks.find(block => block.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const connectionRejection = rejectBlockConnectionChange({ blocks, parts, relationships }, candidate);
-    if (connectionRejection) {
-      showConnectionPolicyError(connectionRejection, id);
+    const geometricKeys = ['x', 'y', 'width', 'height', 'ibdX', 'ibdY', 'ibdWidth', 'ibdHeight'];
+    const hasGeometric = Object.keys(updates).some(k => geometricKeys.includes(k));
+    const hasSemantic = Object.keys(updates).some(k => !geometricKeys.includes(k));
+
+    if (hasGeometric && !hasSemantic) {
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      handleExecuteSysmlCommand({ type: 'updatePresentation', elementId: id, presentation });
       return;
     }
-    if (current.stereotype === 'requirement' && candidate.stereotype !== 'requirement') {
-      addError('error', 'A SysML requirement cannot be changed to an unrelated stereotype.', 'SysML', id);
-      return;
-    }
-    const currentValidation = validateLegacyBlockEdit(blocks, relationships, id);
-    const validation = validateLegacyBlockEdit([...blocks.filter(block => block.id !== id), candidate], relationships, id);
-    if (!validation.valid && (currentValidation.valid || introducesNewValidationCodes(currentValidation, validation))) {
-      addError('error', `Invalid SysML attribute: ${validation.messages[0] || validation.codes[0]}`, 'SysML', id);
-      return;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'properties')) {
-      const reconciled = reconcilePropertyUsages(
-        blocks.map(block => block.id === id ? candidate : block),
-        parts,
-        connectors,
-        id,
-        'property',
-      );
-      setBlocks(reconciled.blocks);
-      setParts(reconciled.parts);
-      setConnectors(reconciled.connectors);
-    } else {
-      setBlocks(prev => prev.map(b => b.id === id ? candidate : b));
-      if (Object.prototype.hasOwnProperty.call(updates, 'ports')) {
-        const validPortIds = new Set((candidate.ports ?? []).map(port => port.id));
-        const affectedPartIds = new Set(parts.filter(part => part.typeId === id).map(part => part.id));
-        setConnectors(prev => prev.filter(connector => {
-          const sourceAffected = connector.sourcePartId === id || affectedPartIds.has(connector.sourcePartId);
-          const targetAffected = connector.targetPartId === id || affectedPartIds.has(connector.targetPartId);
-          const sourceValid = !sourceAffected || validPortIds.has(connector.sourcePortId);
-          const targetValid = !targetAffected || validPortIds.has(connector.targetPortId);
-          return sourceValid && targetValid;
-        }));
+
+    if (hasGeometric && hasSemantic) {
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      const semanticPatch = { ...updates };
+      geometricKeys.forEach(k => delete (semanticPatch as any)[k]);
+      const result = handleExecuteSysmlCommand({
+        type: 'batch',
+        commands: [
+          { type: 'updateElement', elementId: id, patch: semanticPatch },
+          { type: 'updatePresentation', elementId: id, presentation },
+        ],
+      });
+      if (!result.committed) {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       }
+      return;
     }
-  }, [addError, blocks, connectors, parts, relationships, showConnectionPolicyError]);
+
+    const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: id, patch: updates });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [handleExecuteSysmlCommand, addError]);
 
   const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
-    addToHistory();
     const deletedIds = new Set(transaction.impact.deletedElementIds);
-    const deletedPartIds = transaction.model.parts.length === 0
-      ? new Set(parts.filter(part => deletedIds.has(part.id)).map(part => part.id))
-      : new Set(parts.filter(part => deletedIds.has(part.id) && !transaction.model.parts.some(next => next.id === part.id)).map(part => part.id));
-    setBlocks([...deletedPartIds].reduce((current, partId) => removePartProperty(current, partId), transaction.model.blocks));
-    setRelationships(transaction.model.relationships);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setCanonicalSysmlRepository(transaction.repository);
-    setSysmlStore(current => {
-      const nextPresentations = Object.fromEntries(
-        [...current.diagramPresentations.entries()].map(([diagramId, presentation]) => [
-          diagramId,
-          { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
-        ]),
-      );
-      return fromRepository(
-        transaction.repository,
-        Object.fromEntries(current.coordinates.entries()),
-        nextPresentations,
-      );
+    const result = handleExecuteSysmlCommand({
+      type: 'deleteElements',
+      elementIds: transaction.impact.deletedElementIds,
+      authorizedBaselineIds,
     });
-    setDiagramPresentations(prev => Object.fromEntries(
-      Object.entries(prev).map(([diagramId, presentation]) => [
-        diagramId,
-        { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
-      ]),
-    ));
+    // Canonical repository updated by gateway; keep compatibility invariant:
+    // setCanonicalSysmlRepository(transaction.repository);
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
     if (deletedIds.has(currentLayerId) || [...layerStack].some(id => deletedIds.has(id))) {
@@ -9867,7 +9846,7 @@ const ADIA = () => {
       setLayerPath([]);
     }
     addError('info', msg);
-  }, [addToHistory, addError, currentLayerId, layerStack, parts]);
+  }, [handleExecuteSysmlCommand, authorizedBaselineIds, currentLayerId, layerStack, addError]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
@@ -9913,37 +9892,22 @@ const ADIA = () => {
   }, [createBlock]);
 
   const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type']) => {
-    const newRel: RelationshipData = {
-      id: uuidv4(),
-      sourceId,
-      targetId,
-      type,
-      label: '',
-      sourceMultiplicity: '1',
-      targetMultiplicity: '1'
+    const newRel = { id: uuidv4(), sourceId, targetId, type };
+    const candidate: SysmlRelationship = {
+      id: newRel.id,
+      sourceId: newRel.sourceId,
+      targetId: newRel.targetId,
+      kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
+      name: '',
     };
-    const rejection = rejectUiRelationship({ blocks, parts, relationships }, newRel, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
-    if (rejection) {
-      showConnectionPolicyError(rejection);
-      return;
-    }
-    const result = handleExecuteSysmlCommand({
-      type: 'createElement',
-      element: {
-        id: newRel.id,
-        sourceId: newRel.sourceId,
-        targetId: newRel.targetId,
-        kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
-        name: newRel.label,
-      } satisfies SysmlRelationship,
-    });
+    const result = handleExecuteSysmlCommand({ type: 'createElement', element: candidate });
     if (!result.committed) {
-      addError('error', result.diagnostics.map(diagnostic => diagnostic.message).join('; ') || `Unable to create ${type}`);
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       return;
     }
-    setSelectedIds([newRel.id]);
+    setSelectedIds([candidate.id]);
     addError('info', `Created ${type}`);
-  }, [addError, blocks, parts, relationships, diagramMode, handleExecuteSysmlCommand, showConnectionPolicyError]);
+  }, [handleExecuteSysmlCommand, addError]);
 
   type BddFeatureDrag =
     | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }
@@ -9992,25 +9956,33 @@ const ADIA = () => {
     if (rejection) {
       showConnectionPolicyError(rejection);
     } else {
-      addToHistory();
-      setRelationships(prev => [...prev, candidate]);
-      setSelectedIds([candidate.id]);
-      addError('info', `Created ${type} from ${bddFeatureDrag.kind}: ${bddFeatureDrag.name}`);
+      const rel: SysmlRelationship = {
+        id: candidate.id,
+        sourceId: candidate.sourceId,
+        targetId: candidate.targetId,
+        kind: (candidate.type === 'aggregation' ? 'sharedAggregation' : candidate.type) as SysmlRelationship['kind'],
+        name: candidate.label,
+      };
+      const result = handleExecuteSysmlCommand({ type: 'createElement', element: rel });
+      if (result.committed) {
+        setSelectedIds([candidate.id]);
+        addError('info', `Created ${type} from ${bddFeatureDrag.kind}: ${bddFeatureDrag.name}`);
+      } else {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
     }
     setBddFeatureDrag(null);
   }, [diagramMode, bddFeatureDrag, blocks, addError, relationships, parts, showConnectionPolicyError, addToHistory]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
-    const current = relationships.find(relationship => relationship.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
-    if (rejection) {
-      showConnectionPolicyError(rejection, id);
-      return;
+    const patch: Record<string, unknown> = {};
+    if (updates.label !== undefined) patch.name = updates.label;
+    if (updates.type !== undefined) patch.kind = updates.type === 'aggregation' ? 'sharedAggregation' : updates.type;
+    const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: id, patch });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-    setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
-  }, [relationships, blocks, parts, diagramMode, showConnectionPolicyError]);
+  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);

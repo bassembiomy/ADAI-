@@ -998,6 +998,44 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(undone.repository.definitions['blk-undo-test']).toBeUndefined();
     expect(undone.diagramPresentations.requirements?.elementIds ?? []).not.toContain('blk-undo-test');
   });
+
+  it('updates a Block once and projects the change on every diagram', () => {
+    const base = createSysmlGatewayState();
+    const block = makeBlock('blk-motor', 'Motor');
+    let state = executeSysmlCommand(base, { type: 'createElement', element: block });
+    state = executeSysmlCommand(state, { type: 'addToDiagram', diagramId: 'bdd', elementIds: ['blk-motor'] });
+    state = executeSysmlCommand(state, { type: 'addToDiagram', diagramId: 'requirements', elementIds: ['blk-motor'] });
+
+    const renamed = executeSysmlCommand(state, { type: 'updateElement', elementId: 'blk-motor', patch: { name: 'BLDCMotor' } });
+    expect(renamed.repository.definitions['blk-motor'].name).toBe('BLDCMotor');
+    expect(renamed.diagramPresentations.bdd.elementIds).toContain('blk-motor');
+    expect(renamed.diagramPresentations.requirements.elementIds).toContain('blk-motor');
+  });
+
+  it('creates one satisfy relationship independent of its presentation', () => {
+    const base = createSysmlGatewayState();
+    const block = makeBlock('blk-motor', 'Motor');
+    const req: RequirementDefinition = {
+      id: 'req-power',
+      name: 'PowerRequirement',
+      text: 'Must provide power',
+      kind: 'requirement',
+      namespace: ['model'],
+      ownerId: 'model',
+    };
+    let state = executeSysmlCommand(base, { type: 'createElement', element: block });
+    state = executeSysmlCommand(state, { type: 'createElement', element: req });
+
+    const satisfyRelationship: SysmlRelationship = {
+      id: 'rel-satisfy-1',
+      kind: 'satisfy',
+      sourceId: 'blk-motor',
+      targetId: 'req-power',
+    };
+    const result = executeSysmlCommand(state, { type: 'createElement', element: satisfyRelationship });
+    expect(result.committed).toBe(true);
+    expect(Object.keys(result.repository.relationships)).toEqual([satisfyRelationship.id]);
+  });
 });
 
 

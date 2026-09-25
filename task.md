@@ -26,20 +26,20 @@
   - [x] Step 4: Delete the requirements-only presentation mutation inside legacy `createBlock`
   - [x] Step 5: Run focused SysML and TypeScript tests
   - [x] Step 6: Commit
-- [ ] Task 5: Make Every Model Explorer Action Observable and Executable
-  - [ ] Step 1: Write failing adapter tests for copy, remove, delete, duplicate, and paste
-  - [ ] Step 2: Run explorer tests and verify failures
-  - [ ] Step 3: Extend command and result contracts
-  - [ ] Step 4: Execute copy and remove through the adapter
-  - [ ] Step 5: Centralize result handling in `AppModelExplorer`
-  - [ ] Step 6: Run explorer tests
-  - [ ] Step 7: Commit
-- [ ] Task 6: Route SysML Updates and Relationships Through the Gateway
-  - [ ] Step 1: Write failing command-path tests for update and relationship creation
-  - [ ] Step 2: Run focused tests and establish the current failure
-  - [ ] Step 3: Replace update handlers with command dispatch
-  - [ ] Step 4: Run SysML tests and TypeScript
-  - [ ] Step 5: Commit
+- [x] Task 5: Make Every Model Explorer Action Observable and Executable
+  - [x] Step 1: Write failing adapter tests for copy, remove, delete, duplicate, and paste
+  - [x] Step 2: Run explorer tests and verify failures
+  - [x] Step 3: Extend command and result contracts
+  - [x] Step 4: Execute copy and remove through the adapter
+  - [x] Step 5: Centralize result handling in `AppModelExplorer`
+  - [x] Step 6: Run explorer tests
+  - [x] Step 7: Commit
+- [x] Task 6: Route SysML Updates and Relationships Through the Gateway
+  - [x] Step 1: Write failing command-path tests for update and relationship creation
+  - [x] Step 2: Run focused tests and establish the current failure
+  - [x] Step 3: Replace update handlers with command dispatch
+  - [x] Step 4: Run SysML tests and TypeScript
+  - [x] Step 5: Commit
 - [ ] Task 7: Route Parts, Ports, and Connectors Through the Gateway
   - [ ] Step 1: Add failing tests for typed property and port creation
   - [ ] Step 2: Run focused tests and verify failures where UI still bypasses the repository
