@@ -65,9 +65,6 @@ export function deriveAcceptance(
 
   for (const gate of mandatoryGates) {
     const act = activities[gate];
-    if (gate === 'sanitizers' && act?.status === 'NOT_RUN' && (act?.details as any)?.supported === false) {
-      continue;
-    }
     if (!act || act.status !== 'PASS') {
       if (overallStatus !== 'FAIL') {
         overallStatus = act?.status === 'NOT_RUN' ? 'NOT_RUN' : (act?.status ?? 'FAIL');
