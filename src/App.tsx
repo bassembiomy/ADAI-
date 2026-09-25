@@ -10945,12 +10945,12 @@ const ADIA = () => {
     if (isCreatingTransition) { // Reusing this flag for relationships
       if (transitionSourceId) {
         if (transitionSourceId !== blockId) {
-          const source = blocks.find(b => b.id === transitionSourceId);
-          const target = blocks.find(b => b.id === blockId);
+          const source = blocks.find(b => b.id === transitionSourceId) ?? states.find(s => s.id === transitionSourceId);
+          const target = blocks.find(b => b.id === blockId) ?? states.find(s => s.id === blockId);
           if (!source || !target) return;
-          const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+          const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
           if (legalKinds.length === 0) {
-            const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+            const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
             if (reversedKinds.length > 0) {
               setRequirementConnectionPicker({ sourceId: blockId, targetId: transitionSourceId, reversedKinds });
             } else {
@@ -18948,18 +18948,18 @@ const ADIA = () => {
                 <p className="text-xs text-[#888] mt-1">
                   Connect{' '}
                   <span className="text-[#f97316] font-medium">
-                    {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name ?? states.find(s => s.id === requirementConnectionPicker.sourceId)?.name) || 'Source'}
                   </span>{' '}
                   to{' '}
                   <span className="text-[#f97316] font-medium">
-                    {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name ?? states.find(s => s.id === requirementConnectionPicker.targetId)?.name) || 'Target'}
                   </span>
                 </p>
               </div>
 
               <div className="flex flex-col gap-2">
                 {getCanvasRelationshipKinds(
-                  { blocks, parts, relationships },
+                  { blocks, parts, relationships, states },
                   requirementConnectionPicker.sourceId,
                   requirementConnectionPicker.targetId,
                   diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd',

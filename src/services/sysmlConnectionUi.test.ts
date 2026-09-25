@@ -79,4 +79,14 @@ describe('SysML connection UI admission', () => {
     const state = { ...model(), blocks: [block('whole', 'testCase'), block('part', 'requirement')] };
     expect(getCanvasRelationshipKinds(state, 'whole', 'part', 'requirements')).toEqual(['verify', 'refine', 'trace']);
   });
+
+  it('returns satisfy, verify, refine, and trace from State to Requirement', () => {
+    const state = {
+      ...model(),
+      blocks: [block('req-1', 'requirement')],
+      states: [{ id: 'state-active', name: 'Active' }],
+    };
+    expect(getCanvasRelationshipKinds(state, 'state-active', 'req-1', 'requirements'))
+      .toEqual(['satisfy', 'verify', 'refine', 'trace']);
+  });
 });

@@ -46,12 +46,12 @@ export function validateLegacyRequirementStatusTransition(
 }
 
 export function validateLegacyRelationshipCandidate(
-  model: { blocks: readonly BlockData[]; parts: readonly PartData[]; relationships: readonly RelationshipData[] },
+  model: { blocks: readonly BlockData[]; parts: readonly PartData[]; relationships: readonly RelationshipData[]; states?: readonly { id: string; name: string }[] },
   candidate: RelationshipData,
 ): CreationValidationResult {
   const codes: string[] = [];
-  const source = legacyConnectionEndpoint(model.blocks, model.parts, candidate.sourceId);
-  const target = legacyConnectionEndpoint(model.blocks, model.parts, candidate.targetId);
+  const source = legacyConnectionEndpoint(model.blocks, model.parts, candidate.sourceId, model.states);
+  const target = legacyConnectionEndpoint(model.blocks, model.parts, candidate.targetId, model.states);
   const type: string = candidate.type === 'derive' ? 'deriveReqt' : candidate.type;
   if (!source || !target) codes.push('MISSING_RELATIONSHIP_ENDPOINT');
   if (candidate.sourceId === candidate.targetId) codes.push('SELF_RELATIONSHIP');
@@ -123,9 +123,17 @@ export function validateLegacyConnectorCandidate(
   return result(codes);
 }
 
-function legacyConnectionEndpoint(blocks: readonly BlockData[], parts: readonly PartData[], id: string): ConnectionEndpoint | undefined {
+function legacyConnectionEndpoint(
+  blocks: readonly BlockData[],
+  parts: readonly PartData[],
+  id: string,
+  states?: readonly { id: string; name: string }[],
+): ConnectionEndpoint | undefined {
   const endpoint = blocks.find(item => item.id === id) ?? parts.find(item => item.id === id);
-  return endpoint ? classifyLegacyEndpoint(endpoint) : undefined;
+  if (endpoint) return classifyLegacyEndpoint(endpoint);
+  const state = states?.find(item => item.id === id);
+  if (state) return { id: state.id, name: state.name, family: 'state' };
+  return undefined;
 }
 
 function relationshipDiagram(type: string): 'bdd' | 'ibd' | 'requirements' | 'rtm' {

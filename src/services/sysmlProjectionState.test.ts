@@ -80,7 +80,9 @@ describe('applyCanonicalSysmlResult', () => {
       connectors: [],
     };
     let sharedRepositoryView: LegacySysmlView | undefined;
-    applyCanonicalSysmlResult({ view: repositoryProjection }, view => { sharedRepositoryView = view; });
+    applyCanonicalSysmlResult({ view: repositoryProjection }, view => {
+      sharedRepositoryView = typeof view === 'function' ? (view as (prev: LegacySysmlView) => LegacySysmlView)(repositoryProjection) : view;
+    });
 
     const ibdCanvasView = projectDiagramScopedCanvasView(sharedRepositoryView!, 'vehicle-ibd', {
       'vehicle-ibd': { elementIds: ['left-motor'], presentations: {} },

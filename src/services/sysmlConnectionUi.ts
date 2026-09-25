@@ -2,7 +2,12 @@ import type { BlockData, PartData, RelationshipData } from '../types/sysml_types
 import { classifyLegacyEndpoint, evaluateSysmlConnection, type ConnectionEndpoint, type ConnectionPolicyDiagnostic, type ConnectionPolicyInput } from '../engine/sysml/connectionPolicy';
 import { validateLegacyRelationshipCandidate } from './sysmlCreationRules';
 
-type UiModel = { blocks: readonly BlockData[]; parts: readonly PartData[]; relationships: readonly RelationshipData[] };
+type UiModel = {
+  blocks: readonly BlockData[];
+  parts: readonly PartData[];
+  relationships: readonly RelationshipData[];
+  states?: readonly { id: string; name: string }[];
+};
 type Diagram = ConnectionPolicyInput['diagram'];
 export interface UiConnectionRejection {
   relationshipKind: string;
@@ -11,11 +16,17 @@ export interface UiConnectionRejection {
   diagnostic: ConnectionPolicyDiagnostic;
 }
 
-export function resolveUiConnectionEndpoint(model: Pick<UiModel, 'blocks' | 'parts'>, id: string): ConnectionEndpoint {
+export function resolveUiConnectionEndpoint(
+  model: Pick<UiModel, 'blocks' | 'parts'> & { states?: readonly { id: string; name: string }[] },
+  id: string,
+): ConnectionEndpoint {
   const block = model.blocks.find(item => item.id === id);
   if (block) return classifyLegacyEndpoint(block);
   const part = model.parts.find(item => item.id === id);
-  return part ? classifyLegacyEndpoint({ ...part, stereotype: 'part' }) : { id: '', name: id, family: 'unknown' };
+  if (part) return classifyLegacyEndpoint({ ...part, stereotype: 'part' });
+  const state = model.states?.find(item => item.id === id);
+  if (state) return { id: state.id, name: state.name, family: 'state' };
+  return { id: '', name: id, family: 'unknown' };
 }
 
 export function rejectUiRelationship(model: UiModel, candidate: RelationshipData, diagram: Diagram): UiConnectionRejection | undefined {

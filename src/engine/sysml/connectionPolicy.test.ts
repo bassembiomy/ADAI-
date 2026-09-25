@@ -40,9 +40,13 @@ describe('central SysML connection policy', () => {
     ['copy', 'requirement', 'requirement', true],
     ['satisfy', 'block', 'requirement', true],
     ['satisfy', 'part', 'requirement', true],
+    ['satisfy', 'state', 'requirement', true],
     ['verify', 'verificationCase', 'requirement', true],
+    ['verify', 'state', 'requirement', true],
     ['refine', 'unknown', 'requirement', true],
+    ['refine', 'state', 'requirement', true],
     ['trace', 'block', 'requirement', true],
+    ['trace', 'state', 'requirement', true],
     ['trace', 'block', 'valueType', false],
     ['satisfy', 'requirement', 'requirement', false],
   ] as const)('%s %s -> %s is %s', (kind, source, target, allowed) => {

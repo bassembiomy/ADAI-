@@ -4,7 +4,7 @@ import type { SysmlEntity, SysmlUsage } from './model';
 export type SysmlEndpointFamily =
   | 'block' | 'interfaceBlock' | 'interface' | 'valueType' | 'enumeration'
   | 'requirement' | 'verificationCase' | 'part' | 'port' | 'valueParameter'
-  | 'actor' | 'useCase' | 'subject' | 'unknown';
+  | 'actor' | 'useCase' | 'subject' | 'state' | 'unknown';
 
 export interface ConnectionEndpoint {
   id: string;
@@ -28,7 +28,7 @@ export interface ConnectionPolicyInput {
   relationshipKind: string;
   source: ConnectionEndpoint;
   target: ConnectionEndpoint;
-  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase';
+  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' | 'statemachine';
 }
 
 const BLOCK_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock']);
@@ -57,7 +57,7 @@ function reject(input: ConnectionPolicyInput, code: string, reason: string, corr
 function validDiagram(kind: string, diagram: ConnectionPolicyInput['diagram']): boolean {
   if (['association', 'composition', 'sharedAggregation', 'aggregation', 'generalization', 'dependency', 'allocation'].includes(kind)) return diagram === 'bdd';
   if (['binding', 'assembly', 'delegation'].includes(kind)) return diagram === 'ibd';
-  if (REQUIREMENT_KINDS.has(kind)) return diagram === 'requirements' || diagram === 'rtm';
+  if (REQUIREMENT_KINDS.has(kind)) return diagram === 'requirements' || diagram === 'rtm' || diagram === 'statemachine';
   if (USE_CASE_KINDS.has(kind)) return diagram === 'useCase';
   return false;
 }
@@ -98,11 +98,11 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'satisfy') {
-    if ((!BLOCK_FAMILY.has(source.family) && source.family !== 'part') || target.family !== 'requirement') return reject(normalized, 'INVALID_SATISFY_DIRECTION', 'Satisfy requires a Block-family definition or Part usage to a Requirement.', 'Connect the design element or Part to a Requirement.');
+    if ((!BLOCK_FAMILY.has(source.family) && source.family !== 'part' && source.family !== 'state') || target.family !== 'requirement') return reject(normalized, 'INVALID_SATISFY_DIRECTION', 'Satisfy requires a Block-family definition, Part usage, or State to a Requirement.', 'Connect the design element, Part, or State to a Requirement.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'verify') {
-    if (source.family !== 'verificationCase' || target.family !== 'requirement') return reject(normalized, 'INVALID_VERIFY_DIRECTION', 'Verify requires a Verification Case to a Requirement.', 'Connect a Verification Case to the Requirement it verifies.');
+    if ((source.family !== 'verificationCase' && source.family !== 'state') || target.family !== 'requirement') return reject(normalized, 'INVALID_VERIFY_DIRECTION', 'Verify requires a Verification Case or State to a Requirement.', 'Connect a Verification Case or State to the Requirement it verifies.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'refine') {
@@ -184,6 +184,7 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
     case 'actor': return 'actor';
     case 'usecase': case 'use_case': return 'useCase';
     case 'subject': return 'subject';
+    case 'state': return 'state';
     default: return 'unknown';
   }
 }

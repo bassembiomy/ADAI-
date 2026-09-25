@@ -12,12 +12,12 @@
   - [x] Step 3: Update `App.tsx` canvas mouse handlers
   - [x] Step 4: Verify with TypeScript and Vitest
   - [x] Step 5: Commit
-- [ ] Task 3: State Machine State Requirement Connection Backend & Connection Policy
-  - [ ] Step 1: Write failing unit tests for State to Requirement relationship evaluation
-  - [ ] Step 2: Run test to verify it fails
-  - [ ] Step 3: Update `connectionPolicy.ts` and `sysmlConnectionUi.ts`
-  - [ ] Step 4: Run test to verify it passes
-  - [ ] Step 5: Commit
+- [x] Task 3: State Machine State Requirement Connection Backend & Connection Policy
+  - [x] Step 1: Write failing unit tests for State to Requirement relationship evaluation
+  - [x] Step 2: Run test to verify it fails
+  - [x] Step 3: Update `connectionPolicy.ts` and `sysmlConnectionUi.ts`
+  - [x] Step 4: Run test to verify it passes
+  - [x] Step 5: Commit
 - [ ] Task 4: State Machine Inspector Requirement Traceability UI
   - [ ] Step 1: Write component unit test for `StateRequirementTraceability`
   - [ ] Step 2: Run test to verify it fails
