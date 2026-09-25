@@ -17,7 +17,7 @@ export interface ModelDiagramDefinition extends NamedElement {
 export interface ValueTypeDefinition extends NamedElement { kind: 'valueType'; unit?: string; dimension?: string; }
 export interface InterfaceDefinition extends NamedElement { kind: 'interface'; features: string[]; }
 export interface PropertyDefinition { id: string; name: string; kind: 'value' | 'part' | 'reference' | 'flow'; typeId: string; multiplicity: Multiplicity; unit?: string; dimension?: string; defaultValue?: string; isDerived?: boolean; redefinesId?: string; subsetsId?: string; inheritedFromId?: string; }
-export interface PortDefinition { id: string; name: string; kind: 'full' | 'proxy'; typeId: string; direction: 'in' | 'out' | 'inout'; isConjugated: boolean; multiplicity: Multiplicity; inheritedFromId?: string; }
+export interface PortDefinition { id: string; name: string; kind: 'standard' | 'proxy' | 'full' | 'flow'; typeId: string; direction: 'in' | 'out' | 'inout'; isConjugated: boolean; multiplicity: Multiplicity; inheritedFromId?: string; }
 export interface BlockDefinition extends NamedElement { kind: 'block'; isAbstract: boolean; isLeaf: boolean; supertypeIds?: string[]; properties: PropertyDefinition[]; ports: PortDefinition[]; operations: string[]; constraints: string[]; }
 export type SysmlDefinition = BlockDefinition | ValueTypeDefinition | InterfaceDefinition;
 

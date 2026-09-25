@@ -131,7 +131,7 @@ describe('getRequirementsDiagramScope', () => {
   it('renders explicitly presented Blocks and TestCases before relationships exist', () => {
     const blocks = [block('req-root', 'requirement'), block('block-root', 'block'), block('test-root', 'testCase')];
 
-    const scope = getRequirementsDiagramScope(blocks, [], 'root', new Set(['block-root', 'test-root']));
+    const scope = getRequirementsDiagramScope(blocks, [], 'root', ['block-root', 'test-root']);
 
     expect(scope.visibleBlockIds).toEqual(new Set(['req-root', 'block-root', 'test-root']));
   });

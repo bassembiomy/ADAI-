@@ -60,6 +60,10 @@ export type MetaclassKind =
   | 'Requirement'
   | 'TestCase'
   | 'VerificationCase'
+  // Behaviors
+  | 'UseCase'
+  | 'Activity'
+  | 'ActivityPartition'
   // Diagrams
   | 'Diagram';
 
@@ -96,3 +100,9 @@ export interface Constraint extends SemanticElement {
   specification: ValueSpecification;
   constrainedElementIds: string[];
 }
+
+export interface ConstraintExpression {
+  language?: string;
+  body: string;
+}
+

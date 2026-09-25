@@ -1,4 +1,5 @@
 import type { SysmlRepositoryV4 } from '../domain';
+import { validateRelationshipEndpoints } from '../capabilities/relationshipPolicy';
 import type {
   CreateRelationshipCommand,
   UpdateRelationshipCommand,
@@ -18,21 +19,13 @@ export function handleCreateRelationship(
     };
   }
 
-  // Ensure source and target elements exist
-  if (!state.elements[cmd.relationship.sourceId]) {
+  // Validate endpoints via canonical relationship policy
+  const validation = validateRelationshipEndpoints(cmd.relationship, state);
+  if (!validation.allowed) {
     return {
       success: false,
-      code: 'SOURCE_ELEMENT_NOT_FOUND',
-      message: `Source element "${cmd.relationship.sourceId}" does not exist.`,
-      nextState: state,
-    };
-  }
-
-  if (!state.elements[cmd.relationship.targetId]) {
-    return {
-      success: false,
-      code: 'TARGET_ELEMENT_NOT_FOUND',
-      message: `Target element "${cmd.relationship.targetId}" does not exist.`,
+      code: validation.code ?? 'INVALID_RELATIONSHIP_ENDPOINTS',
+      message: validation.message ?? 'Relationship endpoints are invalid.',
       nextState: state,
     };
   }

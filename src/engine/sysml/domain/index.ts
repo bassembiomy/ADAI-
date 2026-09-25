@@ -3,6 +3,7 @@ export * from './classifiers';
 export * from './properties';
 export * from './ports';
 export * from './requirements';
+export * from './behaviors';
 export * from './relationships';
 export * from './presentations';
 

@@ -36,7 +36,7 @@ const INHERITANCE_PANEL_CODES = new Set([
 const DEFAULT_MAX_VISIBLE_INHERITED = 50;
 
 const PROPERTY_KINDS: NonNullable<PropertyDefinition['kind']>[] = ['value', 'part', 'reference', 'flow'];
-const PORT_KINDS: NonNullable<PortDefinition['kind']>[] = ['proxy', 'full'];
+const PORT_KINDS: NonNullable<PortDefinition['kind']>[] = ['standard', 'proxy', 'full', 'flow'];
 const PORT_DIRECTIONS: NonNullable<PortDefinition['direction']>[] = ['in', 'out', 'inout'];
 
 export function BlockFeatureEditor({

@@ -89,8 +89,15 @@ export interface ResizePresentationCommand {
   height: number;
 }
 
+export interface CreateAndPresentElementCommand {
+  type: 'CreateAndPresentElement';
+  element: SemanticElement;
+  presentation: DiagramPresentation;
+}
+
 export type SysmlCommand =
   | CreateElementCommand
+  | CreateAndPresentElementCommand
   | UpdateElementCommand
   | RenameElementCommand
   | MoveElementCommand

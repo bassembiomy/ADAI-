@@ -9738,23 +9738,22 @@ const ADIA = () => {
       });
     }
     if (stereotype === 'requirement' && parentRequirement) {
-      setRelationships(prev => [
-        ...prev,
-        {
+      handleExecuteSysmlCommand({
+        type: 'createElement',
+        element: {
           id: uuidv4(),
           sourceId: parentRequirement.id,
           targetId: newBlock.id,
-          type: 'requirementContainment',
-          label: '',
+          kind: 'requirementContainment',
         },
-      ]);
+      });
     }
 
     setSelectedIds([newBlock.id]);
     addError('info', parentRequirement && stereotype === 'requirement'
       ? `Created contained requirement: ${newBlock.name}`
       : `Created ${stereotype}: ${newBlock.name}`);
-  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
+  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId, handleExecuteSysmlCommand]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
     const current = blocks.find(block => block.id === id);

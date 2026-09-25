@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
 import { createSysmlGatewayState, executeSysmlCommand, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
-import type { BlockDefinition, RequirementDefinition } from '../../../engine/sysml/model';
+import type { BlockDefinition, InterfaceDefinition, RequirementDefinition } from '../../../engine/sysml/model';
 
 function createTestHarness(initialState?: SysmlGatewayState) {
   let state = initialState ?? createSysmlGatewayState();
@@ -67,6 +67,154 @@ describe('sysmlExplorerAdapter', () => {
     const result = adapter.execute({ type: 'createElement', ownerId: 'block-1', elementKind: 'part', name: 'controller' });
     expect(result.committed).toBe(true);
     expect(harness.state.diagramPresentations['bdd-1']?.elementIds).not.toContain(result.selectedIds?.[0]);
+  });
+
+  it('shows legal Block children and disabled illegal All Types entries', () => {
+    const harness = createTestHarness();
+    const block: BlockDefinition = {
+      id: 'block-1',
+      name: 'Block1',
+      kind: 'block',
+      namespace: [],
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    harness.executeCommand({
+      type: 'createElement',
+      element: block,
+    });
+    const adapter = createSysmlExplorerAdapter(harness);
+    const capabilities = adapter.capabilities(['block-1'], 'bdd-1', { includeAllTypes: true });
+    expect(capabilities).toContainEqual(expect.objectContaining({ elementKind: 'PartProperty', enabled: true }));
+    expect(capabilities).toContainEqual(
+      expect.objectContaining({
+        elementKind: 'Requirement',
+        enabled: false,
+        diagnosticCode: 'ILLEGAL_OWNERSHIP',
+      })
+    );
+  });
+
+  it('executes the canonical PartProperty capability exposed by the menu', () => {
+    const harness = createTestHarness();
+    const owner: BlockDefinition = {
+      id: 'block-owner', name: 'Owner', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const type: BlockDefinition = {
+      id: 'block-type', name: 'Type', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    harness.executeCommand({ type: 'createElement', element: owner });
+    harness.executeCommand({ type: 'createElement', element: type });
+
+    const adapter = createSysmlExplorerAdapter(harness);
+    const result = adapter.execute({
+      type: 'createElement', ownerId: owner.id, elementKind: 'PartProperty', name: 'part1',
+    });
+
+    expect(result.committed).toBe(true);
+    expect(harness.state.repository.usages[result.selectedIds![0]]).toMatchObject({
+      ownerId: owner.id,
+      kind: 'part',
+    });
+  });
+
+  it('creates and projects normative TestCase and UML UseCase entities', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    const testCaseResult = adapter.execute({
+      type: 'createElement', ownerId: 'model', elementKind: 'TestCase', name: 'Brake verification',
+    });
+    const useCaseResult = adapter.execute({
+      type: 'createElement', ownerId: 'model', elementKind: 'UseCase', name: 'Stop vehicle',
+    });
+
+    expect(testCaseResult.committed).toBe(true);
+    expect(useCaseResult.committed).toBe(true);
+    expect(harness.state.repository.verificationCases[testCaseResult.selectedIds![0]]).toBeDefined();
+    expect(harness.state.repository.useCases[useCaseResult.selectedIds![0]]).toMatchObject({
+      kind: 'useCase',
+      name: 'Stop vehicle',
+    });
+
+    const projection = adapter.project('containment');
+    expect(projection.nodes[`sysml:element:${testCaseResult.selectedIds![0]}`]?.kind).toBe('testCase');
+    expect(projection.nodes[`sysml:element:${useCaseResult.selectedIds![0]}`]?.kind).toBe('useCase');
+  });
+
+  it('persists distinct standard, full, proxy, and legacy flow port kinds', () => {
+    const harness = createTestHarness();
+    const owner: BlockDefinition = {
+      id: 'port-owner', name: 'PortOwner', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const interfaceType: InterfaceDefinition = {
+      id: 'if-control', name: 'ControlIF', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+    };
+    harness.executeCommand({ type: 'createElement', element: owner });
+    harness.executeCommand({ type: 'createElement', element: interfaceType });
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    for (const [elementKind, name] of [
+      ['Port', 'standardPort'],
+      ['fullPort', 'fullPort'],
+      ['proxyPort', 'proxyPort'],
+      ['flowPort', 'flowPort'],
+    ] as const) {
+      const result = adapter.execute({ type: 'createElement', ownerId: owner.id, elementKind, name });
+      expect(result.committed, `${elementKind} should commit`).toBe(true);
+    }
+
+    expect(harness.state.repository.definitions[owner.id]).toMatchObject({
+      ports: [
+        expect.objectContaining({ name: 'standardPort', kind: 'standard' }),
+        expect.objectContaining({ name: 'fullPort', kind: 'full' }),
+        expect.objectContaining({ name: 'proxyPort', kind: 'proxy', typeId: interfaceType.id }),
+        expect.objectContaining({ name: 'flowPort', kind: 'flow' }),
+      ],
+    });
+  });
+
+  it('commits every enabled repository creation capability exposed by the tree', () => {
+    const harness = createTestHarness();
+    const owner: BlockDefinition = {
+      id: 'capability-owner', name: 'CapabilityOwner', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const type: BlockDefinition = {
+      id: 'capability-type', name: 'CapabilityType', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const interfaceType: InterfaceDefinition = {
+      id: 'capability-if', name: 'CapabilityIF', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+    };
+    harness.executeCommand({ type: 'createElement', element: owner });
+    harness.executeCommand({ type: 'createElement', element: type });
+    harness.executeCommand({ type: 'createElement', element: interfaceType });
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    for (const ownerId of ['model', owner.id]) {
+      const capabilities = adapter.capabilities([ownerId], undefined, { includeAllTypes: true })
+        .filter(capability => capability.enabled)
+        .filter(capability => capability.kind === 'createElement' || capability.kind === 'createOwnedFeature');
+
+      for (const capability of capabilities) {
+        const result = adapter.execute({
+          type: 'createElement',
+          ownerId,
+          elementKind: capability.elementKind!,
+          name: `Created ${capability.elementKind}`,
+        });
+        expect(result.committed, `${ownerId}:${capability.elementKind} should commit`).toBe(true);
+      }
+    }
   });
 
   it('filters relationship targets by canonical policy', () => {

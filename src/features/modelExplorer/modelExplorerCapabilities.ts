@@ -1,10 +1,48 @@
-import type { ExplorerCapability } from './modelExplorerTypes';
+import type { MetaclassKind } from '../../engine/sysml/domain/base';
+import { getSupportedElementKinds } from '../../engine/sysml/capabilities/catalog';
+import { OWNERSHIP_MATRIX } from '../../engine/sysml/capabilities/ownershipPolicy';
+
+function metaclassToExplorerKinds(metaclass: MetaclassKind): string[] {
+  switch (metaclass) {
+    case 'Package':
+      return ['package'];
+    case 'Block':
+      return ['block'];
+    case 'InterfaceBlock':
+      return ['interface'];
+    case 'ValueType':
+      return ['valueType'];
+    case 'Requirement':
+      return ['requirement'];
+    case 'TestCase':
+      return ['testCase'];
+    case 'VerificationCase':
+      return ['verificationCase'];
+    case 'PartProperty':
+      return ['part', 'sharedPart'];
+    case 'ReferenceProperty':
+      return ['reference'];
+    case 'ValueProperty':
+      return ['valueProperty'];
+    case 'Port':
+      return ['port', 'fullPort', 'proxyPort', 'flowPort'];
+    default:
+      return [metaclass.charAt(0).toLowerCase() + metaclass.slice(1)];
+  }
+}
+
+function deriveExplorerChildren(ownerKey: string): readonly string[] {
+  const allowedMetaclasses = OWNERSHIP_MATRIX[ownerKey] ?? [];
+  const kinds = allowedMetaclasses.flatMap(metaclassToExplorerKinds);
+  // Return unique kinds preserving order
+  return Array.from(new Set(kinds));
+}
 
 export const SYSML_CHILDREN: Record<string, readonly string[]> = {
-  model: ['package', 'block', 'valueType', 'interface', 'requirement', 'verificationCase'],
-  package: ['package', 'block', 'valueType', 'interface', 'requirement', 'verificationCase'],
-  block: ['part', 'reference', 'sharedPart', 'fullPort', 'proxyPort', 'valueProperty'],
-  requirement: ['requirement'],
+  model: deriveExplorerChildren('Model'),
+  package: deriveExplorerChildren('Package'),
+  block: deriveExplorerChildren('Block'),
+  requirement: deriveExplorerChildren('Requirement'),
 };
 
 export const SYSML_RELATIONSHIPS: Record<string, readonly string[]> = {
@@ -19,20 +57,31 @@ export const SYSML_DIAGRAM_KINDS: Record<string, readonly string[]> = {
   block: ['ibd', 'bdd', 'stateMachine'],
 };
 
-export const ELEMENT_KIND_LABELS: Record<string, string> = {
+const BASE_ELEMENT_KIND_LABELS: Record<string, string> = {
   model: 'Model',
   package: 'Package',
   block: 'Block',
   valueType: 'Value Type',
   interface: 'Interface',
   requirement: 'Requirement',
+  testCase: 'Test Case',
   verificationCase: 'Verification Case',
   part: 'Part',
   reference: 'Reference Property',
   sharedPart: 'Shared Part',
   fullPort: 'Full Port',
   proxyPort: 'Proxy Port',
+  port: 'Standard UML Port',
+  flowPort: 'Legacy Flow Port',
   valueProperty: 'Value Property',
+  constraintProperty: 'Constraint Property',
+  flowProperty: 'Flow Property',
+  operation: 'Operation',
+  parameter: 'Parameter',
+  reception: 'Reception',
+  constraint: 'Constraint',
+  comment: 'Comment',
+  rationale: 'Rationale',
   // State Machine
   stateMachine: 'State Machine',
   region: 'Region',
@@ -49,6 +98,18 @@ export const ELEMENT_KIND_LABELS: Record<string, string> = {
   'exit-point': 'Exit Point',
   terminate: 'Terminate Pseudostate',
 };
+
+// Build derived label map from catalog plus explorer mappings
+const DERIVED_LABELS: Record<string, string> = { ...BASE_ELEMENT_KIND_LABELS };
+for (const def of getSupportedElementKinds()) {
+  DERIVED_LABELS[def.metaclass] = def.label;
+  const lowerCamel = def.metaclass.charAt(0).toLowerCase() + def.metaclass.slice(1);
+  if (!DERIVED_LABELS[lowerCamel]) {
+    DERIVED_LABELS[lowerCamel] = def.label;
+  }
+}
+
+export const ELEMENT_KIND_LABELS: Record<string, string> = DERIVED_LABELS;
 
 export const RELATIONSHIP_KIND_LABELS: Record<string, string> = {
   association: 'Association',
@@ -79,7 +140,16 @@ export const DIAGRAM_KIND_LABELS: Record<string, string> = {
 };
 
 export function getElementKindLabel(kind: string): string {
-  return ELEMENT_KIND_LABELS[kind] || kind.charAt(0).toUpperCase() + kind.slice(1);
+  if (ELEMENT_KIND_LABELS[kind]) {
+    return ELEMENT_KIND_LABELS[kind];
+  }
+  const catalogDef = getSupportedElementKinds().find(
+    (k) => k.metaclass.toLowerCase() === kind.toLowerCase()
+  );
+  if (catalogDef) {
+    return catalogDef.label;
+  }
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 export function getRelationshipKindLabel(kind: string): string {

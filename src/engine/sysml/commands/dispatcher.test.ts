@@ -13,6 +13,7 @@ import {
 import {
   createEmptyRepositoryV4,
   type Block,
+  type Package,
   type SemanticRelationship,
 } from '../domain';
 
@@ -80,8 +81,8 @@ describe('SysML Command and Transaction Boundary (Dispatcher)', () => {
 
   it('rejects circular ownership move and preserves state/revision atomically', () => {
     let repo = createEmptyRepositoryV4();
-    const pkg1: Block = { id: 'pkg-1', name: 'Pkg1', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
-    const pkg2: Block = { id: 'pkg-2', name: 'Pkg2', metaclass: 'Block', namespace: [], ownerId: 'pkg-1' };
+    const pkg1: Package = { id: 'pkg-1', name: 'Pkg1', metaclass: 'Package', namespace: [], ownerId: 'pkg-root' };
+    const pkg2: Package = { id: 'pkg-2', name: 'Pkg2', metaclass: 'Package', namespace: [], ownerId: 'pkg-1' };
     repo = dispatchSysmlCommand(repo, { type: 'CreateElement', element: pkg1 }, uiContext).state;
     repo = dispatchSysmlCommand(repo, { type: 'CreateElement', element: pkg2 }, uiContext).state;
     const revBefore = repo.revision;

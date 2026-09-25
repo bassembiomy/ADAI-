@@ -9,7 +9,11 @@ import type {
 } from '../domain';
 import { createEmptyRepositoryV4 } from '../domain';
 
-export function migrateV3ToV4(v3: SysmlRepository): SysmlRepositoryV4 {
+export function migrateV3ToV4(
+  v3: SysmlRepository,
+  coordinates?: Record<string, any>,
+  diagramPresentations?: Record<string, { elementIds: string[] }>
+): SysmlRepositoryV4 {
   const v4 = createEmptyRepositoryV4();
   v4.revision = v3.revision;
 
@@ -57,7 +61,13 @@ export function migrateV3ToV4(v3: SysmlRepository): SysmlRepositoryV4 {
           id: port.id,
           name: port.name,
           metaclass: 'Port',
-          portKind: port.kind === 'proxy' ? 'proxyPort' : 'fullPort',
+          portKind: port.kind === 'proxy'
+            ? 'proxyPort'
+            : port.kind === 'full'
+              ? 'fullPort'
+              : port.kind === 'flow'
+                ? 'flowPort'
+                : 'umlPort',
           namespace: [],
           ownerId: block.id,
           typeId: port.typeId,
@@ -146,6 +156,46 @@ export function migrateV3ToV4(v3: SysmlRepository): SysmlRepositoryV4 {
     v4.indexes.byType[el.metaclass].push(el.id);
   }
 
+  // 5. Migrate Presentations
+  const coords = coordinates ?? (v3 as any).coordinates ?? {};
+  const diags = diagramPresentations ?? (v3 as any).diagramPresentations ?? {};
+  for (const [diagramId, presData] of Object.entries(diags as Record<string, { elementIds: string[] }>)) {
+    if (!v4.diagrams[diagramId]) {
+      v4.diagrams[diagramId] = {
+        id: diagramId,
+        name: diagramId,
+        metaclass: 'Diagram',
+        diagramKind: 'bdd',
+        namespace: [],
+        ownerId: 'pkg-root',
+        presentationIds: [],
+      };
+    }
+    for (const elementId of presData.elementIds || []) {
+      const presId = `pres_${diagramId}_${elementId}`;
+      const c = coords[elementId] ?? {};
+      const pres: DiagramPresentation = {
+        id: presId,
+        diagramId,
+        semanticElementId: elementId,
+        bounds: {
+          x: c.x ?? 0,
+          y: c.y ?? 0,
+          width: c.width ?? 160,
+          height: c.height ?? 100,
+        },
+      };
+      v4.presentations[presId] = pres;
+      if (!v4.indexes.byDiagram[diagramId]) v4.indexes.byDiagram[diagramId] = [];
+      if (!v4.indexes.byDiagram[diagramId].includes(presId)) {
+        v4.indexes.byDiagram[diagramId].push(presId);
+      }
+      if (!v4.diagrams[diagramId].presentationIds.includes(presId)) {
+        v4.diagrams[diagramId].presentationIds.push(presId);
+      }
+    }
+  }
+
   return v4;
 }
 
@@ -180,4 +230,16 @@ export function deserializeRepositoryV4(json: string): SysmlRepositoryV4 {
     throw new Error(`Expected schemaVersion 4, received ${parsed.schemaVersion}`);
   }
   return parsed as SysmlRepositoryV4;
+}
+
+export function elementsOfKind(repoOrResult: any, kind: string): any[] {
+  const repo = repoOrResult?.repository ?? repoOrResult;
+  if (!repo || !repo.elements) return [];
+  return Object.values(repo.elements).filter((el: any) => el.metaclass === kind);
+}
+
+export function presentationsForElement(repoOrResult: any, elementId: string): any[] {
+  const repo = repoOrResult?.repository ?? repoOrResult;
+  if (!repo || !repo.presentations) return [];
+  return Object.values(repo.presentations).filter((p: any) => p.semanticElementId === elementId);
 }

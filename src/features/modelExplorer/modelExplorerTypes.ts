@@ -15,6 +15,8 @@ export type ExplorerView = 'containment' | 'diagramContext' | 'search';
 
 export type CapabilityKind =
   | 'createElement'
+  | 'createOwnedFeature'
+  | 'showAllTypes'
   | 'createDiagram'
   | 'createRelationship'
   | 'rename'
@@ -66,6 +68,10 @@ export interface ExplorerCapability {
   elementKind?: string;
   relationshipKind?: string;
   direction?: 'incoming' | 'outgoing';
+  capabilityGroup?: 'child' | 'feature' | 'diagram' | 'relationship' | 'edit' | 'allTypes' | string;
+  authority?: 'OMG_SYSML_1_6' | 'UML_FOUNDATION' | 'CAMEO_TOOLING' | 'ADIA_EXTENSION';
+  diagnosticCode?: string;
+  catalogVisibility?: 'direct' | 'allTypes';
 }
 
 export interface ExplorerDiagnostic {
@@ -112,7 +118,11 @@ export interface ModelExplorerAdapter {
   readonly domain: ExplorerDomain;
   getRevision(): number;
   project(view: ExplorerView, contextId?: string): ModelTreeProjection;
-  capabilities(elementIds: readonly string[], activeDiagramId?: string): ExplorerCapability[];
+  capabilities(
+    elementIds: readonly string[],
+    activeDiagramId?: string,
+    options?: { includeAllTypes?: boolean }
+  ): ExplorerCapability[];
   preflight(command: ModelExplorerCommand): ExplorerCommandResult;
   execute(command: ModelExplorerCommand): ExplorerCommandResult;
   relationshipTargets(sourceId: string, relationshipKind: string, direction: 'incoming' | 'outgoing'): ModelTreeNode[];

@@ -8,14 +8,18 @@ describe('AppModelExplorer Capability Coverage', () => {
     expect(explorerAdapterDomain({ ...selectedNode, domain: 'sysml' })).toBe('sysml');
   });
 
-  it('removes context-menu actions that create new workspace entities', () => {
+  it('keeps repository creation actions in the context menu', () => {
     const capabilities: ExplorerCapability[] = [
       enabledCapability('createElement'),
+      enabledCapability('createOwnedFeature'),
       enabledCapability('createDiagram'),
       enabledCapability('rename'),
       enabledCapability('addToDiagram'),
     ];
     expect(filterNonCreatingCapabilities(capabilities).map(capability => capability.kind)).toEqual([
+      'createElement',
+      'createOwnedFeature',
+      'createDiagram',
       'rename',
       'addToDiagram',
     ]);
@@ -51,6 +55,7 @@ describe('AppModelExplorer Capability Coverage', () => {
 
   it.each([
     'createElement',
+    'createOwnedFeature',
     'createDiagram',
     'createRelationship',
     'rename',
