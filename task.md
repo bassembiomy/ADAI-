@@ -18,21 +18,21 @@
   - [x] Step 3: Update `connectionPolicy.ts` and `sysmlConnectionUi.ts`
   - [x] Step 4: Run test to verify it passes
   - [x] Step 5: Commit
-- [ ] Task 4: State Machine Inspector Requirement Traceability UI
-  - [ ] Step 1: Write component unit test for `StateRequirementTraceability`
-  - [ ] Step 2: Run test to verify it fails
-  - [ ] Step 3: Implement `StateRequirementTraceability.tsx` and integrate into `App.tsx`
-  - [ ] Step 4: Run test to verify it passes
-  - [ ] Step 5: Verify full TypeScript and Release Checks
-  - [ ] Step 6: Commit
-- [ ] Task 5: End-to-End Verification of Cameo Cross-Diagram Workflow and State Traceability
-  - [ ] Step 1: Add the new E2E specification
-  - [ ] Step 2: Run Playwright test
-  - [ ] Step 3: Run all release and architecture gates
-  - [ ] Step 4: Commit
-- [ ] Final Verification
-  - [ ] Confirm creating an element in the repository does not leak onto uninitialized diagrams.
-  - [ ] Confirm moving elements on canvas is smooth and positions persist across tab switches.
-  - [ ] Confirm one Block can be presented independently on both Requirements and BDD diagrams.
-  - [ ] Confirm State Machine states can be linked to Requirements with `«satisfy»` and `«trace»` in both UI and backend.
-  - [ ] Confirm State Machine MISRA-C code generation remains 100% compliant and unaffected.
+- [x] Task 4: State Machine Inspector Requirement Traceability UI
+  - [x] Step 1: Write component unit test for `StateRequirementTraceability`
+  - [x] Step 2: Run test to verify it fails
+  - [x] Step 3: Implement `StateRequirementTraceability.tsx` and integrate into `App.tsx`
+  - [x] Step 4: Run test to verify it passes
+  - [x] Step 5: Verify full TypeScript and Release Checks
+  - [x] Step 6: Commit
+- [x] Task 5: End-to-End Verification of Cameo Cross-Diagram Workflow and State Traceability
+  - [x] Step 1: Add the new E2E specification
+  - [x] Step 2: Run Playwright test
+  - [x] Step 3: Run all release and architecture gates
+  - [x] Step 4: Commit
+- [x] Final Verification
+  - [x] Confirm creating an element in the repository does not leak onto uninitialized diagrams.
+  - [x] Confirm moving elements on canvas is smooth and positions persist across tab switches.
+  - [x] Confirm one Block can be presented independently on both Requirements and BDD diagrams.
+  - [x] Confirm State Machine states can be linked to Requirements with `«satisfy»` and `«trace»` in both UI and backend.
+  - [x] Confirm State Machine MISRA-C code generation remains 100% compliant and unaffected.
