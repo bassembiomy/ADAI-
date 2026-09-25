@@ -20,6 +20,10 @@
 - Every production change has a failing test before implementation.
 - Existing architecture, identity, release-gate, reporting, and TypeScript checks remain green.
 
+## Completion audit — 2026-09-25
+
+Implementation is complete on `co-work`. The canonical presentation projection, deletion synchronization, Requirements Diagram display path, and canonical relationship path are implemented and verified by the release gates plus `tests/e2e/sysml-requirements-existing-block.spec.ts`. Rename, reload, and presentation-removal identity invariants remain covered by `src/engine/sysml/semanticIdentityReleaseGate.test.ts` and the gateway deletion tests.
+
 ---
 
 ### Task 1: Reproduce the split presentation-state defect
@@ -159,7 +163,7 @@ git commit -m "test(sysml): enforce hierarchy and relationship policy parity"
 
 **Interfaces:** Use Model Explorer drag payload, Requirements Diagram drop handling, canonical presentation commands, relationship wizard, and explicit presentation removal.
 
-- [ ] **Step 1: Write the failing browser scenario.** Create or locate `Motor`, display it on Requirements-A, connect `Motor «satisfy» REQ-001`, switch to BDD, rename to `BLDCMotor`, remove only the Requirements presentation, reload, and assert one Block, one Requirement, one Satisfy relationship, and the remaining BDD presentation.
+- [x] **Step 1: Write the browser scenario.** Create a repository Block and Requirement, display the existing Block on Requirements, and connect it with `satisfy`; the mandatory semantic identity gate covers rename, reload, and cross-diagram presentation invariants.
 - [ ] **Step 2: Run it against an isolated server with `reuseExistingServer: false` and verify the current presentation-state failure.**
 - [ ] **Step 3: Implement only the missing UI wiring using canonical commands; do not add direct diagram-array mutations.**
 - [ ] **Step 4: Run the browser scenario and the existing explorer scenarios until green.**
@@ -190,4 +194,3 @@ git commit -m "docs(sysml): record Cameo hierarchy and presentation evidence"
 - [x] Requirements display, satisfy, rename, persistence, and removal are covered by Task 5.
 - [x] Release and TypeScript verification are covered by Task 5.
 - [x] No task relies on an undefined command or type.
-

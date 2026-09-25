@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('SysML Cameo-style existing element presentation', () => {
-  test('displays an existing repository Block on Requirements without duplicating it', async ({ page }) => {
+  test('displays an existing repository Block and connects it to a Requirement', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
@@ -28,9 +28,19 @@ test.describe('SysML Cameo-style existing element presentation', () => {
 
     await expect(page.locator('svg text').filter({ hasText: 'NewBlock' }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('svg text').filter({ hasText: 'NewRequirement' }).last()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[role="treeitem"]:has-text("NewBlock")')).toHaveCount(1);
 
-    // The same semantic Block is now presented on the Requirements Diagram;
-    // relationship creation is covered by the canonical gateway integration test.
+    // The same semantic Block is now presented on the Requirements Diagram.
     await expect(page.locator('svg text').filter({ hasText: 'NewBlock' }).last()).toBeVisible({ timeout: 15000 });
+    const connectButton = page.getByRole('button', { name: 'Connect', exact: true });
+    await connectButton.evaluate((element) => (element as HTMLButtonElement).click());
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible({ timeout: 5000 });
+    const blockNode = page.locator('svg g:has(> rect)').filter({ hasText: 'NewBlock' }).last();
+    const requirementNode = page.locator('svg g:has(> rect)').filter({ hasText: 'NewRequirement' }).last();
+    await blockNode.evaluate((element) => element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+    await requirementNode.evaluate((element) => element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+    await expect(page.getByText('Create Relationship', { exact: true })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /Satisfy/i }).click();
+    await expect(page.locator('svg text').filter({ hasText: '«satisfy»' })).toBeVisible({ timeout: 15000 });
   });
 });
