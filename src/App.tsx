@@ -135,6 +135,7 @@ import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
+import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
 import { createLiveXbridgesStateAccessors, createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
@@ -9719,83 +9720,68 @@ const ADIA = () => {
     addError('info', 'Deleted transition');
   }, [addError]);
 
-  // BDD OPERATIONS
-  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
-    addToHistory();
-    const newId = uuidv4();
-    const parentRequirement = diagramMode === 'requirements'
-      ? blocks.find(block => block.id === currentLayerId && block.stereotype === 'requirement')
+  // BDD / SysML CREATION OPERATIONS
+  const createSysmlElementOnActiveDiagram = useCallback((
+    x: number,
+    y: number,
+    kind: DiagramCreationKind,
+  ) => {
+    const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+    const ownerId = diagramMode === 'ibd' ? currentLayerId : 'model';
+    const parentRequirementId = diagramMode === 'requirements' && currentLayerId !== 'root' && currentLayerId !== 'requirements'
+      ? (canonicalSysmlRepository.requirements[currentLayerId] ? currentLayerId : undefined)
       : undefined;
-    // For requirements diagram, store which layer this block was created in
-    const blockLayerId = (diagramMode === 'requirements') ? currentLayerId : undefined;
-    const newBlock: BlockData = {
-      id: newId,
-      name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
-      stereotype,
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
-      width: 150,
-      height: 100,
-      properties: [],
-      classes: [],
-      operations: [],
-      constraints: [],
-      ports: [],
-      reqId: stereotype === 'requirement' ? `REQ-${blocks.filter(b => b.stereotype === 'requirement').length + 1}` : undefined,
-      status: stereotype === 'requirement' ? 'Draft' : undefined,
-      priority: stereotype === 'requirement' ? 'Medium' : undefined,
-      description: stereotype === 'requirement' ? 'Requirement text...' : undefined,
-      risk: stereotype === 'requirement' ? 'Medium' : undefined,
-      verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
-      source: stereotype === 'requirement' ? '' : undefined,
-      version: stereotype === 'requirement' ? '1.0' : undefined,
-      rationale: stereotype === 'requirement' ? '' : undefined,
-      namespace: [],
-      isAbstract: false,
-      isLeaf: false,
-      layerId: blockLayerId,
-    };
-    setBlocks(prev => [...prev, newBlock]);
-    if (diagramMode === 'requirements') {
-      setDiagramPresentations(prev => {
-        const existing = prev.requirements?.elementIds ?? [];
-        return {
-          ...prev,
-          requirements: {
-            elementIds: existing.includes(newBlock.id) ? existing : [...existing, newBlock.id],
-          },
-        };
-      });
-      setSysmlStore(current => {
-        const existing = current.diagramPresentations.get('requirements')?.elementIds ?? [];
-        const nextPresentations = Object.fromEntries(current.diagramPresentations.entries());
-        nextPresentations.requirements = {
-          elementIds: existing.includes(newBlock.id) ? existing : [...existing, newBlock.id],
-        };
-        return fromRepository(
-          canonicalSysmlRepository,
-          Object.fromEntries(current.coordinates.entries()),
-          nextPresentations,
-        );
-      });
-    }
-    if (stereotype === 'requirement' && parentRequirement) {
-      handleExecuteSysmlCommand({
-        type: 'createElement',
-        element: {
-          id: uuidv4(),
-          sourceId: parentRequirement.id,
-          targetId: newBlock.id,
-          kind: 'requirementContainment',
-        },
-      });
+
+    const outcome = buildDiagramCreationCommand({
+      repository: canonicalSysmlRepository,
+      kind,
+      ownerId,
+      diagramId,
+      position: {
+        x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+        y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      },
+    });
+    if (!outcome.ok) {
+      addError('error', outcome.diagnostic.message, 'SysML');
+      return;
     }
 
-    setSelectedIds([newBlock.id]);
-    addError('info', parentRequirement && stereotype === 'requirement'
-      ? `Created contained requirement: ${newBlock.name}`
-      : `Created ${stereotype}: ${newBlock.name}`);
-  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId, canonicalSysmlRepository, handleExecuteSysmlCommand]);
+    let commandToDispatch: SysmlEditorCommand = outcome.command;
+    if (kind === 'Requirement' && parentRequirementId) {
+      commandToDispatch = {
+        type: 'batch',
+        commands: [
+          outcome.command,
+          {
+            type: 'createElement',
+            element: {
+              id: uuidv4(),
+              sourceId: parentRequirementId,
+              targetId: outcome.semanticId,
+              kind: 'requirementContainment',
+            },
+          },
+        ],
+      };
+    }
+
+    const result = handleExecuteSysmlCommand(commandToDispatch);
+    if (result.committed) {
+      setSelectedIds([outcome.semanticId]);
+      addError('info', parentRequirementId && kind === 'Requirement' ? `Created contained requirement` : `Created ${kind}`);
+    } else {
+      result.diagnostics.forEach(item => addError(item.severity, item.message, 'SysML', item.elementId));
+    }
+  }, [canonicalSysmlRepository, currentLayerId, diagramMode, snapEnabled, handleExecuteSysmlCommand, addError]);
+
+  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
+    const kind: DiagramCreationKind = stereotype === 'requirement' ? 'Requirement'
+      : stereotype === 'testCase' ? 'TestCase'
+      : stereotype === 'useCase' ? 'UseCase'
+      : 'Block';
+    createSysmlElementOnActiveDiagram(x, y, kind);
+  }, [createSysmlElementOnActiveDiagram]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
     const current = blocks.find(block => block.id === id);
@@ -16530,7 +16516,7 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
@@ -16552,7 +16538,7 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'requirement');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Requirement');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
@@ -16563,7 +16549,7 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
@@ -16574,7 +16560,7 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'testCase');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'TestCase');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >

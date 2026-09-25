@@ -73,7 +73,7 @@ export interface NormalizedSysmlStore {
   coordinates: Map<string, PresentationCoordinates>;
   diagramPresentations: Map<string, { elementIds: string[] }>;
   indexes: StoreIndexes;
-  readonly entities?: { has(id: string): boolean; get(id: string): SysmlEntity | undefined };
+  readonly entities: { has(id: string): boolean; get(id: string): SysmlEntity | undefined };
 }
 
 function createEmptyIndexes(): StoreIndexes {

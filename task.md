@@ -19,13 +19,13 @@
   - [x] Step 3: Implement the pure builder
   - [x] Step 4: Run creation tests
   - [x] Step 5: Commit
-- [ ] Task 4: Route Diagram Palette Creation Through the Repository
-  - [ ] Step 1: Write a failing repository-first application projection test
-  - [ ] Step 2: Run the new test and verify it fails
-  - [ ] Step 3: Replace `createBlock` semantic construction with one command
-  - [ ] Step 4: Delete the requirements-only presentation mutation inside legacy `createBlock`
-  - [ ] Step 5: Run focused SysML and TypeScript tests
-  - [ ] Step 6: Commit
+- [x] Task 4: Route Diagram Palette Creation Through the Repository
+  - [x] Step 1: Write a failing repository-first application projection test
+  - [x] Step 2: Run the new test and verify it fails
+  - [x] Step 3: Replace `createBlock` semantic construction with one command
+  - [x] Step 4: Delete the requirements-only presentation mutation inside legacy `createBlock`
+  - [x] Step 5: Run focused SysML and TypeScript tests
+  - [x] Step 6: Commit
 - [ ] Task 5: Make Every Model Explorer Action Observable and Executable
   - [ ] Step 1: Write failing adapter tests for copy, remove, delete, duplicate, and paste
   - [ ] Step 2: Run explorer tests and verify failures

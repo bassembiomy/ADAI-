@@ -19,7 +19,7 @@ describe('sysmlDiagramCreation', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.command.type).toBe('createAndPresent');
-    expect(result.command.element.kind).toBe(repositoryKind);
+    expect((result.command.element as { kind?: string }).kind).toBe(repositoryKind);
     expect(result.command.element.id.startsWith(idPrefix)).toBe(true);
   });
 

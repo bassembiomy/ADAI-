@@ -1,5 +1,5 @@
-import type { SysmlRepository, SysmlElement } from '../engine/sysml/model';
-import type { PresentationCoordinates } from './sysmlCommandGateway';
+import type { SysmlRepository } from '../engine/sysml/model';
+import type { PresentationCoordinates, SysmlElement } from './sysmlCommandGateway';
 import {
   createBlock,
   createRequirement,
@@ -45,10 +45,12 @@ export type DiagramCreationOutcome =
 
 export function collectRepositoryNames(repo: SysmlRepository): Set<string> {
   const names = new Set<string>();
-  const collect = (dict?: Record<string, { name?: string }>) => {
+  const collect = (dict?: Record<string, unknown>) => {
     if (!dict) return;
     for (const item of Object.values(dict)) {
-      if (item?.name) names.add(item.name);
+      if (item && typeof item === 'object' && 'name' in item && typeof (item as { name?: string }).name === 'string') {
+        names.add((item as { name: string }).name);
+      }
     }
   };
   collect(repo.packages);
