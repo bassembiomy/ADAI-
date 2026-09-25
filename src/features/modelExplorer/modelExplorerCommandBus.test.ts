@@ -37,7 +37,7 @@ describe('modelExplorerCommandBus', () => {
         revision: 1,
         diagnostics: [],
         impact: {
-          descendants: ['d1'],
+          descendants: ['child-1'],
           relationships: ['r1'],
           presentations: [],
           invalidated: [],
@@ -54,6 +54,29 @@ describe('modelExplorerCommandBus', () => {
     expect(result.committed).toBe(false);
     expect(result.impact).toBeDefined();
     expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
+  it('executes when preflight contains an empty impact report', () => {
+    const adapter: ModelExplorerAdapter = {
+      domain: 'sysml',
+      getRevision: () => 1,
+      project: vi.fn(),
+      capabilities: vi.fn(),
+      preflight: vi.fn().mockReturnValue({
+        committed: false,
+        revision: 1,
+        diagnostics: [],
+        impact: { descendants: [], relationships: [], presentations: [], invalidated: [] },
+      }),
+      execute: vi.fn().mockReturnValue({
+        committed: true,
+        revision: 2,
+        diagnostics: [],
+      }),
+      relationshipTargets: vi.fn(),
+    };
+    createModelExplorerCommandBus(adapter).dispatch({ type: 'delete', elementIds: ['block-1'] });
+    expect(adapter.execute).toHaveBeenCalledOnce();
   });
 
   it('executes when preflight passes cleanly', () => {

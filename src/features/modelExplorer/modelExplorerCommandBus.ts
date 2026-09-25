@@ -2,6 +2,7 @@ import type {
   ModelExplorerAdapter,
   ModelExplorerCommand,
   ExplorerCommandResult,
+  ExplorerImpact,
 } from './modelExplorerTypes';
 
 export interface ModelExplorerCommandBus {
@@ -9,8 +10,17 @@ export interface ModelExplorerCommandBus {
   confirm(command: ModelExplorerCommand, impactHash: string): ExplorerCommandResult;
 }
 
+export function hasMaterialImpact(impact?: ExplorerImpact): boolean {
+  if (!impact) return false;
+  return impact.descendants.length > 0
+    || impact.relationships.length > 0
+    || impact.presentations.length > 0
+    || impact.invalidated.length > 0;
+}
+
 export function isPreflightClear(result: ExplorerCommandResult): boolean {
-  return !result.impact && !result.diagnostics.some(item => item.severity === 'error');
+  return !result.diagnostics.some(item => item.severity === 'error')
+    && !hasMaterialImpact(result.impact);
 }
 
 export function createModelExplorerCommandBus(adapter: ModelExplorerAdapter): ModelExplorerCommandBus {

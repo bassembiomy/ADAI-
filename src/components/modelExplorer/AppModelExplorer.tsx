@@ -22,6 +22,7 @@ import { createSysmlExplorerAdapter } from '../../features/modelExplorer/adapter
 import {
   createModelExplorerCommandBus,
   isPreflightClear,
+  hasMaterialImpact,
 } from '../../features/modelExplorer/modelExplorerCommandBus';
 import type { StateData, Layer, TransitionData, JunctionData, StateMachineDiagramData } from '../../types/sm_types';
 import type { BlockData, PartData } from '../../types/sysml_types';
@@ -516,7 +517,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       const bus = createModelExplorerCommandBus(nodeAdapter);
       const preflight = nodeAdapter.preflight(cmd);
-      const hasImpact = preflight.impact && preflight.impact.invalidated && preflight.impact.invalidated.length > 0;
+      const hasImpact = hasMaterialImpact(preflight.impact);
       if (hasImpact && preflight.impact) {
         setPendingImpact({
           impact: preflight.impact,
@@ -559,7 +560,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       const bus = createModelExplorerCommandBus(activeAdapter);
       const preflight = activeAdapter.preflight(cmd);
-      const hasImpact = preflight.impact && preflight.impact.invalidated && preflight.impact.invalidated.length > 0;
+      const hasImpact = hasMaterialImpact(preflight.impact);
       if (hasImpact && preflight.impact) {
         setPendingImpact({
           impact: preflight.impact,

@@ -1,69 +1,69 @@
-# Repository-First Model Tree and Diagram Viewpoints Implementation Plan Tasks
+# Cameo-Style Repository and Diagram Presentation Implementation Plan Tasks
 
-- [x] Task 1: Central Capability and Ownership Catalog
-  - [x] Step 1: Write failing ownership-policy tests
-  - [x] Step 2: Run the test and verify RED
-  - [x] Step 3: Implement the typed catalog and policy
-  - [x] Step 4: Replace SYSML_CHILDREN consumers with catalog projections
-  - [x] Step 5: Run tests and commit
-- [x] Task 2: Complete Canonical Element and Feature Types
-  - [x] Step 1: Write a failing metamodel construction test
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Add focused behavior-domain types
-  - [x] Step 4: Run domain and migration tests
+- [x] Task 1: Correct Empty-Impact Dispatch Semantics
+  - [x] Step 1: Write the failing empty-impact test
+  - [x] Step 2: Run the focused tests and verify the new test fails
+  - [x] Step 3: Implement material-impact detection
+  - [x] Step 4: Run the focused tests
   - [x] Step 5: Commit
-- [x] Task 3: Atomic Create-and-Present Command
-  - [x] Step 1: Write atomicity and identity tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Implement the command
-  - [x] Step 4: Enforce duplicate-presentation policy
-  - [x] Step 5: Run command tests and commit
-- [x] Task 4: Canonical Element Factory and No-Silent-Type Resolution
-  - [x] Step 1: Write failing factory tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Implement factory dispatch by metaclass
-  - [x] Step 4: Make legacy explorer factories wrappers over the canonical factory
-  - [x] Step 5: Run tests and commit
-- [x] Task 5: Repository-First Model Tree Context Menu
-  - [x] Step 1: Write failing menu and adapter tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Project capabilities from backend policy
-  - [x] Step 4: Render grouped actions and "All Types…"
-  - [x] Step 5: Verify and commit
-- [x] Task 6: Relationship Capability and Target Policy
-  - [x] Step 1: Write endpoint parity tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Implement one shared policy and use it in commands/UI
-  - [x] Step 4: Verify and commit
-- [x] Task 7: Diagram Toolbars as Semantic-and-Presentation Commands
-  - [x] Step 1: Write cross-diagram identity tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Implement the controller
-  - [x] Step 4: Replace direct setBlocks, setRelationships, and presentation mutations in affected toolbar handlers
-  - [x] Step 5: Verify and commit
-- [x] Task 8: Feature Editing and Specification Panels
-  - [x] Step 1: Write feature identity tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Implement controller commands and type resolution
-  - [x] Step 4: Replace affected direct property/port array mutations in App.tsx
-  - [x] Step 5: Verify and commit
-- [x] Task 9: Persistence, Migration, and Read-Only Legacy Projections
-  - [x] Step 1: Write save/load and migration tests
-  - [x] Step 2: Verify RED
-  - [x] Step 3: Implement presentation migration and projection-only adapters
-  - [x] Step 4: Verify and commit
-- [x] Task 10: Release Gates, Evidence, and Compliance Status
-  - [x] Step 1: Add the repository-first release scenarios
-  - [x] Step 2: Verify the new tests fail before final wiring
-  - [x] Step 3: Complete remaining wiring until all gates pass
-  - [x] Step 4: Run full verification
-  - [x] Step 5: Update evidence and commit
-
-- [x] Task 11: Cameo-Style Hierarchy, Deletion, and Requirements Presentation
-  - [x] Canonical presentation membership is read from `sysmlStore.diagramPresentations`.
-  - [x] Existing repository elements can be displayed on Requirements without semantic duplication.
-  - [x] `Remove from Diagram` preserves the semantic element and other presentations.
-  - [x] Model deletion updates the canonical repository and removes deleted presentations across all entry points.
-  - [x] Requirement relationships are created through the canonical gateway and validated by SysML endpoint policy.
-  - [x] Evidence: `src/engine/sysml/requirementsDiagramScope.appIntegration.test.ts`, `src/services/sysmlCommandGateway.test.ts`, `src/engine/sysml/semanticIdentityReleaseGate.test.ts`, and `tests/e2e/sysml-requirements-existing-block.spec.ts`.
-  - [x] Verification: architecture guard, release gate, 611 SysML tests, 78 reporting tests, TypeScript, and isolated browser workflow.
+- [ ] Task 2: Add an Atomic Create-and-Present Gateway Command
+  - [ ] Step 1: Write rollback and identity tests
+  - [ ] Step 2: Run the gateway test and verify type/test failure
+  - [ ] Step 3: Add rollback-safe transaction cloning
+  - [ ] Step 4: Implement `createAndPresent` as one gateway transaction
+  - [ ] Step 5: Run gateway and undo tests
+  - [ ] Step 6: Commit
+- [ ] Task 3: Build Diagram Creation Intents from Canonical Factories
+  - [ ] Step 1: Write failing creation-intent tests
+  - [ ] Step 2: Run the test and verify the module is missing
+  - [ ] Step 3: Implement the pure builder
+  - [ ] Step 4: Run creation tests
+  - [ ] Step 5: Commit
+- [ ] Task 4: Route Diagram Palette Creation Through the Repository
+  - [ ] Step 1: Write a failing repository-first application projection test
+  - [ ] Step 2: Run the new test and verify it fails
+  - [ ] Step 3: Replace `createBlock` semantic construction with one command
+  - [ ] Step 4: Delete the requirements-only presentation mutation inside legacy `createBlock`
+  - [ ] Step 5: Run focused SysML and TypeScript tests
+  - [ ] Step 6: Commit
+- [ ] Task 5: Make Every Model Explorer Action Observable and Executable
+  - [ ] Step 1: Write failing adapter tests for copy, remove, delete, duplicate, and paste
+  - [ ] Step 2: Run explorer tests and verify failures
+  - [ ] Step 3: Extend command and result contracts
+  - [ ] Step 4: Execute copy and remove through the adapter
+  - [ ] Step 5: Centralize result handling in `AppModelExplorer`
+  - [ ] Step 6: Run explorer tests
+  - [ ] Step 7: Commit
+- [ ] Task 6: Route SysML Updates and Relationships Through the Gateway
+  - [ ] Step 1: Write failing command-path tests for update and relationship creation
+  - [ ] Step 2: Run focused tests and establish the current failure
+  - [ ] Step 3: Replace update handlers with command dispatch
+  - [ ] Step 4: Run SysML tests and TypeScript
+  - [ ] Step 5: Commit
+- [ ] Task 7: Route Parts, Ports, and Connectors Through the Gateway
+  - [ ] Step 1: Add failing tests for typed property and port creation
+  - [ ] Step 2: Run focused tests and verify failures where UI still bypasses the repository
+  - [ ] Step 3: Replace part, port, property, and connector setters
+  - [ ] Step 4: Run port, gateway, and conformance tests
+  - [ ] Step 5: Commit
+- [ ] Task 8: Remove Legacy Semantic Writeback and Enforce the Boundary
+  - [ ] Step 1: Add the repository/presentation release gate
+  - [ ] Step 2: Run the release gate before removing the writeback
+  - [ ] Step 3: Delete the debounced merge effect
+  - [ ] Step 4: Extend the architecture verifier
+  - [ ] Step 5: Run architecture and release gates
+  - [ ] Step 6: Commit
+- [ ] Task 9: Prove Code-Generation Isolation and Compatibility
+  - [ ] Step 1: Write a deterministic generator-isolation test
+  - [ ] Step 2: Run the isolation and golden tests
+  - [ ] Step 3: Add a release script
+  - [ ] Step 4: Run the complete code-generation verification
+  - [ ] Step 5: Commit
+- [ ] Task 10: Verify the Complete Cameo-Style User Workflow
+  - [ ] Step 1: Add the failing end-to-end workflow
+  - [ ] Step 2: Run the new E2E test and verify it fails before final UI wiring
+  - [ ] Step 3: Complete UI selectors and feedback wiring without adding semantic mutation paths
+  - [ ] Step 4: Record four-level compliance evidence
+  - [ ] Step 5: Run all release checks
+  - [ ] Step 6: Commit
+- [ ] Final Verification

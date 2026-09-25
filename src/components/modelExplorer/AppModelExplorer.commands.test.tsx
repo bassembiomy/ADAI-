@@ -33,6 +33,19 @@ describe('AppModelExplorer Command Dispatch & State Machine History', () => {
       },
     };
     expect(isPreflightClear(impactPreflight)).toBe(false);
+
+    const emptyImpactPreflight: ExplorerCommandResult = {
+      committed: false,
+      revision: 1,
+      diagnostics: [],
+      impact: {
+        descendants: [],
+        relationships: [],
+        presentations: [],
+        invalidated: [],
+      },
+    };
+    expect(isPreflightClear(emptyImpactPreflight)).toBe(true);
   });
 
   it('calls onCommitStateMachineSnapshot once with next snapshot and description', () => {
