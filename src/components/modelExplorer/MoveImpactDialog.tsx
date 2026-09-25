@@ -96,6 +96,18 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
             </div>
           )}
 
+          {/* Relationships removed with the selected semantic elements */}
+          {impact.relationships.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="font-medium text-[var(--text-secondary)]">
+                Affected Relationships ({impact.relationships.length})
+              </span>
+              <div className="max-h-20 overflow-y-auto bg-[var(--surface-canvas)] rounded border border-[var(--border-default)] p-2 text-[var(--text-muted)] text-[11px] font-mono">
+                {impact.relationships.join(', ')}
+              </div>
+            </div>
+          )}
+
           {/* Presentations affected */}
           {impact.presentations.length > 0 && (
             <div className="flex flex-col gap-1">

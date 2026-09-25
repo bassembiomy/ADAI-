@@ -6496,6 +6496,16 @@ const ADIA = () => {
     const d = file.data;
     const loadFileSysml = (legacyPayload: Record<string, unknown>) => {
       const persistedCanonical = d.sysmlRepository || d.canonicalSysmlRepository;
+      const hasCanonicalModelContent = canonicalSysmlRepository.revision > 0
+        || Object.keys(canonicalSysmlRepository.diagrams).length > 0
+        || Object.keys(canonicalSysmlRepository.definitions).length > 0
+        || Object.keys(canonicalSysmlRepository.usages).length > 0
+        || Object.keys(canonicalSysmlRepository.relationships).length > 0
+        || Object.keys(canonicalSysmlRepository.requirements).length > 0;
+      // SysML diagram tabs are viewpoints over one repository. Their legacy
+      // snapshots contain only a diagram-scoped projection and must not
+      // replace a canonical model that has already been loaded or edited.
+      if (!persistedCanonical && hasCanonicalModelContent) return;
       const payload = persistedCanonical
         ? { ...d, sysmlRepository: d.sysmlRepository ?? d.canonicalSysmlRepository }
         : legacyPayload;
@@ -6573,6 +6583,7 @@ const ADIA = () => {
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     blocks, relationships, parts, connectors, applyCanonicalProjectLoad, setCustomStereotypes, setInterfaceRealizations,
+    canonicalSysmlRepository,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
     setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
@@ -14686,6 +14697,7 @@ const ADIA = () => {
       return (
         <g
           key={block.id}
+          data-semantic-id={block.id}
           transform={`translate(${block.x}, ${block.y})`}
           onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
           onMouseUp={(e) => dropBddFeatureOnBlock(e, block.id)}

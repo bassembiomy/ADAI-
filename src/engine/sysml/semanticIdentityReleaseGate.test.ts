@@ -152,6 +152,8 @@ describe('Mandatory Semantic Identity Release Gate (Task 15)', () => {
       targetId: 'req-001-uuid',
     };
     mgr.dispatch({ type: 'CreateRelationship', relationship: satisfyRel }, ctx);
+    // The relationship diagram renders Satisfy from its endpoint presentations;
+    // presenting the Requirement alone is not enough to display Motor «satisfy» REQ-001.
     mgr.dispatch(
       {
         type: 'DisplayExistingElement',
@@ -164,6 +166,26 @@ describe('Mandatory Semantic Identity Release Gate (Task 15)', () => {
       },
       ctx
     );
+    mgr.dispatch(
+      {
+        type: 'DisplayExistingElement',
+        presentation: {
+          id: 'pres-motor-req',
+          diagramId: 'diag-req',
+          semanticElementId: 'blk-motor',
+          bounds: { x: 360, y: 100, width: 180, height: 110 },
+        },
+      },
+      ctx
+    );
+
+    expect(
+      Object.values(mgr.getState().presentations)
+        .filter((presentation) => presentation.diagramId === 'diag-req')
+        .map((presentation) => presentation.semanticElementId)
+    ).toEqual(expect.arrayContaining(['blk-motor', 'req-001-uuid']));
+    expect(projectRequirementsDiagram(mgr.getState(), 'diag-req').requirements.map(node => node.elementId))
+      .toContain('req-001-uuid');
 
     // Verification checkpoint 1: Canonical Counts
     let state = mgr.getState();
@@ -180,9 +202,16 @@ describe('Mandatory Semantic Identity Release Gate (Task 15)', () => {
     const satisfyList = Object.values(state.relationships).filter((r) => r.metaclass === 'Satisfy');
     expect(satisfyList.length).toBe(1);
 
-    // Presentations: Motor has 2 presentations across BDD-A and BDD-B
+    // Motor is still one semantic definition with independent BDD and Requirements presentations.
     const motorPresentations = Object.values(state.presentations).filter((p) => p.semanticElementId === 'blk-motor');
-    expect(motorPresentations.length).toBe(2);
+    expect(motorPresentations.length).toBe(3);
+    expect(motorPresentations.find((presentation) => presentation.diagramId === 'diag-req')?.bounds)
+      .toEqual({ x: 360, y: 100, width: 180, height: 110 });
+    expect(state.relationships['rel-motor-satisfy-req']).toMatchObject({
+      metaclass: 'Satisfy',
+      sourceId: 'blk-motor',
+      targetId: 'req-001-uuid',
+    });
 
     // 7. Rename Motor to BLDCMotor and assert every projection dynamically resolves new name with unchanged IDs and counts
     mgr.dispatch(
@@ -222,6 +251,15 @@ describe('Mandatory Semantic Identity Release Gate (Task 15)', () => {
     expect(reloaded.relationships['rel-motor-satisfy-req'].metaclass).toBe('Satisfy');
 
     const reloadedMotorPres = Object.values(reloaded.presentations).filter((p) => p.semanticElementId === 'blk-motor');
-    expect(reloadedMotorPres.length).toBe(2);
+    expect(reloadedMotorPres.length).toBe(3);
+    expect(reloadedMotorPres.find((presentation) => presentation.diagramId === 'diag-req')?.bounds)
+      .toEqual({ x: 360, y: 100, width: 180, height: 110 });
+    expect(
+      Object.values(reloaded.presentations)
+        .filter((presentation) => presentation.diagramId === 'diag-req')
+        .map((presentation) => presentation.semanticElementId)
+    ).toEqual(expect.arrayContaining(['blk-motor', 'req-001-uuid']));
+    expect(projectRequirementsDiagram(reloaded, 'diag-req').requirements.map(node => node.elementId))
+      .toContain('req-001-uuid');
   });
 });

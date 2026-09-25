@@ -1,206 +1,322 @@
 {
-  "profile": "OMG-SysML-1.6-ADIA",
-  "specification": "Cameo-Style Repository and Diagram Presentation Architecture",
-  "status": "COMPLIANT",
-  "generatedAt": "2026-09-25T12:45:00Z",
+  "profile": "ADIA SysML v1.6 repository/presentation evidence",
+  "reviewedOn": "2026-09-25",
+  "status": "PARTIAL",
+  "authorities": [
+    "OMG_SYSML_1_6",
+    "UML_FOUNDATION",
+    "CAMEO_TOOLING",
+    "ADIA_EXTENSION"
+  ],
+  "complianceRule": "Each feature is assessed at element, properties, relationships, and constraints levels. COMPLIANT is reserved for claims with passing automated semantic evidence at all applicable levels.",
+  "authorityNote": "Cameo is an implementation benchmark only. No Cameo product behavior is asserted as an OMG SysML requirement in this evidence set.",
   "evidence": [
     {
-      "id": "CAMEO-001",
-      "authority": "OMG SysML 1.6 / Cameo Systems Modeler Presentation Semantics",
-      "specificationSection": "Section 1 - Single Canonical SysML Repository Authority",
-      "status": "COMPLIANT",
-      "implementationFile": "src/engine/sysml/normalizedStore.ts",
-      "domainType": "SysmlRepository / NormalizedSysmlStore",
-      "command": "commitBatch / dispatchCommand",
-      "validator": "validateSysmlRepository",
-      "persistenceMapping": "NormalizedSysmlStore.diagramPresentations",
-      "projection": "sysmlAppProjection.ts",
-      "automatedTests": [
-        "src/engine/sysml/architectureGuards.test.ts",
-        "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/engine/sysml/normalizedStore.test.ts",
-        "integration": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/largeModelBenchmarkGate.test.ts"
-      }
+      "id": "SYSML-REQ-DIAGRAM-BLOCK-SATISFY-001",
+      "feature": "Requirement Diagram presentation of a Block, Requirement, and their Satisfy relationship",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§16.3.1.1 Requirement Diagram",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/model.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/services/sysmlCreationRules.ts",
+          "src/services/sysmlProjectionState.ts"
+        ],
+        "domainTypes": [
+          "BlockDefinition",
+          "RequirementDefinition",
+          "SysmlRelationship"
+        ],
+        "commands": [
+          "createAndPresent",
+          "createElement",
+          "addToDiagram"
+        ],
+        "validator": [
+          "validateSysmlRepository",
+          "validateCanonicalRelationshipCandidate"
+        ],
+        "persistenceMapping": "SysmlRepository.definitions, requirements, and relationships; diagramPresentations[diagramId].elementIds and presentations reference semantic IDs.",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/services/sysmlDiagramCreation.test.ts",
+          "src/services/sysmlCreationRules.test.ts",
+          "tests/e2e/sysml-requirements-existing-block.spec.ts",
+          "src/engine/sysml/semanticIdentityReleaseGate.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Automated tests create and present one Block and one Requirement."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Block identity/name and Requirement requirementId/text are represented in the domain model and asserted by the semantic identity release gate."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Satisfy is stored with semantic sourceId/targetId endpoints and rendered when both endpoint presentations exist."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "Endpoint and duplicate relationship admission are tested; this evidence does not cover the complete Requirement Diagram notation and constraint set in §16.3.1.1."
+        }
+      },
+      "overallStatus": "PARTIAL"
     },
     {
-      "id": "CAMEO-002",
-      "authority": "OMG SysML 1.6 Section 7 (Diagrams and Model Elements)",
-      "specificationSection": "Section 2 - Atomic Create-and-Present Gateway Command",
-      "status": "COMPLIANT",
-      "implementationFile": "src/services/sysmlCommandGateway.ts",
-      "domainType": "CreateAndPresentCommand",
-      "command": "createAndPresent",
-      "validator": "preflightSysmlCommand",
-      "persistenceMapping": "repo.definitions / repo.requirements / store.coordinates / store.diagramPresentations",
-      "projection": "projectRepositoryToApp",
-      "automatedTests": [
-        "src/services/sysmlCommandGateway.test.ts",
-        "src/services/sysmlDiagramCreation.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/services/sysmlCommandGateway.test.ts",
-        "integration": "src/services/sysmlDiagramCreation.test.ts",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
+      "id": "ADIA-REPOSITORY-PRESENTATION-LIFECYCLE-001",
+      "feature": "One canonical semantic Block with independent diagram-scoped presentations, positions, and remove-from-diagram behavior",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "Cameo-Style Repository and Diagram Presentation Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-25-cameo-repository-presentation-design.md",
+        "sections": [
+          "Authority and terminology",
+          "Semantic and presentation model",
+          "Model Explorer command behavior",
+          "Verification and release gates"
+        ]
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/model.ts",
+          "src/engine/sysml/presentationState.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/services/sysmlProjectionState.ts",
+          "src/App.tsx"
+        ],
+        "domainTypes": [
+          "BlockDefinition",
+          "DiagramPresentation"
+        ],
+        "commands": [
+          "createAndPresent",
+          "addToDiagram",
+          "updatePresentation",
+          "removeFromDiagram"
+        ],
+        "validator": "executeSysmlCommand; validateSysmlRepository; the addToDiagram gateway branch rejects duplicate membership with PRESENTATION_ALREADY_EXISTS.",
+        "persistenceMapping": "buildCanonicalSysmlProjectPayload writes sysmlRepository, sysmlCoordinates, and diagramPresentations; each diagram presentation record stores semanticElementId and bounds under diagramPresentations[diagramId].presentations[elementId].",
+        "projection": [
+          "projectLegacyDiagram produces the complete semantic lookup projection",
+          "projectDiagramScopedCanvasView filters canvas membership by diagram ID",
+          "App.tsx renders the scoped canvas view while repository-backed controls retain the complete projection"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/repositoryPresentationReleaseGate.test.ts",
+          "src/services/sysmlProjectionState.test.ts",
+          "tests/e2e/sysml-repository-presentation.spec.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "The release gate asserts one repository Block definition across Requirements and BDD."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "The release gate serializes/reloads different bounds for the same semantic ID on Requirements and BDD; the browser test verifies the positions remain independent after switching viewpoints."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Presentation records point to the same semantic ID; semantic identity and Satisfy endpoint preservation are independently tested by semanticIdentityReleaseGate.test.ts."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Canvas membership is scoped to its diagram; removeFromDiagram preserves the semantic definition and the other diagram presentation; duplicate membership is rejected by the gateway."
+        }
+      },
+      "overallStatus": "COMPLIANT"
     },
     {
-      "id": "CAMEO-003",
-      "authority": "OMG SysML 1.6 / Cameo Diagram Creation Factory Rules",
-      "specificationSection": "Section 3 - Intent-Driven Diagram Palette Creation",
-      "status": "COMPLIANT",
-      "implementationFile": "src/services/sysmlDiagramCreation.ts",
-      "domainType": "DiagramCreationInput / DiagramCreationOutcome",
-      "command": "buildDiagramCreationCommand",
-      "validator": "buildDiagramCreationCommand pre-conditions",
-      "persistenceMapping": "createSemanticElement / modelExplorerFactories",
-      "projection": "createSysmlElementOnActiveDiagram",
-      "automatedTests": [
-        "src/services/sysmlDiagramCreation.test.ts",
-        "src/services/sysmlAppProjection.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/services/sysmlDiagramCreation.test.ts",
-        "integration": "src/services/sysmlAppProjection.test.ts",
-        "browser": "tests/e2e/sysml-requirements-existing-block.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
+      "id": "ADIA-DELETE-MATERIAL-IMPACT-001",
+      "feature": "Deleting a Block with an owned PartUsage (PartProperty representation), Satisfy relationship, and presentation requires impact confirmation and reports those impacts",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "Cameo-Style Repository and Diagram Presentation Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-25-cameo-repository-presentation-design.md",
+        "sections": [
+          "Model Explorer command behavior",
+          "Deletion and hierarchy rules",
+          "Diagnostics and user feedback"
+        ]
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/mutations.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/services/sysmlTransactionAdapter.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts",
+          "src/features/modelExplorer/modelExplorerTypes.ts",
+          "src/components/modelExplorer/MoveImpactDialog.tsx"
+        ],
+        "domainTypes": [
+          "BlockDefinition",
+          "PartUsage",
+          "SysmlRelationship",
+          "MutationImpact",
+          "ExplorerImpact"
+        ],
+        "commands": [
+          "createElement",
+          "ModelExplorerCommand.createRelationship",
+          "deleteElements"
+        ],
+        "validator": "analyzeMutation computes descendants, removedRelationshipIds, and affected presentations; requiresDeletionConfirmation and executeSysmlCommand require a matching confirmedImpactHash before commit; validateSysmlRepository validates the resulting repository.",
+        "persistenceMapping": "SysmlRepository.definitions, usages, relationships, and diagramPresentations; deletion removes owned semantic descendants, affected relationship IDs, and presentations in one gateway transaction.",
+        "projection": "toExplorerImpact maps gateway impact into ExplorerImpact; MoveImpactDialog displays descendant, relationship, and presentation impacts before confirmation.",
+        "automatedTests": [
+          "src/engine/sysml/mutations.test.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+          "src/components/modelExplorer/MoveImpactDialog.test.tsx",
+          "tests/e2e/sysml-tree-delete-impact.spec.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "The browser test creates a Block, owned PartUsage (the V3 repository's PartProperty representation), Requirement, and Satisfy relationship; after confirmed deletion, the Block and owned PartUsage are absent while the Requirement remains."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "The PartUsage is created with the Block as owner and a valid Block type through the Model Explorer adapter; deletion impact reports it as a descendant."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "The Satisfy relationship is displayed before deletion, included in Affected Relationships in the confirmation, and absent after confirmed deletion."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Unconfirmed material deletion is rejected with impact; the browser confirms using the returned impact hash, after which the single gateway transaction commits."
+        }
+      },
+      "overallStatus": "COMPLIANT"
     },
     {
-      "id": "CAMEO-004",
-      "authority": "OMG SysML 1.6 / Cameo Containment Tree Observability",
-      "specificationSection": "Section 4 - Model Explorer Capabilities and Execution",
-      "status": "COMPLIANT",
-      "implementationFile": "src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts",
-      "domainType": "ModelExplorerCommand (addToDiagram, removeFromDiagram, copy, paste, delete, rename)",
-      "command": "execute / dispatchCommand",
-      "validator": "sysmlExplorerAdapter.preflight",
-      "persistenceMapping": "NormalizedSysmlStore / SysmlRepository",
-      "projection": "AppModelExplorer / ModelExplorerMenu",
-      "automatedTests": [
-        "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
-        "src/components/modelExplorer/ModelExplorerMenu.test.tsx"
-      ],
-      "evidenceTiers": {
-        "unit": "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
-        "integration": "src/components/modelExplorer/ModelExplorerMenu.test.tsx",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
+      "id": "ADIA-REJECTED-TREE-ACTION-DIAGNOSTIC-001",
+      "feature": "A duplicate Satisfy relationship requested from a Model Explorer tree action is rejected without creating a duplicate and exposes its diagnostic",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "Cameo-Style Repository and Diagram Presentation Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-25-cameo-repository-presentation-design.md",
+        "sections": [
+          "Model Explorer command behavior",
+          "Diagnostics and user feedback"
+        ]
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/services/sysmlCreationRules.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts",
+          "src/components/modelExplorer/AppModelExplorer.tsx",
+          "src/App.tsx"
+        ],
+        "domainTypes": [
+          "SysmlRelationship",
+          "ExplorerDiagnostic",
+          "ExplorerCommandResult"
+        ],
+        "commands": "ModelExplorerCommand.createRelationship is translated by sysmlExplorerAdapter to SysmlEditorCommand.createElement.",
+        "validator": "validateCanonicalRelationshipCandidate returns DUPLICATE_RELATIONSHIP; executeSysmlCommand returns a non-committed diagnostic and preserves repository revision.",
+        "persistenceMapping": "Accepted relationships are stored in SysmlRepository.relationships; the duplicate rejection commits no relationship and does not advance semantic revision.",
+        "projection": "AppModelExplorer forwards ExplorerCommandResult through onCommandResult; App.tsx handleExplorerCommandResult routes error diagnostics to the visible error alert.",
+        "automatedTests": [
+          "src/services/sysmlCreationRules.test.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+          "tests/e2e/sysml-tree-delete-impact.spec.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "One valid Satisfy relationship remains after the duplicate request; the browser asserts exactly one relationship presentation."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "The original relationship retains its source, target, and kind; duplicate admission checks those identity-defining fields."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "The rejected duplicate does not add a second relationship to the repository or diagram."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "The gateway returns DUPLICATE_RELATIONSHIP and the browser verifies that code in a visible alertdialog."
+        }
+      },
+      "overallStatus": "COMPLIANT"
     },
     {
-      "id": "CAMEO-005",
-      "authority": "OMG SysML 1.6 Chapter 8 (Blocks, Relationships, Dependencies)",
-      "specificationSection": "Section 5 - Gateway-Routed Relationships and Element Updates",
-      "status": "COMPLIANT",
-      "implementationFile": "src/services/sysmlCommandGateway.ts",
-      "domainType": "UpdateElementCommand / CreateRelationshipCommand",
-      "command": "updateElement / createRelationship",
-      "validator": "preflightSysmlCommand",
-      "persistenceMapping": "repo.definitions / repo.relationships / repo.requirements",
-      "projection": "handleExecuteSysmlCommand / onUpdateElement / onAddRelationship",
-      "automatedTests": [
-        "src/services/sysmlCommandGateway.test.ts",
-        "src/engine/sysml/architectureGuards.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/services/sysmlCommandGateway.test.ts",
-        "integration": "src/engine/sysml/architectureGuards.test.ts",
-        "browser": "tests/e2e/sysml-requirements-existing-block.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
-    },
-    {
-      "id": "CAMEO-006",
-      "authority": "OMG SysML 1.6 Chapter 8 & 9 (Internal Block Diagrams, Parts, Ports, Connectors)",
-      "specificationSection": "Section 6 - Unified Parts, Ports, and Connectors Command Routing",
-      "status": "COMPLIANT",
-      "implementationFile": "src/engine/sysml/ports.ts",
-      "domainType": "createTypedUsageCommand / PortDefinition / PartUsage / ConnectorDefinition",
-      "command": "createElement (part, port) / createConnector",
-      "validator": "preflightSysmlCommand / validateSysmlRepository",
-      "persistenceMapping": "repo.usages / repo.connectors",
-      "projection": "handleAddPart / handleAddPort / handleAddConnector",
-      "automatedTests": [
-        "src/engine/sysml/ports.test.ts",
-        "src/engine/sysml/architectureGuards.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/engine/sysml/ports.test.ts",
-        "integration": "src/engine/sysml/architectureGuards.test.ts",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
-    },
-    {
-      "id": "CAMEO-007",
-      "authority": "ADIA Architecture Governance Rule SYSML-ARCH-001",
-      "specificationSection": "Section 7 - Elimination of Legacy Semantic Diagram Writebacks",
-      "status": "COMPLIANT",
-      "implementationFile": "src/App.tsx",
-      "domainType": "Debounced Merge Effect Removal",
-      "command": "sysmlCommandGateway.dispatchCommand",
-      "validator": "scripts/verify_sysml_architecture.ts",
-      "persistenceMapping": "Zero unallowlisted React state writes to canonicalSysmlRepository",
-      "projection": "canonicalSysmlRepository as sole semantic state",
-      "automatedTests": [
-        "src/engine/sysml/architectureGuards.test.ts",
-        "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/engine/sysml/architectureGuards.test.ts",
-        "integration": "scripts/verify_sysml_architecture.ts",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
-    },
-    {
-      "id": "CAMEO-008",
-      "authority": "MISRA-C:2012 / ISO 26262 ASIL-D Embedded Code Generation",
-      "specificationSection": "Section 8 - Deterministic Code-Generation Isolation from Presentations",
-      "status": "COMPLIANT",
-      "implementationFile": "src/utils/stateMachineCodeGenerator.ts",
-      "domainType": "State Machine C/H Generator Pipeline",
-      "command": "generateStateMachineCode",
-      "validator": "verify:repository-codegen-isolation / smVerificationAggregator",
-      "persistenceMapping": "Pure AST translation from semantic definitions",
-      "projection": "Generated C / H code buffers and golden verification suites",
-      "automatedTests": [
-        "src/utils/stateMachineCodeGenerator.repositoryIsolation.test.ts",
-        "src/utils/stateMachineCodeGenerator.golden.test.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/utils/stateMachineCodeGenerator.repositoryIsolation.test.ts",
-        "integration": "src/utils/stateMachineCodeGenerator.golden.test.ts",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
-    },
-    {
-      "id": "CAMEO-009",
-      "authority": "Cameo Systems Modeler Workflow Conformance Specification",
-      "specificationSection": "Section 9 - End-to-End Multi-Diagram Presentation & Tree Lifecycle",
-      "status": "COMPLIANT",
-      "implementationFile": "tests/e2e/sysml-repository-presentation.spec.ts",
-      "domainType": "Cross-Diagram Element Presentation Lifecycle",
-      "command": "createAndPresent -> addToDiagram -> rename -> copy -> paste -> delete",
-      "validator": "Playwright Browser Test Harness",
-      "persistenceMapping": "Single semantic element mapped across multiple diagram canvas views",
-      "projection": "SVG diagram canvas and Model Tree Explorer",
-      "automatedTests": [
-        "tests/e2e/sysml-repository-presentation.spec.ts",
-        "tests/e2e/sysml-requirements-existing-block.spec.ts"
-      ],
-      "evidenceTiers": {
-        "unit": "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
-        "integration": "src/services/sysmlAppProjection.test.ts",
-        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
-        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
-      }
+      "id": "ADIA-SEMANTIC-IDENTITY-RELEASE-GATE-001",
+      "feature": "Motor semantic identity is preserved across BDD-A, BDD-B, Vehicle IBD, Requirement Diagram, Satisfy linkage, rename, and persistence round trip",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "SysML v1.6 Backend-First Compliance Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-24-sysml-v1-6-backend-first-compliance-design.md",
+        "section": "Mandatory repository identity release gate"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/domain/index.ts",
+          "src/engine/sysml/commands/dispatcher.ts",
+          "src/engine/sysml/projection/canonicalProjections.ts",
+          "src/engine/sysml/persistence/migrateV3ToV4.ts"
+        ],
+        "domainTypes": [
+          "Block",
+          "PartProperty",
+          "Requirement",
+          "SemanticRelationship",
+          "DiagramPresentation"
+        ],
+        "commands": [
+          "CreateElement",
+          "CreateRelationship",
+          "DisplayExistingElement",
+          "RenameElement"
+        ],
+        "validator": "dispatchSysmlCommand checks element existence, diagram metaclass compatibility, duplicate presentation identity, and relationship endpoint/type validity before committing.",
+        "persistenceMapping": "serializeRepositoryV4 and deserializeRepositoryV4 persist elements, relationships, diagrams, and presentations while preserving semantic IDs.",
+        "projection": [
+          "projectBddDiagram",
+          "projectIbdDiagram",
+          "projectRequirementsDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/semanticIdentityReleaseGate.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "The release gate asserts exactly one Motor Block, one leftMotor PartProperty, one REQ-001 Requirement, and one Satisfy relationship."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Motor rename preserves its ID; leftMotor typeId remains Motor's ID; requirementId remains REQ-001 after round trip."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "The Satisfy relationship retains its source and target IDs; BDD, IBD, and Requirement Diagram presentations reference the same semantic elements."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "The release test verifies unique semantic counts, distinct diagram presentations, dynamic renamed-name resolution, and serialization/reload without duplication."
+        }
+      },
+      "overallStatus": "COMPLIANT"
     }
   ]
 }

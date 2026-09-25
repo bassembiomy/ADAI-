@@ -17,8 +17,14 @@ test.describe('SysML Cameo-style existing element presentation', () => {
     await expect(blockItem).toBeVisible({ timeout: 15000 });
 
     await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+    const treeRows = page.locator('.model-tree-row[data-semantic-id]');
+    const existingIds = new Set(await treeRows.evaluateAll(rows => rows.map(row => row.getAttribute('data-semantic-id'))));
     await page.getByRole('button', { name: '+ Requirement', exact: true }).click();
-    const requirementItem = page.locator('[role="treeitem"]:has-text("Requirement")').last();
+    await expect.poll(async () => (await treeRows.evaluateAll(rows => rows.map(row => row.getAttribute('data-semantic-id'))))
+      .filter(id => id && !existingIds.has(id)).length).toBe(1);
+    const requirementId = (await treeRows.evaluateAll(rows => rows.map(row => row.getAttribute('data-semantic-id'))))
+      .find(id => id && !existingIds.has(id))!;
+    const requirementItem = page.locator(`.model-tree-row[data-semantic-id="${requirementId}"]`);
     await expect(requirementItem).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1000);
 
@@ -41,6 +47,9 @@ test.describe('SysML Cameo-style existing element presentation', () => {
     await requirementNode.evaluate((element) => element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
     await expect(page.getByText('Create Relationship', { exact: true })).toBeVisible({ timeout: 10000 });
     await page.getByRole('button', { name: /Satisfy/i }).click();
-    await expect(page.locator('svg text').filter({ hasText: '«satisfy»' })).toBeVisible({ timeout: 15000 });
+    const satisfyPresentation = page.locator('#adia-diagram-canvas svg text').filter({ hasText: '«satisfy»' });
+    await expect(satisfyPresentation).toHaveCount(1, { timeout: 15000 });
+    await expect(page.locator('[role="treeitem"]:has-text("Block")')).toHaveCount(1);
+    await expect(requirementItem).toHaveCount(1);
   });
 });

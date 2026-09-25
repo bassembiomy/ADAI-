@@ -25,6 +25,8 @@ describe('MoveImpactDialog', () => {
 
     expect(html).toContain('Confirm Structural Move');
     expect(html).toContain('Invalid cross-region transition');
+    expect(html).toContain('Affected Relationships (1)');
+    expect(html).toContain('rel-trans-1');
     expect(html).toContain('substate-1');
     expect(html).toContain('hash-abc-123');
     expect(html).toContain('Confirm');
