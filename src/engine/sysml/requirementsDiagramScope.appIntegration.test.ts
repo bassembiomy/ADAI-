@@ -10,6 +10,9 @@ describe('requirements diagram scope App integration', () => {
     expect(source).toContain('Object.fromEntries(sysmlStore.diagramPresentations.entries())');
     expect(source).toContain('new Set(sysmlDiagramPresentations.requirements?.elementIds ?? [])');
     expect(source).toContain('setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations))');
+    expect(source).toContain("type: 'createElement'");
+    expect(source).toContain("kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type)");
+    expect(source).toContain('setCanonicalSysmlRepository(transaction.repository)');
     expect(source).toContain('diagramPresentations={sysmlDiagramPresentations}');
     expect(source).toContain('sysmlDiagramPresentations[contextId]?.elementIds ?? []');
     expect(source).toContain('requirementsDiagramScope.visibleBlockIds.has(b.id)');

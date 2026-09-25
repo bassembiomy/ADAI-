@@ -9384,6 +9384,26 @@ const ADIA = () => {
     setParts(transaction.model.parts);
     setConnectors(transaction.model.connectors);
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setCanonicalSysmlRepository(transaction.repository);
+    setSysmlStore(current => {
+      const nextPresentations = Object.fromEntries(
+        [...current.diagramPresentations.entries()].map(([diagramId, presentation]) => [
+          diagramId,
+          { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
+        ]),
+      );
+      return fromRepository(
+        transaction.repository,
+        Object.fromEntries(current.coordinates.entries()),
+        nextPresentations,
+      );
+    });
+    setDiagramPresentations(prev => Object.fromEntries(
+      Object.entries(prev).map(([diagramId, presentation]) => [
+        diagramId,
+        { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
+      ]),
+    ));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
   }, [addToHistory]);
 

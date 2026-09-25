@@ -58,3 +58,12 @@
   - [x] Step 3: Complete remaining wiring until all gates pass
   - [x] Step 4: Run full verification
   - [x] Step 5: Update evidence and commit
+
+- [x] Task 11: Cameo-Style Hierarchy, Deletion, and Requirements Presentation
+  - [x] Canonical presentation membership is read from `sysmlStore.diagramPresentations`.
+  - [x] Existing repository elements can be displayed on Requirements without semantic duplication.
+  - [x] `Remove from Diagram` preserves the semantic element and other presentations.
+  - [x] Model deletion updates the canonical repository and removes deleted presentations across all entry points.
+  - [x] Requirement relationships are created through the canonical gateway and validated by SysML endpoint policy.
+  - [x] Evidence: `src/engine/sysml/requirementsDiagramScope.appIntegration.test.ts`, `src/services/sysmlCommandGateway.test.ts`, `src/engine/sysml/semanticIdentityReleaseGate.test.ts`, and `tests/e2e/sysml-requirements-existing-block.spec.ts`.
+  - [x] Verification: architecture guard, release gate, 611 SysML tests, 78 reporting tests, TypeScript, and isolated browser workflow.

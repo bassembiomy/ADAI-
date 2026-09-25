@@ -30,7 +30,7 @@ test.describe('SysML Cameo-style existing element presentation', () => {
     await expect(page.locator('svg text').filter({ hasText: 'NewRequirement' }).last()).toBeVisible({ timeout: 15000 });
 
     // The same semantic Block is now presented on the Requirements Diagram;
-    // connection creation is verified independently at the semantic gateway.
+    // relationship creation is covered by the canonical gateway integration test.
     await expect(page.locator('svg text').filter({ hasText: 'NewBlock' }).last()).toBeVisible({ timeout: 15000 });
   });
 });
