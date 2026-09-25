@@ -6068,7 +6068,11 @@ const ADIA = () => {
   const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
+  const dragRawPositionsRef = useRef<Record<string, Point>>({});
+  const setDiagramDragOffset = useCallback((point: Point) => {
+    dragOffsetRef.current = point;
+  }, []);
   const [mousePos, setMousePos] = useState<Point>({ x: 0, y: 0 });
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -6146,8 +6150,15 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const { blocks, relationships, parts, connectors, applyCanonicalSysmlResult, updateBlockBounds, updatePartBounds } = useSysmlProjectionState();
+  const { blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
   const pendingPresentationUpdatesRef = useRef<Map<string, PresentationCoordinates>>(new Map());
+  const presentationDraftsRef = useRef<Record<string, PresentationCoordinates>>({});
+  const [presentationDrafts, setPresentationDrafts] = useState<Record<string, PresentationCoordinates>>({});
+  const updatePresentationDraft = useCallback((id: string, presentation: PresentationCoordinates) => {
+    const next = { ...(presentationDraftsRef.current[id] ?? {}), ...presentation };
+    presentationDraftsRef.current = { ...presentationDraftsRef.current, [id]: next };
+    setPresentationDrafts(presentationDraftsRef.current);
+  }, []);
   const isDraggingRef = useRef(false);
   const isResizingRef = useRef(false);
   useEffect(() => {
@@ -6178,7 +6189,8 @@ const ADIA = () => {
     activeSysmlDiagramId,
     sysmlDiagramPresentations,
     diagramMode === 'ibd' ? [currentLayerId] : [],
-  ), [blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId]);
+    presentationDrafts,
+  ), [blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId, presentationDrafts]);
   // Explicit per-baseline deletion authorizations granted from the governance
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
@@ -9742,12 +9754,12 @@ const ADIA = () => {
     if (hasGeometric && !hasSemantic) {
       const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
       const presentation: PresentationCoordinates = {};
-      if (updates.x !== undefined) presentation.x = updates.x;
-      if (updates.y !== undefined) presentation.y = updates.y;
-      if (updates.width !== undefined) presentation.width = updates.width;
-      if (updates.height !== undefined) presentation.height = updates.height;
+      if (updates.x !== undefined || updates.ibdX !== undefined) presentation.x = updates.x ?? updates.ibdX;
+      if (updates.y !== undefined || updates.ibdY !== undefined) presentation.y = updates.y ?? updates.ibdY;
+      if (updates.width !== undefined || updates.ibdWidth !== undefined) presentation.width = updates.width ?? updates.ibdWidth;
+      if (updates.height !== undefined || updates.ibdHeight !== undefined) presentation.height = updates.height ?? updates.ibdHeight;
       if (isDraggingRef.current || isResizingRef.current) {
-        updateBlockBounds(id, updates);
+        updatePresentationDraft(id, presentation);
         const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
         pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
         return;
@@ -9790,7 +9802,7 @@ const ADIA = () => {
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft]);
 
   const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -10032,7 +10044,7 @@ const ADIA = () => {
       if (updates.width !== undefined) presentation.width = updates.width;
       if (updates.height !== undefined) presentation.height = updates.height;
       if (isDraggingRef.current || isResizingRef.current) {
-        updatePartBounds(id, updates);
+        updatePresentationDraft(id, presentation);
         const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
         pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
         return;
@@ -10073,7 +10085,7 @@ const ADIA = () => {
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
@@ -10453,7 +10465,7 @@ const ADIA = () => {
       setResizeStart({ id: state.id, x: state.x, y: state.y, w: state.width, h: state.height, mx: worldX, my: worldY, type: 'state' });
       addToHistory();
     }
-  }, [blocks, states, parts, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
+  }, [sysmlCanvasView, states, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
 
   // CANVAS NAVIGATION (CATIA-style)
   const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
@@ -10576,14 +10588,14 @@ const ADIA = () => {
     if (isDragging && draggedPort) {
       const { elementId, portId } = draggedPort;
       // Find element (Part or Block)
-      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = parts.find(p => p.id === elementId);
+      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = sysmlCanvasView.parts.find(p => p.id === elementId);
       let isContext = false;
       if (!element) {
-        element = blocks.find(b => b.id === elementId);
+        element = sysmlCanvasView.blocks.find(b => b.id === elementId);
         isContext = true;
       }
-      const part = parts.find(p => p.id === elementId);
-      const block = blocks.find(b => b.id === elementId);
+      const part = sysmlCanvasView.parts.find(p => p.id === elementId);
+      const block = sysmlCanvasView.blocks.find(b => b.id === elementId);
 
       if (element) {
         let elX = element.x, elY = element.y, elW = element.width, elH = element.height;
@@ -10630,8 +10642,8 @@ const ADIA = () => {
 
     if (isDragging) {
       // Calculate delta
-      const dx = worldX - dragOffset.x;
-      const dy = worldY - dragOffset.y;
+      const dx = worldX - dragOffsetRef.current.x;
+      const dy = worldY - dragOffsetRef.current.y;
 
       const idsToMove = new Set(selectedIds);
       selectedIds.forEach(id => {
@@ -10690,13 +10702,17 @@ const ADIA = () => {
         }
 
         // BDD Blocks
-        const block = blocks.find(b => b.id === id);
+        const block = sysmlCanvasView.blocks.find(b => b.id === id);
         if (block) {
+          const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
           if (diagramMode === 'ibd' && block.id === currentLayerId) {
-            const oldX = block.ibdX ?? 50;
-            const oldY = block.ibdY ?? 50;
-            const newX = oldX + dx;
-            const newY = oldY + dy;
+            const oldX = currentBlock.x ?? currentBlock.ibdX ?? 50;
+            const oldY = currentBlock.y ?? currentBlock.ibdY ?? 50;
+            const newX = nextRawPosition.x;
+            const newY = nextRawPosition.y;
             const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
             const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
             const actualDx = snappedX - oldX;
@@ -10717,8 +10733,8 @@ const ADIA = () => {
               }
             });
           } else {
-            const newX = block.x + dx;
-            const newY = block.y + dy;
+            const newX = nextRawPosition.x;
+            const newY = nextRawPosition.y;
             updateBlock(id, {
               x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
               y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
@@ -10727,10 +10743,14 @@ const ADIA = () => {
         }
 
         // IBD Parts
-        const part = parts.find(p => p.id === id);
+        const part = sysmlCanvasView.parts.find(p => p.id === id);
         if (part) {
-          const newX = part.x + dx;
-          const newY = part.y + dy;
+          const currentPart = { ...part, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPart.x, y: currentPart.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+          const newX = nextRawPosition.x;
+          const newY = nextRawPosition.y;
 
           // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
           let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
@@ -10756,9 +10776,9 @@ const ADIA = () => {
       });
 
       // Update drag offset to current position for next frame
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
     setBddFeatureDrag(null);
@@ -10789,6 +10809,9 @@ const ADIA = () => {
         });
       }
       pendingPresentationUpdatesRef.current.clear();
+      presentationDraftsRef.current = {};
+      setPresentationDrafts({});
+      dragRawPositionsRef.current = {};
     }
     if (isPanning) {
       setIsPanning(false);
@@ -10863,7 +10886,7 @@ const ADIA = () => {
       } : l));
       setSelectedIds([newId]);
       setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
       return;
     }
 
@@ -10879,7 +10902,7 @@ const ADIA = () => {
     setIsDragging(true);
 
     // For dragging, we track the mouse position relative to world
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleJunctionMouseDown = useCallback((e: MouseEvent<SVGGElement>, junctionId: string) => {
@@ -10924,7 +10947,7 @@ const ADIA = () => {
       } : l));
       setSelectedIds([newId]);
       setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
       return;
     }
 
@@ -10938,7 +10961,7 @@ const ADIA = () => {
 
     addToHistory(); // Save state before dragging
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, junctions, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
@@ -11003,7 +11026,7 @@ const ADIA = () => {
         if (result.committed) {
           setSelectedIds([outcome.semanticId]);
           setIsDragging(true);
-          setDragOffset({ x: worldX, y: worldY });
+          setDiagramDragOffset({ x: worldX, y: worldY });
         }
       }
       return;
@@ -11016,7 +11039,7 @@ const ADIA = () => {
     }
     addToHistory();
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
@@ -11043,7 +11066,7 @@ const ADIA = () => {
     }
     addToHistory();
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom, parts]);
 
   const handleStateDoubleClick = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
@@ -15067,6 +15090,7 @@ const ADIA = () => {
       return (
         <g
           key={part.id}
+          data-semantic-id={part.id}
           transform={`translate(${part.x}, ${part.y})`}
           onMouseDown={(e) => handlePartMouseDown(e, part.id)}
           style={{ cursor: isCreatingConnector ? 'default' : 'move' }}

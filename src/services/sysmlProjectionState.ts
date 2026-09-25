@@ -44,6 +44,7 @@ export function projectDiagramScopedCanvasView(
   diagramId: string,
   presentations: Record<string, DiagramPresentation>,
   contextElementIds: readonly string[] = [],
+  presentationDrafts: Readonly<Record<string, import('./sysmlCommandGateway').PresentationCoordinates>> = {},
 ): LegacySysmlView {
   const diagram = presentations[diagramId];
   const visibleIds = new Set([...(diagram?.elementIds ?? []), ...contextElementIds]);
@@ -52,7 +53,7 @@ export function projectDiagramScopedCanvasView(
     ...complete,
     blocks: complete.blocks.filter(block => isPresented(block.id)).map(block => {
       const bounds = diagram?.presentations[block.id]?.bounds;
-      return bounds ? { ...block, ...bounds } : block;
+      return { ...block, ...(bounds ?? {}), ...(presentationDrafts[block.id] ?? {}) };
     }),
     parts: complete.parts.filter(part => isPresented(part.id)).map(part => {
       const presentation = diagram?.presentations[part.id];
@@ -60,8 +61,9 @@ export function projectDiagramScopedCanvasView(
       return presentation ? {
         ...part,
         ...presentation.bounds,
+        ...(presentationDrafts[part.id] ?? {}),
         ...(portLayouts ? { portLayouts } : {}),
-      } : part;
+      } : { ...part, ...(presentationDrafts[part.id] ?? {}) };
     }),
     relationships: complete.relationships,
     connectors: complete.connectors,

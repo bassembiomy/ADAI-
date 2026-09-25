@@ -38,6 +38,87 @@ async function movePresentation(
 }
 
 test.describe('Cameo-style repository presentation and tree workflows', () => {
+  test('creates a repository-backed BDD from the Structural tree pillar', async ({ page }) => {
+    await openModeler(page);
+    const structural = page.locator('.model-tree-row[data-node-id="project:pillar:structural"]');
+    await structural.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Block Definition Diagram (BDD)', exact: true }).click();
+
+    await filterTree(page, 'BDD');
+    const diagram = page.locator('.model-tree-row[data-kind="diagram"]');
+    await expect(diagram).toHaveCount(1);
+    await expect(diagram).toContainText('[BDD]');
+  });
+
+  test('dragging a newly presented Block continues from its active diagram position', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+
+    const idsBeforeCreation = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBeforeCreation.has(id)).length)
+      .toBe(1);
+    const blockId = (await semanticIdsInTree(page)).find(id => !idsBeforeCreation.has(id))!;
+    const node = page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`);
+    await expect(node).toBeVisible();
+
+    const beforeDrag = await node.boundingBox();
+    if (!beforeDrag) throw new Error('Block presentation has no browser bounds before drag');
+    await movePresentation(page, node, 60, 40);
+    const afterDrag = await node.boundingBox();
+    if (!afterDrag) throw new Error('Block presentation has no browser bounds after drag');
+    expect(afterDrag.x - beforeDrag.x).toBeGreaterThanOrEqual(55);
+    expect(afterDrag.x - beforeDrag.x).toBeLessThanOrEqual(65);
+    expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
+    expect(afterDrag.y - beforeDrag.y).toBeLessThanOrEqual(45);
+  });
+
+  test('dragging an existing Part Property follows the pointer in its IBD presentation', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+
+    const idsBeforeCreation = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBeforeCreation.has(id)).length)
+      .toBe(1);
+    const vehicleId = (await semanticIdsInTree(page)).find(id => !idsBeforeCreation.has(id))!;
+    const vehicleCanvasNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${vehicleId}"]`);
+    const vehicleTreeNode = page.locator(`.model-tree-row[data-semantic-id="${vehicleId}"]`);
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    await filterTree(page, 'Block');
+    await vehicleTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    await expect(vehicleCanvasNode).toBeVisible();
+
+    await vehicleTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Part Property', exact: true }).click();
+    await filterTree(page, 'part');
+    const partTreeNode = page.locator('.model-tree-row[data-kind="part"][data-semantic-id]');
+    await expect(partTreeNode).toHaveCount(1);
+    const partId = await partTreeNode.getAttribute('data-semantic-id');
+    if (!partId) throw new Error('Created Part Property is missing its semantic identity');
+
+    await filterTree(page, '');
+    await vehicleCanvasNode.dblclick();
+    await expect(page.locator('#adia-diagram-canvas').getByText(/ibd \[Block\]/)).toBeVisible();
+    await filterTree(page, 'part');
+    await partTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    const partCanvasNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${partId}"]`);
+    await expect(partCanvasNode).toBeVisible();
+
+    const beforeDrag = await partCanvasNode.boundingBox();
+    if (!beforeDrag) throw new Error('Part presentation has no browser bounds before drag');
+    await movePresentation(page, partCanvasNode, 40, 40);
+    const afterDrag = await partCanvasNode.boundingBox();
+    if (!afterDrag) throw new Error('Part presentation has no browser bounds after drag');
+    expect(afterDrag.x - beforeDrag.x).toBeGreaterThanOrEqual(35);
+    expect(afterDrag.x - beforeDrag.x).toBeLessThanOrEqual(45);
+    expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
+    expect(afterDrag.y - beforeDrag.y).toBeLessThanOrEqual(45);
+  });
+
   test('one semantic Block keeps independent Requirements and BDD positions', async ({ page }) => {
     await openModeler(page);
     await page.getByRole('button', { name: 'Requirements', exact: true }).click();

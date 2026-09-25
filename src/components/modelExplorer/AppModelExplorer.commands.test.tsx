@@ -11,6 +11,49 @@ import { createSysmlGatewayState, executeSysmlCommand } from '../../services/sys
 import type { SysmlEditorCommand } from '../../services/sysmlCommandGateway';
 
 describe('AppModelExplorer Command Dispatch & State Machine History', () => {
+  it('creates a real repository BDD under model from the Structural pillar', () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      disconnect() {}
+    });
+    const repository = createEmptyRepository();
+    let gatewayState = createSysmlGatewayState(repository);
+    const onExecute = vi.fn((command: SysmlEditorCommand) => {
+      const result = executeSysmlCommand(gatewayState, command);
+      if (result.committed) {
+        gatewayState = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
+      }
+      return result;
+    });
+
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="bdd"
+        states={[]}
+        layers={[]}
+        transitions={[]}
+        junctions={[]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        canonicalSysmlRepository={repository}
+        onSelect={vi.fn()}
+        onDoubleClick={vi.fn()}
+        onExecuteSysmlCommand={onExecute}
+      />
+    );
+
+    const structureRow = container.querySelector('.model-tree-row[data-node-id="project:pillar:structural"]');
+    expect(structureRow).not.toBeNull();
+    fireEvent.contextMenu(structureRow!);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Block Definition Diagram \(BDD\)$/ }));
+
+    expect(onExecute).toHaveBeenCalledTimes(1);
+    expect(onExecute.mock.calls[0][0]).toMatchObject({ type: 'createDiagram', diagram: { ownerId: 'model', diagramKind: 'bdd' } });
+    expect(Object.values(gatewayState.repository.diagrams)).toHaveLength(1);
+    expect(Object.values(gatewayState.repository.diagrams)[0]).toMatchObject({ ownerId: 'model', diagramKind: 'bdd' });
+  });
+
   it('isPreflightClear identifies valid non-committing preflight without errors or impact', () => {
     const clearPreflight: ExplorerCommandResult = {
       committed: false,

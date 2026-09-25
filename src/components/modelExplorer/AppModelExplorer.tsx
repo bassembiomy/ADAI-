@@ -42,6 +42,7 @@ import {
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
+import { getDiagramKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
 
 export interface CapabilityActionContext {
   activeDiagramId?: string;
@@ -99,6 +100,44 @@ export function resolveSemanticOwnerId(
 ): string {
   return node.ownerSemanticId ?? context.parentSemanticId ?? context.defaultOwnerId ??
     (node.domain === 'stateMachine' ? 'root' : 'model');
+}
+
+const PILLAR_DIAGRAM_KINDS: Record<string, readonly string[]> = {
+  structural: ['bdd'],
+  behavior: ['stateMachine'],
+  parametric: ['parametric'],
+  requirements: ['requirements', 'rtm'],
+};
+
+/** Virtual explorer pillars are viewpoints, never semantic command owners. */
+export function resolveCapabilityOwnerId(node: ModelTreeNode): string {
+  if (node.kind === 'pillar' || node.domain === 'project') {
+    return node.ownerSemanticId ?? 'model';
+  }
+  return node.semanticId;
+}
+
+export function capabilitiesForExplorerNode(
+  node: ModelTreeNode,
+  capabilities: ExplorerCapability[],
+): ExplorerCapability[] {
+  if (node.kind !== 'pillar' || !node.virtualKind) return capabilities;
+  const allowedDiagramKinds = PILLAR_DIAGRAM_KINDS[node.virtualKind] ?? [];
+  const allowed = new Set(allowedDiagramKinds);
+  const result = capabilities.filter(capability =>
+    capability.kind !== 'createDiagram' || Boolean(capability.elementKind && allowed.has(capability.elementKind))
+  );
+  for (const diagramKind of allowedDiagramKinds) {
+    if (result.some(capability => capability.kind === 'createDiagram' && capability.elementKind === diagramKind)) continue;
+    result.push({
+      id: `createDiagram:${diagramKind}`,
+      kind: 'createDiagram',
+      label: getDiagramKindLabel(diagramKind),
+      enabled: true,
+      elementKind: diagramKind,
+    });
+  }
+  return result;
 }
 
 export function filterNonCreatingCapabilities(capabilities: ExplorerCapability[]): ExplorerCapability[] {
@@ -460,25 +499,26 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   const handleExecuteCapability = useCallback(
     (capability: ExplorerCapability, node: ModelTreeNode) => {
       const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter;
+      const capabilityOwnerId = resolveCapabilityOwnerId(node);
       if (capability.kind === 'rename') return;
 
       if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {
         const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
           type: 'createElement',
-          ownerId: node.semanticId,
+          ownerId: capabilityOwnerId,
           elementKind: capability.elementKind || 'Block',
         });
-        acceptResult(res, { type: 'createElement', ownerId: node.semanticId, elementKind: capability.elementKind || 'Block' });
+        acceptResult(res, { type: 'createElement', ownerId: capabilityOwnerId, elementKind: capability.elementKind || 'Block' });
         return;
       }
 
       if (capability.kind === 'createDiagram') {
         const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
           type: 'createDiagram',
-          ownerId: node.semanticId,
+          ownerId: capabilityOwnerId,
           diagramKind: capability.elementKind || 'bdd',
         });
-        acceptResult(res, { type: 'createDiagram', ownerId: node.semanticId, diagramKind: capability.elementKind || 'bdd' });
+        acceptResult(res, { type: 'createDiagram', ownerId: capabilityOwnerId, diagramKind: capability.elementKind || 'bdd' });
         return;
       }
 
@@ -552,7 +592,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         cmd = {
           type: 'paste',
           payload: clipboardPayload,
-          targetOwnerId: node.semanticId,
+          targetOwnerId: capabilityOwnerId,
           mode: 'copy',
         };
       } else if (capability.kind === 'addToDiagram') {
@@ -651,8 +691,11 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           const domain = explorerAdapterDomain(node);
           return gateClipboardCapabilities(
             filterNonCreatingCapabilities(
-              (domain === 'stateMachine' ? smAdapter : sysmlAdapter)
-                .capabilities([node.semanticId], activeDiagramId, { includeAllTypes: true })
+              capabilitiesForExplorerNode(
+                node,
+                (domain === 'stateMachine' ? smAdapter : sysmlAdapter)
+                  .capabilities([resolveCapabilityOwnerId(node)], activeDiagramId, { includeAllTypes: true }),
+              )
             ),
             clipboardPayload,
             domain,
