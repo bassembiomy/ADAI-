@@ -1086,6 +1086,7 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(undone.committed).toBe(true);
     expect(undone.repository.definitions['blk-undo-test']).toBeUndefined();
     expect(undone.diagramPresentations.requirements?.elementIds ?? []).not.toContain('blk-undo-test');
+    expect(undone.diagramPresentations.requirements?.presentations['blk-undo-test']).toBeUndefined();
 
     const redone = executeSysmlCommand(undone, { type: 'redo' });
     expect(redone.repository.definitions['blk-undo-test']).toEqual(block);

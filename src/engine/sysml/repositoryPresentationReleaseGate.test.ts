@@ -56,7 +56,9 @@ describe('SysML Repository/Presentation Release Gate', () => {
 
     state = executeSysmlCommand(state, { type: 'removeFromDiagram', diagramId: 'requirements', elementIds: ['blk-motor'] });
     expect(state.repository.definitions['blk-motor']).toBeDefined();
+    expect(state.diagramPresentations?.requirements?.presentations['blk-motor']).toBeUndefined();
     expect(state.diagramPresentations?.bdd?.elementIds).toContain('blk-motor');
+    expect(state.diagramPresentations?.bdd?.presentations['blk-motor']).toBeDefined();
 
     const preflight = executeSysmlCommand(state, { type: 'deleteElements', elementIds: ['blk-motor'] });
     const deleted = preflight.impact
@@ -69,5 +71,6 @@ describe('SysML Repository/Presentation Release Gate', () => {
     state = deleted;
     expect(state.repository.definitions['blk-motor']).toBeUndefined();
     expect(state.diagramPresentations?.bdd?.elementIds ?? []).not.toContain('blk-motor');
+    expect(state.diagramPresentations?.bdd?.presentations['blk-motor']).toBeUndefined();
   });
 });
