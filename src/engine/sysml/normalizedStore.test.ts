@@ -371,4 +371,26 @@ describe('NormalizedSysmlStore', () => {
     expect(back.extensionPoints).toEqual(repo.extensionPoints);
     expect(back.diagramReferences).toEqual(repo.diagramReferences);
   });
+
+  it('does not leak repository elements into a diagram when diagram has no presentation entries', () => {
+    const repo = createEmptyRepository();
+    repo.definitions['blk-isolated'] = {
+      id: 'blk-isolated',
+      name: 'IsolatedBlock',
+      kind: 'block',
+      ownerId: 'model',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+    };
+    const store = fromRepository(repo);
+
+    // When diagramId is specified, unpresented repository elements must NOT be visible
+    const bddView = projectNormalizedDiagram(store, 'bdd');
+    expect(bddView.blocks.map(b => b.id)).not.toContain('blk-isolated');
+
+    // When diagramId is omitted, full repository view is returned
+    const fullView = projectNormalizedDiagram(store);
+    expect(fullView.blocks.map(b => b.id)).toContain('blk-isolated');
+  });
 });

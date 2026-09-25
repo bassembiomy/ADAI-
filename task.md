@@ -1,75 +1,38 @@
-# Cameo-Style Repository and Diagram Presentation Implementation Plan Tasks
+# SysML Presentation Decoupling and State Requirement Traceability Implementation Plan
 
-- [x] Task 1: Correct Empty-Impact Dispatch Semantics
-  - [x] Step 1: Write the failing empty-impact test
-  - [x] Step 2: Run the focused tests and verify the new test fails
-  - [x] Step 3: Implement material-impact detection
-  - [x] Step 4: Run the focused tests
+- [x] Task 1: Strict Diagram Presentation Scoping in Normalized Store & Gateway
+  - [x] Step 1: Write the failing unit tests for diagram scoping and repository creation isolation
+  - [x] Step 2: Run test to verify it fails
+  - [x] Step 3: Update `normalizedStore.ts` and `sysmlCommandGateway.ts`
+  - [x] Step 4: Run tests to verify they pass
   - [x] Step 5: Commit
-- [x] Task 2: Add an Atomic Create-and-Present Gateway Command
-  - [x] Step 1: Write rollback and identity tests
-  - [x] Step 2: Run the gateway test and verify type/test failure
-  - [x] Step 3: Add rollback-safe transaction cloning
-  - [x] Step 4: Implement `createAndPresent` as one gateway transaction
-  - [x] Step 5: Run gateway and undo tests
-  - [x] Step 6: Commit
-- [x] Task 3: Build Diagram Creation Intents from Canonical Factories
-  - [x] Step 1: Write failing creation-intent tests
-  - [x] Step 2: Run the test and verify the module is missing
-  - [x] Step 3: Implement the pure builder
-  - [x] Step 4: Run creation tests
-  - [x] Step 5: Commit
-- [x] Task 4: Route Diagram Palette Creation Through the Repository
-  - [x] Step 1: Write a failing repository-first application projection test
-  - [x] Step 2: Run the new test and verify it fails
-  - [x] Step 3: Replace `createBlock` semantic construction with one command
-  - [x] Step 4: Delete the requirements-only presentation mutation inside legacy `createBlock`
-  - [x] Step 5: Run focused SysML and TypeScript tests
-  - [x] Step 6: Commit
-- [x] Task 5: Make Every Model Explorer Action Observable and Executable
-  - [x] Step 1: Write failing adapter tests for copy, remove, delete, duplicate, and paste
-  - [x] Step 2: Run explorer tests and verify failures
-  - [x] Step 3: Extend command and result contracts
-  - [x] Step 4: Execute copy and remove through the adapter
-  - [x] Step 5: Centralize result handling in `AppModelExplorer`
-  - [x] Step 6: Run explorer tests
-  - [x] Step 7: Commit
-- [x] Task 6: Route SysML Updates and Relationships Through the Gateway
-  - [x] Step 1: Write failing command-path tests for update and relationship creation
-  - [x] Step 2: Run focused tests and establish the current failure
-  - [x] Step 3: Replace update handlers with command dispatch
-  - [x] Step 4: Run SysML tests and TypeScript
-  - [x] Step 5: Commit
-- [x] Task 7: Route Parts, Ports, and Connectors Through the Gateway
-  - [x] Step 1: Add failing tests for typed property and port creation
-  - [x] Step 2: Run focused tests and verify failures where UI still bypasses the repository
-  - [x] Step 3: Replace part, port, property, and connector setters
-  - [x] Step 4: Run port, gateway, and conformance tests
-  - [x] Step 5: Commit
-- [x] Task 8: Remove Legacy Semantic Writeback and Enforce the Boundary
-  - [x] Step 1: Add the repository/presentation release gate
-  - [x] Step 2: Run the release gate before removing the writeback
-  - [x] Step 3: Delete the debounced merge effect
-  - [x] Step 4: Extend the architecture verifier
-  - [x] Step 5: Run architecture and release gates
-  - [x] Step 6: Commit
-- [x] Task 9: Prove Code-Generation Isolation and Compatibility
-  - [x] Step 1: Write a deterministic generator-isolation test
-  - [x] Step 2: Run the isolation and golden tests
-  - [x] Step 3: Add a release script
-  - [x] Step 4: Run the complete code-generation verification
-  - [x] Step 5: Commit
-- [x] Task 10: Verify the Complete Cameo-Style User Workflow
-  - [x] Step 1: Add the failing end-to-end workflow
-  - [x] Step 2: Run the new E2E test and verify it fails before final UI wiring
-  - [x] Step 3: Complete UI selectors and feedback wiring without adding semantic mutation paths
-  - [x] Step 4: Record four-level compliance evidence
-  - [x] Step 5: Run all release checks
-  - [x] Step 6: Commit
-- [x] Final Verification
-  - [x] Confirm `git status --short` contains no unintended files.
-  - [x] Confirm one Block shown on two diagrams has one semantic ID and two presentation memberships.
-  - [x] Confirm `Remove from Diagram` preserves semantics and other presentations.
-  - [x] Confirm `Delete from Model` removes semantic closure and all presentations.
-  - [x] Confirm every enabled tree action produces a commit, clipboard result, impact request, or diagnostic.
-  - [x] Confirm state-machine generated artifacts are unchanged by SysML presentation operations.
+- [ ] Task 2: Smooth Canvas Movement and Drag Decoupling
+  - [ ] Step 1: Write an automated test asserting smooth canvas dragging persistence
+  - [ ] Step 2: Run test to verify current state
+  - [ ] Step 3: Update `App.tsx` canvas mouse handlers
+  - [ ] Step 4: Verify with TypeScript and Vitest
+  - [ ] Step 5: Commit
+- [ ] Task 3: State Machine State Requirement Connection Backend & Connection Policy
+  - [ ] Step 1: Write failing unit tests for State to Requirement relationship evaluation
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Update `connectionPolicy.ts` and `sysmlConnectionUi.ts`
+  - [ ] Step 4: Run test to verify it passes
+  - [ ] Step 5: Commit
+- [ ] Task 4: State Machine Inspector Requirement Traceability UI
+  - [ ] Step 1: Write component unit test for `StateRequirementTraceability`
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Implement `StateRequirementTraceability.tsx` and integrate into `App.tsx`
+  - [ ] Step 4: Run test to verify it passes
+  - [ ] Step 5: Verify full TypeScript and Release Checks
+  - [ ] Step 6: Commit
+- [ ] Task 5: End-to-End Verification of Cameo Cross-Diagram Workflow and State Traceability
+  - [ ] Step 1: Add the new E2E specification
+  - [ ] Step 2: Run Playwright test
+  - [ ] Step 3: Run all release and architecture gates
+  - [ ] Step 4: Commit
+- [ ] Final Verification
+  - [ ] Confirm creating an element in the repository does not leak onto uninitialized diagrams.
+  - [ ] Confirm moving elements on canvas is smooth and positions persist across tab switches.
+  - [ ] Confirm one Block can be presented independently on both Requirements and BDD diagrams.
+  - [ ] Confirm State Machine states can be linked to Requirements with `«satisfy»` and `«trace»` in both UI and backend.
+  - [ ] Confirm State Machine MISRA-C code generation remains 100% compliant and unaffected.

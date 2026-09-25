@@ -667,8 +667,8 @@ export function projectNormalizedDiagram(
 
   const entityCache = getEntityProjectionCache(store);
 
-  const visibleFilter = diagramId && store.diagramPresentations.has(diagramId)
-    ? new Set(store.diagramPresentations.get(diagramId)!.elementIds)
+  const visibleFilter = diagramId
+    ? new Set(store.diagramPresentations.get(diagramId)?.elementIds ?? [])
     : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
   const coordinatesFor = (semanticElementId: string): PresentationCoordinates | undefined => {

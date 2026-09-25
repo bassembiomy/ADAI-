@@ -328,8 +328,8 @@ export function projectLegacyDiagram(
   const relationships: RelationshipData[] = [];
   const connectors: ConnectorData[] = [];
 
-  const visibleFilter = diagramId && diagramPresentations[diagramId]
-    ? new Set(diagramPresentations[diagramId].elementIds)
+  const visibleFilter = diagramId
+    ? new Set(diagramPresentations[diagramId]?.elementIds ?? [])
     : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
   const coordinatesFor = (semanticElementId: string): PresentationCoordinates =>
@@ -1701,9 +1701,10 @@ export function executeSysmlCommand(
     };
     store.diagramPresentations.set(command.diagramId, nextPresentation);
     store.indexes.diagramId.set(command.diagramId, new Set(nextIds));
+    store.revision += 1;
 
     const patch = createSysmlPatch({
-      revision: store.revision + 1,
+      revision: store.revision,
       forward: [{
         op: 'replace',
         collection: 'diagramPresentations',
@@ -1966,12 +1967,22 @@ export function executeSysmlCommand(
     }
 
     const addedIds = command.elementIds.filter(id => !existingSet.has(id));
-    const newRecords = Object.fromEntries(addedIds.map(semanticElementId => [semanticElementId, {
-      id: stableDiagramPresentationId(command.diagramId, semanticElementId),
-      diagramId: command.diagramId,
-      semanticElementId,
-      bounds: { ...(command.coordinates?.[semanticElementId] ?? coordinates[semanticElementId] ?? {}) },
-    }]));
+    const newRecords = Object.fromEntries(addedIds.map(semanticElementId => {
+      const explicit = command.coordinates?.[semanticElementId];
+      const existing = coordinates[semanticElementId] ?? currentPres.presentations[semanticElementId]?.bounds;
+      const bounds = {
+        x: explicit?.x ?? existing?.x ?? 80,
+        y: explicit?.y ?? existing?.y ?? 80,
+        width: explicit?.width ?? existing?.width ?? 160,
+        height: explicit?.height ?? existing?.height ?? 100,
+      };
+      return [semanticElementId, {
+        id: stableDiagramPresentationId(command.diagramId, semanticElementId),
+        diagramId: command.diagramId,
+        semanticElementId,
+        bounds,
+      }];
+    }));
     const nextPres: DiagramPresentation = {
       elementIds: [...currentPres.elementIds, ...addedIds],
       presentations: { ...currentPres.presentations, ...newRecords },
@@ -1982,9 +1993,10 @@ export function executeSysmlCommand(
     };
     store.diagramPresentations.set(command.diagramId, nextPres);
     store.indexes.diagramId.set(command.diagramId, new Set(nextPres.elementIds));
+    store.revision += 1;
 
     const patch = createSysmlPatch({
-      revision: store.revision + 1,
+      revision: store.revision,
       forward: [
         { op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: currentPres, value: nextPres },
       ],
