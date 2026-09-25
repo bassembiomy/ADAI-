@@ -63,7 +63,7 @@ export interface ToolRunResult {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024; // 1 MB
 
-const getEnhancedEnv = (customEnv?: Readonly<Record<string, string>>): NodeJS.ProcessEnv => {
+export const getToolExecutionEnv = (customEnv?: Readonly<Record<string, string>>): NodeJS.ProcessEnv => {
   const base: Record<string, string | undefined> = { ...process.env, ...(customEnv ?? {}) };
   if (process.platform === 'win32') {
     const fs = getNodeBuiltin('node:fs') || getNodeBuiltin('fs');
@@ -95,7 +95,7 @@ const probeToolVersion = async (
       const proc = spawnFn(executable, [...versionArgs], {
         cwd,
         shell: false,
-        env: getEnhancedEnv(env),
+        env: getToolExecutionEnv(env),
         windowsHide: true,
       });
 
@@ -195,7 +195,7 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
       child = spawnFn(request.executable, [...request.args], {
         cwd,
         shell: false,
-        env: getEnhancedEnv(request.env),
+        env: getToolExecutionEnv(request.env),
         windowsHide: true,
       });
     } catch (err) {
