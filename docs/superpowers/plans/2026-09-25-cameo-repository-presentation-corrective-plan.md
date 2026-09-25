@@ -37,10 +37,12 @@
 - Confirmed deletion uses the gateway-provided impact hash, not a hash of an empty adapter placeholder.
 - `App` supplies `onCommandResult` and displays every diagnostic through `addError`.
 - Duplicate resolves its target from `node.ownerSemanticId` (or the parent projection node's `semanticId`), never from the UI-only `parentNodeId`.
+- Paste is disabled with `CLIPBOARD_EMPTY` reasoning until a compatible clipboard payload exists; `Remove from Diagram` is grouped as a diagram action.
 
 - [ ] Add a failing adapter test that deletes a Block owning a PartProperty and asserts the first result is uncommitted with non-empty descendants/presentations.
 - [ ] Add a failing component test that dispatches delete, receives material impact from execution, opens confirmation, confirms, and observes a committed second command.
 - [ ] Add a failing component test that duplicates a Block under Model and asserts the dispatched `targetOwnerId` is `model`, not `sysml:element:model`.
+- [ ] Add a menu test proving Paste is disabled before Copy and enabled after a compatible Copy result.
 - [ ] Map mutation impact fields explicitly:
 
 ```ts
