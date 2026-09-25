@@ -122,6 +122,7 @@ import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './comp
 import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
+import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
@@ -17505,6 +17506,18 @@ const ADIA = () => {
                       className={`w-full h-20 min-h-[4rem] bg-[#1a1a1a] border rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 ${hasExitError ? 'border-red-500 focus:ring-red-500' : 'border-[#333] focus:ring-[#f97316]'}`}
                     />
                   </div>
+
+                  <StateRequirementTraceability
+                    stateId={selectedState.id}
+                    stateName={selectedState.name}
+                    canonicalRepository={canonicalSysmlRepository}
+                    onLinkRequirement={(requirementId, kind) => {
+                      createRelationship(selectedState.id, requirementId, kind);
+                    }}
+                    onUnlinkRelationship={(relationshipId) => {
+                      deleteRelationship(relationshipId);
+                    }}
+                  />
 
                   <Button
                     variant="outline"
