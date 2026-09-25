@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CapabilityKind, ExplorerCapability, ModelTreeNode } from '../../features/modelExplorer/modelExplorerTypes';
-import { capabilityToAction, explorerAdapterDomain, filterNonCreatingCapabilities, type CapabilityActionContext } from './AppModelExplorer';
+import { capabilityToAction, explorerAdapterDomain, filterNonCreatingCapabilities, gateClipboardCapabilities, type CapabilityActionContext } from './AppModelExplorer';
 
 describe('AppModelExplorer Capability Coverage', () => {
   it('routes a State Machine node by its domain even in a SysML editor', () => {
@@ -24,6 +24,39 @@ describe('AppModelExplorer Capability Coverage', () => {
       'addToDiagram',
     ]);
   });
+
+  it('disables Paste until a same-domain clipboard payload exists', () => {
+    const paste = enabledCapability('paste');
+    expect(gateClipboardCapabilities([paste], null, 'sysml')[0]).toMatchObject({
+      enabled: false,
+      reason: 'Copy an element first to enable Paste.',
+    });
+
+    const sysmlClipboard = {
+      domain: 'sysml' as const,
+      rootIds: ['block-1'],
+      snapshots: { 'block-1': {} },
+      copiedAtRevision: 1,
+    };
+    expect(gateClipboardCapabilities([paste], sysmlClipboard, 'sysml')[0].enabled).toBe(true);
+    expect(gateClipboardCapabilities([paste], sysmlClipboard, 'stateMachine')[0]).toMatchObject({
+      enabled: false,
+      reason: 'Cannot paste sysml elements into a stateMachine model.',
+    });
+  });
+
+  it.each(['move', 'duplicate'] as const)(
+    'targets semantic owner for %s instead of the parent projection node ID',
+    capabilityKind => {
+      const projectedNode: ModelTreeNode = {
+        ...selectedNode,
+        parentNodeId: 'sysml:element:model',
+        ownerSemanticId: 'model',
+      };
+      const result = capabilityToAction(enabledCapability(capabilityKind), projectedNode, context);
+      expect(result).toMatchObject({ kind: capabilityKind, targetOwnerId: 'model' });
+    },
+  );
   const selectedNode: ModelTreeNode = {
     nodeId: 'block-1',
     semanticId: 'block-1',

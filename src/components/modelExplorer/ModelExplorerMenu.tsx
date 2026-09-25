@@ -62,7 +62,7 @@ function groupCapabilities(caps: ExplorerCapability[]): CapabilityGroup[] {
       creates.push(c);
     } else if (c.kind === 'copy' || c.kind === 'paste' || c.kind === 'duplicate') {
       clipboard.push(c);
-    } else if (c.kind === 'addToDiagram' || c.kind === 'openSpecification') {
+    } else if (c.kind === 'addToDiagram' || c.kind === 'removeFromDiagram' || c.kind === 'openSpecification') {
       diagramOps.push(c);
     } else {
       edits.push(c);

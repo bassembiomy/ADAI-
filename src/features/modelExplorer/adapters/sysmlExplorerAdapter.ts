@@ -138,7 +138,7 @@ import type {
   SysmlEditorCommand,
   SysmlMutationCommand,
 } from '../../../services/sysmlCommandGateway';
-import { executeSysmlCommand } from '../../../services/sysmlCommandGateway';
+import { computeImpactHash, executeSysmlCommand } from '../../../services/sysmlCommandGateway';
 import type {
   SysmlRepository,
   SysmlRelationship,
@@ -163,18 +163,40 @@ export type SysmlExplorerAdapterHarness = {
 };
 
 
+function toExplorerImpact(result: SysmlCommandResult): ExplorerCommandResult['impact'] {
+  const impact = result.impact;
+  if (!impact) return undefined;
+  const deletedIds = new Set(impact.deletedElementIds);
+  const presentations = Object.entries(result.diagramPresentations ?? {}).flatMap(([diagramId, diagram]) =>
+    diagram.elementIds
+      .filter(elementId => deletedIds.has(elementId))
+      .map(elementId => `${diagramId}:${elementId}`)
+  );
+  return {
+    descendants: impact.deletedElementIds.filter(id =>
+      !impact.requestedElementIds.includes(id) && !impact.removedRelationshipIds.includes(id)
+    ),
+    relationships: impact.removedRelationshipIds,
+    presentations,
+    invalidated: [...impact.unresolvedUsageIds, ...impact.invalidatedEvidenceIds],
+  };
+}
+
 function toExplorerResult(result: SysmlCommandResult, selectedIds?: string[]): ExplorerCommandResult {
   const diagnostics: ExplorerDiagnostic[] = (result.diagnostics || []).map(d => ({
     code: d.code,
     severity: d.severity,
     message: d.message,
-    elementId: d.elementId,
+    semanticId: d.elementId,
   }));
+  const impact = toExplorerImpact(result);
   return {
     committed: result.committed,
     revision: result.repository.revision,
     diagnostics,
     selectedIds: result.committed ? selectedIds : undefined,
+    impact,
+    impactHash: result.impact ? computeImpactHash(result.impact) : undefined,
   };
 }
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import type {
   ModelTreeNode,
   ModelExplorerCommand,
@@ -7,6 +7,7 @@ import type {
   ExplorerClipboardPayload,
   ActiveDiagramContext,
   ExplorerCommandResult,
+  ExplorerDomain,
 } from '../../features/modelExplorer/modelExplorerTypes';
 import { hashImpact } from '../../features/modelExplorer/modelExplorerTypes';
 import { ModelExplorer } from './ModelExplorer';
@@ -46,6 +47,30 @@ export interface CapabilityActionContext {
   activeDiagramContext?: ActiveDiagramContext;
   selectedSemanticIds?: string[];
   hasClipboard?: boolean;
+  parentSemanticId?: string;
+  defaultOwnerId?: string;
+}
+
+export function gateClipboardCapabilities(
+  capabilities: ExplorerCapability[],
+  clipboard: ExplorerClipboardPayload | null,
+  targetDomain: ExplorerDomain,
+): ExplorerCapability[] {
+  return capabilities.map(capability => {
+    if (capability.kind !== 'paste') return capability;
+    const compatible = clipboard?.domain === targetDomain;
+    if (!clipboard) {
+      return { ...capability, enabled: false, reason: 'Copy an element first to enable Paste.' };
+    }
+    if (!compatible) {
+      return {
+        ...capability,
+        enabled: false,
+        reason: `Cannot paste ${clipboard.domain} elements into a ${targetDomain} model.`,
+      };
+    }
+    return capability;
+  });
 }
 
 export type CapabilityActionResult =
@@ -65,6 +90,14 @@ export type CapabilityActionResult =
 
 export function explorerAdapterDomain(node: ModelTreeNode): 'stateMachine' | 'sysml' {
   return node.domain === 'stateMachine' ? 'stateMachine' : 'sysml';
+}
+
+export function resolveSemanticOwnerId(
+  node: ModelTreeNode,
+  context: Pick<CapabilityActionContext, 'parentSemanticId' | 'defaultOwnerId'> = {},
+): string {
+  return node.ownerSemanticId ?? context.parentSemanticId ?? context.defaultOwnerId ??
+    (node.domain === 'stateMachine' ? 'root' : 'model');
 }
 
 export function filterNonCreatingCapabilities(capabilities: ExplorerCapability[]): ExplorerCapability[] {
@@ -116,7 +149,7 @@ export function capabilityToAction(
       return {
         kind: 'move',
         semanticIds: selectedIds,
-        targetOwnerId: node.parentNodeId || 'model',
+        targetOwnerId: resolveSemanticOwnerId(node, context),
       };
     case 'copy':
       return {
@@ -132,7 +165,7 @@ export function capabilityToAction(
       return {
         kind: 'duplicate',
         semanticIds: selectedIds,
-        targetOwnerId: node.parentNodeId || 'model',
+        targetOwnerId: resolveSemanticOwnerId(node, context),
       };
     case 'delete':
       return {
@@ -252,12 +285,19 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     direction?: 'incoming' | 'outgoing';
   } | null>(null);
 
-  // Shared clipboard reference
-  const clipboardRef = useRef<ExplorerClipboardPayload | null>(null);
+  // Clipboard changes must cause the context menu to re-evaluate Paste availability.
+  const [clipboardPayload, setClipboardPayload] = useState<ExplorerClipboardPayload | null>(null);
 
-  const acceptResult = useCallback((result: ExplorerCommandResult) => {
-    if (result.clipboard) clipboardRef.current = result.clipboard;
+  const acceptResult = useCallback((result: ExplorerCommandResult, command?: ModelExplorerCommand) => {
+    if (result.clipboard) setClipboardPayload(result.clipboard);
     if (result.selectedIds?.length) onSelectMultiple?.(result.selectedIds);
+    if (!result.committed && command && result.impact && hasMaterialImpact(result.impact)) {
+      setPendingImpact({
+        impact: result.impact,
+        impactHash: result.impactHash || hashImpact(result.impact),
+        command,
+      });
+    }
     onCommandResult?.(result);
     return result;
   }, [onCommandResult, onSelectMultiple]);
@@ -427,7 +467,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           ownerId: node.semanticId,
           elementKind: capability.elementKind || 'Block',
         });
-        acceptResult(res);
+        acceptResult(res, { type: 'createElement', ownerId: node.semanticId, elementKind: capability.elementKind || 'Block' });
         return;
       }
 
@@ -437,7 +477,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           ownerId: node.semanticId,
           diagramKind: capability.elementKind || 'bdd',
         });
-        acceptResult(res);
+        acceptResult(res, { type: 'createDiagram', ownerId: node.semanticId, diagramKind: capability.elementKind || 'bdd' });
         return;
       }
 
@@ -477,7 +517,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           type: 'copy',
           elementIds: selectedSemanticIds,
         });
-        acceptResult(res);
+        acceptResult(res, { type: 'copy', elementIds: selectedSemanticIds });
         return;
       }
 
@@ -491,10 +531,16 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         cmd = {
           type: 'duplicate',
           elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
-          targetOwnerId: node.parentNodeId || (isStateMachine ? 'root' : 'model'),
+          targetOwnerId: resolveSemanticOwnerId(
+            node,
+            {
+              parentSemanticId: node.parentNodeId ? projection.nodes[node.parentNodeId]?.semanticId : undefined,
+              defaultOwnerId: isStateMachine ? 'root' : 'model',
+            },
+          ),
         };
       } else if (capability.kind === 'paste') {
-        if (!clipboardRef.current) {
+        if (!clipboardPayload) {
           acceptResult({
             committed: false,
             revision: nodeAdapter.getRevision(),
@@ -504,7 +550,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         }
         cmd = {
           type: 'paste',
-          payload: clipboardRef.current,
+          payload: clipboardPayload,
           targetOwnerId: node.semanticId,
           mode: 'copy',
         };
@@ -540,20 +586,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return;
       }
 
-      const bus = createModelExplorerCommandBus(nodeAdapter);
-      const preflight = nodeAdapter.preflight(cmd);
-      const hasImpact = hasMaterialImpact(preflight.impact);
-      if (hasImpact && preflight.impact) {
-        setPendingImpact({
-          impact: preflight.impact,
-          impactHash: hashImpact(preflight.impact),
-          command: cmd,
-        });
-        return;
-      }
-
-      const res = bus.dispatch(cmd);
-      acceptResult(res);
+      const res = createModelExplorerCommandBus(nodeAdapter).dispatch(cmd);
+      acceptResult(res, cmd);
     },
     [
       activeDiagramId,
@@ -573,6 +607,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       states,
       sysmlAdapter,
       transitions,
+      clipboardPayload,
       acceptResult,
     ]
   );
@@ -585,20 +620,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         targetOwnerId: targetNode.semanticId,
       };
 
-      const bus = createModelExplorerCommandBus(activeAdapter);
-      const preflight = activeAdapter.preflight(cmd);
-      const hasImpact = hasMaterialImpact(preflight.impact);
-      if (hasImpact && preflight.impact) {
-        setPendingImpact({
-          impact: preflight.impact,
-          impactHash: hashImpact(preflight.impact),
-          command: cmd,
-        });
-        return;
-      }
-
-      const res = bus.dispatch(cmd);
-      acceptResult(res);
+      const res = createModelExplorerCommandBus(activeAdapter).dispatch(cmd);
+      acceptResult(res, cmd);
     },
     [activeAdapter, acceptResult]
   );
@@ -609,7 +632,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       const bus = createModelExplorerCommandBus(activeAdapter);
       const res = bus.confirm(pendingImpact.command, confirmedImpactHash);
       setPendingImpact(null);
-      acceptResult(res);
+      acceptResult(res, pendingImpact.command);
     },
     [activeAdapter, pendingImpact, acceptResult]
   );
@@ -623,10 +646,17 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         activeDiagramContext={activeDiagramContext}
         onSelectNode={handleSelectNode}
         onActivateNode={handleActivateNode}
-        getCapabilities={(node) => filterNonCreatingCapabilities(
-          (explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter)
-            .capabilities([node.semanticId], activeDiagramId, { includeAllTypes: true })
-        )}
+        getCapabilities={(node) => {
+          const domain = explorerAdapterDomain(node);
+          return gateClipboardCapabilities(
+            filterNonCreatingCapabilities(
+              (domain === 'stateMachine' ? smAdapter : sysmlAdapter)
+                .capabilities([node.semanticId], activeDiagramId, { includeAllTypes: true })
+            ),
+            clipboardPayload,
+            domain,
+          );
+        }}
         onExecuteCapability={handleExecuteCapability}
         onMoveNode={handleMoveNode}
         onRenameCommit={(nodeId, newName) => {
@@ -638,7 +668,11 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
             elementId: node.semanticId,
             name: newName,
           });
-          acceptResult(res);
+          acceptResult(res, {
+            type: 'rename',
+            elementId: node.semanticId,
+            name: newName,
+          });
         }}
         height={height}
         projectId={projectId}

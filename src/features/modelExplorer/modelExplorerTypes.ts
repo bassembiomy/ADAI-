@@ -115,6 +115,7 @@ export interface ExplorerCommandResult {
   diagnostics: ExplorerDiagnostic[];
   selectedIds?: string[];
   impact?: ExplorerImpact;
+  impactHash?: string;
   clipboard?: ExplorerClipboardPayload;
 }
 

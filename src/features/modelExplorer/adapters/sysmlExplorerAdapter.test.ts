@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
 import type { ModelExplorerCommand } from '../modelExplorerTypes';
 import { createSysmlGatewayState, executeSysmlCommand, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
-import type { BlockDefinition, InterfaceDefinition, RequirementDefinition } from '../../../engine/sysml/model';
+import { createEmptyRepository, type BlockDefinition, type InterfaceDefinition, type PartUsage, type RequirementDefinition, type SysmlRelationship } from '../../../engine/sysml/model';
 
 function createTestHarness(initialState?: SysmlGatewayState) {
   let state = initialState ?? createSysmlGatewayState();
@@ -381,6 +381,54 @@ describe('sysmlExplorerAdapter', () => {
       const result = adapter.execute(command);
       expect(result.committed || result.diagnostics.length > 0 || result.clipboard).toBeTruthy();
     }
+  });
+
+  it('returns material gateway impact when deleting a Block with owned features and presentations', () => {
+    const repository = createEmptyRepository();
+    const vehicle: BlockDefinition = {
+      id: 'block-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const motor: BlockDefinition = {
+      id: 'block-motor', name: 'Motor', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const leftMotor: PartUsage = {
+      id: 'part-left-motor', name: 'leftMotor', kind: 'part', ownerId: motor.id, typeId: vehicle.id,
+      aggregation: 'composite', multiplicity: { lower: 1, upper: 1 },
+    };
+    const requirement: RequirementDefinition = {
+      id: 'req-001', name: 'REQ-001', kind: 'requirement', namespace: [], requirementId: 'REQ-001',
+      text: 'Motor shall run', status: 'approved', version: '1', priority: 'high', risk: 'medium',
+    };
+    const satisfy: SysmlRelationship = {
+      id: 'satisfy-motor-req', kind: 'satisfy', sourceId: motor.id, targetId: requirement.id,
+    };
+    repository.definitions[vehicle.id] = vehicle;
+    repository.definitions[motor.id] = motor;
+    repository.usages[leftMotor.id] = leftMotor;
+    repository.requirements[requirement.id] = requirement;
+    repository.relationships[satisfy.id] = satisfy;
+    const initial = createSysmlGatewayState(repository, {
+      [motor.id]: { x: 10, y: 20 },
+      [leftMotor.id]: { x: 30, y: 40 },
+    }, {
+      bdd: { elementIds: [vehicle.id, motor.id, leftMotor.id] },
+      requirements: { elementIds: [motor.id, requirement.id, satisfy.id] },
+    });
+    const harness = createTestHarness(initial);
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    const result = adapter.execute({ type: 'delete', elementIds: [motor.id] });
+
+    expect(result.committed).toBe(false);
+    expect(result.impact).toMatchObject({
+      descendants: [leftMotor.id],
+      relationships: [satisfy.id],
+      presentations: expect.arrayContaining([`bdd:${motor.id}`, `bdd:${leftMotor.id}`, `requirements:${motor.id}`, `requirements:${satisfy.id}`]),
+    });
+    expect(result.impact?.invalidated).toEqual([]);
+    expect(result.impactHash).toEqual(expect.any(String));
   });
 
   it('copies and pastes a Block with owned PartProperty, preserving internal references', () => {

@@ -131,4 +131,35 @@ describe('ModelExplorerMenu', () => {
     expect(html).toContain('Requirement cannot be owned by Block.');
     expect(html).toContain('aria-disabled="true"');
   });
+
+  it('shows unavailable Paste reasons and groups removal with diagram actions', () => {
+    const html = renderToStaticMarkup(
+      <ModelExplorerMenu
+        x={100}
+        y={150}
+        targetNode={targetNode}
+        capabilities={[
+          {
+            id: 'paste',
+            kind: 'paste',
+            label: 'Paste',
+            enabled: false,
+            reason: 'Copy an element first to enable Paste.',
+          },
+          {
+            id: 'remove-from-diagram',
+            kind: 'removeFromDiagram',
+            label: 'Remove from Diagram',
+            enabled: true,
+          },
+        ]}
+        onSelectCapability={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Copy an element first to enable Paste.');
+    expect(html).toContain('aria-disabled="true"');
+    expect(html.indexOf('>Diagram</div>')).toBeLessThan(html.indexOf('Remove from Diagram'));
+  });
 });

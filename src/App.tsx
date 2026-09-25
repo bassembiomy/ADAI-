@@ -100,7 +100,7 @@ import { HELP_DATA } from './HelpData';
 import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
 import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
 import { parseModelExplorerDragData } from './features/modelExplorer/modelExplorerDragDrop';
-import type { ActiveDiagramContext } from './features/modelExplorer/modelExplorerTypes';
+import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -491,6 +491,7 @@ const HierarchyTree: React.FC<any> = (props) => (
     onExecuteSysmlCommand={props.onExecuteSysmlCommand}
     activeDiagramId={props.activeDiagramId}
     activeDiagramContext={props.activeDiagramContext as ActiveDiagramContext | undefined}
+    onCommandResult={props.onCommandResult}
   />
 );
 
@@ -7056,6 +7057,12 @@ const ADIA = () => {
       setIsRunning(false);
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
+
+  const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
+    for (const diagnostic of result.diagnostics) {
+      addError(diagnostic.severity, `${diagnostic.code}: ${diagnostic.message}`, 'Model Explorer', diagnostic.semanticId);
+    }
+  }, [addError]);
 
   const showConnectionPolicyError = useCallback((rejection: {
     diagnostic: ConnectionPolicyDiagnostic;
@@ -16067,6 +16074,7 @@ const ADIA = () => {
 
 
                   onExecuteSysmlCommand={handleExecuteSysmlCommand}
+                  onCommandResult={handleExplorerCommandResult}
                   activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode}
                   activeDiagramContext={(() => {
                     const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
