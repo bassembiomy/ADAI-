@@ -338,7 +338,7 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrat
     const id = text(legacy.id);
     if (!id) continue;
     repo.usages[id] = {
-      id, name: text(legacy.name) || id, kind: 'part', ownerId: text(legacy.parentPartId) || text(legacy.parentBlockId) || text(legacy.blockId),
+      id, propertyId: optionalText(legacy.propertyId), name: text(legacy.name) || id, kind: 'part', ownerId: text(legacy.parentPartId) || text(legacy.parentBlockId) || text(legacy.blockId),
       typeId: text(legacy.typeBlockId) || text(legacy.typeId) || text(legacy.blockId), aggregation: 'composite',
       multiplicity: safeMultiplicity(legacy.multiplicity),
     };

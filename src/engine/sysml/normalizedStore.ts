@@ -823,6 +823,7 @@ export function projectNormalizedDiagram(
 
       const result: PartData = {
         id: pUsage.id,
+        propertyId: pUsage.propertyId,
         name: pUsage.name,
         blockId: pUsage.ownerId,
         parentBlockId: pUsage.ownerId,
@@ -833,6 +834,9 @@ export function projectNormalizedDiagram(
         y: coords?.y ?? 0,
         width: coords?.width ?? 150,
         height: coords?.height ?? 100,
+        ...(diagramId && store.diagramPresentations.get(diagramId)?.presentations[pUsage.id]?.portLayouts
+          ? { portLayouts: store.diagramPresentations.get(diagramId)!.presentations[pUsage.id].portLayouts }
+          : {}),
       };
       entityCache.parts.set(pUsage.id, { entity: pUsage, coords, result });
       parts.push(result);

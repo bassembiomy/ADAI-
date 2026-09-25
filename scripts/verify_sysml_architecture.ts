@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as ts from 'typescript';
 
 export type ArchitectureRuleId =
   | 'SYSML_ARCH_DIRECT_MUTATION'
@@ -14,56 +15,28 @@ export interface ArchitectureViolation {
   line?: number;
   message: string;
   allowed?: boolean;
+  allowedBy?: string;
 }
 
 export interface CompatibilityAllowlistEntry {
   filePath: string;
   ruleId: ArchitectureRuleId;
+  symbol: string;
   reason: string;
   expiry: string;
 }
 
 /**
- * Temporary compatibility allowlist for legacy UI/adapter code.
- * Task 14 of the SysML v1.6 implementation plan explicitly mandates:
- * "Empty the production architecture-guard allowlist"
+ * Single-function compatibility exception for the canonical-to-canvas
+ * projection boundary. All runtime semantic writes must pass the gateway.
  */
 export const COMPATIBILITY_ALLOWLIST: CompatibilityAllowlistEntry[] = [
   {
-    filePath: 'src/App.tsx',
+    filePath: 'src/services/sysmlProjectionState.ts',
     ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
-    reason: 'Temporary compatibility for load/import/history projection synchronization',
-    expiry: 'SysML v1.6 Phase 4 Final Cutover',
-  },
-  {
-    filePath: 'src/App.tsx',
-    ruleId: 'SYSML_ARCH_UI_SEMANTIC_STORAGE',
-    reason: 'Temporary compatibility until Task 12 & Task 14 UI projection conversion',
-    expiry: 'SysML v1.6 Phase 4 Final Cutover',
-  },
-  {
-    filePath: 'src/components/sysml/BlockPropertiesEditor.tsx',
-    ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
-    reason: 'Temporary compatibility until Task 8 property editor command refactor',
-    expiry: 'SysML v1.6 Phase 4 Final Cutover',
-  },
-  {
-    filePath: 'src/services/sysmlPropertyUsageSync.ts',
-    ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
-    reason: 'Temporary legacy sync helper until Task 7/8 command migration',
-    expiry: 'SysML v1.6 Phase 4 Final Cutover',
-  },
-  {
-    filePath: 'src/services/sysmlPropertyRules.ts',
-    ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
-    reason: 'Temporary legacy rule adapter until Task 8',
-    expiry: 'SysML v1.6 Phase 4 Final Cutover',
-  },
-  {
-    filePath: 'src/services/sysmlCommandGateway.ts',
-    ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
-    reason: 'Temporary legacy gateway mutations until Task 7 command dispatcher refactor',
-    expiry: 'SysML v1.6 Phase 4 Final Cutover',
+    symbol: 'applyCanonicalSysmlResult',
+    reason: 'The canonical gateway result is projected into the legacy React canvas view at this single boundary.',
+    expiry: 'Remove when the legacy canvas projection arrays are eliminated.',
   },
 ];
 
@@ -71,11 +44,37 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/');
 }
 
-export function isAllowlisted(filePath: string, ruleId: ArchitectureRuleId): boolean {
+export function isAllowlisted(filePath: string, ruleId: ArchitectureRuleId, symbol?: string): boolean {
   const normalized = normalizePath(filePath);
   return COMPATIBILITY_ALLOWLIST.some(
-    entry => normalized.endsWith(normalizePath(entry.filePath)) && entry.ruleId === ruleId
+    entry => normalized === normalizePath(entry.filePath) && entry.ruleId === ruleId && entry.symbol === symbol
   );
+}
+
+function enclosingFunctionName(sourceFile: ts.SourceFile, lineNumber: number): string | undefined {
+  const lineStart = sourceFile.getPositionOfLineAndCharacter(lineNumber - 1, 0);
+  const lineText = sourceFile.text.slice(lineStart).split(/\r?\n/, 1)[0] ?? '';
+  const firstCodeOffset = lineText.search(/\S/);
+  const position = lineStart + Math.max(0, firstCodeOffset);
+  let nearestFunctionName: string | undefined;
+
+  const visit = (node: ts.Node): void => {
+    if (position < node.getStart(sourceFile) || position > node.end) return;
+    if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isMethodDeclaration(node)) {
+      if (node.name && ts.isIdentifier(node.name)) nearestFunctionName = node.name.text;
+      else if (ts.isFunctionExpression(node) && ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) {
+        nearestFunctionName = node.parent.name.text;
+      }
+    } else if (ts.isArrowFunction(node)) {
+      if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) {
+        nearestFunctionName = node.parent.name.text;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return nearestFunctionName;
 }
 
 export function validateAllowlistIntegrity(): { valid: boolean; errors: string[] } {
@@ -99,25 +98,8 @@ export const FORBIDDEN_RUNTIME_PATTERNS = [
   /mergeLegacyDiagramIntoRepository\(/,
 ];
 
-const ALLOWED_COMPATIBILITY_CONTEXTS = [
-  /function\s+(?:handleFile|load|import|paste|restore|undo|redo)/i,
-  /case\s+['"](?:bdd|requirements|statemachine)['"]:/i,
-  /pasteStateMachineClipboard/i,
-];
-
-function isInsideAllowedCompatibilityContext(lines: string[], currentLineIndex: number): boolean {
-  const start = Math.max(0, currentLineIndex - 25);
-  for (let j = currentLineIndex; j >= start; j--) {
-    const l = lines[j];
-    if (ALLOWED_COMPATIBILITY_CONTEXTS.some(ctx => ctx.test(l))) {
-      return true;
-    }
-  }
-  return false;
-}
-
 const DIRECT_MUTATION_REGEX =
-  /\b(?:setBlocks|setParts|setConnectors|setRelationships|setRequirements|setVerificationCases)\s*\(|\b(?:[A-Za-z0-9_]*(?:model|state|sysml|store|repository)\.(?:blocks|parts|connectors|relationships|requirements|verificationCases))\s*\.push\s*\(/i;
+  /\b(?:setBlocks|setParts|setConnectors|setRelationships|setRequirements|setVerificationCases|setProjection)\s*\(|\b(?:[A-Za-z0-9_]*(?:model|state|sysml|store|repository)\.(?:blocks|parts|connectors|relationships|requirements|verificationCases))\s*\.push\s*\(/i;
 
 const UI_SEMANTIC_STORAGE_REGEX =
   /useState\s*<\s*(?:readonly\s+)?(?:BlockData|PartData|RelationshipData|RequirementData|VerificationCaseData)\s*\[\]\s*>/;
@@ -131,18 +113,29 @@ export function scanSourceForArchitectureViolations(
 ): ArchitectureViolation[] {
   const violations: ArchitectureViolation[] = [];
   const lines = source.split(/\r?\n/);
+  const isAppTsx = normalizePath(filePath).endsWith('App.tsx');
+  const needsFunctionContext = lines.some(line =>
+    DIRECT_MUTATION_REGEX.test(line)
+    || UI_SEMANTIC_STORAGE_REGEX.test(line)
+    || SILENT_CREATION_REGEX.test(line)
+    || (isAppTsx && FORBIDDEN_RUNTIME_PATTERNS.some(pattern => pattern.test(line)))
+  );
+  const sourceFile = needsFunctionContext
+    ? ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true,
+      filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+    : undefined;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNum = i + 1;
 
-    const isAppTsx = normalizePath(filePath).endsWith('App.tsx');
     if (isAppTsx) {
       for (const forbiddenPattern of FORBIDDEN_RUNTIME_PATTERNS) {
         if (forbiddenPattern.test(line)) {
           // mergeLegacyDiagramIntoRepository is strictly forbidden anywhere in App.tsx
           const isStrictlyForbidden = /mergeLegacyDiagramIntoRepository\(/.test(line);
-          const allowedContext = !isStrictlyForbidden && isInsideAllowedCompatibilityContext(lines, i);
+          const symbol = sourceFile ? enclosingFunctionName(sourceFile, lineNum) : undefined;
+          const allowedContext = !isStrictlyForbidden && isAllowlisted(filePath, 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION', symbol);
           if (!allowedContext) {
             violations.push({
               ruleId: 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION',
@@ -157,32 +150,41 @@ export function scanSourceForArchitectureViolations(
     }
 
     if (DIRECT_MUTATION_REGEX.test(line)) {
+      const symbol = sourceFile ? enclosingFunctionName(sourceFile, lineNum) : undefined;
+      const allowed = isAllowlisted(filePath, 'SYSML_ARCH_DIRECT_MUTATION', symbol);
       violations.push({
         ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
         filePath,
         line: lineNum,
         message: `Direct mutation of semantic array detected on line ${lineNum}: "${line.trim()}"`,
-        allowed: isAllowlisted(filePath, 'SYSML_ARCH_DIRECT_MUTATION'),
+        allowed,
+        allowedBy: allowed ? symbol : undefined,
       });
     }
 
     if (UI_SEMANTIC_STORAGE_REGEX.test(line)) {
+      const symbol = sourceFile ? enclosingFunctionName(sourceFile, lineNum) : undefined;
+      const allowed = isAllowlisted(filePath, 'SYSML_ARCH_UI_SEMANTIC_STORAGE', symbol);
       violations.push({
         ruleId: 'SYSML_ARCH_UI_SEMANTIC_STORAGE',
         filePath,
         line: lineNum,
         message: `UI component semantic state storage detected on line ${lineNum}: "${line.trim()}"`,
-        allowed: isAllowlisted(filePath, 'SYSML_ARCH_UI_SEMANTIC_STORAGE'),
+        allowed,
+        allowedBy: allowed ? symbol : undefined,
       });
     }
 
     if (SILENT_CREATION_REGEX.test(line)) {
+      const symbol = sourceFile ? enclosingFunctionName(sourceFile, lineNum) : undefined;
+      const allowed = isAllowlisted(filePath, 'SYSML_ARCH_SILENT_CREATION', symbol);
       violations.push({
         ruleId: 'SYSML_ARCH_SILENT_CREATION',
         filePath,
         line: lineNum,
         message: `Silent type creation detected on line ${lineNum}: "${line.trim()}"`,
-        allowed: isAllowlisted(filePath, 'SYSML_ARCH_SILENT_CREATION'),
+        allowed,
+        allowedBy: allowed ? symbol : undefined,
       });
     }
   }

@@ -8,7 +8,8 @@ describe('ports and typed property creation', () => {
   it('returns TYPE_NOT_FOUND when a requested PartProperty type is absent', () => {
     const repo = createEmptyRepository();
     const result = createTypedUsageCommand(repo, { ownerId: 'vehicle', name: 'leftMotor', typeId: 'missing', kind: 'part' });
-    expect(result).toMatchObject({ ok: false, code: 'TYPE_NOT_FOUND', action: { type: 'CreateNewType' } });
+    expect(result).toMatchObject({ ok: false, code: 'TYPE_NOT_FOUND', action: { actionKind: 'CreateNewType' } });
+    if (!result.ok) expect(result.action).not.toHaveProperty('type');
   });
 
   it('does not auto-create an InterfaceBlock for ProxyPort', () => {

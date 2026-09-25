@@ -154,7 +154,12 @@ import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerforman
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
-import { reconcileAllPropertyUsages, reconcilePropertyUsages } from './services/sysmlPropertyUsageSync';
+import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './services/sysmlProjectionState';
+import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
+import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
+import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
+import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
+import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 
@@ -6036,7 +6041,7 @@ const ADIA = () => {
   } | null>(null);
 
   // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
-  const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<CreateNewTypeAction | null>(null);
+  const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<{ action: CreateNewTypeAction; candidates: import('./engine/sysml/commands/commandResult').TypeCandidate[] } | null>(null);
   const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
     impact: import('./engine/sysml/mutations').MutationImpact;
     transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
@@ -6060,7 +6065,6 @@ const ADIA = () => {
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
   const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
-  const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
@@ -6141,12 +6145,10 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const [blocks, setBlocks] = useState<BlockData[]>([]);
-  const [relationships, setRelationships] = useState<RelationshipData[]>([]);
-  const [parts, setParts] = useState<PartData[]>([]);
-  const [connectors, setConnectors] = useState<ConnectorData[]>([]);
+  const { blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
+  const sysmlGatewayStateRef = useRef(createSysmlGatewayState());
   const sysmlCoordinates = useMemo(
     () => Object.fromEntries(sysmlStore.coordinates.entries()),
     [sysmlStore],
@@ -6155,6 +6157,15 @@ const ADIA = () => {
     () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
     [sysmlStore],
   );
+  const projectCanonicalAppView = useCallback((
+    repository: typeof canonicalSysmlRepository,
+    coordinates: Record<string, PresentationCoordinates>,
+    diagramPresentations: typeof sysmlDiagramPresentations,
+  ) => {
+    const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+    const complete = projectLegacyDiagram(repository, coordinates, diagramPresentations);
+    applyCanonicalSysmlResult({ view: projectDiagramScopedCanvasView(complete, activeDiagramId, diagramPresentations) });
+  }, [diagramMode, currentLayerId, applyCanonicalSysmlResult]);
   // Explicit per-baseline deletion authorizations granted from the governance
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
@@ -6167,53 +6178,65 @@ const ADIA = () => {
         repository: canonicalSysmlRepository,
         history: createHistory(canonicalSysmlRepository),
         store: sysmlStore,
+        patchHistory: sysmlGatewayStateRef.current.patchHistory,
         coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
         diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
       }),
       setState: (nextState) => {
+        sysmlGatewayStateRef.current = { ...sysmlGatewayStateRef.current, ...nextState };
         setCanonicalSysmlRepository(nextState.repository);
         if (nextState.store) {
           setSysmlStore(nextState.store);
         }
       },
       onStateChange: (result) => {
-        setBlocks(result.view.blocks);
-        setRelationships(result.view.relationships);
-        setParts(result.view.parts);
-        setConnectors(result.view.connectors);
+        projectCanonicalAppView(result.repository, result.coordinates, result.diagramPresentations);
       },
     });
-  }, [canonicalSysmlRepository, sysmlStore]);
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
 
   const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
-    const currentState = createSysmlGatewayState(
-      canonicalSysmlRepository,
-      Object.fromEntries(sysmlStore.coordinates.entries()),
-      Object.fromEntries(sysmlStore.diagramPresentations.entries())
-    );
-    currentState.store = sysmlStore;
+    const currentState = {
+      ...sysmlGatewayStateRef.current,
+      repository: canonicalSysmlRepository,
+      store: sysmlStore,
+      coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
+      diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    };
     const result = executeSysmlCommand(currentState, cmd);
     if (result.committed) {
+      sysmlGatewayStateRef.current = { ...currentState, ...result };
       setCanonicalSysmlRepository(result.repository);
       setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations));
       // Keep the application-wide projection complete. A command may return a
       // diagram-scoped view for the active canvas, but that view must never
       // replace the repository-wide model used by other viewpoints.
-      const completeView = projectLegacyDiagram(
+      projectCanonicalAppView(
         result.repository,
         result.coordinates,
         result.diagramPresentations,
       );
-      setBlocks(completeView.blocks);
-      setRelationships(completeView.relationships);
-      setParts(completeView.parts);
-      setConnectors(completeView.connectors);
-      // Compatibility snapshot for legacy save/export consumers. Canonical
-      // reads use sysmlStore.diagramPresentations below.
-      setDiagramPresentations(result.diagramPresentations);
     }
     return result;
-  }, [canonicalSysmlRepository, sysmlStore]);
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+
+  const applyCanonicalProjectLoad = useCallback((loaded: ReturnType<typeof loadCanonicalSysmlProject>) => {
+    if (!loaded.valid) throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
+    const store = fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current = createSysmlGatewayState(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current.store = store;
+    setCanonicalSysmlRepository(loaded.repository);
+    setSysmlStore(store);
+    projectCanonicalAppView(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+  }, [projectCanonicalAppView]);
+
+  useEffect(() => {
+    projectCanonicalAppView(
+      canonicalSysmlRepository,
+      Object.fromEntries(sysmlStore.coordinates.entries()),
+      Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    );
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
 
   // Report Application Delegate connected to the real report export pipeline
   const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
@@ -6429,19 +6452,10 @@ const ADIA = () => {
           setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]);
           break;
         case 'bdd':
-          setBlocks(prev => prev.filter(b => b.stereotype === 'requirement'));
-          setRelationships(prev => prev.filter(r => 
-            r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace'
-          ));
-          break;
         case 'requirements':
-          setBlocks(prev => prev.filter(b => b.stereotype !== 'requirement'));
-          setRelationships(prev => prev.filter(r => 
-            r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace'
-          ));
-          break;
         case 'ibd':
-          setParts([]); setConnectors([]); setInterfaceRealizations([]);
+          // Diagram tabs are viewpoints over the canonical repository; an
+          // empty tab must not erase shared semantic model elements.
           break;
         case 'xbridges':
           setGlobalXBridgesNodes([]); setGlobalXBridgesEdges([]);
@@ -6474,51 +6488,42 @@ const ADIA = () => {
     }
 
     const d = file.data;
+    const loadFileSysml = (legacyPayload: Record<string, unknown>) => {
+      const persistedCanonical = d.sysmlRepository || d.canonicalSysmlRepository;
+      const payload = persistedCanonical
+        ? { ...d, sysmlRepository: d.sysmlRepository ?? d.canonicalSysmlRepository }
+        : legacyPayload;
+      applyCanonicalProjectLoad(loadCanonicalSysmlProject(payload));
+    };
     switch (file.type) {
       case 'statemachine':
         applyStateMachineSnapshot(d);
         if (d.view) setView(d.view);
         break;
       case 'bdd':
-        setBlocks(prev => [
-          ...prev.filter(b => b.stereotype === 'requirement'),
-          ...(d.blocks || [])
-        ]);
-        if (d.relationships) {
-          setRelationships(prev => {
-            const relMap = new Map<string, RelationshipData>();
-            prev.forEach(r => {
-              if (r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace') {
-                relMap.set(r.id, r);
-              }
-            });
-            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
-            return Array.from(relMap.values());
-          });
-        }
+        loadFileSysml({
+          blocks: [...blocks.filter(b => b.stereotype === 'requirement'), ...migrateBlocks(d.blocks || [])],
+          relationships: [...relationships.filter(r => ['deriveReqt', 'derive', 'refine', 'satisfy', 'verify', 'trace'].includes(r.type)), ...(d.relationships || [])],
+          parts,
+          connectors,
+        });
         if (d.customStereotypes) setCustomStereotypes(d.customStereotypes);
         break;
       case 'requirements':
-        setBlocks(prev => [
-          ...prev.filter(b => b.stereotype !== 'requirement'),
-          ...(d.blocks || [])
-        ]);
-        if (d.relationships) {
-          setRelationships(prev => {
-            const relMap = new Map<string, RelationshipData>();
-            prev.forEach(r => {
-              if (r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace') {
-                relMap.set(r.id, r);
-              }
-            });
-            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
-            return Array.from(relMap.values());
-          });
-        }
+        loadFileSysml({
+          blocks: [...blocks.filter(b => b.stereotype !== 'requirement'), ...migrateBlocks(d.blocks || [])],
+          relationships: [...relationships.filter(r => !['deriveReqt', 'derive', 'refine', 'satisfy', 'verify', 'trace'].includes(r.type)), ...(d.relationships || [])],
+          parts,
+          connectors,
+        });
         break;
       case 'ibd':
-        if (d.parts) setParts(d.parts);
-        if (d.connectors) setConnectors(d.connectors);
+        loadFileSysml({
+          blocks,
+          relationships,
+          parts: d.parts || parts,
+          connectors: d.connectors || connectors,
+        });
         if (d.interfaceRealizations) setInterfaceRealizations(d.interfaceRealizations);
         if (d.parts && d.parts.length > 0) {
           const firstBlockId = d.parts[0].blockId;
@@ -6561,7 +6566,7 @@ const ADIA = () => {
     }
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
-    setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
+    blocks, relationships, parts, connectors, applyCanonicalProjectLoad, setCustomStereotypes, setInterfaceRealizations,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
     setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
@@ -7027,6 +7032,7 @@ const ADIA = () => {
 
   // Clipboard state
   const [clipboard, setClipboard] = useState<StateMachineClipboardData | null>(null);
+  const sysmlClipboardRef = useRef<string[]>([]);
 
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
@@ -7472,19 +7478,12 @@ const ADIA = () => {
 
   const hydrateProject = useCallback((importedData: any) => {
     try {
-      let sysmlLoadedView: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] } | null = null;
-      if (importedData.sysmlRepository) {
-        const loaded = loadCanonicalSysmlProject(importedData);
-        if (!loaded.valid) {
-          throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
-        }
-        setCanonicalSysmlRepository(loaded.repository);
-        setSysmlStore(fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations));
-        if (loaded.diagramPresentations) {
-          setDiagramPresentations(loaded.diagramPresentations);
-        }
-        sysmlLoadedView = loaded.view;
-      }
+      // Canonical repositories are preferred; legacy imports are migrated by
+      // the same loader, then all canvas views are refreshed from that model.
+      applyCanonicalProjectLoad(loadCanonicalSysmlProject({
+        ...importedData,
+        sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
+      }));
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
@@ -7502,18 +7501,7 @@ const ADIA = () => {
       }
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
-      // SysML & Requirements — derive from canonical repository if present, else migrate legacy
-      if (sysmlLoadedView) {
-        setBlocks(migrateBlocks(sysmlLoadedView.blocks));
-        setRelationships(sysmlLoadedView.relationships);
-        setParts(sysmlLoadedView.parts);
-        setConnectors(sysmlLoadedView.connectors);
-      } else {
-        if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
-        if (importedData.relationships) setRelationships(importedData.relationships);
-        if (importedData.parts) setParts(importedData.parts);
-        if (importedData.connectors) setConnectors(importedData.connectors);
-      }
+      // SysML projections were refreshed atomically from the canonical load above.
       if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
       if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
 
@@ -7535,10 +7523,6 @@ const ADIA = () => {
 
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
-
-      if (importedData.canonicalSysmlRepository) {
-        setCanonicalSysmlRepository(importedData.canonicalSysmlRepository);
-      }
 
       const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
       if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
@@ -7756,7 +7740,7 @@ const ADIA = () => {
     }
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
-    setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setCustomStereotypes,
+    applyCanonicalProjectLoad, setInterfaceRealizations, setCustomStereotypes,
     setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges,
     setHilConfig,
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
@@ -7786,7 +7770,7 @@ const ADIA = () => {
         ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
         ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
       ]),
-      diagramPresentations,
+      diagramPresentations: sysmlDiagramPresentations,
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7825,7 +7809,7 @@ const ADIA = () => {
     parts,
     connectors,
     canonicalSysmlRepository,
-    diagramPresentations,
+    sysmlDiagramPresentations,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
@@ -8119,28 +8103,6 @@ const ADIA = () => {
   const selectedRelationship = useMemo(() => selectedIds.length === 1 ? relationships.find(r => r.id === selectedIds[0]) : null, [selectedIds, relationships]);
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
 
-  const sysmlStructureSignature = useMemo(() => JSON.stringify({
-    blocks: blocks.map(block => ({ id: block.id, stereotype: block.stereotype, properties: block.properties })),
-    parts: parts.map(part => ({
-      id: part.id,
-      propertyId: part.propertyId,
-      name: part.name,
-      blockId: part.blockId,
-      typeId: part.typeId,
-      aggregation: part.aggregation,
-      multiplicity: part.multiplicity,
-    })),
-  }), [blocks, parts]);
-
-  useEffect(() => {
-    if (diagramMode !== 'bdd' && diagramMode !== 'ibd') return;
-    const reconciled = reconcileAllPropertyUsages(blocks, parts, connectors);
-    const blocksChanged = JSON.stringify(reconciled.blocks) !== JSON.stringify(blocks);
-    const partsChanged = JSON.stringify(reconciled.parts) !== JSON.stringify(parts);
-    if (!blocksChanged && !partsChanged) return;
-    if (blocksChanged) setBlocks(reconciled.blocks);
-    if (partsChanged) setParts(reconciled.parts);
-  }, [diagramMode, sysmlStructureSignature]);
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
   const currentLayer = useMemo(() => layers.find(l => l.id === currentLayerId) || layers[0], [layers, currentLayerId]);
@@ -8296,7 +8258,7 @@ const ADIA = () => {
         tickMs, states, junctions, transitions, layers, variables,
         safetyMode, hilConfig,
       }),
-      blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes
+      // SysML history is owned by the canonical gateway patch history.
     });
     setHistory(prev => {
       const newHistory = prev.slice(0, historyIndex + 1);
@@ -8305,37 +8267,39 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, blocks, relationships, parts, connectors, interfaceRealizations, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, historyIndex]);
 
   const undo = useCallback(() => {
-    if (historyIndex > 0) {
+    if ((sysmlGatewayStateRef.current.patchHistory?.past.length ?? 0) > 0) {
+      const result = handleExecuteSysmlCommand({ type: 'undo' });
+      if (result.committed) {
+        addError('info', 'Undo');
+        return;
+      }
+    }
+    if (diagramMode === 'statemachine' && historyIndex > 0) {
       const prevSnapshot = JSON.parse(history[historyIndex - 1]);
       applyStateMachineSnapshot(prevSnapshot);
-      setBlocks(migrateBlocks(prevSnapshot.blocks));
-      setRelationships(prevSnapshot.relationships || []);
-      setParts(prevSnapshot.parts || []);
-      setConnectors(prevSnapshot.connectors || []);
-      setInterfaceRealizations(prevSnapshot.interfaceRealizations || []);
-      setCustomStereotypes(prevSnapshot.customStereotypes || []);
       setHistoryIndex(prev => prev - 1);
       addError('info', 'Undo');
     }
-  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
+  }, [diagramMode, handleExecuteSysmlCommand, history, historyIndex, addError, applyStateMachineSnapshot]);
 
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
+    if ((sysmlGatewayStateRef.current.patchHistory?.future.length ?? 0) > 0) {
+      const result = handleExecuteSysmlCommand({ type: 'redo' });
+      if (result.committed) {
+        addError('info', 'Redo');
+        return;
+      }
+    }
+    if (diagramMode === 'statemachine' && historyIndex < history.length - 1) {
       const nextSnapshot = JSON.parse(history[historyIndex + 1]);
       applyStateMachineSnapshot(nextSnapshot);
-      setBlocks(migrateBlocks(nextSnapshot.blocks));
-      setRelationships(nextSnapshot.relationships || []);
-      setParts(nextSnapshot.parts || []);
-      setConnectors(nextSnapshot.connectors || []);
-      setInterfaceRealizations(nextSnapshot.interfaceRealizations || []);
-      setCustomStereotypes(nextSnapshot.customStereotypes || []);
       setHistoryIndex(prev => prev + 1);
       addError('info', 'Redo');
     }
-  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
+  }, [diagramMode, handleExecuteSysmlCommand, history, historyIndex, addError, applyStateMachineSnapshot]);
 
   const handleCommitStateMachineSnapshot = useCallback((snapshot: any, description: string) => {
     addToHistory();
@@ -8812,14 +8776,14 @@ const ADIA = () => {
       actions, 
       { states, variables, junctions, layers, currentLayerId },
       { 
-        setStates, setVariables, setTransitions, setBlocks, addError,
+        setStates, setVariables, setTransitions, addError,
         setFactors, setHeaders, setModelType: setActiveModel,
         calculateRSM, calculateGMDH, calculateTaguchi,
         handleExportToXbridges: handleExportToXBridges,
         handleExportToVLab
       }
     );
-  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
+  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
 
   const simulationIOMappings = useMemo(
     () => factoryIOEnabled ? createFactoryIOMappings(factoryIOMapping) : [],
@@ -9155,20 +9119,6 @@ const ADIA = () => {
     simStepRef.current = simulationStep;
   }, [simulationStep]);
 
-  // One-time migration: ensure all requirement blocks have a layerId.
-  // Blocks without layerId are old data and belong to the root layer.
-  useEffect(() => {
-    setBlocks(prev => {
-      const needsMigration = prev.some(b => b.stereotype === 'requirement' && b.layerId === undefined);
-      if (!needsMigration) return prev;
-      return prev.map(b =>
-        b.stereotype === 'requirement' && b.layerId === undefined
-          ? { ...b, layerId: 'root' }
-          : b
-      );
-    });
-  }, []); // Run once on mount
-
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
@@ -9365,33 +9315,18 @@ const ADIA = () => {
       transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
     })));
     const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setBlocks(transaction.model.blocks);
-    setRelationships(transaction.model.relationships);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setCanonicalSysmlRepository(transaction.repository);
-    setSysmlStore(current => {
-      const nextPresentations = Object.fromEntries(
-        [...current.diagramPresentations.entries()].map(([diagramId, presentation]) => [
-          diagramId,
-          { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
-        ]),
-      );
-      return fromRepository(
-        transaction.repository,
-        Object.fromEntries(current.coordinates.entries()),
-        nextPresentations,
-      );
+    const gatewayResult = handleExecuteSysmlCommand({
+      type: 'deleteElements',
+      elementIds: transaction.impact.deletedElementIds,
+      authorizedBaselineIds,
     });
-    setDiagramPresentations(prev => Object.fromEntries(
-      Object.entries(prev).map(([diagramId, presentation]) => [
-        diagramId,
-        { elementIds: presentation.elementIds.filter(elementId => !deletedIds.has(elementId)) },
-      ]),
-    ));
+    if (!gatewayResult.committed) {
+      gatewayResult.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      return;
+    }
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-  }, [addToHistory]);
+  }, [addToHistory, handleExecuteSysmlCommand, authorizedBaselineIds, addError]);
 
   const deleteNonStateElements = useCallback((ids: string[]) => {
     const idSet = new Set(ids);
@@ -9537,10 +9472,14 @@ const ADIA = () => {
         junctionIds: l.junctionIds.filter(jid => !otherSet.has(jid)),
         transitionIds: l.transitionIds.filter(tid => !otherSet.has(tid))
       }));
-      setBlocks(prev => prev.filter(b => !otherSet.has(b.id)));
-      setRelationships(prev => prev.filter(r => !otherSet.has(r.id) && !otherSet.has(r.sourceId) && !otherSet.has(r.targetId)));
-      setParts(prev => prev.filter(p => !otherSet.has(p.id)));
-      setConnectors(prev => prev.filter(c => !otherSet.has(c.id) && !otherSet.has(c.sourcePartId) && !otherSet.has(c.targetPartId)));
+      const gatewayResult = handleExecuteSysmlCommand({
+        type: 'deleteElements',
+        elementIds: [...otherSet],
+        authorizedBaselineIds,
+      });
+      if (!gatewayResult.committed) {
+        gatewayResult.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      }
       setInterfaceRealizations(prev => prev.filter(ir => !otherSet.has(ir.id) && !otherSet.has(ir.partId) && !otherSet.has(ir.interfaceId)));
     }
 
@@ -9564,7 +9503,7 @@ const ADIA = () => {
     } else {
       addError('info', 'Deleted selected elements');
     }
-  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory]);
+  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory, handleExecuteSysmlCommand, authorizedBaselineIds]);
 
   const createXBridgesState = useCallback((x: number, y: number) => {
     addToHistory();
@@ -9793,10 +9732,12 @@ const ADIA = () => {
       if (updates.height !== undefined) presentation.height = updates.height;
       const semanticPatch = { ...updates };
       geometricKeys.forEach(k => delete (semanticPatch as any)[k]);
+      const semanticCommand = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, semanticPatch as Record<string, unknown>);
+      const semanticCommands = semanticCommand.type === 'batch' ? semanticCommand.commands : [semanticCommand];
       const result = handleExecuteSysmlCommand({
         type: 'batch',
         commands: [
-          { type: 'updateElement', elementId: id, patch: semanticPatch },
+          ...semanticCommands,
           { type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation },
         ],
       });
@@ -9806,11 +9747,11 @@ const ADIA = () => {
       return;
     }
 
-    const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: id, patch: updates });
+    const result = handleExecuteSysmlCommand(buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, updates as Record<string, unknown>));
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -9965,7 +9906,7 @@ const ADIA = () => {
     const patch: Record<string, unknown> = {};
     if (updates.label !== undefined) patch.name = updates.label;
     if (updates.type !== undefined) patch.kind = updates.type === 'aggregation' ? 'sharedAggregation' : updates.type;
-    const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: id, patch });
+    const result = handleExecuteSysmlCommand(buildPartUsageUpdateCommand(canonicalSysmlRepository, id, patch));
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
@@ -10004,7 +9945,7 @@ const ADIA = () => {
 
     if (!resolved.ok) {
       addError('error', resolved.message, 'SysML');
-      setPendingCreateNewTypeAction(resolved.action);
+      setPendingCreateNewTypeAction({ action: resolved.action, candidates: resolved.candidates });
       return;
     }
 
@@ -10017,16 +9958,12 @@ const ADIA = () => {
       existingNames: parts.map(p => p.name),
     });
 
-    const result = handleExecuteSysmlCommand({
-      type: 'createElement',
-      element: part,
-      presentation: {
-        x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-        y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
-        width: 150,
-        height: 100,
-      },
-    });
+    const result = handleExecuteSysmlCommand(buildCreatePartUsageCommand(canonicalSysmlRepository, part, {
+      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      width: 150,
+      height: 100,
+    }));
 
     if (result.committed) {
       setSelectedIds([part.id]);
@@ -10035,6 +9972,16 @@ const ADIA = () => {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
   }, [canonicalSysmlRepository, currentLayerId, parts, snapEnabled, handleExecuteSysmlCommand, addError]);
+
+  const handleCreateNewTypeAction = useCallback((action: CreateNewTypeAction) => {
+    const result = handleExecuteSysmlCommand(buildCreateNewTypeCommand(action, canonicalSysmlRepository, () => uuidv4()));
+    if (result.committed) {
+      setPendingCreateNewTypeAction(null);
+      addError('info', `Created type definition '${action.suggestedName}'.`);
+    } else {
+      result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
     const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
@@ -10053,6 +10000,7 @@ const ADIA = () => {
       const resolved = resolveType(updates.typeId, canonicalSysmlRepository, { expectedMetaclasses: ['Block'] });
       if (!resolved.found) {
         addError('error', `Part must reference an existing block type.`, 'SysML', id);
+        setPendingCreateNewTypeAction({ action: resolved.action, candidates: resolved.candidates });
         return;
       }
     }
@@ -10070,7 +10018,7 @@ const ADIA = () => {
       }
     }
 
-    const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: id, patch });
+    const result = handleExecuteSysmlCommand(buildPartUsageUpdateCommand(canonicalSysmlRepository, id, patch));
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
@@ -10156,17 +10104,27 @@ const ADIA = () => {
       levelGroups[lvl].push(id);
     });
 
-    const newBlocks = [...blocks];
+    const updates: Array<{ elementId: string; x: number; y: number }> = [];
     Object.entries(levelGroups).forEach(([lvlStr, ids]) => {
       const lvl = parseInt(lvlStr);
       ids.forEach((id, index) => {
-        const idx = newBlocks.findIndex(b => b.id === id);
-        if (idx !== -1) newBlocks[idx] = { ...newBlocks[idx], x: 50 + index * 220, y: 50 + lvl * 180 };
+        const presentation = sysmlDiagramPresentations.requirements?.presentations[id];
+        if (!presentation) return;
+        updates.push({ elementId: id, x: 50 + index * 220, y: 50 + lvl * 180 });
       });
     });
-    setBlocks(newBlocks);
+    const command = buildDiagramPresentationBatch('requirements', updates);
+    if (!command) {
+      addError('warning', 'No requirement presentations are available to lay out on this diagram.');
+      return;
+    }
+    const result = handleExecuteSysmlCommand(command);
+    if (!result.committed) {
+      result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      return;
+    }
     addError('info', 'Auto-layout applied to current layer.');
-  }, [blocks, relationships, currentLayerId, addError]);
+  }, [blocks, relationships, currentLayerId, sysmlDiagramPresentations, handleExecuteSysmlCommand, addError]);
 
   const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
     if (selectedIds.length !== 1) {
@@ -10235,7 +10193,7 @@ const ADIA = () => {
       updateBlock(id, { ports: [...block.ports, newPort] });
       addError('info', `Added ${kind} port to Block: ${block.name}`);
     }
-  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError, setBlocks]);
+  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError]);
 
   const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
     addToHistory();
@@ -10604,15 +10562,11 @@ const ADIA = () => {
         else { side = 'right'; offset = Math.max(0, Math.min(1, relY / elH)); }
 
         if (isContext && block) {
-          // Update Block definition (Context)
-          setBlocks(prev => prev.map(b => b.id === elementId ? {
-            ...b, ports: b.ports.map(p => p.id === portId ? { ...p, side, offset } : p)
-          } : b));
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset));
+          if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         } else if (part) {
-          // Update Part instance only
-          setParts(prev => prev.map(p => p.id === elementId ? {
-            ...p, portLayouts: { ...(p.portLayouts || {}), [portId]: { side, offset } }
-          } : p));
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset));
+          if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         }
       }
       return;
@@ -10748,7 +10702,7 @@ const ADIA = () => {
       // Update drag offset to current position for next frame
       setDragOffset({ x: worldX, y: worldY });
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
     setBddFeatureDrag(null);
@@ -11775,8 +11729,9 @@ const ADIA = () => {
         if (type === 'ibd' && id === contextId) {
           const block = contextBlock;
           const port = block?.ports?.find((p: any) => p.id === portId);
-          const side = port?.side || 'left';
-          const offset = port?.offset ?? 0.5;
+          const presentationLayout = sysmlDiagramPresentations[currentLayerId]?.presentations[id]?.portLayouts?.[portId];
+          const side = presentationLayout?.side || port?.side || 'left';
+          const offset = presentationLayout?.offset ?? port?.offset ?? 0.5;
 
           let x = 0, y = 0;
           if (side === 'top') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y; }
@@ -13986,24 +13941,20 @@ const ADIA = () => {
       if (e.ctrlKey) {
         if (e.key === 'c' || e.key === 'C') {
           // Copy
-          const clipData = createStateMachineClipboard(
-            selectedIds,
-            states,
-            junctions,
-            transitions,
-            layers,
-            blocks,
-            relationships,
-            parts,
-            connectors,
-            interfaceRealizations
-          );
-          setClipboard(clipData);
+          if (diagramMode === 'statemachine') {
+            setClipboard(createStateMachineClipboard(
+              selectedIds, states, junctions, transitions, layers,
+              blocks, relationships, parts, connectors, interfaceRealizations,
+            ));
+          } else {
+            sysmlClipboardRef.current = [...selectedIds];
+            setClipboard(null);
+          }
           addError('info', `Copied ${selectedIds.length} items`);
         }
         if (e.key === 'v' || e.key === 'V') {
           // Paste
-          if (clipboard) {
+          if (diagramMode === 'statemachine' && clipboard) {
             addToHistory();
             const result = pasteStateMachineClipboard(
               clipboard,
@@ -14023,35 +13974,47 @@ const ADIA = () => {
             setJunctions(prev => [...prev, ...result.newJunctions]);
             setTransitions(prev => [...prev, ...result.newTransitions]);
             setLayers(result.updatedLayers);
-            setBlocks(prev => [...prev, ...result.newBlocks]);
-            setRelationships(prev => [...prev, ...result.newRelationships]);
-            setParts(prev => [...prev, ...result.newParts]);
-            setConnectors(prev => [...prev, ...result.newConnectors]);
             setInterfaceRealizations(prev => [...prev, ...result.newInterfaceRealizations]);
 
             setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
+          } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current.length > 0) {
+            const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+            const plan = buildSysmlPastePlan(
+              canonicalSysmlRepository,
+              sysmlDiagramPresentations,
+              sysmlClipboardRef.current,
+              diagramId,
+              () => uuidv4(),
+            );
+            if (!plan) {
+              addError('warning', 'The copied SysML selection is no longer present in the repository.');
+            } else {
+              const result = handleExecuteSysmlCommand(plan.command);
+              if (result.committed) {
+                setSelectedIds(plan.pastedIds);
+                addError('info', 'Pasted SysML elements through the repository command gateway.');
+              } else {
+                result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+              }
+            }
           }
         }
         if (e.key === 'x' || e.key === 'X') {
           // Cut
-          addToHistory();
-          const clipData = createStateMachineClipboard(
-            selectedIds,
-            states,
-            junctions,
-            transitions,
-            layers,
-            blocks,
-            relationships,
-            parts,
-            connectors,
-            interfaceRealizations
-          );
-          setClipboard(clipData);
-          // Delete logic
           const selectedStateIds = selectedIds.filter(id => states.some(s => s.id === id));
           const otherSelectedIds = selectedIds.filter(id => !states.some(s => s.id === id));
+          if (diagramMode === 'statemachine') {
+            addToHistory();
+            setClipboard(createStateMachineClipboard(
+              selectedIds, states, junctions, transitions, layers,
+              blocks, relationships, parts, connectors, interfaceRealizations,
+            ));
+          } else {
+            sysmlClipboardRef.current = [...otherSelectedIds];
+            setClipboard(null);
+          }
+          // Delete logic
           executeDeleteState(selectedStateIds, otherSelectedIds);
           addError('info', 'Cut items');
         }
@@ -14115,7 +14078,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -18135,32 +18098,14 @@ const ADIA = () => {
                         onClick={() => {
                           const defId = uuidv4();
                           const defName = `${selectedPart.name}_Def`;
-                          const defBlock: BlockData = {
-                            id: defId,
-                            name: defName,
-                            stereotype: 'block',
-                            classes: [],
-                            x: 100,
-                            y: 100,
-                            width: 150,
-                            height: 100,
-                            properties: [],
-                            operations: [],
-                            constraints: [],
-                            ports: []
-                          };
-                          const candidate = { ...selectedPart, typeId: defId };
-                          const reconciled = reconcilePropertyUsages(
-                            [...blocks, defBlock],
-                            parts.map(part => part.id === selectedPart.id ? candidate : part),
-                            connectors,
-                            candidate.blockId || currentLayerId,
-                            'usage',
-                          );
-                          setBlocks(reconciled.blocks);
-                          setParts(reconciled.parts);
-                          setConnectors(reconciled.connectors);
-                          addError('info', `Created definition '${defName}' for part.`);
+                          const result = handleExecuteSysmlCommand(buildCreatePartDefinitionCommand({
+                            partId: selectedPart.id,
+                            definitionId: defId,
+                            definitionName: defName,
+                            repository: canonicalSysmlRepository,
+                          }));
+                          if (result.committed) addError('info', `Created definition '${defName}' for part.`);
+                          else result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
                         }}
                         className="text-[10px] text-[#f97316] hover:underline cursor-pointer"
                       >
@@ -18901,6 +18846,15 @@ const ADIA = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {pendingCreateNewTypeAction && (
+          <CreateNewTypeActionPrompt
+            action={pendingCreateNewTypeAction.action}
+            candidates={pendingCreateNewTypeAction.candidates}
+            onCreate={handleCreateNewTypeAction}
+            onDismiss={() => setPendingCreateNewTypeAction(null)}
+          />
         )}
 
         {/* Policy-filtered connection picker */}

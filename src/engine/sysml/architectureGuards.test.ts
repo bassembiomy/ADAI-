@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMPATIBILITY_ALLOWLIST,
   scanSourceForArchitectureViolations,
   verifySysmlArchitecture,
   type ArchitectureViolation,
@@ -42,14 +43,47 @@ describe('SysML Architecture Guardrails', () => {
     expect(violations.some((v: ArchitectureViolation) => v.ruleId === 'SYSML_ARCH_SILENT_CREATION')).toBe(true);
   });
 
-  it('allows violations when covered by temporary compatibility allowlist', () => {
+  it('does not keep a file-wide App.tsx mutation allowlist', () => {
     const code = `
       setBlocks(current => [...current, block]);
     `;
     const violations = scanSourceForArchitectureViolations(code, 'src/App.tsx');
     const directMutation = violations.find((v: ArchitectureViolation) => v.ruleId === 'SYSML_ARCH_DIRECT_MUTATION');
     expect(directMutation).toBeDefined();
-    expect(directMutation?.allowed).toBe(true);
+    expect(directMutation?.allowed).toBe(false);
+  });
+
+  it('limits the App projection exception to the named canonical projection function', () => {
+    const appEntries = COMPATIBILITY_ALLOWLIST.filter(entry => entry.filePath === 'src/App.tsx');
+    expect(appEntries).toEqual([]);
+    expect(COMPATIBILITY_ALLOWLIST.filter(entry => entry.symbol === 'applyCanonicalSysmlResult'))
+      .toMatchObject([{ filePath: 'src/services/sysmlProjectionState.ts', ruleId: 'SYSML_ARCH_DIRECT_MUTATION' }]);
+  });
+
+  it.each([
+    ['property reconciliation', 'function reconcileEffect() { setBlocks(reconciled.blocks); }'],
+    ['SysML undo/redo', 'function undoSysml() { setBlocks(snapshot.blocks); }'],
+    ['requirements auto-layout', 'function autoLayout() { setBlocks(nextBlocks); }'],
+    ['IBD port layout', 'function dragIbdPort() { setParts(nextParts); }'],
+    ['keyboard paste', 'function handlePaste() { setBlocks(prev => [...prev, ...pasted]); }'],
+    ['property definition creation', 'function createDefinition() { setParts(nextParts); }'],
+    ['project restore/import', 'function hydrateLegacyProject() { setBlocks(loaded.blocks); }'],
+  ])('does not allowlist active %s writes in App.tsx', (_label, code) => {
+    const violations = scanSourceForArchitectureViolations(code, 'src/App.tsx');
+    const directWrite = violations.find(v => v.ruleId === 'SYSML_ARCH_DIRECT_MUTATION');
+    expect(directWrite).toBeDefined();
+    expect(directWrite?.allowed).toBe(false);
+  });
+
+  it('allows a direct projection setter only inside applyCanonicalSysmlResult', () => {
+    const code = `
+      function applyCanonicalSysmlResult(result) { setBlocks(result.view.blocks); }
+      function handlePaste(result) { setBlocks(result.view.blocks); }
+    `;
+    const violations = scanSourceForArchitectureViolations(code, 'src/services/sysmlProjectionState.ts')
+      .filter(v => v.ruleId === 'SYSML_ARCH_DIRECT_MUTATION');
+    expect(violations).toHaveLength(2);
+    expect(violations.map(v => v.allowed)).toEqual([true, false]);
   });
 
   it('detects forbidden runtime mutations like setBlocks(prev => [...prev, newBlock]) in non-compatibility context', () => {

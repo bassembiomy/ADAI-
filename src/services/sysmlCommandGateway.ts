@@ -66,7 +66,6 @@ export type { DiagramElementPresentation, DiagramPresentation, PresentationCoord
 export { resolveType, type ResolvedTypeOutcome, type TypeResolutionOptions } from '../engine/sysml/services/typeResolution';
 import { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
-export type GatewayCreateNewTypeAction = CreateNewTypeAction & { type: 'CreateNewType' };
 export * from '../engine/sysml/commands/presentationCommands';
 export {
   dispatchSysmlCommand,
@@ -2199,7 +2198,7 @@ export type TypedUsageOutcome =
       code: 'TYPE_NOT_FOUND';
       message: string;
       candidates: TypeCandidate[];
-      action: GatewayCreateNewTypeAction;
+      action: CreateNewTypeAction;
     };
 
 export function createTypedUsageCommand(
@@ -2213,7 +2212,7 @@ export function createTypedUsageCommand(
       code: 'TYPE_NOT_FOUND',
       message: `Type '${input.typeId}' not found.`,
       candidates: outcome.candidates,
-      action: { ...outcome.action, type: 'CreateNewType' as const },
+      action: outcome.action,
     };
   }
 

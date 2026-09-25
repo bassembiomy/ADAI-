@@ -21,7 +21,7 @@ export interface PortDefinition { id: string; name: string; kind: 'standard' | '
 export interface BlockDefinition extends NamedElement { kind: 'block'; isAbstract: boolean; isLeaf: boolean; supertypeIds?: string[]; properties: PropertyDefinition[]; ports: PortDefinition[]; operations: string[]; constraints: string[]; }
 export type SysmlDefinition = BlockDefinition | ValueTypeDefinition | InterfaceDefinition;
 
-export interface PartUsage { id: string; kind: 'part'; name: string; ownerId: string; typeId: string; aggregation: 'composite' | 'shared' | 'reference'; multiplicity: Multiplicity; }
+export interface PartUsage { id: string; kind: 'part'; name: string; ownerId: string; typeId: string; aggregation: 'composite' | 'shared' | 'reference'; multiplicity: Multiplicity; propertyId?: string; }
 export interface PortUsage { id: string; kind: 'port'; name: string; ownerId: string; definitionId: string; }
 export type SysmlUsage = PartUsage | PortUsage;
 export interface ConnectorUsage { id: string; kind: 'assembly' | 'delegation' | 'binding'; ownerId: string; sourcePortId: string; targetPortId: string; itemFlowId?: string; sourceParameterId?: string; targetParameterId?: string; itemProperty?: string; itemMultiplicity?: Multiplicity; itemUnit?: string; }

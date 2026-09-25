@@ -46,7 +46,7 @@ export function executeAiActions(
 ) {
   const { states, variables, junctions, currentLayerId } = appState;
   const { 
-    setStates, setVariables, setTransitions, setBlocks, addError,
+    setStates, setVariables, setTransitions, addError,
     setFactors, setHeaders, setModelType, calculateRSM, calculateGMDH, calculateTaguchi,
     handleExportToXbridges, handleExportToVLab
   } = setters;
@@ -134,6 +134,13 @@ export function executeAiActions(
             addError('info', `AI Created Transition: ${action.from} -> ${action.to}`);
           }
         }
+        break;
+
+      case 'CREATE_BLOCK':
+        // SysML semantics must be created through the visible application
+        // workflow and canonical command gateway, never through this legacy
+        // simulation action executor.
+        addError('warning', 'AI block creation requires the explicit SysML Create New Type workflow.', 'AI Assistant');
         break;
     }
   });
