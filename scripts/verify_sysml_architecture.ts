@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 export type ArchitectureRuleId =
   | 'SYSML_ARCH_DIRECT_MUTATION'
   | 'SYSML_ARCH_UI_SEMANTIC_STORAGE'
-  | 'SYSML_ARCH_SILENT_CREATION';
+  | 'SYSML_ARCH_SILENT_CREATION'
+  | 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION';
 
 export interface ArchitectureViolation {
   ruleId: ArchitectureRuleId;
@@ -19,6 +20,7 @@ export interface CompatibilityAllowlistEntry {
   filePath: string;
   ruleId: ArchitectureRuleId;
   reason: string;
+  expiry: string;
 }
 
 /**
@@ -30,32 +32,38 @@ export const COMPATIBILITY_ALLOWLIST: CompatibilityAllowlistEntry[] = [
   {
     filePath: 'src/App.tsx',
     ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
-    reason: 'Temporary compatibility until Task 12 & Task 14 UI projection conversion',
+    reason: 'Temporary compatibility for load/import/history projection synchronization',
+    expiry: 'SysML v1.6 Phase 4 Final Cutover',
   },
   {
     filePath: 'src/App.tsx',
     ruleId: 'SYSML_ARCH_UI_SEMANTIC_STORAGE',
     reason: 'Temporary compatibility until Task 12 & Task 14 UI projection conversion',
+    expiry: 'SysML v1.6 Phase 4 Final Cutover',
   },
   {
     filePath: 'src/components/sysml/BlockPropertiesEditor.tsx',
     ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
     reason: 'Temporary compatibility until Task 8 property editor command refactor',
+    expiry: 'SysML v1.6 Phase 4 Final Cutover',
   },
   {
     filePath: 'src/services/sysmlPropertyUsageSync.ts',
     ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
     reason: 'Temporary legacy sync helper until Task 7/8 command migration',
+    expiry: 'SysML v1.6 Phase 4 Final Cutover',
   },
   {
     filePath: 'src/services/sysmlPropertyRules.ts',
     ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
     reason: 'Temporary legacy rule adapter until Task 8',
+    expiry: 'SysML v1.6 Phase 4 Final Cutover',
   },
   {
     filePath: 'src/services/sysmlCommandGateway.ts',
     ruleId: 'SYSML_ARCH_DIRECT_MUTATION',
     reason: 'Temporary legacy gateway mutations until Task 7 command dispatcher refactor',
+    expiry: 'SysML v1.6 Phase 4 Final Cutover',
   },
 ];
 
@@ -68,6 +76,44 @@ export function isAllowlisted(filePath: string, ruleId: ArchitectureRuleId): boo
   return COMPATIBILITY_ALLOWLIST.some(
     entry => normalized.endsWith(normalizePath(entry.filePath)) && entry.ruleId === ruleId
   );
+}
+
+export function validateAllowlistIntegrity(): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  for (const entry of COMPATIBILITY_ALLOWLIST) {
+    if (!entry.reason || entry.reason.trim() === '') {
+      errors.push(`Allowlist entry for ${entry.filePath} (${entry.ruleId}) is missing a reason.`);
+    }
+    if (!entry.expiry || entry.expiry.trim() === '') {
+      errors.push(`Allowlist entry for ${entry.filePath} (${entry.ruleId}) is missing an expiry condition.`);
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export const FORBIDDEN_RUNTIME_PATTERNS = [
+  /setBlocks\(prev\s*=>\s*\[\.\.\.prev,/,
+  /setRelationships\(prev\s*=>\s*\[\.\.\.prev,/,
+  /setParts\(prev\s*=>\s*\[\.\.\.prev,/,
+  /setConnectors\(prev\s*=>\s*\[\.\.\.prev,/,
+  /mergeLegacyDiagramIntoRepository\(/,
+];
+
+const ALLOWED_COMPATIBILITY_CONTEXTS = [
+  /function\s+(?:handleFile|load|import|paste|restore|undo|redo)/i,
+  /case\s+['"](?:bdd|requirements|statemachine)['"]:/i,
+  /pasteStateMachineClipboard/i,
+];
+
+function isInsideAllowedCompatibilityContext(lines: string[], currentLineIndex: number): boolean {
+  const start = Math.max(0, currentLineIndex - 25);
+  for (let j = currentLineIndex; j >= start; j--) {
+    const l = lines[j];
+    if (ALLOWED_COMPATIBILITY_CONTEXTS.some(ctx => ctx.test(l))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const DIRECT_MUTATION_REGEX =
@@ -89,6 +135,26 @@ export function scanSourceForArchitectureViolations(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNum = i + 1;
+
+    const isAppTsx = normalizePath(filePath).endsWith('App.tsx');
+    if (isAppTsx) {
+      for (const forbiddenPattern of FORBIDDEN_RUNTIME_PATTERNS) {
+        if (forbiddenPattern.test(line)) {
+          // mergeLegacyDiagramIntoRepository is strictly forbidden anywhere in App.tsx
+          const isStrictlyForbidden = /mergeLegacyDiagramIntoRepository\(/.test(line);
+          const allowedContext = !isStrictlyForbidden && isInsideAllowedCompatibilityContext(lines, i);
+          if (!allowedContext) {
+            violations.push({
+              ruleId: 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION',
+              filePath,
+              line: lineNum,
+              message: `Forbidden runtime mutation pattern detected on line ${lineNum}: "${line.trim()}". Mutate via sysmlCommandGateway instead.`,
+              allowed: false,
+            });
+          }
+        }
+      }
+    }
 
     if (DIRECT_MUTATION_REGEX.test(line)) {
       violations.push({
@@ -177,6 +243,14 @@ export function verifySysmlArchitecture(rootDir: string): ArchitectureViolation[
 const currentFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && resolve(process.argv[1]) === resolve(currentFile)) {
   const rootDir = process.cwd();
+  const integrity = validateAllowlistIntegrity();
+  if (!integrity.valid) {
+    console.error(`\n\x1b[31m--- Allowlist Integrity Errors (${integrity.errors.length}) ---\x1b[0m`);
+    for (const err of integrity.errors) {
+      console.error(`  \x1b[31m[ERROR]\x1b[0m ${err}`);
+    }
+    process.exit(1);
+  }
   console.log(`\nScanning SysML architecture in: ${rootDir}...`);
   const violations = verifySysmlArchitecture(rootDir);
   const unallowed = violations.filter(v => !v.allowed);

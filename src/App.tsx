@@ -133,7 +133,7 @@ import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type 
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
-import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
 import { createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
@@ -6227,30 +6227,6 @@ const ADIA = () => {
     });
   }, [canonicalSysmlRepository.revision, blocks, relationships]);
 
-  // The legacy diagram editors still expose array setters. Keep the canonical
-  // store current until every editor has been migrated to gateway commands.
-  // The debounce prevents pointer-move events from rebuilding the store on
-  // every frame, while the revision is advanced only for a settled edit.
-  useEffect(() => {
-    if (isDragging) return;
-    const timer = setTimeout(() => {
-      setCanonicalSysmlRepository(previous => {
-        const next = mergeLegacyDiagramIntoRepository(previous, {
-          blocks,
-          parts,
-          connectors,
-          relationships,
-        });
-        setSysmlStore(current => fromRepository(
-          next,
-          Object.fromEntries(current.coordinates.entries()),
-          Object.fromEntries(current.diagramPresentations.entries()),
-        ));
-        return next;
-      });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [blocks, parts, connectors, relationships, isDragging]);
 
   const blocksById = useMemo(() => {
     const map = new Map<string, BlockData>();
@@ -10194,16 +10170,19 @@ const ADIA = () => {
       const originalTypeId = part.typeId;
 
       if (!originalTypeId || !blocks.some(block => block.id === originalTypeId && block.stereotype === 'block')) {
-        const newBlockId = uuidv4();
         const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        const newBlock: BlockData = {
-          id: newBlockId, name: `${part.name}_Def`, stereotype: 'block', classes: [],
-          x: 100, y: 100, width: 150, height: 100,
-          properties: [], operations: [], constraints: [], ports: [newPort]
-        };
-        setBlocks(prev => [...prev, newBlock]);
-        updatePart(part.id, { typeId: newBlockId });
-        addError('info', `Created definition '${newBlock.name}' for part and added port.`);
+        const cmd = buildDiagramCreationCommand({
+          kind: 'block',
+          name: `${part.name}_Def`,
+          diagramId: diagramMode,
+          coordinates: { x: 100, y: 100, width: 150, height: 100 },
+        });
+        const res = handleExecuteSysmlCommand(cmd);
+        if (res.committed) {
+          updateBlock(cmd.element.id, { ports: [newPort] });
+          updatePart(part.id, { typeId: cmd.element.id });
+          addError('info', `Created definition '${cmd.element.name}' for part and added port.`);
+        }
         return;
       }
 
@@ -10212,13 +10191,19 @@ const ADIA = () => {
 
       if (isShared) {
         addError('info', `Specializing definition for '${part.name}'...`);
-        const newBlockId = uuidv4();
-        const newBlock: BlockData = { ...originalBlock, id: newBlockId, name: `${originalBlock.name}_${part.name}`, ports: originalBlock.ports.map(p => ({ ...p })), properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints, };
-        const newPort: PortData = { id: uuidv4(), name: `p${newBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        newBlock.ports.push(newPort);
-        setBlocks(prev => [...prev, newBlock]);
-        updatePart(part.id, { typeId: newBlockId });
-        addError('info', `Created new definition '${newBlock.name}' and added port.`);
+        const cmd = buildDiagramCreationCommand({
+          kind: 'block',
+          name: `${originalBlock.name}_${part.name}`,
+          diagramId: diagramMode,
+          coordinates: { x: (originalBlock.x ?? 100) + 20, y: (originalBlock.y ?? 100) + 20, width: originalBlock.width, height: originalBlock.height },
+        });
+        const res = handleExecuteSysmlCommand(cmd);
+        if (res.committed) {
+          const newPorts = [...originalBlock.ports.map(p => ({ ...p })), { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined }];
+          updateBlock(cmd.element.id, { ports: newPorts, properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints });
+          updatePart(part.id, { typeId: cmd.element.id });
+          addError('info', `Created new definition '${cmd.element.name}' and added port.`);
+        }
       } else {
         const newPort: PortData = { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
         updateBlock(originalTypeId, { ports: [...originalBlock.ports, newPort] });
@@ -10966,21 +10951,18 @@ const ADIA = () => {
       e.preventDefault();
       const blockToClone = blocks.find(b => b.id === blockId);
       if (!blockToClone) return;
-      const newId = uuidv4();
-      const newBlock = {
-        ...blockToClone,
-        id: newId,
+      const creationCmd = buildDiagramCreationCommand({
+        kind: (blockToClone.stereotype === 'requirement' ? 'requirement' : 'block') as DiagramCreationKind,
         name: `${blockToClone.name}_copy`,
-        ports: blockToClone.ports.map(p => ({
-          ...p,
-          id: uuidv4()
-        }))
-      };
-      addToHistory();
-      setBlocks(prev => [...prev, newBlock]);
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+        diagramId: diagramMode,
+        coordinates: { x: worldX, y: worldY, width: blockToClone.width, height: blockToClone.height },
+      });
+      const result = handleExecuteSysmlCommand(creationCmd);
+      if (result.committed) {
+        setSelectedIds([creationCmd.element.id]);
+        setIsDragging(true);
+        setDragOffset({ x: worldX, y: worldY });
+      }
       return;
     }
 
@@ -10992,7 +10974,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError]);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -11007,17 +10989,7 @@ const ADIA = () => {
       e.preventDefault();
       const partToClone = parts.find(p => p.id === partId);
       if (!partToClone) return;
-      const newId = uuidv4();
-      const newPart = {
-        ...partToClone,
-        id: newId,
-        name: `${partToClone.name}_copy`
-      };
-      addToHistory();
-      setParts(prev => [...prev, newPart]);
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      createPart(partToClone.ownerId || currentLayerId, `${partToClone.name}_copy`, partToClone.typeId, partToClone.kind);
       return;
     }
 

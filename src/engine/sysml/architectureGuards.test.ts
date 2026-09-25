@@ -52,6 +52,24 @@ describe('SysML Architecture Guardrails', () => {
     expect(directMutation?.allowed).toBe(true);
   });
 
+  it('detects forbidden runtime mutations like setBlocks(prev => [...prev, newBlock]) in non-compatibility context', () => {
+    const code = `
+      function handleCanvasClick() {
+        setBlocks(prev => [...prev, newBlock]);
+      }
+    `;
+    const violations = scanSourceForArchitectureViolations(code, 'src/App.tsx');
+    expect(violations.some((v: ArchitectureViolation) => v.ruleId === 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION' && !v.allowed)).toBe(true);
+  });
+
+  it('strictly forbids mergeLegacyDiagramIntoRepository anywhere', () => {
+    const code = `
+      mergeLegacyDiagramIntoRepository(repo, data);
+    `;
+    const violations = scanSourceForArchitectureViolations(code, 'src/App.tsx');
+    expect(violations.some((v: ArchitectureViolation) => v.ruleId === 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION' && !v.allowed)).toBe(true);
+  });
+
   it('runs verifySysmlArchitecture across repository root without unallowed violations', () => {
     const result = verifySysmlArchitecture(process.cwd());
     const unallowed = result.filter((v: ArchitectureViolation) => !v.allowed);
