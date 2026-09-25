@@ -938,6 +938,66 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
       expect.objectContaining({ id: 'satisfy-001', type: 'satisfy' }),
     ]));
   });
+
+  const makeBlock = (id: string, name: string): BlockDefinition => ({
+    id,
+    name,
+    namespace: [],
+    kind: 'block',
+    ownerId: 'model',
+    isAbstract: false,
+    isLeaf: false,
+    properties: [],
+    ports: [],
+    operations: [],
+    constraints: [],
+  });
+
+  it('atomically creates one semantic element and one presentation', () => {
+    const state = createSysmlGatewayState();
+    const block = makeBlock('blk-motor', 'Motor');
+    const result = executeSysmlCommand(state, {
+      type: 'createAndPresent',
+      element: block,
+      diagramId: 'requirements',
+      presentation: { x: 40, y: 80, width: 150, height: 100 },
+    });
+    expect(result.committed).toBe(true);
+    expect(result.repository.definitions['blk-motor']).toBeDefined();
+    expect(result.diagramPresentations.requirements.elementIds).toEqual(['blk-motor']);
+    expect(result.coordinates['blk-motor']).toMatchObject({ x: 40, y: 80 });
+  });
+
+  it('rolls back semantic creation when presentation validation fails', () => {
+    const state = createSysmlGatewayState();
+    const result = executeSysmlCommand(state, {
+      type: 'createAndPresent',
+      element: makeBlock('blk-invalid', 'Invalid'),
+      diagramId: '',
+      presentation: { x: 0, y: 0 },
+    });
+    expect(result.committed).toBe(false);
+    expect(result.repository.definitions['blk-invalid']).toBeUndefined();
+    expect(state.store?.entities.has('blk-invalid')).toBe(false);
+  });
+
+  it('undoes createAndPresent in a single step', () => {
+    const state = createSysmlGatewayState();
+    const block = makeBlock('blk-undo-test', 'UndoTest');
+    const result = executeSysmlCommand(state, {
+      type: 'createAndPresent',
+      element: block,
+      diagramId: 'requirements',
+      presentation: { x: 40, y: 80, width: 150, height: 100 },
+    });
+    expect(result.committed).toBe(true);
+    expect(result.actionStack).toHaveLength(1);
+
+    const undone = executeSysmlCommand(result, { type: 'undo' });
+    expect(undone.committed).toBe(true);
+    expect(undone.repository.definitions['blk-undo-test']).toBeUndefined();
+    expect(undone.diagramPresentations.requirements?.elementIds ?? []).not.toContain('blk-undo-test');
+  });
 });
 
 

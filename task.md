@@ -6,13 +6,13 @@
   - [x] Step 3: Implement material-impact detection
   - [x] Step 4: Run the focused tests
   - [x] Step 5: Commit
-- [ ] Task 2: Add an Atomic Create-and-Present Gateway Command
-  - [ ] Step 1: Write rollback and identity tests
-  - [ ] Step 2: Run the gateway test and verify type/test failure
-  - [ ] Step 3: Add rollback-safe transaction cloning
-  - [ ] Step 4: Implement `createAndPresent` as one gateway transaction
-  - [ ] Step 5: Run gateway and undo tests
-  - [ ] Step 6: Commit
+- [x] Task 2: Add an Atomic Create-and-Present Gateway Command
+  - [x] Step 1: Write rollback and identity tests
+  - [x] Step 2: Run the gateway test and verify type/test failure
+  - [x] Step 3: Add rollback-safe transaction cloning
+  - [x] Step 4: Implement `createAndPresent` as one gateway transaction
+  - [x] Step 5: Run gateway and undo tests
+  - [x] Step 6: Commit
 - [ ] Task 3: Build Diagram Creation Intents from Canonical Factories
   - [ ] Step 1: Write failing creation-intent tests
   - [ ] Step 2: Run the test and verify the module is missing

@@ -73,6 +73,7 @@ export interface NormalizedSysmlStore {
   coordinates: Map<string, PresentationCoordinates>;
   diagramPresentations: Map<string, { elementIds: string[] }>;
   indexes: StoreIndexes;
+  readonly entities?: { has(id: string): boolean; get(id: string): SysmlEntity | undefined };
 }
 
 function createEmptyIndexes(): StoreIndexes {
@@ -110,7 +111,8 @@ function removeFromIndex(map: Map<string, Set<string>>, key: string, id: string)
 }
 
 export function createEmptyNormalizedStore(): NormalizedSysmlStore {
-  return {
+  const indexes = createEmptyIndexes();
+  const store: NormalizedSysmlStore = {
     schemaVersion: 2,
     profileId: 'OMG-SysML-1.6-ADIA',
     revision: 0,
@@ -133,8 +135,20 @@ export function createEmptyNormalizedStore(): NormalizedSysmlStore {
     auditTrail: [],
     coordinates: new Map(),
     diagramPresentations: new Map(),
-    indexes: createEmptyIndexes(),
+    indexes,
+    get entities() {
+      return {
+        has: (id: string) => indexes.byId.has(id),
+        get: (id: string) => {
+          const entry = indexes.byId.get(id);
+          if (!entry) return undefined;
+          const col = (store as any)[entry.collection] as Map<string, any>;
+          return col?.get(id);
+        },
+      };
+    },
   };
+  return store;
 }
 
 /**

@@ -200,6 +200,7 @@ export interface PresentationSnapshot {
 
 export type SysmlMutationCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
+  | { type: 'createAndPresent'; element: SysmlElement; diagramId: string; presentation: PresentationCoordinates }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
@@ -273,6 +274,22 @@ export function createSysmlGatewayState(
     },
     actionStack: [],
     redoStack: [],
+  };
+}
+
+export function cloneGatewayStateForTransaction(state: SysmlGatewayState): SysmlGatewayState {
+  const coordinates = structuredClone(state.coordinates);
+  const diagramPresentations = structuredClone(state.diagramPresentations ?? {});
+  return {
+    ...state,
+    history: structuredClone(state.history),
+    patchHistory: state.patchHistory ? structuredClone(state.patchHistory) : undefined,
+    coordinates,
+    diagramPresentations,
+    presentationHistory: state.presentationHistory ? structuredClone(state.presentationHistory) : undefined,
+    actionStack: [...(state.actionStack ?? [])],
+    redoStack: [...(state.redoStack ?? [])],
+    store: fromRepository(state.repository, coordinates, diagramPresentations),
   };
 }
 
@@ -1163,6 +1180,43 @@ export function executeSysmlCommand(
     };
   }
 
+  if (command.type === 'createAndPresent') {
+    if (!command.diagramId) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: [{
+          code: 'DIAGRAM_NOT_FOUND',
+          severity: 'error',
+          elementId: command.element.id,
+          message: 'An active diagram is required for createAndPresent',
+        }],
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+    return executeSysmlCommand(state, {
+      type: 'batch',
+      commands: [
+        { type: 'createElement', element: command.element },
+        {
+          type: 'addToDiagram',
+          diagramId: command.diagramId,
+          elementIds: [command.element.id],
+          coordinates: { [command.element.id]: command.presentation },
+        },
+      ],
+    }, command.diagramId);
+  }
+
   if (command.type === 'createElement') {
     const gateDiagnostics = gateCreateElement(state.repository, command.element);
     if (gateDiagnostics) {
@@ -1841,17 +1895,33 @@ export function executeSysmlCommand(
     store.diagramPresentations.set(command.diagramId, nextPres);
 
     const nextCoords = { ...coordinates };
+    const coordForwardOps: import('../engine/sysml/patches').PatchOperation[] = [];
+    const coordInverseOps: import('../engine/sysml/patches').PatchOperation[] = [];
     if (command.coordinates) {
       for (const [id, coord] of Object.entries(command.coordinates)) {
+        const prevCoord = store.coordinates.get(id);
         nextCoords[id] = { ...coord };
         store.coordinates.set(id, { ...coord });
+        if (prevCoord !== undefined) {
+          coordForwardOps.push({ op: 'replace', collection: 'coordinates', id, oldValue: prevCoord, value: coord });
+          coordInverseOps.push({ op: 'replace', collection: 'coordinates', id, oldValue: coord, value: prevCoord });
+        } else {
+          coordForwardOps.push({ op: 'add', collection: 'coordinates', id, value: coord });
+          coordInverseOps.push({ op: 'remove', collection: 'coordinates', id, oldValue: coord });
+        }
       }
     }
 
     const patch = createSysmlPatch({
       revision: store.revision + 1,
-      forward: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: currentPres, value: nextPres }],
-      inverse: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: nextPres, value: currentPres }],
+      forward: [
+        { op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: currentPres, value: nextPres },
+        ...coordForwardOps,
+      ],
+      inverse: [
+        { op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: nextPres, value: currentPres },
+        ...coordInverseOps,
+      ],
       description: `addToDiagram ${command.diagramId}`,
     });
     pushPatch(patchHistory, patch, store);
@@ -1892,8 +1962,11 @@ export function executeSysmlCommand(
         redoStack: state.redoStack,
       };
     }
-    let currentState: SysmlGatewayState = state;
+    const txState = cloneGatewayStateForTransaction(state);
+    let currentState: SysmlGatewayState = txState;
     let lastResult: SysmlCommandResult | undefined;
+    const initialPastLength = txState.patchHistory?.past.length ?? 0;
+
     for (const subCmd of command.commands) {
       const res = executeSysmlCommand(currentState, subCmd);
       if (!res.committed || res.diagnostics.some(d => d.severity === 'error')) {
@@ -1901,7 +1974,7 @@ export function executeSysmlCommand(
         return {
           repository: state.repository,
           store,
-          patchHistory,
+          patchHistory: state.patchHistory ?? patchHistory,
           view,
           diagnostics: res.diagnostics,
           committed: false,
@@ -1916,6 +1989,21 @@ export function executeSysmlCommand(
       lastResult = res;
       currentState = res;
     }
+
+    if (lastResult?.patchHistory && lastResult.patchHistory.past.length > initialPastLength) {
+      const addedPatches = lastResult.patchHistory.past.splice(initialPastLength);
+      const forwardOps = addedPatches.flatMap(p => p.forward);
+      const inverseOps = addedPatches.slice().reverse().flatMap(p => p.inverse);
+      const compositePatch = createSysmlPatch({
+        revision: lastResult.repository.revision,
+        coalesceKey: command.coalesceKey,
+        forward: forwardOps,
+        inverse: inverseOps,
+        description: `batch (${addedPatches.map(p => p.description).join(', ')})`,
+      });
+      lastResult.patchHistory.past.push(compositePatch);
+    }
+
     return {
       ...lastResult!,
       actionStack: [...(state.actionStack ?? []), 'semantic'],
