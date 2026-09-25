@@ -124,4 +124,3 @@ describe('applyCanonicalSysmlResult', () => {
     expect(result.current.parts[0]).toMatchObject({ x: 300, y: 400, width: 80, height: 60 });
   });
 });
-
