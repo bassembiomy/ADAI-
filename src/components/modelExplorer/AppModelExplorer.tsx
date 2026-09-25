@@ -6,6 +6,7 @@ import type {
   ExplorerImpact,
   ExplorerClipboardPayload,
   ActiveDiagramContext,
+  ExplorerCommandResult,
 } from '../../features/modelExplorer/modelExplorerTypes';
 import { hashImpact } from '../../features/modelExplorer/modelExplorerTypes';
 import { ModelExplorer } from './ModelExplorer';
@@ -57,6 +58,7 @@ export type CapabilityActionResult =
   | { kind: 'duplicate'; semanticIds: string[]; targetOwnerId: string }
   | { kind: 'delete'; semanticIds: string[] }
   | { kind: 'addToDiagram'; semanticIds: string[]; diagramId: string }
+  | { kind: 'removeFromDiagram'; semanticIds: string[]; diagramId: string }
   | { kind: 'openSpecification'; semanticId: string }
   | { kind: 'reveal'; semanticId: string }
   | { kind: 'unhandled' };
@@ -143,6 +145,12 @@ export function capabilityToAction(
         semanticIds: selectedIds,
         diagramId: context.activeDiagramId || '',
       };
+    case 'removeFromDiagram':
+      return {
+        kind: 'removeFromDiagram',
+        semanticIds: selectedIds,
+        diagramId: context.activeDiagramId || '',
+      };
     case 'openSpecification':
       return {
         kind: 'openSpecification',
@@ -187,6 +195,7 @@ export interface AppModelExplorerProps {
   onAddToDiagram?: (elementIds: string[], diagramId: string) => void;
   onRevealInContainment?: (semanticId: string) => void;
   onOpenSpecification?: (semanticId: string) => void;
+  onCommandResult?: (result: ExplorerCommandResult) => void;
   projectId?: string;
   className?: string;
   height?: number;
@@ -220,6 +229,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   onAddToDiagram,
   onRevealInContainment,
   onOpenSpecification,
+  onCommandResult,
   projectId,
   className = '',
   height,
@@ -244,6 +254,14 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   // Shared clipboard reference
   const clipboardRef = useRef<ExplorerClipboardPayload | null>(null);
+
+  const acceptResult = useCallback((result: ExplorerCommandResult) => {
+    if (result.clipboard) clipboardRef.current = result.clipboard;
+    if (result.selectedIds?.length) onSelectMultiple?.(result.selectedIds);
+    onCommandResult?.(result);
+    return result;
+  }, [onCommandResult, onSelectMultiple]);
+
 
   // State Machine adapter
   const smAdapter = useMemo(() => {
@@ -404,20 +422,22 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       if (capability.kind === 'rename') return;
 
       if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {
-        createModelExplorerCommandBus(nodeAdapter).dispatch({
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
           type: 'createElement',
           ownerId: node.semanticId,
           elementKind: capability.elementKind || 'Block',
         });
+        acceptResult(res);
         return;
       }
 
       if (capability.kind === 'createDiagram') {
-        createModelExplorerCommandBus(nodeAdapter).dispatch({
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
           type: 'createDiagram',
           ownerId: node.semanticId,
           diagramKind: capability.elementKind || 'bdd',
         });
+        acceptResult(res);
         return;
       }
 
@@ -453,26 +473,11 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       if (capability.kind === 'copy') {
         const selectedSemanticIds = selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId];
-        if (node.domain === 'stateMachine') {
-          clipboardRef.current = copyOwnershipForest(
-            'stateMachine',
-            selectedSemanticIds,
-            id => states.find(s => s.id === id) || layers.find(l => l.id === id) || junctions.find(j => j.id === id) || transitions.find(t => t.id === id),
-            () => [],
-            smAdapter.getRevision()
-          );
-        } else {
-          const repo = canonicalSysmlRepository;
-          if (repo) {
-            clipboardRef.current = copyOwnershipForest(
-              'sysml',
-              selectedSemanticIds,
-              id => repo.packages[id] || repo.definitions[id] || repo.usages[id] || repo.requirements[id] || repo.verificationCases[id] || repo.diagrams[id],
-              () => [],
-              sysmlAdapter.getRevision()
-            );
-          }
-        }
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
+          type: 'copy',
+          elementIds: selectedSemanticIds,
+        });
+        acceptResult(res);
         return;
       }
 
@@ -489,14 +494,20 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           targetOwnerId: node.parentNodeId || (isStateMachine ? 'root' : 'model'),
         };
       } else if (capability.kind === 'paste') {
-        if (clipboardRef.current) {
-          cmd = {
-            type: 'paste',
-            payload: clipboardRef.current,
-            targetOwnerId: node.semanticId,
-            mode: 'copy',
-          };
+        if (!clipboardRef.current) {
+          acceptResult({
+            committed: false,
+            revision: nodeAdapter.getRevision(),
+            diagnostics: [{ code: 'CLIPBOARD_EMPTY', severity: 'error', message: 'Clipboard is empty.' }],
+          });
+          return;
         }
+        cmd = {
+          type: 'paste',
+          payload: clipboardRef.current,
+          targetOwnerId: node.semanticId,
+          mode: 'copy',
+        };
       } else if (capability.kind === 'addToDiagram') {
         const targetDiagramId = activeDiagramId || (diagramMode === 'ibd' ? currentLayerId : diagramMode);
         if (onAddToDiagram) {
@@ -511,9 +522,23 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
           diagramId: targetDiagramId,
         };
+      } else if (capability.kind === 'removeFromDiagram') {
+        const targetDiagramId = activeDiagramId || (diagramMode === 'ibd' ? currentLayerId : diagramMode);
+        cmd = {
+          type: 'removeFromDiagram',
+          elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
+          diagramId: targetDiagramId,
+        };
       }
 
-      if (!cmd) return;
+      if (!cmd) {
+        acceptResult({
+          committed: false,
+          revision: nodeAdapter.getRevision(),
+          diagnostics: [{ code: 'UNSUPPORTED_COMMAND', severity: 'error', message: `Unsupported capability: ${capability.kind}` }],
+        });
+        return;
+      }
 
       const bus = createModelExplorerCommandBus(nodeAdapter);
       const preflight = nodeAdapter.preflight(cmd);
@@ -527,7 +552,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return;
       }
 
-      bus.dispatch(cmd);
+      const res = bus.dispatch(cmd);
+      acceptResult(res);
     },
     [
       activeDiagramId,
@@ -547,6 +573,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       states,
       sysmlAdapter,
       transitions,
+      acceptResult,
     ]
   );
 
@@ -570,19 +597,21 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return;
       }
 
-      bus.dispatch(cmd);
+      const res = bus.dispatch(cmd);
+      acceptResult(res);
     },
-    [activeAdapter]
+    [activeAdapter, acceptResult]
   );
 
   const handleConfirmImpact = useCallback(
     (confirmedImpactHash: string) => {
       if (!pendingImpact) return;
       const bus = createModelExplorerCommandBus(activeAdapter);
-      bus.confirm(pendingImpact.command, confirmedImpactHash);
+      const res = bus.confirm(pendingImpact.command, confirmedImpactHash);
       setPendingImpact(null);
+      acceptResult(res);
     },
-    [activeAdapter, pendingImpact]
+    [activeAdapter, pendingImpact, acceptResult]
   );
 
   return (
@@ -604,11 +633,12 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           const node = projection.nodes[nodeId];
           if (!node) return;
           const bus = createModelExplorerCommandBus(explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter);
-          bus.dispatch({
+          const res = bus.dispatch({
             type: 'rename',
             elementId: node.semanticId,
             name: newName,
           });
+          acceptResult(res);
         }}
         height={height}
         projectId={projectId}
@@ -652,7 +682,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
               targetId,
             };
             const bus = createModelExplorerCommandBus(activeAdapter);
-            bus.dispatch(cmd);
+            const res = bus.dispatch(cmd);
+            acceptResult(res);
             setRelationshipWizardState(null);
           }}
         />

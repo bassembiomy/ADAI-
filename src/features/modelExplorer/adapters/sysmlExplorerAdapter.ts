@@ -155,6 +155,22 @@ export type SysmlExplorerAdapterHarness = {
   state?: SysmlGatewayState;
 };
 
+
+function toExplorerResult(result: SysmlCommandResult, selectedIds?: string[]): ExplorerCommandResult {
+  const diagnostics: ExplorerDiagnostic[] = (result.diagnostics || []).map(d => ({
+    code: d.code,
+    severity: d.severity,
+    message: d.message,
+    elementId: d.elementId,
+  }));
+  return {
+    committed: result.committed,
+    revision: result.repository.revision,
+    diagnostics,
+    selectedIds: result.committed ? selectedIds : undefined,
+  };
+}
+
 export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness): ModelExplorerAdapter {
   const getState = (): SysmlGatewayState => {
     if (typeof harness.getState === 'function') {
@@ -663,7 +679,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         caps.push({
           id: 'delete',
           kind: 'delete',
-          label: 'Delete',
+          label: 'Delete from Model',
           enabled: !isRoot,
         });
         caps.push({
@@ -679,7 +695,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           enabled: !isRoot,
         });
 
-        // Add to diagram capability
+        // Diagram presentation capabilities
         if (activeDiagramId && state.diagramPresentations?.[activeDiagramId]) {
           const alreadyPresented = state.diagramPresentations[activeDiagramId].elementIds.includes(id);
           caps.push({
@@ -689,6 +705,14 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             enabled: !alreadyPresented && !isRoot,
             reason: alreadyPresented ? 'Element is already presented on the active diagram' : undefined,
           });
+          if (alreadyPresented && !isRoot) {
+            caps.push({
+              id: 'removeFromDiagram',
+              kind: 'removeFromDiagram',
+              label: 'Remove from Diagram',
+              enabled: true,
+            });
+          }
         }
 
         return caps;
@@ -704,7 +728,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       caps.push({
         id: 'delete',
         kind: 'delete',
-        label: 'Delete',
+        label: 'Delete from Model',
         enabled: !elementIds.includes('model'),
       });
       caps.push({
@@ -723,6 +747,15 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           label: 'Add to Diagram',
           enabled: canAddAny,
         });
+        const canRemoveAny = elementIds.some(id => diagramElements.has(id));
+        if (canRemoveAny) {
+          caps.push({
+            id: 'removeFromDiagram',
+            kind: 'removeFromDiagram',
+            label: 'Remove from Diagram',
+            enabled: true,
+          });
+        }
       }
 
       return caps;
@@ -871,6 +904,23 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           return { committed: false, revision: repo.revision, diagnostics: [] };
         }
 
+        case 'copy': {
+          return { committed: false, revision: repo.revision, diagnostics: [] };
+        }
+
+        case 'removeFromDiagram': {
+          const presentation = state.diagramPresentations?.[command.diagramId];
+          if (!presentation) {
+            diagnostics.push({
+              code: 'DIAGRAM_NOT_FOUND',
+              severity: 'error',
+              message: `Diagram '${command.diagramId}' not found.`,
+            });
+            return { committed: false, revision: repo.revision, diagnostics };
+          }
+          return { committed: false, revision: repo.revision, diagnostics: [] };
+        }
+
         case 'paste': {
           if (command.payload.domain !== 'sysml') {
             diagnostics.push({
@@ -913,67 +963,37 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           if (requestedKind === 'package') {
             const pkg = createPackage({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: pkg });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [pkg.id],
-            };
+            return toExplorerResult(result, [pkg.id]);
           }
 
           if (requestedKind === 'block') {
             const blk = createBlock({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: blk });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [blk.id],
-            };
+            return toExplorerResult(result, [blk.id]);
           }
 
           if (requestedKind === 'valueType') {
             const vt = createValueType({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: vt });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [vt.id],
-            };
+            return toExplorerResult(result, [vt.id]);
           }
 
           if (requestedKind === 'interface') {
             const iface = createInterface({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: iface });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [iface.id],
-            };
+            return toExplorerResult(result, [iface.id]);
           }
 
           if (requestedKind === 'requirement') {
             const req = createRequirement({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: req });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [req.id],
-            };
+            return toExplorerResult(result, [req.id]);
           }
 
           if (requestedKind === 'verificationCase' || requestedKind === 'testCase') {
             const vc = createVerificationCase({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: vc });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [vc.id],
-            };
+            return toExplorerResult(result, [vc.id]);
           }
 
           if (requestedKind === 'useCase') {
@@ -1010,12 +1030,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               existingNames,
             });
             const result = dispatchCommand({ type: 'createElement', element: part });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [part.id],
-            };
+            return toExplorerResult(result, [part.id]);
           }
 
           if (['port', 'fullPort', 'proxyPort', 'flowPort'].includes(requestedKind)) {
@@ -1051,12 +1066,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 elementId: ownerId,
                 patch: { ports: nextPorts },
               });
-              return {
-                committed: result.committed,
-                revision: result.repository.revision,
-                diagnostics: [],
-                selectedIds: [port.id],
-              };
+              return toExplorerResult(result, [port.id]);
             }
           }
 
@@ -1073,12 +1083,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 elementId: ownerId,
                 patch: { properties: nextProps },
               });
-              return {
-                committed: result.committed,
-                revision: result.repository.revision,
-                diagnostics: [],
-                selectedIds: [prop.id],
-              };
+              return toExplorerResult(result, [prop.id]);
             }
           }
 
@@ -1096,12 +1101,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             diagramKind: command.diagramKind as any,
           });
           const result = dispatchCommand({ type: 'createDiagram', diagram: diag });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: [diag.id],
-          };
+          return toExplorerResult(result, [diag.id]);
         }
 
         case 'rename': {
@@ -1110,12 +1110,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             elementId: command.elementId,
             patch: { name: command.name },
           });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: [command.elementId],
-          };
+          return toExplorerResult(result, [command.elementId]);
         }
 
         case 'move': {
@@ -1125,12 +1120,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             targetOwnerId: command.targetOwnerId,
             confirmedImpactHash: command.confirmedImpactHash,
           });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: command.elementIds,
-          };
+          return toExplorerResult(result, command.elementIds);
         }
 
         case 'delete': {
@@ -1139,11 +1129,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             elementIds: command.elementIds,
             confirmedImpactHash: command.confirmedImpactHash,
           });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-          };
+          return toExplorerResult(result);
         }
 
         case 'createRelationship': {
@@ -1157,12 +1143,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             type: 'createElement',
             element: rel,
           });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: [rel.id],
-          };
+          return toExplorerResult(result, [rel.id]);
         }
 
         case 'addToDiagram': {
@@ -1171,13 +1152,31 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             diagramId: command.diagramId,
             elementIds: command.elementIds,
           });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: command.elementIds,
-          };
+          return toExplorerResult(result, command.elementIds);
         }
+
+        case 'removeFromDiagram': {
+          const result = dispatchCommand({
+            type: 'removeFromDiagram',
+            diagramId: command.diagramId,
+            elementIds: command.elementIds,
+          });
+          return toExplorerResult(result, command.elementIds);
+        }
+
+        case 'copy':
+          return {
+            committed: false,
+            revision: repo.revision,
+            diagnostics: [{ code: 'COPIED_TO_CLIPBOARD', severity: 'info', message: `Copied ${command.elementIds.length} root element(s).` }],
+            clipboard: copyOwnershipForest(
+              'sysml',
+              command.elementIds,
+              id => getElementById(id, repo),
+              id => getSysmlDescendants(id, repo),
+              repo.revision
+            ),
+          };
 
         case 'duplicate': {
           const existingNames = [
@@ -1217,12 +1216,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           const result = dispatchCommand({ type: 'batch', commands });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: createdRootIds,
-          };
+          return toExplorerResult(result, createdRootIds);
         }
 
         case 'paste': {
@@ -1256,12 +1250,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           const result = dispatchCommand({ type: 'batch', commands });
-          return {
-            committed: result.committed,
-            revision: result.repository.revision,
-            diagnostics: [],
-            selectedIds: createdRootIds,
-          };
+          return toExplorerResult(result, createdRootIds);
         }
 
         default:

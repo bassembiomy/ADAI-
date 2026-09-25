@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
+import type { ModelExplorerCommand } from '../modelExplorerTypes';
 import { createSysmlGatewayState, executeSysmlCommand, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
 import type { BlockDefinition, InterfaceDefinition, RequirementDefinition } from '../../../engine/sysml/model';
 
@@ -359,5 +360,60 @@ describe('sysmlExplorerAdapter', () => {
       elementIds: ['block-1'],
     });
     expect(pre.diagnostics[0]?.code).toBe('PRESENTATION_ALREADY_EXISTS');
+  });
+
+  it('executes every enabled editing capability or returns a diagnostic', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+    const blk = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'TestBlock' });
+    const blockId = blk.selectedIds?.[0]!;
+    harness.state.diagramPresentations = {
+      requirements: { elementIds: [blockId] },
+    };
+
+    const commands: ModelExplorerCommand[] = [
+      { type: 'copy', elementIds: [blockId] },
+      { type: 'duplicate', elementIds: [blockId], targetOwnerId: 'model' },
+      { type: 'removeFromDiagram', elementIds: [blockId], diagramId: 'requirements' },
+      { type: 'delete', elementIds: [blockId] },
+    ];
+    for (const command of commands) {
+      const result = adapter.execute(command);
+      expect(result.committed || result.diagnostics.length > 0 || result.clipboard).toBeTruthy();
+    }
+  });
+
+  it('copies and pastes a Block with owned PartProperty, preserving internal references', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+    const blkRes = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Car' });
+    const blockId = blkRes.selectedIds?.[0]!;
+    const wheelRes = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Wheel' });
+    const wheelId = wheelRes.selectedIds?.[0]!;
+    const partRes = adapter.execute({ type: 'createElement', ownerId: blockId, elementKind: 'part', name: 'leftWheel' });
+    const partId = partRes.selectedIds?.[0]!;
+
+    const copyRes = adapter.execute({ type: 'copy', elementIds: [blockId] });
+    expect(copyRes.clipboard).toBeDefined();
+    expect(copyRes.clipboard!.rootIds).toEqual([blockId]);
+    expect(Object.keys(copyRes.clipboard!.snapshots)).toContain(blockId);
+    expect(Object.keys(copyRes.clipboard!.snapshots)).toContain(partId);
+
+    const pasteRes = adapter.execute({
+      type: 'paste',
+      payload: copyRes.clipboard!,
+      targetOwnerId: 'model',
+      mode: 'copy',
+    });
+    expect(pasteRes.committed).toBe(true);
+    const newBlockId = pasteRes.selectedIds?.[0]!;
+    expect(newBlockId).not.toBe(blockId);
+    const newBlock = harness.state.repository.definitions[newBlockId];
+    expect(newBlock).toBeDefined();
+
+    // Check remapped part
+    const pastedPart = Object.values(harness.state.repository.usages).find(u => u.ownerId === newBlockId);
+    expect(pastedPart).toBeDefined();
+    expect(pastedPart!.id).not.toBe(partId);
   });
 });

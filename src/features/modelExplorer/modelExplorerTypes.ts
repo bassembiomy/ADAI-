@@ -26,6 +26,7 @@ export type CapabilityKind =
   | 'duplicate'
   | 'delete'
   | 'addToDiagram'
+  | 'removeFromDiagram'
   | 'openSpecification'
   | 'reveal';
 
@@ -103,7 +104,9 @@ export type ModelExplorerCommand =
   | { type: 'delete'; elementIds: string[]; confirmedImpactHash?: string }
   | { type: 'createRelationship'; relationshipKind: string; sourceId: string; targetId: string }
   | { type: 'addToDiagram'; elementIds: string[]; diagramId: string; position?: { x: number; y: number } }
+  | { type: 'removeFromDiagram'; elementIds: string[]; diagramId: string }
   | { type: 'duplicate'; elementIds: string[]; targetOwnerId: string }
+  | { type: 'copy'; elementIds: string[] }
   | { type: 'paste'; payload: ExplorerClipboardPayload; targetOwnerId: string; mode: 'copy' | 'move' | 'reference' };
 
 export interface ExplorerCommandResult {
@@ -112,6 +115,7 @@ export interface ExplorerCommandResult {
   diagnostics: ExplorerDiagnostic[];
   selectedIds?: string[];
   impact?: ExplorerImpact;
+  clipboard?: ExplorerClipboardPayload;
 }
 
 export interface ModelExplorerAdapter {

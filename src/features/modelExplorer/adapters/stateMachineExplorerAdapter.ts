@@ -456,6 +456,14 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
           return { committed: false, revision, diagnostics: [] };
         }
 
+        case 'copy': {
+          return { committed: false, revision, diagnostics: [] };
+        }
+
+        case 'removeFromDiagram': {
+          return { committed: false, revision, diagnostics: [] };
+        }
+
         case 'paste': {
           if (command.payload.domain !== 'stateMachine') {
             diagnostics.push({
@@ -860,6 +868,29 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
             revision: this.getRevision(),
             diagnostics: [],
             selectedIds: createdRootIds,
+          };
+        }
+
+        case 'copy': {
+          return {
+            committed: false,
+            revision: this.getRevision(),
+            diagnostics: [{ code: 'COPIED_TO_CLIPBOARD', severity: 'info', message: `Copied ${command.elementIds.length} root element(s).` }],
+            clipboard: copyOwnershipForest(
+              'stateMachine',
+              command.elementIds,
+              id => getStateMachineElement(id, snapshot),
+              id => getStateMachineDescendants(id, snapshot),
+              this.getRevision()
+            ),
+          };
+        }
+
+        case 'removeFromDiagram': {
+          return {
+            committed: false,
+            revision: this.getRevision(),
+            diagnostics: [{ code: 'UNSUPPORTED_COMMAND', severity: 'error', message: 'Remove from diagram is not supported for state machine models' }],
           };
         }
 

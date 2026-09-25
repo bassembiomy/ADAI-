@@ -65,6 +65,7 @@ describe('AppModelExplorer Capability Coverage', () => {
     'duplicate',
     'delete',
     'addToDiagram',
+    'removeFromDiagram',
     'openSpecification',
     'reveal',
   ] as const)('handles enabled %s capabilities', capabilityKind => {

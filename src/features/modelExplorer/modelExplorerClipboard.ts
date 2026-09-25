@@ -72,6 +72,9 @@ export function remapClipboardPayload(
     if (cloned.ownerId && idMap.has(cloned.ownerId)) {
       cloned.ownerId = idMap.get(cloned.ownerId);
     }
+    if (cloned.typeId && idMap.has(cloned.typeId)) {
+      cloned.typeId = idMap.get(cloned.typeId);
+    }
     if (cloned.parentId && idMap.has(cloned.parentId)) {
       cloned.parentId = idMap.get(cloned.parentId);
     }
