@@ -6193,10 +6193,21 @@ const ADIA = () => {
       if (result.store) {
         setSysmlStore(result.store);
       }
-      setBlocks(result.view.blocks);
-      setRelationships(result.view.relationships);
-      setParts(result.view.parts);
-      setConnectors(result.view.connectors);
+      // Keep the application-wide projection complete. A command may return a
+      // diagram-scoped view for the active canvas, but that view must never
+      // replace the repository-wide model used by other viewpoints.
+      const completeView = projectLegacyDiagram(
+        result.repository,
+        result.coordinates,
+        result.diagramPresentations,
+      );
+      setBlocks(completeView.blocks);
+      setRelationships(completeView.relationships);
+      setParts(completeView.parts);
+      setConnectors(completeView.connectors);
+      // Compatibility snapshot for legacy save/export consumers. Canonical
+      // reads use sysmlStore.diagramPresentations below.
+      setDiagramPresentations(result.diagramPresentations);
     }
     return result;
   }, [canonicalSysmlRepository, sysmlStore]);
@@ -6279,9 +6290,9 @@ const ADIA = () => {
       blocks,
       relationships,
       currentLayerId,
-      new Set(diagramPresentations.requirements?.elementIds ?? []),
+      new Set(sysmlDiagramPresentations.requirements?.elementIds ?? []),
     ),
-    [blocks, relationships, currentLayerId, diagramPresentations],
+    [blocks, relationships, currentLayerId, sysmlDiagramPresentations],
   );
 
   // Schedule large validation asynchronously after edits with revision-based cancellation
@@ -9846,23 +9857,19 @@ const ADIA = () => {
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
     if (rawIds.length === 0) return;
-    const idSet = new Set(rawIds);
-    addToHistory();
     const currentDiagramId = diagramMode === 'requirements' ? 'requirements' : (diagramMode || 'default');
-    setDiagramPresentations(prev => {
-      const existing = prev[currentDiagramId]?.elementIds ?? blocks.map(b => b.id);
-      return {
-        ...prev,
-        [currentDiagramId]: {
-          elementIds: existing.filter(id => !idSet.has(id)),
-        },
-      };
+    const result = handleExecuteSysmlCommand({
+      type: 'removeFromDiagram',
+      diagramId: currentDiagramId,
+      elementIds: rawIds,
     });
-    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
-    setRelationships(prev => prev.filter(r => !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
-    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
-    addError('info', `Removed ${rawIds.length} element(s) from diagram (preserved in model)`);
-  }, [addToHistory, diagramMode, blocks, addError]);
+    if (!result.committed) {
+      addError('error', result.diagnostics.map(diagnostic => diagnostic.message).join('; ') || 'Unable to remove the presentation from the diagram.');
+      return;
+    }
+    setSelectedIds(prev => prev.filter(id => !rawIds.includes(id)));
+    addError('info', `Removed ${rawIds.length} presentation(s) from diagram (preserved in model)`);
+  }, [addError, diagramMode, handleExecuteSysmlCommand]);
 
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
