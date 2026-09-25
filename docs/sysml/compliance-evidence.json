@@ -1,0 +1,206 @@
+{
+  "profile": "OMG-SysML-1.6-ADIA",
+  "specification": "Cameo-Style Repository and Diagram Presentation Architecture",
+  "status": "COMPLIANT",
+  "generatedAt": "2026-09-25T12:45:00Z",
+  "evidence": [
+    {
+      "id": "CAMEO-001",
+      "authority": "OMG SysML 1.6 / Cameo Systems Modeler Presentation Semantics",
+      "specificationSection": "Section 1 - Single Canonical SysML Repository Authority",
+      "status": "COMPLIANT",
+      "implementationFile": "src/engine/sysml/normalizedStore.ts",
+      "domainType": "SysmlRepository / NormalizedSysmlStore",
+      "command": "commitBatch / dispatchCommand",
+      "validator": "validateSysmlRepository",
+      "persistenceMapping": "NormalizedSysmlStore.diagramPresentations",
+      "projection": "sysmlAppProjection.ts",
+      "automatedTests": [
+        "src/engine/sysml/architectureGuards.test.ts",
+        "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/engine/sysml/normalizedStore.test.ts",
+        "integration": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/largeModelBenchmarkGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-002",
+      "authority": "OMG SysML 1.6 Section 7 (Diagrams and Model Elements)",
+      "specificationSection": "Section 2 - Atomic Create-and-Present Gateway Command",
+      "status": "COMPLIANT",
+      "implementationFile": "src/services/sysmlCommandGateway.ts",
+      "domainType": "CreateAndPresentCommand",
+      "command": "createAndPresent",
+      "validator": "preflightSysmlCommand",
+      "persistenceMapping": "repo.definitions / repo.requirements / store.coordinates / store.diagramPresentations",
+      "projection": "projectRepositoryToApp",
+      "automatedTests": [
+        "src/services/sysmlCommandGateway.test.ts",
+        "src/services/sysmlDiagramCreation.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/services/sysmlCommandGateway.test.ts",
+        "integration": "src/services/sysmlDiagramCreation.test.ts",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-003",
+      "authority": "OMG SysML 1.6 / Cameo Diagram Creation Factory Rules",
+      "specificationSection": "Section 3 - Intent-Driven Diagram Palette Creation",
+      "status": "COMPLIANT",
+      "implementationFile": "src/services/sysmlDiagramCreation.ts",
+      "domainType": "DiagramCreationInput / DiagramCreationOutcome",
+      "command": "buildDiagramCreationCommand",
+      "validator": "buildDiagramCreationCommand pre-conditions",
+      "persistenceMapping": "createSemanticElement / modelExplorerFactories",
+      "projection": "createSysmlElementOnActiveDiagram",
+      "automatedTests": [
+        "src/services/sysmlDiagramCreation.test.ts",
+        "src/services/sysmlAppProjection.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/services/sysmlDiagramCreation.test.ts",
+        "integration": "src/services/sysmlAppProjection.test.ts",
+        "browser": "tests/e2e/sysml-requirements-existing-block.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-004",
+      "authority": "OMG SysML 1.6 / Cameo Containment Tree Observability",
+      "specificationSection": "Section 4 - Model Explorer Capabilities and Execution",
+      "status": "COMPLIANT",
+      "implementationFile": "src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts",
+      "domainType": "ModelExplorerCommand (addToDiagram, removeFromDiagram, copy, paste, delete, rename)",
+      "command": "execute / dispatchCommand",
+      "validator": "sysmlExplorerAdapter.preflight",
+      "persistenceMapping": "NormalizedSysmlStore / SysmlRepository",
+      "projection": "AppModelExplorer / ModelExplorerMenu",
+      "automatedTests": [
+        "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+        "src/components/modelExplorer/ModelExplorerMenu.test.tsx"
+      ],
+      "evidenceTiers": {
+        "unit": "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+        "integration": "src/components/modelExplorer/ModelExplorerMenu.test.tsx",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-005",
+      "authority": "OMG SysML 1.6 Chapter 8 (Blocks, Relationships, Dependencies)",
+      "specificationSection": "Section 5 - Gateway-Routed Relationships and Element Updates",
+      "status": "COMPLIANT",
+      "implementationFile": "src/services/sysmlCommandGateway.ts",
+      "domainType": "UpdateElementCommand / CreateRelationshipCommand",
+      "command": "updateElement / createRelationship",
+      "validator": "preflightSysmlCommand",
+      "persistenceMapping": "repo.definitions / repo.relationships / repo.requirements",
+      "projection": "handleExecuteSysmlCommand / onUpdateElement / onAddRelationship",
+      "automatedTests": [
+        "src/services/sysmlCommandGateway.test.ts",
+        "src/engine/sysml/architectureGuards.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/services/sysmlCommandGateway.test.ts",
+        "integration": "src/engine/sysml/architectureGuards.test.ts",
+        "browser": "tests/e2e/sysml-requirements-existing-block.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-006",
+      "authority": "OMG SysML 1.6 Chapter 8 & 9 (Internal Block Diagrams, Parts, Ports, Connectors)",
+      "specificationSection": "Section 6 - Unified Parts, Ports, and Connectors Command Routing",
+      "status": "COMPLIANT",
+      "implementationFile": "src/engine/sysml/ports.ts",
+      "domainType": "createTypedUsageCommand / PortDefinition / PartUsage / ConnectorDefinition",
+      "command": "createElement (part, port) / createConnector",
+      "validator": "preflightSysmlCommand / validateSysmlRepository",
+      "persistenceMapping": "repo.usages / repo.connectors",
+      "projection": "handleAddPart / handleAddPort / handleAddConnector",
+      "automatedTests": [
+        "src/engine/sysml/ports.test.ts",
+        "src/engine/sysml/architectureGuards.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/engine/sysml/ports.test.ts",
+        "integration": "src/engine/sysml/architectureGuards.test.ts",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-007",
+      "authority": "ADIA Architecture Governance Rule SYSML-ARCH-001",
+      "specificationSection": "Section 7 - Elimination of Legacy Semantic Diagram Writebacks",
+      "status": "COMPLIANT",
+      "implementationFile": "src/App.tsx",
+      "domainType": "Debounced Merge Effect Removal",
+      "command": "sysmlCommandGateway.dispatchCommand",
+      "validator": "scripts/verify_sysml_architecture.ts",
+      "persistenceMapping": "Zero unallowlisted React state writes to canonicalSysmlRepository",
+      "projection": "canonicalSysmlRepository as sole semantic state",
+      "automatedTests": [
+        "src/engine/sysml/architectureGuards.test.ts",
+        "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/engine/sysml/architectureGuards.test.ts",
+        "integration": "scripts/verify_sysml_architecture.ts",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-008",
+      "authority": "MISRA-C:2012 / ISO 26262 ASIL-D Embedded Code Generation",
+      "specificationSection": "Section 8 - Deterministic Code-Generation Isolation from Presentations",
+      "status": "COMPLIANT",
+      "implementationFile": "src/utils/stateMachineCodeGenerator.ts",
+      "domainType": "State Machine C/H Generator Pipeline",
+      "command": "generateStateMachineCode",
+      "validator": "verify:repository-codegen-isolation / smVerificationAggregator",
+      "persistenceMapping": "Pure AST translation from semantic definitions",
+      "projection": "Generated C / H code buffers and golden verification suites",
+      "automatedTests": [
+        "src/utils/stateMachineCodeGenerator.repositoryIsolation.test.ts",
+        "src/utils/stateMachineCodeGenerator.golden.test.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/utils/stateMachineCodeGenerator.repositoryIsolation.test.ts",
+        "integration": "src/utils/stateMachineCodeGenerator.golden.test.ts",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    },
+    {
+      "id": "CAMEO-009",
+      "authority": "Cameo Systems Modeler Workflow Conformance Specification",
+      "specificationSection": "Section 9 - End-to-End Multi-Diagram Presentation & Tree Lifecycle",
+      "status": "COMPLIANT",
+      "implementationFile": "tests/e2e/sysml-repository-presentation.spec.ts",
+      "domainType": "Cross-Diagram Element Presentation Lifecycle",
+      "command": "createAndPresent -> addToDiagram -> rename -> copy -> paste -> delete",
+      "validator": "Playwright Browser Test Harness",
+      "persistenceMapping": "Single semantic element mapped across multiple diagram canvas views",
+      "projection": "SVG diagram canvas and Model Tree Explorer",
+      "automatedTests": [
+        "tests/e2e/sysml-repository-presentation.spec.ts",
+        "tests/e2e/sysml-requirements-existing-block.spec.ts"
+      ],
+      "evidenceTiers": {
+        "unit": "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+        "integration": "src/services/sysmlAppProjection.test.ts",
+        "browser": "tests/e2e/sysml-repository-presentation.spec.ts",
+        "persistence": "src/engine/sysml/repositoryPresentationReleaseGate.test.ts"
+      }
+    }
+  ]
+}

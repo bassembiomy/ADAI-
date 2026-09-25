@@ -13,12 +13,12 @@ test.describe('SysML Cameo-style existing element presentation', () => {
 
     await page.getByRole('button', { name: 'SysML BDD' }).click();
     await page.getByRole('button', { name: 'Block', exact: true }).click();
-    const blockItem = page.locator('[role="treeitem"]:has-text("NewBlock")').last();
+    const blockItem = page.locator('[role="treeitem"]:has-text("Block")').last();
     await expect(blockItem).toBeVisible({ timeout: 15000 });
 
     await page.getByRole('button', { name: 'Requirements', exact: true }).click();
     await page.getByRole('button', { name: '+ Requirement', exact: true }).click();
-    const requirementItem = page.locator('[role="treeitem"]:has-text("NewRequirement")').last();
+    const requirementItem = page.locator('[role="treeitem"]:has-text("Requirement")').last();
     await expect(requirementItem).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1000);
 
@@ -26,17 +26,17 @@ test.describe('SysML Cameo-style existing element presentation', () => {
     await expect(page.getByText('Add to Diagram', { exact: true })).toBeVisible({ timeout: 10000 });
     await page.getByText('Add to Diagram', { exact: true }).click();
 
-    await expect(page.locator('svg text').filter({ hasText: 'NewBlock' }).last()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('svg text').filter({ hasText: 'NewRequirement' }).last()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('[role="treeitem"]:has-text("NewBlock")')).toHaveCount(1);
+    await expect(page.locator('#adia-diagram-canvas').getByText('Block', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('#adia-diagram-canvas').getByText('Requirement', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[role="treeitem"]:has-text("Block")')).toHaveCount(1);
 
     // The same semantic Block is now presented on the Requirements Diagram.
-    await expect(page.locator('svg text').filter({ hasText: 'NewBlock' }).last()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('#adia-diagram-canvas').getByText('Block', { exact: true })).toBeVisible({ timeout: 15000 });
     const connectButton = page.getByRole('button', { name: 'Connect', exact: true });
     await connectButton.evaluate((element) => (element as HTMLButtonElement).click());
     await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible({ timeout: 5000 });
-    const blockNode = page.locator('svg g:has(> rect)').filter({ hasText: 'NewBlock' }).last();
-    const requirementNode = page.locator('svg g:has(> rect)').filter({ hasText: 'NewRequirement' }).last();
+    const blockNode = page.locator('svg g:has(> rect)').filter({ hasText: 'Block' }).last();
+    const requirementNode = page.locator('svg g:has(> rect)').filter({ hasText: 'Requirement' }).last();
     await blockNode.evaluate((element) => element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
     await requirementNode.evaluate((element) => element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
     await expect(page.getByText('Create Relationship', { exact: true })).toBeVisible({ timeout: 10000 });

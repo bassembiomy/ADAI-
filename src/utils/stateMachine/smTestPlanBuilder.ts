@@ -158,7 +158,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
 
   const findTriggerVar = (t?: SemanticTransition): string | undefined => {
     if (!ir.variables) return undefined;
-    if (t?.condition && ir.variables[t.condition]) return t.condition;
+    if (t?.guardSource && ir.variables[t.guardSource]) return t.guardSource;
     if (ir.variables['x']) return 'x';
     const boolVar = Object.values(ir.variables).find((v) => v.type === 'bool');
     if (boolVar) return boolVar.id;

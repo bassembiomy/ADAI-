@@ -10171,17 +10171,20 @@ const ADIA = () => {
 
       if (!originalTypeId || !blocks.some(block => block.id === originalTypeId && block.stereotype === 'block')) {
         const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        const cmd = buildDiagramCreationCommand({
-          kind: 'block',
-          name: `${part.name}_Def`,
+        const outcome = buildDiagramCreationCommand({
+          repository: canonicalSysmlRepository,
+          kind: 'Block',
+          ownerId: 'model',
           diagramId: diagramMode,
-          coordinates: { x: 100, y: 100, width: 150, height: 100 },
+          position: { x: 100, y: 100 },
         });
-        const res = handleExecuteSysmlCommand(cmd);
-        if (res.committed) {
-          updateBlock(cmd.element.id, { ports: [newPort] });
-          updatePart(part.id, { typeId: cmd.element.id });
-          addError('info', `Created definition '${cmd.element.name}' for part and added port.`);
+        if (outcome.ok) {
+          const res = handleExecuteSysmlCommand(outcome.command);
+          if (res.committed) {
+            updateBlock(outcome.semanticId, { ports: [newPort] });
+            updatePart(part.id, { typeId: outcome.semanticId });
+            addError('info', `Created definition for part and added port.`);
+          }
         }
         return;
       }
@@ -10191,18 +10194,21 @@ const ADIA = () => {
 
       if (isShared) {
         addError('info', `Specializing definition for '${part.name}'...`);
-        const cmd = buildDiagramCreationCommand({
-          kind: 'block',
-          name: `${originalBlock.name}_${part.name}`,
+        const outcome = buildDiagramCreationCommand({
+          repository: canonicalSysmlRepository,
+          kind: 'Block',
+          ownerId: 'model',
           diagramId: diagramMode,
-          coordinates: { x: (originalBlock.x ?? 100) + 20, y: (originalBlock.y ?? 100) + 20, width: originalBlock.width, height: originalBlock.height },
+          position: { x: (originalBlock.x ?? 100) + 20, y: (originalBlock.y ?? 100) + 20 },
         });
-        const res = handleExecuteSysmlCommand(cmd);
-        if (res.committed) {
-          const newPorts = [...originalBlock.ports.map(p => ({ ...p })), { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined }];
-          updateBlock(cmd.element.id, { ports: newPorts, properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints });
-          updatePart(part.id, { typeId: cmd.element.id });
-          addError('info', `Created new definition '${cmd.element.name}' and added port.`);
+        if (outcome.ok) {
+          const res = handleExecuteSysmlCommand(outcome.command);
+          if (res.committed) {
+            const newPorts: PortData[] = [...originalBlock.ports.map(p => ({ ...p })), { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? ('in' as const) : undefined }];
+            updateBlock(outcome.semanticId, { ports: newPorts, properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints });
+            updatePart(part.id, { typeId: outcome.semanticId });
+            addError('info', `Created new definition and added port.`);
+          }
         }
       } else {
         const newPort: PortData = { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
@@ -10951,17 +10957,21 @@ const ADIA = () => {
       e.preventDefault();
       const blockToClone = blocks.find(b => b.id === blockId);
       if (!blockToClone) return;
-      const creationCmd = buildDiagramCreationCommand({
-        kind: (blockToClone.stereotype === 'requirement' ? 'requirement' : 'block') as DiagramCreationKind,
-        name: `${blockToClone.name}_copy`,
+      const kind: DiagramCreationKind = blockToClone.stereotype === 'requirement' ? 'Requirement' : 'Block';
+      const outcome = buildDiagramCreationCommand({
+        repository: canonicalSysmlRepository,
+        kind,
+        ownerId: 'model',
         diagramId: diagramMode,
-        coordinates: { x: worldX, y: worldY, width: blockToClone.width, height: blockToClone.height },
+        position: { x: worldX, y: worldY },
       });
-      const result = handleExecuteSysmlCommand(creationCmd);
-      if (result.committed) {
-        setSelectedIds([creationCmd.element.id]);
-        setIsDragging(true);
-        setDragOffset({ x: worldX, y: worldY });
+      if (outcome.ok) {
+        const result = handleExecuteSysmlCommand(outcome.command);
+        if (result.committed) {
+          setSelectedIds([outcome.semanticId]);
+          setIsDragging(true);
+          setDragOffset({ x: worldX, y: worldY });
+        }
       }
       return;
     }
@@ -10989,7 +10999,7 @@ const ADIA = () => {
       e.preventDefault();
       const partToClone = parts.find(p => p.id === partId);
       if (!partToClone) return;
-      createPart(partToClone.ownerId || currentLayerId, `${partToClone.name}_copy`, partToClone.typeId, partToClone.kind);
+      createPart(worldX, worldY);
       return;
     }
 

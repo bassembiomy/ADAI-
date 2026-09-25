@@ -59,11 +59,18 @@
   - [x] Step 3: Add a release script
   - [x] Step 4: Run the complete code-generation verification
   - [x] Step 5: Commit
-- [ ] Task 10: Verify the Complete Cameo-Style User Workflow
-  - [ ] Step 1: Add the failing end-to-end workflow
-  - [ ] Step 2: Run the new E2E test and verify it fails before final UI wiring
-  - [ ] Step 3: Complete UI selectors and feedback wiring without adding semantic mutation paths
-  - [ ] Step 4: Record four-level compliance evidence
-  - [ ] Step 5: Run all release checks
+- [x] Task 10: Verify the Complete Cameo-Style User Workflow
+  - [x] Step 1: Add the failing end-to-end workflow
+  - [x] Step 2: Run the new E2E test and verify it fails before final UI wiring
+  - [x] Step 3: Complete UI selectors and feedback wiring without adding semantic mutation paths
+  - [x] Step 4: Record four-level compliance evidence
+  - [x] Step 5: Run all release checks
   - [ ] Step 6: Commit
-- [ ] Final Verification
+- [x] Final Verification
+  - [x] Confirm `git status --short` contains no unintended files.
+  - [x] Confirm one Block shown on two diagrams has one semantic ID and two presentation memberships.
+  - [x] Confirm `Remove from Diagram` preserves semantics and other presentations.
+  - [x] Confirm `Delete from Model` removes semantic closure and all presentations.
+  - [x] Confirm every enabled tree action produces a commit, clipboard result, impact request, or diagnostic.
+  - [x] Confirm state-machine generated artifacts are unchanged by SysML presentation operations.
+

@@ -696,6 +696,12 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           enabled: !isRoot,
         });
         caps.push({
+          id: 'paste',
+          kind: 'paste',
+          label: 'Paste',
+          enabled: true,
+        });
+        caps.push({
           id: 'duplicate',
           kind: 'duplicate',
           label: 'Duplicate',
@@ -703,8 +709,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         });
 
         // Diagram presentation capabilities
-        if (activeDiagramId && state.diagramPresentations?.[activeDiagramId]) {
-          const alreadyPresented = state.diagramPresentations[activeDiagramId].elementIds.includes(id);
+        if (activeDiagramId) {
+          const presentation = state.diagramPresentations?.[activeDiagramId];
+          const alreadyPresented = presentation ? presentation.elementIds.includes(id) : false;
           caps.push({
             id: 'addToDiagram',
             kind: 'addToDiagram',
@@ -744,9 +751,16 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         label: 'Copy',
         enabled: !elementIds.includes('model'),
       });
+      caps.push({
+        id: 'paste',
+        kind: 'paste',
+        label: 'Paste',
+        enabled: elementIds.length === 1,
+      });
 
-      if (activeDiagramId && state.diagramPresentations?.[activeDiagramId]) {
-        const diagramElements = new Set(state.diagramPresentations[activeDiagramId].elementIds);
+      if (activeDiagramId) {
+        const presentation = state.diagramPresentations?.[activeDiagramId];
+        const diagramElements = new Set(presentation?.elementIds ?? []);
         const canAddAny = elementIds.some(id => !diagramElements.has(id) && id !== 'model');
         caps.push({
           id: 'addToDiagram',
