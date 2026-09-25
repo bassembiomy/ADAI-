@@ -128,10 +128,12 @@ npx tsc --noEmit
 5. Keyboard SysML paste: dispatch repository copy/paste commands; keep `pasteStateMachineClipboard` restricted to state-machine mode.
 6. Property “create definition” action: create the definition and update the usage through one atomic gateway batch.
 7. New/load/import/restore: load canonical repository first, then refresh projections through one named projection function.
+8. Missing type UX: use canonical `CreateNewTypeAction.actionKind`, render an explicit Create New Type action, and dispatch its semantic creation only after the user invokes it. Remove the unused `GatewayCreateNewTypeAction.type` alias.
 
 - [ ] Add failing architecture tests for each active runtime pattern above.
 - [ ] Introduce one `applyCanonicalSysmlResult(result)` function containing the only permitted projection setters (`setBlocks`, `setRelationships`, `setParts`, `setConnectors`).
 - [ ] Replace every active runtime setter with gateway dispatch and remove the broad `src/App.tsx` direct-mutation allowlist.
+- [ ] Add a component/service test proving `TYPE_NOT_FOUND` shows candidates and a visible Create New Type action, while no type exists before that action is invoked.
 - [ ] Keep a narrow allowlist only for the named canonical projection function and legacy import adapter, with exact symbol names and expiry conditions.
 - [ ] Make the architecture CLI fail when active runtime mutations are allowlisted or when the App-wide allowlist returns.
 - [ ] Run:
@@ -205,4 +207,3 @@ npx tsc --noEmit
 - [ ] Mandatory code-generation gates remain mandatory.
 - [ ] Every compliance claim cites real, passing evidence and a single authority.
 - [ ] The full release commands above pass from the final commit.
-
