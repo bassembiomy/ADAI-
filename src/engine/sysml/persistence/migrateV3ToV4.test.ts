@@ -137,10 +137,6 @@ describe('Schema v4 Persistence and Migration (Task 13)', () => {
       ownerId: 'pkg-root',
       isAbstract: false,
       isLeaf: false,
-      ownedPropertyIds: [],
-      ownedPortIds: [],
-      ownedOperationIds: [],
-      ownedConstraintIds: [],
     };
     addSemanticElementV4(repository, motor);
 

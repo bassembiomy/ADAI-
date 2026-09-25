@@ -61,7 +61,13 @@ export function migrateV3ToV4(
           id: port.id,
           name: port.name,
           metaclass: 'Port',
-          portKind: port.kind === 'proxy' ? 'proxyPort' : 'fullPort',
+          portKind: port.kind === 'proxy'
+            ? 'proxyPort'
+            : port.kind === 'full'
+              ? 'fullPort'
+              : port.kind === 'flow'
+                ? 'flowPort'
+                : 'umlPort',
           namespace: [],
           ownerId: block.id,
           typeId: port.typeId,

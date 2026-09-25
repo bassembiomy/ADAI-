@@ -50,34 +50,16 @@ function findLegalOwner(
   requestedOwnerId: string | undefined,
   metaclass: MetaclassKind,
   repo: SysmlRepositoryV4
-): string {
-  // If requested owner is valid and legal, use it
-  if (requestedOwnerId && repo.elements[requestedOwnerId]) {
-    const decision = evaluateOwnership(repo.elements[requestedOwnerId], metaclass);
-    if (decision.allowed) {
-      return requestedOwnerId;
-    }
-
-    // Traverse upwards through owners to find a legal owner
-    let curr = repo.elements[requestedOwnerId];
-    while (curr && curr.ownerId && repo.elements[curr.ownerId]) {
-      curr = repo.elements[curr.ownerId];
-      if (evaluateOwnership(curr, metaclass).allowed) {
-        return curr.id;
-      }
-    }
+): { ok: true; ownerId: string } | { ok: false; code: string; message: string } {
+  const ownerId = requestedOwnerId ?? 'pkg-root';
+  const owner = repo.elements[ownerId];
+  if (!owner) {
+    return { ok: false, code: 'OWNER_NOT_FOUND', message: `Owner element "${ownerId}" does not exist.` };
   }
-
-  // Look for any Package in repository
-  const pkg = Object.values(repo.elements).find(
-    el => el.metaclass === 'Package' && evaluateOwnership(el, metaclass).allowed
-  );
-  if (pkg) {
-    return pkg.id;
-  }
-
-  // Fallback to pkg-root or model root
-  return repo.elements['pkg-root'] ? 'pkg-root' : 'model';
+  const decision = evaluateOwnership(owner, metaclass);
+  return decision.allowed
+    ? { ok: true, ownerId }
+    : { ok: false, code: decision.code ?? 'ILLEGAL_OWNERSHIP', message: decision.message ?? `${metaclass} cannot be owned by ${owner.metaclass}.` };
 }
 
 function normalizeMetaclass(raw: string): MetaclassKind {
@@ -105,13 +87,26 @@ export function createElementOnDiagram(
 ): DiagramControllerResult {
   const repo = gateway.repository;
   const metaclass = normalizeMetaclass(request.metaclass);
-  const legalOwnerId = findLegalOwner(request.ownerId, metaclass, repo);
+  const ownerResult = findLegalOwner(request.ownerId, metaclass, repo);
+  if (!ownerResult.ok) {
+    const emptyAffected: any = [];
+    emptyAffected.semanticElementId = '';
+    emptyAffected.presentationId = '';
+    return {
+      success: false,
+      code: ownerResult.code,
+      message: ownerResult.message,
+      revision: repo.revision,
+      state: repo,
+      affectedIds: emptyAffected,
+    };
+  }
 
   const factoryInput: CreateElementInput = {
     ...request,
     metaclass,
     name: request.name,
-    ownerId: legalOwnerId,
+    ownerId: ownerResult.ownerId,
     typeId: request.typeId,
     portKind: request.portKind,
     aggregation: (request.aggregation === 'reference' ? 'none' : request.aggregation) as any,

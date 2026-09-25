@@ -31,10 +31,6 @@ describe('semanticFeatureController', () => {
       ownerId: 'pkg-root',
       isAbstract: false,
       isLeaf: false,
-      ownedPropertyIds: [],
-      ownedPortIds: [],
-      ownedOperationIds: [],
-      ownedConstraintIds: [],
     };
     ifBlock = {
       id: 'if-can',
@@ -65,7 +61,7 @@ describe('semanticFeatureController', () => {
   it('edits one Port identity from tree, BDD compartment, IBD, and specification view', () => {
     const createResult = createOwnedFeature(proxyPortRequest, gateway);
     expect(createResult.success).toBe(true);
-    const portId = createResult.affectedIds[0];
+    const portId = createResult.affectedIds![0];
     expect(portId).toBeDefined();
 
     const updateResult = updateOwnedFeature({ featureId: portId, patch: { name: 'canBus' } }, gateway);
@@ -96,7 +92,7 @@ describe('semanticFeatureController', () => {
 
   it('deletes owned feature and cleans up owner references', () => {
     const createResult = createOwnedFeature(proxyPortRequest, gateway);
-    const portId = createResult.affectedIds[0];
+    const portId = createResult.affectedIds![0];
 
     const delResult = deleteOwnedFeature({ featureId: portId }, gateway);
     expect(delResult.success).toBe(true);

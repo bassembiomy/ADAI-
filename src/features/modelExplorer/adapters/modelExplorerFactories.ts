@@ -9,6 +9,7 @@ import type {
   PortDefinition,
   PropertyDefinition,
   ModelDiagramDefinition,
+  UseCaseDefinition,
   SysmlRepository,
 } from '../../../engine/sysml/model';
 import type {
@@ -20,18 +21,12 @@ import type {
   ValueProperty,
   Port,
   ValueType,
+  UseCase,
 } from '../../../engine/sysml/domain';
 import { createSemanticElement } from '../../../engine/sysml/services/elementFactory';
+import { createEmptyRepository } from '../../../engine/sysml/model';
 
-const DUMMY_REPO: SysmlRepository = {
-  definitions: {},
-  usages: {},
-  connectors: {},
-  relationships: {},
-  requirements: {},
-  diagrams: {},
-  revision: 0,
-};
+const DUMMY_REPO: SysmlRepository = createEmptyRepository();
 
 export function generateUniqueName(baseName: string, existingNames: Iterable<string>): string {
   const set = new Set(existingNames);
@@ -223,6 +218,33 @@ export function createVerificationCase(options: {
   };
 }
 
+export function createUseCase(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+}): UseCaseDefinition {
+  const outcome = createSemanticElement(
+    {
+      metaclass: 'UseCase',
+      id: options.id,
+      name: options.name,
+      ownerId: options.ownerId,
+    },
+    DUMMY_REPO
+  );
+  const el = outcome.ok ? (outcome.element as UseCase) : null;
+  return {
+    id: el?.id ?? options.id ?? generateId('use-case'),
+    name: el?.name ?? options.name ?? 'Use Case',
+    kind: 'useCase',
+    namespace: el?.namespace ?? [],
+    ownerId: options.ownerId,
+    subjectId: el?.subjectIds?.[0],
+    extensionPointIds: el?.extensionPointIds ?? [],
+    behaviorArtifactIds: [],
+  };
+}
+
 export function createPartUsage(options: {
   id?: string;
   name?: string;
@@ -256,11 +278,11 @@ export function createPartUsage(options: {
 export function createPortDefinition(options: {
   id?: string;
   name?: string;
-  kind?: 'full' | 'proxy';
+  kind?: PortDefinition['kind'];
   typeId?: string;
   existingNames?: Iterable<string>;
 }): PortDefinition {
-  const kind = options.kind ?? 'proxy';
+  const kind = options.kind ?? 'standard';
   const outcome = createSemanticElement(
     {
       metaclass: 'Port',
@@ -273,7 +295,9 @@ export function createPortDefinition(options: {
   const el = outcome.ok ? (outcome.element as Port) : null;
   return {
     id: el?.id ?? options.id ?? generateId('port'),
-    name: el?.name ?? options.name ?? (kind === 'proxy' ? 'proxyPort' : 'fullPort'),
+    name: el?.name ?? options.name ?? (
+      kind === 'proxy' ? 'proxyPort' : kind === 'full' ? 'fullPort' : kind === 'flow' ? 'flowPort' : 'port'
+    ),
     kind,
     typeId: el?.typeId ?? options.typeId ?? '',
     direction: el?.direction ?? 'inout',

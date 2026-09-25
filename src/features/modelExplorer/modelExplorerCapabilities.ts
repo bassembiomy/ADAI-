@@ -25,7 +25,7 @@ function metaclassToExplorerKinds(metaclass: MetaclassKind): string[] {
     case 'ValueProperty':
       return ['valueProperty'];
     case 'Port':
-      return ['fullPort', 'proxyPort'];
+      return ['port', 'fullPort', 'proxyPort', 'flowPort'];
     default:
       return [metaclass.charAt(0).toLowerCase() + metaclass.slice(1)];
   }
@@ -71,6 +71,8 @@ const BASE_ELEMENT_KIND_LABELS: Record<string, string> = {
   sharedPart: 'Shared Part',
   fullPort: 'Full Port',
   proxyPort: 'Proxy Port',
+  port: 'Standard UML Port',
+  flowPort: 'Legacy Flow Port',
   valueProperty: 'Value Property',
   constraintProperty: 'Constraint Property',
   flowProperty: 'Flow Property',

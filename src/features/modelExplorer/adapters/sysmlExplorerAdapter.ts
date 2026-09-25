@@ -16,7 +16,6 @@ import {
 } from '../../../engine/sysml/capabilities';
 import { migrateV3ToV4 } from '../../../engine/sysml/persistence/migrateV3ToV4';
 import type { SysmlRepositoryV4 } from '../../../engine/sysml/domain';
-import { createSemanticElement } from '../../../engine/sysml/services/elementFactory';
 import {
   SYSML_CHILDREN,
   SYSML_RELATIONSHIPS,
@@ -41,6 +40,7 @@ function explorerKindToMetaclass(kind: string): MetaclassKind {
       return 'FlowProperty';
     case 'fullPort':
     case 'proxyPort':
+    case 'flowPort':
     case 'port':
       return 'Port';
     case 'package':
@@ -65,6 +65,50 @@ function explorerKindToMetaclass(kind: string): MetaclassKind {
       return kind as MetaclassKind;
   }
 }
+
+function canonicalKindToExplorerKind(kind: string): string {
+  switch (kind) {
+    case 'Package': return 'package';
+    case 'Block': return 'block';
+    case 'InterfaceBlock': return 'interface';
+    case 'ValueType': return 'valueType';
+    case 'Requirement': return 'requirement';
+    case 'TestCase': return 'testCase';
+    case 'VerificationCase': return 'verificationCase';
+    case 'UseCase': return 'useCase';
+    case 'Activity': return 'activity';
+    case 'PartProperty': return 'part';
+    case 'ReferenceProperty': return 'reference';
+    case 'ValueProperty': return 'valueProperty';
+    case 'ConstraintProperty': return 'constraintProperty';
+    case 'FlowProperty': return 'flowProperty';
+    case 'Port': return 'port';
+    default: return kind;
+  }
+}
+
+const EXECUTABLE_EXPLORER_KINDS = new Set([
+  'package',
+  'block',
+  'interface',
+  'valueType',
+  'requirement',
+  'testCase',
+  'verificationCase',
+  'useCase',
+  'part',
+  'sharedPart',
+  'reference',
+  'valueProperty',
+  'port',
+  'fullPort',
+  'proxyPort',
+  'flowPort',
+]);
+
+function isExplorerKindExecutable(kind: string): boolean {
+  return EXECUTABLE_EXPLORER_KINDS.has(canonicalKindToExplorerKind(kind));
+}
 import {
   createPackage,
   createBlock,
@@ -72,6 +116,7 @@ import {
   createInterface,
   createRequirement,
   createVerificationCase,
+  createUseCase,
   createPartUsage,
   createPortDefinition,
   createValueProperty,
@@ -155,6 +200,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       repo.usages[id] ??
       repo.requirements[id] ??
       repo.verificationCases[id] ??
+      repo.useCases?.[id] ??
       repo.connectors[id] ??
       repo.relationships[id]
     );
@@ -192,6 +238,12 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         if (vc.ownerId === curId) {
           descendants.push(vc);
           queue.push(vc.id);
+        }
+      }
+      for (const useCase of Object.values(repo.useCases ?? {})) {
+        if (useCase.ownerId === curId) {
+          descendants.push(useCase);
+          queue.push(useCase.id);
         }
       }
       for (const diag of Object.values(repo.diagrams)) {
@@ -327,7 +379,13 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 nodeId: `sysml:element:${port.id}`,
                 semanticId: port.id,
                 domain: 'sysml',
-                kind: port.kind === 'proxy' ? 'proxyPort' : 'fullPort',
+                kind: port.kind === 'proxy'
+                  ? 'proxyPort'
+                  : port.kind === 'full'
+                    ? 'fullPort'
+                    : port.kind === 'flow'
+                      ? 'flowPort'
+                      : 'port',
                 label: portNameIsUuid ? `Port ${portOrdinal}` : port.name,
                 secondaryLabel: `${port.typeId ? `: ${repo.definitions[port.typeId]?.name ?? port.typeId}` : ''}${port.direction ? ` · ${port.direction}` : ''}${portNameIsUuid ? ` · ID ${port.id}` : ''}` || undefined,
                 parentNodeId: portsGroupId,
@@ -394,7 +452,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           nodeId: `sysml:element:${vc.id}`,
           semanticId: vc.id,
           domain: 'sysml',
-          kind: 'verificationCase',
+          kind: 'testCase',
           label: vc.name,
           parentNodeId: parentId,
           childNodeIds: [],
@@ -402,7 +460,23 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         });
       }
 
-      // 6. Diagrams
+      // 6. Use Cases
+      for (const useCase of Object.values(repo.useCases ?? {})) {
+        const parentOwnerId = useCase.ownerId || 'model';
+        const parentId = nodes[`sysml:element:${parentOwnerId}`] ? `sysml:element:${parentOwnerId}` : modelNodeId;
+        registerNode({
+          nodeId: `sysml:element:${useCase.id}`,
+          semanticId: useCase.id,
+          domain: 'sysml',
+          kind: 'useCase',
+          label: useCase.name,
+          parentNodeId: parentId,
+          childNodeIds: [],
+          hasChildren: false,
+        });
+      }
+
+      // 7. Diagrams
       for (const diag of Object.values(repo.diagrams ?? {})) {
         const parentOwnerId = diag.ownerId || 'model';
         const parentId = nodes[`sysml:element:${parentOwnerId}`] ? `sysml:element:${parentOwnerId}` : modelNodeId;
@@ -476,8 +550,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
         // Resolve semantic owner
         const ownerMetaclass = explorerKindToMetaclass(kind);
+        const canonicalRepo = migrateV3ToV4(repo);
         const ownerSemanticElement: SemanticElement | null =
-          (state.gatewayState?.repository as any)?.elements?.[id] ??
+          canonicalRepo.elements[id] ??
           (id === 'model' || id === ''
             ? null
             : {
@@ -491,11 +566,12 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         // 1. Canonical backend element and feature capabilities
         const backendCaps = getOwnedElementCapabilities(
           ownerSemanticElement,
-          (state.gatewayState?.repository as any)
+          canonicalRepo
         );
 
         for (const cap of backendCaps) {
-          if (cap.allowed) {
+          const executable = isExplorerKindExecutable(cap.metaclass);
+          if (cap.allowed && executable) {
             caps.push({
               id: `create:${cap.metaclass}`,
               kind: cap.category === 'feature' ? 'createOwnedFeature' : 'createElement',
@@ -513,8 +589,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               label: cap.label,
               enabled: false,
               elementKind: cap.metaclass,
-              diagnosticCode: cap.diagnosticCode ?? 'ILLEGAL_OWNERSHIP',
-              reason: cap.reason,
+              diagnosticCode: executable ? (cap.diagnosticCode ?? 'ILLEGAL_OWNERSHIP') : 'UNSUPPORTED_ELEMENT_KIND',
+              reason: executable ? cap.reason : `${cap.label} is not yet writable through this repository adapter.`,
               capabilityGroup: 'allTypes',
               authority: cap.authority,
               catalogVisibility: 'allTypes',
@@ -525,7 +601,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         // 2. Convenience explorer children mappings
         const allowedChildren = SYSML_CHILDREN[kind] ?? [];
         for (const childKind of allowedChildren) {
-          if (!caps.some((c) => c.elementKind === childKind)) {
+          if (isExplorerKindExecutable(childKind) && !caps.some((c) => c.elementKind === childKind)) {
             caps.push({
               id: `create:${childKind}`,
               kind: 'createElement',
@@ -659,6 +735,14 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
       switch (command.type) {
         case 'createElement': {
+          if (!isExplorerKindExecutable(command.elementKind)) {
+            diagnostics.push({
+              code: 'UNSUPPORTED_ELEMENT_KIND',
+              severity: 'error',
+              message: `Kind '${command.elementKind}' is not writable through this repository adapter.`,
+            });
+            return { committed: false, revision: repo.revision, diagnostics };
+          }
           const owner = getElementById(command.ownerId, repo);
           if (!owner && command.ownerId !== 'model' && command.ownerId !== '') {
             diagnostics.push({
@@ -670,8 +754,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           const targetMetaclass = explorerKindToMetaclass(command.elementKind);
+          const canonicalRepo = migrateV3ToV4(repo);
           const ownerSemanticElement: SemanticElement | null =
-            (state.gatewayState?.repository as any)?.elements?.[command.ownerId] ??
+            canonicalRepo.elements[command.ownerId] ??
             (command.ownerId === 'model' || command.ownerId === ''
               ? null
               : {
@@ -815,15 +900,17 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       switch (command.type) {
         case 'createElement': {
           const ownerId = command.ownerId || 'model';
+          const requestedKind = canonicalKindToExplorerKind(command.elementKind);
           const existingNames = [
             ...Object.values(repo.packages).map(x => x.name),
             ...Object.values(repo.definitions).map(x => x.name),
             ...Object.values(repo.requirements).map(x => x.name),
             ...Object.values(repo.verificationCases).map(x => x.name),
+            ...Object.values(repo.useCases ?? {}).map(x => x.name),
             ...Object.values(repo.usages).map(x => x.name),
           ];
 
-          if (command.elementKind === 'package') {
+          if (requestedKind === 'package') {
             const pkg = createPackage({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: pkg });
             return {
@@ -834,7 +921,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (command.elementKind === 'block') {
+          if (requestedKind === 'block') {
             const blk = createBlock({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: blk });
             return {
@@ -845,7 +932,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (command.elementKind === 'valueType') {
+          if (requestedKind === 'valueType') {
             const vt = createValueType({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: vt });
             return {
@@ -856,7 +943,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (command.elementKind === 'interface') {
+          if (requestedKind === 'interface') {
             const iface = createInterface({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: iface });
             return {
@@ -867,7 +954,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (command.elementKind === 'requirement') {
+          if (requestedKind === 'requirement') {
             const req = createRequirement({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: req });
             return {
@@ -878,7 +965,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (command.elementKind === 'verificationCase') {
+          if (requestedKind === 'verificationCase' || requestedKind === 'testCase') {
             const vc = createVerificationCase({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: vc });
             return {
@@ -889,7 +976,22 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (['part', 'reference', 'sharedPart'].includes(command.elementKind)) {
+          if (requestedKind === 'useCase') {
+            const useCase = createUseCase({ name: command.name, ownerId });
+            const result = dispatchCommand({ type: 'createElement', element: useCase });
+            return {
+              committed: result.committed,
+              revision: result.repository.revision,
+              diagnostics: result.committed ? [] : result.diagnostics.map(diagnostic => ({
+                code: diagnostic.code,
+                severity: 'error' as const,
+                message: diagnostic.message,
+              })),
+              selectedIds: result.committed ? [useCase.id] : undefined,
+            };
+          }
+
+          if (['part', 'reference', 'sharedPart'].includes(requestedKind)) {
             const blockDefs = Object.values(repo.definitions).filter(d => d.kind === 'block');
             const typeBlock = blockDefs.find(b => b.id !== ownerId) ?? blockDefs[0];
             if (!typeBlock) {
@@ -899,7 +1001,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 diagnostics: [{ code: 'PART_TYPE_REQUIRED', severity: 'error', message: 'A valid block type is required.' }],
               };
             }
-            const agg = command.elementKind === 'reference' ? 'reference' : command.elementKind === 'sharedPart' ? 'shared' : 'composite';
+            const agg = requestedKind === 'reference' ? 'reference' : requestedKind === 'sharedPart' ? 'shared' : 'composite';
             const part = createPartUsage({
               name: command.name,
               ownerId,
@@ -916,12 +1018,31 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             };
           }
 
-          if (command.elementKind === 'fullPort' || command.elementKind === 'proxyPort') {
+          if (['port', 'fullPort', 'proxyPort', 'flowPort'].includes(requestedKind)) {
             const block = repo.definitions[ownerId];
             if (block && block.kind === 'block') {
+              const interfaceType = Object.values(repo.definitions).find(definition => definition.kind === 'interface');
+              if (requestedKind === 'proxyPort' && !interfaceType) {
+                return {
+                  committed: false,
+                  revision: repo.revision,
+                  diagnostics: [{
+                    code: 'TYPE_NOT_FOUND',
+                    severity: 'error',
+                    message: 'Proxy Port requires an existing Interface Block type. Create an Interface Block explicitly, then retry.',
+                  }],
+                };
+              }
               const port = createPortDefinition({
                 name: command.name,
-                kind: command.elementKind === 'proxyPort' ? 'proxy' : 'full',
+                kind: requestedKind === 'proxyPort'
+                  ? 'proxy'
+                  : requestedKind === 'fullPort'
+                    ? 'full'
+                    : requestedKind === 'flowPort'
+                      ? 'flow'
+                      : 'standard',
+                typeId: requestedKind === 'proxyPort' ? interfaceType?.id : undefined,
                 existingNames: (block.ports ?? []).map(p => p.name),
               });
               const nextPorts = [...(block.ports ?? []), port];
@@ -939,7 +1060,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             }
           }
 
-          if (command.elementKind === 'valueProperty') {
+          if (requestedKind === 'valueProperty') {
             const block = repo.definitions[ownerId];
             if (block && block.kind === 'block') {
               const prop = createValueProperty({
@@ -959,25 +1080,6 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 selectedIds: [prop.id],
               };
             }
-          }
-
-          const targetMetaclass = explorerKindToMetaclass(command.elementKind);
-          const outcome = createSemanticElement(
-            {
-              metaclass: targetMetaclass,
-              name: command.name,
-              ownerId,
-            },
-            (state.gatewayState?.repository as any) ?? repo
-          );
-          if (outcome.ok) {
-            const result = dispatchCommand({ type: 'createElement', element: outcome.element as any });
-            return {
-              committed: result.committed,
-              revision: result.repository.revision,
-              diagnostics: [],
-              selectedIds: [outcome.element.id],
-            };
           }
 
           return {

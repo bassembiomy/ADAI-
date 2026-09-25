@@ -12,6 +12,7 @@ import {
   handleRenameElement,
   handleMoveElement,
   handleDeleteElement,
+  DIAGRAM_ALLOWED_METACLASSES,
 } from './elementCommands';
 import {
   handleCreateRelationship,
@@ -74,20 +75,59 @@ export function dispatchSysmlCommand(
       break;
 
     case 'DisplayExistingElement': {
+      const diagram = state.diagrams[command.presentation.diagramId];
+      if (!diagram) {
+        result = {
+          success: false,
+          code: 'DIAGRAM_NOT_FOUND',
+          message: `Diagram "${command.presentation.diagramId}" does not exist.`,
+          nextState: state,
+        };
+        break;
+      }
+      const element = state.elements[command.presentation.semanticElementId];
+      if (!element) {
+        result = {
+          success: false,
+          code: 'ELEMENT_NOT_FOUND',
+          message: `Element "${command.presentation.semanticElementId}" does not exist.`,
+          nextState: state,
+        };
+        break;
+      }
+      const allowedMetaclasses = DIAGRAM_ALLOWED_METACLASSES[diagram.diagramKind];
+      if (allowedMetaclasses && !allowedMetaclasses.includes(element.metaclass)) {
+        result = {
+          success: false,
+          code: 'INVALID_DIAGRAM_ELEMENT',
+          message: `Metaclass "${element.metaclass}" is not valid for presentation on a "${diagram.diagramKind}" diagram.`,
+          nextState: state,
+        };
+        break;
+      }
+      const alreadyPresented = (state.indexes.byDiagram[diagram.id] ?? []).some(
+        presentationId => state.presentations[presentationId]?.semanticElementId === element.id
+      );
+      if (alreadyPresented) {
+        result = {
+          success: false,
+          code: 'ALREADY_PRESENTED',
+          message: `Semantic element "${element.id}" is already presented on diagram "${diagram.id}".`,
+          nextState: state,
+        };
+        break;
+      }
+      if (state.presentations[command.presentation.id]) {
+        result = {
+          success: false,
+          code: 'PRESENTATION_ID_COLLISION',
+          message: `Presentation with id "${command.presentation.id}" already exists.`,
+          nextState: state,
+        };
+        break;
+      }
       try {
         const repoCopy = structuredClone(state);
-        // Ensure diagram exists in repoCopy
-        if (!repoCopy.diagrams[command.presentation.diagramId]) {
-          repoCopy.diagrams[command.presentation.diagramId] = {
-            id: command.presentation.diagramId,
-            name: command.presentation.diagramId,
-            metaclass: 'Diagram',
-            diagramKind: 'bdd',
-            namespace: [],
-            ownerId: 'pkg-root',
-            presentationIds: [],
-          };
-        }
         executeDisplayExistingElement(repoCopy, {
           type: 'DisplayExistingElement',
           diagramId: command.presentation.diagramId,

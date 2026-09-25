@@ -51,10 +51,6 @@ describe('relationshipPolicy', () => {
       ownerId: 'pkg-1',
       isAbstract: false,
       isLeaf: false,
-      ownedPropertyIds: [],
-      ownedPortIds: ['port-power'],
-      ownedOperationIds: [],
-      ownedConstraintIds: [],
     };
 
     req1 = {
@@ -85,6 +81,7 @@ describe('relationshipPolicy', () => {
       id: 'port-power',
       name: 'pPower',
       metaclass: 'Port',
+      portKind: 'umlPort',
       namespace: [],
       ownerId: 'block-motor',
       typeId: '',
@@ -134,7 +131,7 @@ describe('relationshipPolicy', () => {
   it('restricts RequirementContainment to Requirement endpoints', () => {
     const validContainment: SemanticRelationship = {
       id: 'req-cont-1',
-      metaclass: 'RequirementContainment',
+      metaclass: 'Containment',
       sourceId: req1.id,
       targetId: req2.id,
     };
@@ -142,7 +139,7 @@ describe('relationshipPolicy', () => {
 
     const invalidContainment: SemanticRelationship = {
       id: 'req-cont-2',
-      metaclass: 'RequirementContainment',
+      metaclass: 'Containment',
       sourceId: block.id,
       targetId: req1.id,
     };

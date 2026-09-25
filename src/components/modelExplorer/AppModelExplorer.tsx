@@ -65,7 +65,7 @@ export function explorerAdapterDomain(node: ModelTreeNode): 'stateMachine' | 'sy
 }
 
 export function filterNonCreatingCapabilities(capabilities: ExplorerCapability[]): ExplorerCapability[] {
-  return capabilities.filter(capability => capability.kind !== 'createElement' && capability.kind !== 'createDiagram');
+  return capabilities;
 }
 
 export function capabilityToAction(
@@ -79,6 +79,7 @@ export function capabilityToAction(
 
   switch (capability.kind) {
     case 'createElement':
+    case 'createOwnedFeature':
       return {
         kind: 'command',
         command: {
@@ -395,9 +396,26 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   const handleExecuteCapability = useCallback(
     (capability: ExplorerCapability, node: ModelTreeNode) => {
-      if (capability.kind === 'createElement' || capability.kind === 'createDiagram') return;
       const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter;
       if (capability.kind === 'rename') return;
+
+      if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {
+        createModelExplorerCommandBus(nodeAdapter).dispatch({
+          type: 'createElement',
+          ownerId: node.semanticId,
+          elementKind: capability.elementKind || 'Block',
+        });
+        return;
+      }
+
+      if (capability.kind === 'createDiagram') {
+        createModelExplorerCommandBus(nodeAdapter).dispatch({
+          type: 'createDiagram',
+          ownerId: node.semanticId,
+          diagramKind: capability.elementKind || 'bdd',
+        });
+        return;
+      }
 
       if (capability.kind === 'openSpecification') {
         if (onOpenSpecification) {
@@ -572,7 +590,10 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         activeDiagramContext={activeDiagramContext}
         onSelectNode={handleSelectNode}
         onActivateNode={handleActivateNode}
-        getCapabilities={(node) => filterNonCreatingCapabilities((explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter).capabilities([node.semanticId]))}
+        getCapabilities={(node) => filterNonCreatingCapabilities(
+          (explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter)
+            .capabilities([node.semanticId], activeDiagramId, { includeAllTypes: true })
+        )}
         onExecuteCapability={handleExecuteCapability}
         onMoveNode={handleMoveNode}
         onRenameCommit={(nodeId, newName) => {

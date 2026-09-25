@@ -62,7 +62,7 @@ describe('diagramCreationController', () => {
     expect(presentationsFor(blockId, gateway)).toHaveLength(2);
   });
 
-  it('determines semantic owner from tree or package context, not requirement parent on requirements diagram', () => {
+  it('rejects an illegal explicit owner instead of silently rehoming the element', () => {
     const req: Requirement = {
       id: 'req-spec-1',
       name: 'SpecReq',
@@ -82,10 +82,9 @@ describe('diagramCreationController', () => {
       ownerId: 'req-spec-1',
     }, gateway);
 
-    expect(created.success).toBe(true);
-    const block = gateway.repository.elements[created.affectedIds.semanticElementId];
-    expect(block.ownerId).not.toBe('req-spec-1');
-    expect(block.ownerId).toBe('pkg-root');
+    expect(created.success).toBe(false);
+    expect(created.code).toBe('ILLEGAL_OWNERSHIP');
+    expect(created.affectedIds.semanticElementId).toBe('');
   });
 
   it('rejects adding element to the same diagram twice', () => {

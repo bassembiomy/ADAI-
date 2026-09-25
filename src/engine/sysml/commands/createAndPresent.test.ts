@@ -48,10 +48,6 @@ describe('CreateAndPresentElementCommand', () => {
     ownerId: 'pkg-root',
     isAbstract: false,
     isLeaf: false,
-    ownedPropertyIds: [],
-    ownedPortIds: [],
-    ownedOperationIds: [],
-    ownedConstraintIds: [],
   };
 
   const presentation: DiagramPresentation = {
@@ -103,6 +99,78 @@ describe('CreateAndPresentElementCommand', () => {
     expect(result.success).toBe(false);
     expect(result.state).toBe(repo);
     expect(result.state.elements['block-fail']).toBeUndefined();
+  });
+
+  it('rejects a presentation that references a different semantic identity', () => {
+    const result = dispatchSysmlCommand(repo, {
+      type: 'CreateAndPresentElement',
+      element: block,
+      presentation: { ...presentation, semanticElementId: 'different-element' },
+    }, uiContext);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('PRESENTATION_SEMANTIC_ID_MISMATCH');
+    expect(result.state).toBe(repo);
+  });
+
+  it('does not silently create a missing diagram when displaying an existing element', () => {
+    addSemanticElementV4(repo, block);
+    const result = dispatchSysmlCommand(repo, {
+      type: 'DisplayExistingElement',
+      presentation: { ...presentation, diagramId: 'missing-diagram' },
+    }, uiContext);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('DIAGRAM_NOT_FOUND');
+    expect(result.state.diagrams['missing-diagram']).toBeUndefined();
+  });
+
+  it('rejects displaying an existing element on an incompatible diagram', () => {
+    addSemanticElementV4(repo, block);
+    const part: PartProperty = {
+      id: 'part-existing',
+      name: 'existingPart',
+      metaclass: 'PartProperty',
+      namespace: [],
+      ownerId: block.id,
+      aggregation: 'composite',
+      typeId: block.id,
+      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+    addSemanticElementV4(repo, part);
+
+    const result = dispatchSysmlCommand(repo, {
+      type: 'DisplayExistingElement',
+      presentation: {
+        id: 'pres-part-on-req',
+        diagramId: 'diag-req-1',
+        semanticElementId: part.id,
+        bounds: { x: 0, y: 0, width: 100, height: 80 },
+      },
+    }, uiContext);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_DIAGRAM_ELEMENT');
+    expect(result.state).toBe(repo);
+  });
+
+  it('rejects a duplicate DisplayExistingElement without changing revision', () => {
+    addSemanticElementV4(repo, block);
+    const first = dispatchSysmlCommand(repo, {
+      type: 'DisplayExistingElement',
+      presentation,
+    }, uiContext);
+    expect(first.success).toBe(true);
+
+    const duplicate = dispatchSysmlCommand(first.state, {
+      type: 'DisplayExistingElement',
+      presentation: { ...presentation, id: 'pres-motor-duplicate' },
+    }, uiContext);
+
+    expect(duplicate.success).toBe(false);
+    expect(duplicate.code).toBe('ALREADY_PRESENTED');
+    expect(duplicate.revision).toBe(first.revision);
+    expect(duplicate.state).toBe(first.state);
   });
 
   it('rejects illegal ownership with ILLEGAL_OWNERSHIP and commits neither side', () => {
@@ -190,7 +258,7 @@ describe('CreateAndPresentElementCommand', () => {
     // Now try to present the same element on the same diagram again
     const duplicatePresentationCmd: CreateAndPresentElementCommand = {
       type: 'CreateAndPresentElement',
-      element: { ...block, id: 'block-motor-dup' },
+      element: block,
       presentation: {
         id: 'pres-duplicate-id',
         diagramId: 'diag-bdd-1',

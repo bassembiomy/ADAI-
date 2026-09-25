@@ -282,7 +282,11 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
       if (capability.kind === 'rename') {
         setLocalRenamingNodeId(targetNode.nodeId);
       }
-      if (capability.kind === 'createElement' || capability.kind === 'createDiagram') {
+      if (
+        capability.kind === 'createElement'
+        || capability.kind === 'createOwnedFeature'
+        || capability.kind === 'createDiagram'
+      ) {
         setExpandedNodeIds(prev => new Set([...prev, targetNode.nodeId]));
       }
       onExecuteCapability?.(capability, targetNode);

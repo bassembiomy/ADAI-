@@ -23,7 +23,8 @@ describe('ownershipPolicy', () => {
     ownerId: 'pkg-root',
     requirementId: 'REQ-001',
     text: 'System shall be safe',
-    status: 'Approved',
+    status: 'approved',
+    version: '1.0',
   };
 
   const block: Block = {
@@ -34,10 +35,6 @@ describe('ownershipPolicy', () => {
     ownerId: 'pkg-1',
     isAbstract: false,
     isLeaf: false,
-    ownedPropertyIds: [],
-    ownedPortIds: [],
-    ownedOperationIds: [],
-    ownedConstraintIds: [],
   };
 
   it('allows classifiers under packages but not under requirements', () => {

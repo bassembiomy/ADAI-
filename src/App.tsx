@@ -9739,8 +9739,8 @@ const ADIA = () => {
     }
     if (stereotype === 'requirement' && parentRequirement) {
       handleExecuteSysmlCommand({
-        type: 'createRelationship',
-        relationship: {
+        type: 'createElement',
+        element: {
           id: uuidv4(),
           sourceId: parentRequirement.id,
           targetId: newBlock.id,

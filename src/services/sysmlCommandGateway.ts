@@ -328,7 +328,7 @@ export function projectLegacyDiagram(
         name: p.name,
         direction: p.direction,
         type: p.typeId,
-        kind: p.kind === 'proxy' ? ('proxy' as const) : ('standard' as const),
+        kind: p.kind,
         isConjugated: p.isConjugated,
         multiplicity: formatMultiplicityText(p.multiplicity),
       }));

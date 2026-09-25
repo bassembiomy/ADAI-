@@ -22,7 +22,29 @@ export function handleCreateElement(
     };
   }
 
+  const owner = cmd.element.ownerId ? state.elements[cmd.element.ownerId] : null;
+  if (cmd.element.ownerId && !owner) {
+    return {
+      success: false,
+      code: 'ILLEGAL_OWNERSHIP',
+      message: `Owner element "${cmd.element.ownerId}" does not exist.`,
+      nextState: state,
+    };
+  }
+  const ownershipDecision = evaluateOwnership(owner ?? null, cmd.element.metaclass);
+  if (!ownershipDecision.allowed) {
+    return {
+      success: false,
+      code: ownershipDecision.code ?? 'ILLEGAL_OWNERSHIP',
+      message: ownershipDecision.message,
+      nextState: state,
+    };
+  }
+
   const elements = { ...state.elements, [cmd.element.id]: cmd.element };
+  const diagrams = cmd.element.metaclass === 'Diagram'
+    ? { ...state.diagrams, [cmd.element.id]: cmd.element as Diagram }
+    : state.diagrams;
 
   // Update indexes
   const byOwner = { ...state.indexes.byOwner };
@@ -42,6 +64,7 @@ export function handleCreateElement(
     ...state,
     revision: state.revision + 1,
     elements,
+    diagrams,
     indexes: {
       ...state.indexes,
       byOwner,
@@ -120,6 +143,15 @@ export function handleCreateAndPresentElement(
   state: SysmlRepositoryV4,
   cmd: CreateAndPresentElementCommand
 ): { success: boolean; code?: string; message?: string; nextState: SysmlRepositoryV4; affectedIds?: string[] } {
+  if (cmd.presentation.semanticElementId !== cmd.element.id) {
+    return {
+      success: false,
+      code: 'PRESENTATION_SEMANTIC_ID_MISMATCH',
+      message: `Presentation semantic element "${cmd.presentation.semanticElementId}" must match created element "${cmd.element.id}".`,
+      nextState: state,
+    };
+  }
+
   // 1. Validate ownership
   const owner = cmd.element.ownerId ? state.elements[cmd.element.ownerId] : null;
   if (cmd.element.ownerId && !owner) {
@@ -303,6 +335,25 @@ export function handleMoveElement(
       success: false,
       code: 'CIRCULAR_OWNERSHIP',
       message: `Element cannot own itself.`,
+      nextState: state,
+    };
+  }
+
+  const newOwner = cmd.newOwnerId === null ? null : state.elements[cmd.newOwnerId];
+  if (cmd.newOwnerId !== null && !newOwner) {
+    return {
+      success: false,
+      code: 'OWNER_NOT_FOUND',
+      message: `Owner element "${cmd.newOwnerId}" does not exist.`,
+      nextState: state,
+    };
+  }
+  const ownershipDecision = evaluateOwnership(newOwner, current.metaclass);
+  if (!ownershipDecision.allowed) {
+    return {
+      success: false,
+      code: ownershipDecision.code ?? 'ILLEGAL_OWNERSHIP',
+      message: ownershipDecision.message,
       nextState: state,
     };
   }

@@ -112,7 +112,11 @@ describe('UML and SysML Port Semantics and Rules', () => {
     const namedContext: PortValidationContext = {
       ...context,
       getOwnedElements: () => [
-        { id: 'existing', name: 'dataPort', metaclass: 'Port', namespace: [], ownerId: 'blk-controller' } as Port,
+        {
+          id: 'existing', name: 'dataPort', metaclass: 'Port', portKind: 'umlPort', namespace: [],
+          ownerId: 'blk-controller', typeId: 'ifb-can', direction: 'inout', isConjugated: false,
+          multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+        } as Port,
       ],
     };
     const diagnostics = validatePort({

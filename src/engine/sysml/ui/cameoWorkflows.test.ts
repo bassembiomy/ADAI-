@@ -6,7 +6,9 @@ import {
 } from './cameoWorkflows';
 import {
   createEmptyRepositoryV4,
+  addSemanticElementV4,
   type Block,
+  type Diagram,
   type DiagramPresentation,
 } from '../domain';
 import { createTransactionManager } from '../commands/dispatcher';
@@ -21,7 +23,17 @@ describe('Cameo-Style Command-Only UI Workflows (Task 12)', () => {
       namespace: [],
       ownerId: 'pkg-root',
     };
-    repo.elements[blk.id] = blk;
+    addSemanticElementV4(repo, blk);
+    const diagram: Diagram = {
+      id: 'bdd-powertrain',
+      name: 'Powertrain BDD',
+      metaclass: 'Diagram',
+      diagramKind: 'bdd',
+      namespace: [],
+      ownerId: 'pkg-root',
+      presentationIds: [],
+    };
+    addSemanticElementV4(repo, diagram);
     const initialElementCount = Object.keys(repo.elements).length;
 
     const mgr = createTransactionManager(repo);

@@ -9,6 +9,7 @@ import {
   type ActorDefinition,
   type SubjectDefinition,
   type UseCaseDefinition,
+  type PortDefinition,
   type ExtensionPoint,
   type DiagramReference,
   type UseCaseRelationshipKind,
@@ -309,7 +310,11 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrat
       continue;
     }
     const ports = arrayOfRecords(legacy.ports).map(port => ({
-      id: text(port.id), name: text(port.name), kind: port.kind === 'proxy' ? 'proxy' as const : 'full' as const,
+      id: text(port.id), name: text(port.name), kind: (
+        port.kind === 'proxy' || port.kind === 'full' || port.kind === 'flow' || port.kind === 'standard'
+          ? port.kind
+          : 'standard'
+      ) as PortDefinition['kind'],
       typeId: text(port.type), direction: direction(port.direction), isConjugated: Boolean(port.isConjugated),
       multiplicity: safeMultiplicity(port.multiplicity),
     })).filter(port => port.id);

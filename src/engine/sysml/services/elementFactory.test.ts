@@ -23,10 +23,6 @@ describe('elementFactory', () => {
       ownerId: 'pkg-root',
       isAbstract: false,
       isLeaf: false,
-      ownedPropertyIds: [],
-      ownedPortIds: [],
-      ownedOperationIds: [],
-      ownedConstraintIds: [],
     };
     addSemanticElementV4(repo, motorBlock);
   });

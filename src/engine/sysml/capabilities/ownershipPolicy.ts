@@ -21,6 +21,7 @@ export interface ElementCapability {
 
 export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
   Model: [
+    'Diagram',
     'Package',
     'Block',
     'InterfaceBlock',
@@ -43,6 +44,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Constraint',
   ],
   Package: [
+    'Diagram',
     'Package',
     'Block',
     'InterfaceBlock',
@@ -65,6 +67,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Constraint',
   ],
   Block: [
+    'Diagram',
     'PartProperty',
     'ReferenceProperty',
     'ValueProperty',
@@ -78,6 +81,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Rationale',
   ],
   InterfaceBlock: [
+    'Diagram',
     'FlowProperty',
     'Port',
     'Operation',
@@ -87,6 +91,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Rationale',
   ],
   ConstraintBlock: [
+    'Diagram',
     'ConstraintProperty',
     'Constraint',
     'Parameter',
@@ -95,6 +100,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Rationale',
   ],
   AssociationBlock: [
+    'Diagram',
     'PartProperty',
     'ReferenceProperty',
     'ValueProperty',
@@ -108,6 +114,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Rationale',
   ],
   Requirement: [
+    'Diagram',
     'Requirement',
     'Comment',
     'Rationale',
@@ -135,11 +142,13 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Constraint',
   ],
   UseCase: [
+    'Diagram',
     'Comment',
     'Rationale',
     'Constraint',
   ],
   Activity: [
+    'Diagram',
     'ActivityPartition',
     'Parameter',
     'Comment',
