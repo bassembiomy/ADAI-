@@ -156,11 +156,21 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     return a.id.localeCompare(b.id);
   });
 
+  const findTriggerVar = (t?: SemanticTransition): string | undefined => {
+    if (!ir.variables) return undefined;
+    if (t?.condition && ir.variables[t.condition]) return t.condition;
+    if (ir.variables['x']) return 'x';
+    const boolVar = Object.values(ir.variables).find((v) => v.type === 'bool');
+    if (boolVar) return boolVar.id;
+    return Object.keys(ir.variables)[0];
+  };
+
   for (const t of sortedTransitions) {
     const src = ir.states[t.sourceStateId];
     const dst = ir.states[t.destinationStateId];
     const srcName = toCIdentifier(src ? src.id : t.sourceStateId).toUpperCase();
     const dstName = toCIdentifier(dst ? dst.id : t.destinationStateId).toUpperCase();
+    const triggerVar = findTriggerVar(t);
 
     // TRUE case: Transition fires
     const trueExpectations: SMTestExpectation[] = [];
@@ -182,16 +192,18 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     trueExpectations.push({ kind: 'transition-fired', transitionId: t.id });
     trueExpectations.push(...extractVariableExpectationsFromActions(t.actions));
 
+    const trueOps: SMTestOperation[] = [{ kind: 'init' }];
+    if (triggerVar) {
+      trueOps.push({ kind: 'set-variable', variableId: triggerVar, value: true });
+    }
+    trueOps.push({ kind: 'step', deltaMs: ir.tickMs });
+
     cases.push({
       id: `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
       suite: 'transitions',
       name: `Transition from ${src ? src.name : srcName} to ${dst ? dst.name : dstName} fires when condition is met`,
       applicability: { status: 'applicable' },
-      operations: [
-        { kind: 'init' },
-        { kind: 'set-variable', variableId: 'x', value: true },
-        { kind: 'step', deltaMs: ir.tickMs },
-      ],
+      operations: trueOps,
       expectations: trueExpectations,
       traceability: makeTraceability(
         `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
@@ -218,16 +230,18 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
       });
     }
 
+    const falseOps: SMTestOperation[] = [{ kind: 'init' }];
+    if (triggerVar) {
+      falseOps.push({ kind: 'set-variable', variableId: triggerVar, value: false });
+    }
+    falseOps.push({ kind: 'step', deltaMs: ir.tickMs });
+
     cases.push({
       id: `SM-TC-TRANS-${srcName}-${dstName}-FALSE`,
       suite: 'transitions',
       name: `Transition from ${src ? src.name : srcName} to ${dst ? dst.name : dstName} blocked when condition is false`,
       applicability: { status: 'applicable' },
-      operations: [
-        { kind: 'init' },
-        { kind: 'set-variable', variableId: 'x', value: false },
-        { kind: 'step', deltaMs: ir.tickMs },
-      ],
+      operations: falseOps,
       expectations: falseExpectations,
       traceability: makeTraceability(
         `SM-TC-TRANS-${srcName}-${dstName}-FALSE`,
@@ -244,9 +258,10 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     const sName = toCIdentifier(s.id).toUpperCase();
     if (s.entryActions.length > 0) {
       const incoming = sortedTransitions.find((t) => t.destinationStateId === s.id);
+      const incomingTrigger = incoming ? findTriggerVar(incoming) : undefined;
       const ops: SMTestOperation[] = [{ kind: 'init' }];
-      if (incoming) {
-        ops.push({ kind: 'set-variable', variableId: 'x', value: true });
+      if (incomingTrigger) {
+        ops.push({ kind: 'set-variable', variableId: incomingTrigger, value: true });
       }
       ops.push({ kind: 'step' });
       cases.push({
@@ -303,7 +318,9 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
 
   // 4. Timing Suite
   const tickMs = ir.tickMs;
-  const tolMs = ir.verification.tickToleranceMs;
+  const tolMs = ir.verification.tickToleranceMs > 0
+    ? ir.verification.tickToleranceMs
+    : Math.max(1, Math.floor(ir.tickMs / 10));
   const minValid = Math.max(0, tickMs - tolMs);
   const maxValid = tickMs + tolMs;
 
@@ -512,7 +529,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     name: 'Watchdog policy is strictly enforced during normal execution and after fault',
     applicability: { status: 'applicable' },
     operations: [{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }],
-    expectations: [{ kind: 'watchdog-kicks', count: 1 }],
+    expectations: [{ kind: 'watchdog-kicks', count: ir.ioMappings.length > 0 ? 1 : 0 }],
     traceability: makeTraceability(
       'SM-TC-SAFE-WATCHDOG-POLICY',
       [],

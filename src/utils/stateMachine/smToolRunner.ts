@@ -63,6 +63,22 @@ export interface ToolRunResult {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024; // 1 MB
 
+const getEnhancedEnv = (customEnv?: Readonly<Record<string, string>>): NodeJS.ProcessEnv => {
+  const base: Record<string, string | undefined> = { ...process.env, ...(customEnv ?? {}) };
+  if (process.platform === 'win32') {
+    const fs = getNodeBuiltin('node:fs') || getNodeBuiltin('fs');
+    const path = getNodeBuiltin('node:path') || getNodeBuiltin('path');
+    if (fs && path) {
+      const bundledBin = path.resolve(process.cwd(), 'toolchains', 'w64devkit', 'w64devkit', 'bin');
+      if (fs.existsSync(path.join(bundledBin, 'gcc.exe'))) {
+        base.PATH = `${bundledBin};${base.PATH ?? ''}`;
+        base.Path = `${bundledBin};${base.Path ?? ''}`;
+      }
+    }
+  }
+  return base as NodeJS.ProcessEnv;
+};
+
 const probeToolVersion = async (
   executable: string,
   versionArgs: readonly string[],
@@ -79,7 +95,7 @@ const probeToolVersion = async (
       const proc = spawnFn(executable, [...versionArgs], {
         cwd,
         shell: false,
-        env: env ? { ...process.env, ...env } : process.env,
+        env: getEnhancedEnv(env),
         windowsHide: true,
       });
 
@@ -179,7 +195,7 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
       child = spawnFn(request.executable, [...request.args], {
         cwd,
         shell: false,
-        env: request.env ? { ...process.env, ...request.env } : process.env,
+        env: getEnhancedEnv(request.env),
         windowsHide: true,
       });
     } catch (err) {

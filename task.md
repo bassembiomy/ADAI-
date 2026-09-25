@@ -53,12 +53,12 @@
   - [x] Step 4: Extend the architecture verifier
   - [x] Step 5: Run architecture and release gates
   - [x] Step 6: Commit
-- [ ] Task 9: Prove Code-Generation Isolation and Compatibility
-  - [ ] Step 1: Write a deterministic generator-isolation test
-  - [ ] Step 2: Run the isolation and golden tests
-  - [ ] Step 3: Add a release script
-  - [ ] Step 4: Run the complete code-generation verification
-  - [ ] Step 5: Commit
+- [x] Task 9: Prove Code-Generation Isolation and Compatibility
+  - [x] Step 1: Write a deterministic generator-isolation test
+  - [x] Step 2: Run the isolation and golden tests
+  - [x] Step 3: Add a release script
+  - [x] Step 4: Run the complete code-generation verification
+  - [x] Step 5: Commit
 - [ ] Task 10: Verify the Complete Cameo-Style User Workflow
   - [ ] Step 1: Add the failing end-to-end workflow
   - [ ] Step 2: Run the new E2E test and verify it fails before final UI wiring

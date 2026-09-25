@@ -103,6 +103,10 @@ async function verifyRelease() {
   log('TEST:SYSML:RELEASE', 'Executing release gate (SysML + Reporting + TypeScript)...');
   runCommand('npm', ['run', 'test:sysml:release']);
 
+  // 4b. SysML Presentation Isolation & Codegen Verification
+  log('VERIFY:REPOSITORY-CODEGEN-ISOLATION', 'Verifying code-generation isolation from SysML presentations...');
+  runCommand('npm', ['run', 'verify:repository-codegen-isolation']);
+
   // 5. OPM Qualification & Codegen Gate
   log('TEST:OPM', 'Executing OPM qualification and compiled C host gates...');
   runCommand('npm', ['run', 'test:opm:qualification']);
