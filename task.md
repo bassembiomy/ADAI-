@@ -65,7 +65,7 @@
   - [x] Step 3: Complete UI selectors and feedback wiring without adding semantic mutation paths
   - [x] Step 4: Record four-level compliance evidence
   - [x] Step 5: Run all release checks
-  - [ ] Step 6: Commit
+  - [x] Step 6: Commit
 - [x] Final Verification
   - [x] Confirm `git status --short` contains no unintended files.
   - [x] Confirm one Block shown on two diagrams has one semantic ID and two presentation memberships.
