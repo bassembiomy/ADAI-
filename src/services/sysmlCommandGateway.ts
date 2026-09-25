@@ -53,8 +53,11 @@ import {
 import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 
+import { resolveType } from '../engine/sysml/services/typeResolution';
 export { resolveType, type ResolvedTypeOutcome, type TypeResolutionOptions } from '../engine/sysml/services/typeResolution';
+import { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
+export type GatewayCreateNewTypeAction = CreateNewTypeAction & { type: 'CreateNewType' };
 export * from '../engine/sysml/commands/presentationCommands';
 export {
   dispatchSysmlCommand,
@@ -2106,4 +2109,57 @@ export function projectLegacyViewWithInterchangeReport(
  */
 export function projectOpmWithInterchangeReport(repository: SysmlRepository) {
   return { projection: projectSysmlToOpm(repository), interchangeReport: assessOpmInterchangeLoss(repository) };
+}
+
+export interface TypedUsageInput {
+  ownerId: string;
+  name: string;
+  typeId: string;
+  kind: 'part' | 'sharedPart' | 'reference';
+}
+
+export type TypedUsageOutcome =
+  | {
+      ok: true;
+      command: SysmlEditorCommand;
+      type: SysmlDefinition | import('../engine/sysml/domain/base').SemanticElement;
+    }
+  | {
+      ok: false;
+      code: 'TYPE_NOT_FOUND';
+      message: string;
+      candidates: TypeCandidate[];
+      action: GatewayCreateNewTypeAction;
+    };
+
+export function createTypedUsageCommand(
+  repo: SysmlRepository,
+  input: TypedUsageInput
+): TypedUsageOutcome {
+  const outcome = resolveType(input.typeId, repo, { expectedMetaclasses: ['Block'] });
+  if (!outcome.found) {
+    return {
+      ok: false,
+      code: 'TYPE_NOT_FOUND',
+      message: `Type '${input.typeId}' not found.`,
+      candidates: outcome.candidates,
+      action: { ...outcome.action, type: 'CreateNewType' as const },
+    };
+  }
+
+  const part: PartUsage = {
+    id: `part-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: input.name,
+    ownerId: input.ownerId,
+    typeId: outcome.element.id,
+    kind: 'part',
+    aggregation: input.kind === 'reference' ? 'reference' : input.kind === 'sharedPart' ? 'shared' : 'composite',
+    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+  };
+
+  return {
+    ok: true,
+    command: { type: 'createElement', element: part },
+    type: outcome.element,
+  };
 }

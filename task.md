@@ -40,12 +40,12 @@
   - [x] Step 3: Replace update handlers with command dispatch
   - [x] Step 4: Run SysML tests and TypeScript
   - [x] Step 5: Commit
-- [ ] Task 7: Route Parts, Ports, and Connectors Through the Gateway
-  - [ ] Step 1: Add failing tests for typed property and port creation
-  - [ ] Step 2: Run focused tests and verify failures where UI still bypasses the repository
-  - [ ] Step 3: Replace part, port, property, and connector setters
-  - [ ] Step 4: Run port, gateway, and conformance tests
-  - [ ] Step 5: Commit
+- [x] Task 7: Route Parts, Ports, and Connectors Through the Gateway
+  - [x] Step 1: Add failing tests for typed property and port creation
+  - [x] Step 2: Run focused tests and verify failures where UI still bypasses the repository
+  - [x] Step 3: Replace part, port, property, and connector setters
+  - [x] Step 4: Run port, gateway, and conformance tests
+  - [x] Step 5: Commit
 - [ ] Task 8: Remove Legacy Semantic Writeback and Enforce the Boundary
   - [ ] Step 1: Add the repository/presentation release gate
   - [ ] Step 2: Run the release gate before removing the writeback

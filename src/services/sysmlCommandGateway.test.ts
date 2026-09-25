@@ -1017,8 +1017,11 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     const block = makeBlock('blk-motor', 'Motor');
     const req: RequirementDefinition = {
       id: 'req-power',
+      requirementId: 'REQ-power',
       name: 'PowerRequirement',
       text: 'Must provide power',
+      status: 'draft',
+      version: '1.0',
       kind: 'requirement',
       namespace: ['model'],
       ownerId: 'model',

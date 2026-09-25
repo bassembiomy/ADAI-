@@ -39,9 +39,13 @@ function explorerKindToMetaclass(kind: string): MetaclassKind {
     case 'flowProperty':
       return 'FlowProperty';
     case 'fullPort':
+    case 'FullPort':
     case 'proxyPort':
+    case 'ProxyPort':
     case 'flowPort':
+    case 'FlowPort':
     case 'port':
+    case 'Port':
       return 'Port';
     case 'package':
       return 'Package';
@@ -83,6 +87,9 @@ function canonicalKindToExplorerKind(kind: string): string {
     case 'ConstraintProperty': return 'constraintProperty';
     case 'FlowProperty': return 'flowProperty';
     case 'Port': return 'port';
+    case 'ProxyPort': return 'proxyPort';
+    case 'FullPort': return 'fullPort';
+    case 'FlowPort': return 'flowPort';
     default: return kind;
   }
 }
@@ -818,6 +825,18 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 code: 'PART_TYPE_REQUIRED',
                 severity: 'error',
                 message: 'A valid block type is required to instantiate a part.',
+              });
+              return { committed: false, revision: repo.revision, diagnostics };
+            }
+          }
+
+          if (canonicalKindToExplorerKind(command.elementKind) === 'proxyPort') {
+            const interfaceType = Object.values(repo.definitions).find(definition => definition.kind === 'interface');
+            if (!interfaceType) {
+              diagnostics.push({
+                code: 'TYPE_NOT_FOUND',
+                severity: 'error',
+                message: 'Proxy Port requires an existing Interface Block type. Create an Interface Block explicitly, then retry.',
               });
               return { committed: false, revision: repo.revision, diagnostics };
             }

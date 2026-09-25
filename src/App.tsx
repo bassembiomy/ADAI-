@@ -129,12 +129,13 @@ import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, clon
 import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
 import { analyzeMutation, createHistory } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
-import { createEmptyRepository, parseMultiplicity, type SysmlRelationship } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
@@ -6034,6 +6035,7 @@ const ADIA = () => {
   } | null>(null);
 
   // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
+  const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<CreateNewTypeAction | null>(null);
   const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
     impact: import('./engine/sysml/mutations').MutationImpact;
     transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
@@ -10006,79 +10008,87 @@ const ADIA = () => {
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
-    addToHistory();
-    const defId = uuidv4();
-    const defName = `Part_${parts.length + 1}_Def`;
-    const defBlock: BlockData = {
-      id: defId,
-      name: defName,
-      stereotype: 'block',
-      classes: [],
-      x: 100,
-      y: 100,
-      width: 150,
-      height: 100,
-      properties: [],
-      operations: [],
-      constraints: [],
-      ports: []
-    };
-    const nextBlocks = [...blocks, defBlock];
-
-    const newPart: PartData = {
-      id: uuidv4(),
+    const blockDefs = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === 'block');
+    const targetTypeId = blockDefs.length > 0 ? blockDefs[0].id : 'Block';
+    const resolved = createTypedUsageCommand(canonicalSysmlRepository, {
+      ownerId: currentLayerId,
       name: `part_${parts.length + 1}`,
-      blockId: currentLayerId,
-      typeId: defId,
+      typeId: targetTypeId,
+      kind: 'part',
+    });
+
+    if (!resolved.ok) {
+      addError('error', resolved.message, 'SysML');
+      setPendingCreateNewTypeAction(resolved.action);
+      return;
+    }
+
+    const name = `part_${parts.length + 1}`;
+    const part = createPartUsage({
+      ownerId: currentLayerId,
+      typeId: resolved.type.id,
+      name,
       aggregation: 'composite',
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
-      width: 150,
-      height: 100,
-      multiplicity: '1'
-    };
-    const reconciled = reconcilePropertyUsages(nextBlocks, [...parts, newPart], connectors, currentLayerId, 'usage');
-    setParts(reconciled.parts);
-    setConnectors(reconciled.connectors);
-    setBlocks(reconciled.blocks);
-    setSelectedIds([newPart.id]);
-    addError('info', `Created part: ${newPart.name}`);
-  }, [parts, connectors, currentLayerId, snapEnabled, addError, addToHistory, blocks]);
+      existingNames: parts.map(p => p.name),
+    });
+
+    const result = handleExecuteSysmlCommand({
+      type: 'createElement',
+      element: part,
+      presentation: {
+        x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+        y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+        width: 150,
+        height: 100,
+      },
+    });
+
+    if (result.committed) {
+      setSelectedIds([part.id]);
+      addError('info', `Created part: ${part.name}`);
+    } else {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, currentLayerId, parts, snapEnabled, handleExecuteSysmlCommand, addError]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
-    const current = parts.find(part => part.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-
     const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
     if (isPureGeometricUpdate) {
-      setParts(prev => prev.map(p => p.id === id ? candidate : p));
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      handleExecuteSysmlCommand({ type: 'updatePresentation', elementId: id, presentation });
       return;
     }
 
-    const validName = /^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate.name.trim());
-    const validType = Boolean(candidate.typeId && blocks.some(block => block.id === candidate.typeId && block.stereotype === 'block'));
-    let validMultiplicity = true;
-    try { parseMultiplicity(candidate.multiplicity || '1'); } catch { validMultiplicity = false; }
-    if (!validName || !validType || !validMultiplicity) {
-      addError('error', !validName
-        ? `Invalid SysML part name "${candidate.name}".`
-        : !validType
-          ? `Part ${candidate.name || id} must reference a block type.`
-          : `Invalid multiplicity "${candidate.multiplicity || ''}" for part ${candidate.name || id}.`, 'SysML', id);
-      return;
+    if (updates.typeId) {
+      const resolved = resolveType(updates.typeId, canonicalSysmlRepository, { expectedMetaclasses: ['Block'] });
+      if (!resolved.found) {
+        addError('error', `Part must reference an existing block type.`, 'SysML', id);
+        return;
+      }
     }
-    const reconciled = reconcilePropertyUsages(
-      blocks,
-      parts.map(p => p.id === id ? candidate : p),
-      connectors,
-      candidate.blockId || currentLayerId,
-      'usage',
-    );
-    setParts(reconciled.parts);
-    setBlocks(reconciled.blocks);
-    setConnectors(reconciled.connectors);
-  }, [addError, blocks, connectors, currentLayerId, parts]);
+
+    const patch: Record<string, unknown> = {};
+    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.typeId !== undefined) patch.typeId = updates.typeId;
+    if (updates.aggregation !== undefined) patch.aggregation = updates.aggregation;
+    if (updates.multiplicity !== undefined) {
+      try {
+        patch.multiplicity = parseMultiplicity(updates.multiplicity || '1');
+      } catch {
+        addError('error', `Invalid multiplicity "${updates.multiplicity}" for part.`, 'SysML', id);
+        return;
+      }
+    }
+
+    const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: id, patch });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
@@ -10292,22 +10302,28 @@ const ADIA = () => {
             return;
           }
 
-          const newConnector: ConnectorData = {
+          const sourcePortQualified = connectorSource.partId === currentLayerId
+            ? connectorSource.portId
+            : `${connectorSource.partId}::${connectorSource.portId}`;
+          const targetPortQualified = partId === currentLayerId
+            ? portId
+            : `${partId}::${portId}`;
+          const newConnector: ConnectorUsage = {
             id: uuidv4(),
-            sourcePartId: connectorSource.partId,
-            sourcePortId: connectorSource.portId,
-            targetPartId: partId,
-            targetPortId: portId,
+            ownerId: currentLayerId,
+            sourcePortId: sourcePortQualified,
+            targetPortId: targetPortQualified,
             kind: connectorSource.partId === currentLayerId || partId === currentLayerId ? 'delegation' : 'assembly'
           };
-          const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, newConnector, currentLayerId);
-          if (!validation.valid) {
-            addError('error', `Invalid connector: ${validation.reason}`);
-            return;
+          const result = handleExecuteSysmlCommand({
+            type: 'createElement',
+            element: newConnector,
+          });
+          if (result.committed) {
+            addError('info', 'Created connection');
+          } else {
+            result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
           }
-          addToHistory();
-          setConnectors(prev => [...prev, newConnector]);
-          addError('info', 'Created connection');
         }
         setIsCreatingConnector(false);
         setConnectorSource(null);
@@ -10337,16 +10353,15 @@ const ADIA = () => {
   }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    const current = connectors.find(connector => connector.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, candidate, currentLayerId);
-    if (!validation.valid) {
-      addError('error', `Invalid connector update: ${validation.reason}`);
-      return;
+    const result = handleExecuteSysmlCommand({
+      type: 'updateElement',
+      elementId: id,
+      patch: updates,
+    });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-    setConnectors(prev => prev.map(c => c.id === id ? candidate : c));
-  }, [connectors, blocks, parts, currentLayerId, addError]);
+  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();
