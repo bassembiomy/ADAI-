@@ -61,10 +61,13 @@ export function buildCreatePartUsageCommand(
   repository: SysmlRepository,
   usage: PartUsage,
   presentation?: { x?: number; y?: number; width?: number; height?: number },
+  diagramId?: string,
 ): SysmlMutationPlan {
   const propertyId = createUniquePropertyId(repository, usage.ownerId, usage.id, usage.propertyId);
   const partUsage: PartUsage = { ...usage, propertyId };
-  const commands: SysmlMutationCommand[] = [{ type: 'createElement', element: partUsage, presentation }];
+  const commands: SysmlMutationCommand[] = [diagramId
+    ? { type: 'createAndPresent', element: partUsage, diagramId, presentation: presentation ?? {} }
+    : { type: 'createElement', element: partUsage, presentation }];
   const owner = repository.definitions[usage.ownerId];
   if (owner?.kind === 'block') {
     commands.push({

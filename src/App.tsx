@@ -6164,8 +6164,12 @@ const ADIA = () => {
   ) => {
     const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
     const complete = projectLegacyDiagram(repository, coordinates, diagramPresentations);
-    applyCanonicalSysmlResult({ view: projectDiagramScopedCanvasView(complete, activeDiagramId, diagramPresentations) });
+    const contextElementIds = diagramMode === 'ibd' ? [currentLayerId] : [];
+    applyCanonicalSysmlResult({ view: projectDiagramScopedCanvasView(complete, activeDiagramId, diagramPresentations, contextElementIds) });
   }, [diagramMode, currentLayerId, applyCanonicalSysmlResult]);
+  useEffect(() => {
+    projectCanonicalAppView(canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations);
+  }, [canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations, projectCanonicalAppView]);
   // Explicit per-baseline deletion authorizations granted from the governance
   // panel. Projection-only state: it never mutates semantics by itself; the
   // gateway still requires a confirmed impact hash for destructive mutations.
@@ -9963,7 +9967,7 @@ const ADIA = () => {
       y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
       width: 150,
       height: 100,
-    }));
+    }, currentLayerId));
 
     if (result.committed) {
       setSelectedIds([part.id]);
@@ -10562,10 +10566,15 @@ const ADIA = () => {
         else { side = 'right'; offset = Math.max(0, Math.min(1, relY / elH)); }
 
         if (isContext && block) {
-          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset));
+          const presentationExists = sysmlDiagramPresentations[currentLayerId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset, {
+            presentationExists,
+            bounds: { x: elX, y: elY, width: elW, height: elH },
+          }));
           if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         } else if (part) {
-          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset));
+          const presentationExists = sysmlDiagramPresentations[currentLayerId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset, { presentationExists }));
           if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         }
       }
@@ -10702,7 +10711,7 @@ const ADIA = () => {
       // Update drag offset to current position for next frame
       setDragOffset({ x: worldX, y: worldY });
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
     setBddFeatureDrag(null);

@@ -12,7 +12,7 @@ describe('diagram-scoped SysML presentation commands', () => {
   });
 
   it('persists dragged port layout on the selected diagram presentation only', () => {
-    expect(buildPortLayoutCommand('ibd-vehicle', 'left-motor', 'p-control', 'right', 1.2)).toEqual({
+    expect(buildPortLayoutCommand('ibd-vehicle', 'left-motor', 'p-control', 'right', 1.2, { presentationExists: true })).toEqual({
       type: 'updatePresentation', diagramId: 'ibd-vehicle', elementId: 'left-motor', presentation: {},
       portLayouts: { 'p-control': { side: 'right', offset: 1 } },
     });
@@ -33,11 +33,38 @@ describe('diagram-scoped SysML presentation commands', () => {
       multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
     const state = createSysmlGatewayState(repository, {}, { 'ibd-vehicle': { elementIds: ['left-motor'] } });
-    const result = executeSysmlCommand(state, buildPortLayoutCommand('ibd-vehicle', 'left-motor', 'p-control', 'right', 0.75));
+    const result = executeSysmlCommand(state, buildPortLayoutCommand('ibd-vehicle', 'left-motor', 'p-control', 'right', 0.75, { presentationExists: true }));
 
     expect(result.committed).toBe(true);
     expect(result.diagramPresentations['ibd-vehicle'].presentations['left-motor'].portLayouts).toEqual({ 'p-control': { side: 'right', offset: 0.75 } });
     expect(result.repository.usages['left-motor']).not.toHaveProperty('portLayouts');
     expect(result.view.parts[0]?.portLayouts).toEqual({ 'p-control': { side: 'right', offset: 0.75 } });
+  });
+
+  it('creates the missing IBD context presentation before saving a dragged Block port layout', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.vehicle = {
+      id: 'vehicle', name: 'Vehicle', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [],
+      ports: [{
+        id: 'p-control', name: 'control', kind: 'standard', typeId: 'if-control', direction: 'in', isConjugated: false,
+        multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+      }],
+      operations: [], constraints: [],
+    };
+    const originalRepository = structuredClone(repository);
+    const state = createSysmlGatewayState(repository);
+
+    const result = executeSysmlCommand(state, buildPortLayoutCommand('vehicle-ibd', 'vehicle', 'p-control', 'right', 0.75, {
+      bounds: { x: 50, y: 50, width: 1200, height: 800 },
+    }));
+
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect(result.diagramPresentations['vehicle-ibd']).toMatchObject({
+      elementIds: ['vehicle'],
+      presentations: { vehicle: { semanticElementId: 'vehicle', bounds: { x: 50, y: 50, width: 1200, height: 800 }, portLayouts: { 'p-control': { side: 'right', offset: 0.75 } } } },
+    });
+    expect(result.repository).toEqual(originalRepository);
+    expect(result.coordinates.vehicle).toBeUndefined();
   });
 });

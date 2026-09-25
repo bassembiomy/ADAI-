@@ -24,12 +24,27 @@ export function buildPortLayoutCommand(
   portId: string,
   side: PortLayoutSide,
   offset: number,
+  options: { presentationExists?: boolean; bounds?: { x?: number; y?: number; width?: number; height?: number } } = {},
 ): SysmlEditorCommand {
-  return {
+  const updateCommand: SysmlEditorCommand = {
     type: 'updatePresentation',
     diagramId,
     elementId,
     presentation: {},
     portLayouts: { [portId]: { side, offset: Math.max(0, Math.min(1, offset)) } },
+  };
+  if (options.presentationExists) return updateCommand;
+
+  return {
+    type: 'batch',
+    commands: [
+      {
+        type: 'addToDiagram',
+        diagramId,
+        elementIds: [elementId],
+        ...(options.bounds ? { coordinates: { [elementId]: options.bounds } } : {}),
+      },
+      updateCommand,
+    ],
   };
 }

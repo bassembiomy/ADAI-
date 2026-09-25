@@ -110,4 +110,38 @@ describe('buildCreatePartDefinitionCommand', () => {
       { id: propertyId, name: 'leftMotor', kind: 'part', typeId: 'motor' },
     ]);
   });
+
+  it('creates a PartUsage, owner PropertyDefinition, and active IBD presentation atomically', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.vehicle = {
+      id: 'vehicle', name: 'Vehicle', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions.motor = {
+      id: 'motor', name: 'Motor', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const before = structuredClone(repository);
+    const state = createSysmlGatewayState(repository);
+    const result = executeSysmlCommand(state, buildCreatePartUsageCommand(repository, {
+      id: 'left-motor', kind: 'part', name: 'leftMotor', ownerId: 'vehicle', typeId: 'motor', aggregation: 'composite',
+      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    }, { x: 120, y: 220, width: 150, height: 100 }, 'vehicle-ibd'));
+
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect(result.repository.usages['left-motor']).toMatchObject({ kind: 'part', propertyId: expect.any(String) });
+    expect(result.repository.definitions.vehicle?.kind === 'block' && result.repository.definitions.vehicle.properties)
+      .toMatchObject([{ name: 'leftMotor', kind: 'part', typeId: 'motor' }]);
+    expect(result.diagramPresentations['vehicle-ibd']).toMatchObject({
+      elementIds: ['left-motor'],
+      presentations: { 'left-motor': { semanticElementId: 'left-motor', bounds: { x: 120, y: 220, width: 150, height: 100 } } },
+    });
+    expect(result.coordinates['left-motor']).toBeUndefined();
+    expect(state.repository).toEqual(before);
+
+    const undone = executeSysmlCommand(result, { type: 'undo' });
+    expect(undone.repository.usages['left-motor']).toBeUndefined();
+    expect(undone.repository.definitions.vehicle?.kind === 'block' && undone.repository.definitions.vehicle.properties).toHaveLength(0);
+    expect(undone.diagramPresentations['vehicle-ibd']?.elementIds).not.toContain('left-motor');
+  });
 });
