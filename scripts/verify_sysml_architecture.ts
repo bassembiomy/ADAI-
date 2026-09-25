@@ -228,7 +228,8 @@ function collectSourceFiles(dir: string, fileList: string[] = []): string[] {
 
 export function verifySysmlArchitecture(rootDir: string): ArchitectureViolation[] {
   const srcDir = resolve(rootDir, 'src');
-  const files = collectSourceFiles(srcDir);
+  const scriptDir = resolve(rootDir, 'scripts');
+  const files = [...collectSourceFiles(srcDir), ...collectSourceFiles(scriptDir)];
   const allViolations: ArchitectureViolation[] = [];
 
   for (const file of files) {

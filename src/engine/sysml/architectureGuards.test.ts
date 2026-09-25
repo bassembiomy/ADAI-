@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   COMPATIBILITY_ALLOWLIST,
   scanSourceForArchitectureViolations,
@@ -102,6 +105,20 @@ describe('SysML Architecture Guardrails', () => {
     `;
     const violations = scanSourceForArchitectureViolations(code, 'src/App.tsx');
     expect(violations.some((v: ArchitectureViolation) => v.ruleId === 'SYSML_ARCH_FORBIDDEN_RUNTIME_MUTATION' && !v.allowed)).toBe(true);
+  });
+
+  it('scans migration scripts for silent type synthesis', () => {
+    const root = mkdtempSync(join(tmpdir(), 'sysml-architecture-'));
+    const scriptsDir = join(root, 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(join(scriptsDir, 'migrateLegacyTypes.ts'), 'export const migrate = name => createPlaceholderType(name);');
+
+    try {
+      const violations = verifySysmlArchitecture(root);
+      expect(violations.some(v => v.ruleId === 'SYSML_ARCH_SILENT_CREATION' && !v.allowed)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('runs verifySysmlArchitecture across repository root without unallowed violations', () => {
