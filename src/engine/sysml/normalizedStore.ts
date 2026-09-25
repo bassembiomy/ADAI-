@@ -23,10 +23,13 @@ import type {
   ExtensionPoint,
   DiagramReference,
 } from './model';
-import type {
-  PresentationCoordinates,
-  LegacySysmlView,
-} from '../../services/sysmlCommandGateway';
+import type { LegacySysmlView } from '../../services/sysmlCommandGateway';
+import {
+  normalizeDiagramPresentations,
+  type DiagramPresentation,
+  type DiagramPresentationInput,
+  type PresentationCoordinates,
+} from './presentationState';
 import type {
   BlockData,
   ConnectorData,
@@ -71,7 +74,7 @@ export interface NormalizedSysmlStore {
   diagramReferences: Map<string, DiagramReference>;
   auditTrail: ModelChangeRecord[];
   coordinates: Map<string, PresentationCoordinates>;
-  diagramPresentations: Map<string, { elementIds: string[] }>;
+  diagramPresentations: Map<string, DiagramPresentation>;
   indexes: StoreIndexes;
   readonly entities: { has(id: string): boolean; get(id: string): SysmlEntity | undefined };
 }
@@ -273,7 +276,7 @@ function indexEntity(
 export function fromRepository(
   repo: SysmlRepository,
   coordinates?: Record<string, PresentationCoordinates>,
-  diagramPresentations?: Record<string, { elementIds: string[] }>,
+  diagramPresentations?: Record<string, DiagramPresentationInput>,
 ): NormalizedSysmlStore {
   const store = createEmptyNormalizedStore();
   store.schemaVersion = repo.schemaVersion ?? 2;
@@ -353,7 +356,8 @@ export function fromRepository(
   }
 
   if (diagramPresentations) {
-    for (const [dId, pres] of Object.entries(diagramPresentations)) {
+    const migrated = normalizeDiagramPresentations(diagramPresentations, coordinates);
+    for (const [dId, pres] of Object.entries(migrated)) {
       store.diagramPresentations.set(dId, pres);
       for (const elemId of pres.elementIds) {
         addToIndex(store.indexes.diagramId, dId, elemId);
@@ -667,10 +671,16 @@ export function projectNormalizedDiagram(
     ? new Set(store.diagramPresentations.get(diagramId)!.elementIds)
     : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
+  const coordinatesFor = (semanticElementId: string): PresentationCoordinates | undefined => {
+    const scoped = diagramId
+      ? store.diagramPresentations.get(diagramId)?.presentations?.[semanticElementId]?.bounds
+      : undefined;
+    return scoped ?? store.coordinates.get(semanticElementId);
+  };
 
   // Helper to project a definition
   const projectDef = (def: SysmlDefinition) => {
-    const coords = store.coordinates.get(def.id);
+    const coords = coordinatesFor(def.id);
     const cached = entityCache.blocks.get(def.id);
     if (cached && cached.entity === def && cached.coords === coords) {
       blocks.push(cached.result);
@@ -739,7 +749,7 @@ export function projectNormalizedDiagram(
   };
 
   const projectReq = (req: RequirementDefinition) => {
-    const coords = store.coordinates.get(req.id);
+    const coords = coordinatesFor(req.id);
     const cached = entityCache.blocks.get(req.id);
     if (cached && cached.entity === req && cached.coords === coords) {
       blocks.push(cached.result);
@@ -775,7 +785,7 @@ export function projectNormalizedDiagram(
   };
 
   const projectVc = (vc: VerificationCase) => {
-    const coords = store.coordinates.get(vc.id);
+    const coords = coordinatesFor(vc.id);
     const cached = entityCache.blocks.get(vc.id);
     if (cached && cached.entity === vc && cached.coords === coords) {
       blocks.push(cached.result);
@@ -804,7 +814,7 @@ export function projectNormalizedDiagram(
   const projectPart = (usage: SysmlUsage) => {
     if (usage.kind === 'part') {
       const pUsage = usage as PartUsage;
-      const coords = store.coordinates.get(pUsage.id);
+      const coords = coordinatesFor(pUsage.id);
       const cached = entityCache.parts.get(pUsage.id);
       if (cached && cached.entity === pUsage && cached.coords === coords) {
         parts.push(cached.result);
@@ -1364,12 +1374,27 @@ export function targetedUpdateEntity<T extends SysmlEntity>(
  */
 export function targetedUpdatePresentation(
   store: NormalizedSysmlStore,
+  diagramId: string,
   id: string,
   coords: PresentationCoordinates,
-): void {
-  const existing = store.coordinates.get(id) ?? {};
-  store.coordinates.set(id, { ...existing, ...coords });
+): boolean {
+  const diagram = store.diagramPresentations.get(diagramId);
+  if (!diagram || !diagram.elementIds.includes(id)) return false;
+  const existing = diagram.presentations[id] ?? {
+    id: `presentation:${encodeURIComponent(diagramId)}:${encodeURIComponent(id)}`,
+    diagramId,
+    semanticElementId: id,
+    bounds: {},
+  };
+  store.diagramPresentations.set(diagramId, {
+    ...diagram,
+    presentations: {
+      ...diagram.presentations,
+      [id]: { ...existing, bounds: { ...existing.bounds, ...coords } },
+    },
+  });
   store.revision += 1;
+  return true;
 }
 
 /**

@@ -56,7 +56,7 @@ describe('sysmlExplorerAdapter', () => {
     });
     // Set up a diagram presentation with elementIds
     harness.state.diagramPresentations = {
-      'bdd-1': { elementIds: [] },
+      'bdd-1': { elementIds: [], presentations: {} },
     };
 
     const adapter = createSysmlExplorerAdapter(harness);
@@ -67,7 +67,7 @@ describe('sysmlExplorerAdapter', () => {
 
     const result = adapter.execute({ type: 'createElement', ownerId: 'block-1', elementKind: 'part', name: 'controller' });
     expect(result.committed).toBe(true);
-    expect(harness.state.diagramPresentations['bdd-1']?.elementIds).not.toContain(result.selectedIds?.[0]);
+    expect(harness.state.diagramPresentations?.['bdd-1']?.elementIds).not.toContain(result.selectedIds?.[0]);
   });
 
   it('shows legal Block children and disabled illegal All Types entries', () => {
@@ -351,7 +351,7 @@ describe('sysmlExplorerAdapter', () => {
   it('rejects adding to diagram if presentation already exists', () => {
     const harness = createTestHarness();
     harness.state.diagramPresentations = {
-      'bdd-1': { elementIds: ['block-1'] },
+      'bdd-1': { elementIds: ['block-1'], presentations: {} },
     };
     const adapter = createSysmlExplorerAdapter(harness);
     const pre = adapter.preflight({
@@ -368,7 +368,7 @@ describe('sysmlExplorerAdapter', () => {
     const blk = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'TestBlock' });
     const blockId = blk.selectedIds?.[0]!;
     harness.state.diagramPresentations = {
-      requirements: { elementIds: [blockId] },
+      requirements: { elementIds: [blockId], presentations: {} },
     };
 
     const commands: ModelExplorerCommand[] = [

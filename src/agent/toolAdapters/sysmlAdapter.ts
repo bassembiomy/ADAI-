@@ -208,11 +208,12 @@ function mapAgentCommandToEditorCommand(
     }
 
     case 'updatePresentation': {
-      if (!payload.elementId || !payload.presentation) {
-        return { error: 'updatePresentation requires elementId and presentation' };
+      if (!payload.diagramId || !payload.elementId || !payload.presentation) {
+        return { error: 'updatePresentation requires diagramId, elementId and presentation' };
       }
       return {
         type: 'updatePresentation',
+        diagramId: String(payload.diagramId),
         elementId: String(payload.elementId),
         presentation: payload.presentation as PresentationCoordinates,
       };

@@ -316,6 +316,7 @@ describe('SysML Worker Protocol & Execution', () => {
       const activeIds = defKeys.slice(0, 5);
       store.diagramPresentations.set('diag_small', {
         elementIds: activeIds,
+        presentations: {},
       });
 
       const scopedSnapshot = toWorkerSnapshot(store, 'diag_small', true);

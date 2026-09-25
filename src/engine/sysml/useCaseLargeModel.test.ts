@@ -160,6 +160,8 @@ describe('SysML Use Case Large Model Performance & Conformance Gates', () => {
 
   it('guarantees presentation-only updates (node drag) do NOT advance semantic revision', () => {
     const repo = createDenseUseCaseRepository(100);
+    const activeIds = Object.keys(repo.useCases).slice(0, 100);
+    const initialPresentations = { 'use-case-diagram': { elementIds: activeIds, presentations: {} } };
     const store = fromRepository(repo);
 
     // Node drag stop produces a presentation patch
@@ -173,10 +175,11 @@ describe('SysML Use Case Large Model Performance & Conformance Gates', () => {
     expect(patch.presentation?.y).toBe(620);
 
     // Apply presentation update via gateway
-    const state = createSysmlGatewayState(repo);
+    const state = createSysmlGatewayState(repo, undefined, initialPresentations);
     const tStart = performance.now();
     const result = executeSysmlCommand(state, {
       type: 'updatePresentation',
+      diagramId: 'use-case-diagram',
       elementId: patch.elementId,
       presentation: patch.presentation,
     });

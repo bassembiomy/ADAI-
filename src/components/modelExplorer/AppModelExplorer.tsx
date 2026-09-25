@@ -33,6 +33,7 @@ import type { SysmlGatewayState, SysmlEditorCommand, SysmlCommandResult } from '
 import { executeSysmlCommand } from '../../services/sysmlCommandGateway';
 import { fromRepository } from '../../engine/sysml/normalizedStore';
 import { createHistory } from '../../engine/sysml/mutations';
+import { normalizeDiagramPresentations } from '../../engine/sysml/presentationState';
 
 import {
   computeRangeSelection,
@@ -212,7 +213,7 @@ export interface AppModelExplorerProps {
   parts: PartData[];
   externalModels?: ExternalModelDescriptor[];
   canonicalSysmlRepository?: SysmlRepository;
-  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  diagramPresentations?: Record<string, import('../../engine/sysml/presentationState').DiagramPresentationInput>;
   selectedIds: string[];
   onSelect: (id: string, multiSelect?: boolean) => void;
   onSelectMultiple?: (ids: string[]) => void;
@@ -381,7 +382,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       history: createHistory(repo),
       store: fromRepository(repo, {}, diagramPresentations),
       coordinates: {},
-      diagramPresentations,
+      diagramPresentations: normalizeDiagramPresentations(diagramPresentations ?? {}),
     };
 
     return createSysmlExplorerAdapter({

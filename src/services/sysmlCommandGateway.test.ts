@@ -6,6 +6,7 @@ import {
   buildCanonicalSysmlProjectPayload,
   loadCanonicalSysmlProject,
   computeImpactHash,
+  fromRepository,
   type SysmlGatewayState,
 } from './sysmlCommandGateway';
 import { createEmptyRepository, type BlockDefinition, type ConnectorUsage, type PartUsage, type PortDefinition, type PortUsage, type RequirementDefinition, type SysmlRelationship } from '../engine/sysml/model';
@@ -13,6 +14,59 @@ import { serializeRepository } from '../engine/sysml/persistence';
 import type { SysmlElement } from './sysmlCommandGateway';
 
 describe('sysmlCommandGateway', () => {
+  it('keeps one semantic element at independent diagram positions across persistence', () => {
+    const repository = createEmptyRepository();
+    const motor: BlockDefinition = {
+      id: 'blk-motor', name: 'Motor', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions[motor.id] = motor;
+    let state = createSysmlGatewayState(repository, { [motor.id]: { x: 1, y: 2 } }, {
+      requirements: { elementIds: [motor.id] },
+      bdd: { elementIds: [motor.id] },
+    });
+
+    const requirementsMove = executeSysmlCommand(state, {
+      type: 'updatePresentation', diagramId: 'requirements', elementId: motor.id,
+      presentation: { x: 10, y: 20, width: 180, height: 90 },
+    }, 'requirements');
+    state = { ...state, ...requirementsMove };
+    const bddMove = executeSysmlCommand(state, {
+      type: 'updatePresentation', diagramId: 'bdd', elementId: motor.id,
+      presentation: { x: 400, y: 500, width: 160, height: 100 },
+    }, 'bdd');
+    state = { ...state, ...bddMove };
+
+    const requirementsPresentation = state.diagramPresentations?.requirements?.presentations?.[motor.id];
+    const bddPresentation = state.diagramPresentations?.bdd?.presentations?.[motor.id];
+    expect(requirementsPresentation?.id).toBeTruthy();
+    expect(bddPresentation?.id).toBeTruthy();
+    expect(requirementsPresentation?.id).not.toBe(bddPresentation?.id);
+    expect(requirementsPresentation?.bounds).toMatchObject({ x: 10, y: 20 });
+    expect(bddPresentation?.bounds).toMatchObject({ x: 400, y: 500 });
+    expect(state.coordinates[motor.id]).toEqual({ x: 1, y: 2 });
+
+    const payload = buildCanonicalSysmlProjectPayload(state, { version: '1', projectName: 'Scoped presentations' });
+    const loaded = loadCanonicalSysmlProject(payload);
+    expect(loaded.repository.definitions[motor.id].name).toBe('Motor');
+    expect(loaded.repository.definitions).toHaveProperty(motor.id);
+    expect(projectLegacyDiagram(loaded.repository, loaded.coordinates, loaded.diagramPresentations, 'requirements').blocks[0])
+      .toMatchObject({ id: motor.id, x: 10, y: 20 });
+    expect(projectLegacyDiagram(loaded.repository, loaded.coordinates, loaded.diagramPresentations, 'bdd').blocks[0])
+      .toMatchObject({ id: motor.id, x: 400, y: 500 });
+  });
+
+  it('rejects presentation updates without a resolvable diagram context', () => {
+    const result = executeSysmlCommand(createSysmlGatewayState(), {
+      type: 'updatePresentation',
+      diagramId: 'missing-diagram',
+      elementId: 'blk-motor',
+      presentation: { x: 10, y: 20 },
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('DIAGRAM_NOT_FOUND');
+  });
+
   it('creates an element in the canonical repository first and derives legacy arrays', () => {
     const state = createSysmlGatewayState();
     const block: BlockDefinition = {
@@ -383,7 +437,7 @@ describe('sysmlCommandGateway', () => {
       repository: s3.repository,
       history: s3.history,
       diagramPresentations: {
-        'req-diagram-1': { elementIds: ['req-parent', 'req-child'] },
+        'req-diagram-1': { elementIds: ['req-parent', 'req-child'], presentations: {} },
       },
     };
 
@@ -439,13 +493,21 @@ describe('sysmlCommandGateway', () => {
       { version: '1.0', projectName: 'Test Project' },
     );
     expect(payload.diagramPresentations).toEqual({
-      'req-diagram-1': { elementIds: ['req-child'] },
+      'req-diagram-1': {
+        elementIds: ['req-child'],
+        presentations: {
+          'req-child': {
+            id: 'presentation:req-diagram-1:req-child',
+            diagramId: 'req-diagram-1',
+            semanticElementId: 'req-child',
+            bounds: {},
+          },
+        },
+      },
     });
 
     const loaded = loadCanonicalSysmlProject(payload);
-    expect(loaded.diagramPresentations).toEqual({
-      'req-diagram-1': { elementIds: ['req-child'] },
-    });
+    expect(loaded.diagramPresentations).toEqual(payload.diagramPresentations);
     expect(loaded.repository.requirements['req-parent']).toBeDefined();
     expect(loaded.repository.requirements['req-child']).toBeDefined();
   });
@@ -471,25 +533,49 @@ describe('sysmlCommandGateway', () => {
       presentation: { x: 0, y: 0 },
     });
     state = { ...state, repository: r.repository, coordinates: r.coordinates, store: r.store, patchHistory: r.patchHistory, history: r.history };
+    const initialPresentation = {
+      id: 'presentation:drag-diagram:blk-drag',
+      diagramId: 'drag-diagram',
+      semanticElementId: 'blk-drag',
+      bounds: { x: 0, y: 0 },
+    };
+    const dragDiagramPresentations = {
+      'drag-diagram': { elementIds: ['blk-drag'], presentations: { 'blk-drag': initialPresentation } },
+    };
+    state = {
+      ...state,
+      diagramPresentations: dragDiagramPresentations,
+      store: fromRepository(r.repository, r.coordinates, dragDiagramPresentations),
+    };
 
     // Simulate 10 drag move events with same coalesceKey
     for (let i = 1; i <= 10; i++) {
       r = executeSysmlCommand(state, {
         type: 'updatePresentation',
+        diagramId: 'drag-diagram',
         elementId: 'blk-drag',
         presentation: { x: i * 10, y: i * 10 },
         coalesceKey: 'drag-blk-drag',
       });
-      state = { ...state, coordinates: r.coordinates, store: r.store, patchHistory: r.patchHistory, history: r.history };
+      state = {
+        ...state,
+        coordinates: r.coordinates,
+        diagramPresentations: r.diagramPresentations,
+        store: r.store,
+        patchHistory: r.patchHistory,
+        history: r.history,
+      };
     }
 
-    expect(state.coordinates['blk-drag']).toEqual({ x: 100, y: 100 });
+    expect(state.diagramPresentations?.['drag-diagram']?.presentations['blk-drag'].bounds)
+      .toEqual({ x: 100, y: 100 });
     // In patchHistory, all 10 drag operations should have coalesced into ONE entry!
     expect(state.patchHistory?.past.length).toBe(2); // 1 create + 1 coalesced drag
 
     // Single undo restores back to initial position (0, 0)
     const undone = executeSysmlCommand(state, { type: 'undo' });
-    expect(undone.coordinates['blk-drag']).toEqual({ x: 0, y: 0 });
+    expect(undone.diagramPresentations['drag-diagram'].presentations['blk-drag'].bounds)
+      .toEqual({ x: 0, y: 0 });
 
     // Redo restores to final position (100, 100)
     const redone = executeSysmlCommand(
@@ -504,7 +590,8 @@ describe('sysmlCommandGateway', () => {
       },
       { type: 'redo' },
     );
-    expect(redone.coordinates['blk-drag']).toEqual({ x: 100, y: 100 });
+    expect(redone.diagramPresentations['drag-diagram'].presentations['blk-drag'].bounds)
+      .toEqual({ x: 100, y: 100 });
   });
 
   it('bounds history memory under configurable budget', () => {
@@ -965,7 +1052,9 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(result.committed).toBe(true);
     expect(result.repository.definitions['blk-motor']).toBeDefined();
     expect(result.diagramPresentations.requirements.elementIds).toEqual(['blk-motor']);
-    expect(result.coordinates['blk-motor']).toMatchObject({ x: 40, y: 80 });
+    expect(result.diagramPresentations.requirements.presentations['blk-motor'].bounds)
+      .toMatchObject({ x: 40, y: 80 });
+    expect(result.coordinates['blk-motor']).toBeUndefined();
   });
 
   it('rolls back semantic creation when presentation validation fails', () => {
@@ -997,6 +1086,12 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(undone.committed).toBe(true);
     expect(undone.repository.definitions['blk-undo-test']).toBeUndefined();
     expect(undone.diagramPresentations.requirements?.elementIds ?? []).not.toContain('blk-undo-test');
+
+    const redone = executeSysmlCommand(undone, { type: 'redo' });
+    expect(redone.repository.definitions['blk-undo-test']).toEqual(block);
+    expect(redone.diagramPresentations.requirements?.presentations['blk-undo-test']).toEqual(
+      result.diagramPresentations.requirements.presentations['blk-undo-test'],
+    );
   });
 
   it('updates a Block once and projects the change on every diagram', () => {

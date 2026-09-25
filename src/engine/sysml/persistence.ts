@@ -22,6 +22,7 @@ import {
   type InterchangeReport,
 } from './interchangeReport';
 import { elementsOfKind, presentationsForElement, serializeRepositoryV4 } from './persistence/migrateV3ToV4';
+import { normalizeDiagramPresentations, type DiagramPresentation, type DiagramPresentationInput } from './presentationState';
 export { elementsOfKind, presentationsForElement };
 
 interface PersistenceEnvelope {
@@ -759,7 +760,7 @@ export interface ChunkManifest {
   checksum: string;
   auditTrail: SysmlRepository['auditTrail'];
   chunkIndex: Record<string, EntityChunkMeta>;
-  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  diagramPresentations?: Record<string, DiagramPresentation>;
   metadata?: Record<string, unknown>;
 }
 
@@ -815,7 +816,7 @@ function serializeSingleEntityChunk(collection: string, entity: { id: string }):
 export function serializeToChunks(
   repo: SysmlRepository,
   options?: {
-    diagramPresentations?: Record<string, { elementIds: string[] }>;
+    diagramPresentations?: Record<string, DiagramPresentationInput>;
     metadata?: Record<string, unknown>;
   }
 ): ChunkedRepositoryExport {
@@ -845,7 +846,9 @@ export function serializeToChunks(
     revision: repo.revision ?? 0,
     auditTrail: [...(repo.auditTrail ?? [])],
     chunkIndex,
-    diagramPresentations: options?.diagramPresentations,
+    diagramPresentations: options?.diagramPresentations
+      ? normalizeDiagramPresentations(options.diagramPresentations)
+      : undefined,
     metadata: options?.metadata,
   };
 

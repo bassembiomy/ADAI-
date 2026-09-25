@@ -54,6 +54,15 @@ import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 
 import { resolveType } from '../engine/sysml/services/typeResolution';
+import {
+  normalizeDiagramPresentations,
+  stableDiagramPresentationId,
+  type DiagramElementPresentation,
+  type DiagramPresentation,
+  type DiagramPresentationInput,
+  type PresentationCoordinates,
+} from '../engine/sysml/presentationState';
+export type { DiagramElementPresentation, DiagramPresentation, PresentationCoordinates } from '../engine/sysml/presentationState';
 export { resolveType, type ResolvedTypeOutcome, type TypeResolutionOptions } from '../engine/sysml/services/typeResolution';
 import { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
@@ -156,13 +165,6 @@ export function getDefaultSysmlWorkerClient(): SysmlWorkerClient {
   return defaultWorkerClient;
 }
 
-export interface PresentationCoordinates {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-}
-
 export interface LegacySysmlView {
   blocks: BlockData[];
   relationships: RelationshipData[];
@@ -191,14 +193,9 @@ export type SysmlElement =
   | ExtensionPoint
   | DiagramReference;
 
-export interface DiagramPresentation {
-  diagramId: string;
-  elementIds: string[];
-}
-
 export interface PresentationSnapshot {
   coordinates: Record<string, PresentationCoordinates>;
-  diagramPresentations: Record<string, { elementIds: string[] }>;
+  diagramPresentations: Record<string, DiagramPresentation>;
 }
 
 export type SysmlMutationCommand =
@@ -207,7 +204,7 @@ export type SysmlMutationCommand =
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
-  | { type: 'updatePresentation'; elementId: string; presentation: PresentationCoordinates; coalesceKey?: string }
+  | { type: 'updatePresentation'; diagramId: string; elementId: string; presentation: PresentationCoordinates; style?: DiagramElementPresentation['style']; portLayouts?: DiagramElementPresentation['portLayouts']; coalesceKey?: string }
   | { type: 'moveElements'; elementIds: string[]; targetOwnerId: string; confirmedImpactHash?: string }
   | { type: 'createDiagram'; diagram: ModelDiagramDefinition }
   | { type: 'addToDiagram'; diagramId: string; elementIds: string[]; coordinates?: Record<string, PresentationCoordinates> };
@@ -224,7 +221,7 @@ export interface SysmlGatewayState {
   store?: NormalizedSysmlStore;
   patchHistory?: PatchHistoryState;
   coordinates: Record<string, PresentationCoordinates>;
-  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  diagramPresentations?: Record<string, DiagramPresentation>;
   presentationHistory?: {
     past: PresentationSnapshot[];
     future: PresentationSnapshot[];
@@ -243,7 +240,7 @@ export interface SysmlCommandResult {
   store?: NormalizedSysmlStore;
   patchHistory?: PatchHistoryState;
   coordinates: Record<string, PresentationCoordinates>;
-  diagramPresentations: Record<string, { elementIds: string[] }>;
+  diagramPresentations: Record<string, DiagramPresentation>;
   presentationHistory?: {
     past: PresentationSnapshot[];
     future: PresentationSnapshot[];
@@ -255,12 +252,12 @@ export interface SysmlCommandResult {
 export function createSysmlGatewayState(
   initialRepo?: SysmlRepository,
   initialCoordinates?: Record<string, PresentationCoordinates>,
-  initialDiagramPresentations?: Record<string, { elementIds: string[] }>,
+  initialDiagramPresentations?: Record<string, DiagramPresentationInput>,
   budgetOptions?: HistoryBudgetOptions,
 ): SysmlGatewayState {
   const repo = initialRepo ?? createEmptyRepository();
   const coords = initialCoordinates ?? {};
-  const diagrams = initialDiagramPresentations ?? {};
+  const diagrams = normalizeDiagramPresentations(initialDiagramPresentations ?? {}, coords);
   const store = fromRepository(repo, coords, diagrams);
   const patchHistory = createPatchHistory(budgetOptions);
 
@@ -324,7 +321,7 @@ function formatMultiplicityText(m?: Multiplicity): string {
 export function projectLegacyDiagram(
   repository: SysmlRepository,
   coordinates: Record<string, PresentationCoordinates> = {},
-  diagramPresentations: Record<string, { elementIds: string[] }> = {},
+  diagramPresentations: Record<string, DiagramPresentationInput> = {},
   diagramId?: string,
 ): LegacySysmlView {
   const blocks: BlockData[] = [];
@@ -336,11 +333,15 @@ export function projectLegacyDiagram(
     ? new Set(diagramPresentations[diagramId].elementIds)
     : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
+  const coordinatesFor = (semanticElementId: string): PresentationCoordinates =>
+    (diagramId ? diagramPresentations[diagramId]?.presentations?.[semanticElementId]?.bounds : undefined)
+      ?? coordinates[semanticElementId]
+      ?? {};
 
   // Project definitions (blocks, valueTypes, interfaces)
   for (const def of Object.values(repository.definitions)) {
     if (!isVisible(def.id)) continue;
-    const coords = coordinates[def.id] ?? {};
+    const coords = coordinatesFor(def.id);
     if (def.kind === 'block') {
       const b = def as BlockDefinition;
       const legacyPorts: PortData[] = (b.ports ?? []).map(p => ({
@@ -402,7 +403,7 @@ export function projectLegacyDiagram(
   // Project requirements
   for (const req of Object.values(repository.requirements)) {
     if (!isVisible(req.id)) continue;
-    const coords = coordinates[req.id] ?? {};
+    const coords = coordinatesFor(req.id);
     blocks.push({
       id: req.id,
       name: req.name,
@@ -432,7 +433,7 @@ export function projectLegacyDiagram(
   // Project verification cases
   for (const vc of Object.values(repository.verificationCases)) {
     if (!isVisible(vc.id)) continue;
-    const coords = coordinates[vc.id] ?? {};
+    const coords = coordinatesFor(vc.id);
     blocks.push({
       id: vc.id,
       name: vc.name,
@@ -454,7 +455,7 @@ export function projectLegacyDiagram(
   for (const usage of Object.values(repository.usages)) {
     if (usage.kind === 'part') {
       if (!isVisible(usage.id)) continue;
-      const coords = coordinates[usage.id] ?? {};
+    const coords = coordinatesFor(usage.id);
       parts.push({
         id: usage.id,
         name: usage.name,
@@ -933,14 +934,20 @@ export function executeSysmlCommand(
   activeDiagramId?: string,
 ): SysmlCommandResult {
   const coordinates = { ...state.coordinates };
-  const diagramPresentations: Record<string, { elementIds: string[] }> = { ...(state.diagramPresentations ?? {}) };
+  const diagramPresentations = normalizeDiagramPresentations(state.diagramPresentations ?? {}, coordinates);
   const store = state.store ?? fromRepository(state.repository, coordinates, diagramPresentations);
+  store.coordinates = new Map(Object.entries(coordinates));
+  store.diagramPresentations = new Map(Object.entries(diagramPresentations));
+  store.indexes.diagramId.clear();
+  for (const [diagramId, presentation] of Object.entries(diagramPresentations)) {
+    store.indexes.diagramId.set(diagramId, new Set(presentation.elementIds));
+  }
   const patchHistory = state.patchHistory ?? createPatchHistory();
 
   const getView = (
     repo: SysmlRepository,
     coords: Record<string, PresentationCoordinates>,
-    diagrams: Record<string, { elementIds: string[] }>,
+    diagrams: Record<string, DiagramPresentation>,
     diagramIdOverride?: string,
   ): LegacySysmlView => {
     const diagId = diagramIdOverride ?? activeDiagramId;
@@ -1151,22 +1158,81 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'updatePresentation') {
-    const prevCoords = store.coordinates.get(command.elementId) ?? coordinates[command.elementId] ?? {};
-    store.coordinates.set(command.elementId, { ...command.presentation });
-    coordinates[command.elementId] = { ...command.presentation };
+    if (!command.diagramId || !diagramPresentations[command.diagramId]) {
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view: getView(state.repository, coordinates, diagramPresentations),
+        diagnostics: [{
+          code: 'DIAGRAM_NOT_FOUND',
+          severity: 'error',
+          elementId: command.elementId,
+          message: 'A valid active diagram is required to update a presentation.',
+        }],
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+    const currentDiagram = diagramPresentations[command.diagramId];
+    if (!currentDiagram.elementIds.includes(command.elementId)) {
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view: getView(state.repository, coordinates, diagramPresentations, command.diagramId),
+        diagnostics: [{
+          code: 'PRESENTATION_NOT_FOUND',
+          severity: 'error',
+          elementId: command.elementId,
+          message: `Element '${command.elementId}' is not presented on diagram '${command.diagramId}'.`,
+        }],
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+    const previousDiagram = currentDiagram;
+    const existingPresentation = currentDiagram.presentations[command.elementId] ?? {
+      id: stableDiagramPresentationId(command.diagramId, command.elementId),
+      diagramId: command.diagramId,
+      semanticElementId: command.elementId,
+      bounds: { ...(coordinates[command.elementId] ?? {}) },
+    };
+    const nextPresentation: DiagramElementPresentation = {
+      ...existingPresentation,
+      bounds: { ...existingPresentation.bounds, ...command.presentation },
+      style: command.style ?? existingPresentation.style,
+      portLayouts: command.portLayouts ?? existingPresentation.portLayouts,
+    };
+    const nextDiagram: DiagramPresentation = {
+      ...currentDiagram,
+      presentations: { ...currentDiagram.presentations, [command.elementId]: nextPresentation },
+    };
+    const nextDiagramPresentations = { ...diagramPresentations, [command.diagramId]: nextDiagram };
+    store.diagramPresentations.set(command.diagramId, nextDiagram);
     store.revision += 1;
 
     const patch = createSysmlPatch({
       revision: state.repository.revision,
       coalesceKey: command.coalesceKey,
-      forward: [{ op: 'replace', collection: 'coordinates', id: command.elementId, oldValue: prevCoords, value: command.presentation }],
-      inverse: [{ op: 'replace', collection: 'coordinates', id: command.elementId, oldValue: command.presentation, value: prevCoords }],
+      forward: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: previousDiagram, value: nextDiagram }],
+      inverse: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: nextDiagram, value: previousDiagram }],
       description: 'updatePresentation',
     });
     pushPatch(patchHistory, patch, store);
 
     const validation = validateSysmlRepository(state.repository);
-    const view = getView(state.repository, coordinates, diagramPresentations);
+    const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
     return {
       repository: state.repository,
       store,
@@ -1176,7 +1242,7 @@ export function executeSysmlCommand(
       committed: true,
       history: state.history,
       coordinates,
-      diagramPresentations,
+      diagramPresentations: nextDiagramPresentations,
       presentationHistory: state.presentationHistory,
       actionStack: [...(state.actionStack ?? []), 'presentation'],
       redoStack: [],
@@ -1567,11 +1633,18 @@ export function executeSysmlCommand(
       delete coordinates[delId];
       removeEntity(store, delId);
     }
-    const nextDiagramPresentations: Record<string, { elementIds: string[] }> = {};
+    const nextDiagramPresentations: Record<string, DiagramPresentation> = {};
     for (const [dId, pres] of Object.entries(diagramPresentations)) {
       const nextIds = pres.elementIds.filter(id => !impact.deletedElementIds.includes(id));
-      nextDiagramPresentations[dId] = { elementIds: nextIds };
+      const nextRecord = Object.fromEntries(Object.entries(pres.presentations)
+        .filter(([semanticElementId]) => !impact.deletedElementIds.includes(semanticElementId)));
+      nextDiagramPresentations[dId] = { elementIds: nextIds, presentations: nextRecord };
+      if (nextIds.length !== pres.elementIds.length) {
+        forwardOps.push({ op: 'replace', collection: 'diagramPresentations', id: dId, oldValue: pres, value: nextDiagramPresentations[dId] });
+        inverseOps.unshift({ op: 'replace', collection: 'diagramPresentations', id: dId, oldValue: nextDiagramPresentations[dId], value: pres });
+      }
       store.diagramPresentations.set(dId, nextDiagramPresentations[dId]);
+      store.indexes.diagramId.set(dId, new Set(nextIds));
     }
 
     const deletePatch = createSysmlPatch({
@@ -1615,15 +1688,20 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'removeFromDiagram') {
-    const currentPresentation = diagramPresentations[command.diagramId] ?? { elementIds: [] };
+    const currentPresentation = diagramPresentations[command.diagramId] ?? { elementIds: [], presentations: {} };
+    const nextIds = currentPresentation.elementIds.filter(id => !command.elementIds.includes(id));
+    const nextPresentations = Object.fromEntries(Object.entries(currentPresentation.presentations)
+      .filter(([semanticElementId]) => !command.elementIds.includes(semanticElementId)));
     const nextPresentation = {
-      elementIds: currentPresentation.elementIds.filter(id => !command.elementIds.includes(id)),
+      elementIds: nextIds,
+      presentations: nextPresentations,
     };
-    const nextDiagramPresentations: Record<string, { elementIds: string[] }> = {
+    const nextDiagramPresentations: Record<string, DiagramPresentation> = {
       ...diagramPresentations,
       [command.diagramId]: nextPresentation,
     };
     store.diagramPresentations.set(command.diagramId, nextPresentation);
+    store.indexes.diagramId.set(command.diagramId, new Set(nextIds));
 
     const patch = createSysmlPatch({
       revision: store.revision + 1,
@@ -1821,9 +1899,10 @@ export function executeSysmlCommand(
     upsertEntity(store, 'diagrams', diagram);
     const nextDiagramPresentations = {
       ...diagramPresentations,
-      [diagram.id]: { elementIds: [] },
+      [diagram.id]: { elementIds: [], presentations: {} },
     };
-    store.diagramPresentations.set(diagram.id, { elementIds: [] });
+    store.diagramPresentations.set(diagram.id, { elementIds: [], presentations: {} });
+    store.indexes.diagramId.set(diagram.id, new Set());
 
     const patch = createSysmlPatch({
       revision: nextRepo.revision,
@@ -1866,7 +1945,7 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'addToDiagram') {
-    const currentPres = diagramPresentations[command.diagramId] ?? { elementIds: [] };
+    const currentPres = diagramPresentations[command.diagramId] ?? { elementIds: [], presentations: {} };
     const existingSet = new Set(currentPres.elementIds);
     const alreadyPresent = command.elementIds.filter(id => existingSet.has(id));
     if (alreadyPresent.length > 0 && alreadyPresent.length === command.elementIds.length) {
@@ -1888,49 +1967,37 @@ export function executeSysmlCommand(
     }
 
     const addedIds = command.elementIds.filter(id => !existingSet.has(id));
-    const nextPres = {
+    const newRecords = Object.fromEntries(addedIds.map(semanticElementId => [semanticElementId, {
+      id: stableDiagramPresentationId(command.diagramId, semanticElementId),
+      diagramId: command.diagramId,
+      semanticElementId,
+      bounds: { ...(command.coordinates?.[semanticElementId] ?? coordinates[semanticElementId] ?? {}) },
+    }]));
+    const nextPres: DiagramPresentation = {
       elementIds: [...currentPres.elementIds, ...addedIds],
+      presentations: { ...currentPres.presentations, ...newRecords },
     };
     const nextDiagramPresentations = {
       ...diagramPresentations,
       [command.diagramId]: nextPres,
     };
     store.diagramPresentations.set(command.diagramId, nextPres);
-
-    const nextCoords = { ...coordinates };
-    const coordForwardOps: import('../engine/sysml/patches').PatchOperation[] = [];
-    const coordInverseOps: import('../engine/sysml/patches').PatchOperation[] = [];
-    if (command.coordinates) {
-      for (const [id, coord] of Object.entries(command.coordinates)) {
-        const prevCoord = store.coordinates.get(id);
-        nextCoords[id] = { ...coord };
-        store.coordinates.set(id, { ...coord });
-        if (prevCoord !== undefined) {
-          coordForwardOps.push({ op: 'replace', collection: 'coordinates', id, oldValue: prevCoord, value: coord });
-          coordInverseOps.push({ op: 'replace', collection: 'coordinates', id, oldValue: coord, value: prevCoord });
-        } else {
-          coordForwardOps.push({ op: 'add', collection: 'coordinates', id, value: coord });
-          coordInverseOps.push({ op: 'remove', collection: 'coordinates', id, oldValue: coord });
-        }
-      }
-    }
+    store.indexes.diagramId.set(command.diagramId, new Set(nextPres.elementIds));
 
     const patch = createSysmlPatch({
       revision: store.revision + 1,
       forward: [
         { op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: currentPres, value: nextPres },
-        ...coordForwardOps,
       ],
       inverse: [
         { op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: nextPres, value: currentPres },
-        ...coordInverseOps,
       ],
       description: `addToDiagram ${command.diagramId}`,
     });
     pushPatch(patchHistory, patch, store);
 
     const validation = validateSysmlRepository(state.repository);
-    const view = getView(state.repository, nextCoords, nextDiagramPresentations, command.diagramId);
+    const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
     return {
       repository: state.repository,
       store,
@@ -1939,7 +2006,7 @@ export function executeSysmlCommand(
       diagnostics: validation.diagnostics,
       committed: true,
       history: state.history,
-      coordinates: nextCoords,
+      coordinates,
       diagramPresentations: nextDiagramPresentations,
       presentationHistory: state.presentationHistory,
       actionStack: [...(state.actionStack ?? []), 'presentation'],
@@ -2036,7 +2103,7 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
   store: NormalizedSysmlStore;
   view: LegacySysmlView;
   coordinates: Record<string, PresentationCoordinates>;
-  diagramPresentations: Record<string, { elementIds: string[] }>;
+  diagramPresentations: Record<string, DiagramPresentation>;
   valid: boolean;
   diagnostics: SysmlDiagnostic[];
   interchangeReport: InterchangeReport;
@@ -2044,7 +2111,10 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
   quarantinedConnectorIds: string[];
 } {
   const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
-  const diagramPresentations = (payload.diagramPresentations as Record<string, { elementIds: string[] }>) ?? {};
+  const diagramPresentations = normalizeDiagramPresentations(
+    (payload.diagramPresentations as Record<string, DiagramPresentationInput>) ?? {},
+    coordinates,
+  );
   const rawRepo = payload.sysmlRepository;
 
   if (!rawRepo) {
@@ -2093,7 +2163,7 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
 export function projectLegacyViewWithInterchangeReport(
   repository: SysmlRepository,
   coordinates: Record<string, PresentationCoordinates> = {},
-  diagramPresentations: Record<string, { elementIds: string[] }> = {},
+  diagramPresentations: Record<string, DiagramPresentationInput> = {},
   diagramId?: string,
 ): { view: LegacySysmlView; interchangeReport: InterchangeReport } {
   return {

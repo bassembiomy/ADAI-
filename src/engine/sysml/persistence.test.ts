@@ -419,6 +419,44 @@ describe('versioned SysML persistence and baselines', () => {
       expect(result.repository.definitions.b4).toBeUndefined();
     });
 
+    it('persists independent stable presentation records in the chunk manifest', () => {
+      const repo = createEmptyRepository();
+      repo.definitions['blk-motor'] = block('blk-motor');
+      const diagramPresentations = {
+        requirements: {
+          elementIds: ['blk-motor'],
+          presentations: {
+            'blk-motor': {
+              id: 'presentation:requirements:blk-motor',
+              diagramId: 'requirements',
+              semanticElementId: 'blk-motor',
+              bounds: { x: 10, y: 20 },
+            },
+          },
+        },
+        bdd: {
+          elementIds: ['blk-motor'],
+          presentations: {
+            'blk-motor': {
+              id: 'presentation:bdd:blk-motor',
+              diagramId: 'bdd',
+              semanticElementId: 'blk-motor',
+              bounds: { x: 400, y: 500 },
+            },
+          },
+        },
+      };
+
+      const serialized = serializeToChunks(repo, { diagramPresentations });
+      const restoredManifest = JSON.parse(serialized.manifestJson);
+      expect(restoredManifest.diagramPresentations).toEqual(diagramPresentations);
+      expect(restoredManifest.diagramPresentations.requirements.presentations['blk-motor'].bounds)
+        .toEqual({ x: 10, y: 20 });
+      expect(restoredManifest.diagramPresentations.bdd.presentations['blk-motor'].bounds)
+        .toEqual({ x: 400, y: 500 });
+      expect(Object.keys(repo.definitions)).toEqual(['blk-motor']);
+    });
+
     it('ensures full legacy JSON export and import remains semantically and structurally valid', () => {
       const legacyModel = {
         schemaVersion: 2,

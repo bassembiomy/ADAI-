@@ -9774,16 +9774,18 @@ const ADIA = () => {
     const hasSemantic = Object.keys(updates).some(k => !geometricKeys.includes(k));
 
     if (hasGeometric && !hasSemantic) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
       const presentation: PresentationCoordinates = {};
       if (updates.x !== undefined) presentation.x = updates.x;
       if (updates.y !== undefined) presentation.y = updates.y;
       if (updates.width !== undefined) presentation.width = updates.width;
       if (updates.height !== undefined) presentation.height = updates.height;
-      handleExecuteSysmlCommand({ type: 'updatePresentation', elementId: id, presentation });
+      handleExecuteSysmlCommand({ type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation });
       return;
     }
 
     if (hasGeometric && hasSemantic) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
       const presentation: PresentationCoordinates = {};
       if (updates.x !== undefined) presentation.x = updates.x;
       if (updates.y !== undefined) presentation.y = updates.y;
@@ -9795,7 +9797,7 @@ const ADIA = () => {
         type: 'batch',
         commands: [
           { type: 'updateElement', elementId: id, patch: semanticPatch },
-          { type: 'updatePresentation', elementId: id, presentation },
+          { type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation },
         ],
       });
       if (!result.committed) {
@@ -10037,12 +10039,13 @@ const ADIA = () => {
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
     const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
     if (isPureGeometricUpdate) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
       const presentation: PresentationCoordinates = {};
       if (updates.x !== undefined) presentation.x = updates.x;
       if (updates.y !== undefined) presentation.y = updates.y;
       if (updates.width !== undefined) presentation.width = updates.width;
       if (updates.height !== undefined) presentation.height = updates.height;
-      handleExecuteSysmlCommand({ type: 'updatePresentation', elementId: id, presentation });
+      handleExecuteSysmlCommand({ type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation });
       return;
     }
 

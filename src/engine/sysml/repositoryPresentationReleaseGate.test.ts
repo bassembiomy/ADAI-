@@ -3,6 +3,9 @@ import {
   createSysmlGatewayState,
   executeSysmlCommand,
   computeImpactHash,
+  buildCanonicalSysmlProjectPayload,
+  loadCanonicalSysmlProject,
+  projectLegacyDiagram,
   type SysmlGatewayState,
 } from '../../services/sysmlCommandGateway';
 import type { BlockDefinition } from './model';
@@ -31,7 +34,25 @@ describe('SysML Repository/Presentation Release Gate', () => {
     });
     let state: SysmlGatewayState = created;
     state = executeSysmlCommand(state, { type: 'addToDiagram', diagramId: 'bdd', elementIds: ['blk-motor'] });
+    state = executeSysmlCommand(state, {
+      type: 'updatePresentation', diagramId: 'requirements', elementId: 'blk-motor',
+      presentation: { x: 10, y: 20 },
+    });
+    state = executeSysmlCommand(state, {
+      type: 'updatePresentation', diagramId: 'bdd', elementId: 'blk-motor',
+      presentation: { x: 400, y: 500 },
+    });
     expect(Object.keys(state.repository.definitions)).toEqual(['blk-motor']);
+    expect(state.diagramPresentations?.requirements?.presentations['blk-motor'].id)
+      .not.toBe(state.diagramPresentations?.bdd?.presentations['blk-motor'].id);
+
+    const saved = buildCanonicalSysmlProjectPayload(state, { version: '1', projectName: 'Release gate' });
+    const loaded = loadCanonicalSysmlProject(saved);
+    expect(Object.keys(loaded.repository.definitions)).toEqual(['blk-motor']);
+    expect(projectLegacyDiagram(loaded.repository, loaded.coordinates, loaded.diagramPresentations, 'requirements').blocks[0])
+      .toMatchObject({ id: 'blk-motor', x: 10, y: 20 });
+    expect(projectLegacyDiagram(loaded.repository, loaded.coordinates, loaded.diagramPresentations, 'bdd').blocks[0])
+      .toMatchObject({ id: 'blk-motor', x: 400, y: 500 });
 
     state = executeSysmlCommand(state, { type: 'removeFromDiagram', diagramId: 'requirements', elementIds: ['blk-motor'] });
     expect(state.repository.definitions['blk-motor']).toBeDefined();

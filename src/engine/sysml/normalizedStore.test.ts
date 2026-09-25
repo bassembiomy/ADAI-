@@ -280,7 +280,20 @@ describe('NormalizedSysmlStore', () => {
     const targetBlock = viewBefore.blocks[0];
     const otherBlock = viewBefore.blocks[1];
 
-    targetedUpdatePresentation(store, targetBlock.id, { x: 999, y: 888 });
+    const otherDiagram = {
+      elementIds: [targetBlock.id],
+      presentations: {
+        [targetBlock.id]: {
+          id: `presentation:diagram-other:${targetBlock.id}`,
+          diagramId: 'diagram-other',
+          semanticElementId: targetBlock.id,
+          bounds: { x: 10, y: 20 },
+        },
+      },
+    };
+    store.diagramPresentations.set('diagram-other', otherDiagram);
+
+    expect(targetedUpdatePresentation(store, 'diagram-root', targetBlock.id, { x: 999, y: 888 })).toBe(true);
 
     const viewAfter = projectNormalizedDiagram(store, 'diagram-root');
     const updatedTarget = viewAfter.blocks.find(b => b.id === targetBlock.id);
@@ -289,6 +302,9 @@ describe('NormalizedSysmlStore', () => {
     expect(updatedTarget?.x).toBe(999);
     expect(updatedTarget?.y).toBe(888);
     expect(updatedTarget).not.toBe(targetBlock);
+    expect(projectNormalizedDiagram(store, 'diagram-other').blocks.find(b => b.id === targetBlock.id))
+      .toMatchObject({ x: 10, y: 20 });
+    expect(store.coordinates.get(targetBlock.id)).toEqual(coordinates[targetBlock.id]);
 
     // Unrelated block object identity is completely stable
     expect(unchangedOther).toBe(otherBlock);

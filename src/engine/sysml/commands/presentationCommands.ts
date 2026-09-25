@@ -1,7 +1,7 @@
 import type { Bounds, DiagramPresentation } from '../domain/presentations';
 import type { SemanticElement } from '../domain/base';
 import type { SysmlRepositoryV4 } from '../domain';
-import type { PresentationCoordinates } from '../../../services/sysmlCommandGateway';
+import type { DiagramPresentationInput, PresentationCoordinates } from '../presentationState';
 
 export interface DisplayExistingElementCommand {
   type: 'DisplayExistingElement';
@@ -211,7 +211,7 @@ export function executeDeleteModelElement(
  */
 export function migrateV3PresentationsToV4(
   coordinates: Record<string, PresentationCoordinates> = {},
-  diagramPresentations: Record<string, { elementIds: string[] }> = {}
+  diagramPresentations: Record<string, DiagramPresentationInput> = {}
 ): DiagramPresentation[] {
   const results: DiagramPresentation[] = [];
 

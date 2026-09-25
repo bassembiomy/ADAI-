@@ -16,6 +16,35 @@ import {
 } from '../domain';
 
 describe('Canonical Repository Projections (Task 11)', () => {
+  it('projects one semantic Block using independent bounds for each diagram presentation', () => {
+    const repo = createEmptyRepositoryV4();
+    repo.elements['blk-motor'] = {
+      id: 'blk-motor', name: 'Motor', metaclass: 'Block', namespace: [], ownerId: 'pkg-root',
+    };
+    const firstPresentation: DiagramPresentation = {
+      id: 'pres-bdd-a-motor',
+      diagramId: 'bdd-a',
+      semanticElementId: 'blk-motor',
+      bounds: { x: 10, y: 20, width: 180, height: 90 },
+    };
+    const secondPresentation: DiagramPresentation = {
+      id: 'pres-bdd-b-motor',
+      diagramId: 'bdd-b',
+      semanticElementId: 'blk-motor',
+      bounds: { x: 400, y: 500, width: 160, height: 100 },
+    };
+    repo.presentations[firstPresentation.id] = firstPresentation;
+    repo.presentations[secondPresentation.id] = secondPresentation;
+    repo.indexes.byDiagram['bdd-a'] = [firstPresentation.id];
+    repo.indexes.byDiagram['bdd-b'] = [secondPresentation.id];
+
+    const bddA = projectBddDiagram(repo, 'bdd-a');
+    const bddB = projectBddDiagram(repo, 'bdd-b');
+    expect(Object.keys(repo.elements).filter(id => id === 'blk-motor')).toHaveLength(1);
+    expect(bddA.nodes[0]).toMatchObject({ presentationId: firstPresentation.id, elementId: 'blk-motor', x: 10, y: 20 });
+    expect(bddB.nodes[0]).toMatchObject({ presentationId: secondPresentation.id, elementId: 'blk-motor', x: 400, y: 500 });
+  });
+
   it('projects BDD view model with compartments and dynamic name resolution', () => {
     let repo = createEmptyRepositoryV4();
 
