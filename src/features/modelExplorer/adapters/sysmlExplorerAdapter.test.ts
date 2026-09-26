@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
 import type { ModelExplorerCommand } from '../modelExplorerTypes';
-import { createSysmlGatewayState, executeSysmlCommand, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
+import { createSysmlGatewayState, executeSysmlCommand, projectLegacyDiagram, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
 import { createEmptyRepository, type BlockDefinition, type InterfaceDefinition, type PartUsage, type RequirementDefinition, type SysmlRelationship } from '../../../engine/sysml/model';
 import { buildCreateOwnedPortCommand, type CanonicalPortKind } from '../../../services/sysmlOwnedFeatureCommands';
 
@@ -611,5 +611,61 @@ describe('sysmlExplorerAdapter', () => {
       expect(treePort?.appliedStereotypeIds).toEqual(tc.expectedStereotypes);
       expect(canvasPort?.appliedStereotypeIds).toEqual(tc.expectedStereotypes);
     }
+  });
+
+  it('creates TestCase from tree and adds to Requirement Diagram with matching counts and no Block surrogate', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    harness.state.diagramPresentations = {
+      requirements: { elementIds: [], presentations: {} },
+    };
+
+    // 1. Create TestCase from tree
+    const createRes = adapter.execute({
+      type: 'createElement',
+      ownerId: 'model',
+      elementKind: 'testCase',
+      name: 'TC_Safety_Check',
+    });
+    expect(createRes.committed).toBe(true);
+
+    const tc = Object.values(harness.state.repository.verificationCases).find(v => v.name === 'TC_Safety_Check');
+    expect(tc).toBeDefined();
+    expect(Object.keys(harness.state.repository.verificationCases)).toHaveLength(1);
+
+    // Assert no surrogate Block in definitions
+    expect(harness.state.repository.definitions[tc!.id]).toBeUndefined();
+    expect(Object.keys(harness.state.repository.definitions)).toHaveLength(0);
+
+    // 2. Add to Requirement diagram
+    const addRes = adapter.execute({
+      type: 'addToDiagram',
+      diagramId: 'requirements',
+      elementIds: [tc!.id],
+    });
+    expect(addRes.committed).toBe(true);
+    expect(harness.state.diagramPresentations.requirements.elementIds).toContain(tc!.id);
+
+    // 3. Verify projection in view
+    const view = projectLegacyDiagram(
+      harness.state.repository,
+      harness.state.coordinates,
+      harness.state.diagramPresentations,
+      'requirements',
+    );
+    const projectedBlock = view.blocks.find(b => b.id === tc!.id);
+    expect(projectedBlock).toBeDefined();
+    expect(projectedBlock?.stereotype).toBe('testCase');
+
+    // 4. Remove from diagram preserves TestCase in repository
+    const removeRes = adapter.execute({
+      type: 'removeFromDiagram',
+      diagramId: 'requirements',
+      elementIds: [tc!.id],
+    });
+    expect(removeRes.committed).toBe(true);
+    expect(harness.state.diagramPresentations.requirements.elementIds).not.toContain(tc!.id);
+    expect(harness.state.repository.verificationCases[tc!.id]).toBeDefined();
   });
 });

@@ -127,7 +127,7 @@ import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
 import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
-import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
+import { getRequirementsDiagramScope, resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from './engine/sysml/requirementsDiagramScope';
 import { analyzeMutation, createHistory } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
 import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage } from './engine/sysml/model';
@@ -15026,10 +15026,11 @@ const ADIA = () => {
           onMouseUp={(e) => dropBddFeatureOnBlock(e, block.id)}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
-            if (diagramMode === 'requirements') {
-              enterRequirement(block.id);
-            } else {
-              enterBlock(block.id);
+            const decision = resolveBlockDoubleClickAction(diagramMode, block);
+            if (decision.action === 'enterRequirement') {
+              enterRequirement(decision.targetId!);
+            } else if (decision.action === 'enterBlock') {
+              enterBlock(decision.targetId!);
             }
           }}
           style={{ cursor: bddFeatureDrag ? 'copy' : isCreatingTransition ? 'crosshair' : 'move' }}

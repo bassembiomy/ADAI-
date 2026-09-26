@@ -457,7 +457,8 @@ export function projectLegacyDiagram(
     blocks.push({
       id: vc.id,
       name: vc.name,
-      stereotype: 'verificationCase',
+      // SysML v1.6 normative stereotype is 'testCase' (ADIA_EXTENSION maps legacy repository verificationCases to testCase)
+      stereotype: 'testCase',
       verificationMethod: vc.method,
       x: coords.x ?? 0,
       y: coords.y ?? 0,

@@ -5,6 +5,11 @@ export interface MigrationResult {
   repository: SysmlRepositoryV4;
 }
 
+/**
+ * Normalizes legacy ADIA VerificationCase data to normative SysML v1.6 TestCase.
+ * ADIA_EXTENSION: Legacy persistence stores verificationCases; public domain and projections
+ * use normative TestCase.
+ */
 export function migrateVerificationCasesToTestCases(repo: SysmlRepositoryV4): MigrationResult {
   const nextElements = { ...repo.elements };
   let migratedCount = 0;

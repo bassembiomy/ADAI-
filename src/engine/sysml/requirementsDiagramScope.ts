@@ -77,3 +77,44 @@ export function getRequirementsDiagramScope(
 function layerIdOf(block: BlockData): string {
   return block.layerId ?? 'root';
 }
+
+export interface DiagramBlockDoubleClickAction {
+  action: 'none' | 'enterRequirement' | 'enterBlock';
+  targetId?: string;
+}
+
+/**
+ * Resolves the double-click action for a Block or element on the canvas.
+ * On Requirement diagrams, double-clicking a Block or TestCase does NOT drill down or mutate.
+ * Explicit actions (e.g. Open in BDD, Open IBD) must be used instead, matching Cameo behavior.
+ */
+export function resolveBlockDoubleClickAction(
+  diagramMode: string,
+  block: { id: string; stereotype: string },
+): DiagramBlockDoubleClickAction {
+  if (diagramMode === 'requirements') {
+    if (block.stereotype === 'requirement') {
+      return { action: 'enterRequirement', targetId: block.id };
+    }
+    return { action: 'none' };
+  }
+  return { action: 'enterBlock', targetId: block.id };
+}
+
+export interface ExplicitNavigationTarget {
+  targetMode: 'bdd' | 'ibd';
+  targetLayerId: string;
+}
+
+/**
+ * Resolves explicit diagram navigation actions (e.g. "Open in BDD", "Open IBD") without side effects.
+ */
+export function resolveExplicitBlockNavigation(
+  target: 'bdd' | 'ibd',
+  blockId: string,
+): ExplicitNavigationTarget {
+  return {
+    targetMode: target,
+    targetLayerId: target === 'ibd' ? blockId : 'root',
+  };
+}

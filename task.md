@@ -41,15 +41,15 @@
   - [x] Step 6: Render semantic hit targets (`src/components/sysml/IbdConnectorEndpoint.tsx`)
   - [x] Step 7: Add persistence, undo/redo, and browser-independent projection tests
   - [x] Step 8: Commit
-- [ ] Task 6: Correct Requirement Diagram Block and TestCase Behavior
-  - [ ] Step 1: Write failing TestCase identity tests
-  - [ ] Step 2: Write failing interaction tests
-  - [ ] Step 3: Run focused tests and verify failure
-  - [ ] Step 4: Normalize public TestCase semantics
-  - [ ] Step 5: Project and render TestCase presentations
-  - [ ] Step 6: Remove implicit Requirement Block drill-down
-  - [ ] Step 7: Test save/reload, remove versus delete, and undo
-  - [ ] Step 8: Commit
+- [x] Task 6: Correct Requirement Diagram Block and TestCase Behavior
+  - [x] Step 1: Write failing TestCase identity tests
+  - [x] Step 2: Write failing interaction tests
+  - [x] Step 3: Run focused tests and verify failure
+  - [x] Step 4: Normalize public TestCase semantics
+  - [x] Step 5: Project and render TestCase presentations
+  - [x] Step 6: Remove implicit Requirement Block drill-down
+  - [x] Step 7: Test save/reload, remove versus delete, and undo
+  - [x] Step 8: Commit
 - [ ] Task 7: Fix State-to-Requirement Satisfy Across Every Caller
   - [ ] Step 1: Reproduce the exact diagnostic
   - [ ] Step 2: Add caller-parity tests

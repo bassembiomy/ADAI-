@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, RelationshipData } from '../../types/sysml_types';
-import { getRequirementsDiagramScope } from './requirementsDiagramScope';
+import {
+  getRequirementsDiagramScope,
+  resolveBlockDoubleClickAction,
+  resolveExplicitBlockNavigation,
+} from './requirementsDiagramScope';
 
 function block(id: string, stereotype: string, layerId?: string): BlockData {
   return {
@@ -134,5 +138,31 @@ describe('getRequirementsDiagramScope', () => {
     const scope = getRequirementsDiagramScope(blocks, [], 'root', ['block-root', 'test-root']);
 
     expect(scope.visibleBlockIds).toEqual(new Set(['req-root', 'block-root', 'test-root']));
+  });
+
+  describe('Requirement Diagram block interactions', () => {
+    it('double clicking a Block on a Requirement diagram performs no action', () => {
+      const decision = resolveBlockDoubleClickAction('requirements', { id: 'blk-1', stereotype: 'block' });
+      expect(decision.action).toBe('none');
+    });
+
+    it('double clicking a TestCase on a Requirement diagram performs no action', () => {
+      const decision = resolveBlockDoubleClickAction('requirements', { id: 'tc-1', stereotype: 'testCase' });
+      expect(decision.action).toBe('none');
+    });
+
+    it('double clicking a Block on a BDD triggers enterBlock', () => {
+      const decision = resolveBlockDoubleClickAction('bdd', { id: 'blk-1', stereotype: 'block' });
+      expect(decision.action).toBe('enterBlock');
+      expect(decision.targetId).toBe('blk-1');
+    });
+
+    it('explicit Open in BDD and Open IBD resolve target diagram and context without mutation', () => {
+      const bddNav = resolveExplicitBlockNavigation('bdd', 'blk-1');
+      expect(bddNav).toEqual({ targetMode: 'bdd', targetLayerId: 'root' });
+
+      const ibdNav = resolveExplicitBlockNavigation('ibd', 'blk-1');
+      expect(ibdNav).toEqual({ targetMode: 'ibd', targetLayerId: 'blk-1' });
+    });
   });
 });
