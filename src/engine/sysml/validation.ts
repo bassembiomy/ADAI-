@@ -6,6 +6,7 @@ import {
   validateUseCaseRelationship,
   isUseCaseRelationshipKind,
 } from './useCases';
+import { validateRepositoryPorts } from './validation/portRules';
 
 export { validateRequirementContainment };
 
@@ -97,6 +98,8 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
     for (const property of definition.properties) validateMultiplicity(property.id, property.multiplicity.lower, property.multiplicity.upper, error);
     for (const port of definition.ports) validateMultiplicity(port.id, port.multiplicity.lower, port.multiplicity.upper, error);
   }
+
+  diagnostics.push(...validateRepositoryPorts(repo));
 
   detectCycles(
     Object.values(repo.definitions).filter((d): d is BlockDefinition => d.kind === 'block'),

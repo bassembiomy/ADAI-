@@ -12,6 +12,7 @@ import {
 import { createEmptyRepository, type BlockDefinition, type ConnectorUsage, type PackageDefinition, type PartUsage, type PortDefinition, type PortUsage, type RequirementDefinition, type SysmlRelationship } from '../engine/sysml/model';
 import { serializeRepository } from '../engine/sysml/persistence';
 import type { SysmlElement } from './sysmlCommandGateway';
+import { buildCreateOwnedPortCommand } from './sysmlOwnedFeatureCommands';
 
 describe('sysmlCommandGateway', () => {
   it('projects a presented UML Package as a package presentation without inventing a Block', () => {
@@ -1475,6 +1476,64 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     const result = executeSysmlCommand(state, { type: 'createElement', element: satisfyRelationship });
     expect(result.committed).toBe(true);
     expect(Object.keys(result.repository.relationships)).toEqual([satisfyRelationship.id]);
+  });
+  it('executes owned port create-and-present atomically with undo and redo restoring identical IDs', () => {
+    const base = createSysmlGatewayState();
+    const canBus = { id: 'canBus', name: 'CANBus', namespace: [], kind: 'interface' as const, features: ['baud'] };
+    const vehicle = makeBlock('blk-vehicle', 'Vehicle');
+    let state = executeSysmlCommand(base, { type: 'createElement', element: canBus });
+    state = executeSysmlCommand(state, { type: 'createAndPresent', element: vehicle, diagramId: 'bdd', presentation: { x: 50, y: 50, width: 200, height: 150 } });
+
+    const portBuild = buildCreateOwnedPortCommand(state.repository, {
+      ownerBlockId: 'blk-vehicle',
+      portKind: 'proxyPort',
+      typeId: 'canBus',
+      diagramId: 'bdd',
+      presentation: { x: 50, y: 80 },
+    });
+    expect(portBuild.ok).toBe(true);
+
+    const executed = executeSysmlCommand(state, portBuild.command as any);
+    expect(executed.committed).toBe(true);
+    const updatedVehicle = executed.repository.definitions['blk-vehicle'] as BlockDefinition;
+    expect(updatedVehicle.ports).toHaveLength(1);
+    const createdPortId = updatedVehicle.ports[0].id;
+    expect(updatedVehicle.ports[0].kind).toBe('proxy');
+    expect(updatedVehicle.ports[0].portKind).toBe('proxyPort');
+
+    // Undo removes the port
+    const undone = executeSysmlCommand(executed, { type: 'undo' });
+    const undoneVehicle = undone.repository.definitions['blk-vehicle'] as BlockDefinition;
+    expect(undoneVehicle.ports).toHaveLength(0);
+
+    // Redo restores the exact same port
+    const redone = executeSysmlCommand(undone, { type: 'redo' });
+    const redoneVehicle = redone.repository.definitions['blk-vehicle'] as BlockDefinition;
+    expect(redoneVehicle.ports).toHaveLength(1);
+    expect(redoneVehicle.ports[0].id).toBe(createdPortId);
+  });
+
+  it('rejects invalid owned port creation without committing any semantic feature or presentation', () => {
+    const base = createSysmlGatewayState();
+    const motor = makeBlock('blk-motor', 'Motor');
+    const vehicle = makeBlock('blk-vehicle', 'Vehicle');
+    let state = executeSysmlCommand(base, { type: 'createElement', element: motor });
+    state = executeSysmlCommand(state, { type: 'createAndPresent', element: vehicle, diagramId: 'bdd', presentation: { x: 50, y: 50, width: 200, height: 150 } });
+
+    // Invalid proxyPort typed with a Block
+    const invalidBuild = buildCreateOwnedPortCommand(state.repository, {
+      ownerBlockId: 'blk-vehicle',
+      portKind: 'proxyPort',
+      typeId: 'blk-motor',
+      diagramId: 'bdd',
+      presentation: { x: 50, y: 80 },
+    });
+    expect(invalidBuild.ok).toBe(false);
+    expect(invalidBuild.diagnostics[0]?.code).toBe('INVALID_PROXY_PORT_TYPE');
+
+    // Repository definitions and presentations remain unchanged
+    const currentVehicle = state.repository.definitions['blk-vehicle'] as BlockDefinition;
+    expect(currentVehicle.ports).toHaveLength(0);
   });
 });
 

@@ -1,6 +1,7 @@
 import type { Multiplicity, SemanticElement } from './base';
 
 export type PortKind = 'umlPort' | 'proxyPort' | 'fullPort' | 'flowPort';
+export type CanonicalPortKind = PortKind;
 
 export interface Port extends SemanticElement {
   metaclass: 'Port';
