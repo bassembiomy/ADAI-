@@ -130,7 +130,7 @@ import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, clon
 import { getRequirementsDiagramScope, resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from './engine/sysml/requirementsDiagramScope';
 import { analyzeMutation, createHistory } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
-import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
@@ -168,6 +168,7 @@ import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyD
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 import { buildCreateIbdConnectorCommand } from './services/sysmlIbdConnectorCommands';
 import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
+import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -6127,6 +6128,7 @@ const ADIA = () => {
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
   const [activePackageDiagramId, setActivePackageDiagramId] = useState<string | null>(null);
+  const [packageDiagramChooser, setPackageDiagramChooser] = useState<{ diagramIds: string[] } | null>(null);
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
@@ -7156,6 +7158,36 @@ const ADIA = () => {
       setDiagramMode('package');
     }
   }, [handleExplorerCommandResult, setDiagramMode]);
+
+  const handleActivatePackageDiagram = useCallback(() => {
+    const activation = resolvePackageDiagramActivation(canonicalSysmlRepository, activePackageDiagramId);
+    if (activation.status === 'open') {
+      setActivePackageDiagramId(activation.diagramId);
+      setDiagramMode('package');
+    } else if (activation.status === 'choose') {
+      setPackageDiagramChooser({ diagramIds: activation.diagramIds });
+    } else if (activation.status === 'create') {
+      const newDiagramId = uuidv4();
+      const diagram: ModelDiagramDefinition = {
+        id: newDiagramId,
+        kind: 'diagram',
+        diagramKind: 'package',
+        ownerId: activation.ownerId,
+        namespace: ['model'],
+        name: 'Package Diagram',
+      };
+      const result = handleExecuteSysmlCommand({
+        type: 'createDiagram',
+        diagram,
+      });
+      if (result.committed) {
+        setActivePackageDiagramId(newDiagramId);
+        setDiagramMode('package');
+      } else {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+    }
+  }, [canonicalSysmlRepository, activePackageDiagramId, setDiagramMode, handleExecuteSysmlCommand, addError]);
 
   const showConnectionPolicyError = useCallback((rejection: {
     diagnostic: ConnectionPolicyDiagnostic;
@@ -16002,9 +16034,14 @@ const ADIA = () => {
             ].map(mode => (
               <button
                 key={mode.id}
-                onClick={() => setDiagramMode(mode.id as DiagramMode)}
-                disabled={mode.id === 'package' && !fallbackPackageDiagramId}
-                title={mode.id === 'package' && !fallbackPackageDiagramId ? 'Create a Package Diagram from the Model or Package tree first' : undefined}
+                onClick={() => {
+                  if (mode.id === 'package') {
+                    handleActivatePackageDiagram();
+                  } else {
+                    setDiagramMode(mode.id as DiagramMode);
+                  }
+                }}
+                title={mode.id === 'package' ? 'Open or create a Package Diagram' : undefined}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
                     ? 'bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-sm font-semibold'
@@ -19437,6 +19474,78 @@ const ADIA = () => {
                   onClick={() => setRequirementConnectionPicker(null)}
                   className="border-[#333] text-[#a0a0a0] hover:bg-[#222]"
                 >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Package diagram chooser */}
+        {packageDiagramChooser && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            onMouseDown={() => setPackageDiagramChooser(null)}
+          >
+            <div
+              className="bg-[#141414] border border-[#333] rounded-lg w-[420px] shadow-2xl p-5 flex flex-col gap-4 text-[#e0e0e0]"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-base font-semibold text-white">Select Package Diagram</h3>
+                <p className="text-xs text-[#888] mt-1">Choose a Package Diagram to open or create a new one.</p>
+              </div>
+
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                {packageDiagramChooser.diagramIds.map(id => {
+                  const diag = canonicalSysmlRepository.diagrams[id];
+                  return (
+                    <Button
+                      key={id}
+                      onClick={() => {
+                        setActivePackageDiagramId(id);
+                        setDiagramMode('package');
+                        setPackageDiagramChooser(null);
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      <span className="font-semibold text-xs text-orange-300">{diag?.name || id}</span>
+                      <span className="text-[10px] text-[#888]">ID: {id}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-[#333]">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const newId = uuidv4();
+                    const diagram: ModelDiagramDefinition = {
+                      id: newId,
+                      kind: 'diagram',
+                      diagramKind: 'package',
+                      ownerId: 'model',
+                      namespace: ['model'],
+                      name: `Package Diagram ${packageDiagramChooser.diagramIds.length + 1}`,
+                    };
+                    const result = handleExecuteSysmlCommand({
+                      type: 'createDiagram',
+                      diagram,
+                    });
+                    if (result.committed) {
+                      setActivePackageDiagramId(newId);
+                      setDiagramMode('package');
+                      setPackageDiagramChooser(null);
+                    } else {
+                      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                    }
+                  }}
+                >
+                  Create New Diagram
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setPackageDiagramChooser(null)}>
                   Cancel
                 </Button>
               </div>

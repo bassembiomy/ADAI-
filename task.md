@@ -57,14 +57,14 @@
   - [x] Step 4: Improve diagnostics
   - [x] Step 5: Run relationship and traceability tests
   - [x] Step 6: Commit
-- [ ] Task 8: Make Package Diagram Activation Deterministic
-  - [ ] Step 1: Write zero/one/many activation tests
-  - [ ] Step 2: Run focused tests and verify failure
-  - [ ] Step 3: Implement pure resolver (`src/services/sysmlDiagramActivation.ts`)
-  - [ ] Step 4: Wire application activation
-  - [ ] Step 5: Preserve failure state
-  - [ ] Step 6: Test tree double-click
-  - [ ] Step 7: Commit
+- [x] Task 8: Make Package Diagram Activation Deterministic
+  - [x] Step 1: Write zero/one/many activation tests
+  - [x] Step 2: Run focused tests and verify failure
+  - [x] Step 3: Implement pure resolver (`src/services/sysmlDiagramActivation.ts`)
+  - [x] Step 4: Wire application activation
+  - [x] Step 5: Preserve failure state
+  - [x] Step 6: Test tree double-click
+  - [x] Step 7: Commit
 - [ ] Task 9: Add End-to-End Workflows and Compliance Evidence
   - [ ] Step 1: Add BDD Port browser workflows
   - [ ] Step 2: Add Property and IBD workflows

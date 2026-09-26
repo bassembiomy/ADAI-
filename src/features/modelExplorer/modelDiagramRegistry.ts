@@ -1,4 +1,5 @@
 import type { ModelExplorerAdapter } from './modelExplorerTypes';
+import { resolvePackageDiagramActivation, type PackageDiagramActivation } from '../../services/sysmlDiagramActivation';
 
 export interface ModelDiagramMetadata {
   id: string;
@@ -25,6 +26,7 @@ export interface ModelDiagramRegistry {
   }): ModelDiagramMetadata;
   open(diagramId: string): void;
   presentedElementIds(diagramId: string): string[];
+  resolvePackageActivation(lastActiveId?: string | null): PackageDiagramActivation;
 }
 
 export function createModelDiagramRegistry(options: ModelDiagramRegistryOptions): ModelDiagramRegistry {
@@ -77,6 +79,15 @@ export function createModelDiagramRegistry(options: ModelDiagramRegistryOptions)
         return options.getPresentedIds(diagramId);
       }
       return [];
+    },
+
+    resolvePackageActivation(lastActiveId?: string | null): PackageDiagramActivation {
+      const fromStore = options.listDiagrams ? options.listDiagrams() : localDiagrams;
+      const diagrams: Record<string, any> = {};
+      for (const d of fromStore) {
+        diagrams[d.id] = d;
+      }
+      return resolvePackageDiagramActivation({ diagrams }, lastActiveId);
     },
   };
 }

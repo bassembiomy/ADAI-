@@ -53,4 +53,28 @@ describe('modelDiagramRegistry', () => {
     expect(() => registry.create({ ownerId: 'missing', diagramKind: 'package' })).toThrow('Owner missing');
     expect(registry.listForOwner('missing')).toEqual([]);
   });
+
+  it('delegates package activation resolution to resolvePackageDiagramActivation', () => {
+    const adapter: ModelExplorerAdapter = {
+      domain: 'sysml', getRevision: () => 1, project: vi.fn(), capabilities: vi.fn(),
+      preflight: vi.fn(), execute: vi.fn(), relationshipTargets: vi.fn(),
+    };
+    let diagrams: any[] = [];
+    const registry = createModelDiagramRegistry({
+      adapter,
+      listDiagrams: () => diagrams,
+    });
+
+    expect(registry.resolvePackageActivation()).toEqual({ status: 'create', ownerId: 'model' });
+
+    diagrams = [{ id: 'pkg-1', name: 'Main Packages', diagramKind: 'package', ownerId: 'model' }];
+    expect(registry.resolvePackageActivation()).toEqual({ status: 'open', diagramId: 'pkg-1' });
+
+    diagrams = [
+      { id: 'pkg-1', name: 'Packages Alpha', diagramKind: 'package', ownerId: 'model' },
+      { id: 'pkg-2', name: 'Packages Beta', diagramKind: 'package', ownerId: 'model' },
+    ];
+    expect(registry.resolvePackageActivation('pkg-2')).toEqual({ status: 'open', diagramId: 'pkg-2' });
+    expect(registry.resolvePackageActivation(null)).toEqual({ status: 'choose', diagramIds: ['pkg-1', 'pkg-2'] });
+  });
 });
