@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
 import type { ModelExplorerCommand } from '../modelExplorerTypes';
 import { createSysmlGatewayState, executeSysmlCommand, projectLegacyDiagram, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
@@ -667,5 +667,132 @@ describe('sysmlExplorerAdapter', () => {
     expect(removeRes.committed).toBe(true);
     expect(harness.state.diagramPresentations.requirements.elementIds).not.toContain(tc!.id);
     expect(harness.state.repository.verificationCases[tc!.id]).toBeDefined();
+  });
+
+  it('dispatches createOwnedFeature for Part and Value Property creation with selected existing types', () => {
+    const harness = createTestHarness();
+    const block: BlockDefinition = {
+      id: 'block-1',
+      name: 'Block1',
+      kind: 'block',
+      namespace: [],
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    const engine: BlockDefinition = {
+      id: 'block-engine',
+      name: 'Engine',
+      kind: 'block',
+      namespace: [],
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    const voltage = {
+      id: 'type-voltage',
+      name: 'Voltage',
+      kind: 'valueType' as const,
+      namespace: [],
+      unit: 'V',
+    };
+    harness.executeCommand({ type: 'createElement', element: block });
+    harness.executeCommand({ type: 'createElement', element: engine });
+    harness.executeCommand({ type: 'createElement', element: voltage });
+
+    const adapter = createSysmlExplorerAdapter(harness);
+    const spy = vi.spyOn(harness, 'executeCommand');
+
+    // 1. Create Part Property
+    const partResult = adapter.execute({
+      type: 'createElement',
+      ownerId: 'block-1',
+      elementKind: 'part',
+      name: 'myEngine',
+    });
+    expect(partResult.committed).toBe(true);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'createOwnedFeature',
+        intent: expect.objectContaining({
+          featureKind: 'property',
+          ownerBlockId: 'block-1',
+          propertyKind: 'part',
+          typeId: 'block-engine',
+        }),
+      })
+    );
+
+    // 2. Create Value Property
+    const valueResult = adapter.execute({
+      type: 'createElement',
+      ownerId: 'block-1',
+      elementKind: 'valueProperty',
+      name: 'sensorVoltage',
+    });
+    expect(valueResult.committed).toBe(true);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'createOwnedFeature',
+        intent: expect.objectContaining({
+          featureKind: 'property',
+          ownerBlockId: 'block-1',
+          propertyKind: 'value',
+          typeId: 'type-voltage',
+        }),
+      })
+    );
+  });
+
+  it('returns TYPE_NOT_FOUND and does not commit when no compatible type exists for property creation', () => {
+    const harness = createTestHarness();
+    const block: BlockDefinition = {
+      id: 'block-isolated',
+      name: 'IsolatedBlock',
+      kind: 'block',
+      namespace: [],
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    harness.executeCommand({ type: 'createElement', element: block });
+
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    // Value property creation when no ValueType exists in repository
+    const valueResult = adapter.execute({
+      type: 'createElement',
+      ownerId: 'block-isolated',
+      elementKind: 'valueProperty',
+      name: 'noTypeValue',
+    });
+
+    expect(valueResult.committed).toBe(false);
+    expect(valueResult.diagnostics.some(d => d.code === 'TYPE_NOT_FOUND')).toBe(true);
+
+    // Part property creation with non-existent typeId
+    const partResult = adapter.execute({
+      type: 'createElement',
+      ownerId: 'block-isolated',
+      elementKind: 'part',
+      name: 'noTypePart',
+      typeId: 'non-existent-type',
+    } as any);
+
+    expect(partResult.committed).toBe(false);
+    expect(partResult.diagnostics.some(d => d.code === 'TYPE_NOT_FOUND')).toBe(true);
+    expect((harness.state.repository.definitions['block-isolated'] as BlockDefinition).properties).toHaveLength(0);
   });
 });

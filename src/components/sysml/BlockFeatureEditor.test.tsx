@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { render, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { BlockFeatureEditor } from './BlockFeatureEditor';
 import type { BlockDefinition, SysmlDefinition } from '../../engine/sysml/model';
@@ -181,5 +183,29 @@ describe('BlockFeatureEditor', () => {
     expect(html).toContain('120 total');
     expect(html).toContain('more inherited features');
     expect(html).not.toContain('prop119');
+  });
+
+  it('dispatches createOwnedFeature command when adding a property with selected type', () => {
+    const onDispatchCommand = vi.fn();
+    const { getByText } = render(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        onDispatchCommand={onDispatchCommand}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(getByText('+ Add Property'));
+
+    expect(onDispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'createOwnedFeature',
+        intent: expect.objectContaining({
+          featureKind: 'property',
+          ownerBlockId: 'Vehicle',
+        }),
+      })
+    );
   });
 });

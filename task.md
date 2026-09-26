@@ -8,23 +8,23 @@
   - [x] Step 5: Pass State context through all callers
   - [x] Step 6: Make repository validation cross-domain aware
   - [x] Step 7: Run tests and commit
-- [ ] Task 2: Introduce Atomic, Validated Owned-Feature Gateway Commands
-  - [ ] Step 1: Write a failing command-shape test
-  - [ ] Step 2: Write failing atomicity tests
-  - [ ] Step 3: Write success/undo tests
-  - [ ] Step 4: Run tests and verify failure
-  - [ ] Step 5: Make builders deterministic and side-effect free
-  - [ ] Step 6: Validate staged repository state before commit
-  - [ ] Step 7: Ensure presentation has a real consumer
-  - [ ] Step 8: Run tests, typecheck, and commit
-- [ ] Task 3: Wire Property Creation Through Canvas and Model Explorer
-  - [ ] Step 1: Write failing production-wiring tests
-  - [ ] Step 2: Write type-selection tests
-  - [ ] Step 3: Write Property relationship tests
-  - [ ] Step 4: Run tests and verify failure
-  - [ ] Step 5: Replace local/ad hoc Property edits
-  - [ ] Step 6: Preserve explicit relationship choice
-  - [ ] Step 7: Run tests and commit
+- [x] Task 2: Introduce Atomic, Validated Owned-Feature Gateway Commands
+  - [x] Step 1: Write a failing command-shape test
+  - [x] Step 2: Write failing atomicity tests
+  - [x] Step 3: Write success/undo tests
+  - [x] Step 4: Run tests and verify failure
+  - [x] Step 5: Make builders deterministic and side-effect free
+  - [x] Step 6: Validate staged repository state before commit
+  - [x] Step 7: Ensure presentation has a real consumer
+  - [x] Step 8: Run tests, typecheck, and commit
+- [x] Task 3: Wire Property Creation Through Canvas and Model Explorer
+  - [x] Step 1: Write failing production-wiring tests
+  - [x] Step 2: Write type-selection tests
+  - [x] Step 3: Write Property relationship tests
+  - [x] Step 4: Run tests and verify failure
+  - [x] Step 5: Replace local/ad hoc Property edits
+  - [x] Step 6: Preserve explicit relationship choice
+  - [x] Step 7: Run tests and commit
 - [ ] Task 4: Validate Nested Ports from Persisted Repository Structure
   - [ ] Step 1: Write failing persisted nesting test
   - [ ] Step 2: Write valid nesting tests

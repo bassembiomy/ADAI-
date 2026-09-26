@@ -10031,8 +10031,13 @@ const ADIA = () => {
     }
 
     const candidate: RelationshipData = {
-      id: uuidv4(), sourceId: source.id, targetId: target.id, type, label,
-      sourceMultiplicity, targetMultiplicity: '1',
+      id: uuidv4(),
+      sourceId: bddFeatureDrag.kind === 'property' ? bddFeatureDrag.featureId : source.id,
+      targetId: target.id,
+      type,
+      label,
+      sourceMultiplicity,
+      targetMultiplicity: '1',
     };
     const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, 'bdd');
     if (rejection) {

@@ -1413,6 +1413,8 @@ export function executeSysmlCommand(
 
     let nextCandidateBlock: BlockDefinition;
 
+    let createdUsage: PartUsage | undefined;
+
     if (intent.featureKind === 'port') {
       if (!intent.typeId && intent.portKind !== 'umlPort') {
         return reject('TYPE_NOT_FOUND', `A compatible type is required for ${intent.portKind}.`, intent.ownerBlockId);
@@ -1484,6 +1486,20 @@ export function executeSysmlCommand(
         ...owner,
         properties: [...(owner.properties ?? []), property],
       };
+
+      if (intent.propertyKind === 'part' || intent.propertyKind === 'reference') {
+        const usageId = intent.usageId || `part-${featureId}`;
+        createdUsage = {
+          id: usageId,
+          propertyId: featureId,
+          kind: 'part',
+          name: intent.name || featureId,
+          ownerId: owner.id,
+          typeId: intent.typeId,
+          aggregation: intent.propertyKind === 'reference' ? 'reference' : 'composite',
+          multiplicity: property.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
+        };
+      }
     }
 
     const stagedRepo: SysmlRepository = {
@@ -1492,6 +1508,12 @@ export function executeSysmlCommand(
         ...state.repository.definitions,
         [owner.id]: nextCandidateBlock,
       },
+      usages: createdUsage
+        ? {
+            ...state.repository.usages,
+            [createdUsage.id]: createdUsage,
+          }
+        : state.repository.usages,
     };
     const stagedPortDiagnostics = validateRepositoryPorts(stagedRepo);
     const stagedPortErrors = stagedPortDiagnostics.filter(d => d.severity === 'error');
@@ -1514,6 +1536,9 @@ export function executeSysmlCommand(
     }
 
     upsertEntity(store, 'definitions', nextCandidateBlock);
+    if (createdUsage) {
+      upsertEntity(store, 'usages', createdUsage);
+    }
 
     const nextCoordinates = { ...coordinates };
     let nextDiagramPresentations = { ...diagramPresentations };
@@ -1563,7 +1588,7 @@ export function executeSysmlCommand(
           revision: state.repository.revision + 1,
           timestamp: new Date().toISOString(),
           command: 'createOwnedFeature',
-          elementIds: [owner.id, featureId],
+          elementIds: [owner.id, featureId, ...(createdUsage ? [createdUsage.id] : [])],
         },
       ],
     };
@@ -1574,6 +1599,10 @@ export function executeSysmlCommand(
     const inverseOps: import('../engine/sysml/patches').PatchOperation[] = [
       { op: 'replace', collection: 'definitions', id: owner.id, oldValue: nextCandidateBlock, value: owner },
     ];
+    if (createdUsage) {
+      forwardOps.push({ op: 'add', collection: 'usages', id: createdUsage.id, value: createdUsage });
+      inverseOps.push({ op: 'remove', collection: 'usages', id: createdUsage.id, oldValue: createdUsage });
+    }
     if (command.presentation) {
       forwardOps.push({ op: 'add', collection: 'coordinates', id: featureId, value: command.presentation });
       inverseOps.push({ op: 'remove', collection: 'coordinates', id: featureId, oldValue: command.presentation });

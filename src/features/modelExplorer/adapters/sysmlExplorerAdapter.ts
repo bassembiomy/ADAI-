@@ -24,7 +24,11 @@ import {
   getRelationshipKindLabel,
   getDiagramKindLabel,
 } from '../modelExplorerCapabilities';
-import { buildCreateOwnedPortCommand, type CanonicalPortKind } from '../../../services/sysmlOwnedFeatureCommands';
+import {
+  buildCreateOwnedPortCommand,
+  buildCreateOwnedPropertyCommand,
+  type CanonicalPortKind,
+} from '../../../services/sysmlOwnedFeatureCommands';
 
 function explorerKindToMetaclass(kind: string): MetaclassKind {
   switch (kind) {
@@ -904,11 +908,25 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           // Part type check: must have a valid block definition
           if (['part', 'reference', 'sharedPart'].includes(command.elementKind)) {
             const blockDefs = Object.values(repo.definitions).filter(d => d.kind === 'block');
-            if (blockDefs.length === 0) {
+            const typeId = (command as any).typeId || (blockDefs.find(b => b.id !== command.ownerId) ?? blockDefs[0])?.id;
+            if (!typeId) {
               diagnostics.push({
-                code: 'PART_TYPE_REQUIRED',
+                code: 'TYPE_NOT_FOUND',
                 severity: 'error',
                 message: 'A valid block type is required to instantiate a part.',
+              });
+              return { committed: false, revision: repo.revision, diagnostics };
+            }
+          }
+
+          if (['valueProperty', 'value'].includes(command.elementKind)) {
+            const valueDefs = Object.values(repo.definitions).filter(d => d.kind === 'valueType');
+            const typeId = (command as any).typeId || valueDefs[0]?.id;
+            if (!typeId) {
+              diagnostics.push({
+                code: 'TYPE_NOT_FOUND',
+                severity: 'error',
+                message: 'A valid value type is required for value property.',
               });
               return { committed: false, revision: repo.revision, diagnostics };
             }
@@ -1144,28 +1162,43 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
           if (['part', 'reference', 'sharedPart'].includes(requestedKind)) {
             const blockDefs = Object.values(repo.definitions).filter(d => d.kind === 'block');
-            const typeBlock = blockDefs.find(b => b.id !== ownerId) ?? blockDefs[0];
-            if (!typeBlock) {
+            const propKind: 'part' | 'reference' = requestedKind === 'reference' ? 'reference' : 'part';
+            let typeId = (command as any).typeId as string | undefined;
+            if (!typeId) {
+              const typeBlock = blockDefs.find(b => b.id !== ownerId) ?? blockDefs[0];
+              typeId = typeBlock?.id;
+            }
+            if (!typeId) {
               return {
                 committed: false,
                 revision: repo.revision,
-                diagnostics: [{ code: 'PART_TYPE_REQUIRED', severity: 'error', message: 'A valid block type is required.' }],
+                diagnostics: [{ code: 'TYPE_NOT_FOUND', severity: 'error', message: 'A valid block type is required.' }],
               };
             }
-            const agg = requestedKind === 'reference' ? 'reference' : requestedKind === 'sharedPart' ? 'shared' : 'composite';
-            const part = createPartUsage({
+            const plan = buildCreateOwnedPropertyCommand(repo, {
+              ownerBlockId: ownerId,
+              propertyKind: propKind,
+              typeId,
               name: command.name,
-              ownerId,
-              typeId: typeBlock.id,
-              aggregation: agg,
-              existingNames,
             });
-            // A SysML PartProperty is one semantic feature viewed in two ways:
-            // as an owned Block property on a BDD and as a typed usage on an IBD.
-            // Use the same atomic command as canvas creation so neither entry
-            // path can create an orphan usage or a display-only property row.
-            const result = dispatchCommand(buildCreatePartUsageCommand(repo, part));
-            return toExplorerResult(result, [part.id]);
+            if (!plan.ok || !plan.command) {
+              return {
+                committed: false,
+                revision: repo.revision,
+                diagnostics: plan.diagnostics.map(d => ({
+                  code: d.code,
+                  severity: 'error' as const,
+                  message: d.message,
+                })),
+              };
+            }
+            const result = dispatchCommand(plan.command as SysmlEditorCommand);
+            const updatedBlock = result.repository.definitions[ownerId] as BlockDefinition | undefined;
+            const createdProp = updatedBlock?.properties?.[(updatedBlock.properties?.length ?? 1) - 1];
+            const matchingUsage = Object.values(result.repository.usages).find(
+              u => u.kind === 'part' && (u as PartUsage).propertyId === createdProp?.id
+            );
+            return toExplorerResult(result, matchingUsage ? [matchingUsage.id] : createdProp ? [createdProp.id] : []);
           }
 
           if (['port', 'fullPort', 'proxyPort', 'flowPort'].includes(requestedKind)) {
@@ -1218,21 +1251,75 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             }
           }
 
-          if (requestedKind === 'valueProperty') {
-            const block = repo.definitions[ownerId];
-            if (block && block.kind === 'block') {
-              const prop = createValueProperty({
-                name: command.name,
-                existingNames: (block.properties ?? []).map(p => p.name),
-              });
-              const nextProps = [...(block.properties ?? []), prop];
-              const result = dispatchCommand({
-                type: 'updateElement',
-                elementId: ownerId,
-                patch: { properties: nextProps },
-              });
-              return toExplorerResult(result, [prop.id]);
+          if (requestedKind === 'valueProperty' || requestedKind === 'value') {
+            const valueDefs = Object.values(repo.definitions).filter(d => d.kind === 'valueType');
+            let typeId = (command as any).typeId as string | undefined;
+            if (!typeId) {
+              typeId = valueDefs[0]?.id;
             }
+            if (!typeId) {
+              return {
+                committed: false,
+                revision: repo.revision,
+                diagnostics: [{ code: 'TYPE_NOT_FOUND', severity: 'error', message: 'A valid value type is required.' }],
+              };
+            }
+            const plan = buildCreateOwnedPropertyCommand(repo, {
+              ownerBlockId: ownerId,
+              propertyKind: 'value',
+              typeId,
+              name: command.name,
+            });
+            if (!plan.ok || !plan.command) {
+              return {
+                committed: false,
+                revision: repo.revision,
+                diagnostics: plan.diagnostics.map(d => ({
+                  code: d.code,
+                  severity: 'error' as const,
+                  message: d.message,
+                })),
+              };
+            }
+            const result = dispatchCommand(plan.command as SysmlEditorCommand);
+            const updatedBlock = result.repository.definitions[ownerId] as BlockDefinition | undefined;
+            const createdProp = updatedBlock?.properties?.[(updatedBlock.properties?.length ?? 1) - 1];
+            return toExplorerResult(result, createdProp ? [createdProp.id] : []);
+          }
+
+          if (requestedKind === 'flowProperty' || requestedKind === 'flow') {
+            let typeId = (command as any).typeId as string | undefined;
+            if (!typeId) {
+              typeId = Object.values(repo.definitions)[0]?.id;
+            }
+            if (!typeId) {
+              return {
+                committed: false,
+                revision: repo.revision,
+                diagnostics: [{ code: 'TYPE_NOT_FOUND', severity: 'error', message: 'A valid type is required for flow property.' }],
+              };
+            }
+            const plan = buildCreateOwnedPropertyCommand(repo, {
+              ownerBlockId: ownerId,
+              propertyKind: 'flow',
+              typeId,
+              name: command.name,
+            });
+            if (!plan.ok || !plan.command) {
+              return {
+                committed: false,
+                revision: repo.revision,
+                diagnostics: plan.diagnostics.map(d => ({
+                  code: d.code,
+                  severity: 'error' as const,
+                  message: d.message,
+                })),
+              };
+            }
+            const result = dispatchCommand(plan.command as SysmlEditorCommand);
+            const updatedBlock = result.repository.definitions[ownerId] as BlockDefinition | undefined;
+            const createdProp = updatedBlock?.properties?.[(updatedBlock.properties?.length ?? 1) - 1];
+            return toExplorerResult(result, createdProp ? [createdProp.id] : []);
           }
 
           return {

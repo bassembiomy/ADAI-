@@ -1,10 +1,14 @@
 import React from 'react';
-import type { BlockDefinition, PropertyDefinition, PortDefinition, SysmlDefinition } from '../../engine/sysml/model';
+import type { BlockDefinition, PropertyDefinition, PortDefinition, SysmlDefinition, SysmlRepository } from '../../engine/sysml/model';
+import { createEmptyRepository } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
+import { buildCreateOwnedPropertyCommand, buildCreateOwnedPortCommand } from '../../services/sysmlOwnedFeatureCommands';
+import type { SysmlEditorCommand } from '../../services/sysmlCommandGateway';
 
 export interface BlockFeatureEditorProps {
   block: BlockDefinition;
   definitions: Record<string, SysmlDefinition>;
+  repo?: SysmlRepository;
   inheritedFeatures?: {
     properties: PropertyDefinition[];
     ports: PortDefinition[];
@@ -19,6 +23,7 @@ export interface BlockFeatureEditorProps {
   diagnostics?: SysmlDiagnostic[];
   maxVisibleInherited?: number;
   onChange: (block: BlockDefinition) => void;
+  onDispatchCommand?: (command: SysmlEditorCommand) => void;
   onRedefine?: (property: PropertyDefinition) => void;
   onSubset?: (property: PropertyDefinition) => void;
 }
@@ -47,6 +52,7 @@ export function BlockFeatureEditor({
   diagnostics = [],
   maxVisibleInherited = DEFAULT_MAX_VISIBLE_INHERITED,
   onChange,
+  onDispatchCommand,
   onRedefine,
   onSubset,
 }: BlockFeatureEditorProps) {
@@ -64,7 +70,26 @@ export function BlockFeatureEditor({
   };
 
   const addProperty = () => {
-    const firstDef = Object.values(definitions)[0];
+    const firstDef = Object.values(definitions).find(d => d.kind === 'valueType') ??
+      Object.values(definitions).find(d => d.kind === 'block') ??
+      Object.values(definitions)[0];
+    if (onDispatchCommand) {
+      const repoForBuild: SysmlRepository = (block as any)._repo ?? {
+        ...createEmptyRepository(),
+        definitions: { ...definitions, [block.id]: block },
+      };
+      const kind = firstDef?.kind === 'block' ? 'part' : 'value';
+      const plan = buildCreateOwnedPropertyCommand(repoForBuild, {
+        ownerBlockId: block.id,
+        propertyKind: kind,
+        typeId: firstDef?.id ?? '',
+        name: `prop${block.properties.length + 1}`,
+      });
+      if (plan.ok && plan.command) {
+        onDispatchCommand(plan.command as SysmlEditorCommand);
+        return;
+      }
+    }
     const newProp: PropertyDefinition = {
       id: crypto.randomUUID(),
       name: `prop${block.properties.length + 1}`,
@@ -86,6 +111,22 @@ export function BlockFeatureEditor({
 
   const addPort = () => {
     const firstIF = Object.values(definitions).find(d => d.kind === 'interface') ?? Object.values(definitions)[0];
+    if (onDispatchCommand) {
+      const repoForBuild: SysmlRepository = (block as any)._repo ?? {
+        ...createEmptyRepository(),
+        definitions: { ...definitions, [block.id]: block },
+      };
+      const plan = buildCreateOwnedPortCommand(repoForBuild, {
+        ownerBlockId: block.id,
+        portKind: firstIF?.kind === 'interface' ? 'proxyPort' : 'umlPort',
+        typeId: firstIF?.id,
+        name: `port${block.ports.length + 1}`,
+      });
+      if (plan.ok && plan.command) {
+        onDispatchCommand(plan.command as SysmlEditorCommand);
+        return;
+      }
+    }
     const newPort: PortDefinition = {
       id: crypto.randomUUID(),
       name: `port${block.ports.length + 1}`,

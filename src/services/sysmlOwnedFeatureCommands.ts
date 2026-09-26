@@ -36,6 +36,7 @@ export interface CreateOwnedPropertyIntent {
   diagramId?: string;
   presentation?: PresentationCoordinates;
   featureId?: string;
+  usageId?: string;
 }
 
 export type OwnedFeatureIntent =
@@ -56,6 +57,7 @@ export type OwnedFeatureIntent =
       typeId: string;
       name?: string;
       featureId?: string;
+      usageId?: string;
     };
 
 export interface CreateOwnedFeatureCommand {
@@ -366,6 +368,7 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
       typeId: typeDef.id,
       name: propName,
       featureId: propId,
+      ...(intent.usageId ? { usageId: intent.usageId } : {}),
     },
     ...(intent.diagramId ? { diagramId: intent.diagramId } : {}),
     ...(intent.presentation ? { presentation: intent.presentation } : {}),

@@ -108,4 +108,40 @@ describe('SysML connection UI admission', () => {
     expect(kinds).toContain('allocation');
     expect(kinds).not.toContain('generalization');
   });
+
+  it('connects Property to Block using Property and Block semantic IDs and allows explicit relationship kind selection', () => {
+    const blockWithProp: BlockData = {
+      ...block('b1'),
+      properties: [{ id: 'prop-engine-1', name: 'engine', type: 'EngineBlock', kind: 'part' }],
+    };
+    const targetBlock = block('b2');
+    const state = { blocks: [blockWithProp, targetBlock], parts: [], relationships: [] };
+
+    // Resolve source endpoint by Property semantic ID
+    const sourceEndpoint = resolveUiConnectionEndpoint(state, 'prop-engine-1');
+    expect(sourceEndpoint.id).toBe('prop-engine-1');
+    expect(sourceEndpoint.family).toBe('property');
+
+    // Resolve target endpoint by Block semantic ID
+    const targetEndpoint = resolveUiConnectionEndpoint(state, 'b2');
+    expect(targetEndpoint.id).toBe('b2');
+    expect(targetEndpoint.family).toBe('block');
+
+    // Canvas offers legal choices: association, dependency, allocation
+    const kinds = getCanvasRelationshipKinds(state, 'prop-engine-1', 'b2', 'bdd');
+    expect(kinds).toEqual(expect.arrayContaining(['association', 'dependency', 'allocation']));
+    // Does not default silently or offer invalid kinds
+    expect(kinds).not.toContain('generalization');
+    expect(kinds).not.toContain('composition');
+
+    // Valid relationship with explicit choice passes UI admission
+    const validRel: RelationshipData = {
+      id: 'rel-prop-b2',
+      sourceId: 'prop-engine-1',
+      targetId: 'b2',
+      type: 'association',
+      label: 'engineAssociation',
+    };
+    expect(rejectUiRelationship(state, validRel, 'bdd')).toBeUndefined();
+  });
 });
