@@ -10,11 +10,16 @@ import type {
   ModelBaseline,
   TraceArtifact,
   ModelChangeRecord,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
 } from './model';
 import type { NormalizedSysmlStore } from './normalizedStore';
 import type { SysmlValidationReport } from './validation';
 import type { MutationImpact } from './mutations';
-import type { PresentationCoordinates } from '../../services/sysmlCommandGateway';
+import type { DiagramPresentationInput, PresentationCoordinates } from './presentationState';
 
 export const SYSML_WORKER_PROTOCOL_VERSION = '1.0.0';
 
@@ -38,8 +43,13 @@ export interface WorkerStoreSnapshot {
   baselines?: Record<string, ModelBaseline>;
   artifacts?: Record<string, TraceArtifact>;
   auditTrail?: ModelChangeRecord[];
+  actors?: Record<string, ActorDefinition>;
+  subjects?: Record<string, SubjectDefinition>;
+  useCases?: Record<string, UseCaseDefinition>;
+  extensionPoints?: Record<string, ExtensionPoint>;
+  diagramReferences?: Record<string, DiagramReference>;
   coordinates?: Record<string, PresentationCoordinates>;
-  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  diagramPresentations?: Record<string, DiagramPresentationInput>;
   activeDiagramId?: string;
   activeDiagramElementIds?: string[];
 }

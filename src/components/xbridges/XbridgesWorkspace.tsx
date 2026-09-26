@@ -29,6 +29,7 @@ import {
   syncXBBoundaryNodeMetadata,
 } from '../../utils/stateMachine/xbBoundaryMappings';
 import { isInputFocused } from '../../utils/domUtils';
+import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -1553,6 +1554,8 @@ export const XbridgesWorkspace: React.FC<{
     }
   }, [tickMs]);
   const engineRef = React.useRef<XbridgesEngine | null>(null);
+  const xbridgesWorkerRef = React.useRef<XbridgesWorkerClient | null>(null);
+  const lastWorkerStatesRef = React.useRef<Record<string, any>>({});
   const timeRef = React.useRef(0);
   const activeSimulating = isSimulating || (!!coSimEngine && isSmSimulating);
   const activeTime = coSimEngine && isSmSimulating ? simulationTime : timeRef.current;
@@ -1755,76 +1758,157 @@ export const XbridgesWorkspace: React.FC<{
           sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
         }))
       };
-      engineRef.current = new XbridgesEngine(model);
-      const compileDiagnostics = engineRef.current.compile();
-      setDiagnostics(compileDiagnostics);
 
-      const hasErrors = compileDiagnostics.some(d => d.severity === 'error');
-      if (hasErrors) {
-        setIsSimulating(false);
-        setShowDiagnostics(true);
-        return;
+      if (!xbridgesWorkerRef.current) {
+        xbridgesWorkerRef.current = new XbridgesWorkerClient();
+      }
+
+      const useWorker = xbridgesWorkerRef.current?.available;
+
+      if (!useWorker) {
+        engineRef.current = new XbridgesEngine(model);
+        const compileDiagnostics = engineRef.current.compile();
+        setDiagnostics(compileDiagnostics);
+
+        const hasErrors = compileDiagnostics.some(d => d.severity === 'error');
+        if (hasErrors) {
+          setIsSimulating(false);
+          setShowDiagnostics(true);
+          return;
+        }
+      } else {
+        xbridgesWorkerRef.current.compile(model, timeRef.current)
+          .then(res => {
+            if (res.diagnostics) setDiagnostics(res.diagnostics);
+            if (!res.ok) {
+              setIsSimulating(false);
+              setShowDiagnostics(true);
+            }
+          })
+          .catch(err => {
+            console.error('Failed to compile model in Xbridges worker:', err);
+            setIsSimulating(false);
+            setShowDiagnostics(true);
+          });
       }
 
       const tick = () => {
-        if (engineRef.current && !isPausedRef.current) {
-          // Sync UI node parameters and SM Variables to engine block parameters (dynamic tuning)
-          nodesRef.current.forEach(node => {
-            const block = engineRef.current!['blockMap'].get(node.id);
-            if (block) {
-              // 1. Sync parameter tuning from UI properties panel (e.g. carrierType, frequency)
-              if (block.params && node.data.params) {
-                Object.keys(node.data.params).forEach(k => {
-                  block.params[k] = node.data.params[k];
-                });
-              }
+        if (!isPausedRef.current) {
+          // Sync UI node parameters and SM Variables
+          const paramUpdates: Record<string, Record<string, any>> = {};
+          const inportOverrides: Record<string, any> = {};
 
-              // 2. Sync SM Variables to Inports (Data Connectivity)
-              if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
-                const smVar = availableVariables.find(v => v.id === node.data.params.smVarId);
-                if (smVar) {
-                  const numericVal = Number(smVar.currentValue);
-                  engineRef.current!.setSignalValue(node.id, 'out', numericVal);
-                  if (block.params) block.params.value = numericVal;
-                }
+          nodesRef.current.forEach(node => {
+            if (node.data?.params) {
+              paramUpdates[node.id] = node.data.params;
+            }
+            if (node.data?.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
+              const smVar = availableVariables.find(v => v.id === node.data.params.smVarId);
+              if (smVar) {
+                inportOverrides[node.id] = Number(smVar.currentValue);
               }
             }
           });
 
-          if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
-          else if (solverType === 'ode2') Solvers.stepODE2(engineRef.current, timeRef.current, fixedStep);
-          else if (solverType === 'ode3') Solvers.stepODE3(engineRef.current, timeRef.current, fixedStep);
-          else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
-          else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
-          else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
-          else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
+          if (useWorker && xbridgesWorkerRef.current?.available) {
+            if (!xbridgesWorkerRef.current.inFlight) {
+              xbridgesWorkerRef.current.step({
+                time: timeRef.current,
+                dt: fixedStep,
+                solverType,
+                paramUpdates,
+                inportOverrides,
+              }).then(res => {
+                if (!res.ok) {
+                  if (res.diagnostics) setDiagnostics(res.diagnostics);
+                  setIsSimulating(false);
+                  setShowDiagnostics(true);
+                  return;
+                }
+                timeRef.current = res.simulationTime;
+                if (res.engineSnapshot?.blockStates) {
+                  lastWorkerStatesRef.current = res.engineSnapshot.blockStates;
+                }
+                if (res.diagnostics && res.diagnostics.length > 0) {
+                  setDiagnostics(res.diagnostics);
+                }
 
-          timeRef.current += fixedStep;
+                if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current) {
+                  timeRef.current = simLimitRef.current;
+                  setIsSimulating(false);
+                  setNodes(nds => nds.map(n => {
+                    const state = lastWorkerStatesRef.current[n.id];
+                    if (state !== undefined && n.type === 'xblock') {
+                      return { ...n, data: { ...n.data, state } };
+                    }
+                    return n;
+                  }));
+                }
+              }).catch(err => {
+                console.error('Xbridges worker step error:', err);
+                setIsSimulating(false);
+              });
+            }
 
-          if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current) {
-            timeRef.current = simLimitRef.current;
-            setIsSimulating(false);
-            setNodes(nds => nds.map(n => {
-              const engineBlock = engineRef.current!['blockMap'].get(n.id);
-              if (engineBlock && n.type === 'xblock') {
-                return { ...n, data: { ...n.data, state: engineBlock.state } };
+            // Throttle UI updates to ~15fps (every 4th frame at 60fps)
+            updateThrottle++;
+            if (updateThrottle % 4 === 0) {
+              setNodes(nds => nds.map(n => {
+                const state = lastWorkerStatesRef.current[n.id];
+                if (state !== undefined && n.type === 'xblock') {
+                  return { ...n, data: { ...n.data, state } };
+                }
+                return n;
+              }));
+            }
+          } else if (engineRef.current) {
+            // Main thread fallback
+            nodesRef.current.forEach(node => {
+              const block = engineRef.current!['blockMap'].get(node.id);
+              if (block) {
+                if (paramUpdates[node.id]) {
+                  Object.assign(block.params, paramUpdates[node.id]);
+                }
+                if (inportOverrides[node.id] !== undefined) {
+                  engineRef.current!.setSignalValue(node.id, 'out', inportOverrides[node.id]);
+                  if (block.params) block.params.value = inportOverrides[node.id];
+                }
               }
-              return n;
-            }));
-            return;
-          }
+            });
 
-          // Throttle UI updates to ~15fps (every 4th frame at 60fps) to prevent ReactFlow lag
-          updateThrottle++;
-          if (updateThrottle % 4 === 0) {
-            setNodes(nds => nds.map(n => {
-              const engineBlock = engineRef.current!['blockMap'].get(n.id);
-              if (engineBlock && n.type === 'xblock') {
-                // Sync the engine's block state (which includes Scope history) to React node data
-                return { ...n, data: { ...n.data, state: engineBlock.state } };
-              }
-              return n;
-            }));
+            if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode2') Solvers.stepODE2(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode3') Solvers.stepODE3(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
+            else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
+
+            timeRef.current += fixedStep;
+
+            if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current) {
+              timeRef.current = simLimitRef.current;
+              setIsSimulating(false);
+              setNodes(nds => nds.map(n => {
+                const engineBlock = engineRef.current!['blockMap'].get(n.id);
+                if (engineBlock && n.type === 'xblock') {
+                  return { ...n, data: { ...n.data, state: engineBlock.state } };
+                }
+                return n;
+              }));
+              return;
+            }
+
+            updateThrottle++;
+            if (updateThrottle % 4 === 0) {
+              setNodes(nds => nds.map(n => {
+                const engineBlock = engineRef.current!['blockMap'].get(n.id);
+                if (engineBlock && n.type === 'xblock') {
+                  return { ...n, data: { ...n.data, state: engineBlock.state } };
+                }
+                return n;
+              }));
+            }
           }
         }
         animationFrameId = requestAnimationFrame(tick);
@@ -1836,9 +1920,15 @@ export const XbridgesWorkspace: React.FC<{
       setIsPaused(false);
       setDiagnostics([]);
       setShowDiagnostics(false);
+      xbridgesWorkerRef.current?.dispose();
+      xbridgesWorkerRef.current = null;
     }
 
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      xbridgesWorkerRef.current?.dispose();
+      xbridgesWorkerRef.current = null;
+    };
   }, [isSimulating]); // Deliberately omitted nodes/edges to prevent restarting loop while dragging
 
   const saveHistory = useCallback(() => {
@@ -2809,7 +2899,7 @@ export const XbridgesWorkspace: React.FC<{
   ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div id="xbridges-workspace-container" className="flex h-full w-full bg-[#111] text-[#e0e0e0] font-sans overflow-hidden select-none relative">
+    <div id="xbridges-workspace-container" className="xbridges-workspace flex h-full w-full bg-[#111] text-[#e0e0e0] font-sans overflow-hidden select-none relative">
       {/* Quick Search Menu */}
       {searchMenuPos && (
         <div
@@ -3347,7 +3437,7 @@ export const XbridgesWorkspace: React.FC<{
               connectionLineComponent={PremiumConnectionLine}
               connectionRadius={30}
               reconnectRadius={30}
-              colorMode="dark"
+              className="engineering-canvas"
               minZoom={0.2}
               maxZoom={2.0}
               snapToGrid
@@ -3367,12 +3457,12 @@ export const XbridgesWorkspace: React.FC<{
               }}
               elevateNodesOnSelect
             >
-              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a2a" />
-              <Controls className="bg-[#1a1a1a] border-[#333] fill-[#e0e0e0] shadow-md [&_button]:bg-[#1a1a1a] [&_button]:border-b-[#333] [&_path]:fill-[#e0e0e0] hover:[&_button]:bg-[#222]" />
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--diagram-grid)" />
+              <Controls className="xbridges-panel ui-control" />
               <MiniMap
-                nodeColor={(n) => n.data.selected ? '#10b981' : '#444'}
+                nodeColor={(n) => n.data.selected ? 'var(--diagram-node-selected)' : 'var(--border-default)'}
                 maskColor="rgba(0, 0, 0, 0.4)"
-                className="bg-[#1a1a1a] border border-[#333] rounded-lg shadow-md"
+                className="xbridges-panel rounded-lg shadow-md"
               />
 
               {activeLabId && (
@@ -3456,7 +3546,7 @@ export const XbridgesWorkspace: React.FC<{
                                     className={`flex items-center gap-2.5 p-2 rounded-xl transition-all duration-300 ${done ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-50 border border-slate-200 text-slate-650'}`}
                                   >
                                     <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${done ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-300'}`}>
-                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-350" />}
+                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]" />}
                                     </div>
                                     <span className={`text-[10px] font-bold ${done ? 'line-through text-emerald-600/80' : 'text-slate-600'}`}>
                                       {obj.label}

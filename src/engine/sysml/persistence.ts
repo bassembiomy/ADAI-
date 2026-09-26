@@ -6,12 +6,28 @@ import {
   type RequirementDefinition,
   type SysmlRelationship,
   type SysmlRepository,
+  type ActorDefinition,
+  type SubjectDefinition,
+  type UseCaseDefinition,
+  type PortDefinition,
+  type ExtensionPoint,
+  type DiagramReference,
+  type UseCaseRelationshipKind,
 } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic } from './validation';
+import {
+  createEmptyInterchangeReport,
+  mergeInterchangeReports,
+  quarantineUnresolvedEndpoints,
+  type InterchangeReport,
+} from './interchangeReport';
+import { elementsOfKind, presentationsForElement, serializeRepositoryV4 } from './persistence/migrateV3ToV4';
+import { normalizeDiagramPresentations, type DiagramPresentation, type DiagramPresentationInput } from './presentationState';
+export { elementsOfKind, presentationsForElement };
 
 interface PersistenceEnvelope {
   format: 'ADIA-SysML';
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   checksum: string;
   repository: SysmlRepository;
 }
@@ -21,43 +37,173 @@ export interface LoadRepositoryResult {
   diagnostics: SysmlDiagnostic[];
   valid: boolean;
   migrated: boolean;
+  interchangeReport: InterchangeReport;
 }
 
 export interface BaselineDiff { added: string[]; removed: string[]; changed: string[]; }
 
-export function serializeRepository(repository: SysmlRepository): string {
-  const canonical = stableStringify(repository);
+/**
+ * Canonicalize a repository for deterministic serialization: sort every
+ * collection by element id and keep envelope metadata fixed. Semantic IDs
+ * are never rewritten; only key order is normalized.
+ */
+export function canonicalizeRepository(repository: SysmlRepository): SysmlRepository {
+  const sorted = <T extends { id: string }>(record: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(
+      Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
+    );
+  const definitions = Object.fromEntries(
+    Object.values(repository.definitions ?? {})
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(def => [def.id, def.ownerId ? def : { ...def, ownerId: 'model' }]),
+  );
+  const packages = repository.packages && Object.keys(repository.packages).length > 0
+    ? sorted(repository.packages)
+    : { model: { id: 'model', kind: 'package' as const, name: 'Model', namespace: [], ownerId: '' } };
+  return {
+    ...repository,
+    schemaVersion: 3,
+    profileId: 'OMG-SysML-1.6-ADIA',
+    packages,
+    diagrams: sorted(repository.diagrams ?? {}),
+    definitions,
+    usages: sorted(repository.usages ?? {}),
+    connectors: sorted(repository.connectors ?? {}),
+    relationships: sorted(repository.relationships ?? {}),
+    requirements: sorted(repository.requirements ?? {}),
+    verificationCases: sorted(repository.verificationCases ?? {}),
+    evidence: sorted(repository.evidence ?? {}),
+    baselines: sorted(repository.baselines ?? {}),
+    artifacts: sorted(repository.artifacts ?? {}),
+    actors: sorted(repository.actors ?? {}),
+    subjects: sorted(repository.subjects ?? {}),
+    useCases: sorted(repository.useCases ?? {}),
+    extensionPoints: sorted(repository.extensionPoints ?? {}),
+    diagramReferences: sorted(repository.diagramReferences ?? {}),
+    auditTrail: [...(repository.auditTrail ?? [])],
+  };
+}
+
+export function serializeRepository(repository: SysmlRepository | any): string {
+  if (repository && (repository as any).schemaVersion === 4) {
+    return serializeRepositoryV4(repository);
+  }
+  const canonicalRepo = canonicalizeRepository(repository);
+  const canonical = stableStringify(canonicalRepo);
   const envelope: PersistenceEnvelope = {
-    format: 'ADIA-SysML', schemaVersion: 2, checksum: hash(canonical), repository,
+    format: 'ADIA-SysML', schemaVersion: 3, checksum: hash(canonical), repository: canonicalRepo,
   };
   return stableStringify(envelope);
 }
 
+export function deserializeSysmlRepository(input: string | unknown): SysmlRepository {
+  return loadRepository(input).repository;
+}
+
+function canonicalizeRepositoryForChecksum(repository: any): any {
+  if (repository.schemaVersion === 2) {
+    const sorted = <T extends { id: string }>(record?: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(
+        Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
+      );
+    return {
+      ...repository,
+      schemaVersion: 2,
+      profileId: 'OMG-SysML-1.6-ADIA',
+      definitions: sorted(repository.definitions ?? {}),
+      usages: sorted(repository.usages ?? {}),
+      connectors: sorted(repository.connectors ?? {}),
+      relationships: sorted(repository.relationships ?? {}),
+      requirements: sorted(repository.requirements ?? {}),
+      verificationCases: sorted(repository.verificationCases ?? {}),
+      evidence: sorted(repository.evidence ?? {}),
+      baselines: sorted(repository.baselines ?? {}),
+      artifacts: sorted(repository.artifacts ?? {}),
+      actors: sorted(repository.actors ?? {}),
+      subjects: sorted(repository.subjects ?? {}),
+      useCases: sorted(repository.useCases ?? {}),
+      extensionPoints: sorted(repository.extensionPoints ?? {}),
+      diagramReferences: sorted(repository.diagramReferences ?? {}),
+      auditTrail: [...(repository.auditTrail ?? [])],
+    };
+  }
+  return canonicalizeRepository(repository);
+}
+
 export function loadRepository(input: string | unknown): LoadRepositoryResult {
   const diagnostics: SysmlDiagnostic[] = [];
+  const migrationReport = createEmptyInterchangeReport();
   let raw: unknown;
   try {
     raw = typeof input === 'string' ? JSON.parse(input) : input;
   } catch (cause) {
-    return { repository: createEmptyRepository(), diagnostics: [diag('PERSISTENCE_PARSE_ERROR', `Invalid JSON: ${String(cause)}`)], valid: false, migrated: false };
+    return { repository: createEmptyRepository(), diagnostics: [diag('PERSISTENCE_PARSE_ERROR', `Invalid JSON: ${String(cause)}`)], valid: false, migrated: false, interchangeReport: migrationReport };
+  }
+
+  if (raw && typeof raw === 'object') {
+    if ((raw as any).schemaVersion === 4) {
+      const res: any = {
+        repository: raw,
+        elements: (raw as any).elements,
+        presentations: (raw as any).presentations,
+        diagrams: (raw as any).diagrams,
+        relationships: (raw as any).relationships,
+        diagnostics: [],
+        valid: true,
+        migrated: false,
+        interchangeReport: migrationReport,
+      };
+      return res;
+    }
   }
 
   let migrated = false;
   let repository: SysmlRepository;
   if (isEnvelope(raw)) {
-    repository = hydrateCanonical(raw.repository);
-    if (hash(stableStringify(raw.repository)) !== raw.checksum) diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
+    if ((raw as any).schemaVersion === 4 || (raw.repository as any)?.schemaVersion === 4) {
+      const v4: any = (raw.repository as any)?.schemaVersion === 4 ? (raw as any).repository : raw;
+      const res: any = {
+        repository: v4,
+        elements: v4.elements,
+        presentations: v4.presentations,
+        diagrams: v4.diagrams,
+        relationships: v4.relationships,
+        diagnostics: [],
+        valid: true,
+        migrated: false,
+        interchangeReport: migrationReport,
+      };
+      return res;
+    }
+    const rawRepo = raw.repository;
+    const checksumMatches =
+      hash(stableStringify(rawRepo)) === raw.checksum ||
+      hash(stableStringify(canonicalizeRepository(rawRepo as SysmlRepository))) === raw.checksum ||
+      hash(stableStringify(canonicalizeRepositoryForChecksum(rawRepo))) === raw.checksum;
+    if (!checksumMatches) {
+      diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
+    }
+    repository = hydrateCanonical(rawRepo);
+    if ((raw.repository as any)?.schemaVersion === 2 || raw.schemaVersion === 2) {
+      migrated = true;
+    }
   } else if (isCanonical(raw)) {
     repository = hydrateCanonical(raw);
-    migrated = !('artifacts' in raw) || !('auditTrail' in raw);
+    migrated = !('artifacts' in raw) || !('auditTrail' in raw) || (raw as any).schemaVersion === 2;
   } else {
-    repository = migrateLegacy(raw, diagnostics);
+    repository = migrateLegacy(raw, diagnostics, migrationReport);
     migrated = true;
   }
+  // Reject-or-quarantine: strip edges with dangling endpoints into an
+  // explicit quarantine list. Never synthesize a generic association.
+  const quarantined = quarantineUnresolvedEndpoints(repository);
+  repository = quarantined.repository;
+  const interchangeReport = mergeInterchangeReports(migrationReport, quarantined.report);
+  diagnostics.push(...quarantined.report.diagnostics);
   freezeBaselines(repository);
   const validation = validateSysmlRepository(repository);
   diagnostics.push(...validation.diagnostics);
-  return { repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated };
+  return { repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated, interchangeReport };
 }
 
 export function createBaseline(
@@ -102,11 +248,14 @@ export function compareBaselines(repository: SysmlRepository, fromId: string, to
 }
 
 function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
-  return {
-    ...createEmptyRepository(),
+  const empty = createEmptyRepository();
+  const repo: SysmlRepository = {
+    ...empty,
     ...structuredClone(raw),
-    schemaVersion: 2,
+    schemaVersion: 3,
     profileId: 'OMG-SysML-1.6-ADIA',
+    packages: structuredClone(raw.packages ?? empty.packages),
+    diagrams: structuredClone(raw.diagrams ?? empty.diagrams),
     definitions: structuredClone(raw.definitions ?? {}),
     usages: structuredClone(raw.usages ?? {}),
     connectors: structuredClone(raw.connectors ?? {}),
@@ -116,11 +265,28 @@ function hydrateCanonical(raw: Partial<SysmlRepository>): SysmlRepository {
     evidence: structuredClone(raw.evidence ?? {}),
     baselines: structuredClone(raw.baselines ?? {}),
     artifacts: structuredClone(raw.artifacts ?? {}),
+    actors: structuredClone(raw.actors ?? {}),
+    subjects: structuredClone(raw.subjects ?? {}),
+    useCases: structuredClone(raw.useCases ?? {}),
+    extensionPoints: structuredClone(raw.extensionPoints ?? {}),
+    diagramReferences: structuredClone(raw.diagramReferences ?? {}),
     auditTrail: structuredClone(raw.auditTrail ?? []),
   };
+
+  if (!repo.packages.model) {
+    repo.packages.model = { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' };
+  }
+
+  for (const def of Object.values(repo.definitions)) {
+    if (!def.ownerId) {
+      def.ownerId = 'model';
+    }
+  }
+
+  return repo;
 }
 
-function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): SysmlRepository {
+function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = [], migrationReport = createEmptyInterchangeReport()): SysmlRepository {
   const source = isRecord(raw) ? raw : {};
   const repo = createEmptyRepository();
   for (const legacy of arrayOfRecords(source.blocks)) {
@@ -145,7 +311,11 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
       continue;
     }
     const ports = arrayOfRecords(legacy.ports).map(port => ({
-      id: text(port.id), name: text(port.name), kind: port.kind === 'proxy' ? 'proxy' as const : 'full' as const,
+      id: text(port.id), name: text(port.name), kind: (
+        port.kind === 'proxy' || port.kind === 'full' || port.kind === 'flow' || port.kind === 'standard'
+          ? port.kind
+          : 'standard'
+      ) as PortDefinition['kind'],
       typeId: text(port.type), direction: direction(port.direction), isConjugated: Boolean(port.isConjugated),
       multiplicity: safeMultiplicity(port.multiplicity),
     })).filter(port => port.id);
@@ -168,7 +338,7 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
     const id = text(legacy.id);
     if (!id) continue;
     repo.usages[id] = {
-      id, name: text(legacy.name) || id, kind: 'part', ownerId: text(legacy.parentPartId) || text(legacy.parentBlockId) || text(legacy.blockId),
+      id, propertyId: optionalText(legacy.propertyId), name: text(legacy.name) || id, kind: 'part', ownerId: text(legacy.parentPartId) || text(legacy.parentBlockId) || text(legacy.blockId),
       typeId: text(legacy.typeBlockId) || text(legacy.typeId) || text(legacy.blockId), aggregation: 'composite',
       multiplicity: safeMultiplicity(legacy.multiplicity),
     };
@@ -186,14 +356,44 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
     const targetOwner = text(legacy.targetPartId);
     const sourceDefinition = text(legacy.sourcePortId);
     const targetDefinition = text(legacy.targetPortId);
+    if (!sourceOwner || !targetOwner || !sourceDefinition || !targetDefinition) {
+      const lossEntry = {
+        sourceId: id, sourceKind: 'connector', diagnosticCode: 'LEGACY_CONNECTOR_ENDPOINT_UNRESOLVED',
+        reason: `Legacy connector ${id} has an unresolvable endpoint and is quarantined instead of synthesizing a generic association`,
+        severity: 'warning' as const,
+      };
+      migrationReport.lossEntries.push(lossEntry);
+      migrationReport.unresolvedEndpoints.push({
+        kind: 'connector', id, endpoint: !sourceOwner || !sourceDefinition ? 'sourcePortId' : 'targetPortId',
+        missingId: !sourceOwner || !sourceDefinition ? `${sourceOwner}::${sourceDefinition}` : `${targetOwner}::${targetDefinition}`,
+        code: 'UNRESOLVED_ENDPOINT', message: `Legacy connector ${id} endpoint does not resolve; quarantined`,
+      });
+      const diagnostic = { code: 'LEGACY_CONNECTOR_ENDPOINT_UNRESOLVED', severity: 'warning' as const, elementId: id, message: `Legacy connector ${id} quarantined: unresolved endpoint` };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+      continue;
+    }
     const sourcePortId = `${sourceOwner}::${sourceDefinition}`;
     const targetPortId = `${targetOwner}::${targetDefinition}`;
     if (!repo.usages[sourcePortId]) repo.usages[sourcePortId] = { id: sourcePortId, name: sourceDefinition, kind: 'port', ownerId: sourceOwner, definitionId: sourceDefinition };
     if (!repo.usages[targetPortId]) repo.usages[targetPortId] = { id: targetPortId, name: targetDefinition, kind: 'port', ownerId: targetOwner, definitionId: targetDefinition };
     const inferredOwner = connectorOwner(repo, sourceOwner, targetOwner);
+    const rawKind = text(legacy.kind);
+    const supportedConnector = rawKind === 'binding' || rawKind === 'delegation' || rawKind === 'assembly';
+    if (rawKind && !supportedConnector) {
+      const lossEntry = {
+        sourceId: id, sourceKind: 'connector', diagnosticCode: 'LEGACY_CONNECTOR_KIND_UNSUPPORTED',
+        reason: `Legacy connector ${id} kind '${rawKind}' has no canonical equivalent; defaulted explicitly (not silently)`,
+        severity: 'warning' as const,
+      };
+      migrationReport.lossEntries.push(lossEntry);
+      const diagnostic = { code: 'LEGACY_CONNECTOR_KIND_UNSUPPORTED', severity: 'warning' as const, elementId: id, message: `Legacy connector ${id} kind '${rawKind}' defaulted with explicit loss record` };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+    }
     repo.connectors[id] = {
       id,
-      kind: legacy.kind === 'binding' || legacy.kind === 'delegation' ? legacy.kind : sourceOwner === inferredOwner || targetOwner === inferredOwner ? 'delegation' : 'assembly',
+      kind: rawKind === 'binding' || rawKind === 'delegation' ? rawKind : sourceOwner === inferredOwner || targetOwner === inferredOwner ? 'delegation' : 'assembly',
       ownerId: inferredOwner,
       sourcePortId,
       targetPortId,
@@ -205,29 +405,263 @@ function migrateLegacy(raw: unknown, diagnostics: SysmlDiagnostic[] = []): Sysml
     if (!id) continue;
     const sourceId = text(legacy.sourceId);
     const targetId = text(legacy.targetId);
+    const rawKind = text(legacy.type);
     let kind = relationshipKind(legacy.type);
+    if (!isSupportedRelationshipKind(rawKind)) {
+      const lossEntry = {
+        sourceId: id, sourceKind: 'relationship', diagnosticCode: 'LEGACY_RELATIONSHIP_KIND_UNSUPPORTED',
+        reason: `Legacy relationship ${id} kind '${rawKind || '(empty)'}' has no canonical equivalent; carried explicitly as trace`,
+        severity: 'warning' as const,
+      };
+      migrationReport.lossEntries.push(lossEntry);
+      const diagnostic = { code: 'LEGACY_RELATIONSHIP_KIND_UNSUPPORTED', severity: 'warning' as const, elementId: id, message: `Legacy relationship ${id} kind '${rawKind}' mapped to trace with explicit loss record` };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+    }
     if (kind === 'composition' && repo.requirements[sourceId] && repo.requirements[targetId]) {
       kind = 'requirementContainment';
-      diagnostics.push({
+      const diagnostic = {
         code: 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED',
-        severity: 'info',
+        severity: 'info' as const,
         elementId: id,
         message: `Migrated legacy composition ${id} between requirements to requirementContainment`,
+      };
+      diagnostics.push(diagnostic);
+      migrationReport.diagnostics.push(diagnostic);
+      migrationReport.lossEntries.push({
+        sourceId: id, sourceKind: 'relationship', diagnosticCode: 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED',
+        reason: `Legacy composition ${id} between requirements carried explicitly as requirementContainment`,
+        severity: 'info',
       });
     }
     repo.relationships[id] = {
       id, sourceId, targetId, kind,
+      name: optionalText(legacy.label),
+      sourceMultiplicity: legacy.sourceMultiplicity ? safeMultiplicity(legacy.sourceMultiplicity) : undefined,
+      targetMultiplicity: legacy.targetMultiplicity ? safeMultiplicity(legacy.targetMultiplicity) : undefined,
     };
     if (kind === 'verify' && repo.verificationCases[sourceId] && repo.requirements[targetId]) {
       repo.verificationCases[sourceId].verifiesRequirementIds.push(targetId);
     }
   }
+
+  // Migrate legacy use case diagrams if present in source
+  const legacyUseCaseDiagrams = arrayOfRecords(source.useCaseDiagrams);
+  for (const diagRecord of legacyUseCaseDiagrams) {
+    const diagId = text(diagRecord.id) || 'default_usecase';
+    const legacyNodeMap = new Map<string, string>(); // rawNodeId -> canonicalId
+
+    // 1. First pass: migrate nodes to actors, subjects, use-cases, and extension points
+    const nodes = arrayOfRecords(diagRecord.nodes);
+    for (const node of nodes) {
+      const rawNodeId = text(node.id);
+      if (!rawNodeId) continue;
+      const data = isRecord(node.data) ? node.data : {};
+      const canonicalId = text(data.canonicalElementId) || `${diagId}_${rawNodeId}`;
+      legacyNodeMap.set(rawNodeId, canonicalId);
+      const nodeType = text(node.type);
+
+      if (nodeType === 'actor') {
+        repo.actors[canonicalId] = {
+          id: canonicalId,
+          name: text(data.label) || rawNodeId,
+          kind: 'actor',
+          namespace: [],
+          isExternal: Boolean(data.isExternal),
+          generalizationIds: [],
+        };
+      } else if (nodeType === 'systemBoundary') {
+        repo.subjects[canonicalId] = {
+          id: canonicalId,
+          name: text(data.label) || rawNodeId,
+          kind: 'subject',
+          namespace: [],
+          realizedByBlockId: optionalText(data.subjectBlockId),
+        };
+      } else if (nodeType === 'useCase') {
+        const epIds: string[] = [];
+        if (Array.isArray(data.extensionPoints)) {
+          data.extensionPoints.forEach((epNameRaw, idx) => {
+            const epName = text(epNameRaw);
+            if (epName) {
+              const epId = `${canonicalId}_ep_${idx + 1}`;
+              epIds.push(epId);
+              repo.extensionPoints[epId] = {
+                id: epId,
+                name: epName,
+                kind: 'extensionPoint',
+                namespace: [],
+                useCaseId: canonicalId,
+              };
+            }
+          });
+        }
+
+        const parentId = text(node.parentId);
+        const subjectId = parentId ? legacyNodeMap.get(parentId) || parentId : undefined;
+
+        repo.useCases[canonicalId] = {
+          id: canonicalId,
+          name: text(data.label) || rawNodeId,
+          kind: 'useCase',
+          namespace: [],
+          subjectId,
+          description: optionalText(data.description),
+          extensionPointIds: epIds,
+          behaviorArtifactIds: [],
+        };
+
+        const elaboratingDiagramId = optionalText(data.elaboratingDiagramId);
+        if (elaboratingDiagramId) {
+          const refId = `ref_${canonicalId}_${elaboratingDiagramId}`;
+          repo.diagramReferences[refId] = {
+            id: refId,
+            diagramId: elaboratingDiagramId,
+            diagramKind: 'activity',
+            role: 'elaborates',
+            sourceElementId: canonicalId,
+          };
+        }
+
+        if (Array.isArray(data.requirementTraces)) {
+          for (const traceRecord of arrayOfRecords(data.requirementTraces)) {
+            const reqId = text(traceRecord.requirementId);
+            const relType = text(traceRecord.relationType) || 'trace';
+            if (reqId) {
+              let mappedKind: UseCaseRelationshipKind = 'useCaseTrace';
+              if (relType === 'refine') mappedKind = 'useCaseRefine';
+              else if (relType === 'satisfy') mappedKind = 'useCaseSatisfy';
+              else if (relType === 'trace' || relType === 'verify') mappedKind = 'useCaseTrace';
+
+              const relId = `trace_${canonicalId}_${reqId}`;
+              repo.relationships[relId] = {
+                id: relId,
+                kind: mappedKind,
+                sourceId: canonicalId,
+                targetId: reqId,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Resolve deferred parent subject references
+    for (const node of nodes) {
+      const rawNodeId = text(node.id);
+      const canonicalId = legacyNodeMap.get(rawNodeId);
+      const parentId = text(node.parentId);
+      if (canonicalId && parentId && repo.useCases[canonicalId]) {
+        const resolvedSubjectId = legacyNodeMap.get(parentId) || parentId;
+        if (repo.subjects[resolvedSubjectId]) {
+          repo.useCases[canonicalId].subjectId = resolvedSubjectId;
+        }
+      }
+    }
+
+    // 2. Second pass: migrate edges
+    const edges = arrayOfRecords(diagRecord.edges);
+    for (const edge of edges) {
+      const edgeId = text(edge.id) || `edge_${Math.random().toString(36).slice(2, 8)}`;
+      const rawSource = text(edge.source);
+      const rawTarget = text(edge.target);
+      const canonicalSource = legacyNodeMap.get(rawSource) || rawSource;
+      const canonicalTarget = legacyNodeMap.get(rawTarget) || rawTarget;
+      const rawType = text(edge.type);
+
+      const sourceExists = repo.actors[canonicalSource] || repo.useCases[canonicalSource] || repo.subjects[canonicalSource] || repo.requirements[canonicalSource] || repo.definitions[canonicalSource];
+      const targetExists = repo.actors[canonicalTarget] || repo.useCases[canonicalTarget] || repo.subjects[canonicalTarget] || repo.requirements[canonicalTarget] || repo.definitions[canonicalTarget];
+
+      if (!sourceExists || !targetExists) {
+        const lossEntry = {
+          sourceId: edgeId,
+          sourceKind: 'useCaseRelationship',
+          diagnosticCode: 'LEGACY_USECASE_RELATIONSHIP_UNRESOLVED',
+          reason: `Legacy use-case relationship ${edgeId} connects missing endpoint (${rawSource} -> ${rawTarget}) and was quarantined`,
+          severity: 'warning' as const,
+        };
+        migrationReport.lossEntries.push(lossEntry);
+        migrationReport.unresolvedEndpoints.push({
+          kind: 'relationship',
+          id: edgeId,
+          endpoint: !sourceExists ? 'source' : 'target',
+          missingId: !sourceExists ? rawSource : rawTarget,
+          code: 'UNRESOLVED_ENDPOINT',
+          message: `Legacy use-case relationship ${edgeId} endpoint does not resolve; quarantined`,
+        });
+        const diagnostic = {
+          code: 'LEGACY_USECASE_RELATIONSHIP_UNRESOLVED',
+          severity: 'warning' as const,
+          elementId: edgeId,
+          message: `Legacy use-case relationship ${edgeId} quarantined: unresolved endpoint`,
+        };
+        diagnostics.push(diagnostic);
+        migrationReport.diagnostics.push(diagnostic);
+        continue;
+      }
+
+      let kind: UseCaseRelationshipKind;
+      switch (rawType) {
+        case 'association':
+          kind = 'useCaseAssociation';
+          break;
+        case 'include':
+          kind = 'include';
+          break;
+        case 'extend':
+          kind = 'extend';
+          break;
+        case 'generalization':
+          kind = 'useCaseGeneralization';
+          break;
+        case 'refine':
+          kind = 'useCaseRefine';
+          break;
+        case 'satisfy':
+          kind = 'useCaseSatisfy';
+          break;
+        case 'trace':
+          kind = 'useCaseTrace';
+          break;
+        default:
+          kind = 'useCaseAssociation';
+      }
+
+      const rel: SysmlRelationship = {
+        id: edgeId,
+        sourceId: canonicalSource,
+        targetId: canonicalTarget,
+        kind,
+      };
+
+      if (kind === 'extend' && repo.useCases[canonicalTarget]) {
+        const targetUc = repo.useCases[canonicalTarget];
+        if (targetUc.extensionPointIds.length > 0) {
+          rel.extensionPointId = targetUc.extensionPointIds[0];
+        }
+      }
+
+      repo.relationships[edgeId] = rel;
+    }
+  }
+
+  for (const def of Object.values(repo.definitions)) {
+    if (!def.ownerId) {
+      def.ownerId = 'model';
+    }
+  }
+
   repo.auditTrail.push({ id: 'change-0-legacy-import', revision: 0, timestamp: new Date(0).toISOString(), command: 'migrateLegacy', elementIds: [] });
   return repo;
 }
 
 function snapshotElementHashes(repo: SysmlRepository): Record<string, string> {
-  const records = [repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements, repo.verificationCases, repo.evidence, repo.artifacts];
+  const records = [
+    repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
+    repo.verificationCases, repo.evidence, repo.artifacts,
+    repo.actors ?? {}, repo.subjects ?? {}, repo.useCases ?? {},
+    repo.extensionPoints ?? {}, repo.diagramReferences ?? {},
+  ];
   return Object.fromEntries(records.flatMap(record => Object.values(record).map(element => [element.id, hash(stableStringify(element))] as const)).sort(([a], [b]) => a.localeCompare(b)));
 }
 
@@ -263,7 +697,7 @@ function deepFreeze<T>(value: T): T {
 }
 function isRecord(value: unknown): value is Record<string, any> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
 function isEnvelope(value: unknown): value is PersistenceEnvelope { return isRecord(value) && value.format === 'ADIA-SysML' && isRecord(value.repository) && typeof value.checksum === 'string'; }
-function isCanonical(value: unknown): value is SysmlRepository { return isRecord(value) && value.schemaVersion === 2 && value.profileId === 'OMG-SysML-1.6-ADIA'; }
+function isCanonical(value: unknown): value is SysmlRepository { return isRecord(value) && (value.schemaVersion === 2 || value.schemaVersion === 3) && value.profileId === 'OMG-SysML-1.6-ADIA'; }
 function arrayOfRecords(value: unknown): Record<string, any>[] { return Array.isArray(value) ? value.filter(isRecord) : []; }
 function text(value: unknown): string { return typeof value === 'string' ? value : value == null ? '' : String(value); }
 function optionalText(value: unknown): string | undefined { const result = text(value).trim(); return result || undefined; }
@@ -274,6 +708,15 @@ function level(value: unknown): RequirementDefinition['risk'] { const result = t
 function requirementStatus(value: unknown): RequirementDefinition['status'] {
   const status = text(value).toLocaleLowerCase();
   return status === 'approved' || status === 'implemented' || status === 'verified' || status === 'failed' || status === 'stale' || status === 'retired' ? status : 'draft';
+}
+function isSupportedRelationshipKind(value: string): boolean {
+  if (value === 'aggregation' || value === 'derive' || value === 'requirementContainment') return true;
+  const supported: SysmlRelationship['kind'][] = [
+    'association', 'sharedAggregation', 'composition', 'generalization', 'dependency',
+    'allocation', 'binding', 'itemFlow', 'requirementContainment', 'deriveReqt', 'satisfy',
+    'verify', 'refine', 'trace', 'copy',
+  ];
+  return supported.includes(value as SysmlRelationship['kind']);
 }
 function relationshipKind(value: unknown): SysmlRelationship['kind'] {
   const kind = text(value);
@@ -311,13 +754,13 @@ export interface EntityChunkMeta {
 
 export interface ChunkManifest {
   format: 'ADIA-SysML-Chunked';
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   profileId: string;
   revision: number;
   checksum: string;
   auditTrail: SysmlRepository['auditTrail'];
   chunkIndex: Record<string, EntityChunkMeta>;
-  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  diagramPresentations?: Record<string, DiagramPresentation>;
   metadata?: Record<string, unknown>;
 }
 
@@ -337,6 +780,8 @@ export interface ChunkedRepositoryExport {
 }
 
 const PERSISTENCE_COLLECTIONS = [
+  'packages',
+  'diagrams',
   'definitions',
   'usages',
   'connectors',
@@ -371,7 +816,7 @@ function serializeSingleEntityChunk(collection: string, entity: { id: string }):
 export function serializeToChunks(
   repo: SysmlRepository,
   options?: {
-    diagramPresentations?: Record<string, { elementIds: string[] }>;
+    diagramPresentations?: Record<string, DiagramPresentationInput>;
     metadata?: Record<string, unknown>;
   }
 ): ChunkedRepositoryExport {
@@ -382,6 +827,7 @@ export function serializeToChunks(
     const collRecord = repo[collName] as Record<string, { id: string }>;
     if (!collRecord) continue;
     for (const [id, entity] of Object.entries(collRecord)) {
+      if (collName === 'packages' && id === 'model') continue;
       const chunk = serializeSingleEntityChunk(collName, entity);
       chunks[chunk.chunkKey] = chunk;
       chunkIndex[chunk.chunkKey] = {
@@ -395,12 +841,14 @@ export function serializeToChunks(
 
   const manifestContent = {
     format: 'ADIA-SysML-Chunked' as const,
-    schemaVersion: 2 as const,
+    schemaVersion: (repo.schemaVersion === 2 ? 2 : 3) as (2 | 3),
     profileId: repo.profileId ?? 'OMG-SysML-1.6-ADIA',
     revision: repo.revision ?? 0,
     auditTrail: [...(repo.auditTrail ?? [])],
     chunkIndex,
-    diagramPresentations: options?.diagramPresentations,
+    diagramPresentations: options?.diagramPresentations
+      ? normalizeDiagramPresentations(options.diagramPresentations)
+      : undefined,
     metadata: options?.metadata,
   };
 
@@ -442,6 +890,7 @@ export function serializeIncrementalChunks(
     if (!collRecord) continue;
 
     for (const id of changedSet) {
+      if (collName === 'packages' && id === 'model') continue;
       const entity = collRecord[id];
       const key = createChunkKey(collName, id);
 
@@ -465,7 +914,7 @@ export function serializeIncrementalChunks(
   const nextRevision = (repo.revision ?? baseManifest.revision) + 1;
   const manifestContent = {
     format: 'ADIA-SysML-Chunked' as const,
-    schemaVersion: 2 as const,
+    schemaVersion: (repo.schemaVersion === 2 ? 2 : 3) as (2 | 3),
     profileId: repo.profileId ?? baseManifest.profileId,
     revision: nextRevision,
     auditTrail: [...(repo.auditTrail ?? [])],
@@ -531,15 +980,30 @@ export function hydrateRepositoryFromChunks(
     }
   }
 
+  if (!repo.packages) {
+    repo.packages = {};
+  }
+  if (!repo.packages.model) {
+    repo.packages.model = { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' };
+  }
+  if (!repo.diagrams) {
+    repo.diagrams = {};
+  }
+  repo.schemaVersion = 3;
+
   freezeBaselines(repo);
-  const validation = validateSysmlRepository(repo);
+  const quarantined = quarantineUnresolvedEndpoints(repo);
+  diagnostics.push(...quarantined.report.diagnostics);
+  freezeBaselines(quarantined.repository);
+  const validation = validateSysmlRepository(quarantined.repository);
   diagnostics.push(...validation.diagnostics);
 
   return {
-    repository: repo,
+    repository: quarantined.repository,
     diagnostics,
     valid: !diagnostics.some(d => d.severity === 'error'),
     migrated: false,
+    interchangeReport: quarantined.report,
   };
 }
 
@@ -557,6 +1021,7 @@ export async function streamExportChunks(
     const collRecord = repo[collName] as Record<string, { id: string }>;
     if (!collRecord) continue;
     for (const [id, entity] of Object.entries(collRecord)) {
+      if (collName === 'packages' && id === 'model') continue;
       const chunk = serializeSingleEntityChunk(collName, entity);
       await onChunk(chunk);
       totalBytes += chunk.json.length;
@@ -571,7 +1036,7 @@ export async function streamExportChunks(
 
   const manifestContent = {
     format: 'ADIA-SysML-Chunked' as const,
-    schemaVersion: 2 as const,
+    schemaVersion: (repo.schemaVersion === 2 ? 2 : 3) as (2 | 3),
     profileId: repo.profileId ?? 'OMG-SysML-1.6-ADIA',
     revision: repo.revision ?? 0,
     auditTrail: [...(repo.auditTrail ?? [])],
@@ -668,6 +1133,7 @@ export function hydrateActiveDiagramFromChunks(
     diagnostics,
     valid: !diagnostics.some(d => d.severity === 'error'),
     migrated: false,
+    interchangeReport: createEmptyInterchangeReport(),
     loadedEntityCount: loadedCount,
     deferredChunkCount: deferredCount,
   };

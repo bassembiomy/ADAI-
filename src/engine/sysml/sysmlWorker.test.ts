@@ -88,7 +88,7 @@ describe('SysML Worker Protocol & Execution', () => {
     if (response.success) {
       expect(typeof response.result).toBe('string');
       const parsed = JSON.parse(response.result as string);
-      expect(parsed.schemaVersion).toBe(2);
+      expect(parsed.schemaVersion).toBe(3);
     }
   });
 
@@ -242,7 +242,10 @@ describe('SysML Worker Protocol & Execution', () => {
       });
       expect(workerValRes.success).toBe(true);
       if (workerValRes.success) {
-        expect(workerValRes.result).toEqual(mainVal);
+        const workerVal = workerValRes.result as any;
+        expect(workerVal.valid).toEqual(mainVal.valid);
+        expect(workerVal.diagnostics).toEqual(mainVal.diagnostics);
+        expect(workerVal.diagnosticCodes).toEqual([...new Set(mainVal.diagnostics.map((d: any) => d.code))].sort());
       }
 
       // 2. Projection equivalence
@@ -313,6 +316,7 @@ describe('SysML Worker Protocol & Execution', () => {
       const activeIds = defKeys.slice(0, 5);
       store.diagramPresentations.set('diag_small', {
         elementIds: activeIds,
+        presentations: {},
       });
 
       const scopedSnapshot = toWorkerSnapshot(store, 'diag_small', true);
@@ -339,6 +343,114 @@ describe('SysML Worker Protocol & Execution', () => {
       expect(diags.staleCount).toBe(0);
       expect(typeof diags.lastTaskDurationMs).toBe('number');
       expect(diags.lastTaskDurationMs).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('compact diagnostics and deletion impact without full-repo embedding (Task 2)', () => {
+    it('validate returns compact diagnostics alongside the full report', () => {
+      const fixture = getFixture(20);
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-val',
+        revision: fixture.revision,
+        taskType: 'validate',
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result).toHaveProperty('valid');
+        expect(result).toHaveProperty('diagnostics');
+        expect(Array.isArray(result.diagnosticCodes)).toBe(true);
+        expect(Array.isArray(result.compactDiagnostics)).toBe(true);
+        for (const compact of result.compactDiagnostics) {
+          expect(Object.keys(compact).sort()).toEqual(['code', 'elementId', 'severity']);
+        }
+        expect(result.diagnosticCodes).toEqual([...new Set(result.diagnostics.map((d: any) => d.code))].sort());
+      }
+    });
+
+    it('validate surfaces typed codes for a relationship with a missing endpoint', () => {
+      const fixture = getFixture(10);
+      fixture.relationships['rel-bad'] = {
+        id: 'rel-bad', kind: 'association', sourceId: 'ghost-source',
+        targetId: Object.keys(fixture.definitions)[0],
+      };
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-val-bad',
+        revision: fixture.revision,
+        taskType: 'validate',
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.diagnosticCodes).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+        expect(result.compactDiagnostics.some((d: any) => d.code === 'MISSING_RELATIONSHIP_ENDPOINT')).toBe(true);
+      }
+    });
+
+    it('project returns delta plus diagnostic codes without embedding the repository', () => {
+      const fixture = getFixture(30);
+      const store = fromRepository(fixture);
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-proj',
+        revision: store.revision,
+        taskType: 'project',
+        payload: store,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.view).toBeDefined();
+        expect(result.delta).toBeDefined();
+        expect(Array.isArray(result.diagnosticCodes)).toBe(true);
+        expect('definitions' in result).toBe(false);
+        expect('repository' in result).toBe(false);
+        expect('usages' in result).toBe(false);
+      }
+    });
+
+    it('impact returns compact delta with per-target deletion decisions and no full repo', () => {
+      const fixture = getFixture(30);
+      const firstBlockId = Object.keys(fixture.definitions)[0];
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-imp',
+        revision: fixture.revision,
+        taskType: 'impact',
+        targetElementIds: [firstBlockId],
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.requestedElementIds).toContain(firstBlockId);
+        expect(result.deletedElementIds).toContain(firstBlockId);
+        expect(result.impactSummary).toBeDefined();
+        expect(Array.isArray(result.targets)).toBe(true);
+        expect(result.targets[0]).toMatchObject({ id: firstBlockId });
+        expect(result.targets[0]).toHaveProperty('targetKind');
+        expect(result.targets[0]).toHaveProperty('cascadeIds');
+        expect(Array.isArray(result.diagnosticCodes)).toBe(true);
+        expect('definitions' in result).toBe(false);
+        expect('repository' in result).toBe(false);
+      }
+    });
+
+    it('impact flags unknown targets with a typed diagnostic code', () => {
+      const fixture = getFixture(10);
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-imp-ghost',
+        revision: fixture.revision,
+        taskType: 'impact',
+        targetElementIds: ['ghost-element'],
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.targets[0].targetKind).toBe('unknown');
+        expect(result.diagnosticCodes).toContain('UNKNOWN_ELEMENT');
+      }
     });
   });
 });

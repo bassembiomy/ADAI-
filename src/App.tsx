@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
 import * as math from 'mathjs';
-import Plot from 'react-plotly.js';
+import Plot from './components/doe/PlotlyRenderer';
 import { PlotlyPlots } from './components/doe/PlotlyPlots';
 import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integration';
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
@@ -17,7 +17,6 @@ import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
 import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
-import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -29,7 +28,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
+  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen, ShieldAlert,
   Sun, Moon, Gauge
 } from 'lucide-react';
 import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
@@ -41,7 +40,7 @@ import { executeAiActions } from './utils/aiActionProcessor';
 import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { LiveFpsMonitor } from './components/LiveFpsMonitor';
 import { 
-  VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
+  VariableType, VariableDef, VariableOverflowPolicy, StateData, JunctionData, TransitionData, Layer, ErrorItem
 } from './types/sm_types';
 import {
   calculateControlPointFromMidpoint,
@@ -60,6 +59,7 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { coerceTypedValue } from './utils/stateMachine/smTypedValue';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
 import {
@@ -98,6 +98,9 @@ import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBun
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
 import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
+import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
+import { parseModelExplorerDragData } from './features/modelExplorer/modelExplorerDragDrop';
+import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
@@ -115,23 +118,51 @@ import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
+import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
+import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
-import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
+import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
+import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
+import { analyzeMutation, createHistory } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository } from './engine/sysml/persistence';
-import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
+import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
+import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
+import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
+import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
+import { createLiveXbridgesStateAccessors, createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
+import { ToolGateway } from './agent/toolGateway';
+import { AgentOrchestrator } from './agent/agentOrchestrator';
+import { AgentPanel } from './components/agent/AgentPanel';
+import type {
+  SysmlApplicationDelegate,
+  ReportApplicationDelegate,
+  XbridgesApplicationDelegate,
+  ProjectApplicationDelegate,
+} from './agent/applicationDelegates';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
-import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
-import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
+import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './services/sysmlProjectionState';
+import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
+import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
+import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
+import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
+import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
+import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
+import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -174,152 +205,32 @@ export function safeCreateFunction(params: string[], body: string): Function {
     throw new Error("Security Violation: Access to restricted global objects (process, require, window, document) is forbidden in expressions.");
   }
   // Shadow global objects with undefined parameters to prevent global scope leakage
+  // sast-ignore SEC-SAST-005: safe sandboxed expression evaluator with shadowed globals
   return new Function('window', 'document', 'process', 'require', 'globalThis', ...params, body).bind(
     null, undefined, undefined, undefined, undefined, undefined
   );
 }
 
 // =============================================================================
-// STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
+// SHARED ENGINEERING UI PRIMITIVES
 // =============================================================================
-const Button = ({
-  children,
-  onClick,
-  variant = 'default',
-  size = 'default',
-  className = '',
-  disabled = false,
-  ...props
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'default' | 'outline' | 'destructive' | 'ghost' | 'secondary';
-  size?: 'sm' | 'default' | 'icon';
-  className?: string;
-  disabled?: boolean;
-  [key: string]: any;
-}) => {
-  const base = 'px-3 py-1.5 rounded font-medium transition-colors flex items-center justify-center';
-  const variants = {
-    default: 'bg-[#f97316] text-white hover:bg-[#ea580c]',
-    outline: 'border border-[#333] text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    destructive: 'bg-red-600 hover:bg-red-700 text-white',
-    ghost: 'text-[#a0a0a0] hover:text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    secondary: 'bg-[#1a1a1a] border border-[#333] text-[#e0e0e0] hover:bg-[#222]'
-  };
-  const sizes = {
-    sm: 'text-xs px-2 h-7',
-    default: 'text-sm px-3 h-8',
-    icon: 'h-8 w-8 p-0'
-  };
+import {
+  Button,
+  Input,
+  Label,
+  Badge,
+  Separator,
+  Triangle,
+  Checkbox,
+  Resizer,
+  EngineeringButton,
+  EngineeringInput,
+  EngineeringLabel,
+  EngineeringBadge,
+  EngineeringSeparator,
+  EngineeringCheckbox,
+} from './components/ui/EngineeringPrimitives';
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Input = ({
-  value,
-  onChange,
-  placeholder = '',
-  type = 'text',
-  className = '',
-  ...props
-}: {
-  value: string | number;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  type?: string;
-  className?: string;
-  [key: string]: any;
-}) => (
-  <input
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    type={type}
-    className={`px-2 py-1 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] ${className}`}
-    {...props}
-  />
-);
-
-const Label = ({ children, className = '', ...props }: { children: React.ReactNode; className?: string;[key: string]: any }) => (
-  <label className={`text-xs text-[#888] ${className}`} {...props}>{children}</label>
-);
-
-const Badge = ({ children, variant = 'secondary', className = '' }: {
-  children: React.ReactNode;
-  variant?: 'default' | 'secondary' | 'outline';
-  className?: string;
-}) => (
-  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#f97316] text-[#0a0a0a]'
-    } ${className}`}>
-    {children}
-  </span>
-);
-
-const Separator = ({ orientation = 'horizontal', className = '' }: {
-  orientation?: 'horizontal' | 'vertical';
-  className?: string;
-}) => (
-  <div className={`${orientation === 'vertical' ? 'w-px h-4' : 'h-px w-full'} bg-[#333] ${className}`} />
-);
-
-const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill={fill || "none"}
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3 20h18L12 4z" />
-  </svg>
-);
-
-const Checkbox = ({
-  checked,
-  onCheckedChange,
-  id,
-  className = ''
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  id?: string;
-  className?: string;
-}) => (
-  <input
-    id={id}
-    type="checkbox"
-    checked={checked}
-    onChange={(e) => onCheckedChange(e.target.checked)}
-    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#f97316] focus:ring-[#f97316] ${className}`}
-  />
-);
-
-const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: React.MouseEvent) => void, orientation?: 'vertical' | 'horizontal' }) => (
-  <div
-    onMouseDown={onMouseDown}
-    className={`shrink-0 bg-transparent group transition-colors duration-200 ${orientation === 'vertical' ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
-      }`}
-  >
-    <div className={`bg-[#333] group-hover:bg-[#f97316] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
-  </div>
-);
-
-// WelcomeOverlay has been moved and refactored as a standalone component IntroStandbyOverlay
 
 
 
@@ -340,6 +251,13 @@ interface Point {
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
 type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
+
+type ConnectionErrorItem = ErrorItem & {
+  connectionDiagnostic?: ConnectionPolicyDiagnostic;
+  relationshipKind?: string;
+  sourceEndpoint?: ConnectionEndpoint;
+  targetEndpoint?: ConnectionEndpoint;
+};
 
 interface WorkspaceFile {
   id: string;
@@ -387,22 +305,9 @@ const normalizeNumerals = (val: string) => {
 const parseValue = (type: VariableType, value: string): number | boolean => {
   const trimmed = value.trim().toLowerCase();
   if (type === 'bool') return ['1', 'true', 't', 'yes', 'y', 'on'].includes(trimmed);
-  if (['float', 'single', 'double'].includes(type)) {
-    const parsed = parseFloat(trimmed);
-    return isNaN(parsed) ? 0 : parsed;
-  }
-  const parsed = parseInt(trimmed, 10);
-  if (isNaN(parsed)) return 0;
-  switch (type) {
-    case 'int8': return Math.max(-128, Math.min(127, parsed));
-    case 'uint8': return Math.max(0, Math.min(255, parsed));
-    case 'int16': return Math.max(-32768, Math.min(32767, parsed));
-    case 'uint16': return Math.max(0, Math.min(65535, parsed));
-    case 'int32': return Math.max(-2147483648, Math.min(2147483647, parsed));
-    case 'uint32': return Math.max(0, Math.min(4294967295, parsed));
-    case 'uint': return Math.max(0, parsed);
-    default: return parsed;
-  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return 0;
+  return coerceTypedValue(parsed, type).value;
 };
 
 const getDefaultValue = (type: VariableType): string => {
@@ -568,66 +473,33 @@ class Plant {
   }
 };
 
-const HierarchyTree = ({
-  states,
-  layers,
-  activeStates,
-  currentLayerId,
-  onSelect,
-  onDoubleClick,
-  selectedIds,
-}: {
-  states: StateData[];
-  layers: Layer[];
-  activeStates: Record<string, string>;
-  currentLayerId: string;
-  onSelect: (id: string) => void;
-  onDoubleClick: (id: string) => void;
-  selectedIds: string[];
-}): React.ReactNode => {
-  const renderNode = (state: StateData, level: number): React.ReactNode => {
-    const isActive = Object.values(activeStates).includes(state.id);
-    const isSelected = selectedIds.includes(state.id);
+const HierarchyTree: React.FC<any> = (props) => (
+  <AppModelExplorer
+    diagramMode={props.diagramMode}
+    states={props.states}
+    layers={props.layers}
+    transitions={props.transitions ?? []}
+    junctions={props.junctions ?? []}
+    activeStates={props.activeStates}
+    currentLayerId={props.currentLayerId}
+    blocks={props.blocks}
+    parts={props.parts}
+    externalModels={props.externalModels}
+    canonicalSysmlRepository={props.canonicalSysmlRepository}
+    diagramPresentations={props.diagramPresentations}
+    selectedIds={props.selectedIds}
+    onSelect={props.onSelect}
+    onDoubleClick={props.onDoubleClick}
+    onCommitStateMachineSnapshot={props.onCommitStateMachineSnapshot}
 
-    const childLayer = layers.find(l => l.parentStateId === state.id);
-    const childStates = childLayer
-      ? states.filter(s => childLayer.stateIds.includes(s.id))
-      : [];
 
-    return (
-      <div key={state.id}>
-        <div
-          onClick={(e) => { e.stopPropagation(); onSelect(state.id); }}
-          onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(state.id); }}
-          className={`flex items-center p-1 rounded cursor-pointer hover:bg-[#2a2a2a] ${isSelected ? 'bg-[#f97316]/30' : ''
-            } ${isActive ? 'font-bold' : ''}`}
-          style={{ paddingLeft: `${level * 16 + 8}px` }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill={isActive ? '#4ade80' : 'none'} stroke={state.color} strokeWidth="2" className="mr-2 shrink-0">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          </svg>
-          <span className="text-sm truncate" title={state.name}>{state.name}</span>
-        </div>
-        {childStates.length > 0 && (
-          <div>
-            {childStates.map(childState => renderNode(childState, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
-  const rootLayer = layers.find(l => l.id === 'root');
-  const rootStates = rootLayer ? states.filter(s => rootLayer.stateIds.includes(s.id)) : [];
-
-  return (
-    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-      {rootStates.length > 0 ? rootStates.sort((a, b) => a.name.localeCompare(b.name)).map(state => renderNode(state, 0)) : (
-        <div className="text-center text-xs text-[#666] p-4">No states in root.</div>
-      )}
-    </div>
-  );
-};
+    onExecuteSysmlCommand={props.onExecuteSysmlCommand}
+    activeDiagramId={props.activeDiagramId}
+    activeDiagramContext={props.activeDiagramContext as ActiveDiagramContext | undefined}
+    onCommandResult={props.onCommandResult}
+  />
+);
 
 const findPeaks = (y: number[]): { peaks: number[] } => {
   const peaks: number[] = [];
@@ -770,12 +642,12 @@ const FloatingWindow = ({
         height: windowState.size.height,
         zIndex: windowState.zIndex,
       }}
-      className="bg-[#1a1a1a] border border-[#f97316] rounded-lg flex flex-col shadow-2xl overflow-hidden"
+      className="bg-[var(--surface-base)] border border-[var(--border-strong)] rounded-lg flex flex-col shadow-2xl overflow-hidden"
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
       <div
         style={{ userSelect: 'none' }}
-        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 shrink-0 ${
+        className={`h-8 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between px-3 shrink-0 ${
           isMobile || windowState.isMaximized ? '' : 'cursor-move'
         }`}
         onMouseDown={(e) => {
@@ -785,13 +657,13 @@ const FloatingWindow = ({
           setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
         }}
       >
-        <span className="text-xs font-bold text-[#f97316]">{windowState.title}</span>
+        <span className="text-xs font-bold text-orange-500">{windowState.title}</span>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
           {/* Minimize Button */}
           <button
             onClick={() => onUpdate(windowState.id, { isMinimized: !windowState.isMinimized })}
             title={windowState.isMinimized ? "Restore" : "Minimize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMinimized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -811,7 +683,7 @@ const FloatingWindow = ({
           <button
             onClick={() => onUpdate(windowState.id, { isMaximized: !windowState.isMaximized, isMinimized: false })}
             title={windowState.isMaximized ? "Restore Size" : "Maximize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMaximized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -829,7 +701,7 @@ const FloatingWindow = ({
           <button
             onClick={onClose}
             title="Close"
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-white hover:bg-red-600 transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-rose-600 transition-colors"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -922,12 +794,64 @@ const LegacyTraceabilityMatrix = ({
     const data = orderedReqs.map(({ req: r, level }) => {
       const outgoing = relationships.filter(rel => rel.sourceId === r.id).map(rel => {
         const target = blocks.find(b => b.id === rel.targetId);
-        return `[${rel.type}] ${target?.name}`;
+        return `[${rel.type}] ${target?.name || rel.targetId}`;
       }).join('; ');
+
+      const containedBy = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const contains = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const derivedFrom = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const derivedReqs = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const copiedFrom = relationships
+        .filter(rel => rel.type === 'copy' && rel.sourceId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .join('; ');
+
+      const copies = relationships
+        .filter(rel => rel.type === 'copy' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const satisfiedByRel = relationships
+        .filter(rel => rel.type === 'satisfy' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId);
 
       const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
       const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
-      const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts].join('; ');
+      const satisfiedBy = [...new Set([...satisfiedByRel, ...satisfiedByBlocks, ...satisfiedByParts])].join('; ');
+
+      const verifiedBy = relationships
+        .filter(rel => rel.type === 'verify' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const refinedBy = relationships
+        .filter(rel => rel.type === 'refine' && rel.targetId === r.id)
+        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .join('; ');
+
+      const traced = relationships
+        .filter(rel => (rel.type === 'trace' || (rel.type as string) === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
+        .map(rel => {
+          const otherId = rel.sourceId === r.id ? rel.targetId : rel.sourceId;
+          return blocks.find(b => b.id === otherId)?.name || otherId;
+        })
+        .join('; ');
 
       const prefix = '  '.repeat(level) + (level > 0 ? '└ ' : '');
 
@@ -938,8 +862,17 @@ const LegacyTraceabilityMatrix = ({
         Priority: r.priority || '',
         'Assigned To': r.assignedTo || 'Unassigned',
         Description: r.description || '',
+        'Contained By': containedBy,
+        Contains: contains,
+        'Derived From': derivedFrom,
+        'Derived Requirements': derivedReqs,
+        'Copied From': copiedFrom,
+        'Copied Requirements': copies,
+        'Satisfied By': satisfiedBy,
+        'Verified By': verifiedBy,
+        'Refined By': refinedBy,
+        'Traced Elements': traced,
         Links: outgoing,
-        SatisfiedBy: satisfiedBy
       };
     });
     const ws = XLSX.utils.json_to_sheet(data);
@@ -2562,24 +2495,24 @@ const DoeWorkspace = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0a0a0c] text-[#e0e0e0] font-sans">
+    <div className="doe-workspace doe-panel flex flex-col h-full w-full bg-[var(--surface-base)] text-[var(--text-primary)] font-sans">
       {/* Top Control Bar */}
-      <div className="h-14 border-b border-[#222228] bg-[#111114] flex items-center justify-between px-5 gap-4 shrink-0">
+      <div className="h-14 border-b border-[var(--border-default)] bg-[var(--surface-raised)] flex items-center justify-between px-5 gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-400">
+            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-500">
               <Layers size={16} />
             </div>
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-white">DOE ANALYZER PRO</h2>
-              <span className="text-[10px] text-zinc-500 font-mono">Response Surface & Optimization</span>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">DOE ANALYZER PRO</h2>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">Response Surface & Optimization</span>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6 bg-[var(--border-default)]" />
 
           {/* Model Switcher Segment */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5">
+          <div className="flex bg-[var(--surface-panel)] rounded-lg border border-[var(--border-default)] p-0.5">
             {[
               { id: 'RSM', label: 'Run RSM', action: calculateRSM },
               { id: 'GMDH', label: 'Run GMDH', action: calculateGMDH },
@@ -2590,8 +2523,8 @@ const DoeWorkspace = ({
                 onClick={m.action}
                 className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   activeModel === m.id
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-raised)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-base)]'
                 }`}
               >
                 {m.label}
@@ -2604,7 +2537,7 @@ const DoeWorkspace = ({
               variant="outline"
               size="sm"
               onClick={() => setShowDesignBuilder(true)}
-              className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 whitespace-nowrap"
+              className="h-7 px-2.5 text-xs font-medium bg-[var(--surface-panel)] border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             >
               Create Taguchi Design
             </Button>
@@ -2612,39 +2545,39 @@ const DoeWorkspace = ({
         </div>
 
         {/* Top Actions Capsule */}
-        <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-1">
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
           <Button
             variant="ghost"
             size="sm"
             onClick={handleExportProject}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             title="Ctrl+S"
           >
-            <Save size={13} className="mr-1.5 text-zinc-400" /> Save
+            <Save size={13} className="mr-1.5 text-[var(--text-muted)]" /> Save
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <Upload size={13} className="mr-1.5 text-zinc-400" /> Upload Data
+            <Upload size={13} className="mr-1.5 text-[var(--text-muted)]" /> Upload Data
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={generateReport}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <FileText size={13} className="mr-1.5 text-zinc-400" /> Report
+            <FileText size={13} className="mr-1.5 text-[var(--text-muted)]" /> Report
           </Button>
-          <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+          <Separator orientation="vertical" className="h-4 bg-[var(--border-default)]" />
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-7 px-2 text-xs text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 whitespace-nowrap"
+            className="h-7 px-2 text-xs text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 whitespace-nowrap"
             title="Close DOE Analyzer"
           >
             <X size={14} className="mr-1" /> Close
@@ -4601,7 +4534,7 @@ const WorkspaceTabBar = ({
   ];
 
   return (
-    <div className="h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
+    <div className="workspace-tab-bar ui-surface h-10 bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 justify-between select-none">
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
@@ -4615,9 +4548,9 @@ const WorkspaceTabBar = ({
               key={tabId}
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
-                isActive 
-                  ? 'bg-[#1a1a1a] text-white border-t-[#f97316]' 
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#161616] border-t-transparent'
+                  isActive 
+                ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]' 
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
               }`}
               style={{
                 boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
@@ -4630,7 +4563,7 @@ const WorkspaceTabBar = ({
                   e.stopPropagation();
                   onCloseTab(tabId);
                 }}
-                className="ml-2 w-4 h-4 rounded-full hover:bg-slate-800 hover:text-red-400 flex items-center justify-center text-[8px] text-slate-500 font-normal transition-colors"
+                className="ml-2 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
                 title="Close Tab"
               >
                 ✕
@@ -4641,7 +4574,7 @@ const WorkspaceTabBar = ({
       </div>
       <button 
         onClick={onOpenDialog}
-        className="ml-4 p-1 rounded hover:bg-[#1c1c1c] text-[#f97316] transition-colors flex items-center justify-center"
+        className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
         title="Open Workspace Asset Manager"
       >
         <span className="text-lg font-bold">+</span>
@@ -6043,7 +5976,9 @@ const ADIA = () => {
 
   const [errors, setErrors] = useState<ErrorItem[]>([]);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const [currentError, setCurrentError] = useState<ErrorItem | null>(null);
+  const [currentError, setCurrentError] = useState<ConnectionErrorItem | null>(null);
+  const errorDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const errorDismissButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showGlobalReportPreview, setShowGlobalReportPreview] = useState(false);
   const [globalReportData, setGlobalReportData] = useState<{ html: string, projectName: string } | null>(null);
@@ -6106,6 +6041,17 @@ const ADIA = () => {
     otherDeletedIds?: string[];
   } | null>(null);
 
+  // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
+  const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<{ action: CreateNewTypeAction; candidates: import('./engine/sysml/commands/commandResult').TypeCandidate[] } | null>(null);
+  const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
+    impact: import('./engine/sysml/mutations').MutationImpact;
+    transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
+    elementName: string;
+    elementKind: string;
+    severity: import('./services/sysmlTransactionAdapter').ImpactSeverity;
+    onConfirm: () => void;
+  } | null>(null);
+
   const [states, setStates] = useState<StateData[]>([]);
   const [junctions, setJunctions] = useState<JunctionData[]>([]);
   const [transitions, setTransitions] = useState<TransitionData[]>([]);
@@ -6119,11 +6065,14 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
-  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
-  const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
+  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
+  const dragRawPositionsRef = useRef<Record<string, Point>>({});
+  const setDiagramDragOffset = useCallback((point: Point) => {
+    dragOffsetRef.current = point;
+  }, []);
   const [mousePos, setMousePos] = useState<Point>({ x: 0, y: 0 });
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -6163,7 +6112,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
-  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
@@ -6201,61 +6150,162 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const [blocks, setBlocks] = useState<BlockData[]>([]);
-  const [relationships, setRelationships] = useState<RelationshipData[]>([]);
-  const [parts, setParts] = useState<PartData[]>([]);
-  const [connectors, setConnectors] = useState<ConnectorData[]>([]);
+  const { packages, blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
+  const pendingPresentationUpdatesRef = useRef<Map<string, PresentationCoordinates>>(new Map());
+  const presentationDraftsRef = useRef<Record<string, PresentationCoordinates>>({});
+  const [presentationDrafts, setPresentationDrafts] = useState<Record<string, PresentationCoordinates>>({});
+  const updatePresentationDraft = useCallback((id: string, presentation: PresentationCoordinates) => {
+    const next = { ...(presentationDraftsRef.current[id] ?? {}), ...presentation };
+    presentationDraftsRef.current = { ...presentationDraftsRef.current, [id]: next };
+    setPresentationDrafts(presentationDraftsRef.current);
+  }, []);
+  const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
   const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
   const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
+  const sysmlGatewayStateRef = useRef(createSysmlGatewayState());
+  const sysmlCoordinates = useMemo(
+    () => Object.fromEntries(sysmlStore.coordinates.entries()),
+    [sysmlStore],
+  );
+  const sysmlDiagramPresentations = useMemo(
+    () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    [sysmlStore],
+  );
+  const projectCanonicalAppView = useCallback((
+    repository: typeof canonicalSysmlRepository,
+    coordinates: Record<string, PresentationCoordinates>,
+    diagramPresentations: typeof sysmlDiagramPresentations,
+  ) => {
+    const complete = projectLegacyDiagram(repository, coordinates, diagramPresentations);
+    applyCanonicalSysmlResult({ view: complete });
+  }, [applyCanonicalSysmlResult]);
+  const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+  const sysmlCanvasView = useMemo(() => projectDiagramScopedCanvasView(
+    { packages, blocks, relationships, parts, connectors },
+    activeSysmlDiagramId,
+    sysmlDiagramPresentations,
+    diagramMode === 'ibd' ? [currentLayerId] : [],
+    presentationDrafts,
+  ), [packages, blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId, presentationDrafts]);
+  // Explicit per-baseline deletion authorizations granted from the governance
+  // panel. Projection-only state: it never mutates semantics by itself; the
+  // gateway still requires a confirmed impact hash for destructive mutations.
+  const [authorizedBaselineIds, setAuthorizedBaselineIds] = useState<string[]>([]);
 
-  // The legacy diagram editors still expose array setters. Keep the canonical
-  // store current until every editor has been migrated to gateway commands.
-  // The debounce prevents pointer-move events from rebuilding the store on
-  // every frame, while the revision is advanced only for a settled edit.
+  // SysML Application Delegate connected to the canonical command gateway
+  const sysmlApplicationDelegate = useMemo<SysmlApplicationDelegate>(() => {
+    return createSysmlDelegate({
+      getState: () => ({
+        repository: canonicalSysmlRepository,
+        history: createHistory(canonicalSysmlRepository),
+        store: sysmlStore,
+        patchHistory: sysmlGatewayStateRef.current.patchHistory,
+        coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
+        diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+      }),
+      setState: (nextState) => {
+        sysmlGatewayStateRef.current = { ...sysmlGatewayStateRef.current, ...nextState };
+        setCanonicalSysmlRepository(nextState.repository);
+        if (nextState.store) {
+          setSysmlStore(nextState.store);
+        }
+      },
+      onStateChange: (result) => {
+        projectCanonicalAppView(result.repository, result.coordinates, result.diagramPresentations);
+      },
+    });
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+
+  const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
+    const currentState = {
+      ...sysmlGatewayStateRef.current,
+      repository: canonicalSysmlRepository,
+      store: sysmlStore,
+      coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
+      diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    };
+    const result = executeSysmlCommand(currentState, cmd);
+    if (result.committed) {
+      sysmlGatewayStateRef.current = { ...currentState, ...result };
+      setCanonicalSysmlRepository(result.repository);
+      setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations));
+      // Keep the application-wide projection complete. A command may return a
+      // diagram-scoped view for the active canvas, but that view must never
+      // replace the repository-wide model used by other viewpoints.
+      projectCanonicalAppView(
+        result.repository,
+        result.coordinates,
+        result.diagramPresentations,
+      );
+    }
+    return result;
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+
+  const applyCanonicalProjectLoad = useCallback((loaded: ReturnType<typeof loadCanonicalSysmlProject>) => {
+    if (!loaded.valid) throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
+    const store = fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current = createSysmlGatewayState(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current.store = store;
+    setCanonicalSysmlRepository(loaded.repository);
+    setSysmlStore(store);
+    projectCanonicalAppView(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+  }, [projectCanonicalAppView]);
+
   useEffect(() => {
-    if (isDragging) return;
-    const timer = setTimeout(() => {
-      setCanonicalSysmlRepository(previous => {
-        const next = mergeLegacyDiagramIntoRepository(previous, {
-          blocks,
-          parts,
-          connectors,
-          relationships,
-        });
-        setSysmlStore(current => fromRepository(
-          next,
-          Object.fromEntries(current.coordinates.entries()),
-          Object.fromEntries(current.diagramPresentations.entries()),
-        ));
-        return next;
-      });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [blocks, parts, connectors, relationships, isDragging]);
+    projectCanonicalAppView(
+      canonicalSysmlRepository,
+      Object.fromEntries(sysmlStore.coordinates.entries()),
+      Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    );
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+
+  // Report Application Delegate connected to the real report export pipeline
+  const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
+    return createReportDelegate({
+      getProjectData: () => ({
+        projectId: 'ADIA_Project',
+        modelRevision: canonicalSysmlRepository.revision,
+        blocks,
+        relationships,
+      }),
+      outputDir: './reports',
+    });
+  }, [canonicalSysmlRepository.revision, blocks, relationships]);
+
 
   const blocksById = useMemo(() => {
     const map = new Map<string, BlockData>();
     for (const b of blocks) {
       map.set(b.id, b);
     }
+    for (const b of sysmlCanvasView.blocks) {
+      map.set(b.id, b);
+    }
     return map;
-  }, [blocks]);
+  }, [blocks, sysmlCanvasView.blocks]);
 
   const partsById = useMemo(() => {
     const map = new Map<string, PartData>();
     for (const p of parts) {
       map.set(p.id, p);
     }
-    return map;
-  }, [parts]);
-
-  const partTypeIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of parts) {
-      if (p.typeId) set.add(p.typeId);
+    for (const p of sysmlCanvasView.parts) {
+      map.set(p.id, p);
     }
-    return set;
-  }, [parts]);
+    return map;
+  }, [parts, sysmlCanvasView.parts]);
+
+  const activeDiagramElementIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const b of sysmlCanvasView.blocks) ids.add(b.id);
+    for (const p of sysmlCanvasView.parts) ids.add(p.id);
+    for (const pkg of sysmlCanvasView.packages) ids.add(pkg.id);
+    return ids;
+  }, [sysmlCanvasView.blocks, sysmlCanvasView.parts, sysmlCanvasView.packages]);
 
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -6267,14 +6317,24 @@ const ADIA = () => {
   const culledDiagram = useMemo(() => {
     const limits = loadStoredPerformanceLimits();
     const threshold = limits.virtualizationThreshold ?? 150;
-    if (!limits.forcePerformanceMode && blocks.length < threshold && parts.length < threshold) {
+    if (!limits.forcePerformanceMode && sysmlCanvasView.blocks.length < threshold && sysmlCanvasView.parts.length < threshold) {
       return null;
     }
-    return cullElements(diagramViewport, blocks, relationships, parts, connectors, undefined, 500, {
+    return cullElements(diagramViewport, sysmlCanvasView.blocks, sysmlCanvasView.relationships, sysmlCanvasView.parts, sysmlCanvasView.connectors, undefined, 500, {
       storeRevision: sysmlStore.revision,
       ibdContextBlockId: currentLayerId,
     });
-  }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
+  }, [diagramViewport, sysmlCanvasView, sysmlStore.revision, currentLayerId]);
+
+  const requirementsDiagramScope = useMemo(
+    () => getRequirementsDiagramScope(
+      blocks,
+      relationships,
+      currentLayerId,
+      new Set(sysmlDiagramPresentations.requirements?.elementIds ?? []),
+    ),
+    [blocks, relationships, currentLayerId, sysmlDiagramPresentations],
+  );
 
   // Schedule large validation asynchronously after edits with revision-based cancellation
   useEffect(() => {
@@ -6301,6 +6361,16 @@ const ADIA = () => {
   // Global X-Bridges persistence
   const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+  const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
+  const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
+
+  useEffect(() => {
+    globalXBridgesNodesRef.current = globalXBridgesNodes;
+  }, [globalXBridgesNodes]);
+
+  useEffect(() => {
+    globalXBridgesEdgesRef.current = globalXBridgesEdges;
+  }, [globalXBridgesEdges]);
 
   // V-Lab STATE
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
@@ -6316,13 +6386,21 @@ const ADIA = () => {
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
   const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator' }[]>([]);
-  const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
+  const [factoryIOEnabled, setFactoryIOEnabled] = useState(false);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
   // Multi-File and Tab Management State
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
   const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
+  const hierarchyExternalModels = useMemo(() => workspaceFiles
+    .filter(file => file.type === 'xbridges' || file.type === 'vlab')
+    .map(file => ({
+      id: file.id,
+      name: file.name,
+      domain: file.type as 'xbridges' | 'vlab',
+      diagramId: file.id,
+    })), [workspaceFiles]);
   const [showWorkspaceFileDialog, setShowWorkspaceFileDialog] = useState(false);
   const [sharedClipboard, setSharedClipboard] = useState<{
     nodes: any[];
@@ -6343,17 +6421,11 @@ const ADIA = () => {
         };
       case 'bdd':
         return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
-      case 'requirements': {
-        const reqRelEndpoints = new Set(
-          relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'requirementContainment' || r.type === 'copy' || r.type === 'trace')
-            .flatMap(r => [r.sourceId, r.targetId])
-        );
+      case 'requirements':
         return {
-          blocks: blocks.filter(b => b.stereotype === 'requirement' || reqRelEndpoints.has(b.id)),
-          relationships,
+          blocks: blocks.filter(b => requirementsDiagramScope.visibleBlockIds.has(b.id)),
+          relationships: relationships.filter(r => requirementsDiagramScope.visibleRelationshipIds.has(r.id)),
         };
-      }
       case 'ibd':
         return { parts, connectors, interfaceRealizations };
       case 'xbridges':
@@ -6375,7 +6447,8 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results
+    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
+    requirementsDiagramScope,
   ]);
 
   // Helper to save current active file state into workspaceFiles list
@@ -6418,19 +6491,10 @@ const ADIA = () => {
           setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]);
           break;
         case 'bdd':
-          setBlocks(prev => prev.filter(b => b.stereotype === 'requirement'));
-          setRelationships(prev => prev.filter(r => 
-            r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace'
-          ));
-          break;
         case 'requirements':
-          setBlocks(prev => prev.filter(b => b.stereotype !== 'requirement'));
-          setRelationships(prev => prev.filter(r => 
-            r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace'
-          ));
-          break;
         case 'ibd':
-          setParts([]); setConnectors([]); setInterfaceRealizations([]);
+          // Diagram tabs are viewpoints over the canonical repository; an
+          // empty tab must not erase shared semantic model elements.
           break;
         case 'xbridges':
           setGlobalXBridgesNodes([]); setGlobalXBridgesEdges([]);
@@ -6463,51 +6527,52 @@ const ADIA = () => {
     }
 
     const d = file.data;
+    const loadFileSysml = (legacyPayload: Record<string, unknown>) => {
+      const persistedCanonical = d.sysmlRepository || d.canonicalSysmlRepository;
+      const hasCanonicalModelContent = canonicalSysmlRepository.revision > 0
+        || Object.keys(canonicalSysmlRepository.diagrams).length > 0
+        || Object.keys(canonicalSysmlRepository.definitions).length > 0
+        || Object.keys(canonicalSysmlRepository.usages).length > 0
+        || Object.keys(canonicalSysmlRepository.relationships).length > 0
+        || Object.keys(canonicalSysmlRepository.requirements).length > 0;
+      // SysML diagram tabs are viewpoints over one repository. Their legacy
+      // snapshots contain only a diagram-scoped projection and must not
+      // replace a canonical model that has already been loaded or edited.
+      if (!persistedCanonical && hasCanonicalModelContent) return;
+      const payload = persistedCanonical
+        ? { ...d, sysmlRepository: d.sysmlRepository ?? d.canonicalSysmlRepository }
+        : legacyPayload;
+      applyCanonicalProjectLoad(loadCanonicalSysmlProject(payload));
+    };
     switch (file.type) {
       case 'statemachine':
         applyStateMachineSnapshot(d);
         if (d.view) setView(d.view);
         break;
       case 'bdd':
-        setBlocks(prev => [
-          ...prev.filter(b => b.stereotype === 'requirement'),
-          ...(d.blocks || [])
-        ]);
-        if (d.relationships) {
-          setRelationships(prev => {
-            const relMap = new Map<string, RelationshipData>();
-            prev.forEach(r => {
-              if (r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace') {
-                relMap.set(r.id, r);
-              }
-            });
-            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
-            return Array.from(relMap.values());
-          });
-        }
+        loadFileSysml({
+          blocks: [...blocks.filter(b => b.stereotype === 'requirement'), ...migrateBlocks(d.blocks || [])],
+          relationships: [...relationships.filter(r => ['deriveReqt', 'derive', 'refine', 'satisfy', 'verify', 'trace'].includes(r.type)), ...(d.relationships || [])],
+          parts,
+          connectors,
+        });
         if (d.customStereotypes) setCustomStereotypes(d.customStereotypes);
         break;
       case 'requirements':
-        setBlocks(prev => [
-          ...prev.filter(b => b.stereotype !== 'requirement'),
-          ...(d.blocks || [])
-        ]);
-        if (d.relationships) {
-          setRelationships(prev => {
-            const relMap = new Map<string, RelationshipData>();
-            prev.forEach(r => {
-              if (r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace') {
-                relMap.set(r.id, r);
-              }
-            });
-            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
-            return Array.from(relMap.values());
-          });
-        }
+        loadFileSysml({
+          blocks: [...blocks.filter(b => b.stereotype !== 'requirement'), ...migrateBlocks(d.blocks || [])],
+          relationships: [...relationships.filter(r => !['deriveReqt', 'derive', 'refine', 'satisfy', 'verify', 'trace'].includes(r.type)), ...(d.relationships || [])],
+          parts,
+          connectors,
+        });
         break;
       case 'ibd':
-        if (d.parts) setParts(d.parts);
-        if (d.connectors) setConnectors(d.connectors);
+        loadFileSysml({
+          blocks,
+          relationships,
+          parts: d.parts || parts,
+          connectors: d.connectors || connectors,
+        });
         if (d.interfaceRealizations) setInterfaceRealizations(d.interfaceRealizations);
         if (d.parts && d.parts.length > 0) {
           const firstBlockId = d.parts[0].blockId;
@@ -6550,7 +6615,8 @@ const ADIA = () => {
     }
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
-    setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
+    blocks, relationships, parts, connectors, applyCanonicalProjectLoad, setCustomStereotypes, setInterfaceRealizations,
+    canonicalSysmlRepository,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
     setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
@@ -6977,18 +7043,29 @@ const ADIA = () => {
 
 
 
-  // AI SIDEBAR STATE
+  // AI SIDEBAR & AGENT PANEL STATE
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     if (factoryIOEnabled && (window as any).require) {
       const { ipcRenderer } = (window as any).require('electron');
       ipcRenderer.invoke('fetch-factory-io-tags').then((tags: any) => {
+        if (!isMounted) return;
         if (tags && !tags.error) setFactoryIOStatus('connected');
         else setFactoryIOStatus('error');
+      }).catch(() => {
+        if (!isMounted) return;
+        setFactoryIOStatus('error');
       });
+    } else if (!factoryIOEnabled) {
+      setFactoryIOStatus('disconnected');
     }
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [factoryIOEnabled]);
 
   const projectImportRef = useRef<HTMLInputElement>(null);
   const [importValidationError, setImportValidationError] = useState<ValidationResult | null>(null);
@@ -7005,9 +7082,13 @@ const ADIA = () => {
 
   // Clipboard state
   const [clipboard, setClipboard] = useState<StateMachineClipboardData | null>(null);
+  const sysmlClipboardRef = useRef<string[]>([]);
 
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
+  useEffect(() => {
+    isResizingRef.current = isResizing;
+  }, [isResizing]);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' | 'part' } | null>(null);
 
@@ -7036,10 +7117,50 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
+  const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
+    for (const diagnostic of result.diagnostics) {
+      addError(diagnostic.severity, `${diagnostic.code}: ${diagnostic.message}`, 'Model Explorer', diagnostic.semanticId);
+    }
+  }, [addError]);
+
+  const showConnectionPolicyError = useCallback((rejection: {
+    diagnostic: ConnectionPolicyDiagnostic;
+    relationshipKind: string;
+    source: ConnectionEndpoint;
+    target: ConnectionEndpoint;
+  }, elementId?: string) => {
+    const activeElement = document.activeElement;
+    errorDialogTriggerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+    const error: ConnectionErrorItem = {
+      id: uuidv4(),
+      type: 'error',
+      message: rejection.diagnostic.message,
+      timestamp: new Date(),
+      source: 'SysML connection policy',
+      elementId,
+      connectionDiagnostic: rejection.diagnostic,
+      relationshipKind: rejection.relationshipKind,
+      sourceEndpoint: rejection.source,
+      targetEndpoint: rejection.target,
+    };
+    setErrors(prev => [error, ...prev].slice(0, 100));
+    setCurrentError(error);
+    setShowErrorDialog(true);
+  }, []);
+
+  const dismissErrorDialog = useCallback(() => {
+    setShowErrorDialog(false);
+    const trigger = errorDialogTriggerRef.current;
+    errorDialogTriggerRef.current = null;
+    restoreConnectionErrorFocus(trigger);
+  }, []);
+
+  useEffect(() => {
+    if (showErrorDialog) errorDismissButtonRef.current?.focus();
+  }, [showErrorDialog]);
+
   const exportPlantUmlSource = useCallback(() => {
-    const source = plantUmlDiagram.type === 'sequence'
-      ? generateSequencePlantUml(plantUmlDiagram)
-      : generateUseCasePlantUml(plantUmlDiagram);
+    const source = generateSequencePlantUml(plantUmlDiagram);
     const blob = new Blob([source], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -7325,6 +7446,7 @@ const ADIA = () => {
         entropyNodes,
         entropyEdges,
         opmSimulationConfig,
+        canonicalSysmlRepository,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
         activeFileId
@@ -7406,21 +7528,15 @@ const ADIA = () => {
     }
   }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
 
+
   const hydrateProject = useCallback((importedData: any) => {
     try {
-      let sysmlLoadedView: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] } | null = null;
-      if (importedData.sysmlRepository) {
-        const loaded = loadCanonicalSysmlProject(importedData);
-        if (!loaded.valid) {
-          throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
-        }
-        setCanonicalSysmlRepository(loaded.repository);
-        setSysmlStore(fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations));
-        if (loaded.diagramPresentations) {
-          setDiagramPresentations(loaded.diagramPresentations);
-        }
-        sysmlLoadedView = loaded.view;
-      }
+      // Canonical repositories are preferred; legacy imports are migrated by
+      // the same loader, then all canvas views are refreshed from that model.
+      applyCanonicalProjectLoad(loadCanonicalSysmlProject({
+        ...importedData,
+        sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
+      }));
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
@@ -7438,18 +7554,7 @@ const ADIA = () => {
       }
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
-      // SysML & Requirements — derive from canonical repository if present, else migrate legacy
-      if (sysmlLoadedView) {
-        setBlocks(migrateBlocks(sysmlLoadedView.blocks));
-        setRelationships(sysmlLoadedView.relationships);
-        setParts(sysmlLoadedView.parts);
-        setConnectors(sysmlLoadedView.connectors);
-      } else {
-        if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
-        if (importedData.relationships) setRelationships(importedData.relationships);
-        if (importedData.parts) setParts(importedData.parts);
-        if (importedData.connectors) setConnectors(importedData.connectors);
-      }
+      // SysML projections were refreshed atomically from the canonical load above.
       if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
       if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
 
@@ -7688,7 +7793,7 @@ const ADIA = () => {
     }
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
-    setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setCustomStereotypes,
+    applyCanonicalProjectLoad, setInterfaceRealizations, setCustomStereotypes,
     setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges,
     setHilConfig,
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
@@ -7718,7 +7823,7 @@ const ADIA = () => {
         ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
         ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
       ]),
-      diagramPresentations,
+      diagramPresentations: sysmlDiagramPresentations,
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7757,7 +7862,7 @@ const ADIA = () => {
     parts,
     connectors,
     canonicalSysmlRepository,
-    diagramPresentations,
+    sysmlDiagramPresentations,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
@@ -7831,6 +7936,72 @@ const ADIA = () => {
       addError('error', `Failed to save project: ${err?.message || String(err)}`);
     }
   }, [buildUnifiedProjectPayload, currentProjectName, addError]);
+
+  // X-BRIDGES Application Delegate connected to live React Flow state
+  const liveXbridgesState = useMemo(() => createLiveXbridgesStateAccessors(
+    globalXBridgesNodesRef,
+    globalXBridgesEdgesRef,
+    setGlobalXBridgesNodes,
+    setGlobalXBridgesEdges,
+  ), []);
+
+  const xbridgesApplicationDelegate = useMemo<XbridgesApplicationDelegate | undefined>(() => {
+    if (diagramMode !== 'xbridges') return undefined;
+    return createXbridgesDelegate({
+      ...liveXbridgesState,
+      onSave: (nodes, edges) => handleXBridgesSave(nodes, edges, []),
+    });
+  }, [diagramMode, liveXbridgesState, handleXBridgesSave]);
+
+  // Project Application Delegate for project identity, active workspace, and persistence
+  const projectApplicationDelegate = useMemo<ProjectApplicationDelegate>(() => {
+    return createProjectDelegate({
+      getProjectId: () => currentProjectName || 'ADIA_Project',
+      getActiveWorkspace: () => diagramMode,
+      getRevision: () => canonicalSysmlRepository.revision,
+      onRefreshPersistence: async () => {
+        await saveUnifiedProject(false);
+      },
+    });
+  }, [currentProjectName, diagramMode, canonicalSysmlRepository.revision, saveUnifiedProject]);
+
+  // ToolGateway constructed with live application delegates
+  const agentToolGateway = useMemo<ToolGateway>(() => {
+    return new ToolGateway({
+      project: projectApplicationDelegate,
+      xbridges: xbridgesApplicationDelegate,
+      sysml: sysmlApplicationDelegate,
+      report: reportApplicationDelegate,
+    });
+  }, [projectApplicationDelegate, xbridgesApplicationDelegate, sysmlApplicationDelegate, reportApplicationDelegate]);
+
+  // Single active AgentOrchestrator instance for the project
+  const agentOrchestrator = useMemo<AgentOrchestrator>(() => {
+    const orchestrator = new AgentOrchestrator(undefined, agentToolGateway);
+    orchestrator.updateProjectContext({
+      projectId: currentProjectName || 'ADIA_Project',
+      workspace: diagramMode,
+      revision: canonicalSysmlRepository.revision,
+      nodes: globalXBridgesNodes,
+      edges: globalXBridgesEdges,
+    });
+    return orchestrator;
+  }, []);
+
+  useEffect(() => {
+    agentOrchestrator.setToolGateway(agentToolGateway);
+  }, [agentOrchestrator, agentToolGateway]);
+
+  // Update orchestrator project context whenever project properties change
+  useEffect(() => {
+    agentOrchestrator.updateProjectContext({
+      projectId: currentProjectName || 'ADIA_Project',
+      workspace: diagramMode,
+      revision: canonicalSysmlRepository.revision,
+      nodes: globalXBridgesNodes,
+      edges: globalXBridgesEdges,
+    });
+  }, [agentOrchestrator, currentProjectName, diagramMode, canonicalSysmlRepository.revision, globalXBridgesNodes, globalXBridgesEdges]);
 
   const confirmProjectReplacementIfDirty = useCallback((): boolean => {
     const currentPayload = buildUnifiedProjectPayload();
@@ -7984,6 +8155,7 @@ const ADIA = () => {
   const selectedBlock = useMemo(() => selectedIds.length === 1 ? blocks.find(b => b.id === selectedIds[0]) : null, [selectedIds, blocks]);
   const selectedRelationship = useMemo(() => selectedIds.length === 1 ? relationships.find(r => r.id === selectedIds[0]) : null, [selectedIds, relationships]);
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
+
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
   const currentLayer = useMemo(() => layers.find(l => l.id === currentLayerId) || layers[0], [layers, currentLayerId]);
@@ -8033,6 +8205,7 @@ const ADIA = () => {
       id: uuidv4(),
       name: newVarName,
       type: newVarType,
+      overflowPolicy: 'saturate',
       initialValue: newVarValue,
       currentValue: parseValue(newVarType, newVarValue),
       visibleInScope: true
@@ -8051,7 +8224,12 @@ const ADIA = () => {
   const updateVariableValue = useCallback((idOrName: string, value: string) => {
     setVariables(prev => prev.map(v => {
       if (v.id === idOrName || v.name === idOrName) {
-        const parsed = parseValue(v.type, value);
+        const result = coerceTypedValue(Number(value), v.type, v.overflowPolicy ?? 'saturate');
+        if (result.error !== undefined) {
+          addError('error', `${v.name}: ${result.error}`, 'Variable Runtime');
+          return v;
+        }
+        const parsed = result.value;
         if (simulationSessionRef.current) {
           setSessionVariableValue(simulationSessionRef.current, v.id, parsed);
         }
@@ -8059,6 +8237,22 @@ const ADIA = () => {
       }
       return v;
     }));
+  }, [addError]);
+
+  const updateVariableType = useCallback((id: string, type: VariableType) => {
+    setVariables(prev => prev.map(v => {
+      if (v.id !== id) return v;
+      const initial = validateInitialValue({ type, initialValue: v.initialValue });
+      if (initial === null) {
+        addError('error', `Cannot change '${v.name}' to ${type}: initial value is invalid.`, 'Variable Type');
+        return v;
+      }
+      return { ...v, type, initialValue: initial, currentValue: parseValue(type, initial) };
+    }));
+  }, [addError]);
+
+  const updateVariableOverflowPolicy = useCallback((id: string, overflowPolicy: VariableOverflowPolicy) => {
+    setVariables(prev => prev.map(v => v.id === id ? { ...v, overflowPolicy } : v));
   }, []);
 
   const updateVariableInitValue = useCallback((id: string, value: string) => {
@@ -8117,7 +8311,7 @@ const ADIA = () => {
         tickMs, states, junctions, transitions, layers, variables,
         safetyMode, hilConfig,
       }),
-      blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes
+      // SysML history is owned by the canonical gateway patch history.
     });
     setHistory(prev => {
       const newHistory = prev.slice(0, historyIndex + 1);
@@ -8126,37 +8320,48 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, blocks, relationships, parts, connectors, interfaceRealizations, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, historyIndex]);
 
   const undo = useCallback(() => {
-    if (historyIndex > 0) {
+    if ((sysmlGatewayStateRef.current.patchHistory?.past.length ?? 0) > 0) {
+      const result = handleExecuteSysmlCommand({ type: 'undo' });
+      if (result.committed) {
+        addError('info', 'Undo');
+        return;
+      }
+    }
+    if (diagramMode === 'statemachine' && historyIndex > 0) {
       const prevSnapshot = JSON.parse(history[historyIndex - 1]);
       applyStateMachineSnapshot(prevSnapshot);
-      setBlocks(migrateBlocks(prevSnapshot.blocks));
-      setRelationships(prevSnapshot.relationships || []);
-      setParts(prevSnapshot.parts || []);
-      setConnectors(prevSnapshot.connectors || []);
-      setInterfaceRealizations(prevSnapshot.interfaceRealizations || []);
-      setCustomStereotypes(prevSnapshot.customStereotypes || []);
       setHistoryIndex(prev => prev - 1);
       addError('info', 'Undo');
     }
-  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
+  }, [diagramMode, handleExecuteSysmlCommand, history, historyIndex, addError, applyStateMachineSnapshot]);
 
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
+    if ((sysmlGatewayStateRef.current.patchHistory?.future.length ?? 0) > 0) {
+      const result = handleExecuteSysmlCommand({ type: 'redo' });
+      if (result.committed) {
+        addError('info', 'Redo');
+        return;
+      }
+    }
+    if (diagramMode === 'statemachine' && historyIndex < history.length - 1) {
       const nextSnapshot = JSON.parse(history[historyIndex + 1]);
       applyStateMachineSnapshot(nextSnapshot);
-      setBlocks(migrateBlocks(nextSnapshot.blocks));
-      setRelationships(nextSnapshot.relationships || []);
-      setParts(nextSnapshot.parts || []);
-      setConnectors(nextSnapshot.connectors || []);
-      setInterfaceRealizations(nextSnapshot.interfaceRealizations || []);
-      setCustomStereotypes(nextSnapshot.customStereotypes || []);
       setHistoryIndex(prev => prev + 1);
       addError('info', 'Redo');
     }
-  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
+  }, [diagramMode, handleExecuteSysmlCommand, history, historyIndex, addError, applyStateMachineSnapshot]);
+
+  const handleCommitStateMachineSnapshot = useCallback((snapshot: any, description: string) => {
+    addToHistory();
+    setStates(snapshot.states);
+    setLayers(snapshot.layers);
+    setTransitions(snapshot.transitions);
+    setJunctions(snapshot.junctions);
+    addError('info', description || 'Model update');
+  }, [addToHistory, addError]);
 
   // VALIDATION
   // VALIDATION
@@ -8624,14 +8829,14 @@ const ADIA = () => {
       actions, 
       { states, variables, junctions, layers, currentLayerId },
       { 
-        setStates, setVariables, setTransitions, setBlocks, addError,
+        setStates, setVariables, setTransitions, addError,
         setFactors, setHeaders, setModelType: setActiveModel,
         calculateRSM, calculateGMDH, calculateTaguchi,
         handleExportToXbridges: handleExportToXBridges,
         handleExportToVLab
       }
     );
-  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
+  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
 
   const simulationIOMappings = useMemo(
     () => factoryIOEnabled ? createFactoryIOMappings(factoryIOMapping) : [],
@@ -8967,20 +9172,6 @@ const ADIA = () => {
     simStepRef.current = simulationStep;
   }, [simulationStep]);
 
-  // One-time migration: ensure all requirement blocks have a layerId.
-  // Blocks without layerId are old data and belong to the root layer.
-  useEffect(() => {
-    setBlocks(prev => {
-      const needsMigration = prev.some(b => b.stereotype === 'requirement' && b.layerId === undefined);
-      if (!needsMigration) return prev;
-      return prev.map(b =>
-        b.stereotype === 'requirement' && b.layerId === undefined
-          ? { ...b, layerId: 'root' }
-          : b
-      );
-    });
-  }, []); // Run once on mount
-
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
@@ -9058,6 +9249,7 @@ const ADIA = () => {
     setCurrentLayerId(blockId);
     setDiagramMode('ibd');
     setSelectedIds([]);
+    setView({ scale: 1, offsetX: 0, offsetY: 0 });
     addError('info', `Entered block: ${block.name}`);
   }, [blocks, currentLayerId, addError]);
 
@@ -9166,12 +9358,8 @@ const ADIA = () => {
     }
   }, [layers, states]);
 
-  const deleteNonStateElements = useCallback((ids: string[]) => {
+  const applyNonStateTransaction = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, ids: string[]) => {
     const idSet = new Set(ids);
-    if (idSet.size === 0) return;
-
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
     setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
@@ -9181,13 +9369,52 @@ const ADIA = () => {
       transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
     })));
     const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setBlocks(transaction.model.blocks);
-    setRelationships(transaction.model.relationships);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
+    const gatewayResult = handleExecuteSysmlCommand({
+      type: 'deleteElements',
+      elementIds: transaction.impact.deletedElementIds,
+      authorizedBaselineIds,
+    });
+    if (!gatewayResult.committed) {
+      gatewayResult.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      return;
+    }
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-  }, [addToHistory, blocks, relationships, parts, connectors]);
+  }, [addToHistory, handleExecuteSysmlCommand, authorizedBaselineIds, addError]);
+
+  const deleteNonStateElements = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {},
+      });
+      return;
+    }
+    if (requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {
+          applyNonStateTransaction(transaction, ids);
+        },
+      });
+      return;
+    }
+    applyNonStateTransaction(transaction, ids);
+  }, [blocks, relationships, parts, connectors, authorizedBaselineIds, applyNonStateTransaction]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9299,10 +9526,14 @@ const ADIA = () => {
         junctionIds: l.junctionIds.filter(jid => !otherSet.has(jid)),
         transitionIds: l.transitionIds.filter(tid => !otherSet.has(tid))
       }));
-      setBlocks(prev => prev.filter(b => !otherSet.has(b.id)));
-      setRelationships(prev => prev.filter(r => !otherSet.has(r.id) && !otherSet.has(r.sourceId) && !otherSet.has(r.targetId)));
-      setParts(prev => prev.filter(p => !otherSet.has(p.id)));
-      setConnectors(prev => prev.filter(c => !otherSet.has(c.id) && !otherSet.has(c.sourcePartId) && !otherSet.has(c.targetPartId)));
+      const gatewayResult = handleExecuteSysmlCommand({
+        type: 'deleteElements',
+        elementIds: [...otherSet],
+        authorizedBaselineIds,
+      });
+      if (!gatewayResult.committed) {
+        gatewayResult.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      }
       setInterfaceRealizations(prev => prev.filter(ir => !otherSet.has(ir.id) && !otherSet.has(ir.partId) && !otherSet.has(ir.interfaceId)));
     }
 
@@ -9326,7 +9557,7 @@ const ADIA = () => {
     } else {
       addError('info', 'Deleted selected elements');
     }
-  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory]);
+  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory, handleExecuteSysmlCommand, authorizedBaselineIds]);
 
   const createXBridgesState = useCallback((x: number, y: number) => {
     addToHistory();
@@ -9467,168 +9698,441 @@ const ADIA = () => {
     addError('info', 'Deleted transition');
   }, [addError]);
 
-  // BDD OPERATIONS
-  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
-    addToHistory();
-    const newId = uuidv4();
-    // For requirements, store which layer this block was created in
-    const blockLayerId = (stereotype === 'requirement' && diagramMode === 'requirements') ? currentLayerId : undefined;
-    const newBlock: BlockData = {
-      id: newId,
-      name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
-      stereotype,
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
-      width: 150,
-      height: 100,
-      properties: [],
-      classes: [],
-      operations: [],
-      constraints: [],
-      ports: [],
-      reqId: stereotype === 'requirement' ? `REQ-${blocks.filter(b => b.stereotype === 'requirement').length + 1}` : undefined,
-      status: stereotype === 'requirement' ? 'Draft' : undefined,
-      priority: stereotype === 'requirement' ? 'Medium' : undefined,
-      description: stereotype === 'requirement' ? 'Requirement text...' : undefined,
-      risk: stereotype === 'requirement' ? 'Medium' : undefined,
-      verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
-      source: stereotype === 'requirement' ? '' : undefined,
-      version: stereotype === 'requirement' ? '1.0' : undefined,
-      rationale: stereotype === 'requirement' ? '' : undefined,
-      namespace: [],
-      isAbstract: false,
-      isLeaf: false,
-      layerId: blockLayerId,
-    };
-    setBlocks(prev => [...prev, newBlock]);
+  // BDD / SysML CREATION OPERATIONS
+  const createSysmlElementOnActiveDiagram = useCallback((
+    x: number,
+    y: number,
+    kind: DiagramCreationKind,
+  ) => {
+    const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+    const ownerId = diagramMode === 'ibd' ? currentLayerId : 'model';
+    const parentRequirementId = diagramMode === 'requirements' && currentLayerId !== 'root' && currentLayerId !== 'requirements'
+      ? (canonicalSysmlRepository.requirements[currentLayerId] ? currentLayerId : undefined)
+      : undefined;
 
-    setSelectedIds([newBlock.id]);
-    addError('info', `Created ${stereotype}: ${newBlock.name}`);
-  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
+    const outcome = buildDiagramCreationCommand({
+      repository: canonicalSysmlRepository,
+      kind,
+      ownerId,
+      diagramId,
+      position: {
+        x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+        y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      },
+    });
+    if (!outcome.ok) {
+      addError('error', outcome.diagnostic.message, 'SysML');
+      return;
+    }
+
+    let commandToDispatch: SysmlEditorCommand = outcome.command;
+    if (kind === 'Requirement' && parentRequirementId) {
+      commandToDispatch = {
+        type: 'batch',
+        commands: [
+          outcome.command,
+          {
+            type: 'createElement',
+            element: {
+              id: uuidv4(),
+              sourceId: parentRequirementId,
+              targetId: outcome.semanticId,
+              kind: 'requirementContainment',
+            },
+          },
+        ],
+      };
+    }
+
+    const result = handleExecuteSysmlCommand(commandToDispatch);
+    if (result.committed) {
+      setSelectedIds([outcome.semanticId]);
+      addError('info', parentRequirementId && kind === 'Requirement' ? `Created contained requirement` : `Created ${kind}`);
+    } else {
+      result.diagnostics.forEach(item => addError(item.severity, item.message, 'SysML', item.elementId));
+    }
+  }, [canonicalSysmlRepository, currentLayerId, diagramMode, snapEnabled, handleExecuteSysmlCommand, addError]);
+
+  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
+    const kind: DiagramCreationKind = stereotype === 'requirement' ? 'Requirement'
+      : stereotype === 'testCase' ? 'TestCase'
+      : stereotype === 'useCase' ? 'UseCase'
+      : 'Block';
+    createSysmlElementOnActiveDiagram(x, y, kind);
+  }, [createSysmlElementOnActiveDiagram]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  }, []);
+    const geometricKeys = ['x', 'y', 'width', 'height', 'ibdX', 'ibdY', 'ibdWidth', 'ibdHeight'];
+    const hasGeometric = Object.keys(updates).some(k => geometricKeys.includes(k));
+    const hasSemantic = Object.keys(updates).some(k => !geometricKeys.includes(k));
+
+    if (hasGeometric && !hasSemantic) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined || updates.ibdX !== undefined) presentation.x = updates.x ?? updates.ibdX;
+      if (updates.y !== undefined || updates.ibdY !== undefined) presentation.y = updates.y ?? updates.ibdY;
+      if (updates.width !== undefined || updates.ibdWidth !== undefined) presentation.width = updates.width ?? updates.ibdWidth;
+      if (updates.height !== undefined || updates.ibdHeight !== undefined) presentation.height = updates.height ?? updates.ibdHeight;
+      if (isDraggingRef.current || isResizingRef.current) {
+        updatePresentationDraft(id, presentation);
+        const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
+        pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
+        return;
+      }
+      handleExecuteSysmlCommand({
+        type: 'updatePresentation',
+        diagramId: activeDiagramId,
+        elementId: id,
+        presentation,
+        coalesceKey: `drag-${id}`,
+      });
+      return;
+    }
+
+    if (hasGeometric && hasSemantic) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      const semanticPatch = { ...updates };
+      geometricKeys.forEach(k => delete (semanticPatch as any)[k]);
+      const semanticCommand = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, semanticPatch as Record<string, unknown>);
+      const semanticCommands = semanticCommand.type === 'batch' ? semanticCommand.commands : [semanticCommand];
+      const result = handleExecuteSysmlCommand({
+        type: 'batch',
+        commands: [
+          ...semanticCommands,
+          { type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation },
+        ],
+      });
+      if (!result.committed) {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+      return;
+    }
+
+    const result = handleExecuteSysmlCommand(buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, updates as Record<string, unknown>));
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft]);
+
+  const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    const result = handleExecuteSysmlCommand({
+      type: 'deleteElements',
+      elementIds: transaction.impact.deletedElementIds,
+      authorizedBaselineIds,
+    });
+    // Canonical repository updated by gateway; keep compatibility invariant:
+    // setCanonicalSysmlRepository(transaction.repository);
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
+    if (deletedIds.has(currentLayerId) || [...layerStack].some(id => deletedIds.has(id))) {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath([]);
+    }
+    addError('info', msg);
+  }, [handleExecuteSysmlCommand, authorizedBaselineIds, currentLayerId, layerStack, addError]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
     if (!block) return;
     const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setBlocks(transaction.model.blocks);
-    setRelationships(transaction.model.relationships);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted ${kind}: ${block.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: block.name,
+        elementKind: kind,
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
     if (rawIds.length === 0) return;
-    const idSet = new Set(rawIds);
-    addToHistory();
     const currentDiagramId = diagramMode === 'requirements' ? 'requirements' : (diagramMode || 'default');
-    setDiagramPresentations(prev => {
-      const existing = prev[currentDiagramId]?.elementIds ?? blocks.map(b => b.id);
-      return {
-        ...prev,
-        [currentDiagramId]: {
-          elementIds: existing.filter(id => !idSet.has(id)),
-        },
-      };
+    const result = handleExecuteSysmlCommand({
+      type: 'removeFromDiagram',
+      diagramId: currentDiagramId,
+      elementIds: rawIds,
     });
-    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
-    setRelationships(prev => prev.filter(r => !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
-    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
-    addError('info', `Removed ${rawIds.length} element(s) from diagram (preserved in model)`);
-  }, [addToHistory, diagramMode, blocks, addError]);
+    if (!result.committed) {
+      addError('error', result.diagnostics.map(diagnostic => diagnostic.message).join('; ') || 'Unable to remove the presentation from the diagram.');
+      return;
+    }
+    setSelectedIds(prev => prev.filter(id => !rawIds.includes(id)));
+    addError('info', `Removed ${rawIds.length} presentation(s) from diagram (preserved in model)`);
+  }, [addError, diagramMode, handleExecuteSysmlCommand]);
 
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
   }, [createBlock]);
 
-  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
-    const newRel: RelationshipData = {
-      id: uuidv4(),
-      sourceId,
-      targetId,
-      type,
-      label: '',
-      sourceMultiplicity: '1',
-      targetMultiplicity: '1'
+  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type']) => {
+    const newRel = { id: uuidv4(), sourceId, targetId, type };
+    const candidate: SysmlRelationship = {
+      id: newRel.id,
+      sourceId: newRel.sourceId,
+      targetId: newRel.targetId,
+      kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
+      name: '',
     };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, newRel);
-    if (!validation.valid) {
-      addError('error', `Invalid ${type}: ${validation.reason}`);
+    const result = handleExecuteSysmlCommand({ type: 'createElement', element: candidate });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       return;
     }
-    addToHistory();
-    setRelationships(prev => [...prev, newRel]);
-    setSelectedIds([newRel.id]);
+    setSelectedIds([candidate.id]);
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory, blocks, parts, relationships]);
+  }, [handleExecuteSysmlCommand, addError]);
+
+  type BddFeatureDrag =
+    | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }
+    | { kind: 'operation'; ownerId: string; name: string };
+  const [bddFeatureDrag, setBddFeatureDrag] = useState<BddFeatureDrag | null>(null);
+
+  const startBddFeatureDrag = useCallback((e: MouseEvent<SVGTextElement>, feature: BddFeatureDrag) => {
+    if (diagramMode !== 'bdd' || e.button !== 0) return;
+    e.stopPropagation();
+    setSelectedIds([feature.ownerId]);
+    setBddFeatureDrag(feature);
+  }, [diagramMode]);
+
+  const dropBddFeatureOnBlock = useCallback((e: MouseEvent<SVGGElement>, targetId: string) => {
+    if (diagramMode !== 'bdd' || !bddFeatureDrag) return;
+    const source = blocks.find(block => block.id === bddFeatureDrag.ownerId);
+    const target = blocks.find(block => block.id === targetId);
+    if (!source || !target || source.id === target.id) {
+      setBddFeatureDrag(null);
+      return;
+    }
+
+    let type: RelationshipData['type'];
+    let label: string;
+    let sourceMultiplicity = '1';
+    if (bddFeatureDrag.kind === 'property') {
+      const typeMatchesTarget = bddFeatureDrag.typeId === target.id || bddFeatureDrag.typeName === target.name;
+      if (!typeMatchesTarget) {
+        addError('warning', `This property is typed by ${bddFeatureDrag.typeName}; drop it onto that Block to create its association.`);
+        setBddFeatureDrag(null);
+        return;
+      }
+      type = 'association';
+      label = `${bddFeatureDrag.name} : ${target.name}`;
+      sourceMultiplicity = bddFeatureDrag.multiplicity || '1';
+    } else {
+      type = 'dependency';
+      label = bddFeatureDrag.name;
+    }
+
+    const candidate: RelationshipData = {
+      id: uuidv4(), sourceId: source.id, targetId: target.id, type, label,
+      sourceMultiplicity, targetMultiplicity: '1',
+    };
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection);
+    } else {
+      const rel: SysmlRelationship = {
+        id: candidate.id,
+        sourceId: candidate.sourceId,
+        targetId: candidate.targetId,
+        kind: (candidate.type === 'aggregation' ? 'sharedAggregation' : candidate.type) as SysmlRelationship['kind'],
+        name: candidate.label,
+      };
+      const result = handleExecuteSysmlCommand({ type: 'createElement', element: rel });
+      if (result.committed) {
+        setSelectedIds([candidate.id]);
+        addError('info', `Created ${type} from ${bddFeatureDrag.kind}: ${bddFeatureDrag.name}`);
+      } else {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+    }
+    setBddFeatureDrag(null);
+  }, [diagramMode, bddFeatureDrag, blocks, addError, relationships, parts, showConnectionPolicyError, addToHistory]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
-    const current = relationships.find(relationship => relationship.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, candidate);
-    if (!validation.valid) {
-      addError('error', `Invalid relationship update: ${validation.reason}`);
-      return;
+    const patch: Record<string, unknown> = {};
+    if (updates.label !== undefined) patch.name = updates.label;
+    if (updates.type !== undefined) patch.kind = updates.type === 'aggregation' ? 'sharedAggregation' : updates.type;
+    const result = handleExecuteSysmlCommand(buildPartUsageUpdateCommand(canonicalSysmlRepository, id, patch));
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-    setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
-  }, [relationships, blocks, parts, addError]);
+  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
-    addToHistory();
-    setRelationships(prev => prev.filter(r => r.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted relationship');
-  }, [addError, addToHistory]);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      const rel = relationships.find(r => r.id === id);
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: rel?.label || id,
+        elementKind: 'relationship',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted relationship');
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, 'Deleted relationship');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
-    addToHistory();
-    const newPart: PartData = {
-      id: uuidv4(),
+    const blockDefs = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === 'block');
+    const targetTypeId = blockDefs.length > 0 ? blockDefs[0].id : 'Block';
+    const resolved = createTypedUsageCommand(canonicalSysmlRepository, {
+      ownerId: currentLayerId,
       name: `part_${parts.length + 1}`,
-      blockId: currentLayerId,
-      typeId: null,
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      typeId: targetTypeId,
+      kind: 'part',
+    });
+
+    if (!resolved.ok) {
+      addError('error', resolved.message, 'SysML');
+      setPendingCreateNewTypeAction({ action: resolved.action, candidates: resolved.candidates });
+      return;
+    }
+
+    const name = `part_${parts.length + 1}`;
+    const part = createPartUsage({
+      ownerId: currentLayerId,
+      typeId: resolved.type.id,
+      name,
+      aggregation: 'composite',
+      existingNames: parts.map(p => p.name),
+    });
+
+    const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId);
+    const frameX = contextBlock?.ibdX ?? 50;
+    const frameY = contextBlock?.ibdY ?? 50;
+    const frameW = contextBlock?.ibdWidth ?? 1200;
+    const frameH = contextBlock?.ibdHeight ?? 800;
+
+    let initialX = snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75;
+    let initialY = snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50;
+    initialX = Math.max(frameX + 30, Math.min(initialX, frameX + frameW - 180));
+    initialY = Math.max(frameY + 40, Math.min(initialY, frameY + frameH - 140));
+
+    const result = handleExecuteSysmlCommand(buildCreatePartUsageCommand(canonicalSysmlRepository, part, {
+      x: initialX,
+      y: initialY,
       width: 150,
       height: 100,
-      multiplicity: '1'
-    };
-    setParts(prev => [...prev, newPart]);
-    setSelectedIds([newPart.id]);
-    addError('info', `Created part: ${newPart.name}`);
-  }, [parts.length, currentLayerId, snapEnabled, addError, addToHistory]);
+    }, currentLayerId));
+
+    if (result.committed) {
+      setSelectedIds([part.id]);
+      addError('info', `Created part: ${part.name}`);
+    } else {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, currentLayerId, parts, snapEnabled, handleExecuteSysmlCommand, addError]);
+
+  const handleCreateNewTypeAction = useCallback((action: CreateNewTypeAction) => {
+    const result = handleExecuteSysmlCommand(buildCreateNewTypeCommand(action, canonicalSysmlRepository, () => uuidv4()));
+    if (result.committed) {
+      setPendingCreateNewTypeAction(null);
+      addError('info', `Created type definition '${action.suggestedName}'.`);
+    } else {
+      result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
-    setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
+    const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
+    if (isPureGeometricUpdate) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      if (isDraggingRef.current || isResizingRef.current) {
+        updatePresentationDraft(id, presentation);
+        const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
+        pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
+        return;
+      }
+      handleExecuteSysmlCommand({
+        type: 'updatePresentation',
+        diagramId: activeDiagramId,
+        elementId: id,
+        presentation,
+        coalesceKey: `drag-${id}`,
+      });
+      return;
+    }
+
+    if (updates.typeId) {
+      const resolved = resolveType(updates.typeId, canonicalSysmlRepository, { expectedMetaclasses: ['Block'] });
+      if (!resolved.found) {
+        addError('error', `Part must reference an existing block type.`, 'SysML', id);
+        setPendingCreateNewTypeAction({ action: resolved.action, candidates: resolved.candidates });
+        return;
+      }
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.typeId !== undefined) patch.typeId = updates.typeId;
+    if (updates.aggregation !== undefined) patch.aggregation = updates.aggregation;
+    if (updates.multiplicity !== undefined) {
+      try {
+        patch.multiplicity = parseMultiplicity(updates.multiplicity || '1');
+      } catch {
+        addError('error', `Invalid multiplicity "${updates.multiplicity}" for part.`, 'SysML', id);
+        return;
+      }
+    }
+
+    const result = handleExecuteSysmlCommand(buildPartUsageUpdateCommand(canonicalSysmlRepository, id, patch));
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
     if (!part) return;
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setRelationships(transaction.model.relationships);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted part: ${part.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: part.name,
+        elementKind: 'part',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.target === canvasRef.current) {
@@ -9689,19 +10193,29 @@ const ADIA = () => {
       levelGroups[lvl].push(id);
     });
 
-    const newBlocks = [...blocks];
+    const updates: Array<{ elementId: string; x: number; y: number }> = [];
     Object.entries(levelGroups).forEach(([lvlStr, ids]) => {
       const lvl = parseInt(lvlStr);
       ids.forEach((id, index) => {
-        const idx = newBlocks.findIndex(b => b.id === id);
-        if (idx !== -1) newBlocks[idx] = { ...newBlocks[idx], x: 50 + index * 220, y: 50 + lvl * 180 };
+        const presentation = sysmlDiagramPresentations.requirements?.presentations[id];
+        if (!presentation) return;
+        updates.push({ elementId: id, x: 50 + index * 220, y: 50 + lvl * 180 });
       });
     });
-    setBlocks(newBlocks);
+    const command = buildDiagramPresentationBatch('requirements', updates);
+    if (!command) {
+      addError('warning', 'No requirement presentations are available to lay out on this diagram.');
+      return;
+    }
+    const result = handleExecuteSysmlCommand(command);
+    if (!result.committed) {
+      result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      return;
+    }
     addError('info', 'Auto-layout applied to current layer.');
-  }, [blocks, relationships, currentLayerId, addError]);
+  }, [blocks, relationships, currentLayerId, sysmlDiagramPresentations, handleExecuteSysmlCommand, addError]);
 
-  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy') => {
+  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
     if (selectedIds.length !== 1) {
       addError('warning', 'Select exactly one Block or Part to add a port.');
       return;
@@ -9712,36 +10226,47 @@ const ADIA = () => {
     if (part) {
       const originalTypeId = part.typeId;
 
-      if (!originalTypeId) {
-        const newBlockId = uuidv4();
+      if (!originalTypeId || !blocks.some(block => block.id === originalTypeId && block.stereotype === 'block')) {
         const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        const newBlock: BlockData = {
-          id: newBlockId, name: `${part.name}_Def`, stereotype: 'block', classes: [],
-          x: 100, y: 100, width: 150, height: 100,
-          properties: [], operations: [], constraints: [], ports: [newPort]
-        };
-        setBlocks(prev => [...prev, newBlock]);
-        updatePart(part.id, { typeId: newBlockId });
-        addError('info', `Created definition '${newBlock.name}' for part and added port.`);
+        const outcome = buildDiagramCreationCommand({
+          repository: canonicalSysmlRepository,
+          kind: 'Block',
+          ownerId: 'model',
+          diagramId: diagramMode,
+          position: { x: 100, y: 100 },
+        });
+        if (outcome.ok) {
+          const res = handleExecuteSysmlCommand(outcome.command);
+          if (res.committed) {
+            updateBlock(outcome.semanticId, { ports: [newPort] });
+            updatePart(part.id, { typeId: outcome.semanticId });
+            addError('info', `Created definition for part and added port.`);
+          }
+        }
         return;
       }
 
       const isShared = parts.some(p => p.id !== part.id && p.typeId === originalTypeId);
-      const originalBlock = blocks.find(b => b.id === originalTypeId);
-      if (!originalBlock) {
-        addError('error', `Could not find block definition with ID ${originalTypeId}`);
-        return;
-      }
+      const originalBlock = blocks.find(b => b.id === originalTypeId && b.stereotype === 'block')!;
 
       if (isShared) {
         addError('info', `Specializing definition for '${part.name}'...`);
-        const newBlockId = uuidv4();
-        const newBlock: BlockData = { ...originalBlock, id: newBlockId, name: `${originalBlock.name}_${part.name}`, ports: originalBlock.ports.map(p => ({ ...p })), properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints, };
-        const newPort: PortData = { id: uuidv4(), name: `p${newBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        newBlock.ports.push(newPort);
-        setBlocks(prev => [...prev, newBlock]);
-        updatePart(part.id, { typeId: newBlockId });
-        addError('info', `Created new definition '${newBlock.name}' and added port.`);
+        const outcome = buildDiagramCreationCommand({
+          repository: canonicalSysmlRepository,
+          kind: 'Block',
+          ownerId: 'model',
+          diagramId: diagramMode,
+          position: { x: (originalBlock.x ?? 100) + 20, y: (originalBlock.y ?? 100) + 20 },
+        });
+        if (outcome.ok) {
+          const res = handleExecuteSysmlCommand(outcome.command);
+          if (res.committed) {
+            const newPorts: PortData[] = [...originalBlock.ports.map(p => ({ ...p })), { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? ('in' as const) : undefined }];
+            updateBlock(outcome.semanticId, { ports: newPorts, properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints });
+            updatePart(part.id, { typeId: outcome.semanticId });
+            addError('info', `Created new definition and added port.`);
+          }
+        }
       } else {
         const newPort: PortData = { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
         updateBlock(originalTypeId, { ports: [...originalBlock.ports, newPort] });
@@ -9757,7 +10282,7 @@ const ADIA = () => {
       updateBlock(id, { ports: [...block.ports, newPort] });
       addError('info', `Added ${kind} port to Block: ${block.name}`);
     }
-  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError, setBlocks]);
+  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError]);
 
   const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
     addToHistory();
@@ -9825,22 +10350,28 @@ const ADIA = () => {
             return;
           }
 
-          const newConnector: ConnectorData = {
+          const sourcePortQualified = connectorSource.partId === currentLayerId
+            ? connectorSource.portId
+            : `${connectorSource.partId}::${connectorSource.portId}`;
+          const targetPortQualified = partId === currentLayerId
+            ? portId
+            : `${partId}::${portId}`;
+          const newConnector: ConnectorUsage = {
             id: uuidv4(),
-            sourcePartId: connectorSource.partId,
-            sourcePortId: connectorSource.portId,
-            targetPartId: partId,
-            targetPortId: portId,
+            ownerId: currentLayerId,
+            sourcePortId: sourcePortQualified,
+            targetPortId: targetPortQualified,
             kind: connectorSource.partId === currentLayerId || partId === currentLayerId ? 'delegation' : 'assembly'
           };
-          const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, newConnector, currentLayerId);
-          if (!validation.valid) {
-            addError('error', `Invalid connector: ${validation.reason}`);
-            return;
+          const result = handleExecuteSysmlCommand({
+            type: 'createElement',
+            element: newConnector,
+          });
+          if (result.committed) {
+            addError('info', 'Created connection');
+          } else {
+            result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
           }
-          addToHistory();
-          setConnectors(prev => [...prev, newConnector]);
-          addError('info', 'Created connection');
         }
         setIsCreatingConnector(false);
         setConnectorSource(null);
@@ -9851,23 +10382,34 @@ const ADIA = () => {
   }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
 
   const deleteConnector = useCallback((id: string) => {
-    addToHistory();
-    setConnectors(prev => prev.filter(c => c.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted connector');
-  }, [addError, addToHistory]);
-
-  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    const current = connectors.find(connector => connector.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, candidate, currentLayerId);
-    if (!validation.valid) {
-      addError('error', `Invalid connector update: ${validation.reason}`);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: id,
+        elementKind: 'connector',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted connector');
+        },
+      });
       return;
     }
-    setConnectors(prev => prev.map(c => c.id === id ? candidate : c));
-  }, [connectors, blocks, parts, currentLayerId, addError]);
+    applySysmlDeletion(transaction, 'Deleted connector');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
+
+  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
+    const result = handleExecuteSysmlCommand({
+      type: 'updateElement',
+      elementId: id,
+      patch: updates,
+    });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();
@@ -9920,7 +10462,7 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
-    const block = blocks.find(b => b.id === id);
+    const block = sysmlCanvasView.blocks.find(b => b.id === id) ?? blocks.find(b => b.id === id);
     if (block) {
       setIsResizing(true);
       setResizeHandle(handle);
@@ -9933,7 +10475,7 @@ const ADIA = () => {
       return;
     }
 
-    const part = parts.find(p => p.id === id);
+    const part = sysmlCanvasView.parts.find(p => p.id === id) ?? parts.find(p => p.id === id);
     if (part) {
       setIsResizing(true);
       setResizeHandle(handle);
@@ -9949,7 +10491,7 @@ const ADIA = () => {
       setResizeStart({ id: state.id, x: state.x, y: state.y, w: state.width, h: state.height, mx: worldX, my: worldY, type: 'state' });
       addToHistory();
     }
-  }, [blocks, states, parts, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
+  }, [sysmlCanvasView, states, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
 
   // CANVAS NAVIGATION (CATIA-style)
   const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
@@ -10035,6 +10577,19 @@ const ADIA = () => {
           newY = resizeStart.y + delta;
           newH = resizeStart.h - delta;
         }
+      } else if (resizeStart.type === 'ibdContext') {
+        if (resizeHandle.includes('e')) newW = Math.max(400, resizeStart.w + dx);
+        if (resizeHandle.includes('s')) newH = Math.max(300, resizeStart.h + dy);
+        if (resizeHandle.includes('w')) {
+          const delta = Math.min(resizeStart.w - 400, dx);
+          newX = resizeStart.x + delta;
+          newW = resizeStart.w - delta;
+        }
+        if (resizeHandle.includes('n')) {
+          const delta = Math.min(resizeStart.h - 300, dy);
+          newY = resizeStart.y + delta;
+          newH = resizeStart.h - delta;
+        }
       } else {
         if (resizeHandle.includes('e')) newW = Math.max(50, resizeStart.w + dx);
         if (resizeHandle.includes('s')) newH = Math.max(50, resizeStart.h + dy);
@@ -10072,14 +10627,14 @@ const ADIA = () => {
     if (isDragging && draggedPort) {
       const { elementId, portId } = draggedPort;
       // Find element (Part or Block)
-      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = parts.find(p => p.id === elementId);
+      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = sysmlCanvasView.parts.find(p => p.id === elementId);
       let isContext = false;
       if (!element) {
-        element = blocks.find(b => b.id === elementId);
+        element = sysmlCanvasView.blocks.find(b => b.id === elementId);
         isContext = true;
       }
-      const part = parts.find(p => p.id === elementId);
-      const block = blocks.find(b => b.id === elementId);
+      const part = sysmlCanvasView.parts.find(p => p.id === elementId);
+      const block = sysmlCanvasView.blocks.find(b => b.id === elementId);
 
       if (element) {
         let elX = element.x, elY = element.y, elW = element.width, elH = element.height;
@@ -10109,15 +10664,16 @@ const ADIA = () => {
         else { side = 'right'; offset = Math.max(0, Math.min(1, relY / elH)); }
 
         if (isContext && block) {
-          // Update Block definition (Context)
-          setBlocks(prev => prev.map(b => b.id === elementId ? {
-            ...b, ports: b.ports.map(p => p.id === portId ? { ...p, side, offset } : p)
-          } : b));
+          const presentationExists = sysmlDiagramPresentations[currentLayerId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset, {
+            presentationExists,
+            bounds: { x: elX, y: elY, width: elW, height: elH },
+          }));
+          if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         } else if (part) {
-          // Update Part instance only
-          setParts(prev => prev.map(p => p.id === elementId ? {
-            ...p, portLayouts: { ...(p.portLayouts || {}), [portId]: { side, offset } }
-          } : p));
+          const presentationExists = sysmlDiagramPresentations[currentLayerId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset, { presentationExists }));
+          if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         }
       }
       return;
@@ -10125,8 +10681,8 @@ const ADIA = () => {
 
     if (isDragging) {
       // Calculate delta
-      const dx = worldX - dragOffset.x;
-      const dy = worldY - dragOffset.y;
+      const dx = worldX - dragOffsetRef.current.x;
+      const dy = worldY - dragOffsetRef.current.y;
 
       const idsToMove = new Set(selectedIds);
       selectedIds.forEach(id => {
@@ -10185,59 +10741,93 @@ const ADIA = () => {
         }
 
         // BDD Blocks
-        const block = blocks.find(b => b.id === id);
+        const block = sysmlCanvasView.blocks.find(b => b.id === id);
         if (block) {
-          if (diagramMode === 'ibd' && block.id === currentLayerId) {
-            const oldX = block.ibdX ?? 50;
-            const oldY = block.ibdY ?? 50;
-            const newX = oldX + dx;
-            const newY = oldY + dy;
-            const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-            const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-            const actualDx = snappedX - oldX;
-            const actualDy = snappedY - oldY;
+          const isContextBlock = diagramMode === 'ibd' && block.id === currentLayerId;
+          if (isContextBlock) {
+            const currentBlockX = presentationDraftsRef.current[id]?.x ?? block.ibdX ?? 50;
+            const currentBlockY = presentationDraftsRef.current[id]?.y ?? block.ibdY ?? 50;
+            const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlockX, y: currentBlockY };
+            const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+            dragRawPositionsRef.current[id] = nextRawPosition;
+
+            const snappedX = snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+            const snappedY = snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
 
             updateBlock(id, {
               ibdX: snappedX,
-              ibdY: snappedY
+              ibdY: snappedY,
             });
 
-            // Make all parts in this context follow the context block boundary
-            parts.forEach(p => {
-              if (p.blockId === id && !idsToMove.has(p.id)) {
+            // Make all parts in this context follow the context block boundary in lockstep
+            const contextParts = sysmlCanvasView.parts.filter(p => p.blockId === id || !p.blockId || p.blockId === currentLayerId);
+            contextParts.forEach(p => {
+              if (!idsToMove.has(p.id)) {
+                const currentPartX = presentationDraftsRef.current[p.id]?.x ?? p.x;
+                const currentPartY = presentationDraftsRef.current[p.id]?.y ?? p.y;
+                const partRaw = dragRawPositionsRef.current[p.id] ?? { x: currentPartX, y: currentPartY };
+                const nextPartRaw = { x: partRaw.x + dx, y: partRaw.y + dy };
+                dragRawPositionsRef.current[p.id] = nextPartRaw;
+
+                const snappedPartX = snapEnabled ? snapToGrid(nextPartRaw.x, GRID_SIZE) : nextPartRaw.x;
+                const snappedPartY = snapEnabled ? snapToGrid(nextPartRaw.y, GRID_SIZE) : nextPartRaw.y;
+
                 updatePart(p.id, {
-                  x: p.x + actualDx,
-                  y: p.y + actualDy
+                  x: snappedPartX,
+                  y: snappedPartY,
                 });
               }
             });
           } else {
-            const newX = block.x + dx;
-            const newY = block.y + dy;
+            const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
+            const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
+            const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+            dragRawPositionsRef.current[id] = nextRawPosition;
+            const newX = nextRawPosition.x;
+            const newY = nextRawPosition.y;
             updateBlock(id, {
               x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
-              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
+              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY,
             });
           }
         }
 
+        // UML Package presentations use the same diagram-scoped movement
+        // command as every other semantic element. Moving the notation never
+        // changes package ownership or creates a Block surrogate.
+        const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
+        if (packageNode) {
+          const currentPackage = { ...packageNode, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPackage.x, y: currentPackage.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+          updateBlock(id, {
+            x: snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
+            y: snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
+          });
+        }
+
         // IBD Parts
-        const part = parts.find(p => p.id === id);
+        const part = sysmlCanvasView.parts.find(p => p.id === id);
         if (part) {
-          const newX = part.x + dx;
-          const newY = part.y + dy;
+          const currentPart = { ...part, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPart.x, y: currentPart.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+          const newX = nextRawPosition.x;
+          const newY = nextRawPosition.y;
 
           // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
           let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
           let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
 
           if (diagramMode === 'ibd') {
-            const contextBlock = blocks.find(b => b.id === currentLayerId);
+            const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId) ?? blocks.find(b => b.id === currentLayerId);
             if (contextBlock) {
-              const cx = contextBlock.ibdX ?? 50;
-              const cy = contextBlock.ibdY ?? 50;
-              const cw = contextBlock.ibdWidth ?? 1200;
-              const ch = contextBlock.ibdHeight ?? 800;
+              const cx = presentationDraftsRef.current[contextBlock.id]?.x ?? contextBlock.ibdX ?? 50;
+              const cy = presentationDraftsRef.current[contextBlock.id]?.y ?? contextBlock.ibdY ?? 50;
+              const cw = presentationDraftsRef.current[contextBlock.id]?.width ?? contextBlock.ibdWidth ?? 1200;
+              const ch = presentationDraftsRef.current[contextBlock.id]?.height ?? contextBlock.ibdHeight ?? 800;
               finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
               finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
             }
@@ -10251,11 +10841,12 @@ const ADIA = () => {
       });
 
       // Update drag offset to current position for next frame
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    setBddFeatureDrag(null);
     if (e.button === 1) {
       midDown.current = false;
     }
@@ -10271,10 +10862,26 @@ const ADIA = () => {
       setIsDragging(false);
       setDraggedPort(null);
     }
+    if (pendingPresentationUpdatesRef.current.size > 0) {
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      for (const [elemId, pres] of pendingPresentationUpdatesRef.current.entries()) {
+        handleExecuteSysmlCommand({
+          type: 'updatePresentation',
+          diagramId: activeDiagramId,
+          elementId: elemId,
+          presentation: pres,
+          coalesceKey: `drag-${elemId}`,
+        });
+      }
+      pendingPresentationUpdatesRef.current.clear();
+      presentationDraftsRef.current = {};
+      setPresentationDrafts({});
+      dragRawPositionsRef.current = {};
+    }
     if (isPanning) {
       setIsPanning(false);
     }
-  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds]);
+  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, handleExecuteSysmlCommand]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -10344,7 +10951,7 @@ const ADIA = () => {
       } : l));
       setSelectedIds([newId]);
       setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
       return;
     }
 
@@ -10360,7 +10967,7 @@ const ADIA = () => {
     setIsDragging(true);
 
     // For dragging, we track the mouse position relative to world
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleJunctionMouseDown = useCallback((e: MouseEvent<SVGGElement>, junctionId: string) => {
@@ -10405,7 +11012,7 @@ const ADIA = () => {
       } : l));
       setSelectedIds([newId]);
       setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
       return;
     }
 
@@ -10419,7 +11026,7 @@ const ADIA = () => {
 
     addToHistory(); // Save state before dragging
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, junctions, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
@@ -10427,19 +11034,31 @@ const ADIA = () => {
     if (isCreatingTransition) { // Reusing this flag for relationships
       if (transitionSourceId) {
         if (transitionSourceId !== blockId) {
-          const source = blocks.find(b => b.id === transitionSourceId);
-          const target = blocks.find(b => b.id === blockId);
+          const source = blocks.find(b => b.id === transitionSourceId) ?? states.find(s => s.id === transitionSourceId);
+          const target = blocks.find(b => b.id === blockId) ?? states.find(s => s.id === blockId);
           if (!source || !target) return;
-          let type: RelationshipData['type'] = 'association';
-
-          if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+          const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+          if (legalKinds.length === 0) {
+            const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+            if (reversedKinds.length > 0) {
+              setRequirementConnectionPicker({ sourceId: blockId, targetId: transitionSourceId, reversedKinds });
+            } else {
+              showConnectionPolicyError({
+                relationshipKind: 'relationship',
+                source: classifyLegacyEndpoint(source),
+                target: classifyLegacyEndpoint(target),
+                diagnostic: {
+                  code: 'NO_LEGAL_RELATIONSHIP',
+                  message: `No available relationship can connect ${source.name} to ${target.name} on this diagram.`,
+                  correctiveAction: 'Choose compatible endpoints or the appropriate diagram. Check existing links for duplicate or cyclic relationships.',
+                },
+              });
+            }
+          } else if (diagramMode === 'requirements' || !legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
-            setIsCreatingTransition(false);
-            setTransitionSourceId(null);
-            return;
+          } else {
+            createRelationship(transitionSourceId, blockId, 'association');
           }
-
-          createRelationship(transitionSourceId, blockId, type);
           setIsCreatingTransition(false);
           setTransitionSourceId(null);
         }
@@ -10459,21 +11078,22 @@ const ADIA = () => {
       e.preventDefault();
       const blockToClone = blocks.find(b => b.id === blockId);
       if (!blockToClone) return;
-      const newId = uuidv4();
-      const newBlock = {
-        ...blockToClone,
-        id: newId,
-        name: `${blockToClone.name}_copy`,
-        ports: blockToClone.ports.map(p => ({
-          ...p,
-          id: uuidv4()
-        }))
-      };
-      addToHistory();
-      setBlocks(prev => [...prev, newBlock]);
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      const kind: DiagramCreationKind = blockToClone.stereotype === 'requirement' ? 'Requirement' : 'Block';
+      const outcome = buildDiagramCreationCommand({
+        repository: canonicalSysmlRepository,
+        kind,
+        ownerId: 'model',
+        diagramId: diagramMode,
+        position: { x: worldX, y: worldY },
+      });
+      if (outcome.ok) {
+        const result = handleExecuteSysmlCommand(outcome.command);
+        if (result.committed) {
+          setSelectedIds([outcome.semanticId]);
+          setIsDragging(true);
+          setDiagramDragOffset({ x: worldX, y: worldY });
+        }
+      }
       return;
     }
 
@@ -10484,8 +11104,8 @@ const ADIA = () => {
     }
     addToHistory();
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks]);
+    setDiagramDragOffset({ x: worldX, y: worldY });
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -10500,17 +11120,7 @@ const ADIA = () => {
       e.preventDefault();
       const partToClone = parts.find(p => p.id === partId);
       if (!partToClone) return;
-      const newId = uuidv4();
-      const newPart = {
-        ...partToClone,
-        id: newId,
-        name: `${partToClone.name}_copy`
-      };
-      addToHistory();
-      setParts(prev => [...prev, newPart]);
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      createPart(worldX, worldY);
       return;
     }
 
@@ -10521,7 +11131,7 @@ const ADIA = () => {
     }
     addToHistory();
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom, parts]);
 
   const handleStateDoubleClick = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
@@ -11276,8 +11886,9 @@ const ADIA = () => {
         if (type === 'ibd' && id === contextId) {
           const block = contextBlock;
           const port = block?.ports?.find((p: any) => p.id === portId);
-          const side = port?.side || 'left';
-          const offset = port?.offset ?? 0.5;
+          const presentationLayout = sysmlDiagramPresentations[currentLayerId]?.presentations[id]?.portLayouts?.[portId];
+          const side = presentationLayout?.side || port?.side || 'left';
+          const offset = presentationLayout?.offset ?? port?.offset ?? 0.5;
 
           let x = 0, y = 0;
           if (side === 'top') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y; }
@@ -13487,24 +14098,20 @@ const ADIA = () => {
       if (e.ctrlKey) {
         if (e.key === 'c' || e.key === 'C') {
           // Copy
-          const clipData = createStateMachineClipboard(
-            selectedIds,
-            states,
-            junctions,
-            transitions,
-            layers,
-            blocks,
-            relationships,
-            parts,
-            connectors,
-            interfaceRealizations
-          );
-          setClipboard(clipData);
+          if (diagramMode === 'statemachine') {
+            setClipboard(createStateMachineClipboard(
+              selectedIds, states, junctions, transitions, layers,
+              blocks, relationships, parts, connectors, interfaceRealizations,
+            ));
+          } else {
+            sysmlClipboardRef.current = [...selectedIds];
+            setClipboard(null);
+          }
           addError('info', `Copied ${selectedIds.length} items`);
         }
         if (e.key === 'v' || e.key === 'V') {
           // Paste
-          if (clipboard) {
+          if (diagramMode === 'statemachine' && clipboard) {
             addToHistory();
             const result = pasteStateMachineClipboard(
               clipboard,
@@ -13524,35 +14131,47 @@ const ADIA = () => {
             setJunctions(prev => [...prev, ...result.newJunctions]);
             setTransitions(prev => [...prev, ...result.newTransitions]);
             setLayers(result.updatedLayers);
-            setBlocks(prev => [...prev, ...result.newBlocks]);
-            setRelationships(prev => [...prev, ...result.newRelationships]);
-            setParts(prev => [...prev, ...result.newParts]);
-            setConnectors(prev => [...prev, ...result.newConnectors]);
             setInterfaceRealizations(prev => [...prev, ...result.newInterfaceRealizations]);
 
             setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
+          } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current.length > 0) {
+            const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+            const plan = buildSysmlPastePlan(
+              canonicalSysmlRepository,
+              sysmlDiagramPresentations,
+              sysmlClipboardRef.current,
+              diagramId,
+              () => uuidv4(),
+            );
+            if (!plan) {
+              addError('warning', 'The copied SysML selection is no longer present in the repository.');
+            } else {
+              const result = handleExecuteSysmlCommand(plan.command);
+              if (result.committed) {
+                setSelectedIds(plan.pastedIds);
+                addError('info', 'Pasted SysML elements through the repository command gateway.');
+              } else {
+                result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+              }
+            }
           }
         }
         if (e.key === 'x' || e.key === 'X') {
           // Cut
-          addToHistory();
-          const clipData = createStateMachineClipboard(
-            selectedIds,
-            states,
-            junctions,
-            transitions,
-            layers,
-            blocks,
-            relationships,
-            parts,
-            connectors,
-            interfaceRealizations
-          );
-          setClipboard(clipData);
-          // Delete logic
           const selectedStateIds = selectedIds.filter(id => states.some(s => s.id === id));
           const otherSelectedIds = selectedIds.filter(id => !states.some(s => s.id === id));
+          if (diagramMode === 'statemachine') {
+            addToHistory();
+            setClipboard(createStateMachineClipboard(
+              selectedIds, states, junctions, transitions, layers,
+              blocks, relationships, parts, connectors, interfaceRealizations,
+            ));
+          } else {
+            sysmlClipboardRef.current = [...otherSelectedIds];
+            setClipboard(null);
+          }
+          // Delete logic
           executeDeleteState(selectedStateIds, otherSelectedIds);
           addError('info', 'Cut items');
         }
@@ -13616,7 +14235,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -13788,8 +14407,8 @@ const ADIA = () => {
             width={state.width}
             height={state.height}
             rx={8}
-            fill={state.isActive ? '#2a2a2a' : '#1a1a1a'}
-            stroke={isSelected ? state.color : '#444'}
+            fill={state.isActive ? 'var(--sysml-state-active-fill)' : 'var(--sysml-state-fill)'}
+            stroke={isSelected ? state.color : 'var(--sysml-state-stroke)'}
             strokeWidth={isSelected ? 2 : 1}
           />
 
@@ -13835,7 +14454,7 @@ const ADIA = () => {
             x={8}
             y={17}
             textAnchor="start"
-            fill="#888"
+            fill="var(--sysml-state-subtext)"
             fontSize={9}
             fontFamily="Inter, sans-serif"
           >
@@ -13867,7 +14486,7 @@ const ADIA = () => {
               x={state.width - 8}
               y={state.height - 8}
               textAnchor="end"
-              fill="#888"
+              fill="var(--sysml-state-subtext)"
               fontSize={8}
               fontFamily="Inter, sans-serif"
             >
@@ -13878,9 +14497,9 @@ const ADIA = () => {
           {/* Graphical Representation of Internal Transitions */}
           {state.internalTransitions && (
             <g transform={`translate(8, ${state.height - 15 - (state.internalTransitions.split('\n').length * 10)})`}>
-              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="#444" strokeWidth={1} />
+              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="var(--sysml-block-divider)" strokeWidth={1} />
               {state.internalTransitions.split('\n').slice(0, 3).map((line, i) => (
-                <text key={i} y={i * 10} fill="#aaa" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
+                <text key={i} y={i * 10} fill="var(--sysml-state-subtext)" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
               ))}
             </g>
           )}
@@ -14114,10 +14733,41 @@ const ADIA = () => {
     });
   }, [currentTransitions, states, junctions, view, selectedIds, hoveredTransitionId, firedTransitions, startTransitionDrag, resetTransitionCurve, errors]);
 
+  const renderPackages = useCallback((): React.ReactNode => {
+    if (diagramMode === 'ibd') return null;
+    return sysmlCanvasView.packages.map(pkg => {
+      const isSelected = selectedIds.includes(pkg.id);
+      const tabWidth = Math.min(Math.max(72, pkg.name.length * 7 + 20), pkg.width - 16);
+      return (
+        <g
+          key={pkg.id}
+          data-semantic-id={pkg.id}
+          data-presentation-kind="package"
+          transform={`translate(${pkg.x}, ${pkg.y})`}
+          onMouseDown={(event) => handleBlockMouseDown(event, pkg.id)}
+          style={{ cursor: 'move' }}
+        >
+          {isSelected && (
+            <rect x={-4} y={-4} width={pkg.width + 8} height={pkg.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={3} />
+          )}
+          <path
+            d={`M 0 22 L 0 0 L ${tabWidth} 0 L ${tabWidth + 12} 14 L ${pkg.width} 14 L ${pkg.width} ${pkg.height} L 0 ${pkg.height} Z`}
+            fill="var(--sysml-block-fill)"
+            fillOpacity={0.42}
+            stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'}
+            strokeWidth={1.2}
+          />
+          <text x={10} y={12} fill="var(--sysml-block-meta)" fontSize={9} fontFamily="monospace">«package»</text>
+          <text x={10} y={34} fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{pkg.name}</text>
+        </g>
+      );
+    });
+  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown]);
+
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
-    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : sysmlCanvasView.blocks;
     const isDegraded = Boolean(culledDiagram?.isDegradedMode && view.scale < 0.7);
 
     return targetBlocks.map(block => {
@@ -14195,7 +14845,9 @@ const ADIA = () => {
       }
 
       if (diagramMode === 'requirements') {
-        if (block.stereotype !== 'requirement') return null;
+        const allowedStereotypes = ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'];
+        if (!allowedStereotypes.includes(block.stereotype)) return null;
+        if (!requirementsDiagramScope.visibleBlockIds.has(block.id)) return null;
         // Use layerId for visibility: show only blocks belonging to the current layer.
         // Blocks without layerId (legacy) default to root.
         const blockLayer = block.layerId ?? 'root';
@@ -14204,21 +14856,17 @@ const ADIA = () => {
 
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
-      // In BDD mode, hide any block that is being used as a type for a part.
-      if (diagramMode === 'bdd' && partTypeIds.has(block.id)) {
-        return null;
-      }
-
       const isSelected = selectedIds.includes(block.id);
 
-      const displayWidth = block.width || 150;
-      const displayHeight = block.height || 100;
+      const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
 
       return (
         <g
           key={block.id}
+          data-semantic-id={block.id}
           transform={`translate(${block.x}, ${block.y})`}
           onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+          onMouseUp={(e) => dropBddFeatureOnBlock(e, block.id)}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
             if (diagramMode === 'requirements') {
@@ -14227,22 +14875,22 @@ const ADIA = () => {
               enterBlock(block.id);
             }
           }}
-          style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
+          style={{ cursor: bddFeatureDrag ? 'copy' : isCreatingTransition ? 'crosshair' : 'move' }}
         >
           {isSelected && (
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
 
-          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? 'var(--sysml-requirement-fill)' : 'var(--sysml-block-fill)'} stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="var(--sysml-block-meta)" fontSize={10} fontFamily="monospace">
             {block.isAbstract ? `«${block.stereotype}, abstract»` : `«${block.stereotype}»`}
           </text>
-          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
             {block.name}{block.isLeaf ? ' {leaf}' : ''}
           </text>
-          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
+          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="var(--sysml-block-divider)" strokeWidth={1} />
 
           {/* If degraded mode active, skip complex sub-elements for performance */}
           {!isDegraded && (
@@ -14276,15 +14924,28 @@ const ADIA = () => {
                 </g>
               ) : (
                 <g transform="translate(5, 45)">
-                  {block.properties.slice(0, 3).map((prop, i) => (
-                    <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
+                  {block.properties.map((prop, i) => (
+                    <text
+                      key={prop.id}
+                      y={i * 12}
+                      fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'property' && bddFeatureDrag.featureId === prop.id ? '#f97316' : '#aaa'}
+                      fontSize={10}
+                      fontFamily="monospace"
+                      style={{ cursor: diagramMode === 'bdd' ? 'grab' : 'default', userSelect: 'none' }}
+                      onMouseDown={(e) => startBddFeatureDrag(e, {
+                        kind: 'property', ownerId: block.id, featureId: prop.id, name: prop.name,
+                        typeId: prop.typeId,
+                        typeName: blocks.find(candidate => candidate.id === prop.typeId)?.name ?? prop.type,
+                        multiplicity: prop.multiplicity ?? '1',
+                      })}
+                    >
                       {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
                   {block.classes && block.classes.length > 0 && (
                     <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
                       <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                      {block.classes.slice(0, 3).map((cls, i) => (
+                      {block.classes.map((cls, i) => (
                         <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
                           {cls}
                         </text>
@@ -14300,7 +14961,15 @@ const ADIA = () => {
                   <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
                   <g transform={`translate(5, ${displayHeight - 15})`}>
                     {block.operations.slice(0, 2).map((op, i) => (
-                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
+                      <text
+                        key={`${op}-${i}`}
+                        y={i * 12}
+                        fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'operation' && bddFeatureDrag.name === op ? '#f97316' : '#aaa'}
+                        fontSize={10}
+                        fontFamily="monospace"
+                        style={{ cursor: diagramMode === 'bdd' ? 'grab' : 'default', userSelect: 'none' }}
+                        onMouseDown={(e) => startBddFeatureDrag(e, { kind: 'operation', ownerId: block.id, name: op })}
+                      >{op}</text>
                     ))}
                   </g>
                 </>
@@ -14363,10 +15032,10 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
-    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
+    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
     const isInteracting = isDragging || isPanning;
 
     const pairGroups = new Map<string, string[]>();
@@ -14377,25 +15046,25 @@ const ADIA = () => {
     });
 
     return targetRelationships.map(rel => {
-      const source = blocksById.get(rel.sourceId);
-      const target = blocksById.get(rel.targetId);
+      if (!activeDiagramElementIds.has(rel.sourceId) || !activeDiagramElementIds.has(rel.targetId)) {
+        return null;
+      }
+
+      const source = blocksById.get(rel.sourceId) ?? (partsById.get(rel.sourceId) as any);
+      const target = blocksById.get(rel.targetId) ?? (partsById.get(rel.targetId) as any);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
       if (diagramMode === 'ibd') return null;
       if (diagramMode === 'bdd' && isReqRel) return null;
-      if (diagramMode === 'requirements' && !isReqRel) return null;
+      if (diagramMode === 'requirements' && !requirementsDiagramScope.visibleRelationshipIds.has(rel.id)) return null;
 
-      // Check visibility for requirements: both source and target must be in the current layer
-      if (diagramMode === 'requirements') {
-        const isBlockVisible = (block: BlockData) => (block.layerId ?? 'root') === currentLayerId;
-        if (!isBlockVisible(source) || !isBlockVisible(target)) return null;
-      }
-
-      const srcW = source.width || 150;
-      const srcH = source.height || 100;
-      const tgtW = target.width || 150;
-      const tgtH = target.height || 100;
+      const sourceBounds = 'properties' in source ? computeBlockDisplayBounds(source) : { width: source.width || 120, height: source.height || 60 };
+      const targetBounds = 'properties' in target ? computeBlockDisplayBounds(target) : { width: target.width || 120, height: target.height || 60 };
+      const srcW = sourceBounds.width;
+      const srcH = sourceBounds.height;
+      const tgtW = targetBounds.width;
+      const tgtH = targetBounds.height;
 
       const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
       const group = pairGroups.get(pairKey) || [rel.id];
@@ -14412,7 +15081,7 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(rel.id);
       const isSuspect = Boolean((rel as any).suspect);
       const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
-      const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
+      const strokeDash = ['allocation', 'dependency'].includes(rel.type) ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
       const isReqContainment = rel.type === 'requirementContainment';
       const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
@@ -14457,6 +15126,9 @@ const ADIA = () => {
           )}
           {rel.type === 'allocation' && (
             <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+          )}
+          {rel.type === 'dependency' && (
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#141414" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {isTrace && (
             <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
@@ -14505,12 +15177,12 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning]);
+  }, [relationships, sysmlCanvasView, blocksById, partsById, activeDiagramElementIds, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
     return targetParts.filter(p => p.blockId === currentLayerId).map(part => {
       const block = part.typeId ? blocksById.get(part.typeId) : undefined;
       const isSelected = selectedIds.includes(part.id);
@@ -14518,6 +15190,7 @@ const ADIA = () => {
       return (
         <g
           key={part.id}
+          data-semantic-id={part.id}
           transform={`translate(${part.x}, ${part.y})`}
           onMouseDown={(e) => handlePartMouseDown(e, part.id)}
           style={{ cursor: isCreatingConnector ? 'default' : 'move' }}
@@ -14525,9 +15198,9 @@ const ADIA = () => {
           {isSelected && (
             <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
-          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#f97316' : '#666'} strokeWidth={1} />
-          <text x={part.width / 2} y={20} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
-          <text x={part.width / 2} y={35} textAnchor="middle" fill="#888" fontSize={10}>: {block?.name || 'Unknown'}</text>
+          <rect width={part.width} height={part.height} fill="var(--sysml-part-fill)" stroke={isSelected ? '#f97316' : 'var(--sysml-part-stroke)'} strokeWidth={1} />
+          <text x={part.width / 2} y={20} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
+          <text x={part.width / 2} y={35} textAnchor="middle" fill="var(--sysml-block-subtext)" fontSize={10}>: {block?.name || 'Unknown'}</text>
 
           {/* Ports - FR-IBD-005: Reflect changes in BDD automatically */}
           {block?.ports?.map((port, i) => {
@@ -14553,7 +15226,7 @@ const ADIA = () => {
                 <rect
                   x={-5} y={-5}
                   width={10} height={10}
-                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : '#333'}
+                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : 'var(--sysml-port-fill)'}
                   stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
                   strokeWidth={1}
                   onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
@@ -14576,7 +15249,7 @@ const ADIA = () => {
                     </g>
                   </>
                 )}
-                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="#aaa" fontSize={9}>{port.name}</text>
+                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="var(--sysml-port-label)" fontSize={9}>{port.name}</text>
               </g>
             );
           })}
@@ -14605,14 +15278,14 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
+  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
-    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : connectors;
-    const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
+    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : sysmlCanvasView.connectors;
+    const currentPartIds = new Set(sysmlCanvasView.parts.filter(p => p.blockId === currentLayerId).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
     const isInteracting = isDragging || isPanning;
 
@@ -14680,7 +15353,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [connectors, parts, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
+  }, [connectors, parts, sysmlCanvasView, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
 
   const renderInterfaceRealizations = useCallback((): React.ReactNode => {
     if (diagramMode !== 'ibd') return null;
@@ -14797,7 +15470,7 @@ const ADIA = () => {
       const rect = canvasRef.current.getBoundingClientRect();
       setView({ scale: 1, offsetX: rect.width / 2 - targetX, offsetY: rect.height / 2 - targetY });
     }
-    setShowErrorDialog(false);
+    dismissErrorDialog();
   }, [states, junctions, transitions, layers, currentLayerId]);
 
   const handleAutoFix = useCallback((error: ErrorItem) => {
@@ -14810,7 +15483,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('Duplicate state name')) {
       const state = states.find(s => s.id === error.elementId);
@@ -14824,7 +15497,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed duplicate state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('has no AutoStart')) {
       // REQ-HSM-004 & REQ-HSM-023: Auto-fix by setting first state as autostart
@@ -14856,7 +15529,7 @@ const ADIA = () => {
         updateState(state.id, { autostart: true });
         addError('info', `Auto-fixed: Set '${state.name}' as AutoStart for layer '${layerName}'`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('unguarded and untimed')) {
       const transition = transitions.find(t => t.id === error.elementId);
@@ -14864,7 +15537,7 @@ const ADIA = () => {
         updateTransition(transition.id, { type: 'after', afterTicks: 5 });
         addError('info', `Auto-fixed transition: Added after-timer`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     }
   }, [states, layers, transitions, updateState, updateTransition, addError]);
@@ -14958,7 +15631,7 @@ const ADIA = () => {
         return s;
       }));
       setErrors(prev => prev.filter(e => !e.canAutoFix));
-      setShowErrorDialog(false);
+      dismissErrorDialog();
       addError('info', `Auto-fixed ${updates.size} issues.`);
     }
   }, [errors, states, layers, updateState, addError]);
@@ -14992,6 +15665,23 @@ const ADIA = () => {
         onToggle={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
         currentContext={{ states, variables, transitions, junctions, layers, blocks }}
         onExecuteActions={handleExecuteAiActions}
+      />
+      <AgentPanel
+        isOpen={isAgentPanelOpen}
+        onToggle={() => setIsAgentPanelOpen(prev => !prev)}
+        onClose={() => setIsAgentPanelOpen(false)}
+        orchestrator={agentOrchestrator}
+        projectContext={{
+          projectName: currentProjectName,
+          activeWorkspace: diagramMode,
+          blocksCount: blocks.length,
+          nodesCount: (diagramMode === 'xbridges' ? globalXBridgesNodes.length : diagramMode === 'vlab' ? vlabNodes.length : blocks.length),
+          connectionsCount: (diagramMode === 'xbridges' ? globalXBridgesEdges.length : relationships.length),
+          refreshProject: () => {
+            agentOrchestrator.refreshProjectContext();
+          },
+          delegateReadiness: agentToolGateway.getDelegateReadiness(),
+        }}
       />
       <GlobalReportPreviewModal
         isOpen={showGlobalReportPreview}
@@ -15057,7 +15747,7 @@ const ADIA = () => {
         </div>
       )}
       <div
-        className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
+        className="flex flex-col ui-surface font-sans overflow-hidden"
         style={{
           zoom: uiZoom,
           width: `${100 / uiZoom}vw`,
@@ -15067,13 +15757,13 @@ const ADIA = () => {
         {/* Hidden input for project import */}
         <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
-        {/* Top Toolbar - Modernized & Unified Dark Header */}
-        <header className="h-14 bg-[#111114] border-b border-[#222228] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
+        {/* Top Toolbar - Modernized & Unified Semantic Header */}
+        <header className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
           {/* Brand & Project Identity Group */}
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={() => setShowWorkspaceFileDialog(true)}
-              className="p-1.5 hover:bg-[#1f1f26] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
+              className="p-1.5 hover:bg-[var(--surface-raised)] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
               title="Create/Open Workspace Asset File"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="group-hover:scale-110 transition-transform">
@@ -15081,24 +15771,24 @@ const ADIA = () => {
               </svg>
             </button>
             <div>
-              <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2">
+              <div className="font-bold text-lg tracking-tight text-[var(--text-primary)] flex items-center gap-2">
                 <span>ADIA</span>
                 <input
                   type="text"
                   value={currentProjectName}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
-                  className="bg-[#18181c] text-zinc-300 hover:text-white focus:text-white text-xs font-medium px-2 py-0.5 rounded border border-[#2e2e38] focus:border-[#f97316]/60 focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
+                  className="bg-[var(--surface-raised)] text-[var(--text-primary)] hover:border-[var(--border-strong)] focus:border-[#f97316] text-xs font-medium px-2 py-0.5 rounded border border-[var(--border-default)] focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
                   title="Click to rename project"
                 />
               </div>
-              <div className="text-[10px] text-zinc-500 font-mono mt-[-2px]">{VERSION}</div>
+              <div className="text-[10px] text-[var(--text-muted)] font-mono mt-[-2px]">{VERSION}</div>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* DIAGRAM MODE SWITCHER */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5 shrink-0">
+          <div className="flex ui-card bg-[var(--surface-raised)] rounded-lg border border-[var(--border-default)] p-0.5 shrink-0">
             {[
               { id: 'statemachine', label: 'State Machine' },
               { id: 'bdd', label: 'SysML BDD' },
@@ -15114,8 +15804,8 @@ const ADIA = () => {
                 onClick={() => setDiagramMode(mode.id as DiagramMode)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
-                    ? mode.id === 'plantuml' ? 'bg-orange-500 text-zinc-950 shadow-sm font-semibold' : 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)]'
                 }`}
               >
                 {mode.label}
@@ -15123,20 +15813,21 @@ const ADIA = () => {
             ))}
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+
+          <Separator orientation="vertical" className="h-6" />
 
           {/* SIMULATION & VALIDATION GROUP */}
-          <div className="flex items-center gap-1.5 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1.5 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Sim tick rate control */}
-            <div className="flex items-center gap-1 px-1.5 text-xs text-zinc-400">
+            <div className="flex items-center gap-1 px-1.5 text-xs text-[var(--text-secondary)]">
               <span className="text-[11px] whitespace-nowrap">Tick:</span>
               <TickRateInput value={tickMs} onChange={setTickMs} />
-              <span className="text-[10px] text-zinc-500">ms</span>
+              <span className="text-[10px] text-[var(--text-muted)]">ms</span>
             </div>
 
             {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
               <>
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
                 <Button
                   size="sm"
@@ -15169,7 +15860,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={stepSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Step single cycle"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15183,7 +15874,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={resetSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Reset simulation"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15193,13 +15884,13 @@ const ADIA = () => {
                   Reset
                 </Button>
 
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Check for errors"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15214,11 +15905,11 @@ const ADIA = () => {
                   size="sm"
                   onClick={validateWithAI}
                   disabled={isAiValidating}
-                  className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
                   title="Validate logic with AI"
                 >
                   {isAiValidating ? (
-                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -15234,32 +15925,32 @@ const ADIA = () => {
               </>
             )}
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <div className="flex items-center gap-1.5 px-1.5 py-0.5">
               <Checkbox
                 checked={safetyMode}
                 onCheckedChange={(c) => setSafetyMode(c as boolean)}
                 id="safety-mode"
-                className="h-3.5 w-3.5 rounded border-zinc-600 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
               />
-              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
+              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-500 font-semibold" : "text-[var(--text-secondary)]"}`}>
                 Safety
               </Label>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* CODE GENERATION & PROJECT I/O GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Generate C/H Button - Primary Accent */}
             <Button
               variant="outline"
               size="sm"
               onClick={generateCode}
               disabled={isGenerating}
-              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 disabled:opacity-50 disabled:cursor-wait"
+              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-500 hover:bg-orange-500/20 hover:text-orange-600 disabled:opacity-50 disabled:cursor-wait"
               title="Generate C/H Embedded Code"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15269,16 +15960,16 @@ const ADIA = () => {
               {isGenerating ? 'Generating...' : 'Generate C/H'}
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project (.adia)"
             >
-              <Save size={13} className="mr-1 text-zinc-400" />
+              <Save size={13} className="mr-1 text-[var(--text-muted)]" />
               Save
             </Button>
 
@@ -15286,7 +15977,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project as new file (.adia)"
             >
               Save As
@@ -15296,10 +15987,10 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleOpenProjectDialog}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open ADIA project (.adia)"
             >
-              <FolderOpen size={13} className="mr-1 text-zinc-400" />
+              <FolderOpen size={13} className="mr-1 text-[var(--text-muted)]" />
               Open
             </Button>
 
@@ -15307,7 +15998,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleExportProject}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Export individual module files (.json)"
             >
               Export
@@ -15317,22 +16008,22 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowReportDialog(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Generate Engineering Report"
             >
               Report
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* ENGINEERING TOOLS & GATEWAYS GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('hmi')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open HMI Dashboard Panel"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-orange-400">
@@ -15347,7 +16038,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('pid')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="PID Controller Tuner"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-sky-400">
@@ -15362,24 +16053,24 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('doe')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Design of Experiments (Response Surface Methodology)"
             >
               DOE (RSM)
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowFactoryIOGateway(true)}
-              className={`h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors ${
+              className={`h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors ${
                 factoryIOEnabled ? 'text-indigo-400 bg-indigo-500/10' : ''
               }`}
               title="Factory I/O Gateway Connection"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-zinc-400'}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`}>
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                 <line x1="12" y1="22.08" x2="12" y2="12" />
@@ -15393,7 +16084,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShow3DXGateway(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Connect to 3DEXPERIENCE Platform"
             >
               <Cloud size={13} className="mr-1 text-cyan-400" />
@@ -15405,7 +16096,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowSysmlDiagnostics(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="SysML Performance Diagnostics & Limits"
             >
               <Gauge size={13} className="mr-1 text-orange-400" />
@@ -15421,7 +16112,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => handleOpenHelp()}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Help & Documentation"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15436,17 +16127,12 @@ const ADIA = () => {
             <button
               id="adia-theme-toggle-btn"
               type="button"
-              title={currentTheme === 'dark' ? 'Switch to Emerald & Champagne Light Mode' : 'Switch to Dark Mode'}
+              title={currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               onClick={() => {
                 const next = toggleTheme();
                 setCurrentTheme(next);
               }}
-              className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border transition-all duration-200 shadow-sm cursor-pointer"
-              style={{
-                backgroundColor: currentTheme === 'light' ? '#E5D5B2' : '#18181c',
-                borderColor: currentTheme === 'light' ? '#C9AF84' : '#27272f',
-                color: currentTheme === 'light' ? '#022C22' : '#F8E7C9',
-              }}
+              className="ui-control ui-focus-ring h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border border-[var(--border-default)] transition-all duration-200 shadow-sm cursor-pointer"
             >
               {currentTheme === 'dark' ? (
                 <>
@@ -15455,35 +16141,36 @@ const ADIA = () => {
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-[#022C22]" />
+                  <Moon className="w-3.5 h-3.5 text-[var(--text-primary)]" />
                   <span className="hidden sm:inline font-mono font-bold">Dark</span>
                 </>
               )}
             </button>
 
             {/* Status indicators */}
-            <div className="flex items-center gap-3 bg-[#18181c] border border-[#27272f] rounded-lg px-2.5 py-1 text-xs">
+            <div className="flex items-center gap-3 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg px-2.5 py-1 text-xs">
               <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-500' : 'text-[var(--text-muted)]'}`}>
                   {isRunning ? 'RUN' : 'STOP'}
                 </span>
               </div>
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
+              <Separator orientation="vertical" className="h-3.5" />
               <LiveFpsMonitor />
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
-              <div className="text-zinc-500 font-mono text-[11px]">
-                T: <span className="text-zinc-300 font-semibold">{simulationTime.toFixed(1)}s</span>
+              <Separator orientation="vertical" className="h-3.5" />
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                T: <span className="text-[var(--text-primary)] font-semibold">{simulationTime.toFixed(1)}s</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                S: <span className="text-zinc-300 font-semibold">{currentStates.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                S: <span className="text-[var(--text-primary)] font-semibold">{currentStates.length}</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                V: <span className="text-zinc-300 font-semibold">{variables.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                V: <span className="text-[var(--text-primary)] font-semibold">{variables.length}</span>
               </div>
             </div>
           </div>
         </header>
+
 
         {/* Workspace Tab Bar */}
         <WorkspaceTabBar
@@ -15498,9 +16185,9 @@ const ADIA = () => {
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
-            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+          {![ 'hil', 'entropy'].includes(diagramMode) && (
+            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
                   <div className="flex items-center overflow-hidden whitespace-nowrap">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
@@ -15508,12 +16195,12 @@ const ADIA = () => {
                        <path d="M16 17l-3-3 3-3" />
                        <path d="M13 14H3" />
                     </svg>
-                    <span className="text-sm font-medium">Hierarchy</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Hierarchy</span>
                   </div>
                 )}
                 <button
                   onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-                  className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+                  className={`p-1.5 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
                   <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
                 </button>
@@ -15522,11 +16209,47 @@ const ADIA = () => {
                 <HierarchyTree
                   states={states}
                   layers={layers}
+                  transitions={transitions}
+                  junctions={junctions}
                   activeStates={activeStates}
                   currentLayerId={currentLayerId}
+                  diagramMode={diagramMode}
+                  blocks={blocks}
+                  parts={parts}
+                  diagramPresentations={sysmlDiagramPresentations}
+                  externalModels={hierarchyExternalModels}
+                  canonicalSysmlRepository={canonicalSysmlRepository}
                   onSelect={(id: string) => setSelectedIds([id])}
-                  onDoubleClick={(id: string) => enterLayer(id)}
+                  onDoubleClick={(id: string) => {
+                    const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
+                    if (externalModelFile) {
+                      openFileInTab(externalModelFile.id);
+                    } else if (diagramMode === "statemachine") {
+                      enterLayer(id);
+                    }
+                  }}
                   selectedIds={selectedIds}
+                  onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
+
+
+
+                  onExecuteSysmlCommand={handleExecuteSysmlCommand}
+                  onCommandResult={handleExplorerCommandResult}
+                  activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode}
+                  activeDiagramContext={(() => {
+                    const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+                    const presented = diagramMode === 'statemachine'
+                      ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
+                      : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
+                    return {
+                      diagramId: contextId,
+                      name: contextId,
+                      kind: diagramMode,
+                      domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
+                      presentedSemanticIds: presented,
+                      contextSemanticIds: [],
+                    } as ActiveDiagramContext;
+                  })()}
                 />
               )}
             </aside>
@@ -15629,6 +16352,21 @@ const ADIA = () => {
                             </div>
 
                             <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
+                              <select
+                                value={variable.type}
+                                onChange={(e) => updateVariableType(variable.id, e.target.value as VariableType)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+                              >
+                                {ALLOWED_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                              </select>
+                              <select
+                                value={variable.overflowPolicy ?? 'saturate'}
+                                onChange={(e) => updateVariableOverflowPolicy(variable.id, e.target.value as VariableOverflowPolicy)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+                              >
+                                <option value="saturate">saturate</option>
+                                <option value="error">error</option>
+                              </select>
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
                                 <Input
@@ -15915,7 +16653,18 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Package');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Package
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
@@ -15925,6 +16674,7 @@ const ADIA = () => {
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
                     </div>
                   </>
                 )}
@@ -15936,11 +16686,44 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'requirement');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Package');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
-                      Requirement
+                      + Package
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Requirement');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Requirement
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Block
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'TestCase');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Test Case
                     </Button>
                     <Button
                       variant="secondary"
@@ -15978,6 +16761,7 @@ const ADIA = () => {
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
                     </div>
                     <Button
                       variant="secondary"
@@ -16120,8 +16904,35 @@ const ADIA = () => {
                 onDoubleClick={handleDoubleClick}
                 onWheel={handleWheel}
                 onContextMenu={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('application/x-adia-model-element')) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                  }
+                }}
+                onDrop={(e) => {
+                  const payload = parseModelExplorerDragData(e.dataTransfer);
+                  if (!payload) return;
+                  e.preventDefault();
+                  const rect = canvasRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  const worldPoint = {
+                    x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+                    y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+                  };
+                  const activeDiagId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+                  const elemIds = payload.semanticIds ?? [payload.semanticId];
+                  handleExecuteSysmlCommand({
+                    type: 'addToDiagram',
+                    diagramId: activeDiagId,
+                    elementIds: elemIds,
+                    coordinates: {
+                      [payload.semanticId]: worldPoint,
+                    },
+                  });
+                }}
               >
-                <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
+                <svg className="sysml-diagram-canvas" width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>
                     <pattern
                       id="grid"
@@ -16169,11 +16980,30 @@ const ADIA = () => {
                     ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
                       <>
                         <g style={{ pointerEvents: 'all' }}>
+                          {renderPackages()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
                           {renderBlocks()}
                         </g>
                         <g style={{ pointerEvents: 'all' }}>
                           {renderRelationships()}
                         </g>
+                        {diagramMode === 'bdd' && bddFeatureDrag && (() => {
+                          const source = blocks.find(block => block.id === bddFeatureDrag.ownerId);
+                          if (!source) return null;
+                          const bounds = computeBlockDisplayBounds(source);
+                          const featureY = bddFeatureDrag.kind === 'property'
+                            ? 45 + Math.max(0, source.properties.findIndex(property => property.id === bddFeatureDrag.featureId)) * 12
+                            : bounds.height - 15 + Math.max(0, source.operations.findIndex(operation => operation === bddFeatureDrag.name)) * 12;
+                          const startX = source.x + bounds.width;
+                          const startY = source.y + featureY;
+                          return (
+                            <g pointerEvents="none">
+                              <path d={`M ${startX} ${startY} L ${mousePos.x} ${mousePos.y}`} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="6 4" />
+                              <circle cx={mousePos.x} cy={mousePos.y} r={4} fill="#f97316" />
+                            </g>
+                          );
+                        })()}
                       </>
                     ) : (
                       diagramMode === 'ibd' ? (
@@ -16826,6 +17656,18 @@ const ADIA = () => {
                     />
                   </div>
 
+                  <StateRequirementTraceability
+                    stateId={selectedState.id}
+                    stateName={selectedState.name}
+                    canonicalRepository={canonicalSysmlRepository}
+                    onLinkRequirement={(requirementId, kind) => {
+                      createRelationship(selectedState.id, requirementId, kind);
+                    }}
+                    onUnlinkRelationship={(relationshipId) => {
+                      deleteRelationship(relationshipId);
+                    }}
+                  />
+
                   <Button
                     variant="outline"
                     size="sm"
@@ -16894,26 +17736,29 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Stereotype</Label>
-                    <select
-                      value={selectedBlock.stereotype}
-                      onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      {selectedBlock.stereotype === 'requirement' && (
-                        <option value="requirement">Requirement</option>
-                      )}
-                      <option value="block">Block</option>
-                      <option value="interface">Interface</option>
-                      <option value="interfaceBlock">Interface Block</option>
-                      <option value="valueType">ValueType</option>
-                      <option value="enumeration">Enumeration</option>
-                      <option value="verificationCase">Verification Case</option>
-                      {customStereotypes
-                        ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
-                        .map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    {selectedBlock.stereotype === 'requirement' ? (
+                      <div className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-sm text-[#e0e0e0]" role="status">
+                        Requirement <span className="text-[10px] text-[#888]">(fixed by SysML Requirements semantics)</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedBlock.stereotype}
+                        onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
+                        className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                      >
+                        <option value="block">Block</option>
+                        <option value="interface">Interface</option>
+                        <option value="interfaceBlock">Interface Block</option>
+                        <option value="valueType">ValueType</option>
+                        <option value="enumeration">Enumeration</option>
+                        <option value="verificationCase">Verification Case</option>
+                        {customStereotypes
+                          ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
+                          .map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                   {selectedBlock.stereotype === 'requirement' && (
                     <>
@@ -17182,6 +18027,11 @@ const ADIA = () => {
                         const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
                         const suspectLinks = selectSuspectLinks(sysmlStore, selectedBlock.id);
                         const evidenceHistory = selectEvidenceForRequirement(sysmlStore, selectedBlock.id);
+                        // Projection-only deletion preview: analyze without
+                        // mutating, so the panel can show typed severity,
+                        // unresolved usages, evidence fallout, and protected
+                        // baseline blocks before any confirmation dialog.
+                        const deletionPreview = analyzeMutation(canonicalSysmlRepository, { kind: 'deleteElements', elementIds: [selectedBlock.id] });
 
                         return (
                           <RequirementGovernancePanel
@@ -17190,10 +18040,23 @@ const ADIA = () => {
                             baselines={canonicalSysmlRepository.baselines}
                             suspectLinks={suspectLinks}
                             evidenceHistory={evidenceHistory}
+                            deletionSeverity={impactSeverity(deletionPreview, authorizedBaselineIds)}
+                            unresolvedUsageIds={deletionPreview.unresolvedUsageIds}
+                            invalidatedEvidenceIds={deletionPreview.invalidatedEvidenceIds}
+                            blockedBaselineIds={deletionPreview.affectedBaselineIds.filter(id => !authorizedBaselineIds.includes(id))}
                             onCreateBaseline={(name) => {
                               const res = createModelBaseline(canonicalSysmlRepository, name);
                               setCanonicalSysmlRepository(res.repository);
                               addError('info', `Created baseline: ${name}`);
+                            }}
+                            onCloneBaseline={(baselineId) => {
+                              const res = cloneProtectedBaselineAsWorkingCopy(canonicalSysmlRepository, baselineId, `Working copy of ${baselineId}`);
+                              setCanonicalSysmlRepository(res.repository);
+                              addError('info', `Cloned protected baseline ${baselineId} into unprotected working copy ${res.baseline.id}`);
+                            }}
+                            onAuthorizeBaseline={(baselineId) => {
+                              setAuthorizedBaselineIds(prev => prev.includes(baselineId) ? prev : [...prev, baselineId]);
+                              addError('info', `Recorded explicit deletion authorization for protected baseline ${baselineId}`);
                             }}
                             onClearSuspect={(relId) => {
                               const updated = clearSuspectLink(canonicalSysmlRepository, relId);
@@ -17277,9 +18140,9 @@ const ADIA = () => {
                             <option value="standard">Std</option>
                             <option value="flow">Flow</option>
                             <option value="proxy">Proxy</option>
+                            <option value="full">Full</option>
                           </select>
-                          {port.kind === 'flow' && (
-                            <>
+                          <>
                               <select
                                 value={port.direction || 'in'}
                                 onChange={(e) => {
@@ -17293,7 +18156,7 @@ const ADIA = () => {
                                 <option value="out">Out</option>
                                 <option value="inout">I/O</option>
                               </select>
-                              <Input
+                              {port.kind === 'flow' && <Input
                                 value={port.unit || ''}
                                 onChange={(e) => {
                                   const newPorts = [...selectedBlock.ports];
@@ -17301,9 +18164,8 @@ const ADIA = () => {
                                   updateBlock(selectedBlock.id, { ports: newPorts });
                                 }}
                                 className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
-                              />
-                            </>
-                          )}
+                              />}
+                          </>
                           <button
                             onClick={() => {
                               const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
@@ -17320,6 +18182,7 @@ const ADIA = () => {
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50">+ Full</Button>
                     </div>
                   </div>
                   <div>
@@ -17401,35 +18264,6 @@ const ADIA = () => {
               ) : selectedRelationship ? (
                 <>
                   <div>
-                    <Label>Relationship Type</Label>
-                    <select
-                      value={selectedRelationship.type}
-                      onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      <option value="association">Association</option>
-                      <option value="generalization">Generalization</option>
-                      <option value="composition">Composition</option>
-                      <option value="aggregation">Aggregation</option>
-                      <option value="allocation">Allocation</option>
-                      <option value="derive">Derive</option>
-                      <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
-                      <option value="refine">Refine</option>
-                      <option value="satisfy">Satisfy</option>
-                      <option value="verify">Verify</option>
-                      <option value="trace">Trace</option>
-                      <option value="copy">Copy</option>
-                      <option
-                        value="requirementContainment"
-                        disabled={!(blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement' && blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement')}
-                      >
-                        Requirement Containment (parent → child)
-                      </option>
-                      <option value="binding">Binding</option>
-                      <option value="dependency">Dependency</option>
-                    </select>
-                  </div>
-                  <div>
                     <Label>Label</Label>
                     <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
                   </div>
@@ -17457,6 +18291,10 @@ const ADIA = () => {
                     }
                     sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
                     targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
+                    sourceEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.sourceId)}
+                    targetEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.targetId)}
+                    diagram={diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd'}
+                    onInvalidChange={(rejection) => showConnectionPolicyError(rejection, selectedRelationship.id)}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -17482,6 +18320,50 @@ const ADIA = () => {
                   <div>
                     <Label>Multiplicity</Label>
                     <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label>Block Type</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defId = uuidv4();
+                          const defName = `${selectedPart.name}_Def`;
+                          const result = handleExecuteSysmlCommand(buildCreatePartDefinitionCommand({
+                            partId: selectedPart.id,
+                            definitionId: defId,
+                            definitionName: defName,
+                            repository: canonicalSysmlRepository,
+                          }));
+                          if (result.committed) addError('info', `Created definition '${defName}' for part.`);
+                          else result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+                        }}
+                        className="text-[10px] text-[#f97316] hover:underline cursor-pointer"
+                      >
+                        + New Block Def
+                      </button>
+                    </div>
+                    <select
+                      value={selectedPart.typeId || ''}
+                      onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value || null })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="">Select a Block...</option>
+                      {blocks.filter(b => b.stereotype === 'block').map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Property Semantics</Label>
+                    <select
+                      value={selectedPart.aggregation === 'reference' ? 'reference' : 'composite'}
+                      onChange={(e) => updatePart(selectedPart.id, { aggregation: e.target.value as 'composite' | 'reference' })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="composite">Composite Part</option>
+                      <option value="reference">Reference Property</option>
+                    </select>
                   </div>
 
                   {/* Ports Editor for the underlying Block */}
@@ -17522,9 +18404,24 @@ const ADIA = () => {
                                   }}
                                   className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
                                 >
-                                  <option value="standard">Std</option>
-                                  <option value="flow">Flow</option>
-                                  <option value="proxy">Proxy</option>
+                                <option value="standard">Std</option>
+                                <option value="flow">Flow</option>
+                                <option value="proxy">Proxy</option>
+                                <option value="full">Full</option>
+                                </select>
+                                <select
+                                  aria-label={`Direction for ${port.name || port.id}`}
+                                  value={port.direction || 'inout'}
+                                  onChange={(e) => {
+                                    const newPorts = [...block.ports];
+                                    newPorts[i] = { ...port, direction: e.target.value as any };
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-12 px-0 text-[#e0e0e0]"
+                                >
+                                  <option value="in">In</option>
+                                  <option value="out">Out</option>
+                                  <option value="inout">I/O</option>
                                 </select>
                                 <button
                                   onClick={() => {
@@ -17542,6 +18439,7 @@ const ADIA = () => {
                             <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
                             <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
                             <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50">+ Full</Button>
                           </div>
                         </div>
                       );
@@ -17583,14 +18481,21 @@ const ADIA = () => {
                       itemProperty: (selectedConnector as any).itemProperty,
                       itemUnit: (selectedConnector as any).itemUnit,
                     }}
-                    availablePorts={parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
-                      const b = blocks.find(b => b.id === p.typeId);
-                      return (b?.ports || []).map(port => ({
-                        id: `${p.id}::${port.id}`,
+                    availablePorts={[
+                      ...((blocks.find(block => block.id === currentLayerId)?.ports ?? []).map(port => ({
+                        id: `${currentLayerId}::${port.id}`,
                         name: port.name,
-                        ownerName: p.name,
-                      }));
-                    })}
+                        ownerName: blocks.find(block => block.id === currentLayerId)?.name,
+                      }))),
+                      ...parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
+                        const b = blocks.find(b => b.id === p.typeId);
+                        return (b?.ports || []).map(port => ({
+                          id: `${p.id}::${port.id}`,
+                          name: port.name,
+                          ownerName: p.name,
+                        }));
+                      }),
+                    ]}
                     definitions={canonicalSysmlRepository.definitions}
                     diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
                     onChange={(updatedConn) => {
@@ -18075,8 +18980,115 @@ const ADIA = () => {
             </div>
           </div>
         )}
+        {/* SysML Deletion Confirmation Modal (BDD / Requirements / IBD) */}
+        {sysmlDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setSysmlDeleteConfirm(null)}>
+            <div className="bg-[#1a1a1a] border border-red-900/60 rounded-xl w-[520px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
+                <AlertTriangle className={`w-5 h-5 ${sysmlDeleteConfirm.severity === 'blocked' ? 'text-red-500' : 'text-[#f97316]'} mr-3 shrink-0`} />
+                <h2 className="text-base font-bold text-[#e0e0e0]">
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Deletion Blocked' : `Confirm Delete ${sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}`}
+                </h2>
+                <button
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-        {/* Requirement Connection Picker Modal */}
+              <div className="p-6 space-y-4 overflow-y-auto">
+                {sysmlDeleteConfirm.severity === 'blocked' ? (
+                  <div className="p-3.5 bg-red-950/40 rounded-lg border border-red-800/60 flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-300 leading-relaxed">
+                      Protected baseline <span className="font-semibold text-white">{(sysmlDeleteConfirm.impact.blockedBaselineIds ?? sysmlDeleteConfirm.impact.affectedBaselineIds).join(', ') || 'unknown'}</span> forbids this deletion. Clone the baseline or authorize explicitly before retrying.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#cccccc] leading-relaxed">
+                      Are you sure you want to delete <span className="font-semibold text-[#f97316]">{sysmlDeleteConfirm.elementName}</span>?
+                    </p>
+
+                    {/* Impact Details */}
+                    <div className="space-y-2">
+                      {(() => {
+                        const { impact } = sysmlDeleteConfirm;
+                        const requested = new Set(impact.requestedElementIds);
+                        const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+                        const items: { label: string; value: string; color: string }[] = [];
+                        if (cascade.length > 0) items.push({ label: 'Cascade deleted', value: `${cascade.length} element(s)`, color: 'text-red-300' });
+                        if (impact.nestedRequirementIds.length > 0) items.push({ label: 'Nested requirements', value: `${impact.nestedRequirementIds.length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.removedRelationshipIds.length > 0) items.push({ label: 'Removed relationships', value: `${impact.removedRelationshipIds.length} relationship(s)`, color: 'text-amber-300' });
+                        if (impact.unresolvedUsageIds.length > 0) items.push({ label: 'Unresolved usages', value: impact.unresolvedUsageIds.join(', '), color: 'text-amber-300' });
+                        if (impact.affectedRequirementIds.filter(id => !requested.has(id)).length > 0) items.push({ label: 'Affected requirements', value: `${impact.affectedRequirementIds.filter(id => !requested.has(id)).length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.invalidatedEvidenceIds.length > 0) items.push({ label: 'Invalidated evidence', value: `${impact.invalidatedEvidenceIds.length} record(s)`, color: 'text-amber-300' });
+                        if (impact.affectedDiagramKinds.length > 0) items.push({ label: 'Affected diagrams', value: impact.affectedDiagramKinds.join(', ').toUpperCase(), color: 'text-sky-300' });
+                        if (impact.affectedBaselineIds.length > 0) items.push({ label: 'Affected baselines', value: impact.affectedBaselineIds.join(', '), color: 'text-amber-300' });
+
+                        return items.length > 0 && (
+                          <div className="p-3.5 bg-[#2a1a14] rounded-lg border border-[#f97316]/30">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <AlertTriangle className="w-4 h-4 text-[#f97316]" />
+                              <span className="text-xs font-bold text-[#f97316]">Deletion Impact</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {items.map((item, i) => (
+                                <div key={i} className="flex items-baseline justify-between text-xs">
+                                  <span className="text-[#999]">{item.label}</span>
+                                  <span className={`font-mono ${item.color}`}>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <p className="text-[11px] text-[#777] leading-relaxed">
+                      This action is irreversible. All cascaded elements, relationships, and evidence will be permanently removed.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
+                >
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Dismiss' : 'Cancel'}
+                </Button>
+                {sysmlDeleteConfirm.severity !== 'blocked' && (
+                  <Button
+                    onClick={() => {
+                      const fn = sysmlDeleteConfirm.onConfirm;
+                      setSysmlDeleteConfirm(null);
+                      fn();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete {sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pendingCreateNewTypeAction && (
+          <CreateNewTypeActionPrompt
+            action={pendingCreateNewTypeAction.action}
+            candidates={pendingCreateNewTypeAction.candidates}
+            onCreate={handleCreateNewTypeAction}
+            onDismiss={() => setPendingCreateNewTypeAction(null)}
+          />
+        )}
+
+        {/* Policy-filtered connection picker */}
         {requirementConnectionPicker && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
@@ -18087,71 +19099,62 @@ const ADIA = () => {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div>
-                <h3 className="text-base font-semibold text-white">Create Requirement Relationship</h3>
+                <h3 className="text-base font-semibold text-white">
+                  {requirementConnectionPicker.reversedKinds ? 'Reverse Endpoints & Create' : 'Create Relationship'}
+                </h3>
+                {requirementConnectionPicker.reversedKinds && (
+                  <div className="mt-2 p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs">
+                    Direction assistance: SysML requires connections to be created from the dependent/realizing element to the requirement. The endpoints below have been aligned to standard SysML direction.
+                  </div>
+                )}
                 <p className="text-xs text-[#888] mt-1">
-                  Choose the relationship kind between{' '}
+                  Connect{' '}
                   <span className="text-[#f97316] font-medium">
-                    {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name ?? states.find(s => s.id === requirementConnectionPicker.sourceId)?.name) || 'Source'}
                   </span>{' '}
-                  and{' '}
+                  to{' '}
                   <span className="text-[#f97316] font-medium">
-                    {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name ?? states.find(s => s.id === requirementConnectionPicker.targetId)?.name) || 'Target'}
                   </span>
                 </p>
               </div>
 
               <div className="flex flex-col gap-2">
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'requirementContainment');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Requirement Containment</div>
-                    <div className="text-xs text-[#aaa] font-normal">Parent contains child (source → target)</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'deriveReqt');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Derive Requirement («deriveReqt»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Derived requirement from source</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'copy');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Copy («copy»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Requirement copy relationship</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'trace');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Trace («trace»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">General traceability relationship</div>
-                  </div>
-                </Button>
+                {getCanvasRelationshipKinds(
+                  { blocks, parts, relationships, states },
+                  requirementConnectionPicker.sourceId,
+                  requirementConnectionPicker.targetId,
+                  diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd',
+                ).map(kind => {
+                  const meta = RELATIONSHIP_DEFINITIONS[kind as RequirementRelationshipKind];
+                  return (
+                    <Button
+                      key={kind}
+                      onClick={() => {
+                        createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
+                        setRequirementConnectionPicker(null);
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      {meta ? (
+                        <>
+                          <span className="font-semibold text-xs text-orange-300">
+                            {meta.displayLabel} — {meta.label}
+                          </span>
+                          <span className="text-[11px] text-neutral-400">
+                            {meta.directionLabel}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {kind === 'requirementContainment'
+                            ? 'Requirement Containment (parent → child)'
+                            : kind.replace(/([A-Z])/g, ' $1').replace(/^./, character => character.toUpperCase())}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
@@ -18180,19 +19183,29 @@ const ADIA = () => {
 
         {/* Error Dialog */}
         {showErrorDialog && currentError && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
-            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={dismissErrorDialog}>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <h2 className="text-lg font-bold text-red-400">Error</h2>
+                <h2 id="error-dialog-title" className="text-lg font-bold text-red-400">
+                  {currentError.connectionDiagnostic ? 'SysML Connection Blocked' : 'Error'}
+                </h2>
               </div>
 
               <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
                 <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
+                {currentError.connectionDiagnostic && currentError.relationshipKind && currentError.sourceEndpoint && currentError.targetEndpoint && (
+                  <SysmlConnectionErrorDetails
+                    relationshipKind={currentError.relationshipKind}
+                    source={currentError.sourceEndpoint}
+                    target={currentError.targetEndpoint}
+                    diagnostic={currentError.connectionDiagnostic}
+                  />
+                )}
                 {currentError.source && (
                   <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
                 )}
@@ -18216,7 +19229,7 @@ const ADIA = () => {
                           updateTransition(currentError.elementId!, { type: 'condition', condition: defaultGuard });
                           addError('info', `Added guard condition: [${defaultGuard}]`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18227,7 +19240,7 @@ const ADIA = () => {
                           updateTransition(currentError.elementId!, { type: 'after', afterTicks: 5 });
                           addError('info', `Added after-timer: after(5)`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18253,7 +19266,8 @@ const ADIA = () => {
                 )}
                 <Button
                   variant="outline"
-                  onClick={() => setShowErrorDialog(false)}
+                  ref={errorDismissButtonRef}
+                  onClick={dismissErrorDialog}
                   className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
                 >
                   Dismiss
@@ -18261,7 +19275,7 @@ const ADIA = () => {
                 <Button
                   onClick={() => {
                     clearErrors();
-                    setShowErrorDialog(false);
+                    dismissErrorDialog();
                   }}
                   className="bg-red-600 hover:bg-red-700 text-white px-5"
                 >

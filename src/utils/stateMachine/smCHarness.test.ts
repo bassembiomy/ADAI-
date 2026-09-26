@@ -98,7 +98,7 @@ describe('smCHarness host and sanitizer execution', () => {
   });
 
   it('includes standard mapping and all required warning flags in compilation', async () => {
-    const fakeCompiler = join(testDir, 'fake_gcc.js');
+    const fakeCompiler = join(testDir, 'fake_gcc.cjs');
     writeFileSync(
       fakeCompiler,
       `const fs = require('fs');\n` +

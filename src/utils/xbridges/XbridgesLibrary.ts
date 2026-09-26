@@ -201,7 +201,9 @@ export const XBRIDGES_CATEGORIES = [
   {
     name: 'DC-AC Inverters',
     blocks: [
+      { type: 'DC_VOLTAGE_SOURCE', label: 'DC Voltage Source', icon: 'zap' },
       { type: 'THREE_PHASE_INVERTER', label: '3-Phase Inverter', icon: 'zap' },
+      { type: 'THREE_PHASE_LOAD', label: '3-Phase Load', icon: 'activity' },
       { type: 'SINGLE_PHASE_H_BRIDGE', label: 'H-Bridge', icon: 'zap' },
     ]
   },

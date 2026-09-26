@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './sysmlTransactionAdapter';
+import { applyLegacySysmlDeletion, classifyLegacyDeletionTarget, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation, toCompactImpactDelta } from './sysmlTransactionAdapter';
 import { createEmptyRepository } from '../engine/sysml/model';
 
 const block = (id: string, stereotype = 'block'): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] });
-const part = (id: string, owner: string, type: string, parentPartId: string | null = null): PartData => ({ id, name: id, blockId: owner, typeId: type, parentPartId, x: 0, y: 0, width: 80, height: 60 });
+const part = (id: string, owner: string, type: string, parentPartId: string | null = null, aggregation: PartData['aggregation'] = 'composite'): PartData => ({ id, name: id, blockId: owner, typeId: type, parentPartId, aggregation, x: 0, y: 0, width: 80, height: 60 });
 const relation = (id: string, sourceId: string, targetId: string, type: RelationshipData['type']): RelationshipData => ({ id, sourceId, targetId, type, label: '' });
 
 describe('legacy UI to canonical SysML mutation adapter', () => {
@@ -24,6 +24,28 @@ describe('legacy UI to canonical SysML mutation adapter', () => {
     expect(requiresDeletionConfirmation(result.impact)).toBe(true);
     expect(formatLegacyDeletionImpact(result.impact)).toContain('Affected diagrams: bdd, ibd');
     expect(formatLegacyDeletionImpact(result.impact)).toContain('owned1');
+  });
+
+  it('cascades composite-owned usages on block definition deletion while shared usages stay unresolved', () => {
+    const blocks = [block('whole'), block('child'), block('other')];
+    const parts = [part('owned', 'whole', 'child', null, 'composite'), part('external', 'other', 'child', null, 'shared')];
+    const relationships = [relation('c1', 'whole', 'child', 'composition')];
+    const connectors: ConnectorData[] = [];
+
+    const result = applyLegacySysmlDeletion({ blocks, parts, relationships, connectors }, ['child']);
+
+    // Composite-only cascade: the composite-owned usage follows its type,
+    // the external/shared usage survives as an unresolved impact.
+    expect(result.model.blocks.map(item => item.id).sort()).toEqual(['other', 'whole']);
+    expect(result.model.parts.map(item => item.id)).toEqual(['external']);
+    expect(result.model.relationships).toEqual([]);
+    expect(result.impact.deletedElementIds).toEqual(expect.arrayContaining(['child', 'owned', 'c1']));
+    expect(result.impact.deletedElementIds).not.toContain('external');
+    expect(result.impact.unresolvedUsageIds).toEqual(['external']);
+    expect(requiresDeletionConfirmation(result.impact)).toBe(true);
+    const formatted = formatLegacyDeletionImpact(result.impact);
+    expect(formatted).toContain('owned');
+    expect(formatted).toContain('Typed usages left unresolved: external');
   });
 
   it('recursively deletes selected nested part usages without deleting their type definitions', () => {
@@ -92,6 +114,39 @@ describe('legacy UI to canonical SysML mutation adapter', () => {
 
     const formatted = formatLegacyDeletionImpact(result.impact);
     expect(formatted).toContain('Nested requirements: c, gc');
+  });
+
+  it('classifies legacy deletion targets through the central policy', () => {
+    const input = {
+      blocks: [block('whole'), block('child')],
+      parts: [part('owned', 'whole', 'child')],
+      relationships: [relation('c1', 'whole', 'child', 'composition')],
+      connectors: [] as ConnectorData[],
+    };
+    const decision = classifyLegacyDeletionTarget(input, 'whole');
+    expect(decision.targetKind).toBe('definition');
+
+    const unknown = classifyLegacyDeletionTarget(input, 'ghost');
+    expect(unknown.targetKind).toBe('unknown');
+    expect(unknown.diagnostics.join('\n')).toMatch('UNKNOWN_ELEMENT');
+  });
+
+  it('projects deletion impact to a compact delta without embedding the repository', () => {
+    const input = {
+      blocks: [block('a'), block('b')],
+      parts: [] as PartData[],
+      relationships: [relation('r', 'a', 'b', 'association')],
+      connectors: [] as ConnectorData[],
+    };
+    const result = applyLegacySysmlDeletion(input, ['r']);
+    const delta = toCompactImpactDelta(result.impact);
+    expect(delta.requestedElementIds).toEqual(['r']);
+    expect(delta.deletedElementIds).toContain('r');
+    expect(delta.impactSummary.removedRelationships).toBe(result.impact.removedRelationshipIds.length);
+    expect(delta.impactSummary.unresolvedUsages).toBe(result.impact.unresolvedUsageIds.length);
+    expect(delta.impact).toEqual(result.impact);
+    expect((delta as unknown as Record<string, unknown>).definitions).toBeUndefined();
+    expect((delta as unknown as Record<string, unknown>).repository).toBeUndefined();
   });
 });
 

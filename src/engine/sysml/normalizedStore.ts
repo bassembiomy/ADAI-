@@ -15,14 +15,25 @@ import type {
   PartUsage,
   SysmlEntity,
   SysmlEntityCollection,
+  PackageDefinition,
+  ModelDiagramDefinition,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
 } from './model';
-import type {
-  PresentationCoordinates,
-  LegacySysmlView,
-} from '../../services/sysmlCommandGateway';
+import type { LegacySysmlView } from '../../services/sysmlCommandGateway';
+import {
+  normalizeDiagramPresentations,
+  type DiagramPresentation,
+  type DiagramPresentationInput,
+  type PresentationCoordinates,
+} from './presentationState';
 import type {
   BlockData,
   ConnectorData,
+  PackageData,
   PartData,
   RelationshipData,
   PortData,
@@ -36,14 +47,18 @@ export interface StoreIndexes {
   targetId: Map<string, Set<string>>;
   diagramId: Map<string, Set<string>>;
   requirementId: Map<string, Set<string>>;
+  subjectId: Map<string, Set<string>>;
+  useCaseId: Map<string, Set<string>>;
   kind: Map<string, Set<string>>;
   byId: Map<string, { collection: SysmlEntityCollection; id: string }>;
 }
 
 export interface NormalizedSysmlStore {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3 | 4;
   profileId: 'OMG-SysML-1.6-ADIA';
   revision: number;
+  packages: Map<string, PackageDefinition>;
+  diagrams: Map<string, ModelDiagramDefinition>;
   definitions: Map<string, SysmlDefinition>;
   usages: Map<string, SysmlUsage>;
   connectors: Map<string, ConnectorUsage>;
@@ -53,10 +68,16 @@ export interface NormalizedSysmlStore {
   evidence: Map<string, VerificationEvidence>;
   baselines: Map<string, ModelBaseline>;
   artifacts: Map<string, TraceArtifact>;
+  actors: Map<string, ActorDefinition>;
+  subjects: Map<string, SubjectDefinition>;
+  useCases: Map<string, UseCaseDefinition>;
+  extensionPoints: Map<string, ExtensionPoint>;
+  diagramReferences: Map<string, DiagramReference>;
   auditTrail: ModelChangeRecord[];
   coordinates: Map<string, PresentationCoordinates>;
-  diagramPresentations: Map<string, { elementIds: string[] }>;
+  diagramPresentations: Map<string, DiagramPresentation>;
   indexes: StoreIndexes;
+  readonly entities: { has(id: string): boolean; get(id: string): SysmlEntity | undefined };
 }
 
 function createEmptyIndexes(): StoreIndexes {
@@ -67,6 +88,8 @@ function createEmptyIndexes(): StoreIndexes {
     targetId: new Map(),
     diagramId: new Map(),
     requirementId: new Map(),
+    subjectId: new Map(),
+    useCaseId: new Map(),
     kind: new Map(),
     byId: new Map(),
   };
@@ -92,10 +115,13 @@ function removeFromIndex(map: Map<string, Set<string>>, key: string, id: string)
 }
 
 export function createEmptyNormalizedStore(): NormalizedSysmlStore {
-  return {
+  const indexes = createEmptyIndexes();
+  const store: NormalizedSysmlStore = {
     schemaVersion: 2,
     profileId: 'OMG-SysML-1.6-ADIA',
     revision: 0,
+    packages: new Map(),
+    diagrams: new Map(),
     definitions: new Map(),
     usages: new Map(),
     connectors: new Map(),
@@ -105,11 +131,28 @@ export function createEmptyNormalizedStore(): NormalizedSysmlStore {
     evidence: new Map(),
     baselines: new Map(),
     artifacts: new Map(),
+    actors: new Map(),
+    subjects: new Map(),
+    useCases: new Map(),
+    extensionPoints: new Map(),
+    diagramReferences: new Map(),
     auditTrail: [],
     coordinates: new Map(),
     diagramPresentations: new Map(),
-    indexes: createEmptyIndexes(),
+    indexes,
+    get entities() {
+      return {
+        has: (id: string) => indexes.byId.has(id),
+        get: (id: string) => {
+          const entry = indexes.byId.get(id);
+          if (!entry) return undefined;
+          const col = (store as any)[entry.collection] as Map<string, any>;
+          return col?.get(id);
+        },
+      };
+    },
   };
+  return store;
 }
 
 /**
@@ -149,6 +192,21 @@ function unindexEntity(store: NormalizedSysmlStore, id: string, entity: SysmlEnt
     for (const reqId of entity.verifiesRequirementIds) {
       removeFromIndex(indexes.requirementId, reqId, id);
     }
+  }
+
+  // subjectId
+  if ('subjectId' in entity && typeof entity.subjectId === 'string') {
+    removeFromIndex(indexes.subjectId, entity.subjectId, id);
+  }
+
+  // useCaseId
+  if ('useCaseId' in entity && typeof entity.useCaseId === 'string') {
+    removeFromIndex(indexes.useCaseId, entity.useCaseId, id);
+  }
+
+  // realizedByBlockId
+  if ('realizedByBlockId' in entity && typeof entity.realizedByBlockId === 'string') {
+    removeFromIndex(indexes.typeId, entity.realizedByBlockId, id);
   }
 }
 
@@ -196,6 +254,21 @@ function indexEntity(
       addToIndex(indexes.requirementId, reqId, id);
     }
   }
+
+  // subjectId
+  if ('subjectId' in entity && typeof entity.subjectId === 'string') {
+    addToIndex(indexes.subjectId, entity.subjectId, id);
+  }
+
+  // useCaseId
+  if ('useCaseId' in entity && typeof entity.useCaseId === 'string') {
+    addToIndex(indexes.useCaseId, entity.useCaseId, id);
+  }
+
+  // realizedByBlockId
+  if ('realizedByBlockId' in entity && typeof entity.realizedByBlockId === 'string') {
+    addToIndex(indexes.typeId, entity.realizedByBlockId, id);
+  }
 }
 
 /**
@@ -204,7 +277,7 @@ function indexEntity(
 export function fromRepository(
   repo: SysmlRepository,
   coordinates?: Record<string, PresentationCoordinates>,
-  diagramPresentations?: Record<string, { elementIds: string[] }>,
+  diagramPresentations?: Record<string, DiagramPresentationInput>,
 ): NormalizedSysmlStore {
   const store = createEmptyNormalizedStore();
   store.schemaVersion = repo.schemaVersion ?? 2;
@@ -212,6 +285,14 @@ export function fromRepository(
   store.revision = repo.revision ?? 0;
   store.auditTrail = [...(repo.auditTrail ?? [])];
 
+  for (const [id, pkg] of Object.entries(repo.packages ?? {})) {
+    store.packages.set(id, pkg);
+    indexEntity(store, 'packages', id, pkg);
+  }
+  for (const [id, diag] of Object.entries(repo.diagrams ?? {})) {
+    store.diagrams.set(id, diag);
+    indexEntity(store, 'diagrams', id, diag);
+  }
   for (const [id, def] of Object.entries(repo.definitions ?? {})) {
     store.definitions.set(id, def);
     indexEntity(store, 'definitions', id, def);
@@ -248,6 +329,26 @@ export function fromRepository(
     store.artifacts.set(id, art);
     indexEntity(store, 'artifacts', id, art);
   }
+  for (const [id, act] of Object.entries(repo.actors ?? {})) {
+    store.actors.set(id, act);
+    indexEntity(store, 'actors', id, act);
+  }
+  for (const [id, sub] of Object.entries(repo.subjects ?? {})) {
+    store.subjects.set(id, sub);
+    indexEntity(store, 'subjects', id, sub);
+  }
+  for (const [id, uc] of Object.entries(repo.useCases ?? {})) {
+    store.useCases.set(id, uc);
+    indexEntity(store, 'useCases', id, uc);
+  }
+  for (const [id, ep] of Object.entries(repo.extensionPoints ?? {})) {
+    store.extensionPoints.set(id, ep);
+    indexEntity(store, 'extensionPoints', id, ep);
+  }
+  for (const [id, ref] of Object.entries(repo.diagramReferences ?? {})) {
+    store.diagramReferences.set(id, ref);
+    indexEntity(store, 'diagramReferences', id, ref);
+  }
 
   if (coordinates) {
     for (const [id, coord] of Object.entries(coordinates)) {
@@ -256,7 +357,8 @@ export function fromRepository(
   }
 
   if (diagramPresentations) {
-    for (const [dId, pres] of Object.entries(diagramPresentations)) {
+    const migrated = normalizeDiagramPresentations(diagramPresentations, coordinates);
+    for (const [dId, pres] of Object.entries(migrated)) {
       store.diagramPresentations.set(dId, pres);
       for (const elemId of pres.elementIds) {
         addToIndex(store.indexes.diagramId, dId, elemId);
@@ -269,21 +371,32 @@ export function fromRepository(
 
 /**
  * Export a NormalizedSysmlStore back to a canonical SysmlRepository (schemaVersion: 2).
+ * Keys are emitted in deterministic sorted-id order so serialization is stable
+ * across runs; semantic IDs themselves are never rewritten.
  */
 export function toRepository(store: NormalizedSysmlStore): SysmlRepository {
+  const sortedEntries = <T>(entries: Iterable<[string, T]>): Record<string, T> =>
+    Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b)));
   return {
-    schemaVersion: 2,
+    schemaVersion: (store.schemaVersion ?? 3) as 2 | 3,
     profileId: store.profileId,
     revision: store.revision,
-    definitions: Object.fromEntries(store.definitions),
-    usages: Object.fromEntries(store.usages),
-    connectors: Object.fromEntries(store.connectors),
-    relationships: Object.fromEntries(store.relationships),
-    requirements: Object.fromEntries(store.requirements),
-    verificationCases: Object.fromEntries(store.verificationCases),
-    evidence: Object.fromEntries(store.evidence),
-    baselines: Object.fromEntries(store.baselines),
-    artifacts: Object.fromEntries(store.artifacts),
+    packages: sortedEntries(store.packages),
+    diagrams: sortedEntries(store.diagrams),
+    definitions: sortedEntries(store.definitions),
+    usages: sortedEntries(store.usages),
+    connectors: sortedEntries(store.connectors),
+    relationships: sortedEntries(store.relationships),
+    requirements: sortedEntries(store.requirements),
+    verificationCases: sortedEntries(store.verificationCases),
+    evidence: sortedEntries(store.evidence),
+    baselines: sortedEntries(store.baselines),
+    artifacts: sortedEntries(store.artifacts),
+    actors: sortedEntries(store.actors),
+    subjects: sortedEntries(store.subjects),
+    useCases: sortedEntries(store.useCases),
+    extensionPoints: sortedEntries(store.extensionPoints),
+    diagramReferences: sortedEntries(store.diagramReferences),
     auditTrail: [...store.auditTrail],
   };
 }
@@ -295,6 +408,10 @@ export function getById(store: NormalizedSysmlStore, id: string): SysmlEntity | 
   const meta = store.indexes.byId.get(id);
   if (!meta) return undefined;
   switch (meta.collection) {
+    case 'packages':
+      return store.packages.get(id);
+    case 'diagrams':
+      return store.diagrams.get(id);
     case 'definitions':
       return store.definitions.get(id);
     case 'usages':
@@ -313,6 +430,16 @@ export function getById(store: NormalizedSysmlStore, id: string): SysmlEntity | 
       return store.baselines.get(id);
     case 'artifacts':
       return store.artifacts.get(id);
+    case 'actors':
+      return store.actors.get(id);
+    case 'subjects':
+      return store.subjects.get(id);
+    case 'useCases':
+      return store.useCases.get(id);
+    case 'extensionPoints':
+      return store.extensionPoints.get(id);
+    case 'diagramReferences':
+      return store.diagramReferences.get(id);
   }
 }
 
@@ -357,6 +484,12 @@ export function upsertEntity(
   }
 
   switch (collection) {
+    case 'packages':
+      store.packages.set(entity.id, entity as PackageDefinition);
+      break;
+    case 'diagrams':
+      store.diagrams.set(entity.id, entity as ModelDiagramDefinition);
+      break;
     case 'definitions':
       store.definitions.set(entity.id, entity as SysmlDefinition);
       break;
@@ -384,6 +517,21 @@ export function upsertEntity(
     case 'artifacts':
       store.artifacts.set(entity.id, entity as TraceArtifact);
       break;
+    case 'actors':
+      store.actors.set(entity.id, entity as ActorDefinition);
+      break;
+    case 'subjects':
+      store.subjects.set(entity.id, entity as SubjectDefinition);
+      break;
+    case 'useCases':
+      store.useCases.set(entity.id, entity as UseCaseDefinition);
+      break;
+    case 'extensionPoints':
+      store.extensionPoints.set(entity.id, entity as ExtensionPoint);
+      break;
+    case 'diagramReferences':
+      store.diagramReferences.set(entity.id, entity as DiagramReference);
+      break;
   }
 
   indexEntity(store, collection, entity.id, entity);
@@ -402,6 +550,12 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
 
   if (collection) {
     switch (collection) {
+      case 'packages':
+        store.packages.delete(id);
+        break;
+      case 'diagrams':
+        store.diagrams.delete(id);
+        break;
       case 'definitions':
         store.definitions.delete(id);
         break;
@@ -429,6 +583,21 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
       case 'artifacts':
         store.artifacts.delete(id);
         break;
+      case 'actors':
+        store.actors.delete(id);
+        break;
+      case 'subjects':
+        store.subjects.delete(id);
+        break;
+      case 'useCases':
+        store.useCases.delete(id);
+        break;
+      case 'extensionPoints':
+        store.extensionPoints.delete(id);
+        break;
+      case 'diagramReferences':
+        store.diagramReferences.delete(id);
+        break;
     }
   }
 
@@ -436,6 +605,7 @@ export function removeEntity(store: NormalizedSysmlStore, id: string): boolean {
   store.revision += 1;
   const cache = entityProjectionCaches.get(store);
   if (cache) {
+    cache.packages.delete(id);
     cache.blocks.delete(id);
     cache.parts.delete(id);
     cache.connectors.delete(id);
@@ -461,7 +631,8 @@ function formatMultiplicityText(m?: Multiplicity): string {
 }
 
 interface EntityProjectionCache {
-  blocks: Map<string, { entity: SysmlEntity; coords?: PresentationCoordinates; result: BlockData }>;
+  packages: Map<string, { entity: PackageDefinition; coords?: PresentationCoordinates; result: PackageData }>;
+  blocks: Map<string, { entity: SysmlEntity; coords?: PresentationCoordinates; dependencyKey?: string; result: BlockData }>;
   parts: Map<string, { entity: SysmlUsage; coords?: PresentationCoordinates; result: PartData }>;
   relationships: Map<string, { entity: SysmlRelationship; result: RelationshipData }>;
   connectors: Map<string, { entity: ConnectorUsage; result: ConnectorData }>;
@@ -473,6 +644,7 @@ function getEntityProjectionCache(store: NormalizedSysmlStore): EntityProjection
   let cache = entityProjectionCaches.get(store);
   if (!cache) {
     cache = {
+      packages: new Map(),
       blocks: new Map(),
       parts: new Map(),
       relationships: new Map(),
@@ -492,6 +664,7 @@ export function projectNormalizedDiagram(
   store: NormalizedSysmlStore,
   diagramId?: string,
 ): LegacySysmlView {
+  const packages: PackageData[] = [];
   const blocks: BlockData[] = [];
   const parts: PartData[] = [];
   const relationships: RelationshipData[] = [];
@@ -499,16 +672,47 @@ export function projectNormalizedDiagram(
 
   const entityCache = getEntityProjectionCache(store);
 
-  const visibleFilter = diagramId && store.diagramPresentations.has(diagramId)
-    ? new Set(store.diagramPresentations.get(diagramId)!.elementIds)
+  const visibleFilter = diagramId
+    ? new Set(store.diagramPresentations.get(diagramId)?.elementIds ?? [])
     : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
+  const coordinatesFor = (semanticElementId: string): PresentationCoordinates | undefined => {
+    const scoped = diagramId
+      ? store.diagramPresentations.get(diagramId)?.presentations?.[semanticElementId]?.bounds
+      : undefined;
+    return scoped ?? store.coordinates.get(semanticElementId);
+  };
+
+  const projectPackage = (pkg: PackageDefinition) => {
+    if (pkg.id === 'model') return;
+    const coords = coordinatesFor(pkg.id);
+    const cached = entityCache.packages.get(pkg.id);
+    if (cached && cached.entity === pkg && cached.coords === coords) {
+      packages.push(cached.result);
+      return;
+    }
+    const result: PackageData = {
+      id: pkg.id,
+      name: pkg.name,
+      ownerId: pkg.ownerId,
+      namespace: pkg.namespace,
+      x: coords?.x ?? 0,
+      y: coords?.y ?? 0,
+      width: coords?.width ?? 220,
+      height: coords?.height ?? 140,
+    };
+    entityCache.packages.set(pkg.id, { entity: pkg, coords, result });
+    packages.push(result);
+  };
 
   // Helper to project a definition
   const projectDef = (def: SysmlDefinition) => {
-    const coords = store.coordinates.get(def.id);
+    const coords = coordinatesFor(def.id);
+    const dependencyKey = def.kind === 'block'
+      ? def.properties.map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')
+      : undefined;
     const cached = entityCache.blocks.get(def.id);
-    if (cached && cached.entity === def && cached.coords === coords) {
+    if (cached && cached.entity === def && cached.coords === coords && cached.dependencyKey === dependencyKey) {
       blocks.push(cached.result);
       return;
     }
@@ -521,7 +725,7 @@ export function projectNormalizedDiagram(
         name: p.name,
         direction: p.direction,
         type: p.typeId,
-        kind: p.kind === 'proxy' ? ('proxy' as const) : ('standard' as const),
+        kind: p.kind,
         isConjugated: p.isConjugated,
         multiplicity: formatMultiplicityText(p.multiplicity),
       }));
@@ -540,7 +744,7 @@ export function projectNormalizedDiagram(
           id: prop.id,
           name: prop.name,
           kind: prop.kind,
-          type: prop.typeId,
+          type: store.definitions.get(prop.typeId)?.name ?? prop.typeId,
           typeId: prop.typeId,
           multiplicity: formatMultiplicityText(prop.multiplicity),
           unit: (prop as any).unit,
@@ -570,12 +774,12 @@ export function projectNormalizedDiagram(
         ports: [],
       };
     }
-    entityCache.blocks.set(def.id, { entity: def, coords, result });
+    entityCache.blocks.set(def.id, { entity: def, coords, dependencyKey, result });
     blocks.push(result);
   };
 
   const projectReq = (req: RequirementDefinition) => {
-    const coords = store.coordinates.get(req.id);
+    const coords = coordinatesFor(req.id);
     const cached = entityCache.blocks.get(req.id);
     if (cached && cached.entity === req && cached.coords === coords) {
       blocks.push(cached.result);
@@ -611,7 +815,7 @@ export function projectNormalizedDiagram(
   };
 
   const projectVc = (vc: VerificationCase) => {
-    const coords = store.coordinates.get(vc.id);
+    const coords = coordinatesFor(vc.id);
     const cached = entityCache.blocks.get(vc.id);
     if (cached && cached.entity === vc && cached.coords === coords) {
       blocks.push(cached.result);
@@ -640,7 +844,7 @@ export function projectNormalizedDiagram(
   const projectPart = (usage: SysmlUsage) => {
     if (usage.kind === 'part') {
       const pUsage = usage as PartUsage;
-      const coords = store.coordinates.get(pUsage.id);
+      const coords = coordinatesFor(pUsage.id);
       const cached = entityCache.parts.get(pUsage.id);
       if (cached && cached.entity === pUsage && cached.coords === coords) {
         parts.push(cached.result);
@@ -649,6 +853,7 @@ export function projectNormalizedDiagram(
 
       const result: PartData = {
         id: pUsage.id,
+        propertyId: pUsage.propertyId,
         name: pUsage.name,
         blockId: pUsage.ownerId,
         parentBlockId: pUsage.ownerId,
@@ -659,6 +864,9 @@ export function projectNormalizedDiagram(
         y: coords?.y ?? 0,
         width: coords?.width ?? 150,
         height: coords?.height ?? 100,
+        ...(diagramId && store.diagramPresentations.get(diagramId)?.presentations[pUsage.id]?.portLayouts
+          ? { portLayouts: store.diagramPresentations.get(diagramId)!.presentations[pUsage.id].portLayouts }
+          : {}),
       };
       entityCache.parts.set(pUsage.id, { entity: pUsage, coords, result });
       parts.push(result);
@@ -736,7 +944,7 @@ export function projectNormalizedDiagram(
       sourceId: rel.sourceId,
       targetId: rel.targetId,
       type: legacyType,
-      label: (rel as any).name ?? '',
+      label: rel.name ?? '',
       sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
       targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
     };
@@ -753,6 +961,11 @@ export function projectNormalizedDiagram(
       const meta = store.indexes.byId.get(elemId);
       if (!meta) continue;
       switch (meta.collection) {
+        case 'packages': {
+          const pkg = store.packages.get(elemId);
+          if (pkg) projectPackage(pkg);
+          break;
+        }
         case 'definitions': {
           const def = store.definitions.get(elemId);
           if (def) projectDef(def);
@@ -819,6 +1032,7 @@ export function projectNormalizedDiagram(
     }
   } else {
     // FULL MODEL PATH
+    for (const pkg of store.packages.values()) projectPackage(pkg);
     for (const def of store.definitions.values()) projectDef(def);
     for (const req of store.requirements.values()) projectReq(req);
     for (const vc of store.verificationCases.values()) projectVc(vc);
@@ -827,7 +1041,7 @@ export function projectNormalizedDiagram(
     for (const rel of store.relationships.values()) projectRel(rel);
   }
 
-  return { blocks, relationships, parts, connectors };
+  return { packages, blocks, relationships, parts, connectors };
 }
 
 const legacyViewCache = new WeakMap<
@@ -1099,7 +1313,7 @@ export function selectRelationshipsForVisibleNodes(
                   sourceId: rel.sourceId,
                   targetId: rel.targetId,
                   type: legacyType,
-                  label: (rel as any).name ?? '',
+                  label: rel.name ?? '',
                   sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
                   targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
                 };
@@ -1200,12 +1414,35 @@ export function targetedUpdateEntity<T extends SysmlEntity>(
  */
 export function targetedUpdatePresentation(
   store: NormalizedSysmlStore,
+  diagramId: string,
   id: string,
   coords: PresentationCoordinates,
-): void {
-  const existing = store.coordinates.get(id) ?? {};
-  store.coordinates.set(id, { ...existing, ...coords });
+): boolean {
+  let diagram = store.diagramPresentations.get(diagramId);
+  const isContextBlock = id === diagramId;
+  if (!diagram && isContextBlock && store.definitions.has(diagramId)) {
+    diagram = { elementIds: [id], presentations: {} };
+    store.diagramPresentations.set(diagramId, diagram);
+  }
+  if (!diagram || (!diagram.elementIds.includes(id) && !isContextBlock)) return false;
+  if (isContextBlock && !diagram.elementIds.includes(id)) {
+    diagram = { ...diagram, elementIds: [...diagram.elementIds, id] };
+  }
+  const existing = diagram.presentations[id] ?? {
+    id: `presentation:${encodeURIComponent(diagramId)}:${encodeURIComponent(id)}`,
+    diagramId,
+    semanticElementId: id,
+    bounds: {},
+  };
+  store.diagramPresentations.set(diagramId, {
+    ...diagram,
+    presentations: {
+      ...diagram.presentations,
+      [id]: { ...existing, bounds: { ...existing.bounds, ...coords } },
+    },
+  });
   store.revision += 1;
+  return true;
 }
 
 /**
@@ -1309,8 +1546,8 @@ export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
   }
 
   const snap = snapshot as WorkerStoreSnapshot;
-  if (snap.schemaVersion !== 2) {
-    throw new Error(`Unsupported worker snapshot schemaVersion: ${snap.schemaVersion} (expected 2)`);
+  if (snap.schemaVersion !== 2 && snap.schemaVersion !== 3) {
+    throw new Error(`Unsupported worker snapshot schemaVersion: ${snap.schemaVersion} (expected 2 or 3)`);
   }
 
   if (typeof snap.revision !== 'number' || isNaN(snap.revision)) {
@@ -1321,6 +1558,8 @@ export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
     schemaVersion: snap.schemaVersion,
     profileId: snap.profileId ?? 'OMG-SysML-1.6-ADIA',
     revision: snap.revision,
+    packages: (snap as any).packages ?? { model: { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' } },
+    diagrams: (snap as any).diagrams ?? {},
     definitions: snap.definitions ?? {},
     usages: snap.usages ?? {},
     connectors: snap.connectors ?? {},
@@ -1331,6 +1570,11 @@ export function fromWorkerSnapshot(snapshot: unknown): NormalizedSysmlStore {
     baselines: snap.baselines ?? {},
     artifacts: snap.artifacts ?? {},
     auditTrail: snap.auditTrail ?? [],
+    actors: (snap as any).actors ?? {},
+    subjects: (snap as any).subjects ?? {},
+    useCases: (snap as any).useCases ?? {},
+    extensionPoints: (snap as any).extensionPoints ?? {},
+    diagramReferences: (snap as any).diagramReferences ?? {},
   };
 
   return fromRepository(repo, snap.coordinates, snap.diagramPresentations);

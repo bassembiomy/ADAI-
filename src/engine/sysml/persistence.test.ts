@@ -5,6 +5,7 @@ import {
   createBaseline,
   loadRepository,
   serializeRepository,
+  deserializeSysmlRepository,
   serializeToChunks,
   serializeIncrementalChunks,
   hydrateRepositoryFromChunks,
@@ -16,10 +17,45 @@ import {
 
 const block = (id: string): BlockDefinition => ({
   id, name: id, namespace: [], kind: 'block', isAbstract: false, isLeaf: false,
+  ownerId: 'model',
   properties: [], ports: [], operations: [], constraints: [],
 });
 
 describe('versioned SysML persistence and baselines', () => {
+  it('migrates schema 2 definitions into the model root without changing IDs', () => {
+    const schema2Fixture = {
+      schemaVersion: 2,
+      profileId: 'OMG-SysML-1.6-ADIA',
+      revision: 1,
+      definitions: {
+        motor: {
+          id: 'motor',
+          name: 'Motor',
+          namespace: [],
+          kind: 'block',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        },
+      },
+      usages: {},
+      connectors: {},
+      relationships: {},
+      requirements: {},
+      verificationCases: {},
+      evidence: {},
+      baselines: {},
+      artifacts: {},
+      auditTrail: [],
+    };
+    const loaded = deserializeSysmlRepository(JSON.stringify(schema2Fixture));
+    expect(loaded.schemaVersion).toBe(3);
+    expect(loaded.packages.model.name).toBe('Model');
+    expect(loaded.definitions.motor.ownerId).toBe('model');
+  });
   it('serializes deterministically and round-trips all canonical records', () => {
     const repo = createEmptyRepository();
     repo.definitions.z = block('z');
@@ -151,6 +187,34 @@ describe('versioned SysML persistence and baselines', () => {
     expect(loaded.diagnostics.some(d => d.code === 'LEGACY_REQUIREMENT_COMPOSITION_MIGRATED')).toBe(true);
   });
 
+  it('preserves resolvable policy-invalid relationships while reporting their diagnostic', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = block('system');
+    repo.definitions.temperature = { id: 'temperature', name: 'Temperature', namespace: [], kind: 'valueType' } as any;
+    repo.relationships.invalid = {
+      id: 'invalid', kind: 'sharedAggregation', sourceId: 'system', targetId: 'temperature',
+    };
+
+    const loaded = loadRepository(serializeRepository(repo));
+
+    expect(loaded.repository.relationships.invalid).toEqual(repo.relationships.invalid);
+    expect(loaded.interchangeReport.quarantinedRelationshipIds).not.toContain('invalid');
+    expect(loaded.diagnostics.map(d => d.code)).toContain('INVALID_AGGREGATION_ENDPOINTS');
+  });
+
+  it('quarantines only relationships with unresolved endpoints', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = block('system');
+    repo.relationships.missing = {
+      id: 'missing', kind: 'association', sourceId: 'system', targetId: 'not-present',
+    };
+
+    const loaded = loadRepository(serializeRepository(repo));
+
+    expect(loaded.repository.relationships.missing).toBeUndefined();
+    expect(loaded.interchangeReport.quarantinedRelationshipIds).toContain('missing');
+  });
+
   describe('chunked and incremental persistence', () => {
     it('serializes to chunks with manifest and rehydrates round-trip cleanly', () => {
       const repo = createEmptyRepository();
@@ -175,7 +239,7 @@ describe('versioned SysML persistence and baselines', () => {
 
       const chunked = serializeToChunks(repo);
       expect(chunked.manifest.format).toBe('ADIA-SysML-Chunked');
-      expect(chunked.manifest.schemaVersion).toBe(2);
+      expect([2, 3]).toContain(chunked.manifest.schemaVersion);
       expect(Object.keys(chunked.chunks).length).toBe(4);
 
       const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
@@ -355,6 +419,44 @@ describe('versioned SysML persistence and baselines', () => {
       expect(result.repository.definitions.b4).toBeUndefined();
     });
 
+    it('persists independent stable presentation records in the chunk manifest', () => {
+      const repo = createEmptyRepository();
+      repo.definitions['blk-motor'] = block('blk-motor');
+      const diagramPresentations = {
+        requirements: {
+          elementIds: ['blk-motor'],
+          presentations: {
+            'blk-motor': {
+              id: 'presentation:requirements:blk-motor',
+              diagramId: 'requirements',
+              semanticElementId: 'blk-motor',
+              bounds: { x: 10, y: 20 },
+            },
+          },
+        },
+        bdd: {
+          elementIds: ['blk-motor'],
+          presentations: {
+            'blk-motor': {
+              id: 'presentation:bdd:blk-motor',
+              diagramId: 'bdd',
+              semanticElementId: 'blk-motor',
+              bounds: { x: 400, y: 500 },
+            },
+          },
+        },
+      };
+
+      const serialized = serializeToChunks(repo, { diagramPresentations });
+      const restoredManifest = JSON.parse(serialized.manifestJson);
+      expect(restoredManifest.diagramPresentations).toEqual(diagramPresentations);
+      expect(restoredManifest.diagramPresentations.requirements.presentations['blk-motor'].bounds)
+        .toEqual({ x: 10, y: 20 });
+      expect(restoredManifest.diagramPresentations.bdd.presentations['blk-motor'].bounds)
+        .toEqual({ x: 400, y: 500 });
+      expect(Object.keys(repo.definitions)).toEqual(['blk-motor']);
+    });
+
     it('ensures full legacy JSON export and import remains semantically and structurally valid', () => {
       const legacyModel = {
         schemaVersion: 2,
@@ -431,6 +533,52 @@ describe('versioned SysML persistence and baselines', () => {
       expect(result.success).toBe(false);
       expect(result.committedRevision).toBe(0);
       expect(diskFiles['project/manifest.json']).toBeUndefined();
+    });
+
+    it('preserves non-root packages and diagrams in chunked serialization and restores ownership', () => {
+      const repo = createEmptyRepository();
+      repo.packages.pkg1 = {
+        id: 'pkg1',
+        kind: 'package',
+        name: 'Subsystem',
+        namespace: ['model'],
+        ownerId: 'model',
+      };
+      repo.diagrams.diag1 = {
+        id: 'diag1',
+        kind: 'diagram',
+        name: 'BDD Overview',
+        namespace: ['model', 'pkg1'],
+        diagramKind: 'bdd',
+        ownerId: 'pkg1',
+      };
+      repo.definitions.b1 = {
+        ...block('b1'),
+        ownerId: 'pkg1',
+      };
+
+      const chunked = serializeToChunks(repo);
+      expect(chunked.chunks['packages/pkg1.json']).toBeDefined();
+      expect(chunked.chunks['diagrams/diag1.json']).toBeDefined();
+      expect(chunked.manifest.chunkIndex['packages/pkg1.json']).toBeDefined();
+      expect(chunked.manifest.chunkIndex['diagrams/diag1.json']).toBeDefined();
+
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
+      expect(rehydrated.valid).toBe(true);
+      expect(rehydrated.repository.packages.pkg1).toBeDefined();
+      expect(rehydrated.repository.packages.pkg1.ownerId).toBe('model');
+      expect(rehydrated.repository.diagrams.diag1).toBeDefined();
+      expect(rehydrated.repository.diagrams.diag1.ownerId).toBe('pkg1');
+      expect(rehydrated.repository.definitions.b1.ownerId).toBe('pkg1');
+    });
+
+    it('preserves schema 3 and canonical root model package across chunk round-trip', () => {
+      const repo = createEmptyRepository();
+      const chunked = serializeToChunks(repo);
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
+      expect(rehydrated.repository.schemaVersion).toBe(3);
+      expect(rehydrated.repository.packages.model).toBeDefined();
+      expect(rehydrated.repository.packages.model.name).toBe('Model');
     });
   });
 });

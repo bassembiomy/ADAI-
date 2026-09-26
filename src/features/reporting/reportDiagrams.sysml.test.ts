@@ -64,6 +64,25 @@ describe('renderRequirementsDiagram — cross-diagram relationships', () => {
     expect(html).toContain('edge-dr1');
     expect(html).toContain('2 requirements, 1 supporting blocks');
   });
+
+  it('renders connected test cases and blocks but omits unrelated BDD elements', () => {
+    const html = renderRequirementsDiagram({
+      blocks: [
+        ...reqBlocks,
+        block({ id: 'tc1', name: 'Temperature verification', stereotype: 'testCase' }),
+        block({ id: 'b2', name: 'Unrelated subsystem', stereotype: 'block' }),
+        block({ id: 'tc2', name: 'Unrelated test', stereotype: 'testCase' }),
+      ],
+      relationships: [
+        ...reqRels,
+        rel({ id: 'verify-tc1', sourceId: 'tc1', targetId: 'r1', type: 'verify' }),
+      ],
+    });
+    expect(html).toContain('Temperature verification');
+    expect(html).toContain('edge-verify-tc1');
+    expect(html).not.toContain('Unrelated subsystem');
+    expect(html).not.toContain('Unrelated test');
+  });
 });
 
 
@@ -94,7 +113,7 @@ describe('renderBddDiagram', () => {
       }] })],
       relationships: [],
     });
-    expect(html).toContain('/speed: velocity [0..*]');
+    expect(html).toContain('/speed: Velocity [0..*]');
     expect(html).toContain('{ordered,');
     expect(html).toContain('nonunique}');
     expect(html).toContain('«flow»');

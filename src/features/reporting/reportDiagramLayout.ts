@@ -43,11 +43,17 @@ export function layoutLayered(
     queue.push(id);
   }
   let head = 0;
+  const maxDepth = Math.max(10, nodes.length);
+  const visitedCount = new Map<string, number>();
   while (head < queue.length) {
     const id = queue[head++];
+    const count = (visitedCount.get(id) ?? 0) + 1;
+    visitedCount.set(id, count);
+    if (count > maxDepth) continue; // Cycle/depth limit reached
+
     for (const next of succs.get(id) ?? []) {
       const candidate = rank.get(id)! + 1;
-      if ((rank.get(next) ?? -1) < candidate && candidate <= nodes.length) {
+      if (candidate <= maxDepth && (rank.get(next) ?? -1) < candidate) {
         rank.set(next, candidate);
         queue.push(next);
       }

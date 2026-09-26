@@ -1,3 +1,5 @@
+export * from './domain';
+
 export interface Multiplicity {
   lower: number;
   upper: number | '*';
@@ -5,15 +7,21 @@ export interface Multiplicity {
   unique: boolean;
 }
 
-export interface NamedElement { id: string; name: string; namespace: string[]; }
+export interface NamedElement { id: string; name: string; namespace: string[]; ownerId?: string; }
+export interface PackageDefinition extends NamedElement { kind: 'package'; }
+export interface ModelDiagramDefinition extends NamedElement {
+  kind: 'diagram';
+  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine';
+  contextElementId?: string;
+}
 export interface ValueTypeDefinition extends NamedElement { kind: 'valueType'; unit?: string; dimension?: string; }
 export interface InterfaceDefinition extends NamedElement { kind: 'interface'; features: string[]; }
 export interface PropertyDefinition { id: string; name: string; kind: 'value' | 'part' | 'reference' | 'flow'; typeId: string; multiplicity: Multiplicity; unit?: string; dimension?: string; defaultValue?: string; isDerived?: boolean; redefinesId?: string; subsetsId?: string; inheritedFromId?: string; }
-export interface PortDefinition { id: string; name: string; kind: 'full' | 'proxy'; typeId: string; direction: 'in' | 'out' | 'inout'; isConjugated: boolean; multiplicity: Multiplicity; inheritedFromId?: string; }
+export interface PortDefinition { id: string; name: string; kind: 'standard' | 'proxy' | 'full' | 'flow'; typeId: string; direction: 'in' | 'out' | 'inout'; isConjugated: boolean; multiplicity: Multiplicity; inheritedFromId?: string; }
 export interface BlockDefinition extends NamedElement { kind: 'block'; isAbstract: boolean; isLeaf: boolean; supertypeIds?: string[]; properties: PropertyDefinition[]; ports: PortDefinition[]; operations: string[]; constraints: string[]; }
 export type SysmlDefinition = BlockDefinition | ValueTypeDefinition | InterfaceDefinition;
 
-export interface PartUsage { id: string; kind: 'part'; name: string; ownerId: string; typeId: string; aggregation: 'composite' | 'shared' | 'reference'; multiplicity: Multiplicity; }
+export interface PartUsage { id: string; kind: 'part'; name: string; ownerId: string; typeId: string; aggregation: 'composite' | 'shared' | 'reference'; multiplicity: Multiplicity; propertyId?: string; }
 export interface PortUsage { id: string; kind: 'port'; name: string; ownerId: string; definitionId: string; }
 export type SysmlUsage = PartUsage | PortUsage;
 export interface ConnectorUsage { id: string; kind: 'assembly' | 'delegation' | 'binding'; ownerId: string; sourcePortId: string; targetPortId: string; itemFlowId?: string; sourceParameterId?: string; targetParameterId?: string; itemProperty?: string; itemMultiplicity?: Multiplicity; itemUnit?: string; }
@@ -32,8 +40,55 @@ export type RequirementRelationshipKind =
   | 'trace'
   | 'copy';
 
+export interface ActorDefinition extends NamedElement {
+  kind: 'actor';
+  isExternal: boolean;
+  generalizationIds: string[];
+}
+
+export interface SubjectDefinition extends NamedElement {
+  kind: 'subject';
+  realizedByBlockId?: string;
+  representedBlockId?: string;
+  classifierId?: string;
+}
+
+export interface UseCaseDefinition extends NamedElement {
+  kind: 'useCase';
+  subjectId?: string;
+  description?: string;
+  extensionPointIds: string[];
+  behaviorArtifactIds: string[];
+}
+
+export interface ExtensionPoint extends NamedElement {
+  kind: 'extensionPoint';
+  useCaseId: string;
+  location?: string;
+}
+
+export type UseCaseRelationshipKind =
+  | 'useCaseAssociation'
+  | 'include'
+  | 'extend'
+  | 'useCaseGeneralization'
+  | 'useCaseRefine'
+  | 'useCaseSatisfy'
+  | 'useCaseTrace';
+
+export interface DiagramReference {
+  id: string;
+  diagramId: string;
+  diagramKind: 'useCase' | 'activity' | 'sequence' | 'stateMachine' | 'bdd' | 'ibd' | 'requirements' | 'rtm';
+  role: 'elaborates' | 'realizes' | 'traces' | 'verifies';
+  sourceElementId?: string;
+  targetElementId?: string;
+}
+
 export interface SysmlRelationship {
   id: string;
+  /** Human-readable relationship label/signature shown on diagrams. */
+  name?: string;
   kind:
     | 'association'
     | 'sharedAggregation'
@@ -43,7 +98,8 @@ export interface SysmlRelationship {
     | 'allocation'
     | 'binding'
     | 'itemFlow'
-    | RequirementRelationshipKind;
+    | RequirementRelationshipKind
+    | UseCaseRelationshipKind;
   sourceId: string;
   targetId: string;
   sourceMultiplicity?: Multiplicity;
@@ -56,12 +112,15 @@ export interface SysmlRelationship {
   targetAggregation?: 'none' | 'shared' | 'composite';
   suspect?: boolean;
   lastValidatedRevision?: number;
+  extensionPointId?: string;
 }
 
 export interface SysmlRepository {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   profileId: 'OMG-SysML-1.6-ADIA';
   revision: number;
+  packages: Record<string, PackageDefinition>;
+  diagrams: Record<string, ModelDiagramDefinition>;
   definitions: Record<string, SysmlDefinition>;
   usages: Record<string, SysmlUsage>;
   connectors: Record<string, ConnectorUsage>;
@@ -72,10 +131,38 @@ export interface SysmlRepository {
   baselines: Record<string, ModelBaseline>;
   artifacts: Record<string, TraceArtifact>;
   auditTrail: ModelChangeRecord[];
+  actors: Record<string, ActorDefinition>;
+  subjects: Record<string, SubjectDefinition>;
+  useCases: Record<string, UseCaseDefinition>;
+  extensionPoints: Record<string, ExtensionPoint>;
+  diagramReferences: Record<string, DiagramReference>;
 }
 
 export function createEmptyRepository(): SysmlRepository {
-  return { schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0, definitions: {}, usages: {}, connectors: {}, relationships: {}, requirements: {}, verificationCases: {}, evidence: {}, baselines: {}, artifacts: {}, auditTrail: [] };
+  return {
+    schemaVersion: 3,
+    profileId: 'OMG-SysML-1.6-ADIA',
+    revision: 0,
+    packages: {
+      model: { id: 'model', kind: 'package', name: 'Model', namespace: [], ownerId: '' },
+    },
+    diagrams: {},
+    definitions: {},
+    usages: {},
+    connectors: {},
+    relationships: {},
+    requirements: {},
+    verificationCases: {},
+    evidence: {},
+    baselines: {},
+    artifacts: {},
+    auditTrail: [],
+    actors: {},
+    subjects: {},
+    useCases: {},
+    extensionPoints: {},
+    diagramReferences: {},
+  };
 }
 
 export function qualifiedName(namespace: readonly string[], name: string): string {
@@ -95,6 +182,8 @@ export function parseMultiplicity(input: string): Multiplicity {
 }
 
 export type SysmlEntityCollection =
+  | 'packages'
+  | 'diagrams'
   | 'definitions'
   | 'usages'
   | 'connectors'
@@ -103,9 +192,16 @@ export type SysmlEntityCollection =
   | 'verificationCases'
   | 'evidence'
   | 'baselines'
-  | 'artifacts';
+  | 'artifacts'
+  | 'actors'
+  | 'subjects'
+  | 'useCases'
+  | 'extensionPoints'
+  | 'diagramReferences';
 
 export type SysmlEntity =
+  | PackageDefinition
+  | ModelDiagramDefinition
   | SysmlDefinition
   | SysmlUsage
   | ConnectorUsage
@@ -114,7 +210,12 @@ export type SysmlEntity =
   | VerificationCase
   | VerificationEvidence
   | ModelBaseline
-  | TraceArtifact;
+  | TraceArtifact
+  | ActorDefinition
+  | SubjectDefinition
+  | UseCaseDefinition
+  | ExtensionPoint
+  | DiagramReference;
 
 export interface ModelPersistenceMetadata {
   isChunked?: boolean;

@@ -1,0 +1,14 @@
+{
+  "baseline": "OMG SysML v1.6 plus UML foundation; Cameo behavior is UX reference",
+  "auditDate": "2026-09-24",
+  "testBaseline": {"command": "npm run test:sysml -- --reporter=dot", "filesPassed": 52, "testsPassed": 513},
+  "overallStatus": "PARTIAL",
+  "items": [
+    {"id":"ARC-002","area":"Architecture","feature":"single source of truth at UI boundary","status":"PARTIAL","priority":"P0","evidence":["src/App.tsx:6140-6202","src/types/sysml_types.ts:32-145"]},
+    {"id":"BDD-003","area":"BDD","feature":"semantic operations/receptions/constraints","status":"MISSING","priority":"P1","evidence":["src/engine/sysml/model.ts:19"]},
+    {"id":"IBD-003","area":"IBD","feature":"nested connector-end paths","status":"MISSING","priority":"P1","evidence":["src/engine/sysml/model.ts:25"]},
+    {"id":"FLOW-001","area":"Flows","feature":"independent ItemFlow and conveyed item","status":"PARTIAL","priority":"P1","evidence":["src/engine/sysml/model.ts:25","src/types/sysml_types.ts:108-116"]},
+    {"id":"PERSIST-001","area":"Persistence","feature":"checksums, migration, chunk transactions","status":"IMPLEMENTED","priority":"P2","evidence":["src/engine/sysml/persistence.ts:46-89","src/engine/sysml/persistence.ts:126-167"]}
+  ]
+}
+

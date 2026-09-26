@@ -1,0 +1,34 @@
+{
+  "formatVersion": "1.0.0",
+  "manifestHash": "9f65e743b568882e5174e5aac9cd60da0eaab66ad9088d215c6b06038764064f",
+  "updatedAt": 1789836066758,
+  "patterns": {
+    "pat_three_phase_inverter_bridge_61924689c8269959": {
+      "id": "pat_three_phase_inverter_bridge_61924689c8269959",
+      "name": "Three-Phase Inverter Bridge",
+      "version": 1,
+      "lifecycle": "verified",
+      "contentHash": "61924689c82699595eafcd99c6e8d3ef3fecf39bb7bdf4b3a6d10505e9c65b8b",
+      "qualityScore": 0.98,
+      "filePath": "patterns\\pat_three_phase_inverter_bridge_61924689c8269959.json"
+    },
+    "pat_closed_loop_pid_control_loop_c0f60b5fe3df56ec": {
+      "id": "pat_closed_loop_pid_control_loop_c0f60b5fe3df56ec",
+      "name": "Closed-Loop PID Control Loop",
+      "version": 1,
+      "lifecycle": "verified",
+      "contentHash": "c0f60b5fe3df56eca92011bc0cd66590dda743eb57c491b6ff55be15cb40a528",
+      "qualityScore": 0.95,
+      "filePath": "patterns\\pat_closed_loop_pid_control_loop_c0f60b5fe3df56ec.json"
+    },
+    "pat_signal_filtering_and_conditioning_28fadfb40cd91660": {
+      "id": "pat_signal_filtering_and_conditioning_28fadfb40cd91660",
+      "name": "Signal Filtering and Conditioning",
+      "version": 1,
+      "lifecycle": "verified",
+      "contentHash": "28fadfb40cd9166001c281ddcfa33cbedd4a2c3cb423613b7a1cd1b6a81ab73a",
+      "qualityScore": 0.96,
+      "filePath": "patterns\\pat_signal_filtering_and_conditioning_28fadfb40cd91660.json"
+    }
+  }
+}

@@ -3,6 +3,8 @@ import { PlanValidator } from '../planner/planValidator';
 import { CapabilityRegistry } from '../contracts/capabilityRegistry';
 import { ExecutionContext, ExecutionResult } from './types';
 import { ITransactionJournalStore } from './transactionJournalStore';
+import { EngineeringModelPlan } from '../contracts/engineeringModel';
+import { PlanPreflight } from '../planner/planPreflight';
 
 interface ActionRecord {
   actionId: string;
@@ -31,6 +33,318 @@ export class TransactionManager {
       }
       await this.journalStore.markStatus(tx.transactionId, projectId, tx.planId || '', 'ROLLED_BACK', 'Recovered at startup');
     }
+  }
+
+  public async executeEngineeringPlan(
+    plan: EngineeringModelPlan,
+    currentRevision: number,
+    options?: { allowedBridgePairs?: Array<{ fromDomain: any; toDomain: any }>; signal?: AbortSignal }
+  ): Promise<ExecutionResult> {
+    if (options?.signal?.aborted) {
+      return {
+        success: false,
+        status: 'ROLLED_BACK',
+        planId: plan.planId,
+        executedActionIds: [],
+        rolledBackActionIds: [],
+        newRevision: currentRevision,
+        error: 'Plan execution aborted before start'
+      };
+    }
+
+    const preflightRes = PlanPreflight.preflight(plan, {
+      currentRevision,
+      allowedBridgePairs: options?.allowedBridgePairs
+    });
+
+    if (!preflightRes.passed) {
+      return {
+        success: false,
+        status: 'REJECTED',
+        planId: plan.planId,
+        executedActionIds: [],
+        rolledBackActionIds: [],
+        newRevision: currentRevision,
+        error: preflightRes.diagnostics[0]?.message || 'Plan preflight validation failed'
+      };
+    }
+
+    const adapter = this.adapters.get(plan.targetDomain);
+    if (!adapter) {
+      return {
+        success: false,
+        status: 'REJECTED',
+        planId: plan.planId,
+        executedActionIds: [],
+        rolledBackActionIds: [],
+        newRevision: currentRevision,
+        error: `No adapter registered for target domain: ${plan.targetDomain}`
+      };
+    }
+
+    const transactionId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const context: ExecutionContext = {
+      projectId: plan.projectId,
+      workspaceRevision: currentRevision,
+      isDryRun: false
+    };
+
+    let initialSnapshot: any = null;
+    let beforeHash = '';
+    if (typeof adapter.createSnapshot === 'function') {
+      initialSnapshot = adapter.createSnapshot();
+    } else if (typeof adapter.inspect === 'function') {
+      initialSnapshot = await adapter.inspect();
+    } else if (typeof adapter.prepare === 'function') {
+      const prep = await adapter.prepare({ type: 'INIT' }, context);
+      initialSnapshot = prep?.snapshot;
+    }
+    if (typeof adapter.getStateHash === 'function') {
+      beforeHash = adapter.getStateHash();
+    } else if (initialSnapshot?.stateHash) {
+      beforeHash = initialSnapshot.stateHash;
+    }
+
+    await this.journalStore.append({
+      transactionId,
+      projectId: plan.projectId,
+      planId: plan.planId,
+      actionId: 'init',
+      scopedKey: `${plan.projectId}:plan:${plan.planId}:init`,
+      preparedSnapshot: initialSnapshot,
+      beforeStateHash: beforeHash,
+      result: null,
+      status: 'PREPARED',
+      timestamp: Date.now()
+    });
+
+    const executedActions: string[] = [];
+
+    try {
+      if (options?.signal?.aborted) {
+        throw new Error('Plan execution aborted by user or timeout');
+      }
+
+      if (typeof adapter.apply === 'function') {
+        const applyRes = await adapter.apply(plan, options?.signal);
+        if (!applyRes.success) {
+          throw new Error(applyRes.error || 'Adapter failed to apply engineering plan');
+        }
+        for (const block of plan.blocks) {
+          executedActions.push(`add_block_${block.id}`);
+        }
+        for (const conn of plan.connections) {
+          executedActions.push(`connect_${conn.id}`);
+        }
+      } else {
+        // 1. Add blocks and set parameters sequentially with abort checks
+        for (const block of plan.blocks) {
+          if (options?.signal?.aborted) {
+            throw new Error('Plan execution aborted by user or timeout');
+          }
+          const actionId = `add_block_${block.id}`;
+          if (typeof adapter.addBlock === 'function') {
+            const res = await adapter.addBlock(block);
+            if (res && res.success === false) {
+              throw new Error(res.error || `Failed to add block '${block.id}'`);
+            }
+            if (typeof adapter.verifyBlockExists === 'function') {
+              if (!adapter.verifyBlockExists(block.id, block.blockDefinitionId)) {
+                throw new Error(`Verification failed for block '${block.id}'`);
+              }
+            }
+          } else if (typeof adapter.execute === 'function') {
+            await adapter.execute({ type: 'XB_CREATE_BLOCK', payload: { blockId: block.id, blockType: block.blockDefinitionId } }, context);
+          }
+          executedActions.push(actionId);
+
+          for (const p of block.parameters) {
+            if (options?.signal?.aborted) {
+              throw new Error('Plan execution aborted by user or timeout');
+            }
+            if (typeof adapter.setParameter === 'function') {
+              const pRes = await adapter.setParameter(block.id, p.parameterName, p.value);
+              if (pRes && pRes.success === false) {
+                throw new Error(pRes.error || `Failed to set parameter '${p.parameterName}' on block '${block.id}'`);
+              }
+            }
+          }
+        }
+
+        // 2. Connect ports with abort checks
+        for (const conn of plan.connections) {
+          if (options?.signal?.aborted) {
+            throw new Error('Plan execution aborted by user or timeout');
+          }
+          const actionId = `connect_${conn.id}`;
+          if (typeof adapter.connectPorts === 'function') {
+            const res = await adapter.connectPorts(conn);
+            if (res && res.success === false) {
+              throw new Error(res.error || `Failed to connect '${conn.id}'`);
+            }
+            if (typeof adapter.verifyConnectionExists === 'function') {
+              if (!adapter.verifyConnectionExists(conn.id)) {
+                throw new Error(`Verification failed for connection '${conn.id}'`);
+              }
+            }
+          } else if (typeof adapter.execute === 'function') {
+            await adapter.execute({
+              type: 'XB_CONNECT_PORTS',
+              payload: {
+                connectionId: conn.id,
+                sourceBlockId: conn.fromBlockId,
+                sourcePortId: conn.fromPortId,
+                targetBlockId: conn.toBlockId,
+                targetPortId: conn.toPortId,
+                domainType: conn.domain
+              }
+            }, context);
+          }
+          executedActions.push(actionId);
+        }
+
+        if (options?.signal?.aborted) {
+          throw new Error('Plan execution aborted by user or timeout');
+        }
+
+        // 3. Save only after all mutations complete successfully
+        if (typeof adapter.save === 'function') {
+          await adapter.save();
+        }
+      }
+
+      await this.journalStore.append({
+        transactionId,
+        projectId: plan.projectId,
+        planId: plan.planId,
+        actionId: 'commit',
+        scopedKey: `${plan.projectId}:plan:${plan.planId}:commit`,
+        preparedSnapshot: initialSnapshot,
+        result: {
+          blockCount: plan.blocks.length,
+          connectionCount: plan.connections.length,
+          committedRevision: currentRevision + 1,
+          baseRevision: currentRevision
+        },
+        status: 'COMMITTED',
+        timestamp: Date.now()
+      });
+      await this.journalStore.markStatus(transactionId, plan.projectId, plan.planId, 'COMMITTED');
+
+      return {
+        success: true,
+        status: 'COMMITTED',
+        planId: plan.planId,
+        executedActionIds: executedActions,
+        rolledBackActionIds: [],
+        newRevision: currentRevision + 1
+      };
+    } catch (err: any) {
+      if (initialSnapshot) {
+        if (typeof adapter.restore === 'function') {
+          await adapter.restore(initialSnapshot);
+        } else if (typeof adapter.restoreSnapshot === 'function') {
+          await adapter.restoreSnapshot(initialSnapshot);
+        }
+        if (typeof adapter.save === 'function') {
+          await adapter.save();
+        }
+      }
+      await this.journalStore.markStatus(transactionId, plan.projectId, plan.planId, 'ROLLED_BACK', err.message);
+
+      return {
+        success: false,
+        status: 'ROLLED_BACK',
+        planId: plan.planId,
+        executedActionIds: executedActions,
+        rolledBackActionIds: executedActions,
+        newRevision: currentRevision,
+        error: err.message
+      };
+    }
+  }
+
+  public async undoTransaction(
+    transactionId: string,
+    projectId: string,
+    currentRevision?: number
+  ): Promise<ExecutionResult> {
+    const entries = await this.journalStore.getEntries(projectId);
+    const txRecords = entries.filter(r => r.transactionId === transactionId);
+    if (txRecords.length === 0) {
+      return {
+        success: false,
+        status: 'REJECTED',
+        planId: '',
+        executedActionIds: [],
+        rolledBackActionIds: [],
+        newRevision: currentRevision ?? 0,
+        error: `Transaction '${transactionId}' not found.`
+      };
+    }
+
+    const initRecord = txRecords.find(r => r.actionId === 'init' || r.preparedSnapshot);
+    const commitRecord = txRecords.find(r => r.status === 'COMMITTED');
+
+    if (!commitRecord) {
+      return {
+        success: false,
+        status: 'REJECTED',
+        planId: txRecords[0].planId || '',
+        executedActionIds: [],
+        rolledBackActionIds: [],
+        newRevision: currentRevision ?? 0,
+        error: `Transaction '${transactionId}' is not committed.`
+      };
+    }
+
+    // Protect against undoing when workspace revision has changed due to subsequent edits
+    if (currentRevision !== undefined) {
+      const targetCommitRevision = commitRecord.result?.committedRevision ?? (
+        initRecord?.preparedSnapshot?.revision !== undefined
+          ? initRecord.preparedSnapshot.revision + 1
+          : undefined
+      );
+      if (targetCommitRevision !== undefined && currentRevision !== targetCommitRevision) {
+        return {
+          success: false,
+          status: 'REJECTED',
+          planId: txRecords[0].planId || '',
+          executedActionIds: [],
+          rolledBackActionIds: [],
+          newRevision: currentRevision,
+          error: `Stale undo: project revision (${currentRevision}) does not match committed transaction revision (${targetCommitRevision}).`
+        };
+      }
+    }
+
+    if (initRecord?.preparedSnapshot) {
+      for (const adapter of this.adapters.values()) {
+        if (typeof adapter.restore === 'function') {
+          await adapter.restore(initRecord.preparedSnapshot);
+        } else if (typeof adapter.restoreSnapshot === 'function') {
+          await adapter.restoreSnapshot(initRecord.preparedSnapshot);
+        }
+        if (typeof adapter.save === 'function') {
+          await adapter.save();
+        }
+      }
+    }
+
+    await this.journalStore.markStatus(transactionId, projectId, txRecords[0].planId || '', 'ROLLED_BACK', 'Undone by user');
+
+    const restoredRevision = commitRecord.result?.baseRevision ?? (
+      initRecord?.preparedSnapshot?.revision ?? (currentRevision !== undefined ? currentRevision - 1 : 0)
+    );
+
+    return {
+      success: true,
+      status: 'ROLLED_BACK',
+      planId: txRecords[0].planId || '',
+      executedActionIds: [],
+      rolledBackActionIds: txRecords.map(r => r.actionId || '').filter(Boolean),
+      newRevision: restoredRevision
+    };
   }
 
   public async executePlan(rawPlan: any, currentRevision: number, existingEntityIds: Set<string>): Promise<ExecutionResult> {

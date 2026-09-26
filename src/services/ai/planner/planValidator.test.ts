@@ -80,3 +80,163 @@ describe('PlanValidator with Capability-Driven Entity Lifecycle Resolution', () 
     expect(res.diagnostics.some(d => d.code === 'UNRESOLVED_ENTITY_REFERENCE')).toBe(true);
   });
 });
+
+describe('PlanValidator.validateEngineeringModelPlan', () => {
+  const mockCatalog = {
+    findById(id: string) {
+      if (id === 'DC_VOLTAGE_SOURCE') {
+        return {
+          id: 'DC_VOLTAGE_SOURCE',
+          domain: 'xbridges',
+          ports: [{ id: 'positive_out', domain: 'xbridges' }, { id: 'negative_out', domain: 'xbridges' }],
+          parameters: {
+            voltage: { value: 100, unit: 'V' }
+          }
+        };
+      }
+      if (id === 'INVERTER_BRIDGE') {
+        return {
+          id: 'INVERTER_BRIDGE',
+          domain: 'xbridges',
+          ports: [
+            { id: 'dc_pos', domain: 'xbridges' },
+            { id: 'dc_neg', domain: 'xbridges' },
+            { id: 'phase_a', domain: 'xbridges' },
+            { id: 'phase_b', domain: 'xbridges' },
+            { id: 'phase_c', domain: 'xbridges' }
+          ],
+          parameters: {
+            frequency: { value: 50, unit: 'Hz' }
+          }
+        };
+      }
+      if (id === 'SYSML_BLOCK') {
+        return {
+          id: 'SYSML_BLOCK',
+          domain: 'sysml',
+          ports: [{ id: 'in', domain: 'sysml' }],
+          parameters: {}
+        };
+      }
+      return undefined;
+    }
+  };
+
+  const validPlan = {
+    schemaVersion: '1.0.0',
+    planId: 'plan_1',
+    projectId: 'proj_1',
+    baseRevision: 2,
+    targetDomain: 'xbridges',
+    designRationale: 'Test plan',
+    assumptions: ['Testing assumptions'],
+    blocks: [
+      {
+        id: 'b_source',
+        blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+        domain: 'xbridges',
+        name: 'DC Source',
+        parameters: [{ blockId: 'b_source', parameterName: 'voltage', value: 400, unit: 'V' }]
+      },
+      {
+        id: 'b_bridge',
+        blockDefinitionId: 'INVERTER_BRIDGE',
+        domain: 'xbridges',
+        name: 'Inverter Bridge',
+        parameters: [{ blockId: 'b_bridge', parameterName: 'frequency', value: 50, unit: 'Hz' }]
+      }
+    ],
+    connections: [
+      {
+        id: 'c1',
+        fromBlockId: 'b_source',
+        fromPortId: 'positive_out',
+        toBlockId: 'b_bridge',
+        toPortId: 'dc_pos',
+        domain: 'xbridges'
+      }
+    ],
+    validationCriteria: [
+      {
+        id: 'vc1',
+        description: 'Check voltage',
+        metric: 'voltage',
+        operator: '==',
+        targetValue: 400,
+        unit: 'V'
+      }
+    ]
+  };
+
+  it('validates a correct EngineeringModelPlan against catalog', () => {
+    const res = PlanValidator.validateEngineeringModelPlan(validPlan, mockCatalog as any);
+    expect(res.isValid).toBe(true);
+    expect(res.diagnostics).toHaveLength(0);
+  });
+
+  it('rejects unknown blockDefinitionId not present in catalog', () => {
+    const badPlan = {
+      ...validPlan,
+      blocks: [
+        {
+          id: 'b_unknown',
+          blockDefinitionId: 'NONEXISTENT_BLOCK_TYPE',
+          domain: 'xbridges',
+          name: 'Nonexistent',
+          parameters: []
+        }
+      ],
+      connections: []
+    };
+    const res = PlanValidator.validateEngineeringModelPlan(badPlan, mockCatalog as any);
+    expect(res.isValid).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'UNKNOWN_BLOCK_DEFINITION')).toBe(true);
+  });
+
+  it('rejects unknown port on connection', () => {
+    const badPlan = {
+      ...validPlan,
+      connections: [
+        {
+          id: 'c_bad_port',
+          fromBlockId: 'b_source',
+          fromPortId: 'nonexistent_port',
+          toBlockId: 'b_bridge',
+          toPortId: 'dc_pos',
+          domain: 'xbridges'
+        }
+      ]
+    };
+    const res = PlanValidator.validateEngineeringModelPlan(badPlan, mockCatalog as any);
+    expect(res.isValid).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'UNKNOWN_PORT')).toBe(true);
+  });
+
+  it('rejects invalid parameter name on block', () => {
+    const badPlan = {
+      ...validPlan,
+      blocks: [
+        {
+          id: 'b_source',
+          blockDefinitionId: 'DC_VOLTAGE_SOURCE',
+          domain: 'xbridges',
+          name: 'DC Source',
+          parameters: [{ blockId: 'b_source', parameterName: 'inventedParam', value: 99 }]
+        },
+        validPlan.blocks[1]
+      ]
+    };
+    const res = PlanValidator.validateEngineeringModelPlan(badPlan, mockCatalog as any);
+    expect(res.isValid).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'INVALID_PARAMETER_NAME')).toBe(true);
+  });
+
+  it('rejects base revision mismatch when expectedRevision is provided', () => {
+    const res = PlanValidator.validateEngineeringModelPlan(validPlan, mockCatalog as any, {
+      expectedRevision: 5
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'STALE_BASE_REVISION')).toBe(true);
+  });
+});
+

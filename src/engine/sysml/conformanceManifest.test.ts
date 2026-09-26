@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CONFORMANCE_MANIFEST,
+  evaluateManifestCompliance,
   generateConformanceMatrixMarkdown,
   verifyConformanceManifest,
   type ConformanceRow,
@@ -11,10 +12,10 @@ import {
 describe('SysML release conformance manifest', () => {
   const rootDir = resolve(__dirname, '../../..');
 
-  it('contains entries for all 30 SYSML conformance rows', () => {
-    expect(CONFORMANCE_MANIFEST.rows).toHaveLength(30);
+  it('contains entries for all 32 SYSML conformance rows', () => {
+    expect(CONFORMANCE_MANIFEST.rows).toHaveLength(32);
     const ids = CONFORMANCE_MANIFEST.rows.map(r => r.id);
-    for (let i = 1; i <= 30; i++) {
+    for (let i = 1; i <= 32; i++) {
       const expectedId = `SYSML-${String(i).padStart(3, '0')}`;
       expect(ids).toContain(expectedId);
     }
@@ -49,5 +50,13 @@ describe('SysML release conformance manifest', () => {
     expect(existsSync(matrixDocPath)).toBe(true);
     const fileContent = readFileSync(matrixDocPath, 'utf-8');
     expect(fileContent.replace(/\r\n/g, '\n').trim()).toBe(markdown.replace(/\r\n/g, '\n').trim());
+  });
+
+  it('evaluates four-level compliance across manifest rows with valid authority and evidence', () => {
+    const report = evaluateManifestCompliance(CONFORMANCE_MANIFEST);
+    expect(report.totalFeatures).toBe(32);
+    expect(report.compliantFeatures).toBeGreaterThanOrEqual(28);
+    expect(report.nonCompliantFeatures).toBe(1); // SYSML-029
+    expect(report.valid).toBe(true);
   });
 });

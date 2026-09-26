@@ -38,3 +38,19 @@ export const PlanEnvelopeSchema = z.object({
 
 export type PlanEnvelope = z.infer<typeof PlanEnvelopeSchema>;
 export type ActionEnvelope = z.infer<typeof ActionEnvelopeSchema>;
+
+export {
+  EngineeringModelPlanSchema,
+  LogicalBlockSchema,
+  LogicalConnectionSchema,
+  ParameterIntentSchema,
+  ValidationCriterionSchema,
+  type EngineeringModelPlan,
+  type LogicalBlock,
+  type LogicalConnection,
+  type ParameterIntent,
+  type ValidationCriterion,
+  type EngineeringDomain,
+  EngineeringDomainEnum
+} from '../contracts/engineeringModel';
+

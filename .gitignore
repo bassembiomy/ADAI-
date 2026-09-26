@@ -38,3 +38,7 @@ scratch-opm-probe/
 .codex-*
 test-results/
 playwright-report/
+.tmp-vitest-results.json
+npm-audit-*.json
+Z-CODE/
+data/

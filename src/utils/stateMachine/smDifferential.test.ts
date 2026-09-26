@@ -1006,6 +1006,7 @@ describe('TypeScript-versus-generated-C differential gate', () => {
       initialValue: '0',
       currentValue: 0,
       visibleInScope: true,
+      overflowPolicy: 'saturate',
     });
     model.states[0].during = 'total = sample;';
     model.transitions = [];
@@ -1017,7 +1018,7 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     };
     const expected = runInterpreterTrace(fixture);
 
-    expect(expected.at(-1)?.data.sample).toBe(2);
+    expect(expected.at(-1)?.data.sample).toBe(255);
     expect(
       compareSemanticTraces(expected, compileAndRunCTrace(fixture)),
     ).toBeNull();

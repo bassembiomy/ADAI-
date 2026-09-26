@@ -2208,7 +2208,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   );
 
   return (
-    <div className="h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
+    <div className="entropy-workspace ui-surface h-full w-full font-sans">
       <OpmDockShell
         docks={isRightFloating ? { ...docks, right: false } : docks}
         onDocksChange={(nextDocks) => {
@@ -2220,7 +2220,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         left={
           <div className="flex flex-col gap-2 p-2">
             {/* Tool Dock (moved verbatim into left dock slot; wrapper adapted from floating to docked) */}
-            <div className="bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
+            <div className="opm-panel ui-card bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
               <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
               <button
                 onClick={() => setActiveTool('select')}
