@@ -495,12 +495,11 @@ export function projectLegacyDiagram(
 
   // Project connectors
   for (const conn of Object.values(repository.connectors)) {
-    if (!isVisible(conn.id)) {
-      const sp = conn.sourcePortId.split('::')[0];
-      const tp = conn.targetPortId.split('::')[0];
-      if (!isVisible(sp) || !isVisible(tp)) continue;
-    }
     const parseEndpoint = (portUsageId: string) => {
+      const usage = repository.usages[portUsageId];
+      if (usage && usage.kind === 'port') {
+        return { partId: usage.ownerId, portId: usage.definitionId };
+      }
       if (portUsageId.includes('::')) {
         const [partId, portId] = portUsageId.split('::');
         return { partId, portId };
@@ -509,6 +508,10 @@ export function projectLegacyDiagram(
     };
     const src = parseEndpoint(conn.sourcePortId);
     const tgt = parseEndpoint(conn.targetPortId);
+
+    if (!isVisible(conn.id)) {
+      if (!isVisible(src.partId) || !isVisible(tgt.partId)) continue;
+    }
 
     connectors.push({
       id: conn.id,
@@ -1335,7 +1338,8 @@ export function executeSysmlCommand(
         redoStack: state.redoStack,
       };
     }
-    if (!['bdd', 'requirements', 'ibd', 'rtm'].includes(command.diagramId) && !state.repository.diagrams[command.diagramId]) {
+    const isBlockIbdContext = state.repository.definitions[command.diagramId]?.kind === 'block';
+    if (!['bdd', 'requirements', 'ibd', 'rtm'].includes(command.diagramId) && !state.repository.diagrams[command.diagramId] && !isBlockIbdContext) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
         repository: state.repository, store, patchHistory, view,
@@ -2120,8 +2124,13 @@ export function executeSysmlCommand(
         };
       }
       const usage = state.repository.usages[elementId];
-      if (isBlockIbdContext && (usage?.kind !== 'part' || usage.ownerId !== command.diagramId)) {
-        return reject('INVALID_DIAGRAM_ELEMENT', `Only PartProperties owned by Block '${command.diagramId}' can be presented on its IBD.`, elementId);
+      const connector = state.repository.connectors[elementId];
+      const isConnectorInContext = connector && connector.ownerId === command.diagramId;
+      const isPartInContext = usage?.kind === 'part' && usage.ownerId === command.diagramId;
+      const isPortInContext = usage?.kind === 'port' && (usage.ownerId === command.diagramId || state.repository.usages[usage.ownerId]?.ownerId === command.diagramId);
+
+      if (isBlockIbdContext && !isPartInContext && !isConnectorInContext && !isPortInContext) {
+        return reject('INVALID_DIAGRAM_ELEMENT', `Only PartProperties and Connectors owned by Block '${command.diagramId}' can be presented on its IBD.`, elementId);
       }
       if ((diagramKind === 'bdd' || diagramKind === 'requirements' || diagramKind === 'rtm') && usage?.kind === 'part') {
         if (!requestedElementIds.includes(usage.ownerId)) requestedElementIds.push(usage.ownerId);

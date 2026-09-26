@@ -166,6 +166,8 @@ import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './service
 import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
+import { buildCreateIbdConnectorCommand } from './services/sysmlIbdConnectorCommands';
+import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -10411,44 +10413,24 @@ const ADIA = () => {
           return;
         }
 
-        // FR-IBD-003: Validate compatibility
-        const getBlockForEnd = (pId: string) => {
-          if (pId === currentLayerId) return blocks.find(b => b.id === pId);
-          const p = parts.find(part => part.id === pId);
-          return blocks.find(b => b.id === p?.typeId);
-        };
+        const plan = buildCreateIbdConnectorCommand(canonicalSysmlRepository, {
+          contextId: currentLayerId,
+          source: {
+            occurrenceId: connectorSource.partId === currentLayerId ? null : connectorSource.partId,
+            portDefinitionId: connectorSource.portId,
+          },
+          target: {
+            occurrenceId: partId === currentLayerId ? null : partId,
+            portDefinitionId: portId,
+          },
+        });
 
-        const sourceBlock = getBlockForEnd(connectorSource.partId);
-        const targetBlock = getBlockForEnd(partId);
-
-        const sourcePort = sourceBlock?.ports.find(p => p.id === connectorSource.portId);
-        const targetPort = targetBlock?.ports.find(p => p.id === portId);
-
-        if (sourcePort && targetPort) {
-          if (sourcePort.type !== targetPort.type && sourcePort.type !== 'any' && targetPort.type !== 'any') {
-            addError('error', `Incompatible ports: ${sourcePort.name} (${sourcePort.type}) vs ${targetPort.name} (${targetPort.type})`);
-            return;
-          }
-
-          const sourcePortQualified = connectorSource.partId === currentLayerId
-            ? connectorSource.portId
-            : `${connectorSource.partId}::${connectorSource.portId}`;
-          const targetPortQualified = partId === currentLayerId
-            ? portId
-            : `${partId}::${portId}`;
-          const newConnector: ConnectorUsage = {
-            id: uuidv4(),
-            ownerId: currentLayerId,
-            sourcePortId: sourcePortQualified,
-            targetPortId: targetPortQualified,
-            kind: connectorSource.partId === currentLayerId || partId === currentLayerId ? 'delegation' : 'assembly'
-          };
-          const result = handleExecuteSysmlCommand({
-            type: 'createElement',
-            element: newConnector,
-          });
+        if (!plan.ok || !plan.command) {
+          plan.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+        } else {
+          const result = handleExecuteSysmlCommand(plan.command);
           if (result.committed) {
-            addError('info', 'Created connection');
+            addError('info', `Created ${plan.connector?.kind || 'connector'}`);
           } else {
             result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
           }
@@ -10459,7 +10441,7 @@ const ADIA = () => {
         setConnectorSource({ partId, portId });
       }
     }
-  }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
+  }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId, canonicalSysmlRepository, handleExecuteSysmlCommand]);
 
   const deleteConnector = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
@@ -14984,17 +14966,21 @@ const ADIA = () => {
                 }
 
                 return (
-                  <g key={port.id} transform={`translate(${x}, ${y})`}>
-                    <rect
-                      x={-6} y={-6} width={12} height={12}
-                      fill={connectorSource?.portId === port.id && connectorSource?.partId === block.id ? '#f97316' : '#222'}
-                      stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
-                      strokeWidth={1}
-                      onMouseDown={(e) => handlePortMouseDown(e, block.id, port.id)}
-                      onClick={(e) => handlePortClick(e, block.id, port.id)}
-                      style={{ cursor: 'pointer' }}
+                  <g key={port.id}>
+                    <IbdConnectorEndpoint
+                      isBoundary={true}
+                      definitionId={port.id}
+                      ownerOccurrenceId={null}
+                      name={port.name}
+                      direction={port.direction}
+                      x={x}
+                      y={y}
+                      isSelected={connectorSource?.portId === port.id && connectorSource?.partId === block.id}
+                      isConnecting={isCreatingConnector}
+                      onClick={(_endpoint, e) => handlePortClick(e as any, block.id, port.id)}
+                      onMouseDown={(e) => handlePortMouseDown(e as any, block.id, port.id)}
                     />
-                    <text x={isLeft ? 10 : -10} y={4} textAnchor={isLeft ? "start" : "end"} fill="#aaa" fontSize={10}>{port.name}</text>
+                    <text x={x + (isLeft ? 10 : -10)} y={y + 4} textAnchor={isLeft ? "start" : "end"} fill="#aaa" fontSize={10} pointerEvents="none">{port.name}</text>
                   </g>
                 );
               })}
@@ -15445,33 +15431,20 @@ const ADIA = () => {
 
             return (
               <g key={port.id} transform={`translate(${xOffset}, ${yOffset})`}>
-                <rect
-                  x={-5} y={-5}
-                  width={10} height={10}
-                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : 'var(--sysml-port-fill)'}
-                  stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
-                  strokeWidth={1}
-                  onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
-                  onClick={(e) => handlePortClick(e, part.id, port.id)}
-                  style={{ cursor: 'pointer' }}
+                <IbdConnectorEndpoint
+                  isBoundary={false}
+                  definitionId={port.id}
+                  ownerOccurrenceId={part.id}
+                  name={port.name}
+                  direction={port.direction}
+                  x={0}
+                  y={0}
+                  isSelected={connectorSource?.portId === port.id && connectorSource?.partId === part.id}
+                  isConnecting={isCreatingConnector}
+                  onClick={(_endpoint, e) => handlePortClick(e as any, part.id, port.id)}
+                  onMouseDown={(e) => handlePortMouseDown(e as any, part.id, port.id)}
                 />
-                {port.kind === 'flow' && (
-                  <>
-                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold" pointerEvents="none">
-                      {port.direction === 'in' ? (isLeft ? '>' : '<') : port.direction === 'out' ? (isLeft ? '<' : '>') : '<>'}
-                    </text>
-                    <g transform="translate(5, 5)" style={{ pointerEvents: 'none' }}>
-                      {port.direction === 'in' ? (
-                        isLeft ? <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" /> : <path d="M 3 0 L -3 0 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
-                      ) : port.direction === 'out' ? (
-                        isLeft ? <path d="M 3 0 L -3 0 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" /> : <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
-                      ) : (
-                        <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
-                      )}
-                    </g>
-                  </>
-                )}
-                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="var(--sysml-port-label)" fontSize={9}>{port.name}</text>
+                <text x={isLeft ? -8 : 12} y={3} textAnchor={isLeft ? "end" : "start"} fill="var(--sysml-port-label)" fontSize={9} pointerEvents="none">{port.name}</text>
               </g>
             );
           })}

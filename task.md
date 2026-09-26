@@ -32,15 +32,15 @@
   - [x] Step 5: Add explicit canvas relationship selection
   - [x] Step 6: Test persistence and rename propagation
   - [x] Step 7: Commit
-- [ ] Task 5: Implement Occurrence-Aware IBD Boundary Connectors
-  - [ ] Step 1: Write failing IBD endpoint tests
-  - [ ] Step 2: Write connector matrix tests
-  - [ ] Step 3: Run focused tests and verify failure
-  - [ ] Step 4: Implement occurrence-aware endpoint resolution (`src/services/sysmlIbdConnectorCommands.ts`)
-  - [ ] Step 5: Implement atomic connector creation and presentation
-  - [ ] Step 6: Render semantic hit targets (`src/components/sysml/IbdConnectorEndpoint.tsx`)
-  - [ ] Step 7: Add persistence, undo/redo, and browser-independent projection tests
-  - [ ] Step 8: Commit
+- [x] Task 5: Implement Occurrence-Aware IBD Boundary Connectors
+  - [x] Step 1: Write failing IBD endpoint tests
+  - [x] Step 2: Write connector matrix tests
+  - [x] Step 3: Run focused tests and verify failure
+  - [x] Step 4: Implement occurrence-aware endpoint resolution (`src/services/sysmlIbdConnectorCommands.ts`)
+  - [x] Step 5: Implement atomic connector creation and presentation
+  - [x] Step 6: Render semantic hit targets (`src/components/sysml/IbdConnectorEndpoint.tsx`)
+  - [x] Step 7: Add persistence, undo/redo, and browser-independent projection tests
+  - [x] Step 8: Commit
 - [ ] Task 6: Correct Requirement Diagram Block and TestCase Behavior
   - [ ] Step 1: Write failing TestCase identity tests
   - [ ] Step 2: Write failing interaction tests

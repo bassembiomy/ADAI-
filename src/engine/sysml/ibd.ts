@@ -114,6 +114,7 @@ export function createIbdConnector(repo: SysmlRepository, input: CreateIbdConnec
     diagnostic.code === 'MISSING_CONNECTOR_ENDPOINT'
     || diagnostic.code === 'INVALID_CONNECTOR_CONTEXT'
     || diagnostic.code === 'INVALID_DELEGATION_ENDPOINTS'
+    || diagnostic.code === 'ENDPOINT_OUTSIDE_IBD_CONTEXT'
     || diagnostic.code === 'DUPLICATE_CONNECTOR'
     || diagnostic.code === 'SELF_CONNECTOR',
   );
@@ -130,15 +131,23 @@ function validateConnectorCandidate(repo: SysmlRepository, connector: ConnectorU
   if (!source || !target) return diagnostics;
   if (source.usage.id === target.usage.id) diagnostics.push(diag('SELF_CONNECTOR', connector.id, 'targetPortId', 'A connector cannot connect a port to itself'));
 
+  const sourceBoundary = source.usage.ownerId === connector.ownerId;
+  const targetBoundary = target.usage.ownerId === connector.ownerId;
+  const sourcePart = directPartInContext(repo, source.usage.ownerId, connector.ownerId);
+  const targetPart = directPartInContext(repo, target.usage.ownerId, connector.ownerId);
+
+  if (!sourceBoundary && !sourcePart) {
+    diagnostics.push(diag('ENDPOINT_OUTSIDE_IBD_CONTEXT', connector.id, 'sourcePortId', `Source port ${connector.sourcePortId} is outside the IBD context ${connector.ownerId}`));
+  }
+  if (!targetBoundary && !targetPart) {
+    diagnostics.push(diag('ENDPOINT_OUTSIDE_IBD_CONTEXT', connector.id, 'targetPortId', `Target port ${connector.targetPortId} is outside the IBD context ${connector.ownerId}`));
+  }
+
   if (connector.kind === 'assembly') {
-    const sourcePart = directPartInContext(repo, source.usage.ownerId, connector.ownerId);
-    const targetPart = directPartInContext(repo, target.usage.ownerId, connector.ownerId);
     if (!sourcePart || !targetPart) diagnostics.push(diag('INVALID_CONNECTOR_CONTEXT', connector.id, 'ownerId', 'Assembly endpoints must be roles in the connector owning context'));
   } else if (connector.kind === 'delegation') {
-    const sourceBoundary = source.usage.ownerId === connector.ownerId;
-    const targetBoundary = target.usage.ownerId === connector.ownerId;
-    const sourceInternal = Boolean(directPartInContext(repo, source.usage.ownerId, connector.ownerId));
-    const targetInternal = Boolean(directPartInContext(repo, target.usage.ownerId, connector.ownerId));
+    const sourceInternal = Boolean(sourcePart);
+    const targetInternal = Boolean(targetPart);
     if (!((sourceBoundary && targetInternal) || (targetBoundary && sourceInternal))) {
       diagnostics.push(diag('INVALID_DELEGATION_ENDPOINTS', connector.id, 'kind', 'Delegation requires one boundary port and one internal role port'));
     }
@@ -343,7 +352,7 @@ export function isIbdDiagramRelationship(repo: SysmlRepository, relationshipId: 
   return decision.diagram === 'ibd' && decision.allowed;
 }
 
-function findPortDefinition(repo: SysmlRepository, blockId: string, portId: string, visited = new Set<string>()): PortDefinition | undefined {
+export function findPortDefinition(repo: SysmlRepository, blockId: string, portId: string, visited = new Set<string>()): PortDefinition | undefined {
   if (visited.has(blockId)) return undefined;
   visited.add(blockId);
   const block = repo.definitions[blockId];

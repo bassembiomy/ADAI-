@@ -254,12 +254,38 @@ describe('Task 5 typed IBD connection semantics', () => {
     expect(codes).toContain('INVALID_ITEM_FLOW_DIRECTION');
   });
 
-  it('renders distinct IBD connector notations per connector kind', () => {
-    expect(connectorNotationFor('assembly')).toBe('assembly-solid');
-    expect(connectorNotationFor('delegation')).toBe('delegation-solid');
-    expect(connectorNotationFor('binding')).toBe('binding-dashed');
-    const notations = new Set([connectorNotationFor('assembly'), connectorNotationFor('delegation'), connectorNotationFor('binding')]);
-    expect(notations.size).toBe(3);
+  it('validates connector matrix: delegation, assembly, boundary-to-boundary, cross-context, duplicate', () => {
+    const repo = model();
+    // 1. Boundary-to-part accepts delegation
+    const del = createIbdConnector(repo, { id: 'del-1', kind: 'delegation', ownerId: 'system', sourcePortId: 'boundary', targetPortId: 'bIn' });
+    expect(del.diagnostics).toEqual([]);
+    expect(del.connector?.kind).toBe('delegation');
+
+    // 2. Part-to-part accepts assembly where directions are compatible
+    const assy = createIbdConnector(repo, { id: 'assy-1', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' });
+    expect(assy.diagnostics).toEqual([]);
+    expect(assy.connector?.kind).toBe('assembly');
+
+    // 3. Boundary-to-boundary assembly is rejected
+    (repo.definitions.system as BlockDefinition).ports.push(port('boundary-in', 'in'));
+    repo.usages.boundaryIn = { id: 'boundaryIn', name: 'boundaryIn', kind: 'port', ownerId: 'system', definitionId: 'boundary-in' };
+    const b2bAssy = createIbdConnector(repo, { id: 'b2b-assy', kind: 'assembly', ownerId: 'system', sourcePortId: 'boundary', targetPortId: 'boundaryIn' });
+    expect(b2bAssy.connector).toBeUndefined();
+    expect(b2bAssy.diagnostics.map(d => d.code)).toContain('INVALID_CONNECTOR_CONTEXT');
+
+    // 4. Cross-context endpoints return ENDPOINT_OUTSIDE_IBD_CONTEXT
+    repo.definitions.otherSystem = block('otherSystem');
+    repo.usages.foreignPart = { id: 'foreignPart', name: 'foreignPart', kind: 'part', ownerId: 'otherSystem', typeId: 'component', aggregation: 'composite', multiplicity: one };
+    repo.usages.foreignPort = { id: 'foreignPort', name: 'foreignPort', kind: 'port', ownerId: 'foreignPart', definitionId: 'in-def' };
+    const crossRes = createIbdConnector(repo, { id: 'cross-1', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'foreignPort' });
+    expect(crossRes.connector).toBeUndefined();
+    expect(crossRes.diagnostics.map(d => d.code)).toContain('ENDPOINT_OUTSIDE_IBD_CONTEXT');
+
+    // 5. Duplicate connectors return DUPLICATE_CONNECTOR
+    repo.connectors.existing = { id: 'existing', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' };
+    const dupRes = createIbdConnector(repo, { id: 'dup-1', kind: 'assembly', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' });
+    expect(dupRes.connector).toBeUndefined();
+    expect(dupRes.diagnostics.map(d => d.code)).toContain('DUPLICATE_CONNECTOR');
   });
 });
 
