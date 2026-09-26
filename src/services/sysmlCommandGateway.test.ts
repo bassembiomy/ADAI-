@@ -591,6 +591,134 @@ describe('sysmlCommandGateway', () => {
     expect(redoRes.view.blocks[0].name).toBe('UpdatedName');
   });
 
+  it('atomically rejects invalid createOwnedFeature without mutating repository or history', () => {
+    let state = createSysmlGatewayState();
+    const block: BlockDefinition = {
+      id: 'blk-vehicle',
+      name: 'Vehicle',
+      kind: 'block',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [{
+        id: 'port-existing',
+        name: 'p1',
+        kind: 'standard',
+        typeId: 'type-voltage',
+        direction: 'inout',
+        isConjugated: false,
+        multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+      }],
+      operations: [],
+      constraints: [],
+    };
+    const blockRes = executeSysmlCommand(state, { type: 'createElement', element: block });
+    state = { ...state, repository: blockRes.repository, history: blockRes.history };
+
+    const initialRevision = state.repository.revision;
+    const initialPortsLength = (state.repository.definitions['blk-vehicle'] as BlockDefinition).ports.length;
+    const initialPastLength = state.patchHistory?.past.length ?? 0;
+    const initialActionStackLength = state.actionStack?.length ?? 0;
+
+    // 1. Invalid ProxyPort type (pointing to normal block)
+    const badProxyRes = executeSysmlCommand(state, {
+      type: 'createOwnedFeature' as any,
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'proxyPort',
+        typeId: 'blk-vehicle', // Block is not an InterfaceBlock
+      },
+    } as any);
+    expect(badProxyRes.committed).toBe(false);
+    expect(badProxyRes.diagnostics.some(d => d.code === 'INVALID_PROXY_PORT_TYPE')).toBe(true);
+    expect(state.repository.revision).toBe(initialRevision);
+    expect((state.repository.definitions['blk-vehicle'] as BlockDefinition).ports.length).toBe(initialPortsLength);
+    expect(state.patchHistory?.past.length ?? 0).toBe(initialPastLength);
+    expect(state.actionStack?.length ?? 0).toBe(initialActionStackLength);
+
+    // 2. Duplicate feature ID
+    const duplicateRes = executeSysmlCommand(state, {
+      type: 'createOwnedFeature' as any,
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'umlPort',
+        featureId: 'port-existing',
+      },
+    } as any);
+    expect(duplicateRes.committed).toBe(false);
+    expect(duplicateRes.diagnostics.some(d => d.code === 'DUPLICATE_ELEMENT_ID')).toBe(true);
+
+    // 3. Missing diagram
+    const missingDiagRes = executeSysmlCommand(state, {
+      type: 'createOwnedFeature' as any,
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'umlPort',
+      },
+      diagramId: 'nonexistent-diagram-xyz',
+      presentation: { x: 10, y: 20 },
+    } as any);
+    expect(missingDiagRes.committed).toBe(false);
+    expect(missingDiagRes.diagnostics.some(d => d.code === 'DIAGRAM_NOT_FOUND')).toBe(true);
+  });
+
+  it('executes createOwnedFeature atomically with feature presentation and single undo/redo', () => {
+    let state = createSysmlGatewayState();
+    const block: BlockDefinition = {
+      id: 'blk-car',
+      name: 'Car',
+      kind: 'block',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    const bRes = executeSysmlCommand(state, { type: 'createElement', element: block, presentation: { x: 100, y: 100 } });
+    state = { ...state, repository: bRes.repository, history: bRes.history, coordinates: bRes.coordinates, diagramPresentations: bRes.diagramPresentations };
+
+    // Create Port on Car with presentation in bdd diagram
+    const createRes = executeSysmlCommand(state, {
+      type: 'createOwnedFeature' as any,
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-car',
+        portKind: 'umlPort',
+        name: 'fuelPort',
+        featureId: 'port-fuel-1',
+      },
+      diagramId: 'bdd',
+      presentation: { x: 15, y: 25 },
+    } as any);
+
+    expect(createRes.committed).toBe(true);
+    const updatedBlock = createRes.repository.definitions['blk-car'] as BlockDefinition;
+    expect(updatedBlock.ports).toHaveLength(1);
+    expect(updatedBlock.ports[0].id).toBe('port-fuel-1');
+    expect(updatedBlock.ports[0].name).toBe('fuelPort');
+    expect(createRes.actionStack).toHaveLength(1);
+    expect(createRes.diagramPresentations.bdd?.presentations['blk-car']?.featureLayouts?.['port-fuel-1'] ?? createRes.coordinates['port-fuel-1']).toEqual(expect.objectContaining({ x: 15, y: 25 }));
+
+    state = { ...state, ...createRes };
+
+    // Undo createOwnedFeature
+    const undoRes = executeSysmlCommand(state, { type: 'undo' });
+    expect(undoRes.committed).toBe(true);
+    expect((undoRes.repository.definitions['blk-car'] as BlockDefinition).ports).toHaveLength(0);
+
+    // Redo restores exact feature ID
+    const redoRes = executeSysmlCommand({ ...state, ...undoRes }, { type: 'redo' });
+    expect(redoRes.committed).toBe(true);
+    expect((redoRes.repository.definitions['blk-car'] as BlockDefinition).ports).toHaveLength(1);
+    expect((redoRes.repository.definitions['blk-car'] as BlockDefinition).ports[0].id).toBe('port-fuel-1');
+  });
+
   it('persists only canonical repository and presentation; ignores direct legacy-array tampering', () => {
     let state = createSysmlGatewayState();
     const req: RequirementDefinition = {
@@ -1534,6 +1662,111 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     // Repository definitions and presentations remain unchanged
     const currentVehicle = state.repository.definitions['blk-vehicle'] as BlockDefinition;
     expect(currentVehicle.ports).toHaveLength(0);
+  });
+
+  it('guarantees atomicity: invalid proxy port type leaves repo revision, block features, presentation map, patch history, and action stack unchanged', () => {
+    const base = createSysmlGatewayState();
+    const motor = makeBlock('blk-motor', 'Motor');
+    const vehicle = makeBlock('blk-vehicle', 'Vehicle');
+    let state = executeSysmlCommand(base, { type: 'createElement', element: motor });
+    state = executeSysmlCommand(state, { type: 'createAndPresent', element: vehicle, diagramId: 'bdd', presentation: { x: 50, y: 50 } });
+
+    const revBefore = state.repository.revision;
+    const pastLengthBefore = state.patchHistory?.past.length ?? 0;
+    const actionStackLength = state.actionStack?.length ?? 0;
+
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'proxyPort',
+        typeId: 'blk-motor',
+        featureId: 'bad-port-1',
+      },
+      diagramId: 'bdd',
+      presentation: { x: 60, y: 70 },
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'INVALID_PROXY_PORT_TYPE')).toBe(true);
+    expect(res.repository.revision).toBe(revBefore);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(0);
+    expect(res.coordinates['bad-port-1']).toBeUndefined();
+    expect(res.patchHistory?.past.length ?? 0).toBe(pastLengthBefore);
+    expect(res.actionStack?.length ?? 0).toBe(actionStackLength);
+  });
+
+  it('guarantees atomicity: missing diagram leaves repo revision, block features, presentation map, patch history, and action stack unchanged', () => {
+    const base = createSysmlGatewayState();
+    const vehicle = makeBlock('blk-vehicle', 'Vehicle');
+    const state = executeSysmlCommand(base, { type: 'createElement', element: vehicle });
+
+    const revBefore = state.repository.revision;
+    const pastLengthBefore = state.patchHistory?.past.length ?? 0;
+    const actionStackLength = state.actionStack?.length ?? 0;
+
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'umlPort',
+        featureId: 'port-missing-diagram',
+      },
+      diagramId: 'nonexistent-diagram-xyz',
+      presentation: { x: 60, y: 70 },
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'DIAGRAM_NOT_FOUND')).toBe(true);
+    expect(res.repository.revision).toBe(revBefore);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(0);
+    expect(res.coordinates['port-missing-diagram']).toBeUndefined();
+    expect(res.patchHistory?.past.length ?? 0).toBe(pastLengthBefore);
+    expect(res.actionStack?.length ?? 0).toBe(actionStackLength);
+  });
+
+  it('guarantees atomicity: duplicate feature ID leaves repo revision, block features, presentation map, patch history, and action stack unchanged', () => {
+    const base = createSysmlGatewayState();
+    const vehicle = makeBlock('blk-vehicle', 'Vehicle');
+    let state = executeSysmlCommand(base, { type: 'createAndPresent', element: vehicle, diagramId: 'bdd', presentation: { x: 50, y: 50 } });
+
+    // First port
+    state = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'umlPort',
+        featureId: 'existing-port-id',
+      },
+      diagramId: 'bdd',
+    });
+    expect(state.committed).toBe(true);
+
+    const revBefore = state.repository.revision;
+    const pastLengthBefore = state.patchHistory?.past.length ?? 0;
+    const actionStackLength = state.actionStack?.length ?? 0;
+
+    // Try creating another feature with the duplicate ID
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port',
+        ownerBlockId: 'blk-vehicle',
+        portKind: 'umlPort',
+        featureId: 'existing-port-id',
+      },
+      diagramId: 'bdd',
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_ELEMENT_ID')).toBe(true);
+    expect(res.repository.revision).toBe(revBefore);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(1);
+    expect(res.patchHistory?.past.length ?? 0).toBe(pastLengthBefore);
+    expect(res.actionStack?.length ?? 0).toBe(actionStackLength);
   });
 });
 

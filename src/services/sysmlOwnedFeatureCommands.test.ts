@@ -4,6 +4,7 @@ import {
   buildCreateOwnedPortCommand,
   buildCreateOwnedPropertyCommand,
   createOwnedPort,
+  createPortDefinitionFromIntent,
   type CreateOwnedPortIntent,
   type CreateOwnedPropertyIntent,
 } from './sysmlOwnedFeatureCommands';
@@ -64,7 +65,9 @@ describe('SysML Owned Feature Commands', () => {
       typeId: 'voltage',
     });
     expect(umlRes.ok).toBe(true);
-    const umlPort = (umlRes.command as any)?.payload?.port;
+    expect(umlRes.command?.type).toBe('createOwnedFeature');
+    expect(umlRes.command?.intent.featureKind).toBe('port');
+    const umlPort = createPortDefinitionFromIntent(repo.definitions.vehicle as BlockDefinition, umlRes.command!.intent as any);
     expect(umlPort.kind).toBe('standard');
     expect(umlPort.portKind).toBe('umlPort');
     expect(umlPort.appliedStereotypeIds ?? []).toHaveLength(0);
@@ -76,7 +79,7 @@ describe('SysML Owned Feature Commands', () => {
       typeId: 'canBus',
     });
     expect(proxyRes.ok).toBe(true);
-    const proxyPort = (proxyRes.command as any)?.payload?.port;
+    const proxyPort = createPortDefinitionFromIntent(repo.definitions.vehicle as BlockDefinition, proxyRes.command!.intent as any);
     expect(proxyPort.kind).toBe('proxy');
     expect(proxyPort.portKind).toBe('proxyPort');
 
@@ -87,7 +90,7 @@ describe('SysML Owned Feature Commands', () => {
       typeId: 'motor',
     });
     expect(fullRes.ok).toBe(true);
-    const fullPort = (fullRes.command as any)?.payload?.port;
+    const fullPort = createPortDefinitionFromIntent(repo.definitions.vehicle as BlockDefinition, fullRes.command!.intent as any);
     expect(fullPort.kind).toBe('full');
     expect(fullPort.portKind).toBe('fullPort');
 
@@ -98,7 +101,7 @@ describe('SysML Owned Feature Commands', () => {
       typeId: 'canBus',
     });
     expect(flowRes.ok).toBe(true);
-    const flowPort = (flowRes.command as any)?.payload?.port;
+    const flowPort = createPortDefinitionFromIntent(repo.definitions.vehicle as BlockDefinition, flowRes.command!.intent as any);
     expect(flowPort.kind).toBe('flow');
     expect(flowPort.portKind).toBe('flowPort');
   });
@@ -160,16 +163,16 @@ describe('SysML Owned Feature Commands', () => {
     expect(treeCmd.ok).toBe(true);
     expect(canvasCmd.ok).toBe(true);
 
-    const treePort = (treeCmd.command as any).payload.port;
-    const canvasPort = (canvasCmd.command as any).payload.port;
-
-    expect(treePort.kind).toBe(canvasPort.kind);
-    expect(treePort.portKind).toBe(canvasPort.portKind);
-    expect(treePort.typeId).toBe(canvasPort.typeId);
+    expect(treeCmd.command?.intent.featureKind).toBe('port');
+    expect(canvasCmd.command?.intent.featureKind).toBe('port');
+    if (treeCmd.command?.intent.featureKind === 'port' && canvasCmd.command?.intent.featureKind === 'port') {
+      expect(treeCmd.command.intent.portKind).toBe(canvasCmd.command.intent.portKind);
+      expect(treeCmd.command.intent.typeId).toBe(canvasCmd.command.intent.typeId);
+    }
 
     // Canvas intent includes presentation metadata
-    expect((canvasCmd.command as any).presentation).toEqual({ x: 100, y: 150 });
-    expect((treeCmd.command as any).presentation).toBeUndefined();
+    expect(canvasCmd.command?.presentation).toEqual({ x: 100, y: 150 });
+    expect(treeCmd.command?.presentation).toBeUndefined();
   });
 
   it('supports creating typed owned properties', () => {
@@ -181,9 +184,12 @@ describe('SysML Owned Feature Commands', () => {
       typeId: 'motor',
     });
     expect(partRes.ok).toBe(true);
-    const partProp = (partRes.command as any).payload.property;
-    expect(partProp.kind).toBe('part');
-    expect(partProp.typeId).toBe('motor');
+    expect(partRes.command?.type).toBe('createOwnedFeature');
+    expect(partRes.command?.intent.featureKind).toBe('property');
+    if (partRes.command?.intent.featureKind === 'property') {
+      expect(partRes.command.intent.propertyKind).toBe('part');
+      expect(partRes.command.intent.typeId).toBe('motor');
+    }
 
     const valueRes = buildCreateOwnedPropertyCommand(repo, {
       ownerBlockId: 'vehicle',
@@ -191,9 +197,12 @@ describe('SysML Owned Feature Commands', () => {
       typeId: 'voltage',
     });
     expect(valueRes.ok).toBe(true);
-    const valProp = (valueRes.command as any).payload.property;
-    expect(valProp.kind).toBe('value');
-    expect(valProp.typeId).toBe('voltage');
+    expect(valueRes.command?.type).toBe('createOwnedFeature');
+    expect(valueRes.command?.intent.featureKind).toBe('property');
+    if (valueRes.command?.intent.featureKind === 'property') {
+      expect(valueRes.command.intent.propertyKind).toBe('value');
+      expect(valueRes.command.intent.typeId).toBe('voltage');
+    }
   });
 
   it('rejects owned feature creation when owner block is not found', () => {
@@ -225,4 +234,23 @@ describe('SysML Owned Feature Commands', () => {
     });
     expect(badProxy.diagnostics[0]?.code).toBe('INVALID_PROXY_PORT_TYPE');
   });
+
+  it('returns a typed createOwnedFeature command without attaching undeclared fields to updateElement', () => {
+    const repo = createFixture();
+    const plan = buildCreateOwnedPortCommand(repo, {
+      ownerBlockId: 'vehicle',
+      portKind: 'umlPort',
+      typeId: 'voltage',
+      diagramId: 'bdd',
+      presentation: { x: 10, y: 20 },
+    });
+    expect(plan.ok).toBe(true);
+    expect(plan.command).toEqual({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({ featureKind: 'port', ownerBlockId: 'vehicle' }),
+      diagramId: 'bdd',
+      presentation: expect.any(Object),
+    });
+  });
 });
+

@@ -12,6 +12,7 @@ export interface DiagramElementPresentation {
   bounds: PresentationCoordinates;
   style?: Record<string, string | number>;
   portLayouts?: Record<string, { side: 'top' | 'right' | 'bottom' | 'left'; offset: number }>;
+  featureLayouts?: Record<string, PresentationCoordinates>;
 }
 
 /** Compatibility shape: elementIds is an index; presentations is keyed by semantic element ID. */

@@ -68,6 +68,10 @@ export { resolveType, type ResolvedTypeOutcome, type TypeResolutionOptions } fro
 import { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type TypeCandidate } from '../engine/sysml/commands/commandResult';
 export * from '../engine/sysml/commands/presentationCommands';
+import type { OwnedFeatureIntent } from './sysmlOwnedFeatureCommands';
+import { createPortDefinitionFromIntent, createPropertyDefinitionFromIntent } from './sysmlOwnedFeatureCommands';
+import { validateRepositoryPorts } from '../engine/sysml/validation/portRules';
+export type { OwnedFeatureIntent } from './sysmlOwnedFeatureCommands';
 export {
   dispatchSysmlCommand,
   createTransactionManager,
@@ -202,6 +206,7 @@ export interface PresentationSnapshot {
 export type SysmlMutationCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'createAndPresent'; element: SysmlElement; diagramId: string; presentation: PresentationCoordinates }
+  | { type: 'createOwnedFeature'; intent: OwnedFeatureIntent; diagramId?: string; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
@@ -1367,6 +1372,272 @@ export function executeSysmlCommand(
         },
       ],
     }, command.diagramId, endpointContext);
+  }
+
+  if (command.type === 'createOwnedFeature') {
+    const { intent } = command;
+    const owner = state.repository.definitions[intent.ownerBlockId] as BlockDefinition | undefined;
+    if (!owner || owner.kind !== 'block') {
+      return reject('ELEMENT_NOT_FOUND', `Owner block "${intent.ownerBlockId}" does not exist.`, intent.ownerBlockId);
+    }
+
+    if (command.diagramId) {
+      const isBlockIbdContext = state.repository.definitions[command.diagramId]?.kind === 'block';
+      const isKnownDiagram =
+        ['bdd', 'requirements', 'ibd', 'rtm', 'package'].includes(command.diagramId) ||
+        Boolean(state.repository.diagrams[command.diagramId]) ||
+        Boolean(diagramPresentations[command.diagramId]) ||
+        isBlockIbdContext;
+      if (!isKnownDiagram) {
+        return reject('DIAGRAM_NOT_FOUND', `Diagram '${command.diagramId}' does not exist.`, command.diagramId);
+      }
+    }
+
+    const featureId =
+      intent.featureId ||
+      `${intent.featureKind === 'port' ? 'port' : 'prop'}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const allPortIds = Object.values(state.repository.definitions).flatMap(d =>
+      d.kind === 'block' ? (d.ports || []).map(p => p.id) : [],
+    );
+    const allPropIds = Object.values(state.repository.definitions).flatMap(d =>
+      d.kind === 'block' ? (d.properties || []).map(p => p.id) : [],
+    );
+    if (
+      repositoryHasSemanticId(state.repository, featureId) ||
+      allPortIds.includes(featureId) ||
+      allPropIds.includes(featureId)
+    ) {
+      return reject('DUPLICATE_ELEMENT_ID', `Feature ID '${featureId}' is already used.`, featureId);
+    }
+
+    let nextCandidateBlock: BlockDefinition;
+
+    if (intent.featureKind === 'port') {
+      if (!intent.typeId && intent.portKind !== 'umlPort') {
+        return reject('TYPE_NOT_FOUND', `A compatible type is required for ${intent.portKind}.`, intent.ownerBlockId);
+      }
+      const typeDef = intent.typeId ? state.repository.definitions[intent.typeId] : undefined;
+      if (intent.typeId && !typeDef) {
+        return reject('TYPE_NOT_FOUND', `Type "${intent.typeId}" not found in repository.`, intent.ownerBlockId);
+      }
+      if (intent.portKind === 'proxyPort') {
+        const isInterfaceBlock =
+          typeDef &&
+          (typeDef.kind === 'interface' ||
+            (typeDef as any).metaclass === 'InterfaceBlock' ||
+            (typeDef as any).stereotype === 'interfaceBlock');
+        if (!isInterfaceBlock) {
+          return reject(
+            'INVALID_PROXY_PORT_TYPE',
+            `ProxyPort must be typed by an InterfaceBlock, but "${typeDef?.name ?? 'unknown'}" is a ${typeDef?.kind ?? 'unknown'}.`,
+            intent.ownerBlockId,
+          );
+        }
+      }
+      if (intent.portKind === 'fullPort') {
+        const isBlockOrValue =
+          typeDef &&
+          (typeDef.kind === 'block' ||
+            typeDef.kind === 'valueType' ||
+            (typeDef as any).metaclass === 'Block' ||
+            (typeDef as any).metaclass === 'ValueType');
+        if (!isBlockOrValue) {
+          return reject('INVALID_FULL_PORT_TYPE', `FullPort must be typed by a Block or ValueType.`, intent.ownerBlockId);
+        }
+      }
+
+      const port = createPortDefinitionFromIntent(owner, { ...intent, featureId });
+      nextCandidateBlock = {
+        ...owner,
+        ports: [...(owner.ports ?? []), port],
+      };
+    } else {
+      if (!intent.typeId) {
+        return reject(
+          'TYPE_NOT_FOUND',
+          `A compatible type is required for ${intent.propertyKind} property.`,
+          intent.ownerBlockId,
+        );
+      }
+      const typeDef = state.repository.definitions[intent.typeId];
+      if (!typeDef) {
+        return reject('TYPE_NOT_FOUND', `Type "${intent.typeId}" not found in repository.`, intent.ownerBlockId);
+      }
+      if ((intent.propertyKind === 'part' || intent.propertyKind === 'reference') && typeDef.kind !== 'block') {
+        return reject(
+          'INVALID_PROPERTY_TYPE',
+          `${intent.propertyKind} property must be typed by a Block, but "${typeDef.name}" is a ${typeDef.kind}.`,
+          intent.ownerBlockId,
+        );
+      }
+      if (intent.propertyKind === 'value' && typeDef.kind !== 'valueType') {
+        return reject(
+          'INVALID_PROPERTY_TYPE',
+          `Value property must be typed by a ValueType, but "${typeDef.name}" is a ${typeDef.kind}.`,
+          intent.ownerBlockId,
+        );
+      }
+
+      const property = createPropertyDefinitionFromIntent(owner, { ...intent, featureId });
+      nextCandidateBlock = {
+        ...owner,
+        properties: [...(owner.properties ?? []), property],
+      };
+    }
+
+    const stagedRepo: SysmlRepository = {
+      ...state.repository,
+      definitions: {
+        ...state.repository.definitions,
+        [owner.id]: nextCandidateBlock,
+      },
+    };
+    const stagedPortDiagnostics = validateRepositoryPorts(stagedRepo);
+    const stagedPortErrors = stagedPortDiagnostics.filter(d => d.severity === 'error');
+    if (stagedPortErrors.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: stagedPortErrors,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    upsertEntity(store, 'definitions', nextCandidateBlock);
+
+    const nextCoordinates = { ...coordinates };
+    let nextDiagramPresentations = { ...diagramPresentations };
+
+    if (command.presentation) {
+      nextCoordinates[featureId] = { ...command.presentation };
+      store.coordinates.set(featureId, { ...command.presentation });
+      if (command.diagramId) {
+        const diagPres = nextDiagramPresentations[command.diagramId] ?? {
+          elementIds: [owner.id],
+          presentations: {},
+        };
+        const ownerPres = diagPres.presentations[owner.id] ?? {
+          id: stableDiagramPresentationId(command.diagramId, owner.id),
+          diagramId: command.diagramId,
+          semanticElementId: owner.id,
+          bounds: { ...(nextCoordinates[owner.id] ?? {}) },
+        };
+        const updatedOwnerPres = {
+          ...ownerPres,
+          featureLayouts: {
+            ...(ownerPres.featureLayouts ?? {}),
+            [featureId]: { ...command.presentation },
+          },
+        };
+        nextDiagramPresentations = {
+          ...nextDiagramPresentations,
+          [command.diagramId]: {
+            ...diagPres,
+            presentations: {
+              ...diagPres.presentations,
+              [owner.id]: updatedOwnerPres,
+            },
+          },
+        };
+        store.diagramPresentations.set(command.diagramId, nextDiagramPresentations[command.diagramId]);
+      }
+    }
+
+    const nextRepo: SysmlRepository = {
+      ...stagedRepo,
+      revision: state.repository.revision + 1,
+      auditTrail: [
+        ...state.repository.auditTrail,
+        {
+          id: `change-${state.repository.revision + 1}-${featureId}`,
+          revision: state.repository.revision + 1,
+          timestamp: new Date().toISOString(),
+          command: 'createOwnedFeature',
+          elementIds: [owner.id, featureId],
+        },
+      ],
+    };
+
+    const forwardOps: import('../engine/sysml/patches').PatchOperation[] = [
+      { op: 'replace', collection: 'definitions', id: owner.id, oldValue: owner, value: nextCandidateBlock },
+    ];
+    const inverseOps: import('../engine/sysml/patches').PatchOperation[] = [
+      { op: 'replace', collection: 'definitions', id: owner.id, oldValue: nextCandidateBlock, value: owner },
+    ];
+    if (command.presentation) {
+      forwardOps.push({ op: 'add', collection: 'coordinates', id: featureId, value: command.presentation });
+      inverseOps.push({ op: 'remove', collection: 'coordinates', id: featureId, oldValue: command.presentation });
+      if (command.diagramId) {
+        const prevDiag = diagramPresentations[command.diagramId];
+        const nextDiag = nextDiagramPresentations[command.diagramId];
+        if (prevDiag) {
+          forwardOps.push({
+            op: 'replace',
+            collection: 'diagramPresentations',
+            id: command.diagramId,
+            oldValue: prevDiag,
+            value: nextDiag,
+          });
+          inverseOps.push({
+            op: 'replace',
+            collection: 'diagramPresentations',
+            id: command.diagramId,
+            oldValue: nextDiag,
+            value: prevDiag,
+          });
+        } else {
+          forwardOps.push({ op: 'add', collection: 'diagramPresentations', id: command.diagramId, value: nextDiag });
+          inverseOps.push({
+            op: 'remove',
+            collection: 'diagramPresentations',
+            id: command.diagramId,
+            oldValue: nextDiag,
+          });
+        }
+      }
+    }
+
+    const patch = createSysmlPatch({
+      revision: nextRepo.revision,
+      coalesceKey: (command as any).coalesceKey,
+      forward: forwardOps,
+      inverse: inverseOps,
+      description: `createOwnedFeature (${intent.featureKind} ${featureId})`,
+    });
+    pushPatch(patchHistory, patch, store);
+
+    const nextHistory: MutationHistory = {
+      past: [],
+      present: nextRepo,
+      future: [],
+    };
+    const validation = validateSysmlRepository(nextRepo);
+    const view = getView(nextRepo, nextCoordinates, nextDiagramPresentations, command.diagramId);
+
+    return {
+      repository: nextRepo,
+      store,
+      patchHistory,
+      view,
+      diagnostics: validation.diagnostics,
+      committed: true,
+      history: nextHistory,
+      coordinates: nextCoordinates,
+      diagramPresentations: nextDiagramPresentations,
+      presentationHistory: state.presentationHistory,
+      actionStack: [...(state.actionStack ?? []), 'semantic'],
+      redoStack: [],
+    };
   }
 
   if (command.type === 'createElement') {

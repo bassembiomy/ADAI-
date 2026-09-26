@@ -23,6 +23,9 @@ export interface CreateOwnedPortIntent {
   name?: string;
   diagramId?: string;
   presentation?: PresentationCoordinates;
+  featureId?: string;
+  ownerPortId?: string;
+  nestedPortPathIds?: string[];
 }
 
 export interface CreateOwnedPropertyIntent {
@@ -32,6 +35,86 @@ export interface CreateOwnedPropertyIntent {
   name?: string;
   diagramId?: string;
   presentation?: PresentationCoordinates;
+  featureId?: string;
+}
+
+export type OwnedFeatureIntent =
+  | {
+      featureKind: 'port';
+      ownerBlockId: string;
+      portKind: CanonicalPortKind;
+      typeId?: string;
+      name?: string;
+      featureId?: string;
+      ownerPortId?: string;
+      nestedPortPathIds?: string[];
+    }
+  | {
+      featureKind: 'property';
+      ownerBlockId: string;
+      propertyKind: 'part' | 'reference' | 'value' | 'flow';
+      typeId: string;
+      name?: string;
+      featureId?: string;
+    };
+
+export interface CreateOwnedFeatureCommand {
+  type: 'createOwnedFeature';
+  intent: OwnedFeatureIntent;
+  diagramId?: string;
+  presentation?: PresentationCoordinates;
+}
+
+export const PORT_KIND_MAP: Record<CanonicalPortKind, PortDefinition['kind']> = {
+  umlPort: 'standard',
+  proxyPort: 'proxy',
+  fullPort: 'full',
+  flowPort: 'flow',
+};
+
+export const PORT_STEREOTYPES: Record<CanonicalPortKind, string[]> = {
+  umlPort: [],
+  proxyPort: ['ProxyPort'],
+  fullPort: ['FullPort'],
+  flowPort: ['FlowPort'],
+};
+
+export function createPortDefinitionFromIntent(
+  owner: BlockDefinition,
+  intent: Extract<OwnedFeatureIntent, { featureKind: 'port' }>,
+): PortDefinition {
+  const portId = intent.featureId || `port-${Math.random().toString(36).slice(2, 9)}`;
+  const portName = intent.name || `p${(owner.ports?.length ?? 0) + 1}`;
+
+  return {
+    id: portId,
+    name: portName,
+    kind: PORT_KIND_MAP[intent.portKind],
+    portKind: intent.portKind,
+    appliedStereotypeIds: PORT_STEREOTYPES[intent.portKind],
+    typeId: intent.typeId ?? '',
+    direction: 'inout',
+    isConjugated: false,
+    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    ...(intent.ownerPortId ? { ownerPortId: intent.ownerPortId } : {}),
+    ...(intent.nestedPortPathIds ? { nestedPortPathIds: intent.nestedPortPathIds } : {}),
+  } as PortDefinition;
+}
+
+export function createPropertyDefinitionFromIntent(
+  owner: BlockDefinition,
+  intent: Extract<OwnedFeatureIntent, { featureKind: 'property' }>,
+): PropertyDefinition {
+  const propId = intent.featureId || `prop-${Math.random().toString(36).slice(2, 9)}`;
+  const propName = intent.name || `prop${(owner.properties?.length ?? 0) + 1}`;
+
+  return {
+    id: propId,
+    name: propName,
+    kind: intent.propertyKind,
+    typeId: intent.typeId,
+    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+  };
 }
 
 export interface TypeCandidate {
@@ -52,7 +135,7 @@ export interface CommandBuildResult {
   diagnostics: Array<{ code: string; message: string; elementId?: string }>;
   candidates?: TypeCandidate[];
   action?: CreateNewTypeAction;
-  command?: unknown;
+  command?: CreateOwnedFeatureCommand;
 }
 
 export interface CreateOwnedPortResult {
@@ -164,47 +247,24 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
     }
   }
 
-  const portId = `port-${Math.random().toString(36).slice(2, 9)}`;
+  const portId = intent.featureId || `port-${Math.random().toString(36).slice(2, 9)}`;
   const portName = intent.name || `p${(owner.ports?.length ?? 0) + 1}`;
-  const kindMapping: Record<CanonicalPortKind, PortDefinition['kind']> = {
-    umlPort: 'standard',
-    proxyPort: 'proxy',
-    fullPort: 'full',
-    flowPort: 'flow',
-  };
-  const stereotypes: Record<CanonicalPortKind, string[]> = {
-    umlPort: [],
-    proxyPort: ['ProxyPort'],
-    fullPort: ['FullPort'],
-    flowPort: ['FlowPort'],
-  };
 
-  const port: PortDefinition = {
-    id: portId,
-    name: portName,
-    kind: kindMapping[intent.portKind],
-    portKind: intent.portKind,
-    appliedStereotypeIds: stereotypes[intent.portKind],
-    typeId: typeDef ? typeDef.id : (intent.typeId ?? ''),
-    direction: 'inout',
-    isConjugated: false,
-    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
-  };
-
-
-  const command: any = {
-    type: 'updateElement',
-    elementId: owner.id,
-    payload: { port },
-    patch: {
-      ports: [...(owner.ports ?? []), port],
+  const command: CreateOwnedFeatureCommand = {
+    type: 'createOwnedFeature',
+    intent: {
+      featureKind: 'port',
+      ownerBlockId: intent.ownerBlockId,
+      portKind: intent.portKind,
+      ...(intent.typeId ? { typeId: intent.typeId } : {}),
+      name: portName,
+      featureId: portId,
+      ...(intent.ownerPortId ? { ownerPortId: intent.ownerPortId } : {}),
+      ...(intent.nestedPortPathIds ? { nestedPortPathIds: intent.nestedPortPathIds } : {}),
     },
+    ...(intent.diagramId ? { diagramId: intent.diagramId } : {}),
+    ...(intent.presentation ? { presentation: intent.presentation } : {}),
   };
-
-  if (intent.diagramId && intent.presentation) {
-    command.diagramId = intent.diagramId;
-    command.presentation = intent.presentation;
-  }
 
   return {
     ok: true,
@@ -294,30 +354,22 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
     };
   }
 
-  const propId = `prop-${Math.random().toString(36).slice(2, 9)}`;
+  const propId = intent.featureId || `prop-${Math.random().toString(36).slice(2, 9)}`;
   const propName = intent.name || `prop${(owner.properties?.length ?? 0) + 1}`;
 
-  const property: PropertyDefinition = {
-    id: propId,
-    name: propName,
-    kind: intent.propertyKind,
-    typeId: typeDef.id,
-    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
-  };
-
-  const command: any = {
-    type: 'updateElement',
-    elementId: owner.id,
-    payload: { property },
-    patch: {
-      properties: [...(owner.properties ?? []), property],
+  const command: CreateOwnedFeatureCommand = {
+    type: 'createOwnedFeature',
+    intent: {
+      featureKind: 'property',
+      ownerBlockId: intent.ownerBlockId,
+      propertyKind: intent.propertyKind,
+      typeId: typeDef.id,
+      name: propName,
+      featureId: propId,
     },
+    ...(intent.diagramId ? { diagramId: intent.diagramId } : {}),
+    ...(intent.presentation ? { presentation: intent.presentation } : {}),
   };
-
-  if (intent.diagramId && intent.presentation) {
-    command.diagramId = intent.diagramId;
-    command.presentation = intent.presentation;
-  }
 
   return {
     ok: true,
@@ -328,13 +380,15 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
 
 export function createOwnedPort(repo: SysmlRepository, intent: CreateOwnedPortIntent): CreateOwnedPortResult {
   const buildResult = buildCreateOwnedPortCommand(repo, intent);
-  if (!buildResult.ok) {
+  if (!buildResult.ok || !buildResult.command) {
     return { diagnostics: buildResult.diagnostics };
   }
-  const port = (buildResult.command as any)?.payload?.port as PortDefinition;
-  if (!port) {
-    return { diagnostics: [{ code: 'PORT_CREATION_FAILED', message: 'Failed to create port definition.' }] };
+  const cmd = buildResult.command;
+  if (cmd.intent.featureKind !== 'port') {
+    return { diagnostics: [{ code: 'PORT_CREATION_FAILED', message: 'Command intent is not a port.' }] };
   }
+  const owner = repo.definitions[cmd.intent.ownerBlockId] as BlockDefinition;
+  const port = createPortDefinitionFromIntent(owner, cmd.intent);
 
   const portForValidation = {
     ...port,
