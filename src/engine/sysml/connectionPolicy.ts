@@ -4,7 +4,7 @@ import type { SysmlEntity, SysmlUsage } from './model';
 export type SysmlEndpointFamily =
   | 'block' | 'interfaceBlock' | 'interface' | 'valueType' | 'enumeration'
   | 'requirement' | 'verificationCase' | 'part' | 'port' | 'valueParameter'
-  | 'actor' | 'useCase' | 'subject' | 'state' | 'unknown';
+  | 'actor' | 'useCase' | 'subject' | 'state' | 'property' | 'unknown';
 
 export interface ConnectionEndpoint {
   id: string;
@@ -33,6 +33,7 @@ export interface ConnectionPolicyInput {
 
 const BLOCK_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock']);
 const CLASSIFIER_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration']);
+const ASSOCIATION_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration', 'property']);
 const REQUIREMENT_KINDS = new Set(['requirementContainment', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace']);
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
@@ -72,7 +73,7 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
 
   if (kind === 'association') {
     if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Association requires declared classifier endpoint families.', 'Declare a supported stereotype family before using an association.');
-    if (!CLASSIFIER_FAMILY.has(source.family) || !CLASSIFIER_FAMILY.has(target.family)) return reject(normalized, 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS', 'Association requires compatible classifier endpoints.', 'Choose two Block, Interface, ValueType, or Enumeration classifiers.');
+    if (!ASSOCIATION_FAMILY.has(source.family) || !ASSOCIATION_FAMILY.has(target.family)) return reject(normalized, 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS', 'Association requires compatible classifier endpoints.', 'Choose two Block, Interface, ValueType, or Enumeration classifiers.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'composition' || kind === 'sharedAggregation') {
@@ -185,6 +186,7 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
     case 'usecase': case 'use_case': return 'useCase';
     case 'subject': return 'subject';
     case 'state': return 'state';
+    case 'property': case 'partproperty': case 'referenceproperty': case 'valueproperty': case 'reference': case 'value': return 'property';
     default: return 'unknown';
   }
 }

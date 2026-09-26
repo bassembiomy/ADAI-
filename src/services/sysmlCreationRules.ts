@@ -132,6 +132,12 @@ function legacyConnectionEndpoint(
 ): ConnectionEndpoint | undefined {
   const endpoint = blocks.find(item => item.id === id) ?? parts.find(item => item.id === id);
   if (endpoint) return classifyLegacyEndpoint(endpoint);
+  for (const b of blocks) {
+    const prop = b.properties?.find(p => p.id === id);
+    if (prop) return { id: prop.id, name: prop.name, family: 'property', ownerId: b.id };
+    const port = b.ports?.find(p => p.id === id);
+    if (port) return { id: port.id, name: port.name, family: 'port', ownerId: b.id };
+  }
   const state = states?.find(item => item.id === id);
   if (state) return { id: state.id, name: state.name, family: 'state' };
   return undefined;
@@ -202,11 +208,14 @@ function result(codes: string[]): CreationValidationResult {
 // ---------------------------------------------------------------------------
 
 function canonicalElementExists(repo: SysmlRepository, id: string): boolean {
-  return Boolean(
+  if (Boolean(
     repo.packages[id] ?? repo.diagrams[id] ??
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
     repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
     repo.actors[id] ?? repo.subjects[id] ?? repo.useCases[id] ?? repo.extensionPoints[id],
+  )) return true;
+  return Object.values(repo.definitions).some(
+    d => d.kind === 'block' && (d.properties?.some(p => p.id === id) || d.ports?.some(p => p.id === id))
   );
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, RelationshipData } from '../types/sysml_types';
-import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship } from './sysmlConnectionUi';
+import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './sysmlConnectionUi';
 
 const block = (id: string, stereotype = 'block'): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] });
 const relation = (type: RelationshipData['type'] = 'composition'): RelationshipData => ({ id: 'rel', sourceId: 'whole', targetId: 'part', type, label: '' });
@@ -88,5 +88,24 @@ describe('SysML connection UI admission', () => {
     };
     expect(getCanvasRelationshipKinds(state, 'state-active', 'req-1', 'requirements'))
       .toEqual(['satisfy', 'verify', 'refine', 'trace']);
+  });
+
+  it('resolves nested Block properties by semantic ID with family property', () => {
+    const blockWithProp: BlockData = {
+      ...block('b1'),
+      properties: [{ id: 'prop-123', name: 'sensor', type: 'SensorBlock', kind: 'part' }],
+    };
+    const state = { blocks: [blockWithProp, block('b2')], parts: [], relationships: [] };
+    const endpoint = resolveUiConnectionEndpoint(state, 'prop-123');
+    expect(endpoint.family).toBe('property');
+    expect(endpoint.id).toBe('prop-123');
+    expect(endpoint.name).toBe('sensor');
+    expect(endpoint.ownerId).toBe('b1');
+
+    const kinds = getCanvasRelationshipKinds(state, 'prop-123', 'b2', 'bdd');
+    expect(kinds).toContain('association');
+    expect(kinds).toContain('dependency');
+    expect(kinds).toContain('allocation');
+    expect(kinds).not.toContain('generalization');
   });
 });

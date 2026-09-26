@@ -6,6 +6,8 @@ import {
   type ConnectionEndpoint,
   type SysmlEndpointFamily,
 } from './connectionPolicy';
+import { createEmptyRepository, type BlockDefinition } from './model';
+import { loadRepository, serializeRepository } from './persistence';
 
 const endpoint = (family: SysmlEndpointFamily, id: string = family, name: string = family): ConnectionEndpoint => ({ id, name, family });
 
@@ -153,6 +155,96 @@ describe('central SysML connection policy', () => {
     it('allows refine from both model elements and requirements to requirement', () => {
       expect(evaluateSysmlConnection({ relationshipKind: 'refine', source: block, target: req1, diagram: 'requirements' }).allowed).toBe(true);
       expect(evaluateSysmlConnection({ relationshipKind: 'refine', source: req1, target: req2, diagram: 'requirements' }).allowed).toBe(true);
+    });
+  });
+
+  describe('property endpoint relationships', () => {
+    const propEndpoint = endpoint('property', 'prop-1', 'speed');
+    const blockEndpoint = endpoint('block', 'block-1', 'Vehicle');
+    const portEndpoint = endpoint('port', 'port-1', 'pIn');
+
+    it('classifies property endpoints with family property instead of unknown', () => {
+      expect(classifyCanonicalEndpoint({ id: 'p1', name: 'sensor', metaclass: 'PartProperty' }).family).toBe('property');
+      expect(classifyLegacyEndpoint({ id: 'p1', name: 'sensor', stereotype: 'property' }).family).toBe('property');
+    });
+
+    it('allows Association, Dependency, and Allocation between Property and Block', () => {
+      expect(evaluateSysmlConnection({ relationshipKind: 'association', source: propEndpoint, target: blockEndpoint, diagram: 'bdd' }).allowed).toBe(true);
+      expect(evaluateSysmlConnection({ relationshipKind: 'association', source: blockEndpoint, target: propEndpoint, diagram: 'bdd' }).allowed).toBe(true);
+      expect(evaluateSysmlConnection({ relationshipKind: 'dependency', source: propEndpoint, target: blockEndpoint, diagram: 'bdd' }).allowed).toBe(true);
+      expect(evaluateSysmlConnection({ relationshipKind: 'allocation', source: propEndpoint, target: blockEndpoint, diagram: 'bdd' }).allowed).toBe(true);
+      expect(evaluateSysmlConnection({ relationshipKind: 'association', source: propEndpoint, target: propEndpoint, diagram: 'bdd' }).allowed).toBe(false); // self-relationship
+    });
+
+    it('rejects Association between Property and Port with INCOMPATIBLE_RELATIONSHIP_ENDPOINTS', () => {
+      const res = evaluateSysmlConnection({ relationshipKind: 'association', source: propEndpoint, target: portEndpoint, diagram: 'bdd' });
+      expect(res.allowed).toBe(false);
+      expect(res.diagnostics[0].code).toBe('INCOMPATIBLE_RELATIONSHIP_ENDPOINTS');
+    });
+
+    it('rejects missing Property or Block IDs with MISSING_RELATIONSHIP_ENDPOINT', () => {
+      const res = evaluateSysmlConnection({ relationshipKind: 'association', source: endpoint('property', ''), target: blockEndpoint, diagram: 'bdd' });
+      expect(res.allowed).toBe(false);
+      expect(res.diagnostics[0].code).toBe('MISSING_RELATIONSHIP_ENDPOINT');
+    });
+
+    it('persists property relationships and propagates rename without endpoint mutation', () => {
+      const blockDef = (id: string, name: string): BlockDefinition => ({
+        id, name, namespace: [], kind: 'block', isAbstract: false, isLeaf: false,
+        ownerId: 'model',
+        properties: [], ports: [], operations: [], constraints: [],
+      });
+
+      const repo = createEmptyRepository();
+      repo.definitions.b1 = {
+        ...blockDef('b1', 'Controller'),
+        properties: [{
+          id: 'p1',
+          name: 'engineRef',
+          kind: 'reference',
+          typeId: 'b2',
+          multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+        }],
+      };
+      repo.definitions.b2 = blockDef('b2', 'Engine');
+      repo.relationships.r1 = {
+        id: 'r1',
+        kind: 'association',
+        sourceId: 'p1',
+        targetId: 'b2',
+        name: 'engineRef',
+      };
+
+      const serialized = serializeRepository(repo);
+      const loaded = loadRepository(serialized);
+      expect(loaded.valid).toBe(true);
+      expect(loaded.repository.relationships.r1).toBeDefined();
+      expect(loaded.repository.relationships.r1.sourceId).toBe('p1');
+      expect(loaded.repository.relationships.r1.targetId).toBe('b2');
+
+      // Rename Property and Block
+      const b1 = loaded.repository.definitions.b1 as BlockDefinition;
+      b1.properties[0].name = 'engineRefRenamed';
+      loaded.repository.definitions.b2.name = 'EngineV2';
+
+      // Verify canonical endpoint classification uses updated names while preserving IDs
+      const propEndpoint = classifyCanonicalEndpoint(b1.properties[0]);
+      const targetEndpoint = classifyCanonicalEndpoint(loaded.repository.definitions.b2);
+      expect(propEndpoint.name).toBe('engineRefRenamed');
+      expect(propEndpoint.id).toBe('p1');
+      expect(targetEndpoint.name).toBe('EngineV2');
+      expect(targetEndpoint.id).toBe('b2');
+
+      // Relationship remains valid and endpoints unchanged
+      expect(loaded.repository.relationships.r1.sourceId).toBe('p1');
+      expect(loaded.repository.relationships.r1.targetId).toBe('b2');
+      const evalResult = evaluateSysmlConnection({
+        relationshipKind: loaded.repository.relationships.r1.kind,
+        source: propEndpoint,
+        target: targetEndpoint,
+        diagram: 'bdd',
+      });
+      expect(evalResult.allowed).toBe(true);
     });
   });
 });

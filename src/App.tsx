@@ -6321,7 +6321,11 @@ const ADIA = () => {
 
   const activeDiagramElementIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const b of sysmlCanvasView.blocks) ids.add(b.id);
+    for (const b of sysmlCanvasView.blocks) {
+      ids.add(b.id);
+      for (const prop of b.properties ?? []) ids.add(prop.id);
+      for (const port of b.ports ?? []) ids.add(port.id);
+    }
     for (const p of sysmlCanvasView.parts) ids.add(p.id);
     for (const pkg of sysmlCanvasView.packages) ids.add(pkg.id);
     return ids;
@@ -9925,14 +9929,18 @@ const ADIA = () => {
       kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
       name: '',
     };
-    const result = handleExecuteSysmlCommand({ type: 'createElement', element: candidate });
+    const result = handleExecuteSysmlCommand(
+      activeSysmlDiagramId
+        ? { type: 'createAndPresent', diagramId: activeSysmlDiagramId, element: candidate, presentation: {} }
+        : { type: 'createElement', element: candidate }
+    );
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       return;
     }
     setSelectedIds([candidate.id]);
     addError('info', `Created ${type}`);
-  }, [handleExecuteSysmlCommand, addError]);
+  }, [handleExecuteSysmlCommand, addError, activeSysmlDiagramId]);
 
   type BddFeatureDrag =
     | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }
@@ -11175,9 +11183,15 @@ const ADIA = () => {
     if (isCreatingTransition) { // Reusing this flag for relationships
       if (transitionSourceId) {
         if (transitionSourceId !== blockId) {
-          const source = blocks.find(b => b.id === transitionSourceId) ?? states.find(s => s.id === transitionSourceId);
-          const target = blocks.find(b => b.id === blockId) ?? states.find(s => s.id === blockId);
+          const resolveEntity = (id: string) => {
+            const direct = blocks.find(b => b.id === id) ?? states.find(s => s.id === id) ?? parts.find(p => p.id === id);
+            if (direct) return direct;
+            return blocks.flatMap(b => b.properties ?? []).find(p => p.id === id);
+          };
+          const source = resolveEntity(transitionSourceId);
+          const target = resolveEntity(blockId);
           if (!source || !target) return;
+          const isPropertyEndpoint = ('typeId' in source && 'kind' in source) || ('typeId' in target && 'kind' in target);
           const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
           if (legalKinds.length === 0) {
             const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
@@ -11195,7 +11209,7 @@ const ADIA = () => {
                 },
               });
             }
-          } else if (diagramMode === 'requirements' || !legalKinds.includes('association')) {
+          } else if (diagramMode === 'requirements' || isPropertyEndpoint || !legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
           } else {
             createRelationship(transitionSourceId, blockId, 'association');
@@ -15088,13 +15102,54 @@ const ADIA = () => {
                       fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'property' && bddFeatureDrag.featureId === prop.id ? '#f97316' : '#aaa'}
                       fontSize={10}
                       fontFamily="monospace"
-                      style={{ cursor: diagramMode === 'bdd' ? 'grab' : 'default', userSelect: 'none' }}
-                      onMouseDown={(e) => startBddFeatureDrag(e, {
-                        kind: 'property', ownerId: block.id, featureId: prop.id, name: prop.name,
-                        typeId: prop.typeId,
-                        typeName: blocks.find(candidate => candidate.id === prop.typeId)?.name ?? prop.type,
-                        multiplicity: prop.multiplicity ?? '1',
-                      })}
+                      style={{ cursor: diagramMode === 'bdd' ? (isCreatingTransition ? 'crosshair' : 'grab') : 'default', userSelect: 'none' }}
+                      onMouseDown={(e) => {
+                        if (isCreatingTransition) {
+                          e.stopPropagation();
+                          if (transitionSourceId) {
+                            if (transitionSourceId !== prop.id) {
+                              const resolveEntity = (id: string) => {
+                                const direct = blocks.find(b => b.id === id) ?? states.find(s => s.id === id) ?? parts.find(p => p.id === id);
+                                if (direct) return direct;
+                                return blocks.flatMap(b => b.properties ?? []).find(p => p.id === id);
+                              };
+                              const source = resolveEntity(transitionSourceId);
+                              if (!source) return;
+                              const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, prop.id, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+                              if (legalKinds.length > 0) {
+                                setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: prop.id });
+                              } else {
+                                const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, prop.id, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+                                if (reversedKinds.length > 0) {
+                                  setRequirementConnectionPicker({ sourceId: prop.id, targetId: transitionSourceId, reversedKinds });
+                                } else {
+                                  showConnectionPolicyError({
+                                    relationshipKind: 'relationship',
+                                    source: classifyLegacyEndpoint(source),
+                                    target: classifyLegacyEndpoint(prop),
+                                    diagnostic: {
+                                      code: 'NO_LEGAL_RELATIONSHIP',
+                                      message: `No available relationship can connect ${source.name} to ${prop.name} on this diagram.`,
+                                      correctiveAction: 'Choose compatible endpoints or the appropriate diagram.',
+                                    },
+                                  });
+                                }
+                              }
+                              setIsCreatingTransition(false);
+                              setTransitionSourceId(null);
+                            }
+                          } else {
+                            setTransitionSourceId(prop.id);
+                          }
+                          return;
+                        }
+                        startBddFeatureDrag(e, {
+                          kind: 'property', ownerId: block.id, featureId: prop.id, name: prop.name,
+                          typeId: prop.typeId,
+                          typeName: blocks.find(candidate => candidate.id === prop.typeId)?.name ?? prop.type,
+                          multiplicity: prop.multiplicity ?? '1',
+                        });
+                      }}
                     >
                       {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
@@ -15209,8 +15264,13 @@ const ADIA = () => {
       }
       if (diagramMode === 'package' && !sysmlDiagramPresentations[activeSysmlDiagramId]?.elementIds.includes(rel.id)) return null;
 
-      const source = blocksById.get(rel.sourceId) ?? packagesById.get(rel.sourceId) ?? (partsById.get(rel.sourceId) as any);
-      const target = blocksById.get(rel.targetId) ?? packagesById.get(rel.targetId) ?? (partsById.get(rel.targetId) as any);
+      const resolveNode = (id: string) => {
+        const direct = blocksById.get(id) ?? packagesById.get(id) ?? (partsById.get(id) as any);
+        if (direct) return direct;
+        return sysmlCanvasView.blocks.find(b => b.properties?.some(p => p.id === id));
+      };
+      const source = resolveNode(rel.sourceId);
+      const target = resolveNode(rel.targetId);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
@@ -19346,11 +19406,11 @@ const ADIA = () => {
                 <p className="text-xs text-[#888] mt-1">
                   Connect{' '}
                   <span className="text-[#f97316] font-medium">
-                    {(blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name ?? states.find(s => s.id === requirementConnectionPicker.sourceId)?.name) || 'Source'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name ?? states.find(s => s.id === requirementConnectionPicker.sourceId)?.name ?? blocks.flatMap(b => b.properties ?? []).find(p => p.id === requirementConnectionPicker.sourceId)?.name) || 'Source'}
                   </span>{' '}
                   to{' '}
                   <span className="text-[#f97316] font-medium">
-                    {(blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name ?? states.find(s => s.id === requirementConnectionPicker.targetId)?.name) || 'Target'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name ?? states.find(s => s.id === requirementConnectionPicker.targetId)?.name ?? blocks.flatMap(b => b.properties ?? []).find(p => p.id === requirementConnectionPicker.targetId)?.name) || 'Target'}
                   </span>
                 </p>
               </div>

@@ -22,6 +22,12 @@ export function resolveUiConnectionEndpoint(
 ): ConnectionEndpoint {
   const block = model.blocks.find(item => item.id === id);
   if (block) return classifyLegacyEndpoint(block);
+  for (const b of model.blocks) {
+    const prop = b.properties?.find(p => p.id === id);
+    if (prop) {
+      return { id: prop.id, name: prop.name, family: 'property', ownerId: b.id };
+    }
+  }
   const part = model.parts.find(item => item.id === id);
   if (part) return classifyLegacyEndpoint({ ...part, stereotype: 'part' });
   const state = model.states?.find(item => item.id === id);

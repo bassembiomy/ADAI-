@@ -189,11 +189,14 @@ const RTM_KINDS = new Set(['deriveReqt', 'satisfy', 'verify', 'refine', 'trace',
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
 function elementExists(repo: SysmlRepository, id: string): boolean {
-  return Boolean(
+  if (Boolean(
     repo.packages[id] ?? repo.diagrams[id] ??
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
     repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
     repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id] ?? repo.diagramReferences?.[id],
+  )) return true;
+  return Object.values(repo.definitions).some(
+    d => d.kind === 'block' && (d.properties?.some(p => p.id === id) || d.ports?.some(p => p.id === id))
   );
 }
 
@@ -231,7 +234,30 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
 function canonicalConnectionEndpoint(repo: SysmlRepository, id: string) {
   const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id] ?? repo.artifacts[id] ??
     repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id];
-  return classifyCanonicalEndpoint(element ?? { id, name: id });
+  if (element) return classifyCanonicalEndpoint(element);
+  for (const def of Object.values(repo.definitions)) {
+    if (def.kind === 'block') {
+      const prop = def.properties?.find(p => p.id === id);
+      if (prop) {
+        return {
+          id: prop.id,
+          name: prop.name,
+          family: 'property' as const,
+          ownerId: def.id,
+        };
+      }
+      const port = def.ports?.find(p => p.id === id);
+      if (port) {
+        return {
+          id: port.id,
+          name: port.name,
+          family: 'port' as const,
+          ownerId: def.id,
+        };
+      }
+    }
+  }
+  return classifyCanonicalEndpoint({ id, name: id });
 }
 
 function relationshipDiagram(kind: SysmlRelationship['kind']): 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' {

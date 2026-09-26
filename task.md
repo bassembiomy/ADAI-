@@ -24,14 +24,14 @@
   - [x] Step 5: Render owned features from canonical Block projections
   - [x] Step 6: Run component, explorer, and BDD regression tests
   - [x] Step 7: Commit
-- [ ] Task 4: Support Explicit Property-to-Block Relationships
-  - [ ] Step 1: Write failing endpoint classification tests
-  - [ ] Step 2: Write failing atomic rejection tests
-  - [ ] Step 3: Run focused tests and verify failure
-  - [ ] Step 4: Add a property endpoint family and canonical lookup
-  - [ ] Step 5: Add explicit canvas relationship selection
-  - [ ] Step 6: Test persistence and rename propagation
-  - [ ] Step 7: Commit
+- [x] Task 4: Support Explicit Property-to-Block Relationships
+  - [x] Step 1: Write failing endpoint classification tests
+  - [x] Step 2: Write failing atomic rejection tests
+  - [x] Step 3: Run focused tests and verify failure
+  - [x] Step 4: Add a property endpoint family and canonical lookup
+  - [x] Step 5: Add explicit canvas relationship selection
+  - [x] Step 6: Test persistence and rename propagation
+  - [x] Step 7: Commit
 - [ ] Task 5: Implement Occurrence-Aware IBD Boundary Connectors
   - [ ] Step 1: Write failing IBD endpoint tests
   - [ ] Step 2: Write connector matrix tests
