@@ -64,7 +64,22 @@ export function projectDiagramScopedCanvasView(
     }),
     blocks: complete.blocks.filter(block => isPresented(block.id)).map(block => {
       const bounds = diagram?.presentations[block.id]?.bounds;
-      return { ...block, ...(bounds ?? {}), ...(presentationDrafts[block.id] ?? {}) };
+      const drafts = presentationDrafts[block.id];
+      const isContextBlock = contextElementIds.includes(block.id);
+      if (isContextBlock) {
+        const effectiveIbdX = drafts?.x ?? bounds?.x ?? block.ibdX ?? 50;
+        const effectiveIbdY = drafts?.y ?? bounds?.y ?? block.ibdY ?? 50;
+        const effectiveIbdW = drafts?.width ?? bounds?.width ?? block.ibdWidth ?? 1200;
+        const effectiveIbdH = drafts?.height ?? bounds?.height ?? block.ibdHeight ?? 800;
+        return {
+          ...block,
+          ibdX: effectiveIbdX,
+          ibdY: effectiveIbdY,
+          ibdWidth: effectiveIbdW,
+          ibdHeight: effectiveIbdH,
+        };
+      }
+      return { ...block, ...(bounds ?? {}), ...(drafts ?? {}) };
     }),
     parts: complete.parts.filter(part => isPresented(part.id)).map(part => {
       const presentation = diagram?.presentations[part.id];

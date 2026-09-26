@@ -1178,7 +1178,8 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'updatePresentation') {
-    if (!command.diagramId || !diagramPresentations[command.diagramId]) {
+    let currentDiagram = diagramPresentations[command.diagramId];
+    if (!command.diagramId || (!currentDiagram && !state.repository.definitions?.[command.diagramId])) {
       return {
         repository: state.repository,
         store,
@@ -1199,8 +1200,11 @@ export function executeSysmlCommand(
         redoStack: state.redoStack,
       };
     }
-    const currentDiagram = diagramPresentations[command.diagramId];
-    if (!currentDiagram.elementIds.includes(command.elementId)) {
+    if (!currentDiagram) {
+      currentDiagram = { elementIds: [command.diagramId], presentations: {} };
+    }
+    const isContextBlock = command.elementId === command.diagramId;
+    if (!currentDiagram.elementIds.includes(command.elementId) && !isContextBlock) {
       return {
         repository: state.repository,
         store,
@@ -1219,6 +1223,12 @@ export function executeSysmlCommand(
         presentationHistory: state.presentationHistory,
         actionStack: state.actionStack,
         redoStack: state.redoStack,
+      };
+    }
+    if (isContextBlock && !currentDiagram.elementIds.includes(command.elementId)) {
+      currentDiagram = {
+        ...currentDiagram,
+        elementIds: [...currentDiagram.elementIds, command.elementId],
       };
     }
     const previousDiagram = currentDiagram;

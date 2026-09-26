@@ -1418,8 +1418,16 @@ export function targetedUpdatePresentation(
   id: string,
   coords: PresentationCoordinates,
 ): boolean {
-  const diagram = store.diagramPresentations.get(diagramId);
-  if (!diagram || !diagram.elementIds.includes(id)) return false;
+  let diagram = store.diagramPresentations.get(diagramId);
+  const isContextBlock = id === diagramId;
+  if (!diagram && isContextBlock && store.definitions.has(diagramId)) {
+    diagram = { elementIds: [id], presentations: {} };
+    store.diagramPresentations.set(diagramId, diagram);
+  }
+  if (!diagram || (!diagram.elementIds.includes(id) && !isContextBlock)) return false;
+  if (isContextBlock && !diagram.elementIds.includes(id)) {
+    diagram = { ...diagram, elementIds: [...diagram.elementIds, id] };
+  }
   const existing = diagram.presentations[id] ?? {
     id: `presentation:${encodeURIComponent(diagramId)}:${encodeURIComponent(id)}`,
     diagramId,

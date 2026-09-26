@@ -6282,16 +6282,30 @@ const ADIA = () => {
     for (const b of blocks) {
       map.set(b.id, b);
     }
+    for (const b of sysmlCanvasView.blocks) {
+      map.set(b.id, b);
+    }
     return map;
-  }, [blocks]);
+  }, [blocks, sysmlCanvasView.blocks]);
 
   const partsById = useMemo(() => {
     const map = new Map<string, PartData>();
     for (const p of parts) {
       map.set(p.id, p);
     }
+    for (const p of sysmlCanvasView.parts) {
+      map.set(p.id, p);
+    }
     return map;
-  }, [parts]);
+  }, [parts, sysmlCanvasView.parts]);
+
+  const activeDiagramElementIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const b of sysmlCanvasView.blocks) ids.add(b.id);
+    for (const p of sysmlCanvasView.parts) ids.add(p.id);
+    for (const pkg of sysmlCanvasView.packages) ids.add(pkg.id);
+    return ids;
+  }, [sysmlCanvasView.blocks, sysmlCanvasView.parts, sysmlCanvasView.packages]);
 
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -9235,6 +9249,7 @@ const ADIA = () => {
     setCurrentLayerId(blockId);
     setDiagramMode('ibd');
     setSelectedIds([]);
+    setView({ scale: 1, offsetX: 0, offsetY: 0 });
     addError('info', `Entered block: ${block.name}`);
   }, [blocks, currentLayerId, addError]);
 
@@ -10009,9 +10024,20 @@ const ADIA = () => {
       existingNames: parts.map(p => p.name),
     });
 
+    const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId);
+    const frameX = contextBlock?.ibdX ?? 50;
+    const frameY = contextBlock?.ibdY ?? 50;
+    const frameW = contextBlock?.ibdWidth ?? 1200;
+    const frameH = contextBlock?.ibdHeight ?? 800;
+
+    let initialX = snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75;
+    let initialY = snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50;
+    initialX = Math.max(frameX + 30, Math.min(initialX, frameX + frameW - 180));
+    initialY = Math.max(frameY + 40, Math.min(initialY, frameY + frameH - 140));
+
     const result = handleExecuteSysmlCommand(buildCreatePartUsageCommand(canonicalSysmlRepository, part, {
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      x: initialX,
+      y: initialY,
       width: 150,
       height: 100,
     }, currentLayerId));
@@ -10436,7 +10462,7 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
-    const block = blocks.find(b => b.id === id);
+    const block = sysmlCanvasView.blocks.find(b => b.id === id) ?? blocks.find(b => b.id === id);
     if (block) {
       setIsResizing(true);
       setResizeHandle(handle);
@@ -10449,7 +10475,7 @@ const ADIA = () => {
       return;
     }
 
-    const part = parts.find(p => p.id === id);
+    const part = sysmlCanvasView.parts.find(p => p.id === id) ?? parts.find(p => p.id === id);
     if (part) {
       setIsResizing(true);
       setResizeHandle(handle);
@@ -10548,6 +10574,19 @@ const ADIA = () => {
         }
         if (resizeHandle.includes('n')) {
           const delta = Math.min(resizeStart.h - 60, dy);
+          newY = resizeStart.y + delta;
+          newH = resizeStart.h - delta;
+        }
+      } else if (resizeStart.type === 'ibdContext') {
+        if (resizeHandle.includes('e')) newW = Math.max(400, resizeStart.w + dx);
+        if (resizeHandle.includes('s')) newH = Math.max(300, resizeStart.h + dy);
+        if (resizeHandle.includes('w')) {
+          const delta = Math.min(resizeStart.w - 400, dx);
+          newX = resizeStart.x + delta;
+          newW = resizeStart.w - delta;
+        }
+        if (resizeHandle.includes('n')) {
+          const delta = Math.min(resizeStart.h - 300, dy);
           newY = resizeStart.y + delta;
           newH = resizeStart.h - delta;
         }
@@ -10704,40 +10743,51 @@ const ADIA = () => {
         // BDD Blocks
         const block = sysmlCanvasView.blocks.find(b => b.id === id);
         if (block) {
-          const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
-          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
-          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
-          dragRawPositionsRef.current[id] = nextRawPosition;
-          if (diagramMode === 'ibd' && block.id === currentLayerId) {
-            const oldX = currentBlock.x ?? currentBlock.ibdX ?? 50;
-            const oldY = currentBlock.y ?? currentBlock.ibdY ?? 50;
-            const newX = nextRawPosition.x;
-            const newY = nextRawPosition.y;
-            const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-            const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-            const actualDx = snappedX - oldX;
-            const actualDy = snappedY - oldY;
+          const isContextBlock = diagramMode === 'ibd' && block.id === currentLayerId;
+          if (isContextBlock) {
+            const currentBlockX = presentationDraftsRef.current[id]?.x ?? block.ibdX ?? 50;
+            const currentBlockY = presentationDraftsRef.current[id]?.y ?? block.ibdY ?? 50;
+            const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlockX, y: currentBlockY };
+            const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+            dragRawPositionsRef.current[id] = nextRawPosition;
+
+            const snappedX = snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+            const snappedY = snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
 
             updateBlock(id, {
               ibdX: snappedX,
-              ibdY: snappedY
+              ibdY: snappedY,
             });
 
-            // Make all parts in this context follow the context block boundary
-            parts.forEach(p => {
-              if (p.blockId === id && !idsToMove.has(p.id)) {
+            // Make all parts in this context follow the context block boundary in lockstep
+            const contextParts = sysmlCanvasView.parts.filter(p => p.blockId === id || !p.blockId || p.blockId === currentLayerId);
+            contextParts.forEach(p => {
+              if (!idsToMove.has(p.id)) {
+                const currentPartX = presentationDraftsRef.current[p.id]?.x ?? p.x;
+                const currentPartY = presentationDraftsRef.current[p.id]?.y ?? p.y;
+                const partRaw = dragRawPositionsRef.current[p.id] ?? { x: currentPartX, y: currentPartY };
+                const nextPartRaw = { x: partRaw.x + dx, y: partRaw.y + dy };
+                dragRawPositionsRef.current[p.id] = nextPartRaw;
+
+                const snappedPartX = snapEnabled ? snapToGrid(nextPartRaw.x, GRID_SIZE) : nextPartRaw.x;
+                const snappedPartY = snapEnabled ? snapToGrid(nextPartRaw.y, GRID_SIZE) : nextPartRaw.y;
+
                 updatePart(p.id, {
-                  x: p.x + actualDx,
-                  y: p.y + actualDy
+                  x: snappedPartX,
+                  y: snappedPartY,
                 });
               }
             });
           } else {
+            const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
+            const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
+            const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+            dragRawPositionsRef.current[id] = nextRawPosition;
             const newX = nextRawPosition.x;
             const newY = nextRawPosition.y;
             updateBlock(id, {
               x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
-              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
+              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY,
             });
           }
         }
@@ -10772,12 +10822,12 @@ const ADIA = () => {
           let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
 
           if (diagramMode === 'ibd') {
-            const contextBlock = blocks.find(b => b.id === currentLayerId);
+            const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId) ?? blocks.find(b => b.id === currentLayerId);
             if (contextBlock) {
-              const cx = contextBlock.ibdX ?? 50;
-              const cy = contextBlock.ibdY ?? 50;
-              const cw = contextBlock.ibdWidth ?? 1200;
-              const ch = contextBlock.ibdHeight ?? 800;
+              const cx = presentationDraftsRef.current[contextBlock.id]?.x ?? contextBlock.ibdX ?? 50;
+              const cy = presentationDraftsRef.current[contextBlock.id]?.y ?? contextBlock.ibdY ?? 50;
+              const cw = presentationDraftsRef.current[contextBlock.id]?.width ?? contextBlock.ibdWidth ?? 1200;
+              const ch = presentationDraftsRef.current[contextBlock.id]?.height ?? contextBlock.ibdHeight ?? 800;
               finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
               finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
             }
@@ -14996,8 +15046,12 @@ const ADIA = () => {
     });
 
     return targetRelationships.map(rel => {
-      const source = blocksById.get(rel.sourceId);
-      const target = blocksById.get(rel.targetId);
+      if (!activeDiagramElementIds.has(rel.sourceId) || !activeDiagramElementIds.has(rel.targetId)) {
+        return null;
+      }
+
+      const source = blocksById.get(rel.sourceId) ?? (partsById.get(rel.sourceId) as any);
+      const target = blocksById.get(rel.targetId) ?? (partsById.get(rel.targetId) as any);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
@@ -15005,8 +15059,8 @@ const ADIA = () => {
       if (diagramMode === 'bdd' && isReqRel) return null;
       if (diagramMode === 'requirements' && !requirementsDiagramScope.visibleRelationshipIds.has(rel.id)) return null;
 
-      const sourceBounds = computeBlockDisplayBounds(source);
-      const targetBounds = computeBlockDisplayBounds(target);
+      const sourceBounds = 'properties' in source ? computeBlockDisplayBounds(source) : { width: source.width || 120, height: source.height || 60 };
+      const targetBounds = 'properties' in target ? computeBlockDisplayBounds(target) : { width: target.width || 120, height: target.height || 60 };
       const srcW = sourceBounds.width;
       const srcH = sourceBounds.height;
       const tgtW = targetBounds.width;
@@ -15123,7 +15177,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, sysmlCanvasView, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
+  }, [relationships, sysmlCanvasView, blocksById, partsById, activeDiagramElementIds, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
@@ -15231,7 +15285,7 @@ const ADIA = () => {
     if (diagramMode !== 'ibd') return null;
     const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
     const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : sysmlCanvasView.connectors;
-    const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
+    const currentPartIds = new Set(sysmlCanvasView.parts.filter(p => p.blockId === currentLayerId).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
     const isInteracting = isDragging || isPanning;
 
