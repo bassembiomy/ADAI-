@@ -74,11 +74,11 @@
   - [x] Step 6: Complete evidence records
   - [x] Step 7: Run browser and compliance tests
   - [x] Step 8: Commit
-- [ ] Task 10: Final Regression, Performance, and Code-Generation Validation
-  - [ ] Step 1: Run TypeScript and architecture gates
-  - [ ] Step 2: Run complete SysML suite
-  - [ ] Step 3: Run release and performance gates
-  - [ ] Step 4: Run all affected browser workflows
-  - [ ] Step 5: Verify code-generation isolation
-  - [ ] Step 6: Inspect final change set
-  - [ ] Step 7: Commit validation repairs
+- [x] Task 10: Final Regression, Performance, and Code-Generation Validation
+  - [x] Step 1: Run TypeScript and architecture gates
+  - [x] Step 2: Run complete SysML suite
+  - [x] Step 3: Run release and performance gates
+  - [x] Step 4: Run all affected browser workflows
+  - [x] Step 5: Verify code-generation isolation
+  - [x] Step 6: Inspect final change set
+  - [x] Step 7: Commit validation repairs
