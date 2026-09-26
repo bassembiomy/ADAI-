@@ -7,8 +7,10 @@ import {
 import {
   PORT_DIAGNOSTICS,
   validatePort,
+  validateRepositoryPorts,
   type PortValidationContext,
 } from './portRules';
+import { createEmptyRepository } from '../model';
 import type { Port } from '../domain/ports';
 import type { SemanticElement } from '../domain/base';
 import type { Block, InterfaceBlock, ValueType, FlowSpecification } from '../domain/classifiers';
@@ -265,5 +267,92 @@ describe('UML and SysML Port Semantics and Rules', () => {
     const conjugated = getProvidedRequiredInterfaces(conjugatedPort, testContext);
     expect(conjugated.provided).toEqual(['if-power']); // inverted!
     expect(conjugated.required).toEqual(['if-read']);
+  });
+
+  describe('repository nested port validation', () => {
+    it('accepts ProxyPort nested inside ProxyPort with InterfaceBlock types and top-level Standard Port', () => {
+      const repo = createEmptyRepository();
+      repo.definitions['iface-1'] = {
+        id: 'iface-1', name: 'IF1', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+      };
+      repo.definitions['iface-2'] = {
+        id: 'iface-2', name: 'IF2', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+      };
+      repo.definitions['blk-1'] = {
+        id: 'blk-1', name: 'Block1', kind: 'block', namespace: [], ownerId: 'model',
+        isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
+        ports: [
+          {
+            id: 'top-std', name: 'stdPort', kind: 'standard', portKind: 'umlPort',
+            typeId: '', direction: 'inout', isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+          {
+            id: 'parent-proxy', name: 'parentProxy', kind: 'proxy', portKind: 'proxyPort',
+            typeId: 'iface-1', direction: 'inout', isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+          {
+            id: 'child-proxy', name: 'childProxy', kind: 'proxy', portKind: 'proxyPort',
+            ownerPortId: 'parent-proxy', nestedPortPathIds: ['parent-proxy', 'child-proxy'],
+            typeId: 'iface-2', direction: 'inout', isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+        ],
+      };
+
+      const diagnostics = validateRepositoryPorts(repo);
+      expect(diagnostics.filter(d => d.severity === 'error')).toHaveLength(0);
+    });
+
+    it('rejects nested port when parent port is not found (NESTED_PORT_PATH_INVALID)', () => {
+      const repo = createEmptyRepository();
+      repo.definitions['iface-1'] = {
+        id: 'iface-1', name: 'IF1', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+      };
+      repo.definitions['blk-1'] = {
+        id: 'blk-1', name: 'Block1', kind: 'block', namespace: [], ownerId: 'model',
+        isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
+        ports: [
+          {
+            id: 'orphan-child', name: 'childPort', kind: 'proxy', portKind: 'proxyPort',
+            ownerPortId: 'missing-parent', nestedPortPathIds: ['missing-parent', 'orphan-child'],
+            typeId: 'iface-1', direction: 'inout', isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+        ],
+      };
+
+      const diagnostics = validateRepositoryPorts(repo);
+      expect(diagnostics.some(d => d.code === 'NESTED_PORT_PATH_INVALID')).toBe(true);
+    });
+
+    it('rejects cyclic nested port paths', () => {
+      const repo = createEmptyRepository();
+      repo.definitions['iface-1'] = {
+        id: 'iface-1', name: 'IF1', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+      };
+      repo.definitions['blk-1'] = {
+        id: 'blk-1', name: 'Block1', kind: 'block', namespace: [], ownerId: 'model',
+        isAbstract: false, isLeaf: false, properties: [], operations: [], constraints: [],
+        ports: [
+          {
+            id: 'port-a', name: 'portA', kind: 'proxy', portKind: 'proxyPort',
+            ownerPortId: 'port-b', nestedPortPathIds: ['port-b', 'port-a'],
+            typeId: 'iface-1', direction: 'inout', isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+          {
+            id: 'port-b', name: 'portB', kind: 'proxy', portKind: 'proxyPort',
+            ownerPortId: 'port-a', nestedPortPathIds: ['port-a', 'port-b'],
+            typeId: 'iface-1', direction: 'inout', isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+        ],
+      };
+
+      const diagnostics = validateRepositoryPorts(repo);
+      expect(diagnostics.some(d => d.code === 'NESTED_PORT_PATH_INVALID' || d.code.includes('CYCLE'))).toBe(true);
+    });
   });
 });

@@ -21,6 +21,10 @@ export interface PortDefinition { id: string; name: string; kind: 'standard' | '
 export interface BlockDefinition extends NamedElement { kind: 'block'; isAbstract: boolean; isLeaf: boolean; supertypeIds?: string[]; properties: PropertyDefinition[]; ports: PortDefinition[]; operations: string[]; constraints: string[]; }
 export type SysmlDefinition = BlockDefinition | ValueTypeDefinition | InterfaceDefinition;
 
+export function isBlockDefinition(def: SysmlDefinition | undefined | null): def is BlockDefinition {
+  return def?.kind === 'block';
+}
+
 export interface PartUsage { id: string; kind: 'part'; name: string; ownerId: string; typeId: string; aggregation: 'composite' | 'shared' | 'reference'; multiplicity: Multiplicity; propertyId?: string; }
 export interface PortUsage { id: string; kind: 'port'; name: string; ownerId: string; definitionId: string; }
 export type SysmlUsage = PartUsage | PortUsage;

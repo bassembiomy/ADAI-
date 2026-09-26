@@ -206,6 +206,48 @@ describe('validateSysmlRepository', () => {
     const withContext = validateSysmlRepository(repo, context);
     expect(withContext.valid).toBe(true);
   });
+
+  it('validates repository nested ports and reports INVALID_NESTED_PROXY_PORT for non-proxy port in proxy port', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.iface = {
+      id: 'iface',
+      name: 'CANInterface',
+      kind: 'interface',
+      namespace: [],
+      ownerId: 'model',
+      features: [],
+    };
+    repo.definitions.b1 = {
+      ...block('b1'),
+      ports: [
+        {
+          id: 'parent-proxy',
+          name: 'parentPort',
+          kind: 'proxy',
+          portKind: 'proxyPort',
+          typeId: 'iface',
+          direction: 'inout',
+          isConjugated: false,
+          multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+        },
+        {
+          id: 'child-standard',
+          name: 'childPort',
+          kind: 'standard',
+          portKind: 'umlPort',
+          ownerPortId: 'parent-proxy',
+          nestedPortPathIds: ['parent-proxy', 'child-standard'],
+          typeId: '',
+          direction: 'inout',
+          isConjugated: false,
+          multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+        },
+      ],
+    };
+
+    const report = validateSysmlRepository(repo);
+    expect(report.diagnostics.some(d => d.code === 'INVALID_NESTED_PROXY_PORT')).toBe(true);
+  });
 });
 
 

@@ -2,7 +2,7 @@ import type { Port } from '../domain/ports';
 import type { SemanticElement } from '../domain/base';
 import { validateNestedPortPath, validatePortName } from '../services/portSemantics';
 import type { SysmlDiagnostic } from '../validation';
-import type { SysmlRepository } from '../model';
+import { isBlockDefinition, type BlockDefinition, type SysmlRepository } from '../model';
 
 export const PORT_DIAGNOSTICS = {
   PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK: 'INVALID_PROXY_PORT_TYPE',
@@ -126,28 +126,106 @@ export function validatePort(port: Port, context: PortValidationContext): SysmlD
 
 export function validateRepositoryPorts(repo: SysmlRepository): SysmlDiagnostic[] {
   const diagnostics: SysmlDiagnostic[] = [];
-  const context: PortValidationContext = {
-    getElement: (id: string) => repo.definitions[id] as any,
-  };
-  for (const def of Object.values(repo.definitions)) {
-    if (def.kind !== 'block') continue;
-    for (const port of def.ports) {
-      const portElement: Port = {
-        id: port.id,
-        name: port.name,
-        metaclass: 'Port',
-        portKind: (port.portKind ?? (port.kind === 'proxy' ? 'proxyPort' : port.kind === 'full' ? 'fullPort' : port.kind === 'flow' ? 'flowPort' : 'umlPort')) as any,
-        appliedStereotypeIds: port.appliedStereotypeIds,
-        typeId: port.typeId,
-        direction: port.direction,
-        isConjugated: port.isConjugated,
-        multiplicity: port.multiplicity,
-        namespace: def.namespace,
-        ownerId: def.id,
-      };
-      diagnostics.push(...validatePort(portElement, context));
+
+  const portsById = new Map<string, { block: BlockDefinition; port: import('../model').PortDefinition }>(
+    Object.values(repo.definitions)
+      .filter(isBlockDefinition)
+      .flatMap(block => (block.ports ?? []).map(port => [port.id, { block, port }] as const)),
+  );
+
+  const cyclicPortIds = new Set<string>();
+  for (const [portId, { port }] of portsById.entries()) {
+    const visited = new Set<string>([portId]);
+    let currentParentId = port.ownerPortId;
+    while (currentParentId) {
+      if (visited.has(currentParentId)) {
+        cyclicPortIds.add(portId);
+        break;
+      }
+      visited.add(currentParentId);
+      const parentEntry = portsById.get(currentParentId);
+      currentParentId = parentEntry?.port.ownerPortId;
     }
   }
-  return diagnostics;
+
+  const portElementsById = new Map<string, Port>();
+  for (const [portId, { block, port }] of portsById.entries()) {
+    const canonicalPortKind = (port.portKind ?? (port.kind === 'proxy' ? 'proxyPort' : port.kind === 'full' ? 'fullPort' : port.kind === 'flow' ? 'flowPort' : 'umlPort')) as any;
+    const ownerId = port.ownerPortId ?? block.id;
+    const nestedPortPathIds = port.nestedPortPathIds ?? (port.ownerPortId ? [port.ownerPortId, port.id] : undefined);
+
+    const portElement: Port = {
+      id: port.id,
+      name: port.name,
+      metaclass: 'Port',
+      portKind: canonicalPortKind,
+      appliedStereotypeIds: port.appliedStereotypeIds,
+      typeId: port.typeId,
+      direction: port.direction,
+      isConjugated: port.isConjugated,
+      multiplicity: port.multiplicity,
+      namespace: block.namespace,
+      ownerId,
+      nestedPortPathIds,
+    };
+    portElementsById.set(portId, portElement);
+  }
+
+  const context: PortValidationContext = {
+    getElement: (id: string): SemanticElement | undefined => {
+      if (portElementsById.has(id)) {
+        return portElementsById.get(id);
+      }
+      const def = repo.definitions[id];
+      if (def) {
+        return {
+          id: def.id,
+          name: def.name,
+          metaclass: def.kind === 'block' ? 'Block' : def.kind === 'interface' ? 'InterfaceBlock' : 'ValueType',
+          namespace: def.namespace,
+          ownerId: def.ownerId,
+          kind: def.kind,
+        } as any;
+      }
+      return undefined;
+    },
+    getOwnedElements: (ownerId: string): SemanticElement[] => {
+      return Array.from(portElementsById.values()).filter(p => p.ownerId === ownerId);
+    },
+  };
+
+  for (const portId of cyclicPortIds) {
+    const entry = portsById.get(portId)!;
+    diagnostics.push({
+      code: PORT_DIAGNOSTICS.NESTED_PORT_PATH_INVALID,
+      severity: 'error',
+      message: `Port "${entry.port.name || entry.port.id}" has a cyclic nesting path.`,
+      elementId: portId,
+    });
+  }
+
+  for (const [portId, { port }] of portsById.entries()) {
+    if (port.ownerPortId && !portsById.has(port.ownerPortId)) {
+      diagnostics.push({
+        code: PORT_DIAGNOSTICS.NESTED_PORT_PATH_INVALID,
+        severity: 'error',
+        message: `Parent port "${port.ownerPortId}" does not exist for nested port "${port.name || port.id}".`,
+        elementId: portId,
+      });
+    }
+  }
+
+  for (const portElement of portElementsById.values()) {
+    diagnostics.push(...validatePort(portElement, context));
+  }
+
+  // Deduplicate diagnostics
+  const seen = new Set<string>();
+  return diagnostics.filter(d => {
+    const key = `${d.code}:${d.elementId}:${d.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 

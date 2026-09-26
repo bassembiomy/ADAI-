@@ -580,5 +580,48 @@ describe('versioned SysML persistence and baselines', () => {
       expect(rehydrated.repository.packages.model).toBeDefined();
       expect(rehydrated.repository.packages.model.name).toBe('Model');
     });
+
+    it('validates persisted nested ports and rejects non-ProxyPort inside ProxyPort upon loading', () => {
+      const repo = createEmptyRepository();
+      repo.definitions.iface = {
+        id: 'iface',
+        name: 'CANInterface',
+        kind: 'interface',
+        namespace: [],
+        ownerId: 'model',
+        features: [],
+      };
+      repo.definitions.b1 = {
+        ...block('b1'),
+        ports: [
+          {
+            id: 'parent-proxy',
+            name: 'parentPort',
+            kind: 'proxy',
+            portKind: 'proxyPort',
+            typeId: 'iface',
+            direction: 'inout',
+            isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+          {
+            id: 'child-standard',
+            name: 'childPort',
+            kind: 'standard',
+            portKind: 'umlPort',
+            ownerPortId: 'parent-proxy',
+            nestedPortPathIds: ['parent-proxy', 'child-standard'],
+            typeId: '',
+            direction: 'inout',
+            isConjugated: false,
+            multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+          },
+        ],
+      };
+
+      const serialized = serializeRepository(repo);
+      const loaded = loadRepository(serialized);
+      expect(loaded.diagnostics.some(d => d.code === 'INVALID_NESTED_PROXY_PORT')).toBe(true);
+    });
   });
 });

@@ -25,13 +25,13 @@
   - [x] Step 5: Replace local/ad hoc Property edits
   - [x] Step 6: Preserve explicit relationship choice
   - [x] Step 7: Run tests and commit
-- [ ] Task 4: Validate Nested Ports from Persisted Repository Structure
-  - [ ] Step 1: Write failing persisted nesting test
-  - [ ] Step 2: Write valid nesting tests
-  - [ ] Step 3: Run focused tests and verify failure
-  - [ ] Step 4: Build repository Port index
-  - [ ] Step 5: Validate imported and updated Blocks before commit
-  - [ ] Step 6: Run tests and commit
+- [x] Task 4: Validate Nested Ports from Persisted Repository Structure
+  - [x] Step 1: Write failing persisted nesting test
+  - [x] Step 2: Write valid nesting tests
+  - [x] Step 3: Run focused tests and verify failure
+  - [x] Step 4: Build repository Port index
+  - [x] Step 5: Validate imported and updated Blocks before commit
+  - [x] Step 6: Run tests and commit
 - [ ] Task 5: Replace Shallow Browser Checks with Behavioral Workflows
   - [ ] Step 1: Replace Port existence check
   - [ ] Step 2: Replace IBD navigation check
