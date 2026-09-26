@@ -5,8 +5,9 @@ import type {
   SysmlRelationship,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
-import { classifyCanonicalEndpoint, evaluateSysmlConnection } from './connectionPolicy';
+import { classifyCanonicalEndpoint, evaluateSysmlConnection, type ConnectionEndpoint } from './connectionPolicy';
 import { validateElementImport, validatePackageImport, validatePackageMerge } from './capabilities/packagePolicy';
+import { resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
 
 export interface InheritedFeature {
   featureId: string;
@@ -188,17 +189,8 @@ const IBD_KINDS = new Set(['binding', 'itemFlow']);
 const RTM_KINDS = new Set(['deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy']);
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
-function elementExists(repo: SysmlRepository, id: string, family?: string): boolean {
-  if (family === 'state' || id.toLowerCase().startsWith('state') || id.toLowerCase().includes('state')) return true;
-  if (Boolean(
-    repo.packages[id] ?? repo.diagrams[id] ??
-    repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
-    repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
-    repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id] ?? repo.diagramReferences?.[id],
-  )) return true;
-  return Object.values(repo.definitions).some(
-    d => d.kind === 'block' && (d.properties?.some(p => p.id === id) || d.ports?.some(p => p.id === id))
-  );
+function elementExists(repo: SysmlRepository, id: string, context?: SemanticEndpointContext): boolean {
+  return resolveSemanticEndpoint(repo, id, context) !== undefined;
 }
 
 function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRelationship): { valid: boolean; code: string } {
@@ -232,35 +224,9 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
   }
 }
 
-function canonicalConnectionEndpoint(repo: SysmlRepository, id: string, family?: string) {
-  if (family === 'state' || id.toLowerCase().startsWith('state') || id.toLowerCase().includes('state')) {
-    return { id, name: id, family: 'state' as const };
-  }
-  const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id] ?? repo.artifacts[id] ??
-    repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id];
-  if (element) return classifyCanonicalEndpoint(element);
-  for (const def of Object.values(repo.definitions)) {
-    if (def.kind === 'block') {
-      const prop = def.properties?.find(p => p.id === id);
-      if (prop) {
-        return {
-          id: prop.id,
-          name: prop.name,
-          family: 'property' as const,
-          ownerId: def.id,
-        };
-      }
-      const port = def.ports?.find(p => p.id === id);
-      if (port) {
-        return {
-          id: port.id,
-          name: port.name,
-          family: 'port' as const,
-          ownerId: def.id,
-        };
-      }
-    }
-  }
+function canonicalConnectionEndpoint(repo: SysmlRepository, id: string, context?: SemanticEndpointContext): ConnectionEndpoint {
+  const resolved = resolveSemanticEndpoint(repo, id, context);
+  if (resolved) return resolved;
   return classifyCanonicalEndpoint({ id, name: id });
 }
 
@@ -272,7 +238,7 @@ function relationshipDiagram(kind: SysmlRelationship['kind']): 'bdd' | 'ibd' | '
   return 'rtm';
 }
 
-export function classifyRelationship(repo: SysmlRepository, relationshipId: string): RelationshipDecision {
+export function classifyRelationship(repo: SysmlRepository, relationshipId: string, context?: SemanticEndpointContext): RelationshipDecision {
   const relationship = repo.relationships[relationshipId] as SysmlRelationship | undefined;
   if (!relationship) return { allowed: false, diagram: 'bdd', diagnostics: [`UNKNOWN_RELATIONSHIP: Unknown relationship: ${relationshipId}`] };
 
@@ -296,7 +262,7 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
 
   if (relationship.kind === 'dependency' && (repo.packages[relationship.sourceId] || repo.packages[relationship.targetId])) {
     const diagnostics = [relationship.sourceId === relationship.targetId ? 'SELF_RELATIONSHIP: Dependency cannot target itself' : '',
-      !elementExists(repo, relationship.sourceId) || !elementExists(repo, relationship.targetId)
+      !elementExists(repo, relationship.sourceId, context) || !elementExists(repo, relationship.targetId, context)
         ? 'MISSING_RELATIONSHIP_ENDPOINT: Dependency endpoint does not exist' : ''].filter(Boolean);
     return { allowed: diagnostics.length === 0, diagram: 'package', diagnostics };
   }
@@ -306,18 +272,18 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   }
 
   const diagnostics: string[] = [];
-  if (!elementExists(repo, relationship.sourceId, relationship.sourceFamily)) {
+  if (!elementExists(repo, relationship.sourceId, context)) {
     diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Source ${relationship.sourceId} does not exist`);
   }
-  if (!elementExists(repo, relationship.targetId, relationship.targetFamily)) {
+  if (!elementExists(repo, relationship.targetId, context)) {
     diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Target ${relationship.targetId} does not exist`);
   }
 
   if (USE_CASE_KINDS.has(relationship.kind)) {
     const decision = evaluateSysmlConnection({
       relationshipKind: relationship.kind,
-      source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
-      target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, context),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, context),
       diagram: 'useCase',
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
@@ -330,8 +296,8 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
     const ownership = relationship.kind === 'composition' ? 'composite' : relationship.kind === 'sharedAggregation' ? 'shared' : 'none';
     const decision = evaluateSysmlConnection({
       relationshipKind: relationship.kind,
-      source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
-      target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, context),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, context),
       diagram: relationshipDiagram(relationship.kind),
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
@@ -353,8 +319,8 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   if (relationship.kind === 'requirementContainment') {
     const decision = evaluateSysmlConnection({
       relationshipKind: relationship.kind,
-      source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
-      target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, context),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, context),
       diagram: relationshipDiagram(relationship.kind),
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
@@ -366,8 +332,8 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
 
   const decision = evaluateSysmlConnection({
     relationshipKind: relationship.kind,
-    source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
-    target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
+    source: canonicalConnectionEndpoint(repo, relationship.sourceId, context),
+    target: canonicalConnectionEndpoint(repo, relationship.targetId, context),
     diagram: relationshipDiagram(relationship.kind),
   });
   diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));

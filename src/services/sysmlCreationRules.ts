@@ -20,6 +20,7 @@ import {
   evaluateSysmlConnection,
   type ConnectionEndpoint,
 } from '../engine/sysml/connectionPolicy';
+import { resolveSemanticEndpoint, type SemanticEndpointContext } from '../engine/sysml/semanticEndpointIndex';
 
 export interface CreationValidationResult {
   valid: boolean;
@@ -207,17 +208,8 @@ function result(codes: string[]): CreationValidationResult {
 // as validation, instead of generic invalid-operation errors.
 // ---------------------------------------------------------------------------
 
-function canonicalElementExists(repo: SysmlRepository, id: string, family?: string): boolean {
-  if (family === 'state' || id.toLowerCase().startsWith('state') || id.toLowerCase().includes('state')) return true;
-  if (Boolean(
-    repo.packages[id] ?? repo.diagrams[id] ??
-    repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
-    repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
-    repo.actors[id] ?? repo.subjects[id] ?? repo.useCases[id] ?? repo.extensionPoints[id],
-  )) return true;
-  return Object.values(repo.definitions).some(
-    d => d.kind === 'block' && (d.properties?.some(p => p.id === id) || d.ports?.some(p => p.id === id))
-  );
+function canonicalElementExists(repo: SysmlRepository, id: string, context?: SemanticEndpointContext): boolean {
+  return resolveSemanticEndpoint(repo, id, context) !== undefined;
 }
 
 function withCandidateRelationship(repo: SysmlRepository, candidate: SysmlRelationship): SysmlRepository {
@@ -255,7 +247,7 @@ function canonicalRelationshipCycle(
 
 /** Canonical relationship admission: typed codes via classifyRelationship + duplicate/cycle/self checks. */
 export function validateCanonicalRelationshipCandidate(
-  repo: SysmlRepository, candidate: SysmlRelationship,
+  repo: SysmlRepository, candidate: SysmlRelationship, context: SemanticEndpointContext = {},
 ): CreationValidationResult {
   if (candidate.kind === 'packageImport' || candidate.kind === 'elementImport' || candidate.kind === 'packageMerge') {
     const expectedSource = candidate.kind === 'packageMerge' ? candidate.mergingPackageId : candidate.importingNamespaceId;
@@ -271,7 +263,7 @@ export function validateCanonicalRelationshipCandidate(
   }
   const codes: string[] = [];
   if (candidate.sourceId === candidate.targetId) codes.push('SELF_RELATIONSHIP');
-  if (!canonicalElementExists(repo, candidate.sourceId, candidate.sourceFamily) || !canonicalElementExists(repo, candidate.targetId, candidate.targetFamily)) {
+  if (!canonicalElementExists(repo, candidate.sourceId, context) || !canonicalElementExists(repo, candidate.targetId, context)) {
     codes.push('MISSING_RELATIONSHIP_ENDPOINT');
   }
   const duplicate = Object.values(repo.relationships).some(existing =>
@@ -282,7 +274,7 @@ export function validateCanonicalRelationshipCandidate(
   );
   if (duplicate) codes.push('DUPLICATE_RELATIONSHIP');
 
-  const decision = classifyRelationship(withCandidateRelationship(repo, candidate), candidate.id);
+  const decision = classifyRelationship(withCandidateRelationship(repo, candidate), candidate.id, context);
   for (const entry of decision.diagnostics) codes.push(parsePolicyDiagnostic(entry).code);
 
   const cycle = canonicalRelationshipCycle(repo, candidate);

@@ -50,6 +50,7 @@ import {
   validateCanonicalConnectorCandidate,
   validateCanonicalRelationshipCandidate,
 } from './sysmlCreationRules';
+import type { SemanticEndpointContext } from '../engine/sysml/semanticEndpointIndex';
 import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PackageData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 
@@ -229,6 +230,7 @@ export interface SysmlGatewayState {
   };
   actionStack?: Array<'semantic' | 'presentation'>;
   redoStack?: Array<'semantic' | 'presentation'>;
+  context?: SemanticEndpointContext;
 }
 
 export interface SysmlCommandResult {
@@ -255,6 +257,7 @@ export function createSysmlGatewayState(
   initialCoordinates?: Record<string, PresentationCoordinates>,
   initialDiagramPresentations?: Record<string, DiagramPresentationInput>,
   budgetOptions?: HistoryBudgetOptions,
+  context?: SemanticEndpointContext,
 ): SysmlGatewayState {
   const repo = initialRepo ?? createEmptyRepository();
   const coords = initialCoordinates ?? {};
@@ -275,6 +278,7 @@ export function createSysmlGatewayState(
     },
     actionStack: [],
     redoStack: [],
+    context,
   };
 }
 
@@ -771,7 +775,7 @@ function repositoryHasSemanticId(repo: SysmlRepository, id: string): boolean {
     && [...definition.properties, ...definition.ports].some(feature => feature.id === id));
 }
 
-function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlDiagnostic[] | null {
+function gateCreateElement(repo: SysmlRepository, element: SysmlElement, context?: SemanticEndpointContext): SysmlDiagnostic[] | null {
   if (elementExistsInRepository(repo, element.id)) {
     return [{
       code: 'DUPLICATE_ELEMENT_ID',
@@ -781,7 +785,7 @@ function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlD
     }];
   }
   if (isRelationshipElement(element)) {
-    const verdict = validateCanonicalRelationshipCandidate(repo, element);
+    const verdict = validateCanonicalRelationshipCandidate(repo, element, context);
     if (!verdict.valid) {
       return verdict.codes.map(code => ({
         code, severity: 'error' as const, elementId: element.id,
@@ -811,7 +815,7 @@ function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlD
 }
 
 function gateUpdateElement(
-  repo: SysmlRepository, elementId: string, patch: Record<string, unknown>,
+  repo: SysmlRepository, elementId: string, patch: Record<string, unknown>, context?: SemanticEndpointContext,
 ): SysmlDiagnostic[] | null {
   const definition = repo.definitions[elementId];
   if (definition && definition.kind === 'block') {
@@ -834,7 +838,7 @@ function gateUpdateElement(
     // Re-validate endpoints/direction on the staged candidate, ignoring the
     // candidate itself for duplicate detection.
     const { [elementId]: _ignored, ...rest } = staged.relationships;
-    const verdict = validateCanonicalRelationshipCandidate({ ...staged, relationships: rest }, candidate);
+    const verdict = validateCanonicalRelationshipCandidate({ ...staged, relationships: rest }, candidate, context);
     if (!verdict.valid) {
       return verdict.codes.map(code => ({
         code, severity: 'error' as const, elementId,
@@ -974,7 +978,9 @@ export function executeSysmlCommand(
   state: SysmlGatewayState,
   command: SysmlEditorCommand,
   activeDiagramId?: string,
+  context?: SemanticEndpointContext,
 ): SysmlCommandResult {
+  const endpointContext = context ?? state.context;
   const coordinates = { ...state.coordinates };
   const diagramPresentations = normalizeDiagramPresentations(state.diagramPresentations ?? {}, coordinates);
   const store = state.store ?? fromRepository(state.repository, coordinates, diagramPresentations);
@@ -1360,11 +1366,11 @@ export function executeSysmlCommand(
           coordinates: { [command.element.id]: command.presentation },
         },
       ],
-    }, command.diagramId);
+    }, command.diagramId, endpointContext);
   }
 
   if (command.type === 'createElement') {
-    const gateDiagnostics = gateCreateElement(state.repository, command.element);
+    const gateDiagnostics = gateCreateElement(state.repository, command.element, endpointContext);
     if (gateDiagnostics) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -1493,7 +1499,7 @@ export function executeSysmlCommand(
     }
 
     const collection = getCollectionForId(store, command.elementId) ?? getCollectionFromElement(existing);
-    const updateGate = gateUpdateElement(state.repository, command.elementId, command.patch);
+    const updateGate = gateUpdateElement(state.repository, command.elementId, command.patch, endpointContext);
     if (updateGate) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -2243,7 +2249,7 @@ export function executeSysmlCommand(
     const initialPastLength = txState.patchHistory?.past.length ?? 0;
 
     for (const subCmd of command.commands) {
-      const res = executeSysmlCommand(currentState, subCmd);
+      const res = executeSysmlCommand(currentState, subCmd, undefined, endpointContext);
       if (!res.committed || res.diagnostics.some(d => d.severity === 'error')) {
         const view = getView(state.repository, coordinates, diagramPresentations);
         return {

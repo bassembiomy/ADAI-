@@ -138,6 +138,7 @@ import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapsho
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
 import { createInterface, createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
+import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
@@ -6245,6 +6246,14 @@ const ADIA = () => {
     });
   }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
 
+  const externalEndpointContext = useMemo<SemanticEndpointContext>(() => {
+    const map = new Map<string, ExternalSemanticEndpoint>();
+    for (const s of states) {
+      map.set(s.id, { id: s.id, name: s.name, family: 'state' });
+    }
+    return { externalEndpoints: map };
+  }, [states]);
+
   const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
     const currentState = {
       ...sysmlGatewayStateRef.current,
@@ -6252,10 +6261,11 @@ const ADIA = () => {
       store: sysmlStore,
       coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
       diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+      context: externalEndpointContext,
     };
-    const result = executeSysmlCommand(currentState, cmd);
+    const result = executeSysmlCommand(currentState, cmd, undefined, externalEndpointContext);
     if (result.committed) {
-      sysmlGatewayStateRef.current = { ...currentState, ...result };
+      sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
       setCanonicalSysmlRepository(result.repository);
       setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations));
       // Keep the application-wide projection complete. A command may return a
@@ -6268,7 +6278,7 @@ const ADIA = () => {
       );
     }
     return result;
-  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView, externalEndpointContext]);
 
   const applyCanonicalProjectLoad = useCallback((loaded: ReturnType<typeof loadCanonicalSysmlProject>) => {
     if (!loaded.valid) throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);

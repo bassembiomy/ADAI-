@@ -177,5 +177,35 @@ describe('validateSysmlRepository', () => {
     repo.relationships.cycleRc = { id: 'cycleRc', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r1' };
     expect(validateSysmlRepository(repo).diagnostics.map(d => d.code)).toContain('REQUIREMENT_CONTAINMENT_CYCLE');
   });
+
+  it('validates external State relationship endpoints only when resolvable through context', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.req1 = {
+      id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'Must be fast', status: 'draft', version: '1',
+    };
+    repo.relationships.rel1 = {
+      id: 'rel1',
+      kind: 'satisfy',
+      sourceId: 'state-active',
+      targetId: 'req1',
+      sourceFamily: 'state',
+      targetFamily: 'requirement',
+    };
+
+    // Without external context, relationship to nonexistent state is missing an endpoint
+    const withoutContext = validateSysmlRepository(repo);
+    expect(withoutContext.diagnostics.map(d => d.code)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+    // With external context containing state-active, validation passes
+    const context = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+    const withContext = validateSysmlRepository(repo, context);
+    expect(withContext.valid).toBe(true);
+  });
 });
+
 

@@ -7,6 +7,7 @@ import {
   isUseCaseRelationshipKind,
 } from './useCases';
 import { validateRepositoryPorts } from './validation/portRules';
+import type { SemanticEndpointContext } from './semanticEndpointIndex';
 
 export { validateRequirementContainment };
 
@@ -27,7 +28,7 @@ export interface SysmlValidationReport {
   canVerify: boolean;
 }
 
-export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationReport {
+export function validateSysmlRepository(repo: SysmlRepository, context?: SemanticEndpointContext): SysmlValidationReport {
   const diagnostics: SysmlDiagnostic[] = [];
   const error = (code: string, elementId: string, propertyPath: string, message: string) => {
     diagnostics.push({ code, severity: 'error', elementId, propertyPath, message });
@@ -48,6 +49,11 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
       duplicateIds.add(element.id);
     }
     ids.add(element.id);
+  }
+  if (context?.externalEndpoints) {
+    for (const extId of context.externalEndpoints.keys()) {
+      ids.add(extId);
+    }
   }
 
   for (const pkg of Object.values(repo.packages)) {
@@ -144,7 +150,7 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
     // policy diagnostics used to block new gateway commands. Missing-endpoint
     // links are handled by persistence quarantine instead.
     if (sourceResolved && targetResolved) {
-      const decision = classifyRelationship(repo, relationship.id);
+      const decision = classifyRelationship(repo, relationship.id, context);
       for (const entry of decision.diagnostics) {
         const { code, message } = parsePolicyDiagnostic(entry);
         error(code, relationship.id, 'kind', message);

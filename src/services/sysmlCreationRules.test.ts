@@ -298,5 +298,43 @@ describe('canonical SysML creation rules (Task 2 policy gating)', () => {
     expect(res.codes).toContain('LEAF_SPECIALIZATION');
     expect(validateCanonicalBlockUpdate(repo, 'nope', { name: 'x' }).codes).toContain('ELEMENT_NOT_FOUND');
   });
+
+  it('rejects forged State IDs and only validates external States present in context', () => {
+    const repo = baseRepo();
+    repo.requirements['req-1'] = {
+      id: 'req-1', name: 'req-1', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-1', text: 'Shall satisfy', status: 'draft', version: '1',
+    };
+
+    const forged: SysmlRelationship = {
+      id: 'rel-forged',
+      sourceId: 'nonexistent-state-id',
+      targetId: 'req-1',
+      kind: 'satisfy',
+      sourceFamily: 'state',
+      targetFamily: 'requirement',
+    };
+    expect(validateCanonicalRelationshipCandidate(repo, forged, { externalEndpoints: new Map() }).codes)
+      .toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+    const validStateMap = new Map([
+      ['state-1', { id: 'state-1', name: 'State 1', family: 'state' as const }],
+    ]);
+    const validCandidate: SysmlRelationship = {
+      id: 'rel-valid',
+      sourceId: 'state-1',
+      targetId: 'req-1',
+      kind: 'satisfy',
+      sourceFamily: 'state',
+      targetFamily: 'requirement',
+    };
+    const validResult = validateCanonicalRelationshipCandidate(repo, validCandidate, { externalEndpoints: validStateMap });
+    expect(validResult.valid).toBe(true);
+
+    const emptyContextResult = validateCanonicalRelationshipCandidate(repo, validCandidate, { externalEndpoints: new Map() });
+    expect(emptyContextResult.valid).toBe(false);
+    expect(emptyContextResult.codes).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+  });
 });
+
 
