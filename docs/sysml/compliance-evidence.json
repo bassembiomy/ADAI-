@@ -317,6 +317,287 @@
         }
       },
       "overallStatus": "COMPLIANT"
+    },
+    {
+      "id": "SYSML-PORT-CREATE-001",
+      "feature": "BDD Standard Port, ProxyPort, FullPort, and FlowPort typed creation and stereotype separation",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§9.3.2.8 FullPort, §9.3.2.12 ProxyPort, §9.3.2.7 FlowPort; UML 2.5.1 §11.3 Ports",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/domain/ports.ts",
+          "src/engine/sysml/model.ts",
+          "src/engine/sysml/validation/portRules.ts",
+          "src/services/sysmlOwnedFeatureCommands.ts"
+        ],
+        "domainTypes": [
+          "Port",
+          "PortDefinition",
+          "CanonicalPortKind"
+        ],
+        "commands": [
+          "createOwnedPort",
+          "buildCreateOwnedPortCommand"
+        ],
+        "validator": [
+          "validatePort",
+          "PORT_DIAGNOSTICS"
+        ],
+        "persistenceMapping": "SysmlRepository.definitions[blockId].ports",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PARTIAL",
+          "evidence": "Characterization tests established in diagramInteractionCorrections.test.ts; implementation in progress."
+        },
+        "properties": {
+          "status": "PARTIAL",
+          "evidence": "CanonicalPortKind mapping to live portKind in progress."
+        },
+        "relationships": {
+          "status": "PARTIAL",
+          "evidence": "Owned port block containment characterization in progress."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "ProxyPort InterfaceBlock typing constraint characterization in progress."
+        }
+      },
+      "overallStatus": "PARTIAL"
+    },
+    {
+      "id": "SYSML-IBD-DELEGATION-001",
+      "feature": "IBD boundary-to-part delegation and part-to-part assembly connector resolution and creation",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§9.3.1.2 Internal Block Diagram, Clause 9.3.2 Connectors",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/ibd.ts",
+          "src/services/sysmlIbdConnectorCommands.ts"
+        ],
+        "domainTypes": [
+          "ConnectorUsage",
+          "PortUsage"
+        ],
+        "commands": [
+          "createIbdConnector",
+          "buildCreateIbdConnectorCommand"
+        ],
+        "validator": [
+          "validateConnector",
+          "validateConnectorCandidate"
+        ],
+        "persistenceMapping": "SysmlRepository.connectors",
+        "projection": [
+          "deriveIbdView",
+          "projectLegacyDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PARTIAL",
+          "evidence": "Boundary and part occurrence resolution characterization in progress."
+        },
+        "properties": {
+          "status": "PARTIAL",
+          "evidence": "Delegation and assembly kind validation characterization in progress."
+        },
+        "relationships": {
+          "status": "PARTIAL",
+          "evidence": "Context boundary to internal part port connection characterization in progress."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "Boundary assembly rejection and context checks in progress."
+        }
+      },
+      "overallStatus": "PARTIAL"
+    },
+    {
+      "id": "SYSML-REQ-TESTCASE-001",
+      "feature": "Requirement Diagram TestCase create, project, and explicit navigation behavior without Block double-click drilldown",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§16.3.2.4 TestCase, §16.3.1.1 Requirement Diagram",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/services/sysmlDiagramCreation.ts",
+          "src/engine/sysml/requirementsDiagramScope.ts",
+          "src/services/sysmlProjectionState.ts"
+        ],
+        "domainTypes": [
+          "TestCase",
+          "VerificationCase"
+        ],
+        "commands": [
+          "createAndPresentElement",
+          "createVerificationCase"
+        ],
+        "validator": [
+          "validateSysmlRepository"
+        ],
+        "persistenceMapping": "SysmlRepository.verificationCases normalized to TestCase",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PARTIAL",
+          "evidence": "TestCase semantic element storage characterization in progress."
+        },
+        "properties": {
+          "status": "PARTIAL",
+          "evidence": "Method and verifiesRequirementIds characterization in progress."
+        },
+        "relationships": {
+          "status": "PARTIAL",
+          "evidence": "Verify relationship to Requirement characterization in progress."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "Requirement diagram block interaction isolation in progress."
+        }
+      },
+      "overallStatus": "PARTIAL"
+    },
+    {
+      "id": "SYSML-REQ-SATISFY-STATE-001",
+      "feature": "State Machine State to Requirement Satisfy relationship evaluation and creation",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§16.3.2.3 Satisfy; ISO/IEC 19514:2017",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/connectionPolicy.ts",
+          "src/services/sysmlConnectionUi.ts",
+          "src/services/sysmlCreationRules.ts",
+          "src/engine/sysml/policy.ts"
+        ],
+        "domainTypes": [
+          "ConnectionEndpoint",
+          "SysmlRelationship"
+        ],
+        "commands": [
+          "createAndPresentRelationship",
+          "createRelationship"
+        ],
+        "validator": [
+          "evaluateSysmlConnection",
+          "validateCanonicalRelationshipCandidate"
+        ],
+        "persistenceMapping": "SysmlRepository.relationships",
+        "projection": [
+          "projectLegacyDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PARTIAL",
+          "evidence": "State endpoint resolution characterization in progress."
+        },
+        "properties": {
+          "status": "PARTIAL",
+          "evidence": "Satisfy relationship kind properties characterization in progress."
+        },
+        "relationships": {
+          "status": "PARTIAL",
+          "evidence": "State to Requirement directional Satisfy characterization in progress."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "Reverse Requirement to State rejection characterization in progress."
+        }
+      },
+      "overallStatus": "PARTIAL"
+    },
+    {
+      "id": "CAMEO-DIAGRAM-ACTIVATE-001",
+      "feature": "Deterministic Package Diagram activation by persisted repository ID and last-active tracking",
+      "authority": "CAMEO_TOOLING",
+      "specification": {
+        "document": "Cameo Systems Modeler Tooling Benchmark",
+        "section": "Package Diagram activation, tree double-click, and last-active diagram restoration"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/services/sysmlDiagramActivation.ts",
+          "src/features/modelExplorer/modelDiagramRegistry.ts",
+          "src/App.tsx"
+        ],
+        "domainTypes": [
+          "PackageDiagramActivation",
+          "ModelDiagramDefinition"
+        ],
+        "commands": [
+          "resolvePackageDiagramActivation"
+        ],
+        "validator": [
+          "validateSysmlRepository"
+        ],
+        "persistenceMapping": "SysmlRepository.diagrams",
+        "projection": [
+          "ModelDiagramRegistry"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PARTIAL",
+          "evidence": "Zero/one/many package diagram activation characterization in progress."
+        },
+        "properties": {
+          "status": "PARTIAL",
+          "evidence": "Persisted diagramId preservation characterization in progress."
+        },
+        "relationships": {
+          "status": "PARTIAL",
+          "evidence": "Package diagram owner package association characterization in progress."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "No synthetic 'package' string fallback constraint in progress."
+        }
+      },
+      "overallStatus": "PARTIAL"
     }
   ]
 }
+

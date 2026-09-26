@@ -9,6 +9,14 @@ export type SemanticAuthority =
   | 'CAMEO_TOOLING'
   | 'ADIA_EXTENSION';
 
+export type InteractionDefectEvidenceId =
+  | 'SYSML-PORT-CREATE-001'
+  | 'SYSML-IBD-DELEGATION-001'
+  | 'SYSML-REQ-TESTCASE-001'
+  | 'SYSML-REQ-SATISFY-STATE-001'
+  | 'CAMEO-DIAGRAM-ACTIVATE-001';
+
+
 export type ComplianceLevelStatus = 'PASS' | 'FAIL' | 'NOT_APPLICABLE';
 
 export type OverallComplianceStatus = 'COMPLIANT' | 'PARTIAL' | 'NON_COMPLIANT' | 'NOT_APPLICABLE';
