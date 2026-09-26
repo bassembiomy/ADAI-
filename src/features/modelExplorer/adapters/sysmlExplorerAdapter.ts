@@ -24,6 +24,7 @@ import {
   getRelationshipKindLabel,
   getDiagramKindLabel,
 } from '../modelExplorerCapabilities';
+import { buildCreateOwnedPortCommand, type CanonicalPortKind } from '../../../services/sysmlOwnedFeatureCommands';
 
 function explorerKindToMetaclass(kind: string): MetaclassKind {
   switch (kind) {
@@ -1170,37 +1171,50 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           if (['port', 'fullPort', 'proxyPort', 'flowPort'].includes(requestedKind)) {
             const block = repo.definitions[ownerId];
             if (block && block.kind === 'block') {
-              const interfaceType = Object.values(repo.definitions).find(definition => definition.kind === 'interface');
-              if (requestedKind === 'proxyPort' && !interfaceType) {
+              const portKindMap: Record<string, CanonicalPortKind> = {
+                port: 'umlPort',
+                proxyPort: 'proxyPort',
+                fullPort: 'fullPort',
+                flowPort: 'flowPort',
+              };
+              const canonicalPortKind = portKindMap[requestedKind] ?? 'umlPort';
+              let typeId = (command as any).typeId as string | undefined;
+              if (!typeId) {
+                if (canonicalPortKind === 'proxyPort') {
+                  const iface = Object.values(repo.definitions).find(d => d.kind === 'interface');
+                  typeId = iface?.id;
+                } else if (canonicalPortKind === 'fullPort') {
+                  const blk = Object.values(repo.definitions).find(d => d.kind === 'block' || d.kind === 'valueType');
+                  typeId = blk?.id;
+                } else if (canonicalPortKind === 'flowPort') {
+                  const anyDef = Object.values(repo.definitions).find(d => d.kind === 'block' || d.kind === 'valueType' || d.kind === 'interface');
+                  typeId = anyDef?.id;
+                }
+              }
+
+              const plan = buildCreateOwnedPortCommand(repo, {
+                ownerBlockId: ownerId,
+                portKind: canonicalPortKind,
+                name: command.name,
+                typeId,
+              });
+
+              if (!plan.ok || !plan.command) {
                 return {
                   committed: false,
                   revision: repo.revision,
-                  diagnostics: [{
-                    code: 'TYPE_NOT_FOUND',
-                    severity: 'error',
-                    message: 'Proxy Port requires an existing Interface Block type. Create an Interface Block explicitly, then retry.',
-                  }],
+                  diagnostics: plan.diagnostics.map(d => ({
+                    code: d.code,
+                    severity: 'error' as const,
+                    message: d.message,
+                  })),
                 };
               }
-              const port = createPortDefinition({
-                name: command.name,
-                kind: requestedKind === 'proxyPort'
-                  ? 'proxy'
-                  : requestedKind === 'fullPort'
-                    ? 'full'
-                    : requestedKind === 'flowPort'
-                      ? 'flow'
-                      : 'standard',
-                typeId: requestedKind === 'proxyPort' ? interfaceType?.id : undefined,
-                existingNames: (block.ports ?? []).map(p => p.name),
-              });
-              const nextPorts = [...(block.ports ?? []), port];
-              const result = dispatchCommand({
-                type: 'updateElement',
-                elementId: ownerId,
-                patch: { ports: nextPorts },
-              });
-              return toExplorerResult(result, [port.id]);
+
+              const result = dispatchCommand(plan.command as SysmlEditorCommand);
+              const updatedBlock = result.repository.definitions[ownerId] as BlockDefinition | undefined;
+              const createdPort = updatedBlock?.ports?.[(updatedBlock.ports?.length ?? 1) - 1];
+              return toExplorerResult(result, createdPort ? [createdPort.id] : []);
             }
           }
 

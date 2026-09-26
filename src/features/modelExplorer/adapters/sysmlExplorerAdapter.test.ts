@@ -3,6 +3,7 @@ import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
 import type { ModelExplorerCommand } from '../modelExplorerTypes';
 import { createSysmlGatewayState, executeSysmlCommand, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
 import { createEmptyRepository, type BlockDefinition, type InterfaceDefinition, type PartUsage, type RequirementDefinition, type SysmlRelationship } from '../../../engine/sysml/model';
+import { buildCreateOwnedPortCommand, type CanonicalPortKind } from '../../../services/sysmlOwnedFeatureCommands';
 
 function createTestHarness(initialState?: SysmlGatewayState) {
   let state = initialState ?? createSysmlGatewayState();
@@ -523,5 +524,92 @@ describe('sysmlExplorerAdapter', () => {
     const pastedPart = Object.values(harness.state.repository.usages).find(u => u.ownerId === newBlockId);
     expect(pastedPart).toBeDefined();
     expect(pastedPart!.id).not.toBe(partId);
+  });
+
+  it('guarantees tree and canvas commands produce equivalent Port semantic definitions', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+
+    const ownerRes = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Robot' });
+    const ownerId = ownerRes.selectedIds![0];
+    const typeBlockRes = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Actuator' });
+    const typeBlockId = typeBlockRes.selectedIds![0];
+    const ifaceRes = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'interface', name: 'IControl' });
+    const ifaceId = ifaceRes.selectedIds![0];
+
+    const testCases: Array<{
+      explorerKind: string;
+      canonicalKind: CanonicalPortKind;
+      typeId?: string;
+      expectedKind: string;
+      expectedStereotypes: string[];
+    }> = [
+      {
+        explorerKind: 'Port',
+        canonicalKind: 'umlPort',
+        typeId: undefined,
+        expectedKind: 'standard',
+        expectedStereotypes: [],
+      },
+      {
+        explorerKind: 'proxyPort',
+        canonicalKind: 'proxyPort',
+        typeId: ifaceId,
+        expectedKind: 'proxy',
+        expectedStereotypes: ['ProxyPort'],
+      },
+      {
+        explorerKind: 'fullPort',
+        canonicalKind: 'fullPort',
+        typeId: typeBlockId,
+        expectedKind: 'full',
+        expectedStereotypes: ['FullPort'],
+      },
+      {
+        explorerKind: 'flowPort',
+        canonicalKind: 'flowPort',
+        typeId: typeBlockId,
+        expectedKind: 'flow',
+        expectedStereotypes: ['FlowPort'],
+      },
+    ];
+
+    for (const tc of testCases) {
+      // Tree execution with selected type
+      const treeRes = adapter.execute({
+        type: 'createElement',
+        ownerId,
+        elementKind: tc.explorerKind,
+        name: `tree_${tc.explorerKind}`,
+        ...({ typeId: tc.typeId } as any),
+      });
+      expect(treeRes.committed).toBe(true);
+
+      // Canvas command builder execution
+      const canvasPlan = buildCreateOwnedPortCommand(harness.state.repository, {
+        ownerBlockId: ownerId,
+        portKind: tc.canonicalKind,
+        name: `canvas_${tc.canonicalKind}`,
+        typeId: tc.typeId,
+      });
+      expect(canvasPlan.ok).toBe(true);
+      const canvasRes = harness.executeCommand(canvasPlan.command as any);
+      expect(canvasRes.committed).toBe(true);
+
+      const block = harness.state.repository.definitions[ownerId] as BlockDefinition;
+      const treePort = block.ports?.find(p => p.name === `tree_${tc.explorerKind}`);
+      const canvasPort = block.ports?.find(p => p.name === `canvas_${tc.canonicalKind}`);
+
+      expect(treePort).toBeDefined();
+      expect(canvasPort).toBeDefined();
+      expect(treePort?.kind).toBe(tc.expectedKind);
+      expect(canvasPort?.kind).toBe(tc.expectedKind);
+      expect(treePort?.portKind).toBe(tc.canonicalKind);
+      expect(canvasPort?.portKind).toBe(tc.canonicalKind);
+      expect(treePort?.typeId).toBe(tc.typeId || '');
+      expect(canvasPort?.typeId).toBe(tc.typeId || '');
+      expect(treePort?.appliedStereotypeIds).toEqual(tc.expectedStereotypes);
+      expect(canvasPort?.appliedStereotypeIds).toEqual(tc.expectedStereotypes);
+    }
   });
 });

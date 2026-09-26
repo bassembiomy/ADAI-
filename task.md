@@ -1,38 +1,84 @@
-# SysML Presentation Decoupling and State Requirement Traceability Implementation Plan
+# SysML v1.6 Diagram Interaction Corrections Implementation Plan
 
-- [x] Task 1: Strict Diagram Presentation Scoping in Normalized Store & Gateway
-  - [x] Step 1: Write the failing unit tests for diagram scoping and repository creation isolation
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Update `normalizedStore.ts` and `sysmlCommandGateway.ts`
-  - [x] Step 4: Run tests to verify they pass
-  - [x] Step 5: Commit
-- [x] Task 2: Smooth Canvas Movement and Drag Decoupling
-  - [x] Step 1: Write an automated test asserting smooth canvas dragging persistence
-  - [x] Step 2: Run test to verify current state
-  - [x] Step 3: Update `App.tsx` canvas mouse handlers
-  - [x] Step 4: Verify with TypeScript and Vitest
-  - [x] Step 5: Commit
-- [x] Task 3: State Machine State Requirement Connection Backend & Connection Policy
-  - [x] Step 1: Write failing unit tests for State to Requirement relationship evaluation
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Update `connectionPolicy.ts` and `sysmlConnectionUi.ts`
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit
-- [x] Task 4: State Machine Inspector Requirement Traceability UI
-  - [x] Step 1: Write component unit test for `StateRequirementTraceability`
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Implement `StateRequirementTraceability.tsx` and integrate into `App.tsx`
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Verify full TypeScript and Release Checks
-  - [x] Step 6: Commit
-- [x] Task 5: End-to-End Verification of Cameo Cross-Diagram Workflow and State Traceability
-  - [x] Step 1: Add the new E2E specification
-  - [x] Step 2: Run Playwright test
-  - [x] Step 3: Run all release and architecture gates
-  - [x] Step 4: Commit
-- [x] Final Verification
-  - [x] Confirm creating an element in the repository does not leak onto uninitialized diagrams.
-  - [x] Confirm moving elements on canvas is smooth and positions persist across tab switches.
-  - [x] Confirm one Block can be presented independently on both Requirements and BDD diagrams.
-  - [x] Confirm State Machine states can be linked to Requirements with `«satisfy»` and `«trace»` in both UI and backend.
-  - [x] Confirm State Machine MISRA-C code generation remains 100% compliant and unaffected.
+- [x] Task 1: Characterize the Reported Failures and Lock Semantic Authorities
+  - [x] Step 1: Write failing semantic characterization tests (`src/engine/sysml/diagramInteractionCorrections.test.ts`)
+  - [x] Step 2: Run characterization test and verify failures
+  - [x] Step 3: Add incomplete compliance records in `src/engine/sysml/compliance/types.ts` and `docs/sysml/compliance-evidence.json`
+  - [x] Step 4: Commit characterization boundary
+
+- [x] Task 2: Implement Typed Owned Port and Property Commands
+  - [x] Step 1: Write failing tests for all four Port kinds
+  - [x] Step 2: Write failing no-silent-type tests
+  - [x] Step 3: Run focused tests and verify failure
+  - [x] Step 4: Implement pure command builders (`src/services/sysmlOwnedFeatureCommands.ts`)
+  - [x] Step 5: Extend repository-level Port validation (`src/engine/sysml/validation/portRules.ts`)
+  - [x] Step 6: Add gateway atomicity and undo tests
+  - [x] Step 7: Run focused tests and typecheck
+  - [x] Step 8: Commit
+
+- [x] Task 3: Add Cameo-Style BDD Port and Property Canvas Tools
+  - [x] Step 1: Write component tests (`PortToolMenu.test.tsx`, `TypeSelectionPrompt.test.tsx`)
+  - [x] Step 2: Write Model Explorer parity tests
+  - [x] Step 3: Run focused tests and verify failure
+  - [x] Step 4: Implement thin UI controls (`PortToolMenu.tsx`, `TypeSelectionPrompt.tsx`)
+  - [x] Step 5: Render owned features from canonical Block projections
+  - [x] Step 6: Run component, explorer, and BDD regression tests
+  - [x] Step 7: Commit
+- [ ] Task 4: Support Explicit Property-to-Block Relationships
+  - [ ] Step 1: Write failing endpoint classification tests
+  - [ ] Step 2: Write failing atomic rejection tests
+  - [ ] Step 3: Run focused tests and verify failure
+  - [ ] Step 4: Add a property endpoint family and canonical lookup
+  - [ ] Step 5: Add explicit canvas relationship selection
+  - [ ] Step 6: Test persistence and rename propagation
+  - [ ] Step 7: Commit
+- [ ] Task 5: Implement Occurrence-Aware IBD Boundary Connectors
+  - [ ] Step 1: Write failing IBD endpoint tests
+  - [ ] Step 2: Write connector matrix tests
+  - [ ] Step 3: Run focused tests and verify failure
+  - [ ] Step 4: Implement occurrence-aware endpoint resolution (`src/services/sysmlIbdConnectorCommands.ts`)
+  - [ ] Step 5: Implement atomic connector creation and presentation
+  - [ ] Step 6: Render semantic hit targets (`src/components/sysml/IbdConnectorEndpoint.tsx`)
+  - [ ] Step 7: Add persistence, undo/redo, and browser-independent projection tests
+  - [ ] Step 8: Commit
+- [ ] Task 6: Correct Requirement Diagram Block and TestCase Behavior
+  - [ ] Step 1: Write failing TestCase identity tests
+  - [ ] Step 2: Write failing interaction tests
+  - [ ] Step 3: Run focused tests and verify failure
+  - [ ] Step 4: Normalize public TestCase semantics
+  - [ ] Step 5: Project and render TestCase presentations
+  - [ ] Step 6: Remove implicit Requirement Block drill-down
+  - [ ] Step 7: Test save/reload, remove versus delete, and undo
+  - [ ] Step 8: Commit
+- [ ] Task 7: Fix State-to-Requirement Satisfy Across Every Caller
+  - [ ] Step 1: Reproduce the exact diagnostic
+  - [ ] Step 2: Add caller-parity tests
+  - [ ] Step 3: Implement canonical State classification
+  - [ ] Step 4: Improve diagnostics
+  - [ ] Step 5: Run relationship and traceability tests
+  - [ ] Step 6: Commit
+- [ ] Task 8: Make Package Diagram Activation Deterministic
+  - [ ] Step 1: Write zero/one/many activation tests
+  - [ ] Step 2: Run focused tests and verify failure
+  - [ ] Step 3: Implement pure resolver (`src/services/sysmlDiagramActivation.ts`)
+  - [ ] Step 4: Wire application activation
+  - [ ] Step 5: Preserve failure state
+  - [ ] Step 6: Test tree double-click
+  - [ ] Step 7: Commit
+- [ ] Task 9: Add End-to-End Workflows and Compliance Evidence
+  - [ ] Step 1: Add BDD Port browser workflows
+  - [ ] Step 2: Add Property and IBD workflows
+  - [ ] Step 3: Add Requirement workflows
+  - [ ] Step 4: Add State Satisfy workflow
+  - [ ] Step 5: Add Package activation workflows
+  - [ ] Step 6: Complete evidence records
+  - [ ] Step 7: Run browser and compliance tests
+  - [ ] Step 8: Commit
+- [ ] Task 10: Final Regression, Performance, and Code-Generation Validation
+  - [ ] Step 1: Run TypeScript and architecture gates
+  - [ ] Step 2: Run complete SysML suite
+  - [ ] Step 3: Run release and performance gates
+  - [ ] Step 4: Run all affected browser workflows
+  - [ ] Step 5: Verify code-generation isolation
+  - [ ] Step 6: Inspect final change set
+  - [ ] Step 7: Commit validation repairs

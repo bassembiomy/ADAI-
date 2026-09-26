@@ -136,7 +136,7 @@ import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
-import { createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
+import { createInterface, createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
@@ -157,6 +157,9 @@ import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelati
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './services/sysmlProjectionState';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
+import { PortToolMenu } from './components/sysml/PortToolMenu';
+import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
+import { buildCreateOwnedPortCommand, type CanonicalPortKind, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
 import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
@@ -6043,6 +6046,13 @@ const ADIA = () => {
 
   // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
   const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<{ action: CreateNewTypeAction; candidates: import('./engine/sysml/commands/commandResult').TypeCandidate[] } | null>(null);
+  const [activePortTool, setActivePortTool] = useState<CanonicalPortKind | null>(null);
+  const [portTypePrompt, setPortTypePrompt] = useState<{
+    ownerBlockId: string;
+    portKind: CanonicalPortKind;
+    candidates: TypeCandidate[];
+    error?: string;
+  } | null>(null);
   const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
     impact: import('./engine/sysml/mutations').MutationImpact;
     transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
@@ -10236,96 +10246,115 @@ const ADIA = () => {
     addError('info', 'Auto-layout applied to current layer.');
   }, [blocks, relationships, currentLayerId, sysmlDiagramPresentations, handleExecuteSysmlCommand, addError]);
 
+  const handlePortTypeSelected = useCallback((typeId: string) => {
+    if (!portTypePrompt) return;
+    const plan = buildCreateOwnedPortCommand(canonicalSysmlRepository, {
+      ownerBlockId: portTypePrompt.ownerBlockId,
+      portKind: portTypePrompt.portKind,
+      typeId,
+      diagramId: activeSysmlDiagramId,
+    });
+    if (plan.ok && plan.command) {
+      const res = handleExecuteSysmlCommand(plan.command as any);
+      if (res.committed) {
+        setPortTypePrompt(null);
+      } else {
+        res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+        setPortTypePrompt(prev => prev ? { ...prev, error: res.diagnostics[0]?.message } : null);
+      }
+    } else {
+      setPortTypePrompt(prev => prev ? { ...prev, error: plan.diagnostics[0]?.message } : null);
+    }
+  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
+
+  const handleCreateNewTypeForPort = useCallback(() => {
+    if (!portTypePrompt) return;
+    const isInterface = portTypePrompt.portKind === 'proxyPort';
+    if (isInterface) {
+      const iface = createInterface({
+        name: `InterfaceBlock_${(Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === 'interface').length) + 1}`,
+        ownerId: 'model',
+      });
+      const res = handleExecuteSysmlCommand({
+        type: 'createAndPresent',
+        diagramId: activeSysmlDiagramId,
+        element: iface,
+        presentation: { x: 100, y: 100 },
+      });
+      if (res.committed) {
+        handlePortTypeSelected(iface.id);
+      }
+    } else {
+      const outcome = buildDiagramCreationCommand({
+        repository: canonicalSysmlRepository,
+        kind: 'Block',
+        ownerId: 'model',
+        diagramId: activeSysmlDiagramId,
+        position: { x: 100, y: 100 },
+      });
+      if (outcome.ok) {
+        const res = handleExecuteSysmlCommand(outcome.command);
+        if (res.committed) {
+          handlePortTypeSelected(outcome.semanticId);
+        }
+      }
+    }
+  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, handlePortTypeSelected]);
+
   const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
     if (selectedIds.length !== 1) {
       addError('warning', 'Select exactly one Block or Part to add a port.');
       return;
     }
     const id = selectedIds[0];
+    const kindMap: Record<'standard' | 'flow' | 'proxy' | 'full', CanonicalPortKind> = {
+      standard: 'umlPort',
+      flow: 'flowPort',
+      proxy: 'proxyPort',
+      full: 'fullPort',
+    };
+    const canonicalPortKind = kindMap[kind];
 
     const part = parts.find(p => p.id === id);
-    if (part) {
-      const originalTypeId = part.typeId;
-
-      if (!originalTypeId || !blocks.some(block => block.id === originalTypeId && block.stereotype === 'block')) {
-        const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        const outcome = buildDiagramCreationCommand({
-          repository: canonicalSysmlRepository,
-          kind: 'Block',
-          ownerId: 'model',
-          diagramId: activeSysmlDiagramId,
-          position: { x: 100, y: 100 },
-        });
-        if (outcome.ok) {
-          const res = handleExecuteSysmlCommand(outcome.command);
-          if (res.committed) {
-            updateBlock(outcome.semanticId, { ports: [newPort] });
-            updatePart(part.id, { typeId: outcome.semanticId });
-            addError('info', `Created definition for part and added port.`);
-          }
-        }
-        return;
-      }
-
-      const isShared = parts.some(p => p.id !== part.id && p.typeId === originalTypeId);
-      const originalBlock = blocks.find(b => b.id === originalTypeId && b.stereotype === 'block')!;
-
-      if (isShared) {
-        addError('info', `Specializing definition for '${part.name}'...`);
-        const outcome = buildDiagramCreationCommand({
-          repository: canonicalSysmlRepository,
-          kind: 'Block',
-          ownerId: 'model',
-          diagramId: activeSysmlDiagramId,
-          position: { x: (originalBlock.x ?? 100) + 20, y: (originalBlock.y ?? 100) + 20 },
-        });
-        if (outcome.ok) {
-          const res = handleExecuteSysmlCommand(outcome.command);
-          if (res.committed) {
-            const newPorts: PortData[] = [...originalBlock.ports.map(p => ({ ...p })), { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? ('in' as const) : undefined }];
-            updateBlock(outcome.semanticId, { ports: newPorts, properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints });
-            updatePart(part.id, { typeId: outcome.semanticId });
-            addError('info', `Created new definition and added port.`);
-          }
-        }
-      } else {
-        // Use canonical repository for accurate port count
-        const canonicalDef = canonicalSysmlRepository.definitions[originalTypeId];
-        const existingPorts: PortData[] = (canonicalDef?.kind === 'block' && canonicalDef.ports)
-          ? canonicalDef.ports.map(p => ({
-              id: p.id,
-              name: p.name,
-              type: p.typeId || (p.kind === 'proxy' ? 'Interface' : (p.kind === 'flow' ? 'Power' : 'void')),
-              kind: p.kind,
-              direction: p.direction,
-            }))
-          : originalBlock.ports;
-        const newPort: PortData = { id: uuidv4(), name: `p${existingPorts.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        updateBlock(originalTypeId, { ports: [...existingPorts, newPort] });
-        addError('info', `Added ${kind} port to definition: ${originalBlock.name}`);
-      }
-    } else {
-      const block = blocks.find(b => b.id === id);
-      if (!block) {
-        addError('warning', 'Selected element is not a Block or Part.');
-        return;
-      }
-      // Use canonical repository for accurate port count (avoids stale projection)
-      const canonicalDef = canonicalSysmlRepository.definitions[id];
-      const existingPorts: PortData[] = (canonicalDef?.kind === 'block' && canonicalDef.ports)
-        ? canonicalDef.ports.map(p => ({
-            id: p.id,
-            name: p.name,
-            type: p.typeId || (p.kind === 'proxy' ? 'Interface' : (p.kind === 'flow' ? 'Power' : 'void')),
-            kind: p.kind,
-            direction: p.direction,
-          }))
-        : block.ports;
-      const newPort: PortData = { id: uuidv4(), name: `p${existingPorts.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-      updateBlock(id, { ports: [...existingPorts, newPort] });
-      addError('info', `Added ${kind} port to Block: ${block.name}`);
+    const targetBlockId = part ? part.typeId : id;
+    if (!targetBlockId) {
+      addError('warning', 'Selected element is not a valid Block or Part.');
+      return;
     }
-  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand]);
+
+    const plan = buildCreateOwnedPortCommand(canonicalSysmlRepository, {
+      ownerBlockId: targetBlockId,
+      portKind: canonicalPortKind,
+      diagramId: activeSysmlDiagramId,
+    });
+
+    if (!plan.ok) {
+      if (plan.candidates && plan.candidates.length > 0) {
+        setPortTypePrompt({
+          ownerBlockId: targetBlockId,
+          portKind: canonicalPortKind,
+          candidates: plan.candidates,
+        });
+      } else {
+        const msg = plan.diagnostics[0]?.message ?? `No compatible type found for ${canonicalPortKind}.`;
+        addError('error', msg, 'SysML', targetBlockId);
+        setPortTypePrompt({
+          ownerBlockId: targetBlockId,
+          portKind: canonicalPortKind,
+          candidates: [],
+          error: msg,
+        });
+      }
+      return;
+    }
+
+    const res = handleExecuteSysmlCommand(plan.command as any);
+    if (res.committed) {
+      addError('info', `Added ${kind} port.`);
+    } else {
+      res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [selectedIds, parts, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
 
   const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
     addToHistory();
@@ -11083,6 +11112,41 @@ const ADIA = () => {
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
     e.stopPropagation();
+    if (diagramMode === 'bdd' && activePortTool && e.button === 0) {
+      const plan = buildCreateOwnedPortCommand(canonicalSysmlRepository, {
+        ownerBlockId: blockId,
+        portKind: activePortTool,
+        diagramId: activeSysmlDiagramId,
+      });
+
+      if (!plan.ok) {
+        if (plan.candidates && plan.candidates.length > 0) {
+          setPortTypePrompt({
+            ownerBlockId: blockId,
+            portKind: activePortTool,
+            candidates: plan.candidates,
+          });
+        } else {
+          const msg = plan.diagnostics[0]?.message ?? `No compatible type found for ${activePortTool}.`;
+          addError('error', msg, 'SysML', blockId);
+          setPortTypePrompt({
+            ownerBlockId: blockId,
+            portKind: activePortTool,
+            candidates: [],
+            error: msg,
+          });
+        }
+        return;
+      }
+
+      const res = handleExecuteSysmlCommand(plan.command as any);
+      if (res.committed) {
+        // Keep activePortTool active for continuous placement
+      } else {
+        res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+      return;
+    }
     if (diagramMode === 'package' && packageRelationshipTool && e.button === 0) {
       if (!packageRelationshipSourceId) {
         setPackageRelationshipSourceId(blockId);
@@ -11182,7 +11246,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDiagramDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError]);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError, activePortTool]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -14294,6 +14358,8 @@ const ADIA = () => {
         setIsCreatingTransition(false);
         setTransitionSourceId(null);
         setSelectedIds([]);
+        setActivePortTool(null);
+        setPortTypePrompt(null);
       }
     };
 
@@ -16776,12 +16842,21 @@ const ADIA = () => {
                     >
                       Block
                     </Button>
-                    {diagramMode === 'bdd' && <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
-                    </div>}
+                    {diagramMode === 'bdd' && (
+                      <div className="flex gap-1 items-center">
+                        <PortToolMenu
+                          activePortTool={activePortTool}
+                          onSelectPortTool={(kind) => setActivePortTool(kind)}
+                          onClearPortTool={() => setActivePortTool(null)}
+                        />
+                        <div className="flex gap-0.5">
+                          <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
+                        </div>
+                      </div>
+                    )}
                     {diagramMode === 'package' && (
                       <div className="flex gap-0.5">
                         {([
@@ -19234,6 +19309,18 @@ const ADIA = () => {
             candidates={pendingCreateNewTypeAction.candidates}
             onCreate={handleCreateNewTypeAction}
             onDismiss={() => setPendingCreateNewTypeAction(null)}
+          />
+        )}
+
+        {portTypePrompt && (
+          <TypeSelectionPrompt
+            isOpen={true}
+            featureKind={portTypePrompt.portKind === 'proxyPort' ? 'Proxy Port' : portTypePrompt.portKind === 'fullPort' ? 'Full Port' : 'Flow Port'}
+            candidates={portTypePrompt.candidates}
+            onSelectType={handlePortTypeSelected}
+            onCreateNewType={handleCreateNewTypeForPort}
+            onCancel={() => setPortTypePrompt(null)}
+            error={portTypePrompt.error}
           />
         )}
 
