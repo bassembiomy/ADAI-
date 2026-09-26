@@ -65,15 +65,15 @@
   - [x] Step 5: Preserve failure state
   - [x] Step 6: Test tree double-click
   - [x] Step 7: Commit
-- [ ] Task 9: Add End-to-End Workflows and Compliance Evidence
-  - [ ] Step 1: Add BDD Port browser workflows
-  - [ ] Step 2: Add Property and IBD workflows
-  - [ ] Step 3: Add Requirement workflows
-  - [ ] Step 4: Add State Satisfy workflow
-  - [ ] Step 5: Add Package activation workflows
-  - [ ] Step 6: Complete evidence records
-  - [ ] Step 7: Run browser and compliance tests
-  - [ ] Step 8: Commit
+- [x] Task 9: Add End-to-End Workflows and Compliance Evidence
+  - [x] Step 1: Add BDD Port browser workflows
+  - [x] Step 2: Add Property and IBD workflows
+  - [x] Step 3: Add Requirement workflows
+  - [x] Step 4: Add State Satisfy workflow
+  - [x] Step 5: Add Package activation workflows
+  - [x] Step 6: Complete evidence records
+  - [x] Step 7: Run browser and compliance tests
+  - [x] Step 8: Commit
 - [ ] Task 10: Final Regression, Performance, and Code-Generation Validation
   - [ ] Step 1: Run TypeScript and architecture gates
   - [ ] Step 2: Run complete SysML suite

@@ -354,28 +354,30 @@
           "projectDiagramScopedCanvasView"
         ],
         "automatedTests": [
-          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlOwnedFeatureCommands.test.ts",
+          "src/engine/sysml/validation/portRules.test.ts"
         ]
       },
       "fourLevelCompliance": {
         "element": {
-          "status": "PARTIAL",
-          "evidence": "Characterization tests established in diagramInteractionCorrections.test.ts; implementation in progress."
+          "status": "PASS",
+          "evidence": "CanonicalPortKind separates umlPort, proxyPort, fullPort, and flowPort into distinct owned features."
         },
         "properties": {
-          "status": "PARTIAL",
-          "evidence": "CanonicalPortKind mapping to live portKind in progress."
+          "status": "PASS",
+          "evidence": "PortDefinition preserves direction, typeId, isConjugated, multiplicity, and portKind."
         },
         "relationships": {
-          "status": "PARTIAL",
-          "evidence": "Owned port block containment characterization in progress."
+          "status": "PASS",
+          "evidence": "Owned port is strictly contained within owning BlockDefinition with atomic rollback."
         },
         "constraints": {
-          "status": "PARTIAL",
-          "evidence": "ProxyPort InterfaceBlock typing constraint characterization in progress."
+          "status": "PASS",
+          "evidence": "ProxyPort enforces InterfaceBlock typing; missing types reject without silent creation."
         }
       },
-      "overallStatus": "PARTIAL"
+      "overallStatus": "COMPLIANT"
     },
     {
       "id": "SYSML-IBD-DELEGATION-001",
@@ -410,28 +412,30 @@
           "projectLegacyDiagram"
         ],
         "automatedTests": [
-          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlIbdConnectorCommands.test.ts",
+          "src/components/sysml/IbdConnectorEndpoint.test.tsx"
         ]
       },
       "fourLevelCompliance": {
         "element": {
-          "status": "PARTIAL",
-          "evidence": "Boundary and part occurrence resolution characterization in progress."
+          "status": "PASS",
+          "evidence": "Resolves context boundary ports and part occurrence ports distinctly."
         },
         "properties": {
-          "status": "PARTIAL",
-          "evidence": "Delegation and assembly kind validation characterization in progress."
+          "status": "PASS",
+          "evidence": "Delegation and assembly kinds validated with occurrence port endpoints."
         },
         "relationships": {
-          "status": "PARTIAL",
-          "evidence": "Context boundary to internal part port connection characterization in progress."
+          "status": "PASS",
+          "evidence": "Boundary-to-internal delegation and internal part-to-part assembly connectors created atomically."
         },
         "constraints": {
-          "status": "PARTIAL",
-          "evidence": "Boundary assembly rejection and context checks in progress."
+          "status": "PASS",
+          "evidence": "Assembly between boundary port and part port rejected with INVALID_ASSEMBLY_ENDPOINTS."
         }
       },
-      "overallStatus": "PARTIAL"
+      "overallStatus": "COMPLIANT"
     },
     {
       "id": "SYSML-REQ-TESTCASE-001",
@@ -466,28 +470,30 @@
           "projectDiagramScopedCanvasView"
         ],
         "automatedTests": [
-          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlDiagramCreation.test.ts",
+          "src/engine/sysml/requirementsDiagramScope.test.ts"
         ]
       },
       "fourLevelCompliance": {
         "element": {
-          "status": "PARTIAL",
-          "evidence": "TestCase semantic element storage characterization in progress."
+          "status": "PASS",
+          "evidence": "Normalized TestCase stereotype projected from repository verificationCases under stable identity."
         },
         "properties": {
-          "status": "PARTIAL",
-          "evidence": "Method and verifiesRequirementIds characterization in progress."
+          "status": "PASS",
+          "evidence": "verifiesRequirementIds and testCase presentation properties preserved."
         },
         "relationships": {
-          "status": "PARTIAL",
-          "evidence": "Verify relationship to Requirement characterization in progress."
+          "status": "PASS",
+          "evidence": "Verify relationship between TestCase and Requirement preserved on requirements diagrams."
         },
         "constraints": {
-          "status": "PARTIAL",
-          "evidence": "Requirement diagram block interaction isolation in progress."
+          "status": "PASS",
+          "evidence": "Double-clicking Block on Requirement Diagram is a no-op; explicit context navigation supported."
         }
       },
-      "overallStatus": "PARTIAL"
+      "overallStatus": "COMPLIANT"
     },
     {
       "id": "SYSML-REQ-SATISFY-STATE-001",
@@ -523,28 +529,31 @@
           "projectLegacyDiagram"
         ],
         "automatedTests": [
-          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/engine/sysml/connectionPolicy.test.ts",
+          "src/services/sysmlConnectionUi.test.ts",
+          "src/services/sysmlCreationRules.test.ts"
         ]
       },
       "fourLevelCompliance": {
         "element": {
-          "status": "PARTIAL",
-          "evidence": "State endpoint resolution characterization in progress."
+          "status": "PASS",
+          "evidence": "State recognized as valid connection endpoint across UI and canonical layers."
         },
         "properties": {
-          "status": "PARTIAL",
-          "evidence": "Satisfy relationship kind properties characterization in progress."
+          "status": "PASS",
+          "evidence": "Satisfy relationship kind properties validated with sourceFamily state."
         },
         "relationships": {
-          "status": "PARTIAL",
-          "evidence": "State to Requirement directional Satisfy characterization in progress."
+          "status": "PASS",
+          "evidence": "State to Requirement directional Satisfy allowed across canvas, state machine, and RTM."
         },
         "constraints": {
-          "status": "PARTIAL",
-          "evidence": "Reverse Requirement to State rejection characterization in progress."
+          "status": "PASS",
+          "evidence": "Requirement to State reversed Satisfy rejected with INVALID_SATISFY_DIRECTION and corrective guidance."
         }
       },
-      "overallStatus": "PARTIAL"
+      "overallStatus": "COMPLIANT"
     },
     {
       "id": "CAMEO-DIAGRAM-ACTIVATE-001",
@@ -575,28 +584,31 @@
           "ModelDiagramRegistry"
         ],
         "automatedTests": [
-          "src/engine/sysml/diagramInteractionCorrections.test.ts"
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlDiagramActivation.test.ts",
+          "src/features/modelExplorer/modelDiagramRegistry.test.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts"
         ]
       },
       "fourLevelCompliance": {
         "element": {
-          "status": "PARTIAL",
-          "evidence": "Zero/one/many package diagram activation characterization in progress."
+          "status": "PASS",
+          "evidence": "Zero diagrams returns create, one opens exact diagram ID, many opens last-active or chooser."
         },
         "properties": {
-          "status": "PARTIAL",
-          "evidence": "Persisted diagramId preservation characterization in progress."
+          "status": "PASS",
+          "evidence": "Persisted diagramId preserved without synthetic string fallback."
         },
         "relationships": {
-          "status": "PARTIAL",
-          "evidence": "Package diagram owner package association characterization in progress."
+          "status": "PASS",
+          "evidence": "Package diagram owner package association preserved and tree double-click opens exact ID."
         },
         "constraints": {
-          "status": "PARTIAL",
-          "evidence": "No synthetic 'package' string fallback constraint in progress."
+          "status": "PASS",
+          "evidence": "Deterministic candidate sorting by name then ID; failed creation preserves diagram state."
         }
       },
-      "overallStatus": "PARTIAL"
+      "overallStatus": "COMPLIANT"
     }
   ]
 }
