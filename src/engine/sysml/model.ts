@@ -123,6 +123,8 @@ export interface SysmlRelationship {
   suspect?: boolean;
   lastValidatedRevision?: number;
   extensionPointId?: string;
+  sourceFamily?: string;
+  targetFamily?: string;
 }
 
 export interface LivePackageImport extends SysmlRelationship {

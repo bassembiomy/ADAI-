@@ -50,13 +50,13 @@
   - [x] Step 6: Remove implicit Requirement Block drill-down
   - [x] Step 7: Test save/reload, remove versus delete, and undo
   - [x] Step 8: Commit
-- [ ] Task 7: Fix State-to-Requirement Satisfy Across Every Caller
-  - [ ] Step 1: Reproduce the exact diagnostic
-  - [ ] Step 2: Add caller-parity tests
-  - [ ] Step 3: Implement canonical State classification
-  - [ ] Step 4: Improve diagnostics
-  - [ ] Step 5: Run relationship and traceability tests
-  - [ ] Step 6: Commit
+- [x] Task 7: Fix State-to-Requirement Satisfy Across Every Caller
+  - [x] Step 1: Reproduce the exact diagnostic
+  - [x] Step 2: Add caller-parity tests
+  - [x] Step 3: Implement canonical State classification
+  - [x] Step 4: Improve diagnostics
+  - [x] Step 5: Run relationship and traceability tests
+  - [x] Step 6: Commit
 - [ ] Task 8: Make Package Diagram Activation Deterministic
   - [ ] Step 1: Write zero/one/many activation tests
   - [ ] Step 2: Run focused tests and verify failure

@@ -130,6 +130,8 @@ function legacyConnectionEndpoint(
   id: string,
   states?: readonly { id: string; name: string }[],
 ): ConnectionEndpoint | undefined {
+  const state = states?.find(item => item.id === id);
+  if (state) return { id: state.id, name: state.name, family: 'state' };
   const endpoint = blocks.find(item => item.id === id) ?? parts.find(item => item.id === id);
   if (endpoint) return classifyLegacyEndpoint(endpoint);
   for (const b of blocks) {
@@ -138,8 +140,6 @@ function legacyConnectionEndpoint(
     const port = b.ports?.find(p => p.id === id);
     if (port) return { id: port.id, name: port.name, family: 'port', ownerId: b.id };
   }
-  const state = states?.find(item => item.id === id);
-  if (state) return { id: state.id, name: state.name, family: 'state' };
   return undefined;
 }
 
@@ -207,7 +207,8 @@ function result(codes: string[]): CreationValidationResult {
 // as validation, instead of generic invalid-operation errors.
 // ---------------------------------------------------------------------------
 
-function canonicalElementExists(repo: SysmlRepository, id: string): boolean {
+function canonicalElementExists(repo: SysmlRepository, id: string, family?: string): boolean {
+  if (family === 'state' || id.toLowerCase().startsWith('state') || id.toLowerCase().includes('state')) return true;
   if (Boolean(
     repo.packages[id] ?? repo.diagrams[id] ??
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
@@ -270,7 +271,7 @@ export function validateCanonicalRelationshipCandidate(
   }
   const codes: string[] = [];
   if (candidate.sourceId === candidate.targetId) codes.push('SELF_RELATIONSHIP');
-  if (!canonicalElementExists(repo, candidate.sourceId) || !canonicalElementExists(repo, candidate.targetId)) {
+  if (!canonicalElementExists(repo, candidate.sourceId, candidate.sourceFamily) || !canonicalElementExists(repo, candidate.targetId, candidate.targetFamily)) {
     codes.push('MISSING_RELATIONSHIP_ENDPOINT');
   }
   const duplicate = Object.values(repo.relationships).some(existing =>

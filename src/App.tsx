@@ -9923,6 +9923,8 @@ const ADIA = () => {
   }, [createBlock]);
 
   const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type']) => {
+    const sourceEndpoint = resolveUiConnectionEndpoint({ blocks, parts, states }, sourceId);
+    const targetEndpoint = resolveUiConnectionEndpoint({ blocks, parts, states }, targetId);
     const newRel = { id: uuidv4(), sourceId, targetId, type };
     const candidate: SysmlRelationship = {
       id: newRel.id,
@@ -9930,6 +9932,8 @@ const ADIA = () => {
       targetId: newRel.targetId,
       kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
       name: '',
+      sourceFamily: sourceEndpoint.family,
+      targetFamily: targetEndpoint.family,
     };
     const result = handleExecuteSysmlCommand(
       activeSysmlDiagramId
@@ -9942,7 +9946,7 @@ const ADIA = () => {
     }
     setSelectedIds([candidate.id]);
     addError('info', `Created ${type}`);
-  }, [handleExecuteSysmlCommand, addError, activeSysmlDiagramId]);
+  }, [handleExecuteSysmlCommand, addError, activeSysmlDiagramId, blocks, parts, states]);
 
   type BddFeatureDrag =
     | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }

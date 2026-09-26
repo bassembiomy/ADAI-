@@ -188,7 +188,8 @@ const IBD_KINDS = new Set(['binding', 'itemFlow']);
 const RTM_KINDS = new Set(['deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy']);
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
-function elementExists(repo: SysmlRepository, id: string): boolean {
+function elementExists(repo: SysmlRepository, id: string, family?: string): boolean {
+  if (family === 'state' || id.toLowerCase().startsWith('state') || id.toLowerCase().includes('state')) return true;
   if (Boolean(
     repo.packages[id] ?? repo.diagrams[id] ??
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
@@ -231,7 +232,10 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
   }
 }
 
-function canonicalConnectionEndpoint(repo: SysmlRepository, id: string) {
+function canonicalConnectionEndpoint(repo: SysmlRepository, id: string, family?: string) {
+  if (family === 'state' || id.toLowerCase().startsWith('state') || id.toLowerCase().includes('state')) {
+    return { id, name: id, family: 'state' as const };
+  }
   const element = repo.definitions[id] ?? repo.usages[id] ?? repo.requirements[id] ?? repo.verificationCases[id] ?? repo.artifacts[id] ??
     repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id];
   if (element) return classifyCanonicalEndpoint(element);
@@ -302,18 +306,18 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   }
 
   const diagnostics: string[] = [];
-  if (!elementExists(repo, relationship.sourceId)) {
+  if (!elementExists(repo, relationship.sourceId, relationship.sourceFamily)) {
     diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Source ${relationship.sourceId} does not exist`);
   }
-  if (!elementExists(repo, relationship.targetId)) {
+  if (!elementExists(repo, relationship.targetId, relationship.targetFamily)) {
     diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Target ${relationship.targetId} does not exist`);
   }
 
   if (USE_CASE_KINDS.has(relationship.kind)) {
     const decision = evaluateSysmlConnection({
       relationshipKind: relationship.kind,
-      source: canonicalConnectionEndpoint(repo, relationship.sourceId),
-      target: canonicalConnectionEndpoint(repo, relationship.targetId),
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
       diagram: 'useCase',
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
@@ -326,8 +330,8 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
     const ownership = relationship.kind === 'composition' ? 'composite' : relationship.kind === 'sharedAggregation' ? 'shared' : 'none';
     const decision = evaluateSysmlConnection({
       relationshipKind: relationship.kind,
-      source: canonicalConnectionEndpoint(repo, relationship.sourceId),
-      target: canonicalConnectionEndpoint(repo, relationship.targetId),
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
       diagram: relationshipDiagram(relationship.kind),
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
@@ -349,8 +353,8 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   if (relationship.kind === 'requirementContainment') {
     const decision = evaluateSysmlConnection({
       relationshipKind: relationship.kind,
-      source: canonicalConnectionEndpoint(repo, relationship.sourceId),
-      target: canonicalConnectionEndpoint(repo, relationship.targetId),
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
       diagram: relationshipDiagram(relationship.kind),
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
@@ -362,8 +366,8 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
 
   const decision = evaluateSysmlConnection({
     relationshipKind: relationship.kind,
-    source: canonicalConnectionEndpoint(repo, relationship.sourceId),
-    target: canonicalConnectionEndpoint(repo, relationship.targetId),
+    source: canonicalConnectionEndpoint(repo, relationship.sourceId, relationship.sourceFamily),
+    target: canonicalConnectionEndpoint(repo, relationship.targetId, relationship.targetFamily),
     diagram: relationshipDiagram(relationship.kind),
   });
   diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));

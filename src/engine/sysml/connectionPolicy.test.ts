@@ -152,6 +152,27 @@ describe('central SysML connection policy', () => {
       expect(res.diagnostics[0].code).toBe('INVALID_VERIFY_DIRECTION');
     });
 
+    it('allows satisfy from State to Requirement and rejects Requirement to State with guidance', () => {
+      const state = endpoint('state', 's1', 'Operating');
+      const valid = evaluateSysmlConnection({
+        relationshipKind: 'satisfy',
+        source: state,
+        target: req1,
+        diagram: 'requirements',
+      });
+      expect(valid.allowed).toBe(true);
+
+      const reversed = evaluateSysmlConnection({
+        relationshipKind: 'satisfy',
+        source: req1,
+        target: state,
+        diagram: 'requirements',
+      });
+      expect(reversed.allowed).toBe(false);
+      expect(reversed.diagnostics[0].code).toBe('INVALID_SATISFY_DIRECTION');
+      expect(reversed.diagnostics[0].correctiveAction).toBe('Connect the State to the Requirement, not the Requirement to the State.');
+    });
+
     it('allows refine from both model elements and requirements to requirement', () => {
       expect(evaluateSysmlConnection({ relationshipKind: 'refine', source: block, target: req1, diagram: 'requirements' }).allowed).toBe(true);
       expect(evaluateSysmlConnection({ relationshipKind: 'refine', source: req1, target: req2, diagram: 'requirements' }).allowed).toBe(true);

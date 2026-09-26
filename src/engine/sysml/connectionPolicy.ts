@@ -99,7 +99,12 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'satisfy') {
-    if ((!BLOCK_FAMILY.has(source.family) && source.family !== 'part' && source.family !== 'state') || target.family !== 'requirement') return reject(normalized, 'INVALID_SATISFY_DIRECTION', 'Satisfy requires a Block-family definition, Part usage, or State to a Requirement.', 'Connect the design element, Part, or State to a Requirement.');
+    if ((!BLOCK_FAMILY.has(source.family) && source.family !== 'part' && source.family !== 'state') || target.family !== 'requirement') {
+      const correctiveAction = (source.family === 'requirement' && target.family === 'state')
+        ? 'Connect the State to the Requirement, not the Requirement to the State.'
+        : 'Connect the design element, Part, or State to a Requirement.';
+      return reject(normalized, 'INVALID_SATISFY_DIRECTION', 'Satisfy requires a Block-family definition, Part usage, or State to a Requirement.', correctiveAction);
+    }
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'verify') {

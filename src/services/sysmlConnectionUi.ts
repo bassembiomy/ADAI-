@@ -20,6 +20,8 @@ export function resolveUiConnectionEndpoint(
   model: Pick<UiModel, 'blocks' | 'parts'> & { states?: readonly { id: string; name: string }[] },
   id: string,
 ): ConnectionEndpoint {
+  const state = model.states?.find(item => item.id === id);
+  if (state) return { id: state.id, name: state.name, family: 'state' };
   const block = model.blocks.find(item => item.id === id);
   if (block) return classifyLegacyEndpoint(block);
   for (const b of model.blocks) {
@@ -30,8 +32,6 @@ export function resolveUiConnectionEndpoint(
   }
   const part = model.parts.find(item => item.id === id);
   if (part) return classifyLegacyEndpoint({ ...part, stereotype: 'part' });
-  const state = model.states?.find(item => item.id === id);
-  if (state) return { id: state.id, name: state.name, family: 'state' };
   return { id: '', name: id, family: 'unknown' };
 }
 
