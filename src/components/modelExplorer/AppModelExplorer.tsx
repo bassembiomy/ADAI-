@@ -218,6 +218,11 @@ export function capabilityToAction(
         semanticIds: selectedIds,
         diagramId: context.activeDiagramId || '',
       };
+    case 'showPackageContents':
+      return { kind: 'command', command: {
+        type: 'showPackageContents', packageId: node.semanticId, diagramId: context.activeDiagramId || '',
+        mode: capability.elementKind === 'recursive' || capability.elementKind === 'packages' ? capability.elementKind : 'direct',
+      } };
     case 'removeFromDiagram':
       return {
         kind: 'removeFromDiagram',
@@ -268,7 +273,7 @@ export interface AppModelExplorerProps {
   onAddToDiagram?: (elementIds: string[], diagramId: string) => void;
   onRevealInContainment?: (semanticId: string) => void;
   onOpenSpecification?: (semanticId: string) => void;
-  onCommandResult?: (result: ExplorerCommandResult) => void;
+  onCommandResult?: (result: ExplorerCommandResult, command?: ModelExplorerCommand) => void;
   projectId?: string;
   className?: string;
   height?: number;
@@ -338,7 +343,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         command,
       });
     }
-    onCommandResult?.(result);
+    onCommandResult?.(result, command);
     return result;
   }, [onCommandResult, onSelectMultiple]);
 
@@ -608,6 +613,12 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           type: 'addToDiagram',
           elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
           diagramId: targetDiagramId,
+        };
+      } else if (capability.kind === 'showPackageContents') {
+        cmd = {
+          type: 'showPackageContents', packageId: node.semanticId,
+          diagramId: activeDiagramId || '',
+          mode: capability.elementKind === 'recursive' || capability.elementKind === 'packages' ? capability.elementKind : 'direct',
         };
       } else if (capability.kind === 'removeFromDiagram') {
         const targetDiagramId = activeDiagramId || (diagramMode === 'ibd' ? currentLayerId : diagramMode);

@@ -74,7 +74,7 @@ export interface RelationshipData {
   id: string;
   sourceId: string;
   targetId: string;
-  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'requirementContainment';
+  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'packageImport' | 'elementImport' | 'packageMerge' | 'requirementContainment';
   label: string;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;

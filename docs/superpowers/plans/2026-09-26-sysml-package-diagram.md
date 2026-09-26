@@ -4,9 +4,9 @@
 
 **Goal:** Implement a first-class, repository-backed SysML Package Diagram with UML package, import, merge, dependency, namespace, Cameo-style presentation, persistence, and validation behavior.
 
-**Architecture:** Extend the canonical `SysmlRepositoryV4` domain, commands, validators, normalized indexes, persistence, and diagram projection. Keep legacy `SysmlRepository` as a migration and projection boundary only; route all writes through the canonical command gateway. Add the React workspace only after backend semantics, transaction behavior, and persistence are independently testable.
+**Architecture:** Extend the live, persisted `SysmlRepository` (`src/engine/sysml/model.ts`) through `sysmlCommandGateway.ts`, the command path used by `App.tsx`, Model Explorer, undo, and project persistence. Keep `SysmlRepositoryV4` as a separate capability/migration boundary; do not create a second writable repository or implement this feature only there. Extend the live repository’s semantic diagram definitions, relationships, validators, persistence and projections, then add React integration after semantics are independently testable.
 
-**Tech Stack:** TypeScript, React, Vitest, Playwright, existing SysML V4 command dispatcher, normalized store, Model Explorer adapters, and project persistence.
+**Tech Stack:** TypeScript, React, Vitest, Playwright, existing SysML command gateway, normalized store, Model Explorer adapters, and project persistence.
 
 ## Global Constraints
 
@@ -26,6 +26,11 @@
 
 | Path | Responsibility in this feature |
 |---|---|
+| `src/engine/sysml/model.ts` | Add `package` diagram kind and typed package import/merge relationship data to the live repository model. |
+| `src/types/sysml_types.ts` | Extend serialized relationship data for package import, element import, merge, visibility, and alias. |
+| `src/services/sysmlCommandGateway.ts` | Add package diagram creation/addition and shared transaction behavior for package semantics. |
+| `src/services/sysmlCreationRules.ts` | Add package namespace and endpoint validation shared across command callers. |
+| `src/engine/sysml/policy.ts` and `validation.ts` | Enforce package ownership, import, merge, and relationship constraints at the live semantic boundary. |
 | `src/engine/sysml/domain/base.ts` | Existing Package and Model metaclasses; only extend if common namespace properties are required. |
 | `src/engine/sysml/domain/relationships.ts` | Add typed PackageImport, ElementImport, and PackageMerge relationships; retain existing generic UML Dependency semantics. |
 | `src/engine/sysml/domain/presentations.ts` | Add `package` to DiagramKind; keep diagram presentation references semantic-ID based. |
@@ -38,16 +43,16 @@
 | `src/engine/sysml/capabilities/relationshipPolicy.ts` | Validate Dependency endpoints and package relationship endpoints/direction. |
 | `src/engine/sysml/capabilities/packagePolicy.ts` (new) | Pure package import, element import, merge, visibility, and cycle validators. |
 | `src/engine/sysml/services/packageQueries.ts` (new) | Qualified names, owned members, imports, visibility, dependencies, usages, merge closure, and presentation lookup. |
-| `src/engine/sysml/normalizedStore.ts` | Project Packages and generic relationships from canonical store into Package Diagram scoped view data. |
-| `src/engine/sysml/persistence.ts` | Persist PackageImport, ElementImport, and PackageMerge relationship variants through the existing relationship collection. |
-| `src/engine/sysml/persistence/migrateV3ToV4.ts` | Preserve existing package ownership and BDD/Requirements presentations; do not synthesize package diagrams. |
+| `src/engine/sysml/normalizedStore.ts` | Index and project package relationships, ownership, and diagram presentations from the live repository. |
+| `src/engine/sysml/persistence.ts` | Round-trip package diagram kind and relationship variants through existing project persistence. |
+| `src/services/sysmlProjectionState.ts` and `projectLegacyDiagram` | Project package diagram contents and relationship labels without mutating semantic ownership. |
 | `src/engine/sysml/compliance/types.ts` and package evidence module | Record authority and four-level evidence for each delivered semantic feature. |
 | `src/features/modelExplorer/modelExplorerCapabilities.ts` | Advertise Package Diagram creation only for Model and Package nodes. |
 | `src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts` | Create/open semantic Package Diagrams, add/show/remove presentations, and return diagnostics. |
 | `src/features/modelExplorer/modelExplorerTypes.ts` | Extend explorer commands only for missing intents; avoid frontend-owned semantic state. |
 | `src/features/modelExplorer/modelDiagramRegistry.ts` | Resolve persisted diagrams by repository ID; remove synthetic fallback IDs for failed creation. |
 | `src/components/modelExplorer/AppModelExplorer.tsx` | Surface supported Package Diagram creation and package commands through the command bus. |
-| `src/features/sysml/packageDiagramProjection.ts` (new) | Project semantic packages, selected owned members, imports/merges/dependencies, and presentation bounds. |
+| `src/features/sysml/packageDiagramProjection.ts` (new) | Project semantic packages, selected owned members, imports/merges/dependencies, and presentation bounds from the live repository. |
 | `src/features/sysml/packageDiagramProjection.test.ts` (new) | Validate projection references and ensure presentation does not alter ownership. |
 | `src/components/sysml/PackageDiagramWorkspace.tsx` (new) | Thin React workspace consuming projected semantic data and command callbacks. |
 | `src/components/sysml/PackageDiagramWorkspace.test.tsx` (new) | UI behavior tests for palette, selection, notation, contexts, and diagnostics. |
@@ -63,7 +68,7 @@
 | `tests/e2e/sysml-package-diagram.spec.ts` (new) | Browser workflows from tree, palette, relationship tools, properties, persistence, and deletion. |
 | `docs/sysml/compliance-evidence.json` | Add evidence entries only after semantic automated tests exist. |
 
-The older `src/engine/sysml/model.ts` / `SysmlRepository` model remains an adapter boundary during this feature. Add explicit migration/projection fields only as required for round-trip compatibility; do not add a second writeable Package Diagram repository.
+`SysmlRepository` and `sysmlCommandGateway.ts` are the one writable semantic path for this feature. Do not write Package Diagram semantics to `SysmlRepositoryV4` unless a separate repository-wide migration moves all App persistence and commands to V4; that migration is out of scope.
 
 ## Interfaces Produced by the Plan
 
@@ -97,13 +102,20 @@ export interface PackageMerge extends Omit<SemanticRelationship, 'metaclass' | '
 
 export interface PackageQueryService {
   getOwnedPackageableElements(packageId: string): SemanticElement[];
-  getImportedMembers(namespaceId: string): SemanticElement[];
-  getVisibleMembers(namespaceId: string): SemanticElement[];
+  getImportedMembers(namespaceId: string): PackageMemberReference[];
+  getVisibleMembers(namespaceId: string): PackageMemberReference[];
   getPackageDependencies(packageId: string, recursive?: boolean): SemanticRelationship[];
   getElementUsages(elementId: string): SemanticRelationship[];
   getQualifiedName(elementId: string): string | null;
   getPresentationsForElement(elementId: string): DiagramPresentation[];
   getPackageMergeClosure(packageId: string): string[];
+}
+
+export interface PackageMemberReference {
+  element: SemanticElement;
+  visibleName: string;
+  visibility: PackageVisibility;
+  importedViaId?: string;
 }
 ```
 
@@ -138,7 +150,7 @@ Package relationships must be representable without corrupting existing source/t
 - Modify: `src/engine/sysml/capabilities/ownershipPolicy.ts` only if cycle checks need a shared owner capability.
 
 **Interfaces:**
-- Consumes: package interfaces from Task 1 and canonical `SysmlRepositoryV4` indexes.
+- Consumes: package interfaces from Task 1 and the live `SysmlRepository` normalized indexes.
 - Produces: pure `validatePackageImport`, `validateElementImport`, `validatePackageMerge`, `validatePackageOwnershipMove`; `createPackageQueryService(repo)` implementing all `PackageQueryService` methods.
 
 - [ ] **Step 1: Write failing semantic tests.** Cover import target must be Package, element import target must exist and be packageable, self-merge, merge cycles, ownership cycles, duplicate equivalent imports, public/private imported-member lookup, alias lookup, qualified names from actual owner chain, recursive dependency query, usages, presentations, and merge closure.

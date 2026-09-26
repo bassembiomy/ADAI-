@@ -149,6 +149,8 @@ export function assessOpmInterchangeLoss(repo: SysmlRepository): InterchangeRepo
 export function findUnresolvedEndpoints(repo: SysmlRepository): UnresolvedEndpointRecord[] {
   const records: UnresolvedEndpointRecord[] = [];
   const known = new Set<string>([
+    ...Object.keys(repo.packages ?? {}),
+    ...Object.keys(repo.diagrams ?? {}),
     ...Object.keys(repo.definitions ?? {}),
     ...Object.keys(repo.usages ?? {}),
     ...Object.keys(repo.connectors ?? {}),

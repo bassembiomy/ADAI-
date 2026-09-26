@@ -49,7 +49,11 @@ export function createModelDiagramRegistry(options: ModelDiagramRegistryOptions)
         name: createOptions.name,
       });
 
-      const diagramId = result.selectedIds?.[0] ?? `diag-${Date.now()}`;
+      if (!result.committed || !result.selectedIds?.[0]) {
+        const diagnostic = result.diagnostics[0];
+        throw new Error(diagnostic?.message ?? 'Diagram creation failed; no semantic diagram was created.');
+      }
+      const diagramId = result.selectedIds[0];
       const metadata: ModelDiagramMetadata = {
         id: diagramId,
         name: createOptions.name ?? createOptions.diagramKind.toUpperCase(),

@@ -41,4 +41,16 @@ describe('modelDiagramRegistry', () => {
     expect(registry.listForOwner('block-1')).toContainEqual(expect.objectContaining({ id: 'diag-1', name: 'Power IBD' }));
     expect(registry.presentedElementIds('diag-1')).toEqual([]);
   });
+
+  it('does not fabricate a diagram ID when semantic creation fails', () => {
+    const adapter: ModelExplorerAdapter = {
+      domain: 'sysml', getRevision: () => 1, project: vi.fn(), capabilities: vi.fn(),
+      preflight: vi.fn(), execute: vi.fn().mockReturnValue({
+        committed: false, revision: 1, diagnostics: [{ code: 'OWNER_NOT_FOUND', severity: 'error', message: 'Owner missing' }],
+      }), relationshipTargets: vi.fn(),
+    };
+    const registry = createModelDiagramRegistry({ adapter });
+    expect(() => registry.create({ ownerId: 'missing', diagramKind: 'package' })).toThrow('Owner missing');
+    expect(registry.listForOwner('missing')).toEqual([]);
+  });
 });

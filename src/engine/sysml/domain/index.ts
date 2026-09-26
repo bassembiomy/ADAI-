@@ -6,6 +6,7 @@ export * from './requirements';
 export * from './behaviors';
 export * from './relationships';
 export * from './presentations';
+export type { PackageQueryService, PackageMemberReference } from '../services/packageQueries';
 
 import type { SemanticElement } from './base';
 import type { Diagram, DiagramPresentation } from './presentations';

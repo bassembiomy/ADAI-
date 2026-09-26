@@ -1,6 +1,6 @@
 import type { SemanticElement } from './base';
 
-export type DiagramKind = 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'parametric' | 'stateMachine';
+export type DiagramKind = 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'parametric' | 'stateMachine' | 'package';
 
 export interface Diagram extends SemanticElement {
   metaclass: 'Diagram';

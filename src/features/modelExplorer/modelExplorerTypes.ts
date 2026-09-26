@@ -26,6 +26,7 @@ export type CapabilityKind =
   | 'duplicate'
   | 'delete'
   | 'addToDiagram'
+  | 'showPackageContents'
   | 'removeFromDiagram'
   | 'openSpecification'
   | 'reveal';
@@ -104,6 +105,7 @@ export type ModelExplorerCommand =
   | { type: 'delete'; elementIds: string[]; confirmedImpactHash?: string }
   | { type: 'createRelationship'; relationshipKind: string; sourceId: string; targetId: string }
   | { type: 'addToDiagram'; elementIds: string[]; diagramId: string; position?: { x: number; y: number } }
+  | { type: 'showPackageContents'; diagramId: string; packageId: string; mode: 'direct' | 'packages' | 'packageable' | 'recursive' }
   | { type: 'removeFromDiagram'; elementIds: string[]; diagramId: string }
   | { type: 'duplicate'; elementIds: string[]; targetOwnerId: string }
   | { type: 'copy'; elementIds: string[] }

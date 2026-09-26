@@ -77,6 +77,7 @@ export function handleCreateElement(
 }
 
 export const DIAGRAM_ALLOWED_METACLASSES: Record<DiagramKind, readonly MetaclassKind[]> = {
+  package: ['Model', 'Package', 'Block', 'InterfaceBlock', 'ValueType', 'Requirement', 'TestCase', 'UseCase', 'Comment', 'Rationale', 'Constraint'],
   bdd: [
     'Model',
     'Package',

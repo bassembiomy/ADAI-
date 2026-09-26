@@ -207,6 +207,7 @@ export type SysmlMutationCommand =
   | { type: 'updatePresentation'; diagramId: string; elementId: string; presentation: PresentationCoordinates; style?: DiagramElementPresentation['style']; portLayouts?: DiagramElementPresentation['portLayouts']; coalesceKey?: string }
   | { type: 'moveElements'; elementIds: string[]; targetOwnerId: string; confirmedImpactHash?: string }
   | { type: 'createDiagram'; diagram: ModelDiagramDefinition }
+  | { type: 'showPackageContents'; diagramId: string; packageId: string; mode: 'direct' | 'packages' | 'packageable' | 'recursive' }
   | { type: 'addToDiagram'; diagramId: string; elementIds: string[]; coordinates?: Record<string, PresentationCoordinates> };
 
 export type SysmlEditorCommand =
@@ -529,6 +530,9 @@ export function projectLegacyDiagram(
     if (rel.kind === 'deriveReqt') legacyType = 'derive';
     else if (rel.kind === 'sharedAggregation') legacyType = 'aggregation';
     else if (
+      rel.kind === 'packageImport' ||
+      rel.kind === 'elementImport' ||
+      rel.kind === 'packageMerge' ||
       rel.kind === 'association' ||
       rel.kind === 'composition' ||
       rel.kind === 'generalization' ||
@@ -549,7 +553,9 @@ export function projectLegacyDiagram(
       sourceId: rel.sourceId,
       targetId: rel.targetId,
       type: legacyType,
-      label: rel.name ?? '',
+      label: rel.kind === 'packageImport' ? (rel.visibility === 'private' ? '«access»' : '«import»')
+        : rel.kind === 'elementImport' ? `«elementImport»${rel.alias ? ` ${rel.alias}` : ''}`
+        : rel.kind === 'packageMerge' ? '«merge»' : rel.name ?? '',
       sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
       targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
     });
@@ -732,6 +738,8 @@ function toGateDiagnostics(elementId: string, codes: readonly string[], subject:
 
 function elementExistsInRepository(repo: SysmlRepository, id: string): boolean {
   return Boolean(
+    repo.packages[id] ||
+    repo.diagrams[id] ||
     repo.definitions[id] ||
     repo.usages[id] ||
     repo.connectors[id] ||
@@ -747,6 +755,16 @@ function elementExistsInRepository(repo: SysmlRepository, id: string): boolean {
     repo.extensionPoints?.[id] ||
     repo.diagramReferences?.[id]
   );
+}
+
+function isLegacyDiagramId(id: string): boolean {
+  return id === 'bdd' || id === 'requirements' || id === 'rtm' || id === 'ibd';
+}
+
+function repositoryHasSemanticId(repo: SysmlRepository, id: string): boolean {
+  if (elementExistsInRepository(repo, id)) return true;
+  return Object.values(repo.definitions).some(definition => definition.kind === 'block'
+    && [...definition.properties, ...definition.ports].some(feature => feature.id === id));
 }
 
 function gateCreateElement(repo: SysmlRepository, element: SysmlElement): SysmlDiagnostic[] | null {
@@ -976,6 +994,21 @@ export function executeSysmlCommand(
     }
     return projectLegacyDiagram(repo, coords, diagrams, diagId);
   };
+
+  const reject = (code: string, message: string, elementId?: string): SysmlCommandResult => ({
+    repository: state.repository,
+    store,
+    patchHistory,
+    view: getView(state.repository, coordinates, diagramPresentations),
+    diagnostics: [{ code, severity: 'error', message, elementId }],
+    committed: false,
+    history: state.history,
+    coordinates,
+    diagramPresentations,
+    presentationHistory: state.presentationHistory,
+    actionStack: state.actionStack,
+    redoStack: state.redoStack,
+  });
 
   if (command.type === 'undo') {
     const actionStack = [...(state.actionStack ?? [])];
@@ -1300,6 +1333,15 @@ export function executeSysmlCommand(
         presentationHistory: state.presentationHistory,
         actionStack: state.actionStack,
         redoStack: state.redoStack,
+      };
+    }
+    if (!['bdd', 'requirements', 'ibd', 'rtm'].includes(command.diagramId) && !state.repository.diagrams[command.diagramId]) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository, store, patchHistory, view,
+        diagnostics: [{ code: 'DIAGRAM_NOT_FOUND', severity: 'error', elementId: command.element.id, message: `Diagram '${command.diagramId}' does not exist.` }],
+        committed: false, history: state.history, coordinates, diagramPresentations,
+        presentationHistory: state.presentationHistory, actionStack: state.actionStack, redoStack: state.redoStack,
       };
     }
     return executeSysmlCommand(state, {
@@ -1665,6 +1707,13 @@ export function executeSysmlCommand(
     }
     const nextDiagramPresentations: Record<string, DiagramPresentation> = {};
     for (const [dId, pres] of Object.entries(diagramPresentations)) {
+      if (impact.deletedElementIds.includes(dId)) {
+        forwardOps.push({ op: 'remove', collection: 'diagramPresentations', id: dId, oldValue: pres });
+        inverseOps.unshift({ op: 'add', collection: 'diagramPresentations', id: dId, value: pres });
+        store.diagramPresentations.delete(dId);
+        store.indexes.diagramId.delete(dId);
+        continue;
+      }
       const nextIds = pres.elementIds.filter(id => !impact.deletedElementIds.includes(id));
       const nextRecord = Object.fromEntries(Object.entries(pres.presentations)
         .filter(([semanticElementId]) => !impact.deletedElementIds.includes(semanticElementId)));
@@ -1917,7 +1966,18 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'createDiagram') {
-    const diagram = command.diagram;
+    const diagram = { ...command.diagram, ownerId: command.diagram.ownerId || 'model' };
+    if (!diagram.id?.trim()) return reject('INVALID_DIAGRAM_ID', 'A diagram must have a stable semantic ID.');
+    if (repositoryHasSemanticId(state.repository, diagram.id)) {
+      return reject('DUPLICATE_ELEMENT_ID', `Diagram ID '${diagram.id}' is already used by a model element.`, diagram.id);
+    }
+    const ownerId = diagram.ownerId;
+    if (!elementExistsInRepository(state.repository, ownerId)) {
+      return reject('OWNER_NOT_FOUND', `Diagram owner '${ownerId}' does not exist.`, ownerId);
+    }
+    if (diagram.diagramKind === 'package' && !state.repository.packages[ownerId]) {
+      return reject('INVALID_DIAGRAM_OWNER', 'A Package Diagram must be owned by the Model or a Package.', ownerId);
+    }
     const nextRepo: SysmlRepository = {
       ...state.repository,
       revision: state.repository.revision + 1,
@@ -1975,27 +2035,94 @@ export function executeSysmlCommand(
     };
   }
 
+  if (command.type === 'showPackageContents') {
+    if (state.repository.diagrams[command.diagramId]?.diagramKind !== 'package') {
+      return reject('INVALID_DIAGRAM', 'Show Contents requires an existing Package Diagram.', command.diagramId);
+    }
+    if (!state.repository.packages[command.packageId]) {
+      return reject('ELEMENT_NOT_FOUND', `Package '${command.packageId}' does not exist.`, command.packageId);
+    }
+    const memberIds: string[] = [];
+    const visited = new Set<string>();
+    const collect = (packageId: string) => {
+      if (visited.has(packageId)) return;
+      visited.add(packageId);
+      const ownedPackages = Object.values(state.repository.packages)
+        .filter(pkg => pkg.id !== 'model' && pkg.ownerId === packageId);
+      const ownedElements = [
+        ...Object.values(state.repository.definitions),
+        ...Object.values(state.repository.requirements),
+        ...Object.values(state.repository.verificationCases),
+      ].filter(element => element.ownerId === packageId);
+      memberIds.push(...ownedPackages.map(pkg => pkg.id));
+      if (command.mode !== 'packages') memberIds.push(...ownedElements.map(element => element.id));
+      if (command.mode === 'recursive') ownedPackages.forEach(pkg => collect(pkg.id));
+    };
+    collect(command.packageId);
+    const alreadyShown = new Set(diagramPresentations[command.diagramId]?.elementIds ?? []);
+    const newIds = memberIds.filter(id => !alreadyShown.has(id));
+    if (newIds.length === 0) return reject('NO_CONTENTS_TO_SHOW', 'All matching Package contents are already shown.', command.packageId);
+    const start = alreadyShown.size;
+    return executeSysmlCommand(state, {
+      type: 'addToDiagram', diagramId: command.diagramId, elementIds: newIds,
+      coordinates: Object.fromEntries(newIds.map((id, index) => [id, {
+        x: 80 + ((start + index) % 4) * 260,
+        y: 80 + Math.floor((start + index) / 4) * 170,
+      }])),
+    }, command.diagramId);
+  }
+
   if (command.type === 'addToDiagram') {
+    const ibdContext = state.repository.definitions[command.diagramId];
+    const isBlockIbdContext = ibdContext?.kind === 'block';
+    if (!command.diagramId || (!isLegacyDiagramId(command.diagramId) && !state.repository.diagrams[command.diagramId] && !isBlockIbdContext)) {
+      return reject('DIAGRAM_NOT_FOUND', `Diagram '${command.diagramId}' does not exist.`, command.diagramId);
+    }
     const diagramKind = state.repository.diagrams[command.diagramId]?.diagramKind
-      ?? (command.diagramId === 'bdd' || command.diagramId === 'requirements' || command.diagramId === 'rtm' || command.diagramId === 'ibd'
+      ?? (isLegacyDiagramId(command.diagramId)
         ? command.diagramId
-        : undefined);
+        : isBlockIbdContext ? 'ibd' : undefined);
     const requestedElementIds: string[] = [];
+    const presentedIds = new Set(diagramPresentations[command.diagramId]?.elementIds ?? []);
     for (const elementId of command.elementIds) {
+      if (!repositoryHasSemanticId(state.repository, elementId)) {
+        return reject('ELEMENT_NOT_FOUND', `Element '${elementId}' does not exist and cannot be presented.`, elementId);
+      }
+      const packageRelationship = state.repository.relationships[elementId];
+      const isPackageRelationship = packageRelationship && (
+        packageRelationship.kind === 'packageImport' || packageRelationship.kind === 'elementImport' ||
+        packageRelationship.kind === 'packageMerge' || packageRelationship.kind === 'dependency'
+      );
+      if (diagramKind === 'package' && isPackageRelationship &&
+        (!presentedIds.has(packageRelationship.sourceId) || !presentedIds.has(packageRelationship.targetId))) {
+        return reject('RELATIONSHIP_ENDPOINT_NOT_PRESENTED', 'Both relationship endpoints must be shown on the Package Diagram first.', elementId);
+      }
+      if (diagramKind === 'package' && !(
+        (elementId !== 'model' && state.repository.packages[elementId]) ||
+        state.repository.definitions[elementId] ||
+        state.repository.requirements[elementId] ||
+        state.repository.verificationCases[elementId] ||
+        isPackageRelationship
+      )) {
+        return reject('INVALID_DIAGRAM_ELEMENT', `Element '${elementId}' cannot be rendered on a Package Diagram.`, elementId);
+      }
       const isPackage = Boolean(state.repository.packages[elementId]);
-      if (isPackage && !['bdd', 'requirements'].includes(diagramKind ?? '')) {
+      if (isPackage && !['bdd', 'requirements', 'package'].includes(diagramKind ?? '')) {
         const view = getView(state.repository, coordinates, diagramPresentations);
         return {
           repository: state.repository, store, patchHistory, view,
           diagnostics: [{
             code: 'INVALID_DIAGRAM_ELEMENT', severity: 'error', elementId,
-            message: 'Package symbols are supported on Block Definition and Requirement diagrams.',
+            message: 'Package symbols are supported on Block Definition, Requirement, and Package diagrams.',
           }],
           committed: false, history: state.history, coordinates, diagramPresentations,
           presentationHistory: state.presentationHistory, actionStack: state.actionStack, redoStack: state.redoStack,
         };
       }
       const usage = state.repository.usages[elementId];
+      if (isBlockIbdContext && (usage?.kind !== 'part' || usage.ownerId !== command.diagramId)) {
+        return reject('INVALID_DIAGRAM_ELEMENT', `Only PartProperties owned by Block '${command.diagramId}' can be presented on its IBD.`, elementId);
+      }
       if ((diagramKind === 'bdd' || diagramKind === 'requirements' || diagramKind === 'rtm') && usage?.kind === 'part') {
         if (!requestedElementIds.includes(usage.ownerId)) requestedElementIds.push(usage.ownerId);
       } else if (!requestedElementIds.includes(elementId)) {

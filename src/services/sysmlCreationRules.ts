@@ -13,6 +13,7 @@ import {
   type DeletionDecision,
 } from '../engine/sysml/policy';
 import { validateConnector } from '../engine/sysml/ibd';
+import { validateElementImport, validatePackageImport, validatePackageMerge } from '../engine/sysml/capabilities/packagePolicy';
 import {
   classifyCanonicalEndpoint,
   classifyLegacyEndpoint,
@@ -202,8 +203,10 @@ function result(codes: string[]): CreationValidationResult {
 
 function canonicalElementExists(repo: SysmlRepository, id: string): boolean {
   return Boolean(
+    repo.packages[id] ?? repo.diagrams[id] ??
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
-    repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id],
+    repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
+    repo.actors[id] ?? repo.subjects[id] ?? repo.useCases[id] ?? repo.extensionPoints[id],
   );
 }
 
@@ -244,6 +247,18 @@ function canonicalRelationshipCycle(
 export function validateCanonicalRelationshipCandidate(
   repo: SysmlRepository, candidate: SysmlRelationship,
 ): CreationValidationResult {
+  if (candidate.kind === 'packageImport' || candidate.kind === 'elementImport' || candidate.kind === 'packageMerge') {
+    const expectedSource = candidate.kind === 'packageMerge' ? candidate.mergingPackageId : candidate.importingNamespaceId;
+    const expectedTarget = candidate.kind === 'packageImport' ? candidate.importedPackageId
+      : candidate.kind === 'elementImport' ? candidate.importedElementId : candidate.mergedPackageId;
+    if (candidate.sourceId !== expectedSource || candidate.targetId !== expectedTarget) return result(['INVALID_RELATIONSHIP_ROLES']);
+    const decision = candidate.kind === 'packageImport'
+      ? validatePackageImport(repo, candidate.sourceId, candidate.targetId, candidate.visibility)
+      : candidate.kind === 'elementImport'
+        ? validateElementImport(repo, candidate.sourceId, candidate.targetId, candidate.visibility, candidate.alias)
+        : validatePackageMerge(repo, candidate.sourceId, candidate.targetId);
+    return result(decision.allowed ? [] : [decision.code ?? 'INVALID_PACKAGE_RELATIONSHIP']);
+  }
   const codes: string[] = [];
   if (candidate.sourceId === candidate.targetId) codes.push('SELF_RELATIONSHIP');
   if (!canonicalElementExists(repo, candidate.sourceId) || !canonicalElementExists(repo, candidate.targetId)) {

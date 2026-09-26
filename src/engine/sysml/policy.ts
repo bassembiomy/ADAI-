@@ -6,6 +6,7 @@ import type {
 } from './model';
 import type { SysmlDiagnostic } from './validation';
 import { classifyCanonicalEndpoint, evaluateSysmlConnection } from './connectionPolicy';
+import { validateElementImport, validatePackageImport, validatePackageMerge } from './capabilities/packagePolicy';
 
 export interface InheritedFeature {
   featureId: string;
@@ -20,13 +21,13 @@ export interface InheritanceResolution {
 
 export interface RelationshipDecision {
   allowed: boolean;
-  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase';
+  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' | 'package';
   ownership?: 'composite' | 'shared' | 'none';
   diagnostics: string[];
 }
 
 export interface DeletionDecision {
-  targetKind: 'definition' | 'usage' | 'connector' | 'relationship' | 'requirement' | 'actor' | 'useCase' | 'subject' | 'extensionPoint' | 'diagramReference' | 'unknown';
+  targetKind: 'package' | 'diagram' | 'definition' | 'usage' | 'connector' | 'relationship' | 'requirement' | 'actor' | 'useCase' | 'subject' | 'extensionPoint' | 'diagramReference' | 'unknown';
   cascadeIds: string[];
   unresolvedUsageIds: string[];
   diagnostics: string[];
@@ -189,6 +190,7 @@ const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useC
 
 function elementExists(repo: SysmlRepository, id: string): boolean {
   return Boolean(
+    repo.packages[id] ?? repo.diagrams[id] ??
     repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ??
     repo.requirements[id] ?? repo.verificationCases[id] ?? repo.evidence[id] ?? repo.baselines[id] ?? repo.artifacts[id] ??
     repo.actors?.[id] ?? repo.subjects?.[id] ?? repo.useCases?.[id] ?? repo.extensionPoints?.[id] ?? repo.diagramReferences?.[id],
@@ -243,6 +245,31 @@ function relationshipDiagram(kind: SysmlRelationship['kind']): 'bdd' | 'ibd' | '
 export function classifyRelationship(repo: SysmlRepository, relationshipId: string): RelationshipDecision {
   const relationship = repo.relationships[relationshipId] as SysmlRelationship | undefined;
   if (!relationship) return { allowed: false, diagram: 'bdd', diagnostics: [`UNKNOWN_RELATIONSHIP: Unknown relationship: ${relationshipId}`] };
+
+  if (relationship.kind === 'packageImport' || relationship.kind === 'elementImport' || relationship.kind === 'packageMerge') {
+    const withoutSelf = { ...repo, relationships: Object.fromEntries(Object.entries(repo.relationships).filter(([id]) => id !== relationshipId)) };
+    const expectedSource = relationship.kind === 'packageMerge' ? relationship.mergingPackageId : relationship.importingNamespaceId;
+    const expectedTarget = relationship.kind === 'packageImport' ? relationship.importedPackageId
+      : relationship.kind === 'elementImport' ? relationship.importedElementId : relationship.mergedPackageId;
+    const roleMismatch = relationship.sourceId !== expectedSource || relationship.targetId !== expectedTarget;
+    const decision = relationship.kind === 'packageImport'
+      ? validatePackageImport(withoutSelf, relationship.sourceId, relationship.targetId, relationship.visibility)
+      : relationship.kind === 'elementImport'
+        ? validateElementImport(withoutSelf, relationship.sourceId, relationship.targetId, relationship.visibility, relationship.alias)
+        : validatePackageMerge(withoutSelf, relationship.sourceId, relationship.targetId);
+    const diagnostics = [
+      ...(roleMismatch ? ['INVALID_RELATIONSHIP_ROLES: Package relationship endpoint roles disagree with source and target'] : []),
+      ...(!decision.allowed ? [`${decision.code}: ${decision.message}`] : []),
+    ];
+    return { allowed: diagnostics.length === 0, diagram: 'package', diagnostics };
+  }
+
+  if (relationship.kind === 'dependency' && (repo.packages[relationship.sourceId] || repo.packages[relationship.targetId])) {
+    const diagnostics = [relationship.sourceId === relationship.targetId ? 'SELF_RELATIONSHIP: Dependency cannot target itself' : '',
+      !elementExists(repo, relationship.sourceId) || !elementExists(repo, relationship.targetId)
+        ? 'MISSING_RELATIONSHIP_ENDPOINT: Dependency endpoint does not exist' : ''].filter(Boolean);
+    return { allowed: diagnostics.length === 0, diagram: 'package', diagnostics };
+  }
 
   if (!BDD_KINDS.has(relationship.kind) && !IBD_KINDS.has(relationship.kind) && relationship.kind !== 'requirementContainment' && !RTM_KINDS.has(relationship.kind) && !USE_CASE_KINDS.has(relationship.kind)) {
     return { allowed: false, diagram: 'bdd', diagnostics: [`UNSUPPORTED_RELATIONSHIP_KIND: Unsupported relationship kind: ${relationship.kind}`] };
@@ -341,6 +368,8 @@ function collectOwnedPortIds(repo: SysmlRepository, ownerIds: ReadonlySet<string
 }
 
 export function classifyDeletionTarget(repo: SysmlRepository, elementId: string): DeletionDecision {
+  if (repo.packages[elementId]) return { targetKind: 'package', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
+  if (repo.diagrams[elementId]) return { targetKind: 'diagram', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
   const definition = repo.definitions[elementId];
   if (definition) {
     // Cascade only through explicit composite ownership. Definition-typed

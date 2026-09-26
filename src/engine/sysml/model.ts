@@ -11,7 +11,7 @@ export interface NamedElement { id: string; name: string; namespace: string[]; o
 export interface PackageDefinition extends NamedElement { kind: 'package'; }
 export interface ModelDiagramDefinition extends NamedElement {
   kind: 'diagram';
-  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine';
+  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine' | 'package';
   contextElementId?: string;
 }
 export interface ValueTypeDefinition extends NamedElement { kind: 'valueType'; unit?: string; dimension?: string; }
@@ -95,6 +95,9 @@ export interface SysmlRelationship {
     | 'composition'
     | 'generalization'
     | 'dependency'
+    | 'packageImport'
+    | 'elementImport'
+    | 'packageMerge'
     | 'allocation'
     | 'binding'
     | 'itemFlow'
@@ -102,6 +105,13 @@ export interface SysmlRelationship {
     | UseCaseRelationshipKind;
   sourceId: string;
   targetId: string;
+  importingNamespaceId?: string;
+  importedPackageId?: string;
+  importedElementId?: string;
+  mergingPackageId?: string;
+  mergedPackageId?: string;
+  visibility?: 'public' | 'private';
+  alias?: string;
   sourceMultiplicity?: Multiplicity;
   targetMultiplicity?: Multiplicity;
   sourceRole?: string;
@@ -113,6 +123,25 @@ export interface SysmlRelationship {
   suspect?: boolean;
   lastValidatedRevision?: number;
   extensionPointId?: string;
+}
+
+export interface LivePackageImport extends SysmlRelationship {
+  kind: 'packageImport';
+  importingNamespaceId: string;
+  importedPackageId: string;
+  visibility: 'public' | 'private';
+}
+export interface LiveElementImport extends SysmlRelationship {
+  kind: 'elementImport';
+  importingNamespaceId: string;
+  importedElementId: string;
+  visibility: 'public' | 'private';
+  alias?: string;
+}
+export interface LivePackageMerge extends SysmlRelationship {
+  kind: 'packageMerge';
+  mergingPackageId: string;
+  mergedPackageId: string;
 }
 
 export interface SysmlRepository {

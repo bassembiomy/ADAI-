@@ -763,14 +763,29 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             ? el?.ownerId ?? id
             : id;
           const alreadyPresented = presentation ? presentation.elementIds.includes(representedId) : false;
-          const unsupportedPackageView = kind === 'package' && !['bdd', 'requirements'].includes(diagramKind ?? '');
+          const unsupportedPackageView = kind === 'package' && !['bdd', 'requirements', 'package'].includes(diagramKind ?? '');
+          const unsupportedPackageElement = diagramKind === 'package'
+            && !repo.packages[id] && !repo.definitions[id]
+            && !repo.requirements[id] && !repo.verificationCases[id];
+          if (kind === 'package' && diagramKind === 'package') {
+            for (const [mode, label] of [
+              ['direct', 'Show Contents'],
+              ['packages', 'Show Packages'],
+              ['recursive', 'Show Contents Recursively'],
+            ] as const) {
+              caps.push({ id: `showPackageContents:${mode}`, kind: 'showPackageContents', label,
+                enabled: true, elementKind: mode, capabilityGroup: 'edit', authority: 'CAMEO_TOOLING' });
+            }
+          }
           caps.push({
             id: 'addToDiagram',
             kind: 'addToDiagram',
             label: 'Add to Diagram',
-            enabled: !alreadyPresented && !isRoot && !unsupportedPackageView,
-            reason: unsupportedPackageView
-              ? 'Package symbols are supported on Block Definition and Requirement diagrams.'
+            enabled: !alreadyPresented && !isRoot && !unsupportedPackageView && !unsupportedPackageElement,
+            reason: unsupportedPackageElement
+              ? 'This element has no Package Diagram presentation.'
+              : unsupportedPackageView
+              ? 'Package symbols are supported on Block Definition, Requirement, and Package diagrams.'
               : alreadyPresented ? 'Element is already presented on the active diagram' : undefined,
           });
           if (alreadyPresented && !isRoot && representedId === id) {
@@ -966,13 +981,22 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         case 'addToDiagram': {
           const diagramKind = repo.diagrams[command.diagramId]?.diagramKind
             ?? (command.diagramId === 'bdd' || command.diagramId === 'requirements' || command.diagramId === 'rtm' || command.diagramId === 'ibd' ? command.diagramId : undefined);
-          const unsupportedPackageId = command.elementIds.find(id => Boolean(repo.packages[id]) && !['bdd', 'requirements'].includes(diagramKind ?? ''));
+          const unsupportedPackageId = command.elementIds.find(id => Boolean(repo.packages[id]) && !['bdd', 'requirements', 'package'].includes(diagramKind ?? ''));
           if (unsupportedPackageId) {
             diagnostics.push({
               code: 'INVALID_DIAGRAM_ELEMENT', severity: 'error',
-              message: 'Package symbols are supported on Block Definition and Requirement diagrams.',
+              message: 'Package symbols are supported on Block Definition, Requirement, and Package diagrams.',
             });
             return { committed: false, revision: repo.revision, diagnostics };
+          }
+          if (diagramKind === 'package') {
+            const unrenderableId = command.elementIds.find(id => !repo.packages[id]
+              && !repo.definitions[id] && !repo.requirements[id] && !repo.verificationCases[id]);
+            if (unrenderableId) {
+              diagnostics.push({ code: 'INVALID_DIAGRAM_ELEMENT', severity: 'error',
+                message: `Element '${unrenderableId}' has no Package Diagram presentation.` });
+              return { committed: false, revision: repo.revision, diagnostics };
+            }
           }
           const presentation = state.diagramPresentations?.[command.diagramId];
           if (presentation) {
@@ -987,6 +1011,15 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             }
           }
           return { committed: false, revision: repo.revision, diagnostics: [] };
+        }
+
+        case 'showPackageContents': {
+          if (repo.diagrams[command.diagramId]?.diagramKind !== 'package') {
+            diagnostics.push({ code: 'INVALID_DIAGRAM', severity: 'error', message: 'Show Contents requires a Package Diagram.' });
+          } else if (!repo.packages[command.packageId]) {
+            diagnostics.push({ code: 'ELEMENT_NOT_FOUND', severity: 'error', message: `Package '${command.packageId}' does not exist.` });
+          }
+          return { committed: false, revision: repo.revision, diagnostics };
         }
 
         case 'duplicate': {
@@ -1254,6 +1287,11 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             elementIds: command.elementIds,
           });
           return toExplorerResult(result, command.elementIds);
+        }
+
+        case 'showPackageContents': {
+          const result = dispatchCommand(command);
+          return toExplorerResult(result, [command.packageId]);
         }
 
         case 'removeFromDiagram': {

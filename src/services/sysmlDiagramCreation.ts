@@ -84,6 +84,13 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
     || Boolean(input.repository.requirements?.[input.ownerId]);
   if (!ownerExists) return failure('OWNER_NOT_FOUND', `Owner '${input.ownerId}' does not exist.`);
   if (!input.diagramId) return failure('DIAGRAM_NOT_FOUND', 'An active diagram is required.');
+  if (input.diagramId !== 'bdd' && input.diagramId !== 'requirements' && input.diagramId !== 'ibd' && input.diagramId !== 'rtm') {
+    const diagram = input.repository.diagrams[input.diagramId];
+    if (!diagram) return failure('DIAGRAM_NOT_FOUND', `Diagram '${input.diagramId}' does not exist.`);
+    if (diagram.diagramKind === 'package' && input.kind !== 'Package' && input.kind !== 'Block' && input.kind !== 'Requirement' && input.kind !== 'TestCase' && input.kind !== 'UseCase') {
+      return failure('INVALID_DIAGRAM_ELEMENT', `${input.kind} is not supported on Package Diagrams.`);
+    }
+  }
 
   const names = collectRepositoryNames(input.repository);
   const element = input.kind === 'Package' ? createPackage({ ownerId: input.ownerId, existingNames: names })

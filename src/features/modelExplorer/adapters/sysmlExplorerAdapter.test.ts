@@ -367,6 +367,29 @@ describe('sysmlExplorerAdapter', () => {
     expect(Object.keys(harness.state.repository.definitions)).toHaveLength(0);
   });
 
+  it('creates a repository-backed Package Diagram under Model', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+    const result = adapter.execute({ type: 'createDiagram', ownerId: 'model', diagramKind: 'package', name: 'Package Map' });
+    expect(result.committed).toBe(true);
+    const id = result.selectedIds?.[0]!;
+    expect(harness.state.repository.diagrams[id]).toMatchObject({ id, diagramKind: 'package', ownerId: 'model', name: 'Package Map' });
+    expect(harness.state.diagramPresentations?.[id]?.elementIds).toEqual([]);
+  });
+
+  it('offers Show Contents for a Package on a Package Diagram and presents owned members', () => {
+    const harness = createTestHarness();
+    const adapter = createSysmlExplorerAdapter(harness);
+    const packageId = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'package', name: 'Vehicle' }).selectedIds![0];
+    const blockId = adapter.execute({ type: 'createElement', ownerId: packageId, elementKind: 'block', name: 'Motor' }).selectedIds![0];
+    const diagramId = adapter.execute({ type: 'createDiagram', ownerId: packageId, diagramKind: 'package', name: 'Structure' }).selectedIds![0];
+    expect(adapter.capabilities([packageId], diagramId)).toContainEqual(expect.objectContaining({ kind: 'showPackageContents', enabled: true }));
+    const result = adapter.execute({ type: 'showPackageContents', diagramId, packageId, mode: 'direct' });
+    expect(result.committed).toBe(true);
+    expect(harness.state.diagramPresentations?.[diagramId].elementIds).toContain(blockId);
+    expect(harness.state.repository.definitions[blockId].ownerId).toBe(packageId);
+  });
+
   it('moves an element atomically to another owner', () => {
     const harness = createTestHarness();
     const adapter = createSysmlExplorerAdapter(harness);

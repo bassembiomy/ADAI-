@@ -342,7 +342,7 @@ export function createDiagramDefinition(options: {
   id?: string;
   name?: string;
   ownerId: string;
-  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine';
+  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine' | 'package';
   existingNames?: Iterable<string>;
   contextElementId?: string;
 }): ModelDiagramDefinition {

@@ -13,6 +13,18 @@ const part = (id: string, ownerId: string, typeId: string, aggregation: PartUsag
 });
 
 describe('validateSysmlRepository', () => {
+  it('diagnoses missing and cyclic package owners in a loaded repository', () => {
+    const repo = createEmptyRepository();
+    repo.packages.a = { id: 'a', kind: 'package', name: 'A', namespace: [], ownerId: 'b' };
+    repo.packages.b = { id: 'b', kind: 'package', name: 'B', namespace: [], ownerId: 'a' };
+    repo.packages.c = { id: 'c', kind: 'package', name: 'C', namespace: [], ownerId: 'absent' };
+
+    const report = validateSysmlRepository(repo);
+    expect(report.diagnostics.map(d => d.code)).toEqual(expect.arrayContaining([
+      'PACKAGE_OWNERSHIP_CYCLE', 'INVALID_PACKAGE_OWNER',
+    ]));
+    expect(report.valid).toBe(false);
+  });
   it('accepts a valid definition and composite part usage', () => {
     const repo = createEmptyRepository();
     repo.definitions.whole = block('whole');
@@ -91,6 +103,13 @@ describe('validateSysmlRepository', () => {
     const report = validateSysmlRepository(repo);
     expect(report.diagnostics.map(d => d.code)).toContain('INVALID_RELATIONSHIP_DIRECTION');
     expect(report.canVerify).toBe(false);
+  });
+
+  it('checks Package and Diagram IDs in the global repository identity space', () => {
+    const repo = createEmptyRepository();
+    repo.packages['pkg-shared'] = { id: 'pkg-shared', kind: 'package', name: 'Package', namespace: [], ownerId: 'model' };
+    repo.diagrams['pkg-shared'] = { id: 'pkg-shared', kind: 'diagram', diagramKind: 'package', name: 'Diagram', namespace: [], ownerId: 'model' };
+    expect(validateSysmlRepository(repo).diagnostics.map(diagnostic => diagnostic.code)).toContain('DUPLICATE_ELEMENT_ID');
   });
 
   it('reports central-policy errors for resolvable relationships without removing them', () => {

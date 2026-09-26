@@ -52,8 +52,8 @@ export const SYSML_RELATIONSHIPS: Record<string, readonly string[]> = {
 };
 
 export const SYSML_DIAGRAM_KINDS: Record<string, readonly string[]> = {
-  model: ['bdd', 'requirements', 'rtm'],
-  package: ['bdd', 'requirements', 'rtm'],
+  model: ['bdd', 'requirements', 'rtm', 'package'],
+  package: ['bdd', 'requirements', 'rtm', 'package'],
   block: ['ibd', 'bdd', 'stateMachine'],
 };
 
@@ -136,6 +136,7 @@ export const DIAGRAM_KIND_LABELS: Record<string, string> = {
   ibd: 'Internal Block Diagram (IBD)',
   requirements: 'Requirements Diagram',
   rtm: 'Requirements Traceability Matrix (RTM)',
+  package: 'Package Diagram',
   stateMachine: 'State Machine Diagram',
 };
 

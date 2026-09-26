@@ -7,6 +7,9 @@ export type RelationshipMetaclass =
   | 'Dependency'
   | 'Realization'
   | 'Usage'
+  | 'PackageImport'
+  | 'ElementImport'
+  | 'PackageMerge'
   // SysML Requirements Relationships
   | 'Containment'
   | 'DeriveReqt'
@@ -75,4 +78,27 @@ export interface AllocateRelationship extends SemanticRelationship {
   metaclass: 'Allocate';
   allocatedFromId: string;
   allocatedToId: string;
+}
+
+export type PackageVisibility = 'public' | 'private';
+
+export interface PackageImport extends SemanticRelationship {
+  metaclass: 'PackageImport';
+  importingNamespaceId: string;
+  importedPackageId: string;
+  visibility: PackageVisibility;
+}
+
+export interface ElementImport extends SemanticRelationship {
+  metaclass: 'ElementImport';
+  importingNamespaceId: string;
+  importedElementId: string;
+  visibility: PackageVisibility;
+  alias?: string;
+}
+
+export interface PackageMerge extends SemanticRelationship {
+  metaclass: 'PackageMerge';
+  mergingPackageId: string;
+  mergedPackageId: string;
 }

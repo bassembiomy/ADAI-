@@ -30,7 +30,7 @@ export interface MutationImpact {
   affectedBaselineIds: string[];
   blockedBaselineIds: string[];
   severity: ImpactSeverity;
-  affectedDiagramKinds: Array<'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase'>;
+  affectedDiagramKinds: Array<'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' | 'package'>;
 }
 
 export interface MutationResult {
@@ -129,6 +129,30 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   const requested = new Set(command.elementIds);
   const deleted = new Set(command.elementIds);
 
+  // Package ownership is semantic containment. Deleting a Package removes its
+  // owned namespace recursively, including diagrams, before edge impact is computed.
+  const ownedEntities = [
+    ...Object.values(repo.packages), ...Object.values(repo.diagrams), ...Object.values(repo.definitions),
+    ...Object.values(repo.usages), ...Object.values(repo.requirements), ...Object.values(repo.verificationCases),
+    ...Object.values(repo.artifacts), ...Object.values(repo.actors), ...Object.values(repo.subjects),
+    ...Object.values(repo.useCases), ...Object.values(repo.extensionPoints),
+  ];
+  const ownedBy = new Map<string, string[]>();
+  for (const entity of ownedEntities) if (entity.ownerId) {
+    ownedBy.set(entity.ownerId, [...(ownedBy.get(entity.ownerId) ?? []), entity.id]);
+  }
+  const packageQueue = [...command.elementIds].filter(id => Boolean(repo.packages[id]));
+  const seenPackages = new Set<string>();
+  for (let index = 0; index < packageQueue.length; index++) {
+    const packageId = packageQueue[index];
+    if (seenPackages.has(packageId)) continue;
+    seenPackages.add(packageId);
+    for (const childId of ownedBy.get(packageId) ?? []) {
+      deleted.add(childId);
+      if (repo.packages[childId]) packageQueue.push(childId);
+    }
+  }
+
   const nestedRequirementIdsSet = new Set<string>();
   for (const id of command.elementIds) {
     if (repo.requirements[id]) {
@@ -209,6 +233,8 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     return rel && ['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace'].includes(rel.kind);
   });
   if (hasUseCaseEntities || hasUseCaseRel) diagramKinds.add('useCase');
+  if ([...deleted].some(id => repo.packages[id] || repo.diagrams[id]) ||
+    [...removedRelationshipIdsSet].some(id => ['packageImport', 'elementImport', 'packageMerge'].includes(repo.relationships[id]?.kind ?? ''))) diagramKinds.add('package');
 
   // Protected-baseline touch set: only baselines whose frozen content (or
   // baselined requirements) intersect this deletion are affected. A protected
@@ -261,7 +287,13 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
   const inverseOps: Array<import('./patches').PatchOperation> = [];
 
   for (const id of impact.deletedElementIds) {
-    if (repo.definitions[id]) {
+    if (repo.packages[id]) {
+      forwardOps.push({ op: 'remove', collection: 'packages', id, oldValue: repo.packages[id] });
+      inverseOps.push({ op: 'add', collection: 'packages', id, value: repo.packages[id] });
+    } else if (repo.diagrams[id]) {
+      forwardOps.push({ op: 'remove', collection: 'diagrams', id, oldValue: repo.diagrams[id] });
+      inverseOps.push({ op: 'add', collection: 'diagrams', id, value: repo.diagrams[id] });
+    } else if (repo.definitions[id]) {
       forwardOps.push({ op: 'remove', collection: 'definitions', id, oldValue: repo.definitions[id] });
       inverseOps.push({ op: 'add', collection: 'definitions', id, value: repo.definitions[id] });
     } else if (repo.usages[id]) {
@@ -282,6 +314,9 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
     } else if (repo.evidence[id]) {
       forwardOps.push({ op: 'remove', collection: 'evidence', id, oldValue: repo.evidence[id] });
       inverseOps.push({ op: 'add', collection: 'evidence', id, value: repo.evidence[id] });
+    } else if (repo.artifacts[id]) {
+      forwardOps.push({ op: 'remove', collection: 'artifacts', id, oldValue: repo.artifacts[id] });
+      inverseOps.push({ op: 'add', collection: 'artifacts', id, value: repo.artifacts[id] });
     } else if (repo.actors?.[id]) {
       forwardOps.push({ op: 'remove', collection: 'actors', id, oldValue: repo.actors[id] });
       inverseOps.push({ op: 'add', collection: 'actors', id, value: repo.actors[id] });
@@ -300,6 +335,8 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
     }
   }
 
+  removeFrom(next.packages, removed);
+  removeFrom(next.diagrams, removed);
   removeFrom(next.definitions, removed);
   removeFrom(next.usages, removed);
   removeFrom(next.connectors, removed);
@@ -307,6 +344,7 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
   removeFrom(next.requirements, removed);
   removeFrom(next.verificationCases, removed);
   removeFrom(next.evidence, removed);
+  removeFrom(next.artifacts, removed);
   if (next.actors) removeFrom(next.actors, removed);
   if (next.subjects) removeFrom(next.subjects, removed);
   if (next.useCases) removeFrom(next.useCases, removed);

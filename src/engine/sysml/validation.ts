@@ -32,7 +32,7 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
     diagnostics.push({ code, severity: 'error', elementId, propertyPath, message });
   };
   const collections = [
-    repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
+    repo.packages, repo.diagrams, repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
     repo.verificationCases, repo.evidence, repo.baselines, repo.artifacts,
     repo.actors ?? {}, repo.subjects ?? {}, repo.useCases ?? {},
     repo.extensionPoints ?? {}, repo.diagramReferences ?? {},
@@ -47,6 +47,24 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
       duplicateIds.add(element.id);
     }
     ids.add(element.id);
+  }
+
+  for (const pkg of Object.values(repo.packages)) {
+    if (pkg.id === 'model') continue;
+    if (!pkg.ownerId || !repo.packages[pkg.ownerId]) {
+      error('INVALID_PACKAGE_OWNER', pkg.id, 'ownerId', `Package owner ${pkg.ownerId || '(none)'} is not a Package or Model`);
+      continue;
+    }
+    const seen = new Set<string>([pkg.id]);
+    let ownerId: string | undefined = pkg.ownerId;
+    while (ownerId && ownerId !== 'model' && repo.packages[ownerId]) {
+      if (seen.has(ownerId)) {
+        error('PACKAGE_OWNERSHIP_CYCLE', pkg.id, 'ownerId', `Package ${pkg.id} participates in an ownership cycle`);
+        break;
+      }
+      seen.add(ownerId);
+      ownerId = repo.packages[ownerId].ownerId;
+    }
   }
 
   const names = new Map<string, string>();

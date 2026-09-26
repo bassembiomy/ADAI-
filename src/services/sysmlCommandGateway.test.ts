@@ -105,6 +105,23 @@ describe('sysmlCommandGateway', () => {
     });
   });
 
+  it('presents an existing PartProperty on its owning Block IBD context', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.vehicle = {
+      id: 'vehicle', name: 'Vehicle', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.usages.leftMotor = {
+      id: 'leftMotor', kind: 'part', name: 'leftMotor', ownerId: 'vehicle', typeId: 'vehicle',
+      aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'vehicle', elementIds: ['leftMotor'],
+    });
+    expect(result.committed).toBe(true);
+    expect(result.diagramPresentations.vehicle.elementIds).toContain('leftMotor');
+  });
+
   it('rejects a Package presentation on an IBD instead of committing an invisible symbol', () => {
     const repository = createEmptyRepository();
     repository.packages['pkg-powertrain'] = {
@@ -119,6 +136,223 @@ describe('sysmlCommandGateway', () => {
     expect(result.committed).toBe(false);
     expect(result.diagnostics[0]?.code).toBe('INVALID_DIAGRAM_ELEMENT');
     expect(result.diagramPresentations['ibd-vehicle']).toBeUndefined();
+  });
+
+  it('accepts a Package presentation on a persisted Package Diagram', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-domain'] = {
+      id: 'pkg-domain', kind: 'package', name: 'Domain', namespace: ['model'], ownerId: 'model',
+    };
+    repository.diagrams['diag-packages'] = {
+      id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: ['model'], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'diag-packages', elementIds: ['pkg-domain'],
+    });
+    expect(result.committed).toBe(true);
+    expect(result.diagramPresentations['diag-packages'].elementIds).toEqual(['pkg-domain']);
+    expect(result.view.packages).toContainEqual(expect.objectContaining({ id: 'pkg-domain', name: 'Domain' }));
+
+    const payload = buildCanonicalSysmlProjectPayload(result, { version: '1', projectName: 'Package Diagram' });
+    const reloaded = loadCanonicalSysmlProject(payload);
+    expect(reloaded.repository.diagrams['diag-packages'].diagramKind).toBe('package');
+    expect(reloaded.diagramPresentations['diag-packages'].elementIds).toEqual(['pkg-domain']);
+  });
+
+  it('does not create and present an element into a missing semantic diagram', () => {
+    const result = executeSysmlCommand(createSysmlGatewayState(), {
+      type: 'createAndPresent',
+      element: { id: 'pkg-orphan', kind: 'package', name: 'Orphan', namespace: [], ownerId: 'model' },
+      diagramId: 'missing-package-diagram', presentation: { x: 40, y: 50 },
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('DIAGRAM_NOT_FOUND');
+    expect(result.repository.packages['pkg-orphan']).toBeUndefined();
+  });
+
+  it('rejects creation of a diagram whose semantic ID already exists', () => {
+    const repository = createEmptyRepository();
+    repository.diagrams['diag-existing'] = {
+      id: 'diag-existing', kind: 'diagram', diagramKind: 'package', name: 'Original', namespace: [], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'createDiagram',
+      diagram: { id: 'diag-existing', kind: 'diagram', diagramKind: 'package', name: 'Replacement', namespace: [], ownerId: 'model' },
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('DUPLICATE_ELEMENT_ID');
+    expect(result.repository.diagrams['diag-existing'].name).toBe('Original');
+  });
+
+  it('rejects adding a missing semantic element to an existing diagram', () => {
+    const repository = createEmptyRepository();
+    repository.diagrams['diag-packages'] = {
+      id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'diag-packages', elementIds: ['missing-element'],
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('ELEMENT_NOT_FOUND');
+    expect(result.diagramPresentations['diag-packages']).toBeUndefined();
+  });
+
+  it('rejects adding an element to an unknown diagram ID', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-existing'] = {
+      id: 'pkg-existing', kind: 'package', name: 'Existing', namespace: ['model'], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'missing-diagram', elementIds: ['pkg-existing'],
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('DIAGRAM_NOT_FOUND');
+    expect(result.diagramPresentations['missing-diagram']).toBeUndefined();
+  });
+
+  it('normalizes an omitted Package Diagram owner to the Model', () => {
+    const result = executeSysmlCommand(createSysmlGatewayState(), {
+      type: 'createDiagram',
+      diagram: { id: 'diag-default-owner', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [] },
+    });
+    expect(result.committed).toBe(true);
+    expect(result.repository.diagrams['diag-default-owner'].ownerId).toBe('model');
+  });
+
+  it('rejects unrenderable semantic subjects on a Package Diagram', () => {
+    const repository = createEmptyRepository();
+    repository.diagrams['diag-packages'] = {
+      id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'diag-packages', elementIds: ['diag-packages'],
+    });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe('INVALID_DIAGRAM_ELEMENT');
+    expect(result.diagramPresentations['diag-packages']).toBeUndefined();
+  });
+
+  it('shows direct and recursive Package contents as one undoable presentation transaction', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-parent'] = { id: 'pkg-parent', kind: 'package', name: 'Parent', namespace: ['model'], ownerId: 'model' };
+    repository.packages['pkg-child'] = { id: 'pkg-child', kind: 'package', name: 'Child', namespace: ['model', 'Parent'], ownerId: 'pkg-parent' };
+    repository.definitions['blk-direct'] = {
+      id: 'blk-direct', kind: 'block', name: 'Direct', namespace: [], ownerId: 'pkg-parent',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions['blk-nested'] = {
+      id: 'blk-nested', kind: 'block', name: 'Nested', namespace: [], ownerId: 'pkg-child',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.diagrams['diag-packages'] = {
+      id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [], ownerId: 'model',
+    };
+
+    const initial = createSysmlGatewayState(repository);
+    const direct = executeSysmlCommand(initial, {
+      type: 'showPackageContents', diagramId: 'diag-packages', packageId: 'pkg-parent', mode: 'direct',
+    });
+    expect(direct.committed).toBe(true);
+    expect(direct.repository).toBe(repository);
+    expect(direct.diagramPresentations['diag-packages'].elementIds).toEqual(['pkg-child', 'blk-direct']);
+    expect(direct.repository.definitions['blk-direct'].ownerId).toBe('pkg-parent');
+
+    const undone = executeSysmlCommand(direct, { type: 'undo' });
+    expect(undone.diagramPresentations['diag-packages']?.elementIds ?? []).toEqual([]);
+    const recursive = executeSysmlCommand(initial, {
+      type: 'showPackageContents', diagramId: 'diag-packages', packageId: 'pkg-parent', mode: 'recursive',
+    });
+    expect(recursive.diagramPresentations['diag-packages'].elementIds).toEqual(['pkg-child', 'blk-direct', 'blk-nested']);
+  });
+
+  it('persists a private Package Import and rejects an invalid target without mutation', () => {
+    const repository = createEmptyRepository();
+    repository.packages.consumer = { id: 'consumer', kind: 'package', name: 'Consumer', namespace: [], ownerId: 'model' };
+    repository.packages.types = { id: 'types', kind: 'package', name: 'Types', namespace: [], ownerId: 'model' };
+    repository.definitions.block = {
+      id: 'block', kind: 'block', name: 'Block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const initial = createSysmlGatewayState(repository);
+    const invalid = executeSysmlCommand(initial, { type: 'createElement', element: {
+      id: 'bad-import', kind: 'packageImport', sourceId: 'consumer', targetId: 'block',
+      importingNamespaceId: 'consumer', importedPackageId: 'block', visibility: 'public',
+    } });
+    expect(invalid.committed).toBe(false);
+    expect(invalid.diagnostics.map(d => d.code)).toContain('PACKAGE_IMPORT_TARGET_NOT_PACKAGE');
+    expect(invalid.repository).toBe(repository);
+    const valid = executeSysmlCommand(initial, { type: 'createElement', element: {
+      id: 'import', kind: 'packageImport', sourceId: 'consumer', targetId: 'types',
+      importingNamespaceId: 'consumer', importedPackageId: 'types', visibility: 'private',
+    } });
+    expect(valid.committed).toBe(true);
+    expect(valid.repository.relationships.import).toMatchObject({ visibility: 'private', sourceId: 'consumer', targetId: 'types' });
+    const reloaded = loadCanonicalSysmlProject(buildCanonicalSysmlProjectPayload(valid, { version: '1', projectName: 'Imports' }));
+    expect(reloaded.repository.relationships.import.visibility).toBe('private');
+  });
+
+  it('atomically creates and presents a Package Import only when both endpoints are displayed', () => {
+    const repository = createEmptyRepository();
+    repository.packages.consumer = { id: 'consumer', kind: 'package', name: 'Consumer', namespace: [], ownerId: 'model' };
+    repository.packages.types = { id: 'types', kind: 'package', name: 'Types', namespace: [], ownerId: 'model' };
+    repository.diagrams['diag-packages'] = { id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [], ownerId: 'model' };
+    const relationship: SysmlRelationship = {
+      id: 'rel-import', kind: 'packageImport', sourceId: 'consumer', targetId: 'types',
+      importingNamespaceId: 'consumer', importedPackageId: 'types', visibility: 'public',
+    };
+    const initial = createSysmlGatewayState(repository);
+    const rejected = executeSysmlCommand(initial, {
+      type: 'createAndPresent', diagramId: 'diag-packages', element: relationship, presentation: {},
+    });
+    expect(rejected.committed).toBe(false);
+    expect(rejected.repository.relationships['rel-import']).toBeUndefined();
+
+    const endpoints = executeSysmlCommand(initial, { type: 'addToDiagram', diagramId: 'diag-packages', elementIds: ['consumer', 'types'] });
+    const created = executeSysmlCommand(endpoints, {
+      type: 'createAndPresent', diagramId: 'diag-packages', element: relationship, presentation: {},
+    });
+    expect(created.committed).toBe(true);
+    expect(created.diagramPresentations['diag-packages'].elementIds).toContain('rel-import');
+    expect(created.repository.relationships['rel-import'].kind).toBe('packageImport');
+    const undone = executeSysmlCommand(created, { type: 'undo' });
+    expect(undone.repository.relationships['rel-import']).toBeUndefined();
+    expect(undone.diagramPresentations['diag-packages'].elementIds).toEqual(['consumer', 'types']);
+  });
+
+  it('deletes a Package with owned descendants, diagram and imports only after impact confirmation', () => {
+    const repository = createEmptyRepository();
+    repository.packages.parent = { id: 'parent', kind: 'package', name: 'Parent', namespace: [], ownerId: 'model' };
+    repository.packages.child = { id: 'child', kind: 'package', name: 'Child', namespace: [], ownerId: 'parent' };
+    repository.packages.other = { id: 'other', kind: 'package', name: 'Other', namespace: [], ownerId: 'model' };
+    repository.definitions.motor = {
+      id: 'motor', kind: 'block', name: 'Motor', namespace: [], ownerId: 'child',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.diagrams.diagram = { id: 'diagram', kind: 'diagram', diagramKind: 'package', name: 'Inside', namespace: [], ownerId: 'parent' };
+    repository.relationships.link = {
+      id: 'link', kind: 'packageImport', sourceId: 'other', targetId: 'child',
+      importingNamespaceId: 'other', importedPackageId: 'child', visibility: 'public',
+    };
+    const initial = createSysmlGatewayState(repository, {}, {
+      diagram: { elementIds: ['child', 'motor'], presentations: {} },
+    });
+    const proposed = executeSysmlCommand(initial, { type: 'deleteElements', elementIds: ['parent'] });
+    expect(proposed.committed).toBe(false);
+    expect(proposed.impact?.deletedElementIds).toEqual(expect.arrayContaining(['parent', 'child', 'motor', 'diagram', 'link']));
+    const confirmed = executeSysmlCommand(initial, {
+      type: 'deleteElements', elementIds: ['parent'], confirmedImpactHash: computeImpactHash(proposed.impact!),
+    });
+    expect(confirmed.committed).toBe(true);
+    expect(confirmed.repository.packages.parent).toBeUndefined();
+    expect(confirmed.repository.packages.child).toBeUndefined();
+    expect(confirmed.repository.definitions.motor).toBeUndefined();
+    expect(confirmed.repository.diagrams.diagram).toBeUndefined();
+    expect(confirmed.repository.relationships.link).toBeUndefined();
+    expect(confirmed.repository.packages.other).toBeDefined();
+    expect(confirmed.diagramPresentations.diagram).toBeUndefined();
+    const restored = executeSysmlCommand(confirmed, { type: 'undo' });
+    expect(restored.repository.packages.child).toBeDefined();
+    expect(restored.repository.relationships.link).toBeDefined();
   });
 
   it('keeps one semantic element at independent diagram positions across persistence', () => {

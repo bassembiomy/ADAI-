@@ -250,7 +250,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'package' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
 
 type ConnectionErrorItem = ErrorItem & {
   connectionDiagnostic?: ConnectionPolicyDiagnostic;
@@ -6065,6 +6065,8 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
+  const [packageRelationshipTool, setPackageRelationshipTool] = useState<null | 'packageImport' | 'access' | 'elementImport' | 'packageMerge' | 'dependency'>(null);
+  const [packageRelationshipSourceId, setPackageRelationshipSourceId] = useState<string | null>(null);
   const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -6112,11 +6114,14 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const [activePackageDiagramId, setActivePackageDiagramId] = useState<string | null>(null);
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
     setSelectedIds([]);
+    setPackageRelationshipTool(null);
+    setPackageRelationshipSourceId(null);
     setDiagramModeState(mode);
     setOpenTabs(prev => {
       if (prev.includes(mode)) return prev;
@@ -6183,7 +6188,12 @@ const ADIA = () => {
     const complete = projectLegacyDiagram(repository, coordinates, diagramPresentations);
     applyCanonicalSysmlResult({ view: complete });
   }, [applyCanonicalSysmlResult]);
-  const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+  const selectedPackageDiagram = activePackageDiagramId ? canonicalSysmlRepository.diagrams[activePackageDiagramId] : undefined;
+  const fallbackPackageDiagramId = Object.values(canonicalSysmlRepository.diagrams)
+    .find(diagram => diagram.diagramKind === 'package')?.id;
+  const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId
+    : diagramMode === 'package' ? (selectedPackageDiagram?.diagramKind === 'package' ? selectedPackageDiagram.id : fallbackPackageDiagramId ?? '')
+    : diagramMode;
   const sysmlCanvasView = useMemo(() => projectDiagramScopedCanvasView(
     { packages, blocks, relationships, parts, connectors },
     activeSysmlDiagramId,
@@ -7090,7 +7100,7 @@ const ADIA = () => {
     isResizingRef.current = isResizing;
   }, [isResizing]);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' | 'part' } | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'package' | 'state' | 'ibdContext' | 'part' } | null>(null);
 
   // Panel resizing state
   const [hierarchyWidth, setHierarchyWidth] = useState(256);
@@ -7122,6 +7132,14 @@ const ADIA = () => {
       addError(diagnostic.severity, `${diagnostic.code}: ${diagnostic.message}`, 'Model Explorer', diagnostic.semanticId);
     }
   }, [addError]);
+
+  const handleExplorerCommand = useCallback((result: ExplorerCommandResult, command?: import('./features/modelExplorer/modelExplorerTypes').ModelExplorerCommand) => {
+    handleExplorerCommandResult(result);
+    if (command?.type === 'createDiagram' && command.diagramKind === 'package' && result.committed && result.selectedIds?.[0]) {
+      setActivePackageDiagramId(result.selectedIds[0]);
+      setDiagramMode('package');
+    }
+  }, [handleExplorerCommandResult, setDiagramMode]);
 
   const showConnectionPolicyError = useCallback((rejection: {
     diagnostic: ConnectionPolicyDiagnostic;
@@ -8153,6 +8171,7 @@ const ADIA = () => {
   const selectedJunction = useMemo(() => selectedIds.length === 1 ? junctions.find(j => j.id === selectedIds[0]) : null, [selectedIds, junctions]);
   const selectedTransition = useMemo(() => selectedIds.length === 1 ? transitions.find(t => t.id === selectedIds[0]) : null, [selectedIds, transitions]);
   const selectedBlock = useMemo(() => selectedIds.length === 1 ? blocks.find(b => b.id === selectedIds[0]) : null, [selectedIds, blocks]);
+  const selectedPackage = useMemo(() => selectedIds.length === 1 ? packages.find(p => p.id === selectedIds[0]) : null, [selectedIds, packages]);
   const selectedRelationship = useMemo(() => selectedIds.length === 1 ? relationships.find(r => r.id === selectedIds[0]) : null, [selectedIds, relationships]);
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
 
@@ -9704,8 +9723,10 @@ const ADIA = () => {
     y: number,
     kind: DiagramCreationKind,
   ) => {
-    const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
-    const ownerId = diagramMode === 'ibd' ? currentLayerId : 'model';
+    const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
+    const ownerId = diagramMode === 'ibd' ? currentLayerId
+      : diagramMode === 'package' ? canonicalSysmlRepository.diagrams[diagramId]?.ownerId || 'model'
+      : 'model';
     const parentRequirementId = diagramMode === 'requirements' && currentLayerId !== 'root' && currentLayerId !== 'requirements'
       ? (canonicalSysmlRepository.requirements[currentLayerId] ? currentLayerId : undefined)
       : undefined;
@@ -9751,7 +9772,7 @@ const ADIA = () => {
     } else {
       result.diagnostics.forEach(item => addError(item.severity, item.message, 'SysML', item.elementId));
     }
-  }, [canonicalSysmlRepository, currentLayerId, diagramMode, snapEnabled, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, currentLayerId, diagramMode, activeSysmlDiagramId, snapEnabled, handleExecuteSysmlCommand, addError]);
 
   const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
     const kind: DiagramCreationKind = stereotype === 'requirement' ? 'Requirement'
@@ -9767,7 +9788,7 @@ const ADIA = () => {
     const hasSemantic = Object.keys(updates).some(k => !geometricKeys.includes(k));
 
     if (hasGeometric && !hasSemantic) {
-      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const activeDiagramId = activeSysmlDiagramId;
       const presentation: PresentationCoordinates = {};
       if (updates.x !== undefined || updates.ibdX !== undefined) presentation.x = updates.x ?? updates.ibdX;
       if (updates.y !== undefined || updates.ibdY !== undefined) presentation.y = updates.y ?? updates.ibdY;
@@ -9790,7 +9811,7 @@ const ADIA = () => {
     }
 
     if (hasGeometric && hasSemantic) {
-      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const activeDiagramId = activeSysmlDiagramId;
       const presentation: PresentationCoordinates = {};
       if (updates.x !== undefined) presentation.x = updates.x;
       if (updates.y !== undefined) presentation.y = updates.y;
@@ -9817,7 +9838,7 @@ const ADIA = () => {
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft, activeSysmlDiagramId]);
 
   const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -9867,7 +9888,7 @@ const ADIA = () => {
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
     if (rawIds.length === 0) return;
-    const currentDiagramId = diagramMode === 'requirements' ? 'requirements' : (diagramMode || 'default');
+    const currentDiagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
     const result = handleExecuteSysmlCommand({
       type: 'removeFromDiagram',
       diagramId: currentDiagramId,
@@ -9879,7 +9900,7 @@ const ADIA = () => {
     }
     setSelectedIds(prev => prev.filter(id => !rawIds.includes(id)));
     addError('info', `Removed ${rawIds.length} presentation(s) from diagram (preserved in model)`);
-  }, [addError, diagramMode, handleExecuteSysmlCommand]);
+  }, [addError, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand]);
 
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
@@ -9966,7 +9987,7 @@ const ADIA = () => {
       }
     }
     setBddFeatureDrag(null);
-  }, [diagramMode, bddFeatureDrag, blocks, addError, relationships, parts, showConnectionPolicyError, addToHistory]);
+  }, [diagramMode, bddFeatureDrag, blocks, addError, relationships, parts, showConnectionPolicyError, addToHistory, handleExecuteSysmlCommand]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
     const patch: Record<string, unknown> = {};
@@ -10048,7 +10069,7 @@ const ADIA = () => {
     } else {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [canonicalSysmlRepository, currentLayerId, parts, snapEnabled, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, currentLayerId, parts, snapEnabled, handleExecuteSysmlCommand, addError, activeSysmlDiagramId]);
 
   const handleCreateNewTypeAction = useCallback((action: CreateNewTypeAction) => {
     const result = handleExecuteSysmlCommand(buildCreateNewTypeCommand(action, canonicalSysmlRepository, () => uuidv4()));
@@ -10063,7 +10084,7 @@ const ADIA = () => {
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
     const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
     if (isPureGeometricUpdate) {
-      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const activeDiagramId = activeSysmlDiagramId;
       const presentation: PresentationCoordinates = {};
       if (updates.x !== undefined) presentation.x = updates.x;
       if (updates.y !== undefined) presentation.y = updates.y;
@@ -10111,7 +10132,7 @@ const ADIA = () => {
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft, activeSysmlDiagramId]);
 
   const deletePart = useCallback((id: string) => {
     const part = parts.find(p => p.id === id);
@@ -10232,7 +10253,7 @@ const ADIA = () => {
           repository: canonicalSysmlRepository,
           kind: 'Block',
           ownerId: 'model',
-          diagramId: diagramMode,
+          diagramId: activeSysmlDiagramId,
           position: { x: 100, y: 100 },
         });
         if (outcome.ok) {
@@ -10255,7 +10276,7 @@ const ADIA = () => {
           repository: canonicalSysmlRepository,
           kind: 'Block',
           ownerId: 'model',
-          diagramId: diagramMode,
+          diagramId: activeSysmlDiagramId,
           position: { x: (originalBlock.x ?? 100) + 20, y: (originalBlock.y ?? 100) + 20 },
         });
         if (outcome.ok) {
@@ -10268,8 +10289,19 @@ const ADIA = () => {
           }
         }
       } else {
-        const newPort: PortData = { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        updateBlock(originalTypeId, { ports: [...originalBlock.ports, newPort] });
+        // Use canonical repository for accurate port count
+        const canonicalDef = canonicalSysmlRepository.definitions[originalTypeId];
+        const existingPorts: PortData[] = (canonicalDef?.kind === 'block' && canonicalDef.ports)
+          ? canonicalDef.ports.map(p => ({
+              id: p.id,
+              name: p.name,
+              type: p.typeId || (p.kind === 'proxy' ? 'Interface' : (p.kind === 'flow' ? 'Power' : 'void')),
+              kind: p.kind,
+              direction: p.direction,
+            }))
+          : originalBlock.ports;
+        const newPort: PortData = { id: uuidv4(), name: `p${existingPorts.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
+        updateBlock(originalTypeId, { ports: [...existingPorts, newPort] });
         addError('info', `Added ${kind} port to definition: ${originalBlock.name}`);
       }
     } else {
@@ -10278,11 +10310,22 @@ const ADIA = () => {
         addError('warning', 'Selected element is not a Block or Part.');
         return;
       }
-      const newPort: PortData = { id: uuidv4(), name: `p${block.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-      updateBlock(id, { ports: [...block.ports, newPort] });
+      // Use canonical repository for accurate port count (avoids stale projection)
+      const canonicalDef = canonicalSysmlRepository.definitions[id];
+      const existingPorts: PortData[] = (canonicalDef?.kind === 'block' && canonicalDef.ports)
+        ? canonicalDef.ports.map(p => ({
+            id: p.id,
+            name: p.name,
+            type: p.typeId || (p.kind === 'proxy' ? 'Interface' : (p.kind === 'flow' ? 'Power' : 'void')),
+            kind: p.kind,
+            direction: p.direction,
+          }))
+        : block.ports;
+      const newPort: PortData = { id: uuidv4(), name: `p${existingPorts.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
+      updateBlock(id, { ports: [...existingPorts, newPort] });
       addError('info', `Added ${kind} port to Block: ${block.name}`);
     }
-  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError]);
+  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand]);
 
   const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
     addToHistory();
@@ -10461,6 +10504,15 @@ const ADIA = () => {
     if (!rect) return;
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+    const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
+    if (packageNode) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+      setResizeStart({ id, x: packageNode.x, y: packageNode.y, w: packageNode.width, h: packageNode.height, mx: worldX, my: worldY, type: 'package' });
+      addToHistory();
+      return;
+    }
 
     const block = sysmlCanvasView.blocks.find(b => b.id === id) ?? blocks.find(b => b.id === id);
     if (block) {
@@ -10843,7 +10895,7 @@ const ADIA = () => {
       // Update drag offset to current position for next frame
       setDiagramDragOffset({ x: worldX, y: worldY });
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
     setBddFeatureDrag(null);
@@ -10863,7 +10915,7 @@ const ADIA = () => {
       setDraggedPort(null);
     }
     if (pendingPresentationUpdatesRef.current.size > 0) {
-      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
       for (const [elemId, pres] of pendingPresentationUpdatesRef.current.entries()) {
         handleExecuteSysmlCommand({
           type: 'updatePresentation',
@@ -10881,7 +10933,7 @@ const ADIA = () => {
     if (isPanning) {
       setIsPanning(false);
     }
-  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, handleExecuteSysmlCommand]);
+  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -11031,6 +11083,31 @@ const ADIA = () => {
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
     e.stopPropagation();
+    if (diagramMode === 'package' && packageRelationshipTool && e.button === 0) {
+      if (!packageRelationshipSourceId) {
+        setPackageRelationshipSourceId(blockId);
+        return;
+      }
+      const kind = packageRelationshipTool === 'access' ? 'packageImport' : packageRelationshipTool;
+      const sourceId = packageRelationshipSourceId;
+      const relationship: SysmlRelationship = {
+        id: uuidv4(), kind, sourceId, targetId: blockId,
+        ...(kind === 'packageImport' ? { importingNamespaceId: sourceId, importedPackageId: blockId, visibility: packageRelationshipTool === 'access' ? 'private' : 'public' } : {}),
+        ...(kind === 'elementImport' ? { importingNamespaceId: sourceId, importedElementId: blockId, visibility: 'public' as const } : {}),
+        ...(kind === 'packageMerge' ? { mergingPackageId: sourceId, mergedPackageId: blockId } : {}),
+      };
+      const result = handleExecuteSysmlCommand({
+        type: 'createAndPresent', diagramId: activeSysmlDiagramId, element: relationship, presentation: {},
+      });
+      if (result.committed) {
+        setSelectedIds([relationship.id]);
+      } else {
+        result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      }
+      setPackageRelationshipSourceId(null);
+      setPackageRelationshipTool(null);
+      return;
+    }
     if (isCreatingTransition) { // Reusing this flag for relationships
       if (transitionSourceId) {
         if (transitionSourceId !== blockId) {
@@ -11082,8 +11159,8 @@ const ADIA = () => {
       const outcome = buildDiagramCreationCommand({
         repository: canonicalSysmlRepository,
         kind,
-        ownerId: 'model',
-        diagramId: diagramMode,
+        ownerId: diagramMode === 'package' ? canonicalSysmlRepository.diagrams[activeSysmlDiagramId]?.ownerId || 'model' : 'model',
+        diagramId: activeSysmlDiagramId,
         position: { x: worldX, y: worldY },
       });
       if (outcome.ok) {
@@ -11105,7 +11182,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDiagramDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand]);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -14136,7 +14213,7 @@ const ADIA = () => {
             setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
           } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current.length > 0) {
-            const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+            const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
             const plan = buildSysmlPastePlan(
               canonicalSysmlRepository,
               sysmlDiagramPresentations,
@@ -14205,7 +14282,7 @@ const ADIA = () => {
 
           if (selectedStateIds.length > 0) {
             deleteStates(selectedStateIds, otherSelectedIds);
-          } else if (diagramMode === 'requirements' || diagramMode === 'bdd') {
+          } else if (diagramMode === 'requirements' || diagramMode === 'bdd' || diagramMode === 'package') {
             removeFromDiagram(otherSelectedIds);
           } else {
             deleteNonStateElements(otherSelectedIds);
@@ -14235,7 +14312,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, activeSysmlDiagramId, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -14759,10 +14836,24 @@ const ADIA = () => {
           />
           <text x={10} y={12} fill="var(--sysml-block-meta)" fontSize={9} fontFamily="monospace">«package»</text>
           <text x={10} y={34} fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{pkg.name}</text>
+          {isSelected && ['nw', 'ne', 'sw', 'se'].map(handle => (
+            <rect
+              key={handle}
+              data-resize-handle={handle}
+              x={(handle.includes('e') ? pkg.width : 0) - 5}
+              y={(handle.includes('s') ? pkg.height : 0) - 5}
+              width={10}
+              height={10}
+              fill="#f97316"
+              stroke="#111"
+              style={{ cursor: `${handle}-resize` }}
+              onMouseDown={event => handleResizeMouseDown(event, handle, pkg.id)}
+            />
+          ))}
         </g>
       );
     });
-  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown]);
+  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown, handleResizeMouseDown]);
 
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
@@ -15035,8 +15126,9 @@ const ADIA = () => {
   }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
-    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
+    const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
     const isInteracting = isDragging || isPanning;
+    const packagesById = new Map(sysmlCanvasView.packages.map(pkg => [pkg.id, pkg]));
 
     const pairGroups = new Map<string, string[]>();
     targetRelationships.forEach(rel => {
@@ -15049,9 +15141,10 @@ const ADIA = () => {
       if (!activeDiagramElementIds.has(rel.sourceId) || !activeDiagramElementIds.has(rel.targetId)) {
         return null;
       }
+      if (diagramMode === 'package' && !sysmlDiagramPresentations[activeSysmlDiagramId]?.elementIds.includes(rel.id)) return null;
 
-      const source = blocksById.get(rel.sourceId) ?? (partsById.get(rel.sourceId) as any);
-      const target = blocksById.get(rel.targetId) ?? (partsById.get(rel.targetId) as any);
+      const source = blocksById.get(rel.sourceId) ?? packagesById.get(rel.sourceId) ?? (partsById.get(rel.sourceId) as any);
+      const target = blocksById.get(rel.targetId) ?? packagesById.get(rel.targetId) ?? (partsById.get(rel.targetId) as any);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
@@ -15081,7 +15174,8 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(rel.id);
       const isSuspect = Boolean((rel as any).suspect);
       const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
-      const strokeDash = ['allocation', 'dependency'].includes(rel.type) ? '5,5' : undefined;
+      const isPackageRelation = ['packageImport', 'elementImport', 'packageMerge'].includes(rel.type);
+      const strokeDash = ['allocation', 'dependency', 'packageImport', 'elementImport', 'packageMerge'].includes(rel.type) ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
       const isReqContainment = rel.type === 'requirementContainment';
       const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
@@ -15096,6 +15190,8 @@ const ADIA = () => {
       return (
         <g
           key={rel.id}
+          data-semantic-id={rel.id}
+          data-presentation-kind="relationship"
           onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}
           style={{ cursor: 'pointer' }}
           role={isReqContainment ? "graphics-symbol" : undefined}
@@ -15127,7 +15223,7 @@ const ADIA = () => {
           {rel.type === 'allocation' && (
             <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
-          {rel.type === 'dependency' && (
+          {(rel.type === 'dependency' || isPackageRelation) && (
             <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#141414" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {isTrace && (
@@ -15177,7 +15273,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [relationships, sysmlCanvasView, blocksById, partsById, activeDiagramElementIds, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope]);
+  }, [relationships, sysmlCanvasView, blocksById, partsById, activeDiagramElementIds, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope, sysmlDiagramPresentations, activeSysmlDiagramId]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
@@ -15794,6 +15890,7 @@ const ADIA = () => {
               { id: 'bdd', label: 'SysML BDD' },
               { id: 'requirements', label: 'Requirements' },
               { id: 'ibd', label: 'SysML IBD' },
+              { id: 'package', label: 'Package Diagram' },
               { id: 'xbridges', label: 'X-Bridges' },
               { id: 'vlab', label: 'V-Lab' },
               { id: 'hil', label: 'HIL' },
@@ -15802,6 +15899,8 @@ const ADIA = () => {
               <button
                 key={mode.id}
                 onClick={() => setDiagramMode(mode.id as DiagramMode)}
+                disabled={mode.id === 'package' && !fallbackPackageDiagramId}
+                title={mode.id === 'package' && !fallbackPackageDiagramId ? 'Create a Package Diagram from the Model or Package tree first' : undefined}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
                     ? 'bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-sm font-semibold'
@@ -16224,6 +16323,13 @@ const ADIA = () => {
                     const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
                     if (externalModelFile) {
                       openFileInTab(externalModelFile.id);
+                    } else if (canonicalSysmlRepository.diagrams[id]) {
+                      if (canonicalSysmlRepository.diagrams[id].diagramKind === 'package') {
+                        setActivePackageDiagramId(id);
+                        setDiagramMode('package');
+                      } else {
+                        setDiagramMode(canonicalSysmlRepository.diagrams[id].diagramKind as DiagramMode);
+                      }
                     } else if (diagramMode === "statemachine") {
                       enterLayer(id);
                     }
@@ -16234,16 +16340,16 @@ const ADIA = () => {
 
 
                   onExecuteSysmlCommand={handleExecuteSysmlCommand}
-                  onCommandResult={handleExplorerCommandResult}
-                  activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode}
+                  onCommandResult={handleExplorerCommand}
+                  activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode}
                   activeDiagramContext={(() => {
-                    const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+                    const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
                     const presented = diagramMode === 'statemachine'
                       ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
                       : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
                     return {
                       diagramId: contextId,
-                      name: contextId,
+                      name: canonicalSysmlRepository.diagrams[contextId]?.name ?? contextId,
                       kind: diagramMode,
                       domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
                       presentedSemanticIds: presented,
@@ -16646,7 +16752,7 @@ const ADIA = () => {
                   </>
                 )}
 
-                {diagramMode === 'bdd' && (
+              {(diagramMode === 'bdd' || diagramMode === 'package') && (
                   <>
                     <Button
                       variant="secondary"
@@ -16670,16 +16776,33 @@ const ADIA = () => {
                     >
                       Block
                     </Button>
-                    <div className="flex gap-0.5">
+                    {diagramMode === 'bdd' && <div className="flex gap-0.5">
                       <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
-                    </div>
+                    </div>}
+                    {diagramMode === 'package' && (
+                      <div className="flex gap-0.5">
+                        {([
+                          ['packageImport', 'Package Import'],
+                          ['access', 'Access'],
+                          ['elementImport', 'Element Import'],
+                          ['packageMerge', 'Package Merge'],
+                          ['dependency', 'Dependency'],
+                        ] as const).map(([kind, label]) => (
+                          <Button key={kind} size="sm" variant={packageRelationshipTool === kind ? 'default' : 'secondary'}
+                            onClick={() => { setPackageRelationshipTool(kind); setPackageRelationshipSourceId(null); }}
+                            className="h-6 px-2 text-[10px]" title={`Select source then target for ${label}`}>
+                            {label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
 
-                {diagramMode === 'requirements' && (
+              {diagramMode === 'requirements' && (
                   <>
                     <Button
                       variant="secondary"
@@ -16879,6 +17002,12 @@ const ADIA = () => {
                   {transitionSourceId ? 'Click target state/junction to connect...' : 'Click source state/junction...'}
                 </div>
               )}
+              {diagramMode === 'package' && packageRelationshipTool && (
+                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg text-xs">
+                  {packageRelationshipSourceId ? 'Select target element' : 'Select source Package'}
+                  <button className="ml-3 underline" onClick={() => { setPackageRelationshipTool(null); setPackageRelationshipSourceId(null); }}>Cancel</button>
+                </div>
+              )}
               {isCreatingConnector && (
                 <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
                   {connectorSource ? 'Click target port...' : 'Click source port...'}
@@ -16920,7 +17049,7 @@ const ADIA = () => {
                     x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
                     y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
                   };
-                  const activeDiagId = diagramMode === 'ibd' ? currentLayerId : diagramMode;
+                  const activeDiagId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
                   const elemIds = payload.semanticIds ?? [payload.semanticId];
                   handleExecuteSysmlCommand({
                     type: 'addToDiagram',
@@ -16977,7 +17106,7 @@ const ADIA = () => {
                           {renderJunctions()}
                         </g>
                       </>
-                    ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                    ) : (diagramMode === 'bdd' || diagramMode === 'requirements' || diagramMode === 'package') ? (
                       <>
                         <g style={{ pointerEvents: 'all' }}>
                           {renderPackages()}
@@ -17036,7 +17165,7 @@ const ADIA = () => {
                     <span className="mr-4">States: {currentStates.length}</span>
                     <span>Transitions: {currentTransitions.length}</span>
                   </>
-                ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                ) : (diagramMode === 'bdd' || diagramMode === 'requirements' || diagramMode === 'package') ? (
                   <>
                     <span className="mr-4">Blocks: {blocks.length}</span>
                     <span>Relations: {relationships.length}</span>
@@ -17726,6 +17855,26 @@ const ADIA = () => {
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                     Delete Junction
+                  </Button>
+                </>
+              ) : selectedPackage && diagramMode === 'package' ? (
+                <>
+                  <div className="text-xs uppercase tracking-wide text-[#888]">Semantic Package</div>
+                  <div>
+                    <Label htmlFor="sysml-package-name">Package Name</Label>
+                    <Input id="sysml-package-name" value={selectedPackage.name} className="mt-1"
+                      onChange={(e) => {
+                        const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: selectedPackage.id,
+                          patch: { name: e.target.value }, coalesceKey: `package-name-${selectedPackage.id}` });
+                        if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                      }} />
+                  </div>
+                  <div className="text-xs text-[#888]">ID: {selectedPackage.id}</div>
+                  <div className="text-xs text-[#888]">Owner: {canonicalSysmlRepository.packages[selectedPackage.id]?.ownerId || 'Model'}</div>
+                  <div className="text-xs uppercase tracking-wide text-[#888]">Diagram Presentation</div>
+                  <div className="text-xs text-[#888]">Position: {Math.round(selectedPackage.x)}, {Math.round(selectedPackage.y)}</div>
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
+                    Remove from Diagram
                   </Button>
                 </>
               ) : selectedBlock ? (

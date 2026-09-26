@@ -32,19 +32,42 @@ export function getEdgePoint(from: Rect, to: Rect): Point {
   const ty = to.y + to.height / 2;
   const dx = tx - fx;
   const dy = ty - fy;
+
+  // Degenerate case: both centers coincide — return the right edge midpoint
+  if (dx === 0 && dy === 0) {
+    return { x: from.x + from.width, y: fy };
+  }
+
   const angle = Math.atan2(dy, dx);
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
   const w = from.width / 2;
   const h = from.height / 2;
   let edgeX = fx;
   let edgeY = fy;
 
-  if (Math.abs(Math.cos(angle)) * h > Math.abs(Math.sin(angle)) * w) {
-    edgeX = fx + (Math.cos(angle) > 0 ? w : -w);
-    edgeY = fy + (edgeX - fx) * Math.tan(angle);
+  if (Math.abs(cosA) * h > Math.abs(sinA) * w) {
+    // Ray exits through a vertical edge (left or right)
+    edgeX = fx + (cosA > 0 ? w : -w);
+    // tanA is safe here because |cosA| > |sinA| * w/h, so cosA != 0
+    const tanA = sinA / cosA;
+    edgeY = fy + (edgeX - fx) * tanA;
   } else {
-    edgeY = fy + (Math.sin(angle) > 0 ? h : -h);
-    edgeX = fx + (edgeY - fy) / Math.tan(angle);
+    // Ray exits through a horizontal edge (top or bottom)
+    edgeY = fy + (sinA > 0 ? h : -h);
+    // cotA is safe here because |sinA| >= |cosA| * h/w, so sinA != 0
+    const cotA = cosA / sinA;
+    edgeX = fx + (edgeY - fy) * cotA;
   }
+
+  // Final safety clamp: ensure the edge point stays on the block perimeter
+  edgeX = Math.max(from.x, Math.min(edgeX, from.x + from.width));
+  edgeY = Math.max(from.y, Math.min(edgeY, from.y + from.height));
+
+  // Guard against NaN/Infinity from degenerate geometry
+  if (!Number.isFinite(edgeX)) edgeX = fx;
+  if (!Number.isFinite(edgeY)) edgeY = fy;
+
   return { x: edgeX, y: edgeY };
 }
 
