@@ -920,7 +920,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             return {
               committed: false,
               revision: repo.revision,
-              diagnostics: needsSelection && plan.candidates?.length ? [] : plan.diagnostics.map(item => ({ ...item, severity: 'error' as const })),
+              diagnostics: plan.diagnostics.map(item => ({ ...item, severity: 'error' as const })),
               ...(needsSelection && plan.action ? { typeSelection: { candidates: plan.candidates ?? [], action: plan.action } } : {}),
             };
           }
@@ -1070,7 +1070,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
     execute(command: ModelExplorerCommand): ExplorerCommandResult {
       const pre = this.preflight(command);
-      if (pre.diagnostics.some(d => d.severity === 'error')) {
+      if (pre.typeSelection || pre.diagnostics.some(d => d.severity === 'error')) {
         return pre;
       }
 

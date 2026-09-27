@@ -325,7 +325,6 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   const [pendingType, setPendingType] = useState<{
     command: Extract<ModelExplorerCommand, { type: 'createElement' }>;
     selection: NonNullable<ExplorerCommandResult['typeSelection']>;
-    createdTypeId?: string;
   } | null>(null);
 
   // Relationship wizard state
@@ -434,10 +433,30 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       coordinates: {},
       diagramPresentations: normalizeDiagramPresentations(diagramPresentations ?? {}),
     };
+    // Mutable local snapshot: refreshed after each committed command so the
+    // pending type-selection resume sees the just-created type. Reassignment
+    // requires `let` (const would throw on CreateNewType resume).
+    const refreshState = (result: SysmlCommandResult) => {
+      state.repository = result.repository;
+      state.history = result.history;
+      state.store = result.store;
+      state.patchHistory = result.patchHistory;
+      state.coordinates = result.coordinates;
+      state.diagramPresentations = result.diagramPresentations;
+      state.presentationHistory = result.presentationHistory;
+      state.actionStack = result.actionStack;
+      state.redoStack = result.redoStack;
+    };
 
     return createSysmlExplorerAdapter({
       getState: () => state,
-      executeCommand: onExecuteSysmlCommand || ((cmd) => executeSysmlCommand(state, cmd)),
+      executeCommand: (cmd) => {
+        const result = onExecuteSysmlCommand ? onExecuteSysmlCommand(cmd) : executeSysmlCommand(state, cmd);
+        if (result.committed) {
+          refreshState(result);
+        }
+        return result;
+      },
     });
   }, [canonicalSysmlRepository, blocks, parts, diagramPresentations, onExecuteSysmlCommand]);
 
@@ -691,17 +710,12 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     const result = createModelExplorerCommandBus(sysmlAdapter).dispatch(command);
     acceptResult(result, command);
     if (result.committed && result.selectedIds?.[0]) {
-      setPendingType({ ...pendingType, createdTypeId: result.selectedIds[0] });
+      const featureCommand = { ...pendingType.command, typeId: result.selectedIds[0] };
+      setPendingType(null);
+      acceptResult(createModelExplorerCommandBus(sysmlAdapter).dispatch(featureCommand), featureCommand);
     } else {
       setPendingType(null);
     }
-  }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult]);
-
-  useEffect(() => {
-    if (!pendingType?.createdTypeId || !canonicalSysmlRepository?.definitions[pendingType.createdTypeId]) return;
-    const command = { ...pendingType.command, typeId: pendingType.createdTypeId };
-    setPendingType(null);
-    acceptResult(createModelExplorerCommandBus(sysmlAdapter).dispatch(command), command);
   }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult]);
 
   const handleMoveNode = useCallback(
@@ -783,7 +797,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         />
       )}
 
-      {pendingType && !pendingType.createdTypeId && (
+      {pendingType && (
         <TypeSelectionPrompt
           isOpen
           featureKind={getElementKindLabel(pendingType.command.elementKind)}

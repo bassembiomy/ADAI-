@@ -56,8 +56,24 @@ describe('sysmlExplorerAdapter', () => {
     const adapter = createSysmlExplorerAdapter(harness);
     const result = createModelExplorerCommandBus(adapter).dispatch({ type: 'createElement', ownerId: owner.id, elementKind, name: 'newFeature' });
     expect(result.committed).toBe(false);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'TYPE_NOT_FOUND', severity: 'error' }));
     expect(result.typeSelection?.candidates.map(candidate => candidate.id)).toEqual(candidateIds);
     expect(result.typeSelection?.action.kind).toBe('CreateNewType');
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(harness.state.repository.revision).toBe(revision);
+  });
+
+  it('direct execute preserves the missing-type chooser and does not mutate', () => {
+    const harness = createTestHarness();
+    const owner: BlockDefinition = { id: 'owner', name: 'Owner', kind: 'block', namespace: [], ownerId: 'model', isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
+    harness.executeCommand({ type: 'createElement', element: owner });
+    harness.executeCommand({ type: 'createElement', element: { id: 'interface-type', name: 'Signals', kind: 'interface', namespace: [], ownerId: 'model', features: [] } });
+    const revision = harness.state.repository.revision;
+    const dispatch = vi.spyOn(harness, 'executeCommand');
+    const result = createSysmlExplorerAdapter(harness).execute({ type: 'createElement', ownerId: owner.id, elementKind: 'ProxyPort', name: 'proxy' });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'TYPE_NOT_FOUND', severity: 'error' }));
+    expect(result.typeSelection).toMatchObject({ candidates: [{ id: 'interface-type' }], action: { kind: 'CreateNewType' } });
     expect(dispatch).not.toHaveBeenCalled();
     expect(harness.state.repository.revision).toBe(revision);
   });

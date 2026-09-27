@@ -69,6 +69,32 @@ it('tree Create New Type commits a canonical Interface Block before resuming Pro
   expect(calls[1]).toMatchObject({ type: 'createOwnedFeature', intent: { portKind: 'proxyPort', typeId: expect.any(String) } });
 });
 
+it('Create New Type resumes a pending Proxy Port without a canonical repository prop', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const initial = createEmptyRepository();
+  const owner: BlockDefinition = { id: 'owner', name: 'Owner', kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
+  initial.definitions[owner.id] = owner;
+  let gateway = createSysmlGatewayState(initial);
+  const calls: SysmlEditorCommand[] = [];
+  const { container } = render(<AppModelExplorer diagramMode="bdd" states={[]} layers={[]} transitions={[]} junctions={[]} blocks={[{ id: owner.id, name: owner.name } as any]} parts={[]} selectedIds={[]} onSelect={vi.fn()} onDoubleClick={vi.fn()} onExecuteSysmlCommand={(cmd) => {
+    calls.push(cmd);
+    const result = executeSysmlCommand(gateway, cmd);
+    if (result.committed) gateway = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
+    return result;
+  }} />);
+  const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:owner"]');
+  expect(row).not.toBeNull();
+  fireEvent.contextMenu(row!);
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Create New Type/i }));
+  await waitFor(() => expect(calls).toHaveLength(2));
+  const interfaces = Object.values(gateway.repository.definitions).filter(definition => definition.kind === 'interface');
+  expect(interfaces).toHaveLength(1);
+  const ports = (gateway.repository.definitions[owner.id] as BlockDefinition).ports;
+  expect(ports).toHaveLength(1);
+  expect(ports[0]).toMatchObject({ kind: 'proxy', typeId: interfaces[0].id });
+});
+
 describe('AppModelExplorer Capability Coverage', () => {
   it('routes a State Machine node by its domain even in a SysML editor', () => {
     expect(explorerAdapterDomain({ ...selectedNode, domain: 'stateMachine' })).toBe('stateMachine');
