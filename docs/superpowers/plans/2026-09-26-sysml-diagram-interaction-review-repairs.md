@@ -77,7 +77,7 @@ export type SysmlEditorCommand =
 - Consumes: `SysmlRepository`, actual State Machine `states`, canonical relationship candidate.
 - Produces: `resolveSemanticEndpoint(repo, id, context): ConnectionEndpoint | undefined` and context-aware relationship validation.
 
-- [ ] **Step 1: Write failing forged-State tests.** Prove that family text and an ID containing `state` do not establish identity.
+- [x] **Step 1: Write failing forged-State tests.** Prove that family text and an ID containing `state` do not establish identity.
 
 ```ts
 const forged = relationship('rel-forged', 'nonexistent-state-id', 'req-1', 'satisfy', {
@@ -87,15 +87,15 @@ expect(validateCanonicalRelationshipCandidate(repo, forged, { externalEndpoints:
   .toContain('MISSING_RELATIONSHIP_ENDPOINT');
 ```
 
-- [ ] **Step 2: Write a valid external-State test.** Add `state-1` to `externalEndpoints`, create State → Requirement Satisfy, and assert validation succeeds. Remove the entry and assert the same candidate fails atomically.
+- [x] **Step 2: Write a valid external-State test.** Add `state-1` to `externalEndpoints`, create State → Requirement Satisfy, and assert validation succeeds. Remove the entry and assert the same candidate fails atomically.
 
-- [ ] **Step 3: Run the focused tests and verify failure.**
+- [x] **Step 3: Run the focused tests and verify failure.**
 
 Run: `npx vitest run src/engine/sysml/semanticEndpointIndex.test.ts src/services/sysmlCreationRules.test.ts src/engine/sysml/validation.test.ts`
 
 Expected: FAIL because current validation trusts `sourceFamily` and ID substrings.
 
-- [ ] **Step 4: Implement endpoint resolution.** Search repository top-level collections and nested Block properties/ports. Search State IDs only through `context.externalEndpoints`. Return the resolved family from the stored entity, never from candidate fields.
+- [x] **Step 4: Implement endpoint resolution.** Search repository top-level collections and nested Block properties/ports. Search State IDs only through `context.externalEndpoints`. Return the resolved family from the stored entity, never from candidate fields.
 
 ```ts
 export function resolveSemanticEndpoint(
@@ -109,11 +109,11 @@ export function resolveSemanticEndpoint(
 }
 ```
 
-- [ ] **Step 5: Pass State context through all callers.** `App.tsx` builds a read-only map from the actual State Machine model. UI, gateway, import, script, and AI adapters either provide that context or receive `MISSING_RELATIONSHIP_ENDPOINT`; they may not manufacture a State family.
+- [x] **Step 5: Pass State context through all callers.** `App.tsx` builds a read-only map from the actual State Machine model. UI, gateway, import, script, and AI adapters either provide that context or receive `MISSING_RELATIONSHIP_ENDPOINT`; they may not manufacture a State family.
 
-- [ ] **Step 6: Make repository validation cross-domain aware.** Extend validation input with external endpoint IDs for active integrated models. Persisted relationships without a resolvable external endpoint remain invalid and cannot be silently declared valid by `sourceFamily`.
+- [x] **Step 6: Make repository validation cross-domain aware.** Extend validation input with external endpoint IDs for active integrated models. Persisted relationships without a resolvable external endpoint remain invalid and cannot be silently declared valid by `sourceFamily`.
 
-- [ ] **Step 7: Run tests and commit.**
+- [x] **Step 7: Run tests and commit.**
 
 Run: `npx vitest run src/engine/sysml/semanticEndpointIndex.test.ts src/services/sysmlCreationRules.test.ts src/engine/sysml/validation.test.ts src/services/sysmlConnectionUi.test.ts`
 
@@ -137,7 +137,7 @@ git commit -m "fix(sysml): resolve state relationship endpoints by identity"
 - Consumes: `OwnedFeatureIntent`, optional active diagram ID and feature presentation.
 - Produces: gateway `createOwnedFeature` execution with pre-commit validation and one undo action.
 
-- [ ] **Step 1: Write a failing command-shape test.** Assert builders return a typed `createOwnedFeature` command and never attach undeclared fields to `updateElement`.
+- [x] **Step 1: Write a failing command-shape test.** Assert builders return a typed `createOwnedFeature` command and never attach undeclared fields to `updateElement`.
 
 ```ts
 expect(plan.command).toEqual({
@@ -148,23 +148,23 @@ expect(plan.command).toEqual({
 });
 ```
 
-- [ ] **Step 2: Write failing atomicity tests.** Invalid ProxyPort type, invalid nested Port, missing diagram, and duplicate feature ID must leave repository revision, Block features, presentation map, patch history, and action stack unchanged.
+- [x] **Step 2: Write failing atomicity tests.** Invalid ProxyPort type, invalid nested Port, missing diagram, and duplicate feature ID must leave repository revision, Block features, presentation map, patch history, and action stack unchanged.
 
-- [ ] **Step 3: Write success/undo tests.** Successful Port or Property creation updates one Block, records optional diagram-keyed feature layout, creates one action-stack entry, and undo/redo restores the exact same feature ID.
+- [x] **Step 3: Write success/undo tests.** Successful Port or Property creation updates one Block, records optional diagram-keyed feature layout, creates one action-stack entry, and undo/redo restores the exact same feature ID.
 
-- [ ] **Step 4: Run tests and verify failure.**
+- [x] **Step 4: Run tests and verify failure.**
 
 Run: `npx vitest run src/services/sysmlOwnedFeatureCommands.test.ts src/services/sysmlCommandGateway.test.ts`
 
 Expected: FAIL because the builder currently emits `updateElement` with ignored `diagramId` and `presentation` properties.
 
-- [ ] **Step 5: Make builders deterministic and side-effect free.** Accept or generate IDs through the shared repository ID service, return only the typed intent command, and remove `payload`, undeclared presentation fields, and `any` command casts.
+- [x] **Step 5: Make builders deterministic and side-effect free.** Accept or generate IDs through the shared repository ID service, return only the typed intent command, and remove `payload`, undeclared presentation fields, and `any` command casts.
 
-- [ ] **Step 6: Validate staged repository state before commit.** Construct the candidate Block in memory, run ownership/type rules and `validateRepositoryPorts`, reject all error diagnostics, then create the semantic and presentation patches together. Do not commit first and return validation errors afterward.
+- [x] **Step 6: Validate staged repository state before commit.** Construct the candidate Block in memory, run ownership/type rules and `validateRepositoryPorts`, reject all error diagnostics, then create the semantic and presentation patches together. Do not commit first and return validation errors afterward.
 
-- [ ] **Step 7: Ensure the presentation has a real consumer.** Store owned-feature border/row layout in the active diagram presentation's feature layout map. If no separate feature layout is required, omit presentation from the public command and document that the feature is projected through its owning Block; never accept and ignore presentation input.
+- [x] **Step 7: Ensure the presentation has a real consumer.** Store owned-feature border/row layout in the active diagram presentation's feature layout map. If no separate feature layout is required, omit presentation from the public command and document that the feature is projected through its owning Block; never accept and ignore presentation input.
 
-- [ ] **Step 8: Run tests, typecheck, and commit.**
+- [x] **Step 8: Run tests, typecheck, and commit.**
 
 Run: `npx vitest run src/services/sysmlOwnedFeatureCommands.test.ts src/services/sysmlCommandGateway.test.ts src/engine/sysml/validation/portRules.test.ts`
 
@@ -204,7 +204,7 @@ Run: `npx vitest run src/components/sysml/BlockFeatureEditor.test.tsx src/featur
 
 Expected: FAIL because production never dispatches `buildCreateOwnedPropertyCommand`/`createOwnedFeature`.
 
-- [ ] **Step 5: Replace local/ad hoc Property edits.** Route Block editor, canvas feature action, and tree menu through the shared command. Render the resulting Property from canonical projection only.
+- [ ] **Step 5: Replace local/ad hoc Property edits.** Route Block editor, canvas feature action, and tree menu through the shared command. Render the resulting Property from canonical projection only. — PARTIAL (Task 8): tree (`sysmlExplorerAdapter` returns `TYPE_NOT_FOUND`, no first-candidate fallback) and canvas (`App.tsx` shared chooser) paths are routed and green; the `BlockFeatureEditor` inspector still auto-dispatches with first-candidate fallbacks (`BlockFeatureEditor.tsx:72-101,112-140`, `firstDef`/`firstIF`) and renders no type-selection dialog. The uncommitted `BlockFeatureEditor.test.tsx` rewrite asserting explicit inspector type selection fails 2/8 against current source (stash-verified: HEAD version passes 7/7), so the inspector rewrite is explicitly left incomplete, not silently committed.
 
 - [ ] **Step 6: Preserve explicit relationship choice.** Keep the legal-kind picker backend-derived; never default silently to Association when multiple kinds are legal. Failed relationship creation leaves the new Property intact but creates no relationship or edge.
 
@@ -234,15 +234,15 @@ git commit -m "fix(sysml): route property workflows through canonical commands"
 
 - [ ] **Step 1: Write a failing persisted nesting test.** Create a ProxyPort parent and Standard Port child in a Block, persist/load them, and assert `INVALID_NESTED_PROXY_PORT` is reported independently of React.
 
-- [ ] **Step 2: Write valid nesting tests.** ProxyPort inside ProxyPort with an InterfaceBlock type passes; missing parent ID returns `NESTED_PORT_PATH_INVALID`; cyclic paths are rejected; a top-level Standard Port remains valid.
+- [x] **Step 2: Write valid nesting tests.** ProxyPort inside ProxyPort with an InterfaceBlock type passes; missing parent ID returns `NESTED_PORT_PATH_INVALID`; cyclic paths are rejected; a top-level Standard Port remains valid.
 
-- [ ] **Step 3: Run focused tests and verify failure.**
+- [x] **Step 3: Run focused tests and verify failure.**
 
 Run: `npx vitest run src/engine/sysml/validation/portRules.test.ts src/engine/sysml/validation.test.ts src/engine/sysml/persistence.test.ts`
 
 Expected: FAIL because repository validation resolves only definitions and rewrites every Port owner to its Block.
 
-- [ ] **Step 4: Build a repository Port index.** Index every embedded Port by ID before validation. Resolve parent Port IDs from explicit nesting data, preserve the containing Block separately, and pass both definitions and Ports through `PortValidationContext.getElement`.
+- [x] **Step 4: Build a repository Port index.** Index every embedded Port by ID before validation. Resolve parent Port IDs from explicit nesting data, preserve the containing Block separately, and pass both definitions and Ports through `PortValidationContext.getElement`.
 
 ```ts
 const portsById = new Map(
@@ -252,9 +252,9 @@ const portsById = new Map(
 );
 ```
 
-- [ ] **Step 5: Validate imported and updated Blocks before commit.** Reuse the same index and validator for gateway updates, persistence hydration, imports, scripts, and AI actions.
+- [x] **Step 5: Validate imported and updated Blocks before commit.** Reuse the same index and validator for gateway updates, persistence hydration, imports, scripts, and AI actions.
 
-- [ ] **Step 6: Run tests and commit.**
+- [x] **Step 6: Run tests and commit.**
 
 Run: `npx vitest run src/engine/sysml/validation/portRules.test.ts src/engine/sysml/validation.test.ts src/engine/sysml/persistence.test.ts src/services/sysmlCommandGateway.test.ts`
 
@@ -275,25 +275,25 @@ git commit -m "fix(sysml): validate persisted nested ports"
 - Consumes: completed Tasks 1–4 and existing browser helpers.
 - Produces: non-conditional release workflows that fail when controls or semantic changes are absent.
 
-- [ ] **Step 1: Replace the Port existence check.** Create all four Port kinds from the canvas and tree, select existing compatible types, assert exact canonical feature counts/kinds, test ProxyPort wrong-type rejection, reload, and verify stable IDs.
+- [x] **Step 1: Replace the Port existence check.** Create all four Port kinds from the canvas and tree, select existing compatible types, assert exact canonical feature counts/kinds, test ProxyPort wrong-type rejection, reload, and verify stable IDs.
 
-- [ ] **Step 2: Replace the IBD navigation check.** Create context/part Ports, connect boundary-to-part delegation and part-to-part assembly, assert connector IDs and endpoint usages in the repository projection, reload, then verify the connectors remain visible.
+- [x] **Step 2: Replace the IBD navigation check.** Create context/part Ports, connect boundary-to-part delegation and part-to-part assembly, assert connector IDs and endpoint usages in the repository projection, reload, then verify the connectors remain visible.
 
-- [ ] **Step 3: Add the complete Property workflow.** Create a typed Property, connect it to a Block through an explicitly chosen legal relationship, and verify endpoints, rename propagation, undo/redo, and reload.
+- [x] **Step 3: Add the complete Property workflow.** Create a typed Property, connect it to a Block through an explicitly chosen legal relationship, and verify endpoints, rename propagation, undo/redo, and reload.
 
-- [ ] **Step 4: Add TestCase behavior.** Create TestCases from tree and canvas, assert exactly one semantic record per action, move and remove one presentation, confirm repository preservation, then delete with impact confirmation and undo.
+- [x] **Step 4: Add TestCase behavior.** Create TestCases from tree and canvas, assert exactly one semantic record per action, move and remove one presentation, confirm repository preservation, then delete with impact confirmation and undo.
 
-- [ ] **Step 5: Make Satisfy assertions mandatory.** Remove `count()`, `isVisible()`, and `isEnabled()` branches that skip behavior. Create State → Requirement Satisfy and assert repository/edge state; attempt reverse direction and assert visible `INVALID_SATISFY_DIRECTION` with unchanged relationship count.
+- [x] **Step 5: Make Satisfy assertions mandatory.** Remove `count()`, `isVisible()`, and `isEnabled()` branches that skip behavior. Create State → Requirement Satisfy and assert repository/edge state; attempt reverse direction and assert visible `INVALID_SATISFY_DIRECTION` with unchanged relationship count.
 
-- [ ] **Step 6: Cover Package activation zero/one/many cases.** Assert explicit zero-diagram creation behavior, direct one-diagram opening, chooser or exact tree opening for multiple diagrams, and independent presentation restoration.
+- [x] **Step 6: Cover Package activation zero/one/many cases.** Assert explicit zero-diagram creation behavior, direct one-diagram opening, chooser or exact tree opening for multiple diagrams, and independent presentation restoration.
 
-- [ ] **Step 7: Run the browser suite repeatedly.**
+- [ ] **Step 7: Run the browser suite repeatedly.** — PARTIAL (Task 8): single-pass runs are green for both specs (`sysml-diagram-interaction-corrections` 7/7, `sysml-repository-presentation` 11/11 with one cold-start goto retry); the strict `--repeat-each=2` invocation is BLOCKED by environment — the dev webServer stops responding (`net::ERR_CONNECTION_REFUSED` on every repeat-pass navigation) under the extended repeat load. No semantic assertion failed on repeat; the failure mode is server availability, not test logic.
 
 Run: `npx playwright test tests/e2e/sysml-diagram-interaction-corrections.spec.ts tests/e2e/sysml-repository-presentation.spec.ts --project=chromium --repeat-each=2`
 
 Expected: every scenario executes its semantic assertions twice; no workflow conditionally skips its core action.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```powershell
 git add tests/e2e/sysml-diagram-interaction-corrections.spec.ts tests/e2e/sysml-repository-presentation.spec.ts
@@ -402,3 +402,21 @@ Confirm there is no substring-based identity, ignored command property, post-com
 - **No silent creation:** Missing State IDs, types, owners, diagrams, and relationship endpoints all reject through authoritative lookup.
 - **Type consistency:** `SemanticEndpointContext`, `OwnedFeatureIntent`, and `createOwnedFeature` are defined once and consumed consistently across tasks.
 - **No unrelated scope:** Package semantics beyond activation, new diagram types, and repository-wide V4 migration remain outside this repair plan.
+
+## Task 8 Reconciliation (2026-09-27, branch `co-work` @ `38428b1`)
+
+Checklist mapping — every box checked above was demonstrated by code plus a passing gate, never by implementation presence alone:
+
+| Prior item | Fulfilling work | Gate evidence |
+|---|---|---|
+| Task 1 Steps 1–7 (authoritative endpoint resolution) | `src/engine/sysml/semanticEndpointIndex.ts` + context threading (`App.tsx`, gateway, worker); commits `e7c18ab`, `9e02cde`, `1bb8410` | `semanticEndpointIndex` 3/3, creationRules/validation/gateway suites green; Playwright Workflow 4 (State Satisfy persists across unrelated mutation + real reload; reverse rejected) 7/7 run |
+| Task 2 Steps 1–8 (atomic owned-feature commands) | Staged validation + atomic IDs in `sysmlCommandGateway.ts`, `sysmlOwnedFeatureCommands.ts`; commits `8604830`, `2502c50` | `sysmlOwnedFeatureCommands` 23/23, `sysmlCommandGateway` 64/64, `portRules` 13/13; `npx tsc --noEmit` exit 0 |
+| Task 3 Steps 1–7 | Tree + canvas paths done (adapter `TYPE_NOT_FOUND`, `App.tsx` chooser); **inspector path explicitly partial** — see Step 5 note. Boxes left unchecked. | Explorer/canvas suites green; `BlockFeatureEditor` inspector rewrite fails 2/8 (uncommitted, stash-verified) |
+| Task 4 Steps 1–6 (nested Port validation) | Repository Port index in `validation/portRules.ts`, `model.ts`; commit `598f183` | `portRules` 13/13 incl. `PORT_NESTED_PROXY_VALIDATED`; persistence/gateway suites green |
+| Task 5 Steps 1–6, 8 (behavioral browser workflows) | `tests/e2e/sysml-diagram-interaction-corrections.spec.ts` real save/reload workflows; commit `e3c02fc`; Task 8 fix commit for `sysml-repository-presentation.spec.ts` stale expectations | Corrections 7/7; repository-presentation 11/11 (one cold-start goto retry, environmental) |
+| Task 5 Step 7 (`--repeat-each=2`) | BLOCKED by environment (dev webServer `ERR_CONNECTION_REFUSED` under repeat load). Box left unchecked with reason. | Single-pass green on both specs demonstrated instead |
+| Tasks 6–7 | Previously checked; re-verified: compliance gate 21/21 live-bound, release gate 16/16, codegen isolation vitest 4/4 | `diagramInteractionCompliance` 21/21, `test:sysml:release-gate` 16/16 |
+
+- **Compliance evidence:** `docs/sysml/compliance-evidence.json` statuses unchanged after the final run — the compliance gate re-executes the corrections suite live and evaluates `COMPLIANT` on the current revision, so no JSON update was required (overall profile remains `PARTIAL` only via the pre-existing `SYSML-REQ-DIAGRAM-BLOCK-SATISFY-001` constraints `PARTIAL`, which is a notation-coverage caveat, not a failure).
+- **Codegen:** `verify:repository-codegen-isolation` vitest 4/4 pass; `verify:sm:codegen` reports `NOT_RUN` gates (sanitizers unsupported by host gcc; static-analysis/MISRA/target/hardware not configured) — recorded separately per plan, outputs unchanged.
+- **Unrelated changes untouched:** pre-existing dirty `src/components/sysml/BlockFeatureEditor.test.tsx` left uncommitted (explicitly partial, reason in Task 3 Step 5 note); untracked `docs/superpowers/plans/2026-09-27-sysml-semantic-workflow-and-palette-repairs.md` left untracked. `git diff --check` clean.
