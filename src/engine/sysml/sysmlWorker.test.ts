@@ -598,6 +598,40 @@ describe('SysML Worker Protocol & Execution', () => {
       expect(captured[0].endpointContext.externalEndpoints).toBeDefined();
       client.terminate();
     });
+
+    it('scheduleValidation posts endpointContext under the exact field the worker reads (worker path)', async () => {
+      const repo = buildStateLinkRepo();
+      for (let i = 0; i < 220; i++) {
+        repo.definitions[`pad-${i}`] = {
+          id: `pad-${i}`, name: `Pad ${i}`, kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        };
+      }
+      const captured: any[] = [];
+      const loopback = {
+        onmessage: null as any,
+        onerror: null as any,
+        postMessage(request: any) {
+          captured.push(request);
+          const response = handleWorkerMessage(request);
+          queueMicrotask(() => (this as any).onmessage?.({ data: response }));
+        },
+        terminate() {},
+      };
+      const client = new SysmlWorkerClient(() => loopback as unknown as Worker);
+
+      const report = await new Promise<any>((resolve, reject) => {
+        // Padded repo forces the off-thread path so the test captures the
+        // posted request; the small unpadded repo would take the fast path.
+        client.scheduleValidation(repo, 0, resolve, reject, mapContext);
+      });
+      expect(codesOf(report)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(report.valid).toBe(true);
+      expect(captured).toHaveLength(1);
+      expect(captured[0].endpointContext).toBeDefined();
+      expect(captured[0].endpointContext.externalEndpoints).toBeDefined();
+      client.terminate();
+    });
   });
   });
 });

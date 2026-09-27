@@ -210,12 +210,41 @@ export interface DiagramPresentationStyleLookup {
 }
 
 /**
+ * Roles for which a stored `style.color` override must never win.
+ * Interaction/status presentation (selection highlight, warning/error
+ * status) always resolves to the role token so the status stays visible;
+ * overrides apply only to base semantic roles.
+ */
+const STATUS_PRESENTATION_ROLES: ReadonlySet<string> = new Set([
+  'selection',
+  'warning',
+  'error',
+]);
+
+/**
+ * Interaction/status states with the same never-override guarantee: a base
+ * role rendered in a selected/warning/error state resolves to the status
+ * token, never to a stored override.
+ */
+const STATUS_PRESENTATION_STATES: ReadonlySet<unknown> = new Set([
+  'selected',
+  'focused',
+  'warning',
+  'error',
+]);
+
+/**
  * Effective canvas presentation color for one semantic role in one
  * diagram/element presentation. Reads the stored `style.color` override for
  * that element+diagram and resolves it through
- * {@link resolveSemanticPresentation}: a valid override wins for rendering,
- * while an absent/invalid override resolves to the role token. Pure
- * presentation: never validates, admits, or rejects semantic content.
+ * {@link resolveSemanticPresentation}: a valid override wins for rendering
+ * base semantic roles, while an absent/invalid override resolves to the role
+ * token. Interaction/status roles (`selection`, `warning`, `error`) and
+ * interaction/status states (`selected`, `focused`, `warning`, `error`)
+ * never honor stored overrides and always resolve to the role token, so a
+ * user color can never hide a selection highlight or a suspect-error
+ * indicator. Pure presentation: never validates, admits, or rejects
+ * semantic content.
  */
 export function elementPresentationColor(
   role: unknown,
@@ -227,6 +256,13 @@ export function elementPresentationColor(
     | null,
   state: unknown = 'default',
 ): string {
+  if (STATUS_PRESENTATION_ROLES.has(role as string) || STATUS_PRESENTATION_STATES.has(state)) {
+    return resolveSemanticPresentation(role, {
+      state,
+      ...(diagramId ? { diagramId } : {}),
+      ...(elementId ? { presentationId: elementId } : {}),
+    }).color;
+  }
   const stored =
     diagramId && elementId
       ? diagramPresentations?.[diagramId]?.presentations?.[elementId]?.style?.color

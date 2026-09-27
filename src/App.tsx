@@ -6457,10 +6457,12 @@ const ADIA = () => {
       sysmlStore.revision,
       () => {
         // Validation completed in worker thread without blocking UI
-      }
+      },
+      undefined,
+      externalEndpointContext,
     );
     return cancel;
-  }, [sysmlStore.revision]);
+  }, [sysmlStore.revision, externalEndpointContext]);
 
   const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
@@ -15575,9 +15577,12 @@ const ADIA = () => {
       // error, then valid requirement relationship) is presentational only;
       // validation state is computed upstream and color never drives it.
       // Review follow-up Finding 6a: a stored style.color override for the
-      // relationship's element+diagram wins for rendering via
-      // resolveSemanticPresentation (kept in style props per the Task 6
-      // var()-in-style fix); absent/invalid resolves to the role default.
+      // relationship's element+diagram wins for rendering base semantic
+      // roles via resolveSemanticPresentation (kept in style props per the
+      // Task 6 var()-in-style fix); selection/error status roles always
+      // resolve to the role token so an override can never hide the
+      // selection highlight or the suspect-error indicator.
+      // Absent/invalid resolves to the role default.
       const strokeColor = isSelected
         ? elementPresentationColor('selection', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
         : isSuspect

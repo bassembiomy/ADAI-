@@ -198,6 +198,46 @@ describe('elementPresentationColor stored overrides (review Finding 6a)', () => 
   });
 });
 
+describe('elementPresentationColor status-role precedence (review follow-up)', () => {
+  const presentationsFor = (color: unknown) => ({
+    bdd: { presentations: { 'rel-1': { style: { color } } } },
+  });
+  it('ignores stored overrides for selection/error/warning roles and returns the role token', () => {
+    for (const role of ['selection', 'error', 'warning'] as const) {
+      const token = semanticPresentationToken(role);
+      expect(
+        elementPresentationColor(role, 'bdd', 'rel-1', presentationsFor('#123456')),
+      ).toBe(token);
+      expect(
+        elementPresentationColor(role, 'bdd', 'rel-1', presentationsFor('var(--my-custom)')),
+      ).toBe(token);
+      expect(
+        elementPresentationColor(role, 'bdd', 'rel-1', presentationsFor(undefined)),
+      ).toBe(token);
+    }
+  });
+  it('ignores stored overrides for base roles rendered in a status state', () => {
+    expect(
+      elementPresentationColor('block', 'bdd', 'rel-1', presentationsFor('#123456'), 'selected'),
+    ).toBe(semanticPresentationToken('block', 'selected'));
+    expect(
+      elementPresentationColor('block', 'bdd', 'rel-1', presentationsFor('#123456'), 'error'),
+    ).toBe(semanticPresentationToken('block', 'error'));
+    expect(
+      elementPresentationColor('block', 'bdd', 'rel-1', presentationsFor('#123456'), 'warning'),
+    ).toBe(semanticPresentationToken('block', 'warning'));
+  });
+  it('still honors valid overrides for base semantic roles and rejects invalid ones', () => {
+    const token = semanticPresentationToken('validRequirementRelationship');
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor('#123456')),
+    ).toBe('#123456');
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor('not a color;;;')),
+    ).toBe(token);
+  });
+});
+
 describe('semanticPresentationStyles accessible status (spec 7)', () => {
   it('pairs warning/error tokens with text labels and icon names', () => {
     const warning = getSemanticPresentationStatusMeta('warning');
