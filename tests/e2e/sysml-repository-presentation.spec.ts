@@ -21,6 +21,14 @@ async function filterTree(page: import('@playwright/test').Page, query: string) 
   await page.locator('input[placeholder^="Filter model"]').fill(query);
 }
 
+function typeSelectionPrompt(page: import('@playwright/test').Page) {
+  return page.locator('[role="dialog"][aria-labelledby="type-selection-title"]');
+}
+
+function impactDialog(page: import('@playwright/test').Page) {
+  return page.locator('[role="dialog"][aria-labelledby="move-impact-dialog-title"]');
+}
+
 async function movePresentation(
   page: import('@playwright/test').Page,
   node: import('@playwright/test').Locator,
@@ -215,6 +223,14 @@ test.describe('Cameo-style repository presentation and tree workflows', () => {
 
     await vehicleTreeNode.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Part Property', exact: true }).click();
+    // Typed Part creation requires explicit type selection: choose the Vehicle
+    // Block itself as the part type through the shared chooser, then confirm.
+    const partPrompt = typeSelectionPrompt(page);
+    await expect(partPrompt).toBeVisible();
+    await expect(partPrompt).toContainText(/Select Type for Part Property/i);
+    await partPrompt.getByRole('button').filter({ hasText: vehicleId }).first().click();
+    await partPrompt.getByRole('button', { name: 'Confirm' }).click();
+    await expect(partPrompt).toHaveCount(0);
     await filterTree(page, 'part');
     const partTreeNode = page.locator('.model-tree-row[data-kind="part"][data-semantic-id]');
     await expect(partTreeNode).toHaveCount(1);
@@ -374,8 +390,14 @@ test.describe('Cameo-style repository presentation and tree workflows', () => {
 
     await page.getByRole('treeitem', { name: 'BLDCMotor', exact: true }).first().click({ button: 'right' });
     await page.getByRole('menuitem', { name: /^Delete from Model/ }).click();
-    // This leaf Block has no owned elements or relationships, so deletion is
-    // immediate; material-impact confirmation is covered by the dedicated gate.
+    // The Block carries a BDD presentation, so deletion requires impact
+    // confirmation even with zero owned elements or relationships:
+    // presentations always force review.
+    const dialog = impactDialog(page);
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+    await expect(dialog).toContainText(/Affected Diagram Presentations/);
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
     await expect(page.getByRole('treeitem', { name: 'BLDCMotor', exact: true })).toHaveCount(0);
   });
 });
