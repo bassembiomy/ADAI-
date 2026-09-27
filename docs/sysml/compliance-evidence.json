@@ -319,8 +319,83 @@
       "overallStatus": "COMPLIANT"
     },
     {
+      "id": "UML-PORT-STANDARD-001",
+      "feature": "Standard UML Port created without SysML proxy/full stereotyping",
+      "authority": "UML_FOUNDATION",
+      "specification": {
+        "document": "ISO/IEC 19505-2 (UML 2.5.1)",
+        "section": "§11.3 Ports",
+        "url": "https://www.omg.org/spec/UML/2.5.1/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/domain/ports.ts",
+          "src/engine/sysml/model.ts",
+          "src/services/sysmlOwnedFeatureCommands.ts"
+        ],
+        "domainTypes": [
+          "Port",
+          "PortDefinition",
+          "CanonicalPortKind"
+        ],
+        "commands": [
+          "createOwnedPort",
+          "buildCreateOwnedPortCommand"
+        ],
+        "validator": [
+          "validatePort",
+          "PORT_DIAGNOSTICS"
+        ],
+        "persistenceMapping": "SysmlRepository.definitions[blockId].ports",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlOwnedFeatureCommands.test.ts",
+          "src/engine/sysml/validation/portRules.test.ts"
+        ],
+        "executableCases": [
+          "PORT_UML_STANDARD_OWNED",
+          "PORT_PERSISTENCE_STABLE"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Standard Port creates owned feature with canonical portKind umlPort without stereotypes.",
+          "executableCases": [
+            "PORT_UML_STANDARD_OWNED"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "PortDefinition retains id, name, direction, multiplicity, and stable persistence.",
+          "executableCases": [
+            "PORT_PERSISTENCE_STABLE"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Standard port is contained strictly within owning BlockDefinition.",
+          "executableCases": [
+            "PORT_UML_STANDARD_OWNED"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Persistence and serialization round trip cleanly without forced stereotypes.",
+          "executableCases": [
+            "PORT_PERSISTENCE_STABLE"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT"
+    },
+    {
       "id": "SYSML-PORT-CREATE-001",
-      "feature": "BDD Standard Port, ProxyPort, FullPort, and FlowPort typed creation and stereotype separation",
+      "feature": "BDD ProxyPort, FullPort, and FlowPort typed creation and stereotype separation",
       "authority": "OMG_SYSML_1_6",
       "specification": {
         "document": "OMG Systems Modeling Language (SysML), Version 1.6",
@@ -357,24 +432,46 @@
           "src/engine/sysml/diagramInteractionCorrections.test.ts",
           "src/services/sysmlOwnedFeatureCommands.test.ts",
           "src/engine/sysml/validation/portRules.test.ts"
+        ],
+        "executableCases": [
+          "PORT_PROXY_INTERFACE_TYPING",
+          "PORT_PROXY_WRONG_TYPE_REJECTED",
+          "PORT_FULL_BLOCK_TYPING",
+          "PORT_FLOW_LEGACY_OWNED",
+          "PORT_NESTED_PROXY_VALIDATED",
+          "PORT_PERSISTENCE_STABLE"
         ]
       },
       "fourLevelCompliance": {
         "element": {
           "status": "PASS",
-          "evidence": "CanonicalPortKind separates umlPort, proxyPort, fullPort, and flowPort into distinct owned features."
+          "evidence": "CanonicalPortKind separates proxyPort, fullPort, and flowPort into distinct owned features.",
+          "executableCases": [
+            "PORT_FULL_BLOCK_TYPING",
+            "PORT_FLOW_LEGACY_OWNED"
+          ]
         },
         "properties": {
           "status": "PASS",
-          "evidence": "PortDefinition preserves direction, typeId, isConjugated, multiplicity, and portKind."
+          "evidence": "PortDefinition preserves direction, typeId, isConjugated, multiplicity, and portKind.",
+          "executableCases": [
+            "PORT_PERSISTENCE_STABLE"
+          ]
         },
         "relationships": {
           "status": "PASS",
-          "evidence": "Owned port is strictly contained within owning BlockDefinition with atomic rollback."
+          "evidence": "Owned port is strictly contained within owning BlockDefinition with atomic rollback.",
+          "executableCases": [
+            "PORT_PROXY_INTERFACE_TYPING"
+          ]
         },
         "constraints": {
           "status": "PASS",
-          "evidence": "ProxyPort enforces InterfaceBlock typing; missing types reject without silent creation."
+          "evidence": "ProxyPort enforces InterfaceBlock typing; missing types reject without silent creation.",
+          "executableCases": [
+            "PORT_PROXY_WRONG_TYPE_REJECTED",
+            "PORT_NESTED_PROXY_VALIDATED"
+          ]
         }
       },
       "overallStatus": "COMPLIANT"
@@ -415,24 +512,42 @@
           "src/engine/sysml/diagramInteractionCorrections.test.ts",
           "src/services/sysmlIbdConnectorCommands.test.ts",
           "src/components/sysml/IbdConnectorEndpoint.test.tsx"
+        ],
+        "executableCases": [
+          "IBD_BOUNDARY_DELEGATION_PERSISTS",
+          "IBD_ASSEMBLY_PART_TO_PART",
+          "IBD_ASSEMBLY_BOUNDARY_REJECTED",
+          "IBD_CONNECTOR_PERSISTENCE"
         ]
       },
       "fourLevelCompliance": {
         "element": {
           "status": "PASS",
-          "evidence": "Resolves context boundary ports and part occurrence ports distinctly."
+          "evidence": "Resolves context boundary ports and part occurrence ports distinctly.",
+          "executableCases": [
+            "IBD_ASSEMBLY_PART_TO_PART"
+          ]
         },
         "properties": {
           "status": "PASS",
-          "evidence": "Delegation and assembly kinds validated with occurrence port endpoints."
+          "evidence": "Delegation and assembly kinds validated with occurrence port endpoints.",
+          "executableCases": [
+            "IBD_CONNECTOR_PERSISTENCE"
+          ]
         },
         "relationships": {
           "status": "PASS",
-          "evidence": "Boundary-to-internal delegation and internal part-to-part assembly connectors created atomically."
+          "evidence": "Boundary-to-internal delegation and internal part-to-part assembly connectors created atomically.",
+          "executableCases": [
+            "IBD_BOUNDARY_DELEGATION_PERSISTS"
+          ]
         },
         "constraints": {
           "status": "PASS",
-          "evidence": "Assembly between boundary port and part port rejected with INVALID_ASSEMBLY_ENDPOINTS."
+          "evidence": "Assembly between boundary port and part port rejected with INVALID_ASSEMBLY_ENDPOINTS.",
+          "executableCases": [
+            "IBD_ASSEMBLY_BOUNDARY_REJECTED"
+          ]
         }
       },
       "overallStatus": "COMPLIANT"
@@ -473,24 +588,108 @@
           "src/engine/sysml/diagramInteractionCorrections.test.ts",
           "src/services/sysmlDiagramCreation.test.ts",
           "src/engine/sysml/requirementsDiagramScope.test.ts"
+        ],
+        "executableCases": [
+          "REQ_TESTCASE_STABLE_IDENTITY",
+          "REQ_TESTCASE_VERIFIES_PERSISTED",
+          "REQ_BLOCK_NO_DRILLDOWN"
         ]
       },
       "fourLevelCompliance": {
         "element": {
           "status": "PASS",
-          "evidence": "Normalized TestCase stereotype projected from repository verificationCases under stable identity."
+          "evidence": "Normalized TestCase stereotype projected from repository verificationCases under stable identity.",
+          "executableCases": [
+            "REQ_TESTCASE_STABLE_IDENTITY"
+          ]
         },
         "properties": {
           "status": "PASS",
-          "evidence": "verifiesRequirementIds and testCase presentation properties preserved."
+          "evidence": "verifiesRequirementIds and testCase presentation properties preserved.",
+          "executableCases": [
+            "REQ_TESTCASE_STABLE_IDENTITY"
+          ]
         },
         "relationships": {
           "status": "PASS",
-          "evidence": "Verify relationship between TestCase and Requirement preserved on requirements diagrams."
+          "evidence": "Verify relationship between TestCase and Requirement preserved on requirements diagrams.",
+          "executableCases": [
+            "REQ_TESTCASE_VERIFIES_PERSISTED"
+          ]
         },
         "constraints": {
           "status": "PASS",
-          "evidence": "Double-clicking Block on Requirement Diagram is a no-op; explicit context navigation supported."
+          "evidence": "Double-clicking Block on Requirement Diagram is a no-op; explicit context navigation supported.",
+          "executableCases": [
+            "REQ_BLOCK_NO_DRILLDOWN"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT"
+    },
+    {
+      "id": "ADIA-VERIFICATIONCASE-NORMALIZATION-001",
+      "feature": "Legacy VerificationCase schema normalization to SysML v1.6 TestCase semantic representation",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "ADIA VerificationCase Normalization & Transition Architecture",
+        "section": "SysML 1.6 TestCase mapping and legacy verificationCase projection"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/model.ts",
+          "src/services/sysmlDiagramCreation.ts"
+        ],
+        "domainTypes": [
+          "VerificationCase",
+          "TestCase"
+        ],
+        "commands": [
+          "createVerificationCase"
+        ],
+        "validator": [
+          "validateSysmlRepository"
+        ],
+        "persistenceMapping": "SysmlRepository.verificationCases",
+        "projection": [
+          "projectLegacyDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlDiagramCreation.test.ts"
+        ],
+        "executableCases": [
+          "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Legacy verificationCase entities map cleanly to canonical TestCase element.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "method, parameters, and verifiesRequirementIds retained across normalization.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Requirement verification links preserved without schema divergence.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Atomic normalization during repository loading and command dispatch.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
         }
       },
       "overallStatus": "COMPLIANT"
@@ -533,24 +732,41 @@
           "src/engine/sysml/connectionPolicy.test.ts",
           "src/services/sysmlConnectionUi.test.ts",
           "src/services/sysmlCreationRules.test.ts"
+        ],
+        "executableCases": [
+          "STATE_SATISFY_REAL_ID_REQUIRED",
+          "STATE_SATISFY_DIRECTION_ENFORCED",
+          "STATE_SATISFY_RELATIONSHIP_PERSISTS"
         ]
       },
       "fourLevelCompliance": {
         "element": {
           "status": "PASS",
-          "evidence": "State recognized as valid connection endpoint across UI and canonical layers."
+          "evidence": "State recognized as valid connection endpoint across UI and canonical layers.",
+          "executableCases": [
+            "STATE_SATISFY_REAL_ID_REQUIRED"
+          ]
         },
         "properties": {
           "status": "PASS",
-          "evidence": "Satisfy relationship kind properties validated with sourceFamily state."
+          "evidence": "Satisfy relationship kind properties validated with sourceFamily state.",
+          "executableCases": [
+            "STATE_SATISFY_RELATIONSHIP_PERSISTS"
+          ]
         },
         "relationships": {
           "status": "PASS",
-          "evidence": "State to Requirement directional Satisfy allowed across canvas, state machine, and RTM."
+          "evidence": "State to Requirement directional Satisfy allowed across canvas, state machine, and RTM.",
+          "executableCases": [
+            "STATE_SATISFY_RELATIONSHIP_PERSISTS"
+          ]
         },
         "constraints": {
           "status": "PASS",
-          "evidence": "Requirement to State reversed Satisfy rejected with INVALID_SATISFY_DIRECTION and corrective guidance."
+          "evidence": "Requirement to State reversed Satisfy rejected with INVALID_SATISFY_DIRECTION and corrective guidance.",
+          "executableCases": [
+            "STATE_SATISFY_DIRECTION_ENFORCED"
+          ]
         }
       },
       "overallStatus": "COMPLIANT"
@@ -588,24 +804,41 @@
           "src/services/sysmlDiagramActivation.test.ts",
           "src/features/modelExplorer/modelDiagramRegistry.test.ts",
           "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts"
+        ],
+        "executableCases": [
+          "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES",
+          "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS",
+          "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER"
         ]
       },
       "fourLevelCompliance": {
         "element": {
           "status": "PASS",
-          "evidence": "Zero diagrams returns create, one opens exact diagram ID, many opens last-active or chooser."
+          "evidence": "Zero diagrams returns create, one opens exact diagram ID, many opens last-active or chooser.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES"
+          ]
         },
         "properties": {
           "status": "PASS",
-          "evidence": "Persisted diagramId preserved without synthetic string fallback."
+          "evidence": "Persisted diagramId preserved without synthetic string fallback.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS"
+          ]
         },
         "relationships": {
           "status": "PASS",
-          "evidence": "Package diagram owner package association preserved and tree double-click opens exact ID."
+          "evidence": "Package diagram owner package association preserved and tree double-click opens exact ID.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER"
+          ]
         },
         "constraints": {
           "status": "PASS",
-          "evidence": "Deterministic candidate sorting by name then ID; failed creation preserves diagram state."
+          "evidence": "Deterministic candidate sorting by name then ID; failed creation preserves diagram state.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER"
+          ]
         }
       },
       "overallStatus": "COMPLIANT"

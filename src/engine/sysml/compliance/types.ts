@@ -10,12 +10,13 @@ export type SemanticAuthority =
   | 'ADIA_EXTENSION';
 
 export type InteractionDefectEvidenceId =
+  | 'UML-PORT-STANDARD-001'
   | 'SYSML-PORT-CREATE-001'
   | 'SYSML-IBD-DELEGATION-001'
   | 'SYSML-REQ-TESTCASE-001'
+  | 'ADIA-VERIFICATIONCASE-NORMALIZATION-001'
   | 'SYSML-REQ-SATISFY-STATE-001'
   | 'CAMEO-DIAGRAM-ACTIVATE-001';
-
 
 export type ComplianceLevelStatus = 'PASS' | 'FAIL' | 'NOT_APPLICABLE';
 
@@ -26,6 +27,13 @@ export interface FourLevelCompliance {
   properties: ComplianceLevelStatus;
   relationships: ComplianceLevelStatus;
   constraints: ComplianceLevelStatus;
+}
+
+export interface LevelEvidenceCases {
+  element?: string[];
+  properties?: string[];
+  relationships?: string[];
+  constraints?: string[];
 }
 
 export interface ComplianceEvidence {
@@ -45,6 +53,10 @@ export interface ComplianceEvidence {
   projection: string;
   /** Automated test files providing verification evidence */
   tests: string[];
+  /** Stable registered executable case IDs required to substantiate compliance */
+  executableCases?: string[];
+  /** Registered executable cases mapped to specific compliance levels */
+  levelEvidenceCases?: LevelEvidenceCases;
 }
 
 export interface FeatureComplianceDefinition {

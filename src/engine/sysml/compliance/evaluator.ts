@@ -3,6 +3,7 @@ import type {
   FeatureComplianceDefinition,
   OverallComplianceStatus,
 } from './types';
+import { isExecutableCaseRegistered } from './evidenceRegistry';
 
 const REQUIRED_EVIDENCE_FIELDS = [
   'specificationSection',
@@ -32,6 +33,46 @@ export function evaluateCompliance(definition: FeatureComplianceDefinition): Com
       if (!val || typeof val !== 'string' || val.trim().length === 0) {
         missingEvidence.push(field);
         reasons.push(`Missing evidence: ${field}`);
+      }
+    }
+  }
+
+  // Validate executable evidence cases when provided
+  if (evidence.executableCases !== undefined) {
+    if (!Array.isArray(evidence.executableCases) || evidence.executableCases.length === 0) {
+      missingEvidence.push('executableCases');
+      reasons.push('Executable evidence cases missing or empty');
+    } else {
+      for (const caseId of evidence.executableCases) {
+        if (!isExecutableCaseRegistered(caseId)) {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(`Unregistered or absent executable case: ${caseId}`);
+        }
+      }
+    }
+  }
+
+  // Validate level-specific evidence cases when provided
+  if (evidence.levelEvidenceCases !== undefined) {
+    const levelKeys: Array<keyof typeof levels> = ['element', 'properties', 'relationships', 'constraints'];
+    for (const levelKey of levelKeys) {
+      if (levels[levelKey] === 'PASS') {
+        const cases = evidence.levelEvidenceCases[levelKey];
+        if (!cases || !Array.isArray(cases) || cases.length === 0) {
+          missingEvidence.push(`levelEvidenceCases.${levelKey}`);
+          reasons.push(`Passing level ${levelKey} requires registered executable evidence cases`);
+        } else {
+          for (const caseId of cases) {
+            if (!isExecutableCaseRegistered(caseId)) {
+              missingEvidence.push(`case:${caseId}`);
+              reasons.push(`Unregistered executable case for level ${levelKey}: ${caseId}`);
+            }
+            if (evidence.executableCases && !evidence.executableCases.includes(caseId)) {
+              missingEvidence.push(`case:${caseId}`);
+              reasons.push(`Level ${levelKey} evidence case ${caseId} not declared in executableCases`);
+            }
+          }
+        }
       }
     }
   }

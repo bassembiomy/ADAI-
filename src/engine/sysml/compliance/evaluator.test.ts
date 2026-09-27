@@ -177,4 +177,102 @@ describe('Four-Level Compliance Evaluator', () => {
     const result = evaluateCompliance(featureDef);
     expect(result.status).toBe('COMPLIANT');
   });
+
+  it('evaluates a record with four PASS levels but absent test ID or nonexistent evidence case as PARTIAL (Step 1)', () => {
+    const falseEvidenceDef: FeatureComplianceDefinition = {
+      id: 'SYSML-FALSE-EVIDENCE',
+      name: 'FalseEvidenceBlock',
+      authority: 'OMG_SYSML_1_6',
+      levels: {
+        element: 'PASS',
+        properties: 'PASS',
+        relationships: 'PASS',
+        constraints: 'PASS',
+      },
+      evidence: {
+        specificationSection: 'OMG SysML 1.6 Clause 8.3.1',
+        sourceFile: 'src/engine/sysml/domain/classifiers.ts',
+        domainType: 'BlockDefinition',
+        command: 'CreateBlockCommand',
+        validator: 'validateBlock',
+        persistence: 'persistBlock',
+        projection: 'bddProjection',
+        tests: ['src/engine/sysml/diagramInteractionCorrections.test.ts'], // File exists on disk
+        executableCases: ['ABSENT_EXECUTABLE_CASE_999'], // Nonexistent / unregistered case ID!
+        levelEvidenceCases: {
+          element: ['ABSENT_EXECUTABLE_CASE_999'],
+          properties: ['ABSENT_EXECUTABLE_CASE_999'],
+          relationships: ['ABSENT_EXECUTABLE_CASE_999'],
+          constraints: ['ABSENT_EXECUTABLE_CASE_999'],
+        },
+      },
+    };
+
+    const result = evaluateCompliance(falseEvidenceDef);
+    expect(result.status).toBe('PARTIAL');
+    expect(result.status).not.toBe('COMPLIANT');
+    expect(result.missingEvidence).toContain('case:ABSENT_EXECUTABLE_CASE_999');
+    expect(result.reasons.some(r => r.includes('ABSENT_EXECUTABLE_CASE_999'))).toBe(true);
+  });
+
+  it('downgrades to PARTIAL when a passing level lacks executable cases', () => {
+    const missingLevelDef: FeatureComplianceDefinition = {
+      id: 'SYSML-MISSING-LEVEL-CASE',
+      name: 'MissingLevelCaseBlock',
+      authority: 'OMG_SYSML_1_6',
+      levels: {
+        element: 'PASS',
+        properties: 'PASS',
+        relationships: 'PASS',
+        constraints: 'PASS',
+      },
+      evidence: {
+        ...completeProxyPortEvidence,
+        executableCases: ['PORT_PROXY_WRONG_TYPE_REJECTED'],
+        levelEvidenceCases: {
+          element: ['PORT_PROXY_WRONG_TYPE_REJECTED'],
+          properties: ['PORT_PROXY_WRONG_TYPE_REJECTED'],
+          relationships: [], // Missing relationship executable cases!
+          constraints: ['PORT_PROXY_WRONG_TYPE_REJECTED'],
+        },
+      },
+    };
+
+    const result = evaluateCompliance(missingLevelDef);
+    expect(result.status).toBe('PARTIAL');
+    expect(result.missingEvidence).toContain('levelEvidenceCases.relationships');
+  });
+
+  it('evaluates as COMPLIANT when valid registered executable cases substantiate all passing levels', () => {
+    const validEvidenceDef: FeatureComplianceDefinition = {
+      id: 'SYSML-VALID-PORT',
+      name: 'ValidProxyPort',
+      authority: 'OMG_SYSML_1_6',
+      levels: {
+        element: 'PASS',
+        properties: 'PASS',
+        relationships: 'PASS',
+        constraints: 'PASS',
+      },
+      evidence: {
+        ...completeProxyPortEvidence,
+        executableCases: [
+          'PORT_PROXY_INTERFACE_TYPING',
+          'PORT_PERSISTENCE_STABLE',
+          'PORT_PROXY_WRONG_TYPE_REJECTED',
+        ],
+        levelEvidenceCases: {
+          element: ['PORT_PROXY_INTERFACE_TYPING'],
+          properties: ['PORT_PERSISTENCE_STABLE'],
+          relationships: ['PORT_PROXY_INTERFACE_TYPING'],
+          constraints: ['PORT_PROXY_WRONG_TYPE_REJECTED'],
+        },
+      },
+    };
+
+    const result = evaluateCompliance(validEvidenceDef);
+    expect(result.status).toBe('COMPLIANT');
+    expect(result.missingEvidence).toHaveLength(0);
+    expect(result.reasons).toHaveLength(0);
+  });
 });
