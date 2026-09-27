@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import type { TypeCandidate } from '../../services/sysmlOwnedFeatureCommands';
+import type { TypeCandidate, TypedFeatureKind, TypeSelectionResult } from './typeSelectionTypes';
+
+export type TypeSelectionId = Extract<TypeSelectionResult, { kind: 'selected' }>['typeId'];
 
 export interface TypeSelectionPromptProps {
   isOpen: boolean;
-  featureKind: string;
+  // Typed feature kind when known; still accepts the human-readable display
+  // label (e.g. "Proxy Port") produced by getElementKindLabel so call sites
+  // and rendered text stay unchanged.
+  featureKind: TypedFeatureKind | (string & {});
   candidates: TypeCandidate[];
-  onSelectType: (typeId: string) => void;
+  onSelectType: (typeId: TypeSelectionId) => void;
   onCreateNewType?: () => void;
   onCancel: () => void;
   error?: string;

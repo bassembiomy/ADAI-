@@ -7,28 +7,34 @@
  * first candidate or implicitly create a type.
  *
  * NOTE: Task 6 owns the full centralized semantic-style resolver. This
- * module only declares the presentation-role vocabulary and a stub token
- * accessor signature so Task 1 surfaces compile without duplicating the
- * resolver.
+ * module only declares the presentation-role vocabulary so Task 1
+ * surfaces compile without duplicating the resolver. There is
+ * intentionally no token accessor stub here — Task 6 provides the real
+ * `semanticPresentationToken` resolver.
  */
-import type { TypeCandidate } from '../../services/sysmlOwnedFeatureCommands';
+import type { TypeCandidate, CreateNewTypeAction } from '../../services/sysmlOwnedFeatureCommands';
 
-export type { TypeCandidate };
+export type { TypeCandidate, CreateNewTypeAction };
 
 export type TypedFeatureKind =
   | 'part'
   | 'reference'
   | 'valueProperty'
+  | 'port'
+  | 'standardPort'
   | 'proxyPort'
   | 'fullPort'
   | 'flowPort';
 
 export interface TypeSelectionRequest {
   ownerId: string;
-  featureKind: string;
+  featureKind: TypedFeatureKind;
   candidates: TypeCandidate[];
-  action: { kind: 'CreateNewType'; payload?: { suggestedMetaclass?: string; suggestedName?: string } };
+  action: CreateNewTypeAction;
 }
+
+/** Payload carried on ExplorerCommandResult.typeSelection (request minus owner/kind). */
+export type TypeSelectionPayload = Pick<TypeSelectionRequest, 'candidates' | 'action'>;
 
 export type TypeSelectionResult =
   | { kind: 'selected'; typeId: string }
@@ -50,15 +56,6 @@ export type SemanticPresentationRole =
 
 export type SemanticPresentationState = 'default' | 'selected' | 'focused' | 'warning' | 'error';
 
-/**
- * Stub token accessor. Task 6 provides the full centralized resolver;
- * this stub keeps Task 1 surfaces compiling and returns the role key so
- * no hard-coded workflow color is introduced here. Colors never drive
- * validation.
- */
-export function semanticPresentationToken(
-  role: SemanticPresentationRole,
-  _state: SemanticPresentationState = 'default',
-): string {
-  return role;
-}
+// Task 6 owns the centralized `semanticPresentationToken(role, state)`
+// resolver. It is intentionally not stubbed here so a placeholder return
+// value can never masquerade as the real resolver.

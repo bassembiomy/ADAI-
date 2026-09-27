@@ -29,6 +29,7 @@ import {
   buildCreateOwnedPropertyCommand,
   type CanonicalPortKind,
 } from '../../../services/sysmlOwnedFeatureCommands';
+import type { TypeSelectionPayload } from '../../../components/sysml/typeSelectionTypes';
 
 function explorerKindToMetaclass(kind: string): MetaclassKind {
   switch (kind) {
@@ -917,11 +918,15 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               : null;
           if (plan && !plan.ok) {
             const needsSelection = !command.typeId && plan.diagnostics.some(item => item.code === 'TYPE_NOT_FOUND');
+            const typeSelection: TypeSelectionPayload | undefined =
+              needsSelection && plan.action
+                ? { candidates: plan.candidates ?? [], action: plan.action }
+                : undefined;
             return {
               committed: false,
               revision: repo.revision,
               diagnostics: plan.diagnostics.map(item => ({ ...item, severity: 'error' as const })),
-              ...(needsSelection && plan.action ? { typeSelection: { candidates: plan.candidates ?? [], action: plan.action } } : {}),
+              ...(typeSelection ? { typeSelection } : {}),
             };
           }
           return { committed: false, revision: repo.revision, diagnostics: [] };

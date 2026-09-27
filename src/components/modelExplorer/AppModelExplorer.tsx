@@ -14,6 +14,7 @@ import { ModelExplorer } from './ModelExplorer';
 import { MoveImpactDialog } from './MoveImpactDialog';
 import { RelationshipWizard } from './RelationshipWizard';
 import { TypeSelectionPrompt } from '../sysml/TypeSelectionPrompt';
+import type { TypeSelectionPayload } from '../sysml/typeSelectionTypes';
 import {
   copyOwnershipForest,
 } from '../../features/modelExplorer/modelExplorerClipboard';
@@ -324,7 +325,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   } | null>(null);
   const [pendingType, setPendingType] = useState<{
     command: Extract<ModelExplorerCommand, { type: 'createElement' }>;
-    selection: NonNullable<ExplorerCommandResult['typeSelection']>;
+    selection: TypeSelectionPayload;
   } | null>(null);
 
   // Relationship wizard state
