@@ -36,6 +36,42 @@ export interface LevelEvidenceCases {
   constraints?: string[];
 }
 
+export type ExecutableTestStatus = 'passed' | 'failed' | 'skipped';
+
+/**
+ * Machine-readable outcome of a single executable evidence case as emitted
+ * by the test runner. Binds the case to the source revision and test-run
+ * identity that produced it so results from another revision or run cannot
+ * certify the current code.
+ */
+export interface ExecutableCaseRunOutcome {
+  caseId: string;
+  /** Repository-relative test file that executed the case. */
+  testFile: string;
+  /** Exact test title that executed the case. */
+  testName: string;
+  /** Runner-reported full test name (suite chain + title) for identity. */
+  fullName: string;
+  status: ExecutableTestStatus;
+  /** Source revision (e.g. git HEAD) the runner executed against. */
+  revision: string;
+  /** Identity of the test run that produced this outcome. */
+  runId: string;
+}
+
+/**
+ * Current test-run evidence supplied to the evaluator. Compliance is granted
+ * only when every declared executable case has a passing outcome bound to
+ * this same revision and run identity.
+ */
+export interface EvidenceRunContext {
+  /** Source revision under evaluation. */
+  revision: string;
+  /** Test-run identity under evaluation. */
+  runId: string;
+  outcomes: Record<string, ExecutableCaseRunOutcome>;
+}
+
 export interface ComplianceEvidence {
   /** Normative specification clause or standard section (e.g., 'OMG SysML 1.6 Clause 9.3.2.8') */
   specificationSection: string;

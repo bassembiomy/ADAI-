@@ -1,9 +1,10 @@
 import type {
   ComplianceResult,
+  EvidenceRunContext,
   FeatureComplianceDefinition,
   OverallComplianceStatus,
 } from './types';
-import { isExecutableCaseRegistered } from './evidenceRegistry';
+import { EXECUTABLE_EVIDENCE, isExecutableCaseRegistered } from './evidenceRegistry';
 
 const REQUIRED_EVIDENCE_FIELDS = [
   'specificationSection',
@@ -16,7 +17,24 @@ const REQUIRED_EVIDENCE_FIELDS = [
   'tests',
 ] as const;
 
-export function evaluateCompliance(definition: FeatureComplianceDefinition): ComplianceResult {
+function hasUsableRunContext(runContext: EvidenceRunContext | undefined | null): runContext is EvidenceRunContext {
+  return (
+    runContext !== undefined &&
+    runContext !== null &&
+    typeof runContext.revision === 'string' &&
+    runContext.revision.trim().length > 0 &&
+    typeof runContext.runId === 'string' &&
+    runContext.runId.trim().length > 0 &&
+    runContext.outcomes !== undefined &&
+    runContext.outcomes !== null &&
+    typeof runContext.outcomes === 'object'
+  );
+}
+
+export function evaluateCompliance(
+  definition: FeatureComplianceDefinition,
+  runContext?: EvidenceRunContext | null,
+): ComplianceResult {
   const { id, name, authority, levels, evidence } = definition;
   const missingEvidence: string[] = [];
   const reasons: string[] = [];
@@ -72,6 +90,80 @@ export function evaluateCompliance(definition: FeatureComplianceDefinition): Com
               reasons.push(`Level ${levelKey} evidence case ${caseId} not declared in executableCases`);
             }
           }
+        }
+      }
+    }
+  }
+
+  // Bind declared executable cases to current machine-readable test-run results.
+  // Missing, skipped, failed, stale, or unexecuted evidence cannot produce COMPLIANT.
+  if (evidence.executableCases !== undefined) {
+    if (!hasUsableRunContext(runContext)) {
+      missingEvidence.push('evidenceRunResults');
+      reasons.push('No current test-run evidence supplied for declared executable cases');
+      for (const caseId of evidence.executableCases) {
+        if (isExecutableCaseRegistered(caseId) && !missingEvidence.includes(`case:${caseId}`)) {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(`Executable case ${caseId} has no bound test result in the current run`);
+        }
+      }
+    } else {
+      const casesToVerify = new Set<string>(evidence.executableCases);
+      if (evidence.levelEvidenceCases !== undefined) {
+        const levelKeys: Array<keyof typeof levels> = ['element', 'properties', 'relationships', 'constraints'];
+        for (const levelKey of levelKeys) {
+          if (levels[levelKey] === 'PASS') {
+            for (const caseId of evidence.levelEvidenceCases[levelKey] ?? []) {
+              casesToVerify.add(caseId);
+            }
+          }
+        }
+      }
+      for (const caseId of casesToVerify) {
+        const record = (EXECUTABLE_EVIDENCE as Record<string, (typeof EXECUTABLE_EVIDENCE)[keyof typeof EXECUTABLE_EVIDENCE] | undefined>)[caseId];
+        if (!record) {
+          continue;
+        }
+        const outcome = runContext.outcomes[caseId];
+        if (!outcome) {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(`No test result recorded for executable case ${caseId} in the current run`);
+          continue;
+        }
+        if (outcome.status === 'skipped') {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(`Executable case ${caseId} was skipped in the current run and cannot certify compliance`);
+          continue;
+        }
+        if (outcome.status === 'failed') {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(`Executable case ${caseId} failed in the current run and cannot certify compliance`);
+          continue;
+        }
+        if (outcome.status !== 'passed') {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(`Executable case ${caseId} has unknown test status '${(outcome as { status: string }).status}' in the current run`);
+          continue;
+        }
+        if (!outcome.revision || outcome.revision !== runContext.revision) {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(
+            `Executable case ${caseId} result is stale (result revision '${outcome.revision || 'unknown'}' does not match current revision '${runContext.revision}')`,
+          );
+          continue;
+        }
+        if (!outcome.runId || outcome.runId !== runContext.runId) {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(
+            `Executable case ${caseId} result run identity does not match the current test run`,
+          );
+          continue;
+        }
+        if (outcome.testFile !== record.testFile || outcome.testName !== record.testName) {
+          missingEvidence.push(`case:${caseId}`);
+          reasons.push(
+            `Executable case ${caseId} result does not match the registered test binding (${record.testFile} :: ${record.testName}); the test is missing or was renamed`,
+          );
         }
       }
     }

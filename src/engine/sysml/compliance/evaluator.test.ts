@@ -243,7 +243,74 @@ describe('Four-Level Compliance Evaluator', () => {
     expect(result.missingEvidence).toContain('levelEvidenceCases.relationships');
   });
 
-  it('evaluates as COMPLIANT when valid registered executable cases substantiate all passing levels', () => {
+  it('evaluates as COMPLIANT when valid registered executable cases have passing current-run results', () => {
+    const validEvidenceDef: FeatureComplianceDefinition = {
+      id: 'SYSML-VALID-PORT',
+      name: 'ValidProxyPort',
+      authority: 'OMG_SYSML_1_6',
+      levels: {
+        element: 'PASS',
+        properties: 'PASS',
+        relationships: 'PASS',
+        constraints: 'PASS',
+      },
+      evidence: {
+        ...completeProxyPortEvidence,
+        executableCases: [
+          'PORT_PROXY_INTERFACE_TYPING',
+          'PORT_PERSISTENCE_STABLE',
+          'PORT_PROXY_WRONG_TYPE_REJECTED',
+        ],
+        levelEvidenceCases: {
+          element: ['PORT_PROXY_INTERFACE_TYPING'],
+          properties: ['PORT_PERSISTENCE_STABLE'],
+          relationships: ['PORT_PROXY_INTERFACE_TYPING'],
+          constraints: ['PORT_PROXY_WRONG_TYPE_REJECTED'],
+        },
+      },
+    };
+
+    const runContext = {
+      revision: 'current-revision',
+      runId: 'current-run',
+      outcomes: {
+        PORT_PROXY_INTERFACE_TYPING: {
+          caseId: 'PORT_PROXY_INTERFACE_TYPING',
+          testFile: 'src/engine/sysml/diagramInteractionCorrections.test.ts',
+          testName: 'PORT_PROXY_INTERFACE_TYPING: creates ProxyPort typed by InterfaceBlock',
+          fullName: 'PORT_PROXY_INTERFACE_TYPING: creates ProxyPort typed by InterfaceBlock',
+          status: 'passed' as const,
+          revision: 'current-revision',
+          runId: 'current-run',
+        },
+        PORT_PERSISTENCE_STABLE: {
+          caseId: 'PORT_PERSISTENCE_STABLE',
+          testFile: 'src/engine/sysml/diagramInteractionCorrections.test.ts',
+          testName: 'PORT_PERSISTENCE_STABLE: port definitions and kinds survive serialization round trip',
+          fullName: 'PORT_PERSISTENCE_STABLE: port definitions and kinds survive serialization round trip',
+          status: 'passed' as const,
+          revision: 'current-revision',
+          runId: 'current-run',
+        },
+        PORT_PROXY_WRONG_TYPE_REJECTED: {
+          caseId: 'PORT_PROXY_WRONG_TYPE_REJECTED',
+          testFile: 'src/engine/sysml/diagramInteractionCorrections.test.ts',
+          testName: 'PORT_PROXY_WRONG_TYPE_REJECTED: rejects ProxyPort typed by non-interface Block with INVALID_PROXY_PORT_TYPE',
+          fullName: 'PORT_PROXY_WRONG_TYPE_REJECTED: rejects ProxyPort typed by non-interface Block with INVALID_PROXY_PORT_TYPE',
+          status: 'passed' as const,
+          revision: 'current-revision',
+          runId: 'current-run',
+        },
+      },
+    };
+
+    const result = evaluateCompliance(validEvidenceDef, runContext);
+    expect(result.status).toBe('COMPLIANT');
+    expect(result.missingEvidence).toHaveLength(0);
+    expect(result.reasons).toHaveLength(0);
+  });
+
+  it('fails closed when declared executable cases have no bound current-run results', () => {
     const validEvidenceDef: FeatureComplianceDefinition = {
       id: 'SYSML-VALID-PORT',
       name: 'ValidProxyPort',
@@ -271,8 +338,8 @@ describe('Four-Level Compliance Evaluator', () => {
     };
 
     const result = evaluateCompliance(validEvidenceDef);
-    expect(result.status).toBe('COMPLIANT');
-    expect(result.missingEvidence).toHaveLength(0);
-    expect(result.reasons).toHaveLength(0);
+    expect(result.status).toBe('PARTIAL');
+    expect(result.status).not.toBe('COMPLIANT');
+    expect(result.missingEvidence).toContain('evidenceRunResults');
   });
 });

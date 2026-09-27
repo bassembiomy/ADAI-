@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createEmptyRepository,
   type BlockDefinition,
@@ -16,6 +18,7 @@ import { resolvePackageDiagramActivation } from '../../services/sysmlDiagramActi
 import { resolveBlockDoubleClickAction } from './requirementsDiagramScope';
 import {
   REGISTERED_EXECUTABLE_CASES,
+  listExecutableEvidenceRecords,
   type RegisteredExecutableCaseId,
 } from './compliance/evidenceRegistry';
 
@@ -224,6 +227,36 @@ describe('SysML v1.6 Diagram Interaction Corrections Executable Cases', () => {
     const registeredIds = Object.keys(REGISTERED_EXECUTABLE_CASES) as RegisteredExecutableCaseId[];
     for (const id of registeredIds) {
       expect(EXECUTED_CORRECTION_CASES).toContain(id);
+    }
+  });
+
+  it('maps every registered executable case to a concrete test file and test name', () => {
+    const records = listExecutableEvidenceRecords();
+    expect(records.length).toBe(EXECUTED_CORRECTION_CASES.length);
+    for (const record of records) {
+      expect(EXECUTED_CORRECTION_CASES).toContain(record.id);
+      expect(record.testFile).toMatch(/\.test\.tsx?$/);
+      expect(record.testName.length).toBeGreaterThan(0);
+      expect(record.authority).toBeDefined();
+      expect(record.specificationSection.length).toBeGreaterThan(0);
+      expect(record.implementation.sourceFiles.length).toBeGreaterThan(0);
+      expect(record.implementation.domainTypes.length).toBeGreaterThan(0);
+      expect(record.implementation.commands.length).toBeGreaterThan(0);
+      expect(record.implementation.validators.length).toBeGreaterThan(0);
+      expect(record.implementation.persistence.length).toBeGreaterThan(0);
+      expect(record.implementation.projections.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('resolves every registered test binding to an executed test in this suite', () => {
+    const suiteSource = readFileSync(resolve(__dirname, 'diagramInteractionCorrections.test.ts'), 'utf8');
+    for (const record of listExecutableEvidenceRecords()) {
+      const fullPath = resolve(process.cwd(), record.testFile);
+      expect(existsSync(fullPath), `Test file must exist: ${record.testFile}`).toBe(true);
+      expect(
+        suiteSource.includes(record.testName),
+        `Registered test "${record.testName}" must execute in ${record.testFile}`,
+      ).toBe(true);
     }
   });
 

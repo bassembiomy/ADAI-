@@ -391,7 +391,33 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "PORT_UML_STANDARD_OWNED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_UML_STANDARD_OWNED: creates standard UML Port as owned feature without proxy/full stereotype"
+        },
+        {
+          "caseId": "PORT_PERSISTENCE_STABLE",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PERSISTENCE_STABLE: port definitions and kinds survive serialization round trip"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 2,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     },
     {
       "id": "SYSML-PORT-CREATE-001",
@@ -474,7 +500,53 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "PORT_PROXY_INTERFACE_TYPING",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PROXY_INTERFACE_TYPING: creates ProxyPort typed by InterfaceBlock"
+        },
+        {
+          "caseId": "PORT_PROXY_WRONG_TYPE_REJECTED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PROXY_WRONG_TYPE_REJECTED: rejects ProxyPort typed by non-interface Block with INVALID_PROXY_PORT_TYPE"
+        },
+        {
+          "caseId": "PORT_FULL_BLOCK_TYPING",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_FULL_BLOCK_TYPING: creates FullPort typed by Block"
+        },
+        {
+          "caseId": "PORT_FLOW_LEGACY_OWNED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_FLOW_LEGACY_OWNED: creates legacy FlowPort with direction"
+        },
+        {
+          "caseId": "PORT_NESTED_PROXY_VALIDATED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_NESTED_PROXY_VALIDATED: nested proxy ports validate against repository definitions"
+        },
+        {
+          "caseId": "PORT_PERSISTENCE_STABLE",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PERSISTENCE_STABLE: port definitions and kinds survive serialization round trip"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     },
     {
       "id": "SYSML-IBD-DELEGATION-001",
@@ -550,7 +622,43 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "IBD_BOUNDARY_DELEGATION_PERSISTS",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_BOUNDARY_DELEGATION_PERSISTS: creates and persists boundary port to internal part port delegation connector"
+        },
+        {
+          "caseId": "IBD_ASSEMBLY_PART_TO_PART",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_ASSEMBLY_PART_TO_PART: creates internal part to part assembly connector"
+        },
+        {
+          "caseId": "IBD_ASSEMBLY_BOUNDARY_REJECTED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_ASSEMBLY_BOUNDARY_REJECTED: rejects assembly connector on boundary port with INVALID_CONNECTOR_CONTEXT"
+        },
+        {
+          "caseId": "IBD_CONNECTOR_PERSISTENCE",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_CONNECTOR_PERSISTENCE: connector and endpoints preserved across serialization"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     },
     {
       "id": "SYSML-REQ-TESTCASE-001",
@@ -625,7 +733,38 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "REQ_TESTCASE_STABLE_IDENTITY",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "REQ_TESTCASE_STABLE_IDENTITY: TestCase exists under stable canonical identity"
+        },
+        {
+          "caseId": "REQ_TESTCASE_VERIFIES_PERSISTED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "REQ_TESTCASE_VERIFIES_PERSISTED: TestCase verifiesRequirementIds preserved"
+        },
+        {
+          "caseId": "REQ_BLOCK_NO_DRILLDOWN",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "REQ_BLOCK_NO_DRILLDOWN: double-clicking Block on Requirement Diagram is no-op"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     },
     {
       "id": "ADIA-VERIFICATIONCASE-NORMALIZATION-001",
@@ -692,7 +831,28 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "ADIA_LEGACY_VERIFICATION_NORMALIZATION",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "ADIA_LEGACY_VERIFICATION_NORMALIZATION: legacy VerificationCase normalized to TestCase under ADIA_EXTENSION"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     },
     {
       "id": "SYSML-REQ-SATISFY-STATE-001",
@@ -769,7 +929,38 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "STATE_SATISFY_REAL_ID_REQUIRED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "STATE_SATISFY_REAL_ID_REQUIRED: requires resolvable canonical State endpoint identity"
+        },
+        {
+          "caseId": "STATE_SATISFY_DIRECTION_ENFORCED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "STATE_SATISFY_DIRECTION_ENFORCED: reversed Requirement-to-State satisfy rejected with INVALID_SATISFY_DIRECTION"
+        },
+        {
+          "caseId": "STATE_SATISFY_RELATIONSHIP_PERSISTS",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "STATE_SATISFY_RELATIONSHIP_PERSISTS: State-to-Requirement satisfy relationship valid and persists"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     },
     {
       "id": "CAMEO-DIAGRAM-ACTIVATE-001",
@@ -841,8 +1032,38 @@
           ]
         }
       },
-      "overallStatus": "COMPLIANT"
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES: zero package diagrams returns create"
+        },
+        {
+          "caseId": "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS: single package diagram opens directly without chooser"
+        },
+        {
+          "caseId": "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER: multiple diagrams opens chooser or last active"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
     }
   ]
 }
-
