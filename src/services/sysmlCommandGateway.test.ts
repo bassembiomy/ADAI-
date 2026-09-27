@@ -2229,6 +2229,63 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
     expect(res.store?.usages.get('part-engine')).toMatchObject({ typeId: 'blk-motor' });
   });
 
+  it('moveElements rolls back a staged-validation failure (duplicate qualified name) admitted by the gate', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-target'] = {
+      id: 'pkg-target', kind: 'package', name: 'Target', namespace: ['model'], ownerId: 'model',
+    };
+    // Pre-existing repo-level validity error the move gate does not cover:
+    // two blocks share one qualified name. The move gate only checks target
+    // existence plus ownership policy, so the intent is admitted and only
+    // full staged validation (DUPLICATE_QUALIFIED_NAME) rejects it.
+    repository.definitions['blk-motor'] = block('blk-motor', 'Motor');
+    repository.definitions['blk-motor-copy'] = block('blk-motor-copy', 'Motor');
+    const state = createSysmlGatewayState(repository);
+    const before = snapshot(state);
+
+    const res = executeSysmlCommand(state, {
+      type: 'moveElements', elementIds: ['blk-motor'], targetOwnerId: 'pkg-target',
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_QUALIFIED_NAME' && d.severity === 'error')).toBe(true);
+    expect(res.diagnostics.some(d => d.code === 'TARGET_OWNER_NOT_FOUND' || d.code === 'DISALLOWED_OWNERSHIP' || d.code === 'CIRCULAR_OWNERSHIP' || d.code === 'ROOT_PACKAGE_MOVE_PROHIBITED')).toBe(false);
+    expectNoMutation(res, state, before);
+    expect(res.repository.definitions['blk-motor']).toMatchObject({ ownerId: 'model' });
+    expect(res.store?.definitions.get('blk-motor')).toMatchObject({ ownerId: 'model' });
+  });
+
+  it('createDiagram rolls back a staged-validation failure (proxy port typing) admitted by the gate', () => {
+    const repository = createEmptyRepository();
+    // Pre-existing repo-level validity error the diagram gate does not
+    // cover: a proxy port with no InterfaceBlock type. The diagram gate only
+    // checks the diagram id, owner existence, and package-diagram ownership,
+    // so the intent is admitted and only full staged validation
+    // (PROXY_PORT_TYPE_REQUIRED) rejects it.
+    repository.definitions['blk-vehicle'] = {
+      ...block('blk-vehicle', 'Vehicle'),
+      ports: [{
+        id: 'port-orphan', name: 'orphan', kind: 'proxy', portKind: 'proxyPort', typeId: '',
+        direction: 'in', isConjugated: false, multiplicity: { ...one },
+      }],
+    };
+    const state = createSysmlGatewayState(repository);
+    const before = snapshot(state);
+
+    const res = executeSysmlCommand(state, {
+      type: 'createDiagram',
+      diagram: { id: 'diag-bdd', kind: 'diagram', diagramKind: 'bdd', name: 'BDD', namespace: ['model'], ownerId: 'model' },
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'PROXY_PORT_TYPE_REQUIRED' && d.severity === 'error')).toBe(true);
+    expect(res.diagnostics.some(d => d.code === 'INVALID_DIAGRAM_ID' || d.code === 'DUPLICATE_ELEMENT_ID' || d.code === 'OWNER_NOT_FOUND' || d.code === 'INVALID_DIAGRAM_OWNER')).toBe(false);
+    expectNoMutation(res, state, before);
+    expect(res.repository.diagrams['diag-bdd']).toBeUndefined();
+    expect(res.store?.diagrams.has('diag-bdd')).toBe(false);
+    expect(res.diagramPresentations['diag-bdd']).toBeUndefined();
+  });
+
   it('createElement commits a valid element as one transaction with no error diagnostics', () => {
     const state = createSysmlGatewayState();
     const before = snapshot(state);

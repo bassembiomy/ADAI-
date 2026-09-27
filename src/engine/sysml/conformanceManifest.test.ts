@@ -6,6 +6,7 @@ import {
   evaluateManifestCompliance,
   executableCasesForManifestRow,
   generateConformanceMatrixMarkdown,
+  MANIFEST_EXECUTABLE_CASES,
   verifyConformanceManifest,
   type ConformanceRow,
 } from './conformanceManifest';
@@ -126,6 +127,31 @@ describe('SysML release conformance manifest', () => {
     const result = resultFor(report, 'SYSML-006');
     expect(result.status).toBe('COMPLIANT');
     expect(result.missingEvidence).toHaveLength(0);
+  });
+
+  it('rates all bound rows COMPLIANT with a current passing runContext while unbound supported rows stay PARTIAL', () => {
+    const boundRowIds = Object.keys(MANIFEST_EXECUTABLE_CASES);
+    // Locks the binding against silent regressions: every bound row is
+    // exercised here, and only bound rows may read COMPLIANT.
+    expect(boundRowIds).toHaveLength(8);
+    const report = evaluateManifestCompliance(CONFORMANCE_MANIFEST, passingRunContext());
+    expect(report.totalFeatures).toBe(32);
+    expect(report.compliantFeatures).toBe(boundRowIds.length);
+    for (const rowId of boundRowIds) {
+      expect(executableCasesForManifestRow(rowId).length).toBeGreaterThan(0);
+      const result = resultFor(report, rowId);
+      expect(result.status).toBe('COMPLIANT');
+      expect(result.missingEvidence).toHaveLength(0);
+    }
+    const unboundSupported = CONFORMANCE_MANIFEST.rows.filter(
+      r => r.status === 'supported' && executableCasesForManifestRow(r.id).length === 0,
+    );
+    expect(unboundSupported.length).toBeGreaterThan(0);
+    for (const row of unboundSupported) {
+      const result = resultFor(report, row.id);
+      expect(result.status).toBe('PARTIAL');
+      expect(result.status).not.toBe('COMPLIANT');
+    }
   });
 
   it('never rates an unbound supported row COMPLIANT, even with a current passing runContext', () => {
