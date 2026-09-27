@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { semanticPresentationToken } from '../../engine/sysml/semanticPresentationStyles';
 
 export interface IbdEndpointIdentity {
   usageId?: string;
@@ -46,23 +47,33 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
   const [hovered, setHovered] = useState(false);
   const half = size / 2;
 
-  const strokeColor = isSelected
-    ? '#f97316'
+  // Task 6 review fix: IBD port symbols and connection-preview surfaces resolve
+  // presentation from the centralized semantic palette (presentation only;
+  // validation state is computed upstream and color never drives it).
+  // Boundary ports present via the proxy-port role; a valid/invalid
+  // connection preview presents via the valid-requirement-relationship /
+  // error roles; selection and hover present via the selection role.
+  // Tokens are applied through `style` (never SVG presentation attributes)
+  // because browsers do not resolve var() in presentation attributes.
+  const strokeToken = isSelected
+    ? semanticPresentationToken('selection')
     : isConnecting
-      ? (isValidTarget ? '#22c55e' : '#ef4444')
+      ? (isValidTarget ? semanticPresentationToken('validRequirementRelationship') : semanticPresentationToken('error'))
       : hovered
-        ? '#fb923c'
+        ? semanticPresentationToken('selection')
         : isBoundary
-          ? '#60a5fa'
-          : '#a78bfa';
+          ? semanticPresentationToken('proxyPort')
+          : semanticPresentationToken('standardPort');
 
-  const fillColor = isSelected
-    ? '#f97316'
-    : isConnecting && isValidTarget
-      ? '#14532d'
+  const fillToken = isSelected
+    ? semanticPresentationToken('selection')
+    : isConnecting
+      ? (isValidTarget ? semanticPresentationToken('validRequirementRelationship') : semanticPresentationToken('error'))
       : hovered
-        ? '#374151'
-        : '#1f2937';
+        ? semanticPresentationToken('selection')
+        : isBoundary
+          ? semanticPresentationToken('proxyPort')
+          : semanticPresentationToken('standardPort');
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -109,8 +120,7 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
         y={-half}
         width={size}
         height={size}
-        fill={fillColor}
-        stroke={strokeColor}
+        style={{ fill: fillToken, stroke: strokeToken }}
         strokeWidth={isSelected || hovered ? 2 : 1.5}
         rx={1}
       />
@@ -119,7 +129,7 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
       {direction === 'in' && (
         <path
           d={`M ${-half + 2} 0 L ${half - 2} 0 M ${half - 5} -3 L ${half - 2} 0 L ${half - 5} 3`}
-          stroke={strokeColor}
+          style={{ stroke: strokeToken }}
           strokeWidth={1}
           fill="none"
         />
@@ -127,7 +137,7 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
       {direction === 'out' && (
         <path
           d={`M ${half - 2} 0 L ${-half + 2} 0 M ${-half + 5} -3 L ${-half + 2} 0 L ${-half + 5} 3`}
-          stroke={strokeColor}
+          style={{ stroke: strokeToken }}
           strokeWidth={1}
           fill="none"
         />

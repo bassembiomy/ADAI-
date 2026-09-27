@@ -24,6 +24,27 @@ describe('SysmlConnectionErrorDetails', () => {
     expect(html).toContain('How to fix it:');
   });
 
+  it('backs error and warning text with semantic presentation tokens while keeping the text pairing', () => {
+    const html = renderToStaticMarkup(
+      <SysmlConnectionErrorDetails
+        relationshipKind="composition"
+        source={{ id: 'engine', name: 'Engine', family: 'block' }}
+        target={{ id: 'mass', name: 'Mass', family: 'valueType' }}
+        diagnostic={{
+          code: 'INVALID_AGGREGATION_ENDPOINTS',
+          message: 'composition is invalid',
+          correctiveAction: 'Create a value property instead.',
+        }}
+      />,
+    );
+
+    expect(html).toContain('--sysml-sem-error');
+    expect(html).toContain('--sysml-sem-warning');
+    // Text pairing stays intact: color is never the sole indicator.
+    expect(html).toContain('Reason:');
+    expect(html).toContain('How to fix it:');
+  });
+
   it('restores focus to the captured trigger through the supplied scheduler', () => {
     const focus = vi.fn();
     const schedule = vi.fn((callback: FrameRequestCallback) => {

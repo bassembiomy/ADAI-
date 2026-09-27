@@ -1,5 +1,10 @@
 import React from 'react';
 import type { ConnectionEndpoint, ConnectionPolicyDiagnostic } from '../../engine/sysml/connectionPolicy';
+// Task 6 review fix: error/warning text resolves from the centralized
+// semantic palette via CSS vars. The text labels ("Relationship:", "Rule
+// code:", "Reason:", "How to fix it:") stay paired with the color so status
+// is never conveyed by color alone.
+import { getSemanticPresentationStatusMeta } from '../../engine/sysml/semanticPresentationStyles';
 
 export interface SysmlConnectionErrorDetailsProps {
   relationshipKind: string;
@@ -19,16 +24,18 @@ export function SysmlConnectionErrorDetails({
   target,
   diagnostic,
 }: SysmlConnectionErrorDetailsProps) {
+  const errorMeta = getSemanticPresentationStatusMeta('error');
+  const warningMeta = getSemanticPresentationStatusMeta('warning');
   return (
     <div className="mt-3 space-y-2 text-sm" aria-label="Connection error details">
-      <p className="text-red-200"><span className="font-semibold">Relationship:</span> {relationshipKind}</p>
-      <p className="text-red-200"><span className="font-semibold">Source endpoint:</span> {endpointLabel(source)}</p>
-      <p className="text-red-200"><span className="font-semibold">Target endpoint:</span> {endpointLabel(target)}</p>
+      <p style={{ color: errorMeta?.token }}><span className="font-semibold">Relationship:</span> {relationshipKind}</p>
+      <p style={{ color: errorMeta?.token }}><span className="font-semibold">Source endpoint:</span> {endpointLabel(source)}</p>
+      <p style={{ color: errorMeta?.token }}><span className="font-semibold">Target endpoint:</span> {endpointLabel(target)}</p>
       {diagnostic.code && (
-        <p className="text-red-200"><span className="font-semibold">Rule code:</span> <span data-testid="connection-error-code">{diagnostic.code}</span></p>
+        <p style={{ color: errorMeta?.token }}><span className="font-semibold">Rule code:</span> <span data-testid="connection-error-code">{diagnostic.code}</span></p>
       )}
-      <p className="text-red-200"><span className="font-semibold">Reason:</span> {diagnostic.message}</p>
-      <p className="text-amber-200"><span className="font-semibold">How to fix it:</span> {diagnostic.correctiveAction}</p>
+      <p style={{ color: errorMeta?.token }}><span className="font-semibold">Reason:</span> {diagnostic.message}</p>
+      <p style={{ color: warningMeta?.token }}><span className="font-semibold">How to fix it:</span> {diagnostic.correctiveAction}</p>
     </div>
   );
 }

@@ -236,8 +236,12 @@ export const StateRequirementTraceability: React.FC<StateRequirementTraceability
                 type="button"
                 onClick={handleAddLink}
                 disabled={!selectedReqId}
-                className="px-3 py-1.5 disabled:bg-[#2a2a2a] disabled:text-[#555] text-white text-xs font-medium rounded transition-colors flex items-center gap-1"
-                style={{ backgroundColor: selectionToken }}
+                // Task 6 review fix (contrast): dark text on the selection
+                // token passes AA in both themes (~6.3:1 dark, ~4.9:1 light);
+                // white on the selection token was 2.8-3.6:1 and failed.
+                // Disabled pairing below is untouched.
+                className="px-3 py-1.5 disabled:bg-[#2a2a2a] disabled:text-[#555] text-xs font-medium rounded transition-colors flex items-center gap-1"
+                style={{ backgroundColor: selectionToken, color: '#111827' }}
               >
                 <Link2 className="w-3.5 h-3.5" aria-hidden="true" />
                 Add Trace Link

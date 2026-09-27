@@ -165,8 +165,7 @@ describe('StateRequirementTraceability component', () => {
     expect(warning.getAttribute('style') ?? '').toContain('--sysml-sem-warning');
   });
 
-  it('surfaces dangling trace links as an error with icon, label, and token', () => {
-    const repo = createEmptyRepository();
+  it('surfaces dangling trace links as an error with icon, label, and token', () => {    const repo = createEmptyRepository();
     repo.relationships['rel-dangling'] = {
       id: 'rel-dangling',
       kind: 'satisfy',
@@ -187,5 +186,27 @@ describe('StateRequirementTraceability component', () => {
     expect(alert.getAttribute('aria-label') ?? '').toMatch(/error/i);
     expect(alert.textContent ?? '').toMatch(/error/i);
     expect(alert.getAttribute('style') ?? '').toContain('--sysml-sem-error');
+  });
+
+  it('pairs the Add Trace Link selection-token background with AA-passing dark text', () => {
+    const repo = mockRepo();
+    render(
+      <StateRequirementTraceability
+        stateId="state-emergency"
+        stateName="EmergencyStop"
+        canonicalRepository={repo}
+        onLinkRequirement={vi.fn()}
+        onUnlinkRelationship={vi.fn()}
+      />
+    );
+
+    const button = screen.getByRole('button', { name: /Add Trace Link/i });
+    const style = button.getAttribute('style') ?? '';
+    // Selection token background (CSS var resolves in both themes) with dark
+    // text: ~6.3:1 on the dark-theme token, ~4.9:1 on the light-theme token.
+    // React serializes the dark hex to rgb in the style attribute.
+    expect(style).toContain('--sysml-sem-selection');
+    expect((button as HTMLElement).style.color).toBe('rgb(17, 24, 39)');
+    expect(style).not.toMatch(/color:\s*(white|#fff|#ffffff)/i);
   });
 });

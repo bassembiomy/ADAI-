@@ -180,8 +180,7 @@ describe('TypeSelectionPrompt', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('drops a stale selection when candidates change so Confirm cannot fire for an absent id', () => {
-    const onSelect = vi.fn();
+  it('drops a stale selection when candidates change so Confirm cannot fire for an absent id', () => {    const onSelect = vi.fn();
     const { rerender } = render(
       <TypeSelectionPrompt
         isOpen={true}
@@ -207,5 +206,31 @@ describe('TypeSelectionPrompt', () => {
     expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('backs selection, error, and confirm surfaces with semantic presentation tokens', () => {
+    render(
+      <TypeSelectionPrompt
+        isOpen={true}
+        featureKind="Proxy Port"
+        candidates={candidates}
+        onSelectType={vi.fn()}
+        onCreateNewType={vi.fn()}
+        onCancel={vi.fn()}
+        error="TYPE_NOT_FOUND"
+      />,
+    );
+    // Error surface pairs the error token with the message text.
+    expect(screen.getByText('TYPE_NOT_FOUND').getAttribute('style') ?? '').toContain('--sysml-sem-error');
+
+    // Selected candidate + enabled Confirm resolve from the selection token
+    // with dark (AA-passing) text instead of white on the token.
+    fireEvent.click(screen.getByText('CANBus'));
+    expect(screen.getByText('CANBus').closest('button')?.getAttribute('style') ?? '').toContain('--sysml-sem-selection');
+    const confirmStyle = screen.getByRole('button', { name: /Confirm/i }).getAttribute('style') ?? '';
+    expect(confirmStyle).toContain('--sysml-sem-selection');
+    // Dark (AA-passing) text on the selection token; React serializes the
+    // hex to rgb in the style attribute.
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLElement).style.color).toBe('rgb(17, 24, 39)');
   });
 });

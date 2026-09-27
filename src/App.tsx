@@ -977,7 +977,9 @@ const LegacyTraceabilityMatrix = ({
                         const t = blocks.find(b => b.id === rel.targetId);
                         return (
                           <div key={rel.id} className="flex items-center gap-1.5 bg-[#1a1a1a] px-2 py-1 rounded border border-[#222] w-max">
-                            <span className="text-[#6c9ac6] text-[10px] font-mono">«{rel.type}»</span>
+                            {/* Task 6 review fix: tree «kind» glyph resolves from the centralized
+                                semantic palette; the «kind» text stays as the non-color indicator. */}
+                            <span className="text-[10px] font-mono" style={{ color: semanticPresentationToken('validRequirementRelationship') }}>«{rel.type}»</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                             <span className="text-[#ccc]">{t?.name}</span>
                           </div>
@@ -15310,15 +15312,18 @@ const ADIA = () => {
                 const portToken = semanticPresentationToken(portKindToPresentationRole(port.kind));
                 return (
                 <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
+                  {/* Task 6 review fix: the token is applied through `style`
+                      because browsers do not resolve var() in SVG
+                      presentation attributes. */}
                   <rect
                     width={10}
                     height={10}
                     fill="#333"
-                    stroke={portToken}
+                    style={{ stroke: portToken }}
                     strokeWidth={1}
                   />
                   {port.kind === 'flow' && (
-                    <text x={5} y={8} textAnchor="middle" fill={portToken} fontSize={8} fontWeight="bold">
+                    <text x={5} y={8} textAnchor="middle" style={{ fill: portToken }} fontSize={8} fontWeight="bold">
                       {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
                     </text>
                   )}
@@ -15445,34 +15450,36 @@ const ADIA = () => {
           {/* Broad click target */}
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
 
-          {/* Rendered line/curve */}
-          <path d={route.path} fill="none" stroke={strokeColor} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
+          {/* Rendered line/curve (Task 6 review fix: token resolves through
+              `style` because browsers do not resolve var() in SVG
+              presentation attributes) */}
+          <path d={route.path} fill="none" style={{ stroke: strokeColor }} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
 
           {/* Arrowheads & Markers */}
           {rel.type === 'generalization' && (
-            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#1a1a1a" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {rel.type === 'composition' && (
-            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} style={{ fill: strokeColor, stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
           {rel.type === 'requirementContainment' && (
             <g transform={`translate(${sp.x}, ${sp.y}) rotate(${angle})`}>
-              <circle cx={7} cy={0} r={6} fill="#141414" stroke={strokeColor} strokeWidth={1.5} />
-              <line x1={1} y1={0} x2={13} y2={0} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
-              <line x1={7} y1={-6} x2={7} y2={6} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
+              <circle cx={7} cy={0} r={6} fill="#141414" style={{ stroke: strokeColor }} strokeWidth={1.5} />
+              <line x1={1} y1={0} x2={13} y2={0} style={{ stroke: strokeColor }} strokeWidth={1.5} strokeLinecap="round" />
+              <line x1={7} y1={-6} x2={7} y2={6} style={{ stroke: strokeColor }} strokeWidth={1.5} strokeLinecap="round" />
             </g>
           )}
           {rel.type === 'aggregation' && (
-            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
           {rel.type === 'allocation' && (
-            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {(rel.type === 'dependency' || isPackageRelation) && (
-            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#141414" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#141414" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {isTrace && (
-            <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+            <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
 
           {/* Stereotype / Label Badge with background - deferred during drag/pan */}
@@ -15492,7 +15499,7 @@ const ADIA = () => {
                 x={0}
                 y={2}
                 textAnchor="middle"
-                fill={containmentDiagnostics.length > 0 ? '#ef4444' : strokeColor}
+                style={{ fill: containmentDiagnostics.length > 0 ? '#ef4444' : strokeColor }}
                 fontSize={9}
                 fontWeight="600"
               >
@@ -15504,16 +15511,16 @@ const ADIA = () => {
           )}
 
           {!isInteracting && (rel as any).sourceRole && (
-            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} style={{ fill: strokeColor }} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
           )}
           {!isInteracting && rel.sourceMultiplicity && (
-            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} style={{ fill: strokeColor }} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
           )}
           {!isInteracting && (rel as any).targetRole && (
-            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} style={{ fill: strokeColor }} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
           )}
           {!isInteracting && rel.targetMultiplicity && (
-            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} style={{ fill: strokeColor }} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
           )}
         </g>
       );

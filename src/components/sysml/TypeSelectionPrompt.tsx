@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import type { TypeCandidate, TypedFeatureKind, TypeSelectionResult } from './typeSelectionTypes';
+// Task 6 review fix: dialog selection/error/confirm colors resolve from the
+// centralized semantic palette (presentation only; the selection gate above
+// is unchanged and color never drives it).
+import { semanticPresentationToken } from '../../engine/sysml/semanticPresentationStyles';
 
 export type TypeSelectionId = Extract<TypeSelectionResult, { kind: 'selected' }>['typeId'];
 
@@ -54,6 +58,13 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
   // a typed feature and the first candidate is never selected silently.
   const hasValidSelection = selectedId !== '' && candidates.some(c => c.id === selectedId);
 
+  const selectionToken = semanticPresentationToken('selection');
+  const errorToken = semanticPresentationToken('error');
+  // Dark text on the selection token keeps the selected-row and confirm
+  // pairings above AA in both themes (white on the selection token is
+  // ~3:1 and fails); neutral/disabled chrome below is untouched.
+  const onSelectionText = '#111827';
+
   return (
     <div
       role="dialog"
@@ -97,9 +108,9 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
-              background: 'rgba(239, 68, 68, 0.2)',
-              border: '1px solid #ef4444',
-              color: '#fca5a5',
+              background: `color-mix(in srgb, ${errorToken} 20%, transparent)`,
+              border: `1px solid ${errorToken}`,
+              color: errorToken,
               fontSize: '12px',
             }}
           >
@@ -139,8 +150,8 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
                       padding: '8px 12px',
                       borderRadius: '4px',
                       border: 'none',
-                      background: isSelected ? '#2563eb' : 'transparent',
-                      color: isSelected ? '#ffffff' : '#e5e7eb',
+                      background: isSelected ? selectionToken : 'transparent',
+                      color: isSelected ? onSelectionText : '#e5e7eb',
                       cursor: 'pointer',
                       fontSize: '13px',
                       display: 'flex',
@@ -149,7 +160,7 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
                     }}
                   >
                     <span>{candidate.name}</span>
-                    <span style={{ fontSize: '11px', color: isSelected ? '#bfdbfe' : '#6b7280' }}>
+                    <span style={{ fontSize: '11px', color: isSelected ? onSelectionText : '#6b7280' }}>
                       {candidate.id}
                     </span>
                   </button>
@@ -211,8 +222,8 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
                 padding: '6px 14px',
                 borderRadius: '4px',
                 border: 'none',
-                background: hasValidSelection ? '#2563eb' : '#4b5563',
-                color: '#ffffff',
+                background: hasValidSelection ? selectionToken : '#4b5563',
+                color: hasValidSelection ? onSelectionText : '#ffffff',
                 cursor: hasValidSelection ? 'pointer' : 'not-allowed',
                 fontSize: '12px',
                 fontWeight: 600,
