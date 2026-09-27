@@ -110,4 +110,82 @@ describe('StateRequirementTraceability component', () => {
 
     expect(onUnlink).toHaveBeenCalledWith('rel-1');
   });
+
+  it('projects committed links with the centralized requirement-relationship token', () => {
+    const repo = mockRepo();
+    render(
+      <StateRequirementTraceability
+        stateId="state-emergency"
+        stateName="EmergencyStop"
+        canonicalRepository={repo}
+        onLinkRequirement={vi.fn()}
+        onUnlinkRelationship={vi.fn()}
+      />
+    );
+
+    const badge = screen.getAllByText('«satisfy»')[0];
+    // The «kind» text is the non-color indicator; the color resolves from the
+    // centralized palette role instead of a hard-coded workflow color.
+    expect(badge.textContent).toContain('satisfy');
+    expect(badge.getAttribute('style') ?? '').toContain('--sysml-sem-valid-requirement-relationship');
+  });
+
+  it('exposes the unlink control under an accessible name', () => {
+    const repo = mockRepo();
+    render(
+      <StateRequirementTraceability
+        stateId="state-emergency"
+        stateName="EmergencyStop"
+        canonicalRepository={repo}
+        onLinkRequirement={vi.fn()}
+        onUnlinkRelationship={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Unlink Safety Interlock/i }),
+    ).toBeDefined();
+  });
+
+  it('pairs the empty-repository warning token with a text label and accessible name', () => {
+    const repo = createEmptyRepository();
+    render(
+      <StateRequirementTraceability
+        stateId="state-emergency"
+        stateName="EmergencyStop"
+        canonicalRepository={repo}
+        onLinkRequirement={vi.fn()}
+        onUnlinkRelationship={vi.fn()}
+      />
+    );
+
+    const warning = screen.getByRole('status');
+    expect(warning.getAttribute('aria-label') ?? '').toMatch(/warning/i);
+    expect(warning.textContent ?? '').toMatch(/warning/i);
+    expect(warning.getAttribute('style') ?? '').toContain('--sysml-sem-warning');
+  });
+
+  it('surfaces dangling trace links as an error with icon, label, and token', () => {
+    const repo = createEmptyRepository();
+    repo.relationships['rel-dangling'] = {
+      id: 'rel-dangling',
+      kind: 'satisfy',
+      sourceId: 'state-emergency',
+      targetId: 'req-missing',
+    };
+    render(
+      <StateRequirementTraceability
+        stateId="state-emergency"
+        stateName="EmergencyStop"
+        canonicalRepository={repo}
+        onLinkRequirement={vi.fn()}
+        onUnlinkRelationship={vi.fn()}
+      />
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert.getAttribute('aria-label') ?? '').toMatch(/error/i);
+    expect(alert.textContent ?? '').toMatch(/error/i);
+    expect(alert.getAttribute('style') ?? '').toContain('--sysml-sem-error');
+  });
 });

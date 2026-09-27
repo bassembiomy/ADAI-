@@ -45,6 +45,21 @@
   --sysml-state-active-fill: #2a2a2a;
   --sysml-state-stroke: #444444;
   --sysml-state-subtext: #888888;
+  /* Task 6 centralized semantic presentation roles (spec 3.5): one custom
+     property per role, reusing existing families (block blue, requirement
+     neutral, state orange, port blue/green/amber accents, requirement
+     relationship accent, app orange/amber/red). */
+  --sysml-sem-block: #6c9ac6;
+  --sysml-sem-requirement: #e0e0e0;
+  --sysml-sem-state: #f97316;
+  --sysml-sem-standard-port: #a1a1aa;
+  --sysml-sem-proxy-port: #60a5fa;
+  --sysml-sem-full-port: #34d399;
+  --sysml-sem-flow-port: #fbbf24;
+  --sysml-sem-valid-requirement-relationship: #6c9ac6;
+  --sysml-sem-selection: #f97316;
+  --sysml-sem-warning: #fbbf24;
+  --sysml-sem-error: #f87171;
   --scrollbar-thumb: rgba(201, 168, 108, 0.5);
   --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
 }
@@ -84,6 +99,19 @@
   --sysml-state-active-fill: #e7f3f1;
   --sysml-state-stroke: #75919a;
   --sysml-state-subtext: #536b74;
+  /* Task 6 centralized semantic presentation roles (spec 3.5), light theme:
+     same roles, light-contrast values reusing existing light families. */
+  --sysml-sem-block: #0369a1;
+  --sysml-sem-requirement: #405661;
+  --sysml-sem-state: #b45309;
+  --sysml-sem-standard-port: #405661;
+  --sysml-sem-proxy-port: #1d4ed8;
+  --sysml-sem-full-port: #087f73;
+  --sysml-sem-flow-port: #92400e;
+  --sysml-sem-valid-requirement-relationship: #0369a1;
+  --sysml-sem-selection: #ea580c;
+  --sysml-sem-warning: #92400e;
+  --sysml-sem-error: #b91c1c;
   --scrollbar-thumb: rgba(8, 127, 115, 0.38);
   --scrollbar-thumb-hover: rgba(8, 127, 115, 0.68);
 }

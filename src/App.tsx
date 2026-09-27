@@ -169,6 +169,9 @@ import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './service
 import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
+// Task 6 centralized semantic presentation resolver (spec 3.5): workflow
+// surfaces consume tokens instead of hard-coded palette colors.
+import { portKindToPresentationRole, semanticPresentationToken } from './engine/sysml/semanticPresentationStyles';
 import { buildCreateIbdConnectorCommand } from './services/sysmlIbdConnectorCommands';
 import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
 import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
@@ -15299,24 +15302,30 @@ const ADIA = () => {
                 </>
               )}
 
-              {/* Ports */}
-              {block.ports.map((port, i) => (
+              {/* Ports (Task 6: stroke/glyph resolve from the centralized
+                  semantic palette via portKindToPresentationRole; legacy
+                  ports carry no presentation override so role defaults
+                  apply deterministically) */}
+              {block.ports.map((port, i) => {
+                const portToken = semanticPresentationToken(portKindToPresentationRole(port.kind));
+                return (
                 <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
                   <rect
                     width={10}
                     height={10}
                     fill="#333"
-                    stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
+                    stroke={portToken}
                     strokeWidth={1}
                   />
                   {port.kind === 'flow' && (
-                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
+                    <text x={5} y={8} textAnchor="middle" fill={portToken} fontSize={8} fontWeight="bold">
                       {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
                     </text>
                   )}
                   <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
                 </g>
-              ))}
+                );
+              })}
 
               {/* Satisfied Requirements Indicator */}
               {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
@@ -15399,10 +15408,20 @@ const ADIA = () => {
 
       const isSelected = selectedIds.includes(rel.id);
       const isSuspect = Boolean((rel as any).suspect);
-      const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
+      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
+      // Task 6: committed relationship projections resolve presentation from
+      // the centralized semantic palette. Precedence (selection, then suspect
+      // error, then valid requirement relationship) is presentational only;
+      // validation state is computed upstream and color never drives it.
+      const strokeColor = isSelected
+        ? semanticPresentationToken('selection')
+        : isSuspect
+          ? semanticPresentationToken('error')
+          : isTrace
+            ? semanticPresentationToken('validRequirementRelationship')
+            : '#888';
       const isPackageRelation = ['packageImport', 'elementImport', 'packageMerge'].includes(rel.type);
       const strokeDash = ['allocation', 'dependency', 'packageImport', 'elementImport', 'packageMerge'].includes(rel.type) ? '5,5' : undefined;
-      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
       const isReqContainment = rel.type === 'requirementContainment';
       const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
         ? validateRequirementContainment(canonicalSysmlRepository, rel.id)
@@ -17008,10 +17027,10 @@ const ADIA = () => {
                           onClearPortTool={() => setActivePortTool(null)}
                         />
                         <div className="flex gap-0.5">
-                          <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }} title="Add Standard Port">+Std</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }} title="Add Flow Port">+Flow</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }} title="Add Proxy Port">+Prx</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }} title="Add Full Port">+Full</Button>
                         </div>
                       </div>
                     )}
@@ -17114,10 +17133,10 @@ const ADIA = () => {
                       Part
                     </Button>
                     <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50" title="Add Full Port">+Full</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }} title="Add Standard Port">+Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }} title="Add Flow Port">+Flow</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }} title="Add Proxy Port">+Prx</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }} title="Add Full Port">+Full</Button>
                     </div>
                     <Button
                       variant="secondary"
@@ -18562,10 +18581,10 @@ const ADIA = () => {
                       ))}
                     </div>
                     <div className="flex gap-1 mt-2">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50">+ Full</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
                     </div>
                   </div>
                   <div>
@@ -18819,10 +18838,10 @@ const ADIA = () => {
                             ))}
                           </div>
                           <div className="flex gap-1 mt-2">
-                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 bg-[#a78bfa]/20 text-[#a78bfa] hover:bg-[#a78bfa]/30 border border-[#a78bfa]/50">+ Full</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
                           </div>
                         </div>
                       );
