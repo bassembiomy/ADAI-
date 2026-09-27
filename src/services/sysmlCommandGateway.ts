@@ -1849,11 +1849,15 @@ export function executeSysmlCommand(
       };
     }
     const collection = getCollectionFromElement(command.element);
-    upsertEntity(store, collection, command.element as any);
-    if (command.presentation) {
-      coordinates[command.element.id] = { ...command.presentation };
-      store.coordinates.set(command.element.id, { ...command.presentation });
-    }
+
+    // Stage-first atomicity (Finding 1 review fix, Task-3 createOwnedFeature
+    // pattern): build the staged repository and coordinates as pure values.
+    // Store, patch history, and presentation maps stay untouched until staged
+    // validation passes; any error returns committed: false with the original
+    // state.
+    const nextCoordinates = command.presentation
+      ? { ...coordinates, [command.element.id]: { ...command.presentation } }
+      : { ...coordinates };
 
     const nextRepo: SysmlRepository = {
       ...state.repository,
@@ -1896,6 +1900,35 @@ export function executeSysmlCommand(
       forwardOps.push({ op: 'add', collection: 'coordinates', id: command.element.id, value: command.presentation });
       inverseOps.push({ op: 'remove', collection: 'coordinates', id: command.element.id, oldValue: command.presentation });
     }
+    // Full semantic validation runs on the staged state BEFORE any mutation.
+    // Any error aborts with the original repository/history/coordinates and
+    // untouched store/patchHistory, so a success never carries errors.
+    const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    if (stagedErrors.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: stagedErrors,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    // Single atomic transaction: store projection, persistence records, and
+    // exactly one history entry.
+    upsertEntity(store, collection, command.element as any);
+    if (command.presentation) {
+      store.coordinates.set(command.element.id, { ...command.presentation });
+    }
     const patch = createSysmlPatch({
       revision: nextRepo.revision,
       coalesceKey: command.coalesceKey,
@@ -1910,18 +1943,17 @@ export function executeSysmlCommand(
       present: nextRepo,
       future: [],
     };
-    const validation = validateSysmlRepository(nextRepo, endpointContext);
-    const view = getView(nextRepo, coordinates, diagramPresentations);
+    const view = getView(nextRepo, nextCoordinates, diagramPresentations);
 
     return {
       repository: nextRepo,
       store,
       patchHistory,
       view,
-      diagnostics: validation.diagnostics,
+      diagnostics: stagedValidation.diagnostics,
       committed: true,
       history: nextHistory,
-      coordinates,
+      coordinates: nextCoordinates,
       diagramPresentations,
       presentationHistory: state.presentationHistory,
       actionStack: [...(state.actionStack ?? []), 'semantic'],
@@ -1977,8 +2009,10 @@ export function executeSysmlCommand(
         redoStack: state.redoStack,
       };
     }
+    // Stage-first atomicity (Finding 1 review fix): the merged element is
+    // staged into a pure repository value first; the store stays untouched
+    // until staged validation passes.
     const nextElement = { ...existing, ...command.patch } as SysmlEntity;
-    upsertEntity(store, collection, nextElement);
 
     const nextRepo: SysmlRepository = {
       ...state.repository,
@@ -1999,6 +2033,32 @@ export function executeSysmlCommand(
       ],
     };
 
+    // Full semantic validation runs on the staged state BEFORE any mutation.
+    // Any error aborts with the original repository/history and untouched
+    // store/patchHistory, so a success never carries errors.
+    const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    if (stagedErrors.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: stagedErrors,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    // Single atomic transaction: store projection, persistence records, and
+    // exactly one history entry.
+    upsertEntity(store, collection, nextElement);
     const patch = createSysmlPatch({
       revision: nextRepo.revision,
       coalesceKey: command.coalesceKey,
@@ -2013,7 +2073,6 @@ export function executeSysmlCommand(
       present: nextRepo,
       future: [],
     };
-    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, diagramPresentations);
 
     return {
@@ -2021,7 +2080,7 @@ export function executeSysmlCommand(
       store,
       patchHistory,
       view,
-      diagnostics: validation.diagnostics,
+      diagnostics: stagedValidation.diagnostics,
       committed: true,
       history: nextHistory,
       coordinates,
@@ -2375,43 +2434,82 @@ export function executeSysmlCommand(
       auditTrail: [...(state.repository.auditTrail || [])],
     };
 
+    // Stage-first atomicity (Finding 1 review fix): stage owner changes into
+    // a pure repository value. The store stays untouched until staged
+    // validation below passes.
     for (const elemId of command.elementIds) {
       if (nextRepo.definitions[elemId]) {
         const prevDef = nextRepo.definitions[elemId];
         const updatedDef = { ...prevDef, ownerId: targetOwnerId };
         nextRepo.definitions[elemId] = updatedDef;
-        upsertEntity(store, 'definitions', updatedDef);
         forwardOps.push({ op: 'replace', collection: 'definitions', id: elemId, oldValue: prevDef, value: updatedDef });
         inverseOps.unshift({ op: 'replace', collection: 'definitions', id: elemId, oldValue: updatedDef, value: prevDef });
       } else if (nextRepo.packages[elemId]) {
         const prevPkg = nextRepo.packages[elemId];
         const updatedPkg = { ...prevPkg, ownerId: targetOwnerId };
         nextRepo.packages[elemId] = updatedPkg;
-        upsertEntity(store, 'packages', updatedPkg);
         forwardOps.push({ op: 'replace', collection: 'packages', id: elemId, oldValue: prevPkg, value: updatedPkg });
         inverseOps.unshift({ op: 'replace', collection: 'packages', id: elemId, oldValue: updatedPkg, value: prevPkg });
       } else if (nextRepo.diagrams[elemId]) {
         const prevDiag = nextRepo.diagrams[elemId];
         const updatedDiag = { ...prevDiag, ownerId: targetOwnerId };
         nextRepo.diagrams[elemId] = updatedDiag;
-        upsertEntity(store, 'diagrams', updatedDiag);
         forwardOps.push({ op: 'replace', collection: 'diagrams', id: elemId, oldValue: prevDiag, value: updatedDiag });
         inverseOps.unshift({ op: 'replace', collection: 'diagrams', id: elemId, oldValue: updatedDiag, value: prevDiag });
       } else if (nextRepo.requirements[elemId]) {
         const prevReq = nextRepo.requirements[elemId];
         const updatedReq = { ...prevReq, ownerId: targetOwnerId, owner: targetOwnerId };
         nextRepo.requirements[elemId] = updatedReq;
-        upsertEntity(store, 'requirements', updatedReq);
         forwardOps.push({ op: 'replace', collection: 'requirements', id: elemId, oldValue: prevReq, value: updatedReq });
         inverseOps.unshift({ op: 'replace', collection: 'requirements', id: elemId, oldValue: updatedReq, value: prevReq });
       } else if (nextRepo.usages[elemId]) {
         const prevUsage = nextRepo.usages[elemId];
         const updatedUsage = { ...prevUsage, ownerId: targetOwnerId };
         nextRepo.usages[elemId] = updatedUsage;
-        upsertEntity(store, 'usages', updatedUsage);
         forwardOps.push({ op: 'replace', collection: 'usages', id: elemId, oldValue: prevUsage, value: updatedUsage });
         inverseOps.unshift({ op: 'replace', collection: 'usages', id: elemId, oldValue: updatedUsage, value: prevUsage });
       }
+    }
+
+    nextRepo.auditTrail.push({
+      id: `change-${nextRepo.revision}-move`,
+      revision: nextRepo.revision,
+      timestamp: new Date().toISOString(),
+      command: 'moveElements',
+      elementIds: command.elementIds,
+    });
+
+    // Full semantic validation runs on the staged state BEFORE any store or
+    // history mutation. Any error aborts with the original state and untouched
+    // store/patchHistory, so a success never carries errors.
+    const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    if (stagedErrors.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: stagedErrors,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    // Single atomic transaction: store projection, persistence records, and
+    // exactly one history entry.
+    for (const elemId of command.elementIds) {
+      if (nextRepo.definitions[elemId]) upsertEntity(store, 'definitions', nextRepo.definitions[elemId]);
+      else if (nextRepo.packages[elemId]) upsertEntity(store, 'packages', nextRepo.packages[elemId]);
+      else if (nextRepo.diagrams[elemId]) upsertEntity(store, 'diagrams', nextRepo.diagrams[elemId]);
+      else if (nextRepo.requirements[elemId]) upsertEntity(store, 'requirements', nextRepo.requirements[elemId]);
+      else if (nextRepo.usages[elemId]) upsertEntity(store, 'usages', nextRepo.usages[elemId]);
     }
 
     const patch = createSysmlPatch({
@@ -2422,28 +2520,19 @@ export function executeSysmlCommand(
     });
     pushPatch(patchHistory, patch, store);
 
-    nextRepo.auditTrail.push({
-      id: `change-${nextRepo.revision}-move`,
-      revision: nextRepo.revision,
-      timestamp: new Date().toISOString(),
-      command: 'moveElements',
-      elementIds: command.elementIds,
-    });
-
     const nextHistory: MutationHistory = {
       past: [...state.history.past, state.repository],
       present: nextRepo,
       future: [],
     };
 
-    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, diagramPresentations);
     return {
       repository: nextRepo,
       store,
       patchHistory,
       view,
-      diagnostics: validation.diagnostics,
+      diagnostics: stagedValidation.diagnostics,
       committed: true,
       history: nextHistory,
       coordinates,
@@ -2467,6 +2556,9 @@ export function executeSysmlCommand(
     if (diagram.diagramKind === 'package' && !state.repository.packages[ownerId]) {
       return reject('INVALID_DIAGRAM_OWNER', 'A Package Diagram must be owned by the Model or a Package.', ownerId);
     }
+    // Stage-first atomicity (Finding 1 review fix): stage the diagram and its
+    // presentation as pure values. Store and patch history stay untouched
+    // until staged validation below passes.
     const nextRepo: SysmlRepository = {
       ...state.repository,
       revision: state.repository.revision + 1,
@@ -2476,11 +2568,44 @@ export function executeSysmlCommand(
       },
       auditTrail: [...(state.repository.auditTrail || [])],
     };
-    upsertEntity(store, 'diagrams', diagram);
     const nextDiagramPresentations = {
       ...diagramPresentations,
       [diagram.id]: { elementIds: [], presentations: {} },
     };
+    nextRepo.auditTrail.push({
+      id: `change-${nextRepo.revision}-createDiagram`,
+      revision: nextRepo.revision,
+      timestamp: new Date().toISOString(),
+      command: 'createDiagram',
+      elementIds: [diagram.id],
+    });
+
+    // Full semantic validation runs on the staged state BEFORE any mutation.
+    // Any error aborts with the original state and untouched
+    // store/patchHistory, so a success never carries errors.
+    const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    if (stagedErrors.length > 0) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: stagedErrors,
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    // Single atomic transaction: store projection, persistence records, and
+    // exactly one history entry.
+    upsertEntity(store, 'diagrams', diagram);
     store.diagramPresentations.set(diagram.id, { elementIds: [], presentations: {} });
     store.indexes.diagramId.set(diagram.id, new Set());
 
@@ -2492,28 +2617,19 @@ export function executeSysmlCommand(
     });
     pushPatch(patchHistory, patch, store);
 
-    nextRepo.auditTrail.push({
-      id: `change-${nextRepo.revision}-createDiagram`,
-      revision: nextRepo.revision,
-      timestamp: new Date().toISOString(),
-      command: 'createDiagram',
-      elementIds: [diagram.id],
-    });
-
     const nextHistory: MutationHistory = {
       past: [...state.history.past, state.repository],
       present: nextRepo,
       future: [],
     };
 
-    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, nextDiagramPresentations);
     return {
       repository: nextRepo,
       store,
       patchHistory,
       view,
-      diagnostics: validation.diagnostics,
+      diagnostics: stagedValidation.diagnostics,
       committed: true,
       history: nextHistory,
       coordinates,

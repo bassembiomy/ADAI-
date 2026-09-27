@@ -2120,4 +2120,173 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
   });
 });
 
+describe('sysmlCommandGateway review follow-up: atomic element commands (Finding 1)', () => {
+  const one = { lower: 1, upper: 1 as const, ordered: false, unique: true };
+  const block = (id: string, name: string): BlockDefinition => ({
+    id, name, kind: 'block', namespace: ['model'], ownerId: 'model',
+    isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+  });
+
+  function advance(state: SysmlGatewayState, result: ReturnType<typeof executeSysmlCommand>): SysmlGatewayState {
+    return {
+      ...state,
+      repository: result.repository,
+      history: result.history,
+      store: result.store ?? state.store,
+      patchHistory: result.patchHistory ?? state.patchHistory,
+      coordinates: result.coordinates,
+      diagramPresentations: result.diagramPresentations,
+      actionStack: result.actionStack ?? state.actionStack,
+      redoStack: result.redoStack ?? state.redoStack,
+    };
+  }
+
+  function snapshot(state: SysmlGatewayState) {
+    return {
+      revision: state.repository.revision,
+      audit: state.repository.auditTrail.length,
+      patches: state.patchHistory?.past.length ?? 0,
+      actions: state.actionStack?.length ?? 0,
+      redos: state.redoStack?.length ?? 0,
+      definitions: Object.keys(state.repository.definitions).sort(),
+      usages: Object.keys(state.repository.usages).sort(),
+      diagrams: Object.keys(state.repository.diagrams ?? {}).sort(),
+      coordinates: JSON.stringify(state.coordinates),
+      presentations: JSON.stringify(state.diagramPresentations),
+    };
+  }
+
+  function expectNoMutation(result: ReturnType<typeof executeSysmlCommand>, state: SysmlGatewayState, before: ReturnType<typeof snapshot>) {
+    expect(result.repository).toBe(state.repository);
+    expect(result.repository.revision).toBe(before.revision);
+    expect(result.repository.auditTrail).toHaveLength(before.audit);
+    expect(result.history).toBe(state.history);
+    expect(result.patchHistory?.past.length ?? 0).toBe(before.patches);
+    expect(result.actionStack?.length ?? 0).toBe(before.actions);
+    expect(result.redoStack?.length ?? 0).toBe(before.redos);
+    expect(Object.keys(result.repository.definitions).sort()).toEqual(before.definitions);
+    expect(Object.keys(result.repository.usages).sort()).toEqual(before.usages);
+    expect(JSON.stringify(result.coordinates)).toBe(before.coordinates);
+    expect(JSON.stringify(result.diagramPresentations)).toBe(before.presentations);
+  }
+
+  function expectSingleTransaction(result: ReturnType<typeof executeSysmlCommand>, before: ReturnType<typeof snapshot>) {
+    expect(result.committed).toBe(true);
+    expect(result.diagnostics.filter(d => d.severity === 'error')).toHaveLength(0);
+    expect(result.repository.revision).toBe(before.revision + 1);
+    expect(result.repository.auditTrail).toHaveLength(before.audit + 1);
+    expect(result.patchHistory?.past.length ?? 0).toBe(before.patches + 1);
+    expect(result.actionStack?.length ?? 0).toBe(before.actions + 1);
+    expect(result.redoStack?.length ?? 0).toBe(0);
+  }
+
+  it('createElement rolls back a staged-validation failure (duplicate qualified name) admitted by the gate', () => {
+    let state = createSysmlGatewayState();
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-motor', 'Motor') }));
+    const before = snapshot(state);
+
+    // The gate only checks duplicate IDs plus relationship/connector/block
+    // policy, so a duplicate qualified name is admitted and caught only by
+    // full staged validation (DUPLICATE_QUALIFIED_NAME).
+    const res = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: block('blk-motor-copy', 'Motor'),
+      presentation: { x: 5, y: 5 },
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_QUALIFIED_NAME' && d.severity === 'error')).toBe(true);
+    expectNoMutation(res, state, before);
+    expect(res.repository.definitions['blk-motor-copy']).toBeUndefined();
+    expect(res.coordinates['blk-motor-copy']).toBeUndefined();
+    expect(res.store?.definitions.has('blk-motor-copy')).toBe(false);
+    expect(res.store?.coordinates.has('blk-motor-copy')).toBe(false);
+  });
+
+  it('updateElement rolls back a staged-validation failure (missing usage type) admitted by the gate', () => {
+    let state = createSysmlGatewayState();
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-vehicle', 'Vehicle') }));
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-motor', 'Motor') }));
+    const part: PartUsage = {
+      id: 'part-engine', propertyId: 'prop-engine', kind: 'part', name: 'engine',
+      ownerId: 'blk-vehicle', typeId: 'blk-motor', aggregation: 'composite',
+      multiplicity: { ...one },
+    };
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: part }));
+    const before = snapshot(state);
+
+    // The update gate only covers block/relationship/connector candidates, so
+    // retargeting a part usage at a ghost type is admitted and caught only by
+    // full staged validation (MISSING_USAGE_TYPE).
+    const res = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'part-engine', patch: { typeId: 'ghost-type' },
+    });
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'MISSING_USAGE_TYPE' && d.severity === 'error')).toBe(true);
+    expectNoMutation(res, state, before);
+    expect(res.repository.usages['part-engine']).toMatchObject({ typeId: 'blk-motor' });
+    expect(res.store?.usages.get('part-engine')).toMatchObject({ typeId: 'blk-motor' });
+  });
+
+  it('createElement commits a valid element as one transaction with no error diagnostics', () => {
+    const state = createSysmlGatewayState();
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: block('blk-motor', 'Motor'),
+      presentation: { x: 10, y: 20 },
+    });
+
+    expectSingleTransaction(res, before);
+    expect(res.repository.definitions['blk-motor']).toBeDefined();
+    expect(res.coordinates['blk-motor']).toMatchObject({ x: 10, y: 20 });
+    expect(res.store?.definitions.has('blk-motor')).toBe(true);
+    expect(res.repository.auditTrail[res.repository.auditTrail.length - 1].command).toBe('createElement');
+  });
+
+  it('updateElement commits a valid patch as one transaction with no error diagnostics', () => {
+    let state = createSysmlGatewayState();
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-motor', 'Motor') }));
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'blk-motor', patch: { name: 'BLDCMotor' },
+    });
+
+    expectSingleTransaction(res, before);
+    expect(res.repository.definitions['blk-motor']).toMatchObject({ name: 'BLDCMotor' });
+    expect(res.store?.definitions.get('blk-motor')).toMatchObject({ name: 'BLDCMotor' });
+  });
+
+  it('moveElements commits a valid move as one transaction with no error diagnostics', () => {
+    let state = createSysmlGatewayState();
+    state = advance(state, executeSysmlCommand(state, {
+      type: 'createElement',
+      element: { id: 'pkg-target', kind: 'package', name: 'Target', namespace: ['model'], ownerId: 'model' },
+    }));
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-motor', 'Motor') }));
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'moveElements', elementIds: ['blk-motor'], targetOwnerId: 'pkg-target',
+    });
+
+    expectSingleTransaction(res, before);
+    expect(res.repository.definitions['blk-motor']).toMatchObject({ ownerId: 'pkg-target' });
+    expect(res.store?.definitions.get('blk-motor')).toMatchObject({ ownerId: 'pkg-target' });
+  });
+
+  it('createDiagram commits a valid diagram as one transaction with no error diagnostics', () => {
+    const state = createSysmlGatewayState();
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'createDiagram',
+      diagram: { id: 'diag-bdd', kind: 'diagram', diagramKind: 'bdd', name: 'BDD', namespace: ['model'], ownerId: 'model' },
+    });
+
+    expectSingleTransaction(res, before);
+    expect(res.repository.diagrams['diag-bdd']).toBeDefined();
+    expect(res.store?.diagrams.has('diag-bdd')).toBe(true);
+  });
+});
+
 

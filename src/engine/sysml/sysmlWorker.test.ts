@@ -504,5 +504,100 @@ describe('SysML Worker Protocol & Execution', () => {
       expect(codesOf(withPlain)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
       expect((withPlain as any).result.valid).toBe(true);
     });
+  describe('SysmlWorkerClient endpoint context (Finding 4 review follow-up)', () => {
+    const buildStateLinkRepo = (): SysmlRepository => {
+      const repo = createEmptyRepository();
+      repo.requirements.req1 = {
+        id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+        text: 'Must hold', status: 'draft', version: '1',
+      };
+      repo.relationships.rel1 = {
+        id: 'rel1', kind: 'satisfy', sourceId: 'state-active', targetId: 'req1',
+      };
+      return repo;
+    };
+    const mapContext = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+    const plainContext = {
+      externalEndpoints: {
+        'state-active': { id: 'state-active', name: 'Active', family: 'state' as const },
+      },
+    };
+    const codesOf = (report: { diagnostics: Array<{ code: string }> }): string[] =>
+      report.diagnostics.map(d => d.code);
+
+    it('validate without context diagnoses, with Map or plain-object context resolves', async () => {
+      const client = new SysmlWorkerClient();
+
+      const blind = await client.validate(buildStateLinkRepo(), 0);
+      expect(codesOf(blind)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      const withMap = await client.validate(buildStateLinkRepo(), 0, undefined, mapContext);
+      expect(codesOf(withMap)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(withMap.valid).toBe(true);
+
+      const withPlain = await client.validate(buildStateLinkRepo(), 0, undefined, plainContext);
+      expect(codesOf(withPlain)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(withPlain.valid).toBe(true);
+
+      client.terminate();
+    });
+
+    it('project forwards endpoint context and resolves links in diagnosticCodes', async () => {
+      const client = new SysmlWorkerClient();
+
+      const blind = await client.project(buildStateLinkRepo(), 0);
+      expect(blind.diagnosticCodes).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      const withMap = await client.project(buildStateLinkRepo(), 0, undefined, mapContext);
+      expect(withMap.diagnosticCodes).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      client.terminate();
+    });
+
+    it('scheduleValidation forwards endpoint context to the validation report', async () => {
+      const client = new SysmlWorkerClient();
+      const report = await new Promise<any>((resolve, reject) => {
+        client.scheduleValidation(buildStateLinkRepo(), 0, resolve, reject, mapContext);
+      });
+      expect(codesOf(report)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(report.valid).toBe(true);
+      client.terminate();
+    });
+
+    it('posts endpointContext under the exact field the worker reads (worker path)', async () => {
+      const repo = buildStateLinkRepo();
+      for (let i = 0; i < 220; i++) {
+        repo.definitions[`pad-${i}`] = {
+          id: `pad-${i}`, name: `Pad ${i}`, kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        };
+      }
+      const captured: any[] = [];
+      const loopback = {
+        onmessage: null as any,
+        onerror: null as any,
+        postMessage(request: any) {
+          captured.push(request);
+          const response = handleWorkerMessage(request);
+          queueMicrotask(() => (this as any).onmessage?.({ data: response }));
+        },
+        terminate() {},
+      };
+      const client = new SysmlWorkerClient(() => loopback as unknown as Worker);
+
+      const report = await client.validate(repo, repo.revision, undefined, mapContext);
+      expect(codesOf(report)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(captured).toHaveLength(1);
+      // Exact field name match with the worker reader (requestEndpointContext
+      // reads `endpointContext`, with the legacy `context` alias NOT used).
+      expect(captured[0].endpointContext).toBeDefined();
+      expect(captured[0].endpointContext.externalEndpoints).toBeDefined();
+      client.terminate();
+    });
+  });
   });
 });
