@@ -162,7 +162,7 @@ import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './servi
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortToolMenu } from './components/sysml/PortToolMenu';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
-import { planOwnedPortCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
+import { planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
 import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
@@ -6077,6 +6077,20 @@ const ADIA = () => {
     action: OwnedFeatureNewTypeAction;
     error?: string;
   } | null>(null);
+  // Task 7 IBD parity (spec 3.2, 4.1): canvas Part creation plans through the
+  // same surface-agnostic property planner as Model Explorer and resumes only
+  // after an explicit type choice, mirroring the portTypePrompt flow. The
+  // pending drop coordinates and name travel with the request; cancelling
+  // performs no mutation and no type is ever selected silently.
+  const [propertyTypePrompt, setPropertyTypePrompt] = useState<{
+    ownerBlockId: string;
+    x: number;
+    y: number;
+    name: string;
+    candidates: TypeCandidate[];
+    action: OwnedFeatureNewTypeAction;
+    error?: string;
+  } | null>(null);
   const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
     impact: import('./engine/sysml/mutations').MutationImpact;
     transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
@@ -6335,6 +6349,20 @@ const ADIA = () => {
       }
     }
   }, [handleExecuteSysmlCommand, canonicalSysmlRepository]);
+
+  // Task 7 browser-gate read access (spec 6, 8.3): stable test selectors for
+  // the real save/reload path. These hooks expose production state only —
+  // the semantic token resolver and the live diagram-presentation store — so
+  // browser tests can assert token roles and override preservation without
+  // substituting the save/hydration path. They never mutate state.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__adiaTestHooks = {
+        semanticToken: (role: string) => semanticPresentationToken(role),
+        getDiagramPresentations: () => sysmlDiagramPresentations,
+      };
+    }
+  }, [sysmlDiagramPresentations]);
 
   // Report Application Delegate connected to the real report export pipeline
   const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
@@ -7648,10 +7676,27 @@ const ADIA = () => {
     try {
       // Canonical repositories are preferred; legacy imports are migrated by
       // the same loader, then all canvas views are refreshed from that model.
+      // Task 7 (spec 3.4, 4.4): State-to-Requirement relationships resolve
+      // their State endpoints by stable semantic ID against the incoming
+      // State Machine model supplied with the payload, so a legal Satisfy
+      // remains valid after hydration instead of being quarantined as an
+      // unresolved endpoint. No stale State copies are persisted: only live
+      // endpoint identities from the incoming model are supplied.
+      const incomingStates = Array.isArray(importedData.states) ? importedData.states : [];
+      const hydrationEndpoints = new Map<string, ExternalSemanticEndpoint>();
+      for (const state of incomingStates) {
+        if (state && typeof state.id === 'string' && state.id.length > 0) {
+          hydrationEndpoints.set(state.id, {
+            id: state.id,
+            name: typeof state.name === 'string' && state.name.length > 0 ? state.name : state.id,
+            family: 'state',
+          });
+        }
+      }
       applyCanonicalProjectLoad(loadCanonicalSysmlProject({
         ...importedData,
         sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
-      }));
+      }, hydrationEndpoints.size > 0 ? { externalEndpoints: hydrationEndpoints } : undefined));
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
@@ -10132,25 +10177,27 @@ const ADIA = () => {
   }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   // IBD OPERATIONS
-  const createPart = useCallback((x: number, y: number) => {
-    const blockDefs = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === 'block');
-    const targetTypeId = blockDefs.length > 0 ? blockDefs[0].id : 'Block';
+  // Task 7 (spec 3.2, 4.1): IBD Part creation offers an explicit Block type
+  // choice through the shared property planner — never the first Block
+  // definition silently. The pending drop position and name travel with the
+  // type-selection request; resume commits the same legacy usage +
+  // definition-property records with IBD placement, mirroring the
+  // portTypePrompt select/create-new-type/cancel flow.
+  const commitIbdPartAt = useCallback((typeId: string, ownerBlockId: string, x: number, y: number, name: string) => {
     const resolved = createTypedUsageCommand(canonicalSysmlRepository, {
-      ownerId: currentLayerId,
-      name: `part_${parts.length + 1}`,
-      typeId: targetTypeId,
+      ownerId: ownerBlockId,
+      name,
+      typeId,
       kind: 'part',
     });
 
     if (!resolved.ok) {
-      addError('error', resolved.message, 'SysML');
-      setPendingCreateNewTypeAction({ action: resolved.action, candidates: resolved.candidates });
+      setPropertyTypePrompt(prev => prev ? { ...prev, error: resolved.message } : null);
       return;
     }
 
-    const name = `part_${parts.length + 1}`;
     const part = createPartUsage({
-      ownerId: currentLayerId,
+      ownerId: ownerBlockId,
       typeId: resolved.type.id,
       name,
       aggregation: 'composite',
@@ -10176,12 +10223,79 @@ const ADIA = () => {
     }, currentLayerId));
 
     if (result.committed) {
+      setPropertyTypePrompt(null);
       setSelectedIds([part.id]);
       addError('info', `Created part: ${part.name}`);
     } else {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      setPropertyTypePrompt(prev => prev ? { ...prev, error: result.diagnostics[0]?.message } : null);
     }
-  }, [canonicalSysmlRepository, currentLayerId, parts, snapEnabled, handleExecuteSysmlCommand, addError, activeSysmlDiagramId]);
+  }, [canonicalSysmlRepository, currentLayerId, parts, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
+
+  const createPart = useCallback((x: number, y: number) => {
+    const plan = planOwnedPropertyCreation(canonicalSysmlRepository, {
+      ownerBlockId: currentLayerId,
+      propertyKind: 'part',
+    });
+    if (plan.outcome === 'typeSelection') {
+      setPropertyTypePrompt({
+        ownerBlockId: currentLayerId,
+        x,
+        y,
+        name: `part_${parts.length + 1}`,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+      });
+      return;
+    }
+    const msg = plan.outcome === 'error'
+      ? plan.diagnostics[0]?.message ?? 'No compatible Block type found for Part.'
+      : 'No compatible Block type found for Part.';
+    addError('error', msg, 'SysML', currentLayerId);
+  }, [canonicalSysmlRepository, currentLayerId, parts.length, addError]);
+
+  const handlePropertyTypeSelected = useCallback((typeId: string) => {
+    if (!propertyTypePrompt) return;
+    const plan = planOwnedPropertyCreation(canonicalSysmlRepository, {
+      ownerBlockId: propertyTypePrompt.ownerBlockId,
+      propertyKind: 'part',
+      typeId,
+    });
+    if (plan.outcome !== 'command') {
+      setPropertyTypePrompt(prev => prev ? {
+        ...prev,
+        candidates: plan.outcome === 'typeSelection' ? plan.request.candidates : prev.candidates,
+        action: plan.outcome === 'typeSelection' ? plan.request.action : prev.action,
+        error: plan.outcome === 'error' ? plan.diagnostics[0]?.message : prev.error,
+      } : null);
+      return;
+    }
+    commitIbdPartAt(typeId, propertyTypePrompt.ownerBlockId, propertyTypePrompt.x, propertyTypePrompt.y, propertyTypePrompt.name);
+  }, [propertyTypePrompt, canonicalSysmlRepository, commitIbdPartAt]);
+
+  const handleCreateNewTypeForProperty = useCallback(() => {
+    if (!propertyTypePrompt) return;
+    // Canonical CreateNewType mirroring handleCreateNewTypeForPort: the new
+    // type commits through the semantic gateway with no diagram presentation,
+    // and the pending Part request resumes only after the new type commits.
+    const metaclass = propertyTypePrompt.action.payload?.suggestedMetaclass;
+    const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
+    const ownerId = canonicalSysmlRepository.definitions[propertyTypePrompt.ownerBlockId]?.ownerId || 'model';
+    const siblingCount = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === elementKind).length + 1;
+    const baseName = metaclass === 'InterfaceBlock' ? 'InterfaceBlock' : metaclass === 'ValueType' ? 'ValueType' : 'Block';
+    const element = elementKind === 'interface'
+      ? createInterface({ name: `${baseName}_${siblingCount}`, ownerId })
+      : elementKind === 'valueType'
+        ? createValueTypeDefinition({ name: `${baseName}_${siblingCount}`, ownerId })
+        : createBlockDefinition({ name: `${baseName}_${siblingCount}`, ownerId });
+    const res = handleExecuteSysmlCommand({ type: 'createElement', element } as any);
+    if (!res.committed || !res.repository.definitions[element.id]) {
+      setPropertyTypePrompt(null);
+      res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
+    commitIbdPartAt(element.id, propertyTypePrompt.ownerBlockId, propertyTypePrompt.x, propertyTypePrompt.y, propertyTypePrompt.name);
+  }, [propertyTypePrompt, canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const handleCreateNewTypeAction = useCallback((action: CreateNewTypeAction) => {
     const result = handleExecuteSysmlCommand(buildCreateNewTypeCommand(action, canonicalSysmlRepository, () => uuidv4()));
@@ -14474,6 +14588,7 @@ const ADIA = () => {
         setSelectedIds([]);
         setActivePortTool(null);
         setPortTypePrompt(null);
+        setPropertyTypePrompt(null);
       }
     };
 
@@ -19506,6 +19621,18 @@ const ADIA = () => {
             onCreateNewType={handleCreateNewTypeForPort}
             onCancel={() => setPortTypePrompt(null)}
             error={portTypePrompt.error}
+          />
+        )}
+
+        {propertyTypePrompt && (
+          <TypeSelectionPrompt
+            isOpen={true}
+            featureKind={getElementKindLabel('part')}
+            candidates={propertyTypePrompt.candidates}
+            onSelectType={handlePropertyTypeSelected}
+            onCreateNewType={handleCreateNewTypeForProperty}
+            onCancel={() => setPropertyTypePrompt(null)}
+            error={propertyTypePrompt.error ?? (propertyTypePrompt.candidates.length === 0 ? 'TYPE_NOT_FOUND: No compatible existing type.' : undefined)}
           />
         )}
 
