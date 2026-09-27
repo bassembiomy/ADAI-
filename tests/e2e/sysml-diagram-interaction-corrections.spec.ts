@@ -423,19 +423,20 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     expect(dependency.sourceId).toBe(motorId);
     expect(dependency.targetId).toBe(batteryId);
 
-    // Allocate from the Motor-typed Part Property usage to Battery. The tree
-    // wizard is the explicit tool for Association/Dependency above; for a part
-    // usage it currently offers zero legal targets because the explorer V4
-    // projection does not index usage IDs (documented follow-up), so the
-    // Allocate is committed through the same real semantic gateway the wizard
-    // submits to, with explicit endpoint IDs.
-    const allocResult = await page.evaluate(({ source, target }) => {
-      return (window as any).__sysmlExecuteCommand?.({
-        type: 'createElement',
-        element: { id: `alloc-${source}-${target}`, sourceId: source, targetId: target, kind: 'allocation', name: '' },
-      });
-    }, { source: firstPartId, target: batteryId });
-    expect(allocResult.committed).toBe(true);
+    // Allocate from the Motor-typed Part Property usage to Battery through the
+    // explicit tree relationship wizard — the same explicit tool used for
+    // Association/Dependency above.
+    await filterTree(page, '');
+    const allocSourceRow = page.locator(`.model-tree-row[data-semantic-id="${firstPartId}"]`);
+    await expect(allocSourceRow).toBeVisible();
+    await allocSourceRow.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Allocation', exact: true }).click();
+    const allocWizard = relationshipWizard(page);
+    await expect(allocWizard.getByText('Target Element')).toBeVisible();
+    await expect(allocWizard.getByText('No matching target elements')).toHaveCount(0);
+    await allocWizard.getByRole('button', { name: 'Battery', exact: true }).click();
+    await allocWizard.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(allocWizard).toHaveCount(0);
     freshRels = (await repoRelationshipIds(page)).filter(id => !relsBefore.has(id));
     expect(freshRels).toHaveLength(3);
     const allocationId = freshRels.find(id => id !== associationId && id !== dependencyId)!;
@@ -613,6 +614,8 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     await page.getByRole('menuitem', { name: 'Remove from Diagram', exact: true }).click();
     await expect(tc1Presentation).toHaveCount(0);
     await expect(tc1Row).toHaveCount(1);
+    // Remove from Diagram is not deletion: it must never ask for confirmation.
+    await expect(impactDialog(page)).toHaveCount(0);
 
     // Re-present the TestCase so its deletion carries presentation impact.
     await tc1Row.click({ button: 'right' });
@@ -670,6 +673,40 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     await page.keyboard.press('Control+y');
     await expect(page.locator(`.model-tree-row[data-semantic-id="${tc1Id}"]`)).toHaveCount(0);
     expect(await page.evaluate(id => Boolean((window as any).__sysmlRepository.verificationCases[id]), tc1Id)).toBe(false);
+
+    // Presentation-only deletion still requires confirmation: tc2 carries a
+    // diagram presentation but zero relationships.
+    await filterTree(page, '');
+    const tc2Row = page.locator(`.model-tree-row[data-semantic-id="${tc2Id}"]`);
+    await tc2Row.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${tc2Id}"]`)).toBeVisible({ timeout: 10000 });
+    expect(await page.evaluate(id =>
+      (Object.values((window as any).__sysmlRepository.relationships ?? {}) as any[])
+        .filter(rel => rel.sourceId === id || rel.targetId === id).length, tc2Id)).toBe(0);
+
+    await tc2Row.click({ button: 'right' });
+    await page.locator('[role="menuitem"]:has-text("Delete from Model")').first().click();
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+    await expect(dialog).toContainText(/Affected Diagram Presentations/);
+    await expect(dialog.getByText(/Affected Relationships/)).toHaveCount(0);
+
+    // Cancel preserves the TestCase and its presentation.
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(tc2Row).toHaveCount(1);
+    expect(await page.evaluate(id => Boolean((window as any).__sysmlRepository.verificationCases[id]), tc2Id)).toBe(true);
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${tc2Id}"]`)).toHaveCount(1);
+
+    // Confirm deletes the TestCase and its presentation.
+    await tc2Row.click({ button: 'right' });
+    await page.locator('[role="menuitem"]:has-text("Delete from Model")').first().click();
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(tc2Row).toHaveCount(0);
+    expect(await page.evaluate(id => Boolean((window as any).__sysmlRepository.verificationCases[id]), tc2Id)).toBe(false);
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${tc2Id}"]`)).toHaveCount(0);
     await filterTree(page, '');
   });
 

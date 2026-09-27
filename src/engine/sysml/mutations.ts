@@ -29,6 +29,14 @@ export interface MutationImpact {
   affectedRequirementIds: string[];
   affectedBaselineIds: string[];
   blockedBaselineIds: string[];
+  /**
+   * Presentation-layer impact: `diagramId:elementId` entries for every diagram
+   * presentation removed alongside the deleted semantic elements. The engine
+   * itself owns no presentation state, so analyzeMutation reports an empty
+   * list; the gateway enriches it from its coordinates/diagramPresentations
+   * before applying the deletion-confirmation gate.
+   */
+  affectedPresentationIds: string[];
   severity: ImpactSeverity;
   affectedDiagramKinds: Array<'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' | 'package'>;
 }
@@ -84,7 +92,7 @@ export function computeTouchedProtectedBaselines(
 }
 
 export function impactSeverity(
-  impact: Pick<MutationImpact, 'affectedBaselineIds' | 'deletedElementIds' | 'requestedElementIds' | 'nestedRequirementIds' | 'removedRelationshipIds' | 'unresolvedUsageIds' | 'invalidatedEvidenceIds' | 'affectedRequirementIds'>,
+  impact: Pick<MutationImpact, 'affectedBaselineIds' | 'deletedElementIds' | 'requestedElementIds' | 'nestedRequirementIds' | 'removedRelationshipIds' | 'unresolvedUsageIds' | 'invalidatedEvidenceIds' | 'affectedRequirementIds' | 'affectedPresentationIds'>,
   authorizedBaselineIds: readonly string[] = [],
 ): ImpactSeverity {
   const authorized = new Set(authorizedBaselineIds);
@@ -94,13 +102,16 @@ export function impactSeverity(
   // request, no nested content, no affected bystanders) are safe. A
   // requirement only names itself as affected when it is the requested
   // target, so affected ids beyond the request are what force review.
+  // Presentations always force review: deleting a presented element removes
+  // visible diagram content even when zero relationships are affected.
   const needsReview =
     impact.deletedElementIds.some(id => !requested.has(id)) ||
     impact.nestedRequirementIds.length > 0 ||
     impact.removedRelationshipIds.some(id => !requested.has(id)) ||
     impact.unresolvedUsageIds.length > 0 ||
     impact.invalidatedEvidenceIds.length > 0 ||
-    impact.affectedRequirementIds.some(id => !requested.has(id));
+    impact.affectedRequirementIds.some(id => !requested.has(id)) ||
+    (impact.affectedPresentationIds ?? []).length > 0;
   return needsReview ? 'review' : 'safe';
 }
 
@@ -251,6 +262,9 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     affectedRequirementIds: [...affectedRequirements].sort(),
     affectedBaselineIds,
     affectedDiagramKinds: [...diagramKinds].sort(),
+    // Engine-level analysis owns no presentation state; the gateway enriches
+    // this list from its coordinates/diagramPresentations before gating.
+    affectedPresentationIds: [],
   };
   const severity = impactSeverity(partial);
   return {

@@ -374,6 +374,30 @@ describe('sysmlExplorerAdapter', () => {
     expect(targets.map(node => node.kind)).not.toContain('requirement');
   });
 
+  it('offers allocate targets for a part-usage source id', () => {
+    const harness = createTestHarness();
+    const vehicle: BlockDefinition = {
+      id: 'vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const battery: BlockDefinition = {
+      id: 'battery', name: 'Battery', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    harness.executeCommand({ type: 'createElement', element: vehicle });
+    harness.executeCommand({ type: 'createElement', element: battery });
+    harness.state.repository.usages['usage-motor'] = {
+      id: 'usage-motor', kind: 'part', name: 'motor', ownerId: 'vehicle', typeId: 'vehicle',
+      aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+
+    const adapter = createSysmlExplorerAdapter(harness);
+    const targets = adapter.relationshipTargets('usage-motor', 'allocation', 'outgoing');
+    expect(targets.map(node => node.semanticId)).toContain('battery');
+    const satisfyTargets = adapter.relationshipTargets('usage-motor', 'satisfy', 'outgoing');
+    expect(Array.isArray(satisfyTargets)).toBe(true);
+  });
+
   it('projects canonical containment tree with packages and blocks', () => {
     const harness = createTestHarness();
     const blk: BlockDefinition = {

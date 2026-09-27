@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
 import { applyLegacySysmlDeletion, classifyLegacyDeletionTarget, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation, toCompactImpactDelta } from './sysmlTransactionAdapter';
 import { createEmptyRepository } from '../engine/sysml/model';
+import type { MutationImpact } from '../engine/sysml/mutations';
 
 const block = (id: string, stereotype = 'block'): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] });
 const part = (id: string, owner: string, type: string, parentPartId: string | null = null, aggregation: PartData['aggregation'] = 'composite'): PartData => ({ id, name: id, blockId: owner, typeId: type, parentPartId, aggregation, x: 0, y: 0, width: 80, height: 60 });
@@ -74,6 +75,17 @@ describe('legacy UI to canonical SysML mutation adapter', () => {
     const input = { blocks: [block('a'), block('b')], parts: [], relationships: [relation('r', 'a', 'b', 'association')], connectors: [] };
     const result = applyLegacySysmlDeletion(input, ['r']);
     expect(requiresDeletionConfirmation(result.impact)).toBe(false);
+  });
+
+  it('requires impact confirmation for a presentation-only deletion with zero relationships', () => {
+    const input = { blocks: [block('a'), block('b')], parts: [], relationships: [relation('r', 'a', 'b', 'association')], connectors: [] };
+    const result = applyLegacySysmlDeletion(input, ['r']);
+    expect(requiresDeletionConfirmation(result.impact)).toBe(false);
+    // Same semantic impact plus one diagram presentation: confirmation is
+    // mandatory even though no relationship is affected (spec §4.5).
+    const presented: MutationImpact = { ...result.impact, affectedPresentationIds: ['bdd:a'] };
+    expect(requiresDeletionConfirmation(presented)).toBe(true);
+    expect(formatLegacyDeletionImpact(presented)).toContain('Affected presentations: bdd:a');
   });
 
   it('merges legacy editor changes into the canonical source while preserving evidence, baselines, and layout-insensitive revision', () => {

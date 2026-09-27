@@ -149,9 +149,30 @@ import { buildCreatePartUsageCommand } from '../../../services/sysmlPropertyComm
 import type {
   SysmlRepository,
   SysmlRelationship,
+  SysmlUsage,
   BlockDefinition,
   PartUsage,
 } from '../../../engine/sysml/model';
+
+/**
+ * Projects a V3 usage record to a V4 semantic element for relationship
+ * endpoint validation. The V4 elements index carries definitions, requirements,
+ * and verification cases but no usage ids, so without this projection a part
+ * usage source resolves to nothing and the Allocate/Satisfy tree wizards
+ * offer zero targets.
+ */
+function usageToSemanticElement(id: string, usage: SysmlUsage | undefined): SemanticElement | undefined {
+  if (!usage) return undefined;
+  const metaclass = usage.kind === 'part' ? 'PartProperty' : usage.kind === 'port' ? 'Port' : undefined;
+  if (!metaclass) return undefined;
+  return {
+    id,
+    name: usage.name,
+    metaclass,
+    namespace: [],
+    ownerId: usage.ownerId ?? null,
+  };
+}
 
 const getRequirementContainmentParents = (repo: SysmlRepository) => {
   const parents = new Map<string, string>();
@@ -1490,10 +1511,18 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       const state = getState();
       const repo = state.repository;
       const canonicalRepo: SysmlRepositoryV4 = (repo as any).elements ? (repo as any) : migrateV3ToV4(repo);
-      const source = canonicalRepo.elements[sourceId];
+      // Usage ids are absent from the V4 elements index; resolve them
+      // alongside elements so part-usage sources offer wizard targets. The
+      // resolved usage is indexed into a transient adapter-local copy because
+      // endpoint validation looks both ends up in the elements map.
+      const source: SemanticElement | undefined =
+        canonicalRepo.elements[sourceId] ?? usageToSemanticElement(sourceId, repo.usages?.[sourceId]);
       if (!source) return [];
+      const indexed: SysmlRepositoryV4 = canonicalRepo.elements[sourceId]
+        ? canonicalRepo
+        : { ...canonicalRepo, elements: { ...canonicalRepo.elements, [source.id]: source } };
 
-      const legalTargets = getLegalRelationshipTargets(source, relationshipKind, direction, canonicalRepo);
+      const legalTargets = getLegalRelationshipTargets(source, relationshipKind, direction, indexed);
       const legalTargetIds = new Set(legalTargets.map(t => t.id));
 
       const projection = this.project('containment');

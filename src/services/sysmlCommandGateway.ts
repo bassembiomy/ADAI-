@@ -29,6 +29,7 @@ import {
   analyzeMutation,
   applyCommand,
   createHistory,
+  impactSeverity,
   undo as historyUndo,
   redo as historyRedo,
   type MutationImpact,
@@ -311,6 +312,7 @@ export function computeImpactHash(impact: MutationImpact): string {
     inval: [...impact.invalidatedEvidenceIds].sort(),
     affReq: [...impact.affectedRequirementIds].sort(),
     affBase: [...impact.affectedBaselineIds].sort(),
+    affPres: [...(impact.affectedPresentationIds ?? [])].sort(),
     blocked: [...(impact.blockedBaselineIds ?? [])].sort(),
     severity: (impact as { severity?: string }).severity ?? 'review',
   });
@@ -320,6 +322,28 @@ export function computeImpactHash(impact: MutationImpact): string {
     h = Math.imul(h, 16777619);
   }
   return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Presentation-layer deletion impact: `diagramId:elementId` entries for every
+ * diagram presentation removed alongside the deleted semantic elements. This
+ * mirrors the presentation list the explorer adapter projects for the impact
+ * dialog, so the confirmation gate and the dialog agree on what is affected.
+ * `removeFromDiagram` never flows through here, so presentation removal alone
+ * stays confirmation-free by construction.
+ */
+export function collectAffectedPresentationIds(
+  deletedElementIds: readonly string[],
+  diagramPresentations: Record<string, DiagramPresentationInput> | undefined,
+): string[] {
+  const deleted = new Set(deletedElementIds);
+  const affected = new Set<string>();
+  for (const [diagramId, presentation] of Object.entries(diagramPresentations ?? {})) {
+    for (const elementId of presentation?.elementIds ?? []) {
+      if (deleted.has(elementId)) affected.add(`${diagramId}:${elementId}`);
+    }
+  }
+  return [...affected].sort();
 }
 
 function formatMultiplicityText(m?: Multiplicity): string {
@@ -2060,7 +2084,18 @@ export function executeSysmlCommand(
         redoStack: state.redoStack,
       };
     }
-    const impact = analyzeMutation(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
+    const analyzed = analyzeMutation(state.repository, { kind: 'deleteElements', elementIds: command.elementIds });
+    // Presentation-layer impact threads into the confirmation gate: a TestCase
+    // (or any element) with diagram presentations but zero relationships must
+    // still require impact confirmation (spec §4.5). The engine owns no
+    // presentation state, so the gateway enriches the impact here and
+    // re-derives severity before gating.
+    const affectedPresentationIds = collectAffectedPresentationIds(analyzed.deletedElementIds, diagramPresentations);
+    const impact: MutationImpact = {
+      ...analyzed,
+      affectedPresentationIds,
+      severity: impactSeverity({ ...analyzed, affectedPresentationIds }),
+    };
     const authorized = new Set(command.authorizedBaselineIds ?? []);
     const unauthorizedBaselines = impact.affectedBaselineIds.filter(id => !authorized.has(id));
 

@@ -133,14 +133,17 @@ export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
   const requested = new Set(impact.requestedElementIds);
   // Bible §7 matrix: leaf/unreferenced targets need no confirmation. Affected
   // requirement ids only force confirmation when they name bystanders beyond
-  // the request itself.
+  // the request itself. Presentations always force confirmation: deleting a
+  // presented element removes visible diagram content even when zero
+  // relationships are affected (spec §4.5).
   return impact.deletedElementIds.some(id => !requested.has(id))
     || impact.nestedRequirementIds.length > 0
     || impact.removedRelationshipIds.some(id => !requested.has(id))
     || impact.unresolvedUsageIds.length > 0
     || impact.invalidatedEvidenceIds.length > 0
     || impact.affectedRequirementIds.some(id => !requested.has(id))
-    || impact.affectedBaselineIds.length > 0;
+    || impact.affectedBaselineIds.length > 0
+    || (impact.affectedPresentationIds ?? []).length > 0;
 }
 
 export function formatLegacyDeletionImpact(impact: MutationImpact): string {
@@ -156,6 +159,7 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
     `Nested requirements: ${impact.nestedRequirementIds.join(', ') || 'none'}`,
     `Removed relationships: ${impact.removedRelationshipIds.join(', ') || 'none'}`,
     `Affected diagrams: ${impact.affectedDiagramKinds.join(', ') || 'none'}`,
+    `Affected presentations: ${(impact.affectedPresentationIds ?? []).join(', ') || 'none'}`,
     `Affected requirements: ${impact.affectedRequirementIds.join(', ') || 'none'}`,
     `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
     `Invalidated evidence: ${impact.invalidatedEvidenceIds.join(', ') || 'none'}`,
