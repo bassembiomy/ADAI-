@@ -141,12 +141,30 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
   }, [edges, nodes, block.id, history]);
 
   const displayData = React.useMemo(() => {
-    if (timeRange === 'auto' || history.length === 0) return history;
-    const limit = Number(timeRange);
-    if (isNaN(limit)) return history;
-    const maxTime = history[history.length - 1].t;
-    return history.filter((pt: any) => pt.t >= maxTime - limit);
-  }, [history, timeRange]);
+    if (history.length === 0) return history;
+    const maxPoints = Math.max(100, Math.min(2000, Number(block.params?.bufferSize || 1000)));
+    let filtered = history;
+    if (timeRange !== 'auto') {
+      const limit = Number(timeRange);
+      if (!isNaN(limit)) {
+        const maxTime = history[history.length - 1].t;
+        filtered = history.filter((pt: any) => pt.t >= maxTime - limit);
+      }
+    }
+    // Cap display points to bounded window to prevent rendering thread freeze
+    if (filtered.length > maxPoints) {
+      const stride = Math.ceil(filtered.length / maxPoints);
+      const downsampled = [];
+      for (let i = 0; i < filtered.length; i += stride) {
+        downsampled.push(filtered[i]);
+      }
+      if (downsampled[downsampled.length - 1] !== filtered[filtered.length - 1]) {
+        downsampled.push(filtered[filtered.length - 1]);
+      }
+      return downsampled;
+    }
+    return filtered;
+  }, [history, timeRange, block.params?.bufferSize]);
 
   const [showSettings, setShowSettings] = React.useState(false);
 

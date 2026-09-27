@@ -17,6 +17,7 @@ import {
   type XBRuntime,
 } from './xbInterpreter';
 import { normalizeLogicalTick } from './smTiming';
+import { coerceTypedValue } from './smTypedValue';
 
 export interface SemanticRuntimeError {
   code:
@@ -138,44 +139,11 @@ const evaluateExpression = (
 export const coerceSemanticValue = (
   value: number | boolean,
   type: VariableType,
+  policy: 'saturate' | 'error' = 'saturate',
 ): number | boolean => {
-  if (type === 'bool') return Boolean(value);
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    throw new Error(`cannot coerce non-finite value to '${type}'`);
-  }
-  switch (type) {
-    case 'float':
-    case 'single':
-      return Math.fround(numeric);
-    case 'double':
-      return numeric;
-    case 'int8':
-      return (Math.trunc(numeric) << 24) >> 24;
-    case 'uint8':
-      return Math.trunc(numeric) & 0xFF;
-    case 'int16':
-      return (Math.trunc(numeric) << 16) >> 16;
-    case 'uint16':
-      return Math.trunc(numeric) & 0xFFFF;
-    case 'int':
-    case 'int32':
-      return Math.trunc(numeric) | 0;
-    case 'uint':
-    case 'uint32':
-      return Math.trunc(numeric) >>> 0;
-    case 'int64':
-    case 'uint64': {
-      const integer = Math.trunc(numeric);
-      if (
-        !Number.isSafeInteger(integer)
-        || (type === 'uint64' && integer < 0)
-      ) {
-        throw new Error(`value '${numeric}' is outside deterministic '${type}' range`);
-      }
-      return integer;
-    }
-  }
+  const result = coerceTypedValue(value, type, policy);
+  if (result.error !== undefined) throw new Error(result.error);
+  return result.value;
 };
 
 const runActions = (
@@ -196,6 +164,7 @@ const runActions = (
     context.runtime.data[action.target] = coerceSemanticValue(
       value,
       target.type,
+      target.overflowPolicy,
     );
   }
   context.actions.push(traceLabel);

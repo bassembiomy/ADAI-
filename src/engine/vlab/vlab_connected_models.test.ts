@@ -84,7 +84,7 @@ describe('V-Lab connected reference models', () => {
         edge('sensor-scope', 'sensor', 't_s', 'scope', 'in1_t'),
       ],
     });
-    expect(result.readings.at(-1)).toBeCloseTo(350, 6);
+    expect(result.readings.at(-1)).toBeCloseTo(350 - 293.15, 6);
   });
 
   it('propagates a physical signal through a gain block to the scope', () => {

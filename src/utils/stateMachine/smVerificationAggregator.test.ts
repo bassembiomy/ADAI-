@@ -92,6 +92,26 @@ describe('smVerificationAggregator fail-closed acceptance policy', () => {
     expect(evaluated.overallStatus).toBe('NOT_RUN');
   });
 
+  it('rejects unsupported sanitizer tooling when the mandatory sanitizer gate is NOT_RUN', () => {
+    const activities = makeAllPassActivities();
+    activities.sanitizers = {
+      ...makeActivity('sanitizers', 'NOT_RUN', 'Sanitizer tooling is unavailable on this host'),
+      details: { supported: false },
+    };
+
+    const evaluated = deriveAcceptance({
+      schemaVersion: 1,
+      modelHash: 'hash_abc123',
+      generatedAt: new Date().toISOString(),
+      overallStatus: 'PASS',
+      acceptance: false,
+      activities,
+    });
+
+    expect(evaluated.acceptance).toBe(false);
+    expect(evaluated.overallStatus).toBe('NOT_RUN');
+  });
+
   it('rejects bundle if MC/DC coverage is NOT_APPLICABLE when MC/DC is required for safety', () => {
     const activities = makeAllPassActivities();
     activities['mcdc-coverage'] = makeActivity('mcdc-coverage', 'NOT_APPLICABLE');

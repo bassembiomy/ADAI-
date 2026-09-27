@@ -247,7 +247,24 @@ export function VirtualizedTraceabilityGrid({
                     style={{ width: headers[1].width }}
                   >
                     <div className="flex flex-col gap-0.5 truncate">
-                      {row.parents && row.parents.length > 0 && (
+                      {/* Containment Parents */}
+                      {row.containmentParents && row.containmentParents.length > 0 ? (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Contained:</span>
+                          {row.containmentParents.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(p.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-blue-900/50 bg-blue-950/40 px-1 text-blue-300 text-[10px] truncate hover:border-blue-500"
+                              title={`Contained By: [${p.requirementId}] ${p.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-blue-400">«containment»</span>
+                              <span className="font-mono text-orange-300">{p.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : row.parents && row.parents.length > 0 && (
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">P:</span>
                           {row.parents.map(p => (
@@ -264,7 +281,25 @@ export function VirtualizedTraceabilityGrid({
                           ))}
                         </div>
                       )}
-                      {row.children && row.children.length > 0 && (
+
+                      {/* Containment Children */}
+                      {row.containmentChildren && row.containmentChildren.length > 0 ? (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Contains:</span>
+                          {row.containmentChildren.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(c.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-purple-900/50 bg-purple-950/40 px-1 text-purple-300 text-[10px] truncate hover:border-purple-500"
+                              title={`Contains: [${c.requirementId}] ${c.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-purple-400">«containment»</span>
+                              <span className="font-mono text-orange-300">{c.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : row.children && row.children.length > 0 && (
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">C:</span>
                           {row.children.map(c => (
@@ -281,7 +316,131 @@ export function VirtualizedTraceabilityGrid({
                           ))}
                         </div>
                       )}
-                      {(!row.parents || row.parents.length === 0) && (!row.children || row.children.length === 0) && (
+
+                      {/* Derived From */}
+                      {row.derivedFrom && row.derivedFrom.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Derived:</span>
+                          {row.derivedFrom.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(d.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
+                              title={`Derived From: [${d.requirementId}] ${d.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-cyan-400">«deriveReqt»</span>
+                              <span className="font-mono text-orange-300">{d.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Derived Requirements */}
+                      {row.derivedRequirements && row.derivedRequirements.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">DerivedReq:</span>
+                          {row.derivedRequirements.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(d.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
+                              title={`Derived Req: [${d.requirementId}] ${d.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-cyan-400">«deriveReqt»</span>
+                              <span className="font-mono text-orange-300">{d.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Copied From */}
+                      {row.copiedFrom && row.copiedFrom.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Copied:</span>
+                          {row.copiedFrom.map(cp => (
+                            <button
+                              key={cp.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(cp.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-pink-900/50 bg-pink-950/40 px-1 text-pink-300 text-[10px] truncate hover:border-pink-500"
+                              title={`Copied From: [${cp.requirementId}] ${cp.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-pink-400">«copy»</span>
+                              <span className="font-mono text-orange-300">{cp.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Copied Requirements */}
+                      {row.copiedRequirements && row.copiedRequirements.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Copies:</span>
+                          {row.copiedRequirements.map(cp => (
+                            <button
+                              key={cp.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(cp.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-pink-900/50 bg-pink-950/40 px-1 text-pink-300 text-[10px] truncate hover:border-pink-500"
+                              title={`Copy Req: [${cp.requirementId}] ${cp.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-pink-400">«copy»</span>
+                              <span className="font-mono text-orange-300">{cp.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Refined By */}
+                      {row.refinedBy && row.refinedBy.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Refined:</span>
+                          {row.refinedBy.map(rf => (
+                            <button
+                              key={rf.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(rf.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-amber-900/50 bg-amber-950/40 px-1 text-amber-300 text-[10px] truncate hover:border-amber-500"
+                              title={`Refined By: ${rf.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-amber-400">«refine»</span>
+                              <span>{rf.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Traced Elements */}
+                      {row.tracedElements && row.tracedElements.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Traced:</span>
+                          {row.tracedElements.map(tr => (
+                            <button
+                              key={tr.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(tr.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-teal-900/50 bg-teal-950/40 px-1 text-teal-300 text-[10px] truncate hover:border-teal-500"
+                              title={`Traced: ${tr.name}`}
+                            >
+                              <span className="font-mono text-[9px] text-teal-400">«trace»</span>
+                              <span>{tr.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {(!row.parents || row.parents.length === 0) &&
+                       (!row.children || row.children.length === 0) &&
+                       (!row.containmentParents || row.containmentParents.length === 0) &&
+                       (!row.containmentChildren || row.containmentChildren.length === 0) &&
+                       (!row.derivedFrom || row.derivedFrom.length === 0) &&
+                       (!row.derivedRequirements || row.derivedRequirements.length === 0) &&
+                       (!row.copiedFrom || row.copiedFrom.length === 0) &&
+                       (!row.copiedRequirements || row.copiedRequirements.length === 0) &&
+                       (!row.refinedBy || row.refinedBy.length === 0) &&
+                       (!row.tracedElements || row.tracedElements.length === 0) && (
                         <span className="text-neutral-600 italic text-[10px]">None</span>
                       )}
                     </div>
@@ -329,7 +488,21 @@ export function VirtualizedTraceabilityGrid({
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate"
                     style={{ width: headers[4].width }}
                   >
-                    {row.coveringBlocks && row.coveringBlocks.length > 0 ? (
+                    {row.satisfiedBy && row.satisfiedBy.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 truncate">
+                        {row.satisfiedBy.map(cb => (
+                          <button
+                            key={cb.id}
+                            type="button"
+                            onClick={e => { e.stopPropagation(); onNavigate?.(cb.id); }}
+                            className="inline-flex items-center gap-0.5 rounded border border-emerald-900/50 bg-emerald-950/40 px-1 text-emerald-300 text-[10px] truncate hover:border-emerald-500"
+                          >
+                            <span className="text-[9px] text-emerald-400 font-mono">«{cb.kind}»</span>
+                            <span>{cb.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : row.coveringBlocks && row.coveringBlocks.length > 0 ? (
                       <div className="flex flex-wrap gap-1 truncate">
                         {row.coveringBlocks.map(cb => (
                           <button
@@ -383,7 +556,19 @@ export function VirtualizedTraceabilityGrid({
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate text-[11px]"
                     style={{ width: headers[6].width }}
                   >
-                    {row.verificationCases.length > 0 ? (
+                    {row.verifiedBy && row.verifiedBy.length > 0 ? (
+                      row.verifiedBy.map(v => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={e => { e.stopPropagation(); onNavigate?.(v.id); }}
+                          className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
+                        >
+                          <span className="text-[9px] text-cyan-400 font-mono">«verify»</span>
+                          <span>{v.name}</span>
+                        </button>
+                      ))
+                    ) : row.verificationCases.length > 0 ? (
                       row.verificationCases.map(vc => (
                         <button
                           key={vc}

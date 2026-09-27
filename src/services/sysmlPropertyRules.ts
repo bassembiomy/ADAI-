@@ -1,7 +1,78 @@
 import { parseMultiplicity } from '../engine/sysml/model';
-import type { BlockData, RelationshipData, ValuePropertyData } from '../types/sysml_types';
+import type { BlockData, PartData, RelationshipData, ValuePropertyData } from '../types/sysml_types';
 
 export interface PropertyValidationResult { valid: boolean; codes: string[]; messages: string[]; }
+
+/** Return true only when an edit introduces a validation category that was not already present. */
+export function introducesNewValidationCodes(
+  current: PropertyValidationResult,
+  candidate: PropertyValidationResult,
+): boolean {
+  const existingCodes = new Set(current.codes);
+  return candidate.codes.some(code => !existingCodes.has(code));
+}
+
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const OPERATION = /^[A-Za-z_][A-Za-z0-9_]*(?:\s*\([^\n]*\))?(?:\s*:\s*[A-Za-z_][A-Za-z0-9_:]*)?$/;
+const REQUIREMENT_ID = /^[A-Za-z][A-Za-z0-9._-]*$/;
+const PORT_DIRECTIONS = new Set(['in', 'out', 'inout']);
+const REQUIREMENT_STATUSES = new Set(['Draft', 'Approved', 'Implemented', 'Verified', 'Failed', 'Stale', 'Retired']);
+
+/** Project a typed part usage into its owning block's SysML part property. */
+export function syncPartProperty(blocks: readonly BlockData[], part: PartData): BlockData[] {
+  if (!part.blockId || !part.typeId) return [...blocks];
+  const type = blocks.find(item => item.id === part.typeId);
+  if (!type) return [...blocks];
+  return blocks.map(block => {
+    if (block.id !== part.blockId) return block;
+    const projected: ValuePropertyData = {
+      id: part.id,
+      name: part.name,
+      type: type.name,
+      typeId: type.id,
+      kind: 'part',
+      multiplicity: part.multiplicity || '1',
+    };
+    const properties = block.properties.filter(property => property.id !== part.id);
+    return { ...block, properties: [...properties, projected] };
+  });
+}
+
+export function removePartProperty(blocks: readonly BlockData[], partId: string): BlockData[] {
+  return blocks.map(block => ({ ...block, properties: block.properties.filter(property => property.id !== partId) }));
+}
+
+export function validateLegacyBlockEdit(
+  blocks: readonly BlockData[], relationships: readonly RelationshipData[], blockId: string,
+): PropertyValidationResult {
+  const block = blocks.find(item => item.id === blockId);
+  if (!block) return { valid: false, codes: ['BLOCK_NOT_FOUND'], messages: [`Block ${blockId} does not exist`] };
+  const codes: string[] = [];
+  const messages: string[] = [];
+  const add = (code: string, message: string) => { codes.push(code); messages.push(message); };
+  if (!IDENTIFIER.test(block.name.trim())) add('INVALID_BLOCK_NAME', `Block name "${block.name}" must be a valid SysML identifier`);
+  const duplicateName = blocks.find(item => item.id !== block.id && item.name === block.name && JSON.stringify(item.namespace ?? []) === JSON.stringify(block.namespace ?? []));
+  if (duplicateName) add('DUPLICATE_BLOCK_NAME', `Block name "${block.name}" is already used in this namespace`);
+  if ((block.namespace ?? []).some(segment => !IDENTIFIER.test(segment))) add('INVALID_NAMESPACE', 'Namespace segments must be valid SysML identifiers');
+  if (block.stereotype === 'requirement') {
+    if (!block.reqId || !REQUIREMENT_ID.test(block.reqId)) add('INVALID_REQUIREMENT_ID', `Requirement ID "${block.reqId || ''}" is invalid`);
+    if (block.status && !REQUIREMENT_STATUSES.has(block.status)) add('INVALID_REQUIREMENT_STATUS', `Requirement status "${block.status}" is not supported`);
+  }
+  for (const operation of block.operations) {
+    if (!OPERATION.test(operation.trim())) add('INVALID_OPERATION_SIGNATURE', `Operation "${operation}" is not a valid SysML signature`);
+  }
+  for (const constraint of block.constraints) {
+    if (!constraint.trim()) add('EMPTY_CONSTRAINT', 'Constraints cannot be empty');
+  }
+  for (const port of block.ports) {
+    if (!IDENTIFIER.test(port.name.trim())) add('INVALID_PORT_NAME', `Port name "${port.name}" must be a valid SysML identifier`);
+    if (!port.type.trim()) add('MISSING_PORT_TYPE', `Port ${port.name || port.id} must have a type`);
+    if (port.direction && !PORT_DIRECTIONS.has(port.direction)) add('INVALID_PORT_DIRECTION', `Port ${port.name || port.id} has invalid direction ${port.direction}`);
+  }
+  const propertyResult = validateLegacyBlockProperties(blocks, relationships, blockId);
+  propertyResult.codes.forEach((code, index) => add(code, propertyResult.messages[index] ?? code));
+  return { valid: codes.length === 0, codes: [...new Set(codes)], messages };
+}
 
 export function validateLegacyBlockProperties(
   blocks: readonly BlockData[], relationships: readonly RelationshipData[], blockId: string,
@@ -14,13 +85,18 @@ export function validateLegacyBlockProperties(
   const names = new Set<string>();
   const inherited = inheritedProperties(blocks, relationships, blockId);
   for (const property of block.properties) {
+    if (!IDENTIFIER.test(property.name.trim())) add('INVALID_PROPERTY_NAME', `Property name "${property.name}" must be a valid SysML identifier`);
     if (names.has(property.name)) add('DUPLICATE_PROPERTY_NAME', `Property name ${property.name} is duplicated`);
     names.add(property.name);
     let parsed: ReturnType<typeof parseMultiplicity> | undefined;
     try { parsed = parseMultiplicity(property.multiplicity || '1'); } catch { add('INVALID_MULTIPLICITY', `${property.name} has invalid multiplicity ${property.multiplicity}`); }
     const typeId = property.typeId || property.type;
     const type = blocks.find(item => item.id === typeId || item.name === typeId);
-    if (!type || !validType(property.kind || 'value', type.stereotype)) add('INVALID_PROPERTY_TYPE', `${property.name} has incompatible type ${typeId}`);
+    if (!type) {
+      add('INVALID_PROPERTY_TYPE', `${property.name || 'Property'} references non-existent type ${typeId || '(unresolved)'}`);
+    } else if (!validType(property.kind || 'value', type.stereotype)) {
+      add('INVALID_PROPERTY_TYPE', `${property.name || 'Property'} has incompatible type ${type.name} «${type.stereotype}» for ${property.kind || 'value'} property`);
+    }
     if (property.redefinesId) {
       const original = inherited.find(item => item.id === property.redefinesId);
       if (!original || (original.kind || 'value') !== (property.kind || 'value') || (original.typeId || original.type) !== typeId || !parsed || !multiplicityAtMost(parsed, safeParse(original.multiplicity))) {
@@ -55,7 +131,7 @@ export function inheritedProperties(blocks: readonly BlockData[], relationships:
 export function formatLegacyProperty(property: ValuePropertyData): string {
   const modifiers = [property.ordered ? 'ordered' : '', property.unique === false ? 'nonunique' : property.unique ? 'unique' : ''].filter(Boolean);
   return [
-    `${property.isDerived ? '/' : ''}${property.name}: ${property.typeId || property.type} [${property.multiplicity || '1'}]`,
+    `${property.isDerived ? '/' : ''}${property.name}: ${property.type || property.typeId} [${property.multiplicity || '1'}]`,
     modifiers.length ? `{${modifiers.join(', ')}}` : '',
     `«${property.kind || 'value'}»`,
     property.unit ? `{unit=${property.unit}}` : '',

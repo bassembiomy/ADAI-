@@ -1,4 +1,4 @@
-import type { VariableType } from '../../types/sm_types';
+import type { VariableOverflowPolicy, VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type {
   ModelDiagnostic,
@@ -108,6 +108,7 @@ export interface SemanticVariable {
   name: string;
   cName: string;
   type: VariableType;
+  overflowPolicy?: VariableOverflowPolicy;
   initialValue: number | boolean;
 }
 

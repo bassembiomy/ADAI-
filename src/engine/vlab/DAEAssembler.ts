@@ -60,11 +60,20 @@ export class DAEAssembler {
       for (const domain of VLAB_LIBRARY) {
         const block = domain.blocks.find(b => b.id === blockType);
         if (block) {
-          return block.ports.map(p => ({
-            id: p.id,
-            domain: (p.domain || domain.type).toLowerCase() as PhysicalDomain,
-            pos: p.pos
-          }));
+          return block.ports.map(p => {
+            let d = p.domain;
+            if (!d) {
+              const pid = p.id.toLowerCase();
+              if (['ctrl', 'src', 'phi'].includes(pid)) d = 'Physical';
+              else if (domain.type === 'Magnetic' && (pid === 'n' || pid === 's')) d = 'Magnetic';
+              else d = domain.type;
+            }
+            return {
+              id: p.id,
+              domain: d.toLowerCase() as PhysicalDomain,
+              pos: p.pos
+            };
+          });
         }
       }
       return [];
@@ -254,18 +263,26 @@ export class DAEAssembler {
       }
 
       const isPhysicalOutputPort = (portId: string) => {
-        if (blockType === 'lms_adaptive_filter' && ['x', 'd', 'lr'].includes(portId)) return false;
-        if (blockType === 'neural_neuron_learning' && ['x1', 'x2', 'target', 'lr'].includes(portId)) return false;
-        if (blockType === 'rl_q_learning_controller' && ['error', 'reward', 'reset'].includes(portId)) return false;
-        if (blockType === 'ac_motor_pid_control' && ['w_ref', 'tl'].includes(portId)) return false;
+        const id = portId.toLowerCase();
+        if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
+            id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
+          return false;
+        }
+        if (['n', 's', 'p', 'p1', 'p2', 'n1', 'n2', 'r', 'c', 'r1', 'r2', 'c1', 'c2', 's1', 's2', 'a', 'b'].includes(id) &&
+            !['v_sensor', 'i_sensor', 'temp_sensor', 'heat_sensor', 'heat_flow_sensor', 'pressure_sensor', 'flow_sensor'].includes(blockType)) {
+          return false;
+        }
+        if (blockType === 'lms_adaptive_filter' && ['x', 'd', 'lr'].includes(id)) return false;
+        if (blockType === 'neural_neuron_learning' && ['x1', 'x2', 'target', 'lr'].includes(id)) return false;
+        if (blockType === 'rl_q_learning_controller' && ['error', 'reward', 'reset'].includes(id)) return false;
+        if (blockType === 'ac_motor_pid_control' && ['w_ref', 'tl'].includes(id)) return false;
 
         const key = `${blockId}_${portId}`;
         const pos = nodePortPositions.get(key);
         if (pos === 'right' || pos === 'bottom') {
           return true;
         }
-        const id = portId.toLowerCase();
-        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'p', 'f', 'x', 'h', 'm', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps'].includes(id) || 
+        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'p', 'f', 'x', 'h', 'm', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps', 'phi'].includes(id) || 
                id.startsWith('out') || id.startsWith('signal');
       };
 
@@ -308,11 +325,19 @@ export class DAEAssembler {
       case 'gas_pressure_source':
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
         break;
+      case 'gas_pressure_sensor':
+        branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: 1 }] });
+        break;
+      case 'gas_flow_sensor':
+        branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+        break;
       case 'gas_rotational_conv':
+        // Positive torque is defined from gas port a toward h when Pa > Ph.
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
       case 'gas_translational_conv':
+        // Positive force is defined from gas port a toward h when Pa > Ph.
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
@@ -334,8 +359,12 @@ export class DAEAssembler {
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
       case 'mag_flux_sensor':
+        branches.push({ name: 'flux', ports: [{ id: 'n', sign: -1 }, { id: 's', sign: 1 }] });
+        branches.push({ name: 'signal_phi', ports: [{ id: 'phi', sign: 1 }] });
+        break;
       case 'mag_mmf_sensor':
         branches.push({ name: 'flux', ports: [{ id: 'n', sign: -1 }, { id: 's', sign: 1 }] });
+        branches.push({ name: 'signal_f', ports: [{ id: 'f', sign: 1 }] });
         break;
       case 'luenberger_observer':
         states.push('xhat');
@@ -431,11 +460,17 @@ export class DAEAssembler {
         case 'rot_hard_stop':
         case 'torque_sensor':
         case 'torque_source':
+        case 'ang_vel_source':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
           break;
         case 'gear_box':
-          branches.push({ name: 'torque1', ports: [{ id: 'r1', sign: -1 }, { id: 'c1', sign: 1 }] });
-          branches.push({ name: 'torque2', ports: [{ id: 'r2', sign: -1 }, { id: 'c2', sign: 1 }] });
+          if (ports.includes('r1') || ports.includes('c1')) {
+            branches.push({ name: 'torque1', ports: [{ id: 'r1', sign: -1 }, { id: 'c1', sign: 1 }] });
+            branches.push({ name: 'torque2', ports: [{ id: 'r2', sign: -1 }, { id: 'c2', sign: 1 }] });
+          } else {
+            branches.push({ name: 'torque1', ports: [{ id: 's1', sign: -1 }] });
+            branches.push({ name: 'torque2', ports: [{ id: 's2', sign: -1 }] });
+          }
           break;
         case 'mass':
           branches.push({ name: 'force', ports: [{ id: 'p', sign: -1 }] });
@@ -470,11 +505,17 @@ export class DAEAssembler {
           break;
 
         case 'thermal_mass':
-        case 'heat_src':
         case 'temp_src':
+          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          break;
+        case 'heat_src':
         case 'ctrl_heat_src':
         case 'ctrl_temp_src':
-          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          if (ports.includes('b')) {
+            branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          } else {
+            branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          }
           break;
         case 'magnetron':
         case 'upper_heater':
@@ -737,7 +778,9 @@ export class DAEAssembler {
       if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
         const ports = nodePorts.get(node.id) || [];
         let targetVal = 0;
-        if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
+        if (type === 'gas_ref') {
+          targetVal = 101325;
+        } else if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
           const params = (node.data as any)?.params || {};
           const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
           const pRefUnit = (params?.referencePressure?.unit || 'Pa');
@@ -878,7 +921,7 @@ export class DAEAssembler {
             if (matchingBranchIdx === -1 && sourceBranchIndices.length > 0) {
               if (sourceType === 'force_source' || sourceType === 'force_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'force' || b.name.includes('force'));
-              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor') {
+              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor' || sourceType === 'ang_vel_source') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'torque' || b.name.includes('torque'));
               } else if (sourceType === 'current_source' || sourceType === 'controlled_current' || sourceType === 'current_sensor' || sourceType === 'ideal_current_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'current' || b.name.includes('current'));
@@ -886,6 +929,10 @@ export class DAEAssembler {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('heat') || b.name.includes('signal_t'));
               } else if (sourceType === 'mass_flow_src' || sourceType === 'ctrl_mass_flow') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('mass_flow'));
+              } else if (sourceType === 'mag_flux_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_phi' || b.name.includes('phi'));
+              } else if (sourceType === 'mag_mmf_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name.includes('f'));
               }
             }
 

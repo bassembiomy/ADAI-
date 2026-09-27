@@ -113,7 +113,7 @@ export class SysmlWorkerClient {
     if (response.success) {
       pending.resolve(response.result);
     } else {
-      pending.reject(new Error(response.error || 'Worker request failed'));
+      pending.reject(new Error((response as any).error || 'Worker request failed'));
     }
   }
 
@@ -157,20 +157,24 @@ export class SysmlWorkerClient {
 
     const request = createRequest(requestId);
 
-    // Fast path: if payload is small or no WebWorker instance available, compute synchronously
+    // Fast path: if payload is small, compute synchronously.
     const count = entityCount ?? ('payload' in request ? this.countEntities((request as any).payload) : 0);
-    if (!this.worker || !shouldRunInWorker(count)) {
-      if (!this.worker && shouldRunInWorker(count)) {
-        this.isMainThreadFallback = true;
-        this.fallbackReason = this.fallbackReason || 'Worker unavailable: falling back to main-thread processing for large model';
-      }
+    const runInWorker = shouldRunInWorker(count);
+
+    if (!this.worker && runInWorker) {
+      this.isMainThreadFallback = false;
+      this.fallbackReason = 'Worker unavailable: large model processing exceeds main-thread safety threshold';
+      throw new Error('Worker unavailable: large model processing exceeds main-thread safety threshold. Please enable Web Workers to prevent UI freeze.');
+    }
+
+    if (!this.worker || !runInWorker) {
       const t0 = performance.now();
       const response = handleWorkerMessage(request);
       this.lastTaskDurationMs = performance.now() - t0;
       if (response.success) {
         return response.result as T;
       }
-      throw new Error(response.error || 'Execution failed');
+      throw new Error((response as any).error || 'Execution failed');
     }
 
     // Off-thread path via WebWorker

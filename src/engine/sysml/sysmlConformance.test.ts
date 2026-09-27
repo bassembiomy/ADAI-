@@ -60,7 +60,11 @@ describe('SysML 1.6 BDD/IBD/Requirements/RTM representative lifecycle', () => {
     repo = loadRepository(serializeRepository(second.repository)).repository;
     expect(repo.definitions.Controller.name).toBe('Renamed Controller');
 
-    const deletion = applyCommand(repo, { kind: 'deleteElements', elementIds: ['System'] });
+    // Task 6: the repo carries frozen protected baselines (BL-1/BL-2), so the
+    // destructive mutation requires explicit baseline authorization; the
+    // cascade itself is unchanged (composite-only, definitions preserved).
+    const deletion = applyCommand(repo, { kind: 'deleteElements', elementIds: ['System'] }, { authorizedBaselineIds: ['BL-1', 'BL-2'] });
+    expect(deletion.applied).toBe(true);
     expect(deletion.repository.usages.controller).toBeUndefined();
     expect(deletion.repository.definitions.Controller).toBeDefined();
     const history = { past: [repo], present: deletion.repository, future: [] };

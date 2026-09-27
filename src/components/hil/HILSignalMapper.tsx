@@ -103,7 +103,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
   };
 
   return (
-    <div className="bg-[#121212] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
+    <div className="hil-panel ui-card bg-[#121212] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
       <div className="flex justify-between items-center mb-4 shrink-0">
         <div>
           <h2 className="text-md font-bold text-[#e0e0e0] flex items-center gap-2">
@@ -116,7 +116,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
       </div>
 
       {/* Add Mapping Form */}
-      <div className="bg-[#181818] border border-[#252525] rounded-lg p-3 mb-4 shrink-0 space-y-3">
+      <div className="hil-target-card ui-card bg-[#181818] border border-[#252525] rounded-lg p-3 mb-4 shrink-0 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           {/* ADIA Variable Selection */}
           <div>
@@ -124,7 +124,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
             <select
               value={selectedVar}
               onChange={(e) => setSelectedVar(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+              className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               <option value="">-- Select Variable --</option>
               {availableVariables.map((v) => (
@@ -149,7 +149,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                   setDirection(ch.direction === 'In' ? 'read' : 'write');
                 }
               }}
-              className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+              className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               <option value="">-- Select Channel --</option>
               {channels.map((ch) => (
@@ -171,7 +171,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                 setDirection(e.target.value as 'read' | 'write');
                 setSafeValueError(null);
               }}
-              className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+              className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               <option value="read">HW &rarr; ADIA (Input)</option>
               <option value="write">ADIA &rarr; HW (Output)</option>
@@ -191,7 +191,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
               placeholder="e.g. x * 3.3 / 4095"
               value={conversionExpr}
               onChange={(e) => setConversionExpr(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white placeholder-gray-700 focus:outline-none focus:border-[#f97316]"
+              className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white placeholder-gray-700 focus:outline-none focus:border-[#f97316]"
             />
           </div>
 
@@ -203,7 +203,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                 placeholder="0 / false"
                 value={safeValue}
                 onChange={(e) => { setSafeValue(e.target.value); setSafeValueError(null); }}
-                className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white placeholder-gray-700 focus:outline-none focus:border-[#f97316]"
+                className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white placeholder-gray-700 focus:outline-none focus:border-[#f97316]"
               />
               {safeValueError && <p className="mt-1 text-[10px] text-red-400">{safeValueError}</p>}
             </div>
@@ -212,7 +212,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
           <button
             onClick={addMapping}
             disabled={!selectedVar || !selectedChannel}
-            className="px-3.5 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-control ui-focus-ring px-3.5 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Map Signal
           </button>
@@ -233,7 +233,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
               return (
                 <div
                   key={map.id}
-                  className="flex items-center justify-between p-2.5 bg-[#181818] border border-[#252525] rounded hover:border-[#333] transition-colors duration-150 text-xs"
+                  className="hil-target-card ui-card flex items-center justify-between p-2.5 bg-[#181818] border border-[#252525] rounded hover:border-[#333] transition-colors duration-150 text-xs"
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-semibold text-white">{map.adiaVarId}</span>
@@ -258,7 +258,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                     )}
                     <button
                       onClick={() => removeMapping(map.id)}
-                      className="text-[#666] hover:text-red-400 p-1 rounded transition-colors"
+                      className="ui-control ui-focus-ring text-[#666] hover:text-red-400 p-1 rounded transition-colors"
                       title="Delete Mapping"
                     >
                       <Trash2 size={13} />

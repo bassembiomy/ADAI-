@@ -243,4 +243,62 @@ describe('canonical requirements traceability matrix', () => {
     expect(csv).toContain('Covering Blocks');
     expect(csv).toContain('PowerController');
   });
+
+  it('indexes all 7 relationship types into directional RTM fields', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.r1 = { id: 'r1', kind: 'requirement', requirementId: 'REQ-1', name: 'Parent Req', text: '', status: 'draft', version: '1', namespace: [] };
+    repo.requirements.r2 = { id: 'r2', kind: 'requirement', requirementId: 'REQ-2', name: 'Child / Derived Req', text: '', status: 'draft', version: '1', namespace: [] };
+    repo.requirements.r3 = { id: 'r3', kind: 'requirement', requirementId: 'REQ-3', name: 'Copy Req', text: '', status: 'draft', version: '1', namespace: [] };
+    repo.definitions.b1 = { id: 'b1', name: 'Controller', kind: 'block', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
+    repo.verificationCases.t1 = { id: 't1', name: 'Temp Test', namespace: [], kind: 'verificationCase', method: 'test', verifiesRequirementIds: [] };
+
+    repo.relationships.rc1 = { id: 'rc1', kind: 'requirementContainment', sourceId: 'r1', targetId: 'r2' };
+    repo.relationships.rd1 = { id: 'rd1', kind: 'deriveReqt', sourceId: 'r2', targetId: 'r1' };
+    repo.relationships.rcopy1 = { id: 'rcopy1', kind: 'copy', sourceId: 'r3', targetId: 'r2' };
+    repo.relationships.rsat = { id: 'rsat', kind: 'satisfy', sourceId: 'b1', targetId: 'r2' };
+    repo.relationships.rver = { id: 'rver', kind: 'verify', sourceId: 't1', targetId: 'r2' };
+    repo.relationships.rref = { id: 'rref', kind: 'refine', sourceId: 'b1', targetId: 'r2' };
+    repo.relationships.rtr = { id: 'rtr', kind: 'trace', sourceId: 'r1', targetId: 'r3' };
+
+    const matrix = buildTraceabilityMatrix(repo);
+    const rowR2 = matrix.rows.find(r => r.requirement.id === 'r2')!;
+
+    expect(rowR2.containmentParents.map(x => x.id)).toContain('r1');
+    expect(rowR2.derivedFrom.map(x => x.id)).toContain('r1');
+    expect(rowR2.copiedRequirements.map(x => x.id)).toContain('r3');
+    expect(rowR2.satisfiedBy.map(x => x.id)).toContain('b1');
+    expect(rowR2.verifiedBy.map(x => x.id)).toContain('t1');
+    expect(rowR2.refinedBy.map(x => x.id)).toContain('b1');
+    expect(rowR2.satisfactionStatus).toBe('satisfied');
+    expect(rowR2.verificationStatus).toBe('not-run');
+
+    const rowR3 = matrix.rows.find(r => r.requirement.id === 'r3')!;
+    expect(rowR3.copiedFrom.map(x => x.id)).toContain('r2');
+    expect(rowR3.tracedElements.map(x => x.id)).toContain('r1');
+
+    const rowR1 = matrix.rows.find(r => r.requirement.id === 'r1')!;
+    expect(rowR1.containmentChildren.map(x => x.id)).toContain('r2');
+    expect(rowR1.derivedRequirements.map(x => x.id)).toContain('r2');
+    expect(rowR1.tracedElements.map(x => x.id)).toContain('r3');
+
+    // Add evidence to test verificationStatus passed
+    repo.evidence.ev1 = { id: 'ev1', verificationCaseId: 't1', requirementId: 'r2', revision: 1, result: 'passed', executedAt: '2026-09-15' };
+    const matrixWithEv = buildTraceabilityMatrix(repo);
+    expect(matrixWithEv.rows.find(r => r.requirement.id === 'r2')!.verificationStatus).toBe('passed');
+
+    // CSV export contains all new columns
+    const csv = exportRtmCsv(matrixWithEv);
+    expect(csv).toContain('Contained By');
+    expect(csv).toContain('Contains');
+    expect(csv).toContain('Derived From');
+    expect(csv).toContain('Derived Requirements');
+    expect(csv).toContain('Copied From');
+    expect(csv).toContain('Copied Requirements');
+    expect(csv).toContain('Satisfied By');
+    expect(csv).toContain('Verified By');
+    expect(csv).toContain('Refined By');
+    expect(csv).toContain('Traced Elements');
+    expect(csv).toContain('Satisfaction Status');
+    expect(csv).toContain('Verification Status');
+  });
 });

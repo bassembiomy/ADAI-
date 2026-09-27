@@ -4,11 +4,13 @@ import type {
 } from '../utils/stateMachine/xbModel';
 
 export type VariableType = 'bool' | 'int' | 'uint' | 'int8' | 'uint8' | 'int16' | 'uint16' | 'int32' | 'uint32' | 'int64' | 'uint64' | 'float' | 'single' | 'double';
+export type VariableOverflowPolicy = 'saturate' | 'error';
 
 export interface VariableDef {
   id: string;
   name: string;
   type: VariableType;
+  overflowPolicy?: VariableOverflowPolicy;
   initialValue: string;
   currentValue: number | boolean;
   visibleInScope: boolean;
@@ -61,6 +63,26 @@ export interface StateData {
   xBridgesModel?: XBPersistedModelV1 | XBLegacyXBridgesModel;
 }
 
+export type PseudostateKind =
+  | 'initial'
+  | 'final'
+  | 'junction'
+  | 'choice'
+  | 'fork'
+  | 'join'
+  | 'history'
+  | 'deep-history'
+  | 'entry-point'
+  | 'exit-point'
+  | 'terminate';
+
+export interface StateMachineDiagramData {
+  id: string;
+  name: string;
+  ownerId: string;
+  contextRegionId: string;
+}
+
 export interface JunctionData {
   id: string;
   x: number;
@@ -68,7 +90,7 @@ export interface JunctionData {
   name: string;
   color: string;
   parentId: string | null;
-  type?: 'junction' | 'history' | 'deep-history';
+  type?: PseudostateKind;
   autostart?: boolean;
 }
 

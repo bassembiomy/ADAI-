@@ -45,8 +45,7 @@ test.describe('SysML Conformance: BDD, IBD, Requirements, and RTM browser flows'
     }
   });
 
-  test('creates 3-level requirement containment hierarchy, verifies notation, navigation, and persistence', async ({ page }) => {
-    // Switch to Requirements diagram if mode selector is present
+  test('creates 3-level requirement containment hierarchy, verifies notation, navigation, and persistence', async ({ page }) => {    // Switch to Requirements diagram if mode selector is present
     const reqModeBtn = page.locator('button:has-text("Requirements"), button:has-text("Req Diagram")').first();
     if (await reqModeBtn.isVisible()) {
       await reqModeBtn.click({ force: true });
@@ -67,6 +66,24 @@ test.describe('SysML Conformance: BDD, IBD, Requirements, and RTM browser flows'
     const containmentEdge = page.locator('g[role="graphics-symbol"][aria-label*="Requirement containment"]').first();
     if (await containmentEdge.isVisible()) {
       await expect(containmentEdge).toHaveAttribute('aria-label', /Requirement containment:/);
+    }
+  });
+
+  test('exposes typed IBD connector kinds and BDD relation options', async ({ page }) => {
+    // IBD connector inspector offers the three typed connector kinds when present.
+    const connectorKind = page.locator('select[aria-label="Connector kind"]').first();
+    if (await connectorKind.isVisible()) {
+      await expect(connectorKind.locator('option[value="assembly"]')).toBeAttached();
+      await expect(connectorKind.locator('option[value="delegation"]')).toBeAttached();
+      await expect(connectorKind.locator('option[value="binding"]')).toBeAttached();
+    }
+
+    // BDD relation options stay available on the canvas when a chooser is present.
+    for (const value of ['association', 'composition', 'generalization', 'dependency']) {
+      const option = page.locator(`option[value="${value}"]`).first();
+      if (await option.count() > 0) {
+        await expect(option).toBeAttached();
+      }
     }
   });
 });

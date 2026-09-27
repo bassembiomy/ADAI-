@@ -2823,7 +2823,40 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  // --- DC-AC Inverters ---
+  // --- DC-AC Inverters & Power Components ---
+  'DC_VOLTAGE_SOURCE': (id, params) => ({
+    id, type: 'DC_VOLTAGE_SOURCE',
+    params: { voltage: params?.voltage !== undefined ? Number(params.voltage) : 400 },
+    inputs: [],
+    outputs: [
+      createPort('v_pos', 'Vdc+', 'output', params?.voltage !== undefined ? Number(params.voltage) : 400, 'right', 'power'),
+      createPort('v_neg', 'Vdc-', 'output', 0, 'right', 'power')
+    ],
+    execute: (_, p) => {
+      const v = Number(p?.voltage !== undefined ? p.voltage : 400);
+      return { outputs: [v, 0] };
+    }
+  }),
+
+  'THREE_PHASE_LOAD': (id, params) => ({
+    id, type: 'THREE_PHASE_LOAD',
+    params: { R: params?.R !== undefined ? Number(params.R) : 10 },
+    inputs: [
+      createPort('va', 'Va', 'input', 0, 'left', 'power'),
+      createPort('vb', 'Vb', 'input', 0, 'left', 'power'),
+      createPort('vc', 'Vc', 'input', 0, 'left', 'power')
+    ],
+    outputs: [
+      createPort('ia', 'Ia', 'output', 0, 'right', 'power'),
+      createPort('ib', 'Ib', 'output', 0, 'right', 'power'),
+      createPort('ic', 'Ic', 'output', 0, 'right', 'power')
+    ],
+    execute: (ins, p) => {
+      const r = Math.max(0.001, Number(p?.R) || 10);
+      return { outputs: [Number(ins[0] || 0) / r, Number(ins[1] || 0) / r, Number(ins[2] || 0) / r] };
+    }
+  }),
+
   'THREE_PHASE_INVERTER': (id, params) => ({
     id, type: 'THREE_PHASE_INVERTER',
     params: { Ron: params.Ron || 0.01, Vf: params.Vf || 0.7 },

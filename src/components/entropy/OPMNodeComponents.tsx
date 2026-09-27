@@ -215,7 +215,7 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = (props) => {
 
   return (
     <div
-      className={`relative rounded-xl px-3 py-2 flex flex-col justify-between transition-all duration-200 backdrop-blur-md ${borderClass}`}
+      className={`opm-node opm-object relative rounded-xl px-3 py-2 flex flex-col justify-between transition-all duration-200 backdrop-blur-md ${borderClass}`}
       style={{
         minWidth: `${dynamicMinWidth}px`,
         minHeight: `${dynamicMinHeight}px`,
@@ -316,7 +316,7 @@ export const OPMProcessNode: React.FC<NodeProps<AppNode>> = ({ id, data, selecte
   return (
     <div
       data-process-firing={isFiring ? 'true' : undefined}
-      className={`relative px-4 py-2 min-w-[200px] min-h-[68px] flex flex-col items-center justify-center transition-all duration-200 ${
+      className={`opm-node opm-process relative px-4 py-2 min-w-[200px] min-h-[68px] flex flex-col items-center justify-center transition-all duration-200 ${
         selected
           ? 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.65),0_0_50px_rgba(245,158,11,0.35),inset_0_0_12px_rgba(251,191,36,0.15)] ring-1 ring-amber-300/40 bg-gradient-to-b from-[#1a1608]/95 to-[#081522]/95'
           : isFiring
@@ -386,7 +386,7 @@ export const OPMStateNode: React.FC<NodeProps<AppNode>> = (props) => {
 
   return (
     <div
-      className={`relative rounded-lg px-2 py-1 w-[95px] h-[32px] flex items-center justify-center border transition-all duration-200 box-border z-20 ${
+      className={`opm-node opm-state relative rounded-lg px-2 py-1 w-[95px] h-[32px] flex items-center justify-center border transition-all duration-200 box-border z-20 ${
         selected
           ? 'border-2 border-amber-400 bg-gradient-to-b from-[#2a1b08] to-[#140b02] shadow-[0_0_22px_rgba(251,191,36,0.7),inset_0_0_8px_rgba(251,191,36,0.2)] ring-1 ring-amber-300/50 scale-105'
           : isActive

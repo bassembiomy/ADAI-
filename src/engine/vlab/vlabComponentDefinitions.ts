@@ -98,10 +98,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
   },
   steam_nozzle: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*(P - P_atm))'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho (P - P_{atm})}'],
+    equations: ['mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho \\max(P_p-P_n,0)}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models steam discharging to atmosphere through a throttled nozzle outlet.'
+    description: 'Models steam flow from upstream pressure Pp to downstream pressure Pn through a throttled two-port nozzle.'
   },
   pressure_sensor: {
     equations: ['S = P'],
@@ -182,10 +182,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges the Electrical and Translational domains. Models voice coils or solenoids where force is proportional to current.'
   },
   thermal_resistor: {
-    equations: ['Q = (Th - Tc) / Rth'],
-    latex: ['Q = \\frac{\Delta T}{R_{th}}'],
-    across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Bridges Electrical and Thermal domains by modeling heat generation from power dissipation ($P = I^2 R$).'
+    equations: ['V = I * R', 'Q = I^2 * R'],
+    latex: ['V = I \\cdot R', 'Q = I^2 R'],
+    across: 'Voltage (V), Temperature (K)', through: 'Current (A), Heat Flow (W)',
+    description: 'Bridges Electrical and Thermal domains by modeling heat generation from electrical resistance ($P = I^2 R$).'
   },
   v_sensor: {
     equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
@@ -403,6 +403,18 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a pump or compressor that maintains a constant pressure difference between ports.'
   },
+  gas_pressure_sensor: {
+    equations: ['mass_flow = 0', 'out = P(p)'],
+    latex: ['\dot{m} = 0', 'y = P'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas pressure without drawing mass flow.'
+  },
+  gas_flow_sensor: {
+    equations: ['P(p) = P(n)', 'out = mdot'],
+    latex: ['P_p = P_n', 'y = \dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas mass flow through an ideal zero-pressure-loss pass-through.'
+  },
   gas_properties: {
     equations: ['P = rho * R * T'],
     latex: ['P = \rho R T'],
@@ -428,10 +440,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A magnetic reluctance whose value is modulated by an external physical signal (PS).'
   },
   permanent_magnet: {
-    equations: ['mmf = Hc * L'],
-    latex: ['\\mathcal{F} = H_c L'],
+    equations: ['mmf = Hc * Lm - phi * Rm'],
+    latex: ['\\mathcal{F} = H_c L_m - \\phi R_m'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'Models a hard magnetic material providing constant magneto-motive force (MMF).'
+    description: 'Models a permanent magnet material providing MMF with coercive force Hc, length Lm, and internal reluctance Rm.'
   },
   em_converter: {
     equations: ['V = N * dphi/dt', 'mmf = N * I'],
@@ -440,10 +452,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Magnetic domains. Models a coil with N turns.'
   },
   reluctance_force: {
-    equations: ['F = -0.5 * phi^2 * dR/dx'],
-    latex: ['f = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
+    equations: ['F = 0.5 * phi^2 * K', 'R = R0 + K * x'],
+    latex: ['f = \\frac{1}{2} \\phi^2 K', '\\mathcal{R} = \\mathcal{R}_0 + K x'],
     across: 'A-t, m/s', through: 'Wb, N',
-    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays. Force is directed to minimize reluctance.'
+    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays with initial reluctance R0 and reluctance gradient K.'
   },
   mag_flux_sensor: {
     equations: ['phi_out = phi'],
@@ -501,15 +513,21 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   torque_source: {
     equations: ['T_r - T_c = T_src'],
-    latex: ['\tau = T_{src}'],
+    latex: ['\\tau = T_{src}'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'An ideal torque generator for rotational networks.'
   },
-  gear_box: {
-    equations: ['omega2 = ratio * omega1', 'tau1 = ratio * tau2'],
-    latex: ['\omega_2 = N \omega_1', '\tau_1 = N \tau_2'],
+  ang_vel_source: {
+    equations: ['omega_r - omega_c = omega'],
+    latex: ['\\omega_r - \\omega_c = \\omega'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
-    description: 'Models a mechanical transmission that scales velocity and torque based on the gear ratio.'
+    description: 'An ideal angular velocity generator for rotational networks.'
+  },
+  gear_box: {
+    equations: ['omega1 = ratio * omega2', 'tau2 = ratio * tau1'],
+    latex: ['\\omega_1 = N \\omega_2', '\\tau_2 = N \\tau_1'],
+    across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
+    description: 'Models a mechanical transmission that scales velocity and torque between shafts s1 and s2 based on the gear ratio.'
   },
   lever: {
     equations: ['v_b = -(L2/L1) * v_a', 'f_a = (L2/L1) * f_b'],
@@ -599,7 +617,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['dm/dt = f(V, P, T)', 'dQ/dt = f(T, P)'],
     latex: ['\dot{m}, \dot{Q} = f(V, P, T)'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a fixed-volume moist air chamber. Tracks mass, energy, and vapor content over time.'
+    description: 'Models a fixed-volume moist air chamber. Tracks temperature in Kelvin with configurable ambient_temp (°C), heat_capacity (J/K), wall/food thermal mass, k_loss (W/K), and max_temp (°C).'
   },
   ma_pipe: {
     equations: ['Delta P = f(L, m)', 'Delta T = f(h, Q)'],
@@ -1271,10 +1289,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A heat flow source driven by an external physical signal (PS).'
   },
   ctrl_temp_src: {
-    equations: ['T = S_input'],
-    latex: ['T = f(S_{ctrl})'],
+    equations: ['Ta - Tb = S_input'],
+    latex: ['T_a - T_b = S_{ctrl}'],
     across: 'T', through: 'Q',
-    description: 'A temperature source driven by an external physical signal (PS).'
+    description: 'A temperature source maintaining difference Ta - Tb driven by an external physical signal (PS).'
   },
   solver_config: {
     equations: ['f(x) = 0'],

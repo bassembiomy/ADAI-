@@ -1,0 +1,8 @@
+[
+  {"url":"https://www.mathworks.com/help/simulink/","title":"Official MathWorks Simulink documentation","provider":"MathWorks","sourceType":"documentation"},
+  {"url":"https://www.mathworks.com/help/simulink/model-finder.html","title":"MathWorks Simulink Model Finder","provider":"MathWorks","sourceType":"model_finder"},
+  {"url":"https://www.mathworks.com/help/simulink/model-reference.html","title":"MathWorks Simulink Model Reference","provider":"MathWorks","sourceType":"model_reference"},
+  {"url":"https://www.mathworks.com/matlabcentral/fileexchange/","title":"MATLAB Central File Exchange","provider":"MathWorks","sourceType":"file_exchange"},
+  {"url":"https://www.mathworks.com/matlabcentral/fileexchange/?term=simulink","title":"Simulink-tagged MATLAB Central File Exchange","provider":"MathWorks","sourceType":"file_exchange"},
+  {"url":"https://github.com/search?q=simulink&type=repositories","title":"GitHub Simulink repository search","provider":"GitHub","sourceType":"repository_search"}
+]

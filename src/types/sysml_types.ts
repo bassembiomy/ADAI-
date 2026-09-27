@@ -4,7 +4,8 @@ export interface PortData {
   id: string;
   name: string;
   type: string; // e.g. 'int', 'float', 'signal'
-  kind?: 'standard' | 'flow' | 'proxy';
+  /** UML Port and SysML v1 legacy/SysML port usages. */
+  kind?: 'standard' | 'flow' | 'proxy' | 'full';
   direction?: 'in' | 'out' | 'inout';
   unit?: string;
   side?: 'top' | 'bottom' | 'left' | 'right';
@@ -73,17 +74,38 @@ export interface RelationshipData {
   id: string;
   sourceId: string;
   targetId: string;
-  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'requirementContainment';
+  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'packageImport' | 'elementImport' | 'packageMerge' | 'requirementContainment';
   label: string;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
 }
 
+/** UML Package notation projected from the semantic repository for a diagram. */
+export interface PackageData {
+  id: string;
+  name: string;
+  ownerId?: string;
+  namespace?: string[];
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface PartData {
   id: string;
+  /** Stable identity of the owning Block property projected by this IBD usage. */
+  propertyId?: string;
   name: string;
   blockId: string | null;
   typeId?: string | null;
+  /**
+   * Ownership semantics of this typed usage (OMG SysML 1.6 / UML).
+   * Composite usages are lifetime-owned by their whole and cascade on
+   * deletion; shared/reference usages never cascade implicitly and surface
+   * as unresolved impacts instead. Absent means composite (legacy default).
+   */
+  aggregation?: 'composite' | 'shared' | 'reference';
   x: number;
   y: number;
   width: number;
