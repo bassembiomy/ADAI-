@@ -4,10 +4,47 @@ import { describe, expect, it } from 'vitest';
 import {
   CONFORMANCE_MANIFEST,
   evaluateManifestCompliance,
+  executableCasesForManifestRow,
   generateConformanceMatrixMarkdown,
   verifyConformanceManifest,
   type ConformanceRow,
 } from './conformanceManifest';
+import { EXECUTABLE_EVIDENCE, isExecutableCaseRegistered, type RegisteredExecutableCaseId } from './compliance/evidenceRegistry';
+import type {
+  EvidenceRunContext,
+  ExecutableCaseRunOutcome,
+} from './compliance/types';
+
+const TEST_REVISION = 'manifest-test-revision';
+const TEST_RUN_ID = 'manifest-test-run';
+
+function outcomeFor(caseId: RegisteredExecutableCaseId): ExecutableCaseRunOutcome {
+  const record = EXECUTABLE_EVIDENCE[caseId];
+  return {
+    caseId,
+    testFile: record.testFile,
+    testName: record.testName,
+    fullName: record.testName,
+    status: 'passed',
+    revision: TEST_REVISION,
+    runId: TEST_RUN_ID,
+  };
+}
+
+/** Current passing runContext covering every registered executable case. */
+function passingRunContext(): EvidenceRunContext {
+  const outcomes: Record<string, ExecutableCaseRunOutcome> = {};
+  for (const id of Object.keys(EXECUTABLE_EVIDENCE) as RegisteredExecutableCaseId[]) {
+    outcomes[id] = outcomeFor(id);
+  }
+  return { revision: TEST_REVISION, runId: TEST_RUN_ID, outcomes };
+}
+
+function resultFor(report: ReturnType<typeof evaluateManifestCompliance>, rowId: string) {
+  const result = report.results.find(r => r.id === rowId);
+  expect(result).toBeDefined();
+  return result!;
+}
 
 describe('SysML release conformance manifest', () => {
   const rootDir = resolve(__dirname, '../../..');
@@ -52,11 +89,81 @@ describe('SysML release conformance manifest', () => {
     expect(fileContent.replace(/\r\n/g, '\n').trim()).toBe(markdown.replace(/\r\n/g, '\n').trim());
   });
 
-  it('evaluates four-level compliance across manifest rows with valid authority and evidence', () => {
+  it('evaluates fail-closed without a runContext: zero COMPLIANT rows, unsupported row still NON_COMPLIANT, report stays valid', () => {
     const report = evaluateManifestCompliance(CONFORMANCE_MANIFEST);
     expect(report.totalFeatures).toBe(32);
-    expect(report.compliantFeatures).toBeGreaterThanOrEqual(28);
+    // Fail-closed contract: no current test-run evidence is bound, so no
+    // non-unsupported row may read COMPLIANT.
+    expect(report.compliantFeatures).toBe(0);
     expect(report.nonCompliantFeatures).toBe(1); // SYSML-029
     expect(report.valid).toBe(true);
+    expect(resultFor(report, 'SYSML-029').status).toBe('NON_COMPLIANT');
+  });
+
+  it('binds every mapped manifest row to registered executable cases only', () => {
+    const mappedRows = CONFORMANCE_MANIFEST.rows.filter(r => executableCasesForManifestRow(r.id).length > 0);
+    expect(mappedRows.length).toBeGreaterThan(0);
+    for (const row of CONFORMANCE_MANIFEST.rows) {
+      for (const caseId of executableCasesForManifestRow(row.id)) {
+        expect(isExecutableCaseRegistered(caseId)).toBe(true);
+      }
+    }
+    expect(executableCasesForManifestRow('SYSML-029')).toHaveLength(0);
+  });
+
+  it('rates a supported bound row PARTIAL with the row named when no runContext is supplied', () => {
+    const report = evaluateManifestCompliance(CONFORMANCE_MANIFEST);
+    const result = resultFor(report, 'SYSML-006');
+    expect(executableCasesForManifestRow('SYSML-006').length).toBeGreaterThan(0);
+    expect(result.status).toBe('PARTIAL');
+    expect(result.status).not.toBe('COMPLIANT');
+    expect(result.missingEvidence).toContain('evidenceRunResults');
+    expect(result.missingEvidence).toContain('manifestRow:SYSML-006');
+  });
+
+  it('rates a supported bound row COMPLIANT with a current passing runContext', () => {
+    const report = evaluateManifestCompliance(CONFORMANCE_MANIFEST, passingRunContext());
+    const result = resultFor(report, 'SYSML-006');
+    expect(result.status).toBe('COMPLIANT');
+    expect(result.missingEvidence).toHaveLength(0);
+  });
+
+  it('never rates an unbound supported row COMPLIANT, even with a current passing runContext', () => {
+    const report = evaluateManifestCompliance(CONFORMANCE_MANIFEST, passingRunContext());
+    const result = resultFor(report, 'SYSML-001');
+    expect(executableCasesForManifestRow('SYSML-001')).toHaveLength(0);
+    expect(result.status).toBe('PARTIAL');
+    expect(result.status).not.toBe('COMPLIANT');
+    expect(result.missingEvidence).toContain('manifestRow:SYSML-001:noExecutableCases');
+    expect(result.reasons.some(r => r.includes('SYSML-001'))).toBe(true);
+  });
+
+  it('rates a supported bound row PARTIAL on stale or failed outcomes', () => {
+    const boundCases = executableCasesForManifestRow('SYSML-006');
+    expect(boundCases.length).toBeGreaterThan(0);
+    const failingCase = boundCases[0];
+
+    const failedContext = passingRunContext();
+    failedContext.outcomes[failingCase] = { ...failedContext.outcomes[failingCase], status: 'failed' };
+    const failedReport = evaluateManifestCompliance(CONFORMANCE_MANIFEST, failedContext);
+    const failedResult = resultFor(failedReport, 'SYSML-006');
+    expect(failedResult.status).toBe('PARTIAL');
+    expect(failedResult.status).not.toBe('COMPLIANT');
+    expect(failedResult.missingEvidence).toContain(`case:${failingCase}`);
+
+    const staleContext = passingRunContext();
+    staleContext.outcomes[failingCase] = { ...staleContext.outcomes[failingCase], revision: 'older-revision' };
+    const staleReport = evaluateManifestCompliance(CONFORMANCE_MANIFEST, staleContext);
+    const staleResult = resultFor(staleReport, 'SYSML-006');
+    expect(staleResult.status).toBe('PARTIAL');
+    expect(staleResult.status).not.toBe('COMPLIANT');
+    expect(staleResult.missingEvidence).toContain(`case:${failingCase}`);
+  });
+
+  it('leaves unsupported rows unaffected by runContext', () => {
+    const without = resultFor(evaluateManifestCompliance(CONFORMANCE_MANIFEST), 'SYSML-029');
+    const withRun = resultFor(evaluateManifestCompliance(CONFORMANCE_MANIFEST, passingRunContext()), 'SYSML-029');
+    expect(without.status).toBe('NON_COMPLIANT');
+    expect(withRun.status).toBe('NON_COMPLIANT');
   });
 });

@@ -15276,6 +15276,17 @@ const ADIA = () => {
 
       const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
 
+      // Review follow-up Finding 6b: a stored style.color override for this
+      // block/requirement element+diagram wins for the node body stroke
+      // (applied through `style` per the Task 6 var()-in-style fix — browsers
+      // do not resolve var() in SVG presentation attributes); absent/invalid
+      // resolves to the existing role default and selection keeps precedence.
+      // Presentation only: validation state is computed upstream.
+      const storedNodeOverride = sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[block.id]?.style?.color;
+      const nodeOverrideStyle = !isSelected && isValidPresentationColor(storedNodeOverride)
+        ? { stroke: String(storedNodeOverride).trim() }
+        : undefined;
+
       return (
         <g
           key={block.id}
@@ -15298,7 +15309,7 @@ const ADIA = () => {
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
 
-          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? 'var(--sysml-requirement-fill)' : 'var(--sysml-block-fill)'} stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} strokeWidth={1} />
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? 'var(--sysml-requirement-fill)' : 'var(--sysml-block-fill)'} stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} style={nodeOverrideStyle} strokeWidth={1} />
 
           {/* Header */}
           <text x={displayWidth / 2} y={15} textAnchor="middle" fill="var(--sysml-block-meta)" fontSize={10} fontFamily="monospace">

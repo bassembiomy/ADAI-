@@ -3,7 +3,9 @@ import { resolve } from 'node:path';
 import {
   evaluateCompliance,
   type ComplianceResult,
+  type EvidenceRunContext,
   type FourLevelCompliance,
+  type RegisteredExecutableCaseId,
   type SemanticAuthority,
 } from './compliance';
 
@@ -470,7 +472,74 @@ export interface FourLevelComplianceManifestReport {
   results: ComplianceResult[];
 }
 
-export function evaluateManifestCompliance(manifest: ConformanceManifest = CONFORMANCE_MANIFEST): FourLevelComplianceManifestReport {
+/**
+ * Review follow-up (Finding 3, fail-closed manifest): explicit, reviewable
+ * binding from manifest rows to the registered executable evidence cases
+ * (`EXECUTABLE_EVIDENCE` in `./compliance/evidenceRegistry`) that
+ * substantiate them. Only rows genuinely covered by a registered case are
+ * listed here; every other non-unsupported row intentionally carries no
+ * binding and therefore can never read COMPLIANT (see
+ * `evaluateManifestCompliance`). The typed `RegisteredExecutableCaseId`
+ * values make an unregistered case ID a compile-time error; the manifest
+ * test suite additionally asserts every listed ID is registered.
+ */
+export const MANIFEST_EXECUTABLE_CASES: Record<string, RegisteredExecutableCaseId[]> = {
+  // BDD ports: every registered port case exercises port creation, typing,
+  // rejection, nesting, or persistence through the port command/validator path.
+  'SYSML-006': [
+    'PORT_UML_STANDARD_OWNED',
+    'PORT_PROXY_INTERFACE_TYPING',
+    'PORT_PROXY_WRONG_TYPE_REJECTED',
+    'PORT_FULL_BLOCK_TYPING',
+    'PORT_FLOW_LEGACY_OWNED',
+    'PORT_NESTED_PROXY_VALIDATED',
+    'PORT_PERSISTENCE_STABLE',
+  ],
+  // IBD full port: FullPort typing plus port persistence round-trip.
+  'SYSML-014': ['PORT_FULL_BLOCK_TYPING', 'PORT_PERSISTENCE_STABLE'],
+  // IBD proxy port: ProxyPort typing, wrong-type rejection, nesting, persistence.
+  'SYSML-015': [
+    'PORT_PROXY_INTERFACE_TYPING',
+    'PORT_PROXY_WRONG_TYPE_REJECTED',
+    'PORT_NESTED_PROXY_VALIDATED',
+    'PORT_PERSISTENCE_STABLE',
+  ],
+  // IBD assembly connector: part-to-part creation, boundary rejection, persistence.
+  'SYSML-016': [
+    'IBD_ASSEMBLY_PART_TO_PART',
+    'IBD_ASSEMBLY_BOUNDARY_REJECTED',
+    'IBD_CONNECTOR_PERSISTENCE',
+  ],
+  // IBD delegation connector: boundary delegation creation plus connector persistence.
+  'SYSML-019': ['IBD_BOUNDARY_DELEGATION_PERSISTS', 'IBD_CONNECTOR_PERSISTENCE'],
+  // satisfy: State-to-Requirement satisfy identity, direction, and persistence.
+  'SYSML-022': [
+    'STATE_SATISFY_REAL_ID_REQUIRED',
+    'STATE_SATISFY_DIRECTION_ENFORCED',
+    'STATE_SATISFY_RELATIONSHIP_PERSISTS',
+  ],
+  // verify/evidence: TestCase verify-relationship persistence.
+  'SYSML-023': ['REQ_TESTCASE_VERIFIES_PERSISTED'],
+  // Typed semantic policy decisions: the fail-closed rejection/decision cases
+  // (standard-port admission, proxy wrong-type rejection, assembly-context
+  // rejection, satisfy-direction enforcement).
+  'SYSML-031': [
+    'PORT_UML_STANDARD_OWNED',
+    'PORT_PROXY_WRONG_TYPE_REJECTED',
+    'IBD_ASSEMBLY_BOUNDARY_REJECTED',
+    'STATE_SATISFY_DIRECTION_ENFORCED',
+  ],
+};
+
+/** Registered executable cases bound to a manifest row (empty when unbound). */
+export function executableCasesForManifestRow(rowId: string): RegisteredExecutableCaseId[] {
+  return MANIFEST_EXECUTABLE_CASES[rowId] ?? [];
+}
+
+export function evaluateManifestCompliance(
+  manifest: ConformanceManifest = CONFORMANCE_MANIFEST,
+  runContext?: EvidenceRunContext | null,
+): FourLevelComplianceManifestReport {
   const results: ComplianceResult[] = manifest.rows.map(row => {
     const authority = row.authority ?? (row.id === 'SYSML-029' ? 'ADIA_EXTENSION' : /generalization|association|dependency|use-case/i.test(row.capability) ? 'UML_FOUNDATION' : 'OMG_SYSML_1_6');
     const levels = row.levels ?? (
@@ -481,7 +550,8 @@ export function evaluateManifestCompliance(manifest: ConformanceManifest = CONFO
         : { element: 'PASS', properties: 'PASS', relationships: 'PASS', constraints: 'PASS' }
     );
 
-    return evaluateCompliance({
+    const executableCases = executableCasesForManifestRow(row.id);
+    const result = evaluateCompliance({
       id: row.id,
       name: row.capability,
       authority,
@@ -495,9 +565,50 @@ export function evaluateManifestCompliance(manifest: ConformanceManifest = CONFO
         persistence: row.persistence ?? 'SysmlPersistence',
         projection: row.projection ?? 'SysmlProjection',
         tests: row.automatedEvidence,
+        // Fail-closed binding: rows with registered coverage declare their
+        // executable cases so the evaluator binds them to current-run results;
+        // rows without coverage declare none and are forced PARTIAL below.
+        ...(executableCases.length > 0 ? { executableCases: [...executableCases] } : {}),
       },
       notes: row.remainingLimitation,
-    });
+    }, runContext ?? undefined);
+
+    // Fail-closed rule (Finding 3): a non-unsupported row must never read
+    // COMPLIANT without bound executable evidence.
+    // - Row declares executable cases but the evaluator could not bind them
+    //   to the current run (no usable runContext, missing/stale/failed
+    //   outcome): the evaluator already returns PARTIAL; name the row in
+    //   missingEvidence so the gap is attributable.
+    if (
+      row.status !== 'unsupported' &&
+      executableCases.length > 0 &&
+      result.status !== 'COMPLIANT' &&
+      result.missingEvidence.includes('evidenceRunResults') &&
+      !result.missingEvidence.includes(`manifestRow:${row.id}`)
+    ) {
+      return {
+        ...result,
+        missingEvidence: [...result.missingEvidence, `manifestRow:${row.id}`],
+        reasons: [
+          ...result.reasons,
+          `Manifest row ${row.id} (${row.capability}) declares executable cases with no bound current-run results`,
+        ],
+      };
+    }
+    // - Row has no executable-case binding at all: no silent COMPLIANT
+    //   without evidence — force PARTIAL with reason.
+    if (row.status !== 'unsupported' && executableCases.length === 0 && result.status === 'COMPLIANT') {
+      return {
+        ...result,
+        status: 'PARTIAL' as const,
+        missingEvidence: [...result.missingEvidence, `manifestRow:${row.id}:noExecutableCases`],
+        reasons: [
+          ...result.reasons,
+          `Manifest row ${row.id} (${row.capability}) has no registered executable evidence binding; COMPLIANT requires bound test execution`,
+        ],
+      };
+    }
+    return result;
   });
 
   const compliantFeatures = results.filter(r => r.status === 'COMPLIANT').length;

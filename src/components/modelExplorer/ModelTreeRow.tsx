@@ -21,6 +21,11 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { ModelTreeNode } from '../../features/modelExplorer/modelExplorerTypes';
+import {
+  portKindToPresentationRole,
+  semanticPresentationToken,
+  type SemanticPresentationRole,
+} from '../../engine/sysml/semanticPresentationStyles';
 
 export interface ModelTreeRowProps {
   node: ModelTreeNode;
@@ -45,44 +50,102 @@ export interface ModelTreeRowProps {
   onDrop?: (e: React.DragEvent) => void;
 }
 
+/**
+ * Review follow-up (Finding 5b): tree node kinds mapped onto the centralized
+ * semantic presentation roles (spec 3.5). Kinds with a genuine semantic role
+ * resolve to that role's token; every other kind resolves to the neutral
+ * requirement fallback through the same resolver (never a hard-coded
+ * Tailwind palette color), so light/dark themes apply via `index.css`.
+ * Port granularity: the explorer adapter emits `proxyPort` / `fullPort` /
+ * `flowPort` node kinds where the definition carries them and generic
+ * `port` for standard UML ports, so sub-kinds map to their respective port
+ * roles while a bare `port` deterministically stays the Standard Port role
+ * (never promoted to proxy/full).
+ */
+export function nodeKindToPresentationRole(kind: string): SemanticPresentationRole {
+  switch (kind) {
+    case 'block':
+    case 'part':
+      return 'block';
+    case 'requirement':
+    case 'testCase':
+      return 'requirement';
+    case 'state':
+    case 'state_machine':
+    case 'region':
+    case 'pseudostate':
+    case 'junction':
+    case 'transition':
+      return 'state';
+    case 'port':
+    case 'proxy':
+    case 'proxyPort':
+    case 'full':
+    case 'fullPort':
+    case 'flow':
+    case 'flowPort':
+    case 'standard':
+    case 'standardPort':
+    case 'umlPort':
+      return portKindToPresentationRole(kind);
+    default:
+      return 'requirement';
+  }
+}
+
 export function getNodeKindIcon(kind: string, _domain: string): React.ReactElement {
-  const iconProps = { size: 14, className: 'shrink-0' };
+  // Token-backed glyph color: icons/shapes stay the non-color indicators;
+  // selection/focus row states are untouched (handled by the row container).
+  const iconProps = {
+    size: 14,
+    className: 'shrink-0',
+    style: { color: semanticPresentationToken(nodeKindToPresentationRole(kind)) },
+  };
 
   switch (kind) {
     case 'model':
-      return <Layers {...iconProps} className="shrink-0 text-[var(--diagram-node-selected)]" />;
+      return <Layers {...iconProps} />;
     case 'package':
-      return <Folder {...iconProps} className="shrink-0 text-amber-400" />;
+      return <Folder {...iconProps} />;
     case 'block':
-      return <Box {...iconProps} className="shrink-0 text-emerald-400" />;
     case 'part':
-      return <Component {...iconProps} className="shrink-0 text-cyan-400" />;
+      return kind === 'block' ? <Box {...iconProps} /> : <Component {...iconProps} />;
     case 'port':
-      return <CircleDot {...iconProps} className="shrink-0 text-pink-400" />;
+    case 'proxy':
+    case 'proxyPort':
+    case 'full':
+    case 'fullPort':
+    case 'flow':
+    case 'flowPort':
+    case 'standard':
+    case 'standardPort':
+    case 'umlPort':
+      return <CircleDot {...iconProps} />;
     case 'constraint':
-      return <ShieldAlert {...iconProps} className="shrink-0 text-yellow-400" />;
+      return <ShieldAlert {...iconProps} />;
     case 'requirement':
-      return <CheckSquare {...iconProps} className="shrink-0 text-purple-400" />;
+    case 'testCase':
+      return <CheckSquare {...iconProps} />;
     case 'diagram':
-      return <Layout {...iconProps} className="shrink-0 text-sky-400" />;
+      return <Layout {...iconProps} />;
     case 'state_machine':
-      return <Activity {...iconProps} className="shrink-0 text-indigo-400" />;
+      return <Activity {...iconProps} />;
     case 'region':
-      return <LayoutGrid {...iconProps} className="shrink-0 text-violet-400" />;
+      return <LayoutGrid {...iconProps} />;
     case 'state':
-      return <Square {...iconProps} className="shrink-0 text-teal-400" />;
-    case 'xbridgesModel':
-      return <Workflow {...iconProps} className="shrink-0 text-amber-400" />;
-    case 'vlabModel':
-      return <FlaskConical {...iconProps} className="shrink-0 text-purple-400" />;
     case 'pseudostate':
-      return <Disc {...iconProps} className="shrink-0 text-orange-400" />;
     case 'junction':
-      return <GitCommit {...iconProps} className="shrink-0 text-red-400" />;
     case 'transition':
-      return <ArrowRight {...iconProps} className="shrink-0 text-lime-400" />;
+      if (kind === 'pseudostate') return <Disc {...iconProps} />;
+      if (kind === 'junction') return <GitCommit {...iconProps} />;
+      if (kind === 'transition') return <ArrowRight {...iconProps} />;
+      return <Square {...iconProps} />;
+    case 'xbridgesModel':
+      return <Workflow {...iconProps} />;
+    case 'vlabModel':
+      return <FlaskConical {...iconProps} />;
     default:
-      return <FileCode {...iconProps} className="shrink-0 text-[var(--text-muted)]" />;
+      return <FileCode {...iconProps} />;
   }
 }
 

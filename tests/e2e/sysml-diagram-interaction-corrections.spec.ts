@@ -1117,6 +1117,21 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
       return (window as any).__adiaTestHooks.getDiagramPresentations()[diagram]?.presentations[target]?.style;
     }, { diagram: diagramId, target: reqId })).toMatchObject({ color: '#123456' });
 
+    // Rendered effect (review follow-up Finding 6b): the requirement node
+    // body on canvas resolves the stored override — the store assertion
+    // above alone never proves the pixels. Selection would mask the body
+    // stroke with the selection color, so clear it first; the override then
+    // paints the body rect (browsers serialize it as rgb(18, 52, 86)).
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+    const reqNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${reqId}"]`);
+    await expect(reqNode).toBeVisible({ timeout: 15000 });
+    await expect.poll(async () => reqNode.evaluate(el =>
+      Array.from(el.querySelectorAll('rect')).map(rect =>
+        getComputedStyle(rect).getPropertyValue('stroke').trim().toLowerCase()
+      ).join('||')
+    )).toMatch(/#123456|rgb\(18,\s*52,\s*86\)/);
+
     // Real save, real reload, real re-open preserves the valid override.
     const savedPath = await saveProject(page, 'workflow6b.adia');
     await reloadAndReopenProject(page, savedPath);
@@ -1130,5 +1145,13 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     expect(await page.evaluate(id => (window as any).__sysmlRepository.requirements[id]?.kind, reqId)).toBe('requirement');
     await page.getByRole('button', { name: 'Requirements', exact: true }).click();
     await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${reqId}"]`)).toBeVisible({ timeout: 15000 });
+    // Rendered effect persists across real save/reload (review follow-up
+    // Finding 6b): the rehydrated override still paints the node body.
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => page.locator(`#adia-diagram-canvas [data-semantic-id="${reqId}"]`).evaluate(el =>
+      Array.from(el.querySelectorAll('rect')).map(rect =>
+        getComputedStyle(rect).getPropertyValue('stroke').trim().toLowerCase()
+      ).join('||')
+    )).toMatch(/#123456|rgb\(18,\s*52,\s*86\)/);
   });
 });
