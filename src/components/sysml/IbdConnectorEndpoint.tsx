@@ -85,6 +85,7 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
       data-definition-id={definitionId}
       data-occurrence-id={ownerOccurrenceId ?? 'boundary'}
       data-usage-id={usageId ?? ''}
+      data-selected={isSelected ? 'true' : 'false'}
       className={`ibd-connector-endpoint cursor-pointer select-none ${className}`}
       transform={`translate(${x}, ${y})`}
       onClick={handleClick}

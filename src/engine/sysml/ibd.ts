@@ -160,7 +160,7 @@ function validateConnectorCandidate(repo: SysmlRepository, connector: ConnectorU
   }
   diagnostics.push(...validatePortTyping(repo, connector, source, 'sourcePortId'));
   diagnostics.push(...validatePortTyping(repo, connector, target, 'targetPortId'));
-  if (source.definition.typeId !== target.definition.typeId) {
+  if (source.definition.typeId && target.definition.typeId && source.definition.typeId !== target.definition.typeId) {
     diagnostics.push(diag('INCOMPATIBLE_INTERFACE', connector.id, 'targetPortId', `Port interfaces ${source.definition.typeId} and ${target.definition.typeId} differ`));
   }
   const duplicate = Object.values(repo.connectors).find(other => other.id !== connector.id && other.ownerId === connector.ownerId && (
@@ -298,6 +298,12 @@ function validatePortTyping(
   propertyPath: 'sourcePortId' | 'targetPortId',
 ): SysmlDiagnostic[] {
   const diagnostics: SysmlDiagnostic[] = [];
+  if (!resolved.definition.typeId) {
+    if (resolved.definition.kind === 'proxy' || resolved.definition.kind === 'full') {
+      diagnostics.push(diag('MISSING_PORT_TYPE', connector.id, propertyPath, `Port ${resolved.usage.id} requires a type`));
+    }
+    return diagnostics;
+  }
   const type = repo.definitions[resolved.definition.typeId];
   if (!type) {
     diagnostics.push(diag('UNRESOLVED_IMPORT', connector.id, propertyPath, `Port type ${resolved.definition.typeId} cannot be resolved`));

@@ -28,7 +28,7 @@ export interface RelationshipDecision {
 }
 
 export interface DeletionDecision {
-  targetKind: 'package' | 'diagram' | 'definition' | 'usage' | 'connector' | 'relationship' | 'requirement' | 'actor' | 'useCase' | 'subject' | 'extensionPoint' | 'diagramReference' | 'unknown';
+  targetKind: 'package' | 'diagram' | 'definition' | 'usage' | 'connector' | 'relationship' | 'requirement' | 'verificationCase' | 'testCase' | 'actor' | 'useCase' | 'subject' | 'extensionPoint' | 'diagramReference' | 'unknown';
   cascadeIds: string[];
   unresolvedUsageIds: string[];
   diagnostics: string[];
@@ -417,6 +417,7 @@ export function classifyDeletionTarget(repo: SysmlRepository, elementId: string)
   if (repo.connectors[elementId]) return { targetKind: 'connector', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.relationships[elementId]) return { targetKind: 'relationship', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.requirements[elementId]) return { targetKind: 'requirement', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
+  if (repo.verificationCases?.[elementId]) return { targetKind: 'verificationCase', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.useCases?.[elementId]) {
     const cascadeIds = Object.values(repo.extensionPoints ?? {})
       .filter(ep => ep.useCaseId === elementId)

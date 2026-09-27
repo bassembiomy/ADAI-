@@ -54,11 +54,12 @@ export function createPackage(options: {
   existingNames?: Iterable<string>;
 }): PackageDefinition {
   const chosenId = options.id ?? generateId('pkg');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('Package', options.existingNames) : 'Package');
   const outcome = createSemanticElement(
     {
       metaclass: 'Package',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
     },
     DUMMY_REPO
@@ -66,7 +67,7 @@ export function createPackage(options: {
   const el = outcome.ok ? outcome.element : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'Package',
+    name: el?.name ?? chosenName,
     kind: 'package',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
@@ -80,11 +81,12 @@ export function createBlock(options: {
   existingNames?: Iterable<string>;
 }): BlockDefinition {
   const chosenId = options.id ?? generateId('blk');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('Block', options.existingNames) : 'Block');
   const outcome = createSemanticElement(
     {
       metaclass: 'Block',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
     },
     DUMMY_REPO
@@ -92,7 +94,7 @@ export function createBlock(options: {
   const el = outcome.ok ? (outcome.element as Block) : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'Block',
+    name: el?.name ?? chosenName,
     kind: 'block',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
@@ -114,11 +116,12 @@ export function createValueType(options: {
   dimension?: string;
 }): ValueTypeDefinition {
   const chosenId = options.id ?? generateId('vt');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('ValueType', options.existingNames) : 'ValueType');
   const outcome = createSemanticElement(
     {
       metaclass: 'ValueType',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
     },
     DUMMY_REPO
@@ -126,7 +129,7 @@ export function createValueType(options: {
   const el = outcome.ok ? (outcome.element as ValueType) : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'ValueType',
+    name: el?.name ?? chosenName,
     kind: 'valueType',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
@@ -142,11 +145,12 @@ export function createInterface(options: {
   existingNames?: Iterable<string>;
 }): InterfaceDefinition {
   const chosenId = options.id ?? generateId('if');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('Interface', options.existingNames) : 'Interface');
   const outcome = createSemanticElement(
     {
       metaclass: 'InterfaceBlock',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
     },
     DUMMY_REPO
@@ -154,7 +158,7 @@ export function createInterface(options: {
   const el = outcome.ok ? (outcome.element as InterfaceBlock) : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'Interface',
+    name: el?.name ?? chosenName,
     kind: 'interface',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
@@ -170,11 +174,12 @@ export function createRequirement(options: {
   text?: string;
 }): RequirementDefinition {
   const chosenId = options.id ?? generateId('req');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('Requirement', options.existingNames) : 'Requirement');
   const outcome = createSemanticElement(
     {
       metaclass: 'Requirement',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
       text: options.text,
     },
@@ -183,7 +188,7 @@ export function createRequirement(options: {
   const el = outcome.ok ? (outcome.element as Requirement) : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'Requirement',
+    name: el?.name ?? chosenName,
     kind: 'requirement',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
@@ -203,11 +208,12 @@ export function createVerificationCase(options: {
   existingNames?: Iterable<string>;
 }): VerificationCase {
   const chosenId = options.id ?? generateId('vc');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('VerificationCase', options.existingNames) : 'VerificationCase');
   const outcome = createSemanticElement(
     {
       metaclass: 'TestCase',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
     },
     DUMMY_REPO
@@ -215,7 +221,7 @@ export function createVerificationCase(options: {
   const el = outcome.ok ? (outcome.element as TestCase) : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'VerificationCase',
+    name: el?.name ?? chosenName,
     kind: 'verificationCase',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
@@ -228,13 +234,15 @@ export function createUseCase(options: {
   id?: string;
   name?: string;
   ownerId: string;
+  existingNames?: Iterable<string>;
 }): UseCaseDefinition {
   const chosenId = options.id ?? generateId('uc');
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('UseCase', options.existingNames) : 'Use Case');
   const outcome = createSemanticElement(
     {
       metaclass: 'UseCase',
       id: chosenId,
-      name: options.name,
+      name: chosenName,
       ownerId: options.ownerId,
     },
     DUMMY_REPO
@@ -242,7 +250,7 @@ export function createUseCase(options: {
   const el = outcome.ok ? (outcome.element as UseCase) : null;
   return {
     id: el?.id ?? chosenId,
-    name: el?.name ?? options.name ?? 'Use Case',
+    name: el?.name ?? chosenName,
     kind: 'useCase',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,

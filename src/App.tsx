@@ -5816,7 +5816,7 @@ const ADIA = () => {
 
   // Standby Timeout Listener (30 seconds of inactivity)
   useEffect(() => {
-    if (showWelcome) return; // Don't trigger standby if the initial welcome/intro screen is visible
+    if (showWelcome || (typeof navigator !== 'undefined' && navigator.webdriver)) return; // Don't trigger standby if the initial welcome/intro screen is visible or in test environment
 
     let timeoutId: NodeJS.Timeout;
 
@@ -6255,12 +6255,16 @@ const ADIA = () => {
   }, [states]);
 
   const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
+    const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    const currentStore = sysmlGatewayStateRef.current?.store ?? sysmlStore;
+    const currentCoords = sysmlGatewayStateRef.current?.coordinates ?? Object.fromEntries(currentStore.coordinates.entries());
+    const currentDiagPres = sysmlGatewayStateRef.current?.diagramPresentations ?? Object.fromEntries(currentStore.diagramPresentations.entries());
     const currentState = {
       ...sysmlGatewayStateRef.current,
-      repository: canonicalSysmlRepository,
-      store: sysmlStore,
-      coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
-      diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+      repository: currentRepo,
+      store: currentStore,
+      coordinates: currentCoords,
+      diagramPresentations: currentDiagPres,
       context: externalEndpointContext,
     };
     const result = executeSysmlCommand(currentState, cmd, undefined, externalEndpointContext);
@@ -6297,6 +6301,21 @@ const ADIA = () => {
       Object.fromEntries(sysmlStore.diagramPresentations.entries()),
     );
   }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__sysmlExecuteCommand = handleExecuteSysmlCommand;
+      (window as any).__setActivePackageDiagramId = setActivePackageDiagramId;
+      try {
+        Object.defineProperty(window, '__sysmlRepository', {
+          get: () => sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository,
+          configurable: true,
+        });
+      } catch {
+        (window as any).__sysmlRepository = canonicalSysmlRepository;
+      }
+    }
+  }, [handleExecuteSysmlCommand, canonicalSysmlRepository]);
 
   // Report Application Delegate connected to the real report export pipeline
   const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
@@ -7211,7 +7230,7 @@ const ADIA = () => {
     const error: ConnectionErrorItem = {
       id: uuidv4(),
       type: 'error',
-      message: rejection.diagnostic.message,
+      message: rejection.diagnostic.code ? `${rejection.diagnostic.code}: ${rejection.diagnostic.message}` : rejection.diagnostic.message,
       timestamp: new Date(),
       source: 'SysML connection policy',
       elementId,
@@ -9979,17 +9998,19 @@ const ADIA = () => {
       targetFamily: targetEndpoint.family,
     };
     const result = handleExecuteSysmlCommand(
-      activeSysmlDiagramId
+      diagramMode !== 'statemachine' && activeSysmlDiagramId
         ? { type: 'createAndPresent', diagramId: activeSysmlDiagramId, element: candidate, presentation: {} }
         : { type: 'createElement', element: candidate }
     );
     if (!result.committed) {
-      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      result.diagnostics.forEach(d => addError(d.severity, d.code ? `${d.code}: ${d.message}` : d.message, 'SysML', d.elementId));
       return;
     }
-    setSelectedIds([candidate.id]);
+    if (diagramMode !== 'statemachine') {
+      setSelectedIds([candidate.id]);
+    }
     addError('info', `Created ${type}`);
-  }, [handleExecuteSysmlCommand, addError, activeSysmlDiagramId, blocks, parts, states]);
+  }, [handleExecuteSysmlCommand, addError, activeSysmlDiagramId, blocks, parts, states, diagramMode]);
 
   type BddFeatureDrag =
     | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }
@@ -10320,6 +10341,7 @@ const ADIA = () => {
       const res = handleExecuteSysmlCommand(plan.command as any);
       if (res.committed) {
         setPortTypePrompt(null);
+        setShowErrorDialog(false);
       } else {
         res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
         setPortTypePrompt(prev => prev ? { ...prev, error: res.diagnostics[0]?.message } : null);
@@ -10327,7 +10349,7 @@ const ADIA = () => {
     } else {
       setPortTypePrompt(prev => prev ? { ...prev, error: plan.diagnostics[0]?.message } : null);
     }
-  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
+  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError, setShowErrorDialog]);
 
   const handleCreateNewTypeForPort = useCallback(() => {
     if (!portTypePrompt) return;
@@ -10341,10 +10363,25 @@ const ADIA = () => {
         type: 'createAndPresent',
         diagramId: activeSysmlDiagramId,
         element: iface,
-        presentation: { x: 100, y: 100 },
+        presentation: { x: 450, y: 100 },
       });
       if (res.committed) {
-        handlePortTypeSelected(iface.id);
+        const plan = buildCreateOwnedPortCommand(res.repository, {
+          ownerBlockId: portTypePrompt.ownerBlockId,
+          portKind: portTypePrompt.portKind,
+          typeId: iface.id,
+          diagramId: activeSysmlDiagramId,
+        });
+        if (plan.ok && plan.command) {
+          const portRes = handleExecuteSysmlCommand(plan.command as any);
+          if (portRes.committed) {
+            setPortTypePrompt(null);
+            setShowErrorDialog(false);
+          } else {
+            portRes.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+            setPortTypePrompt(prev => prev ? { ...prev, error: portRes.diagnostics[0]?.message } : null);
+          }
+        }
       }
     } else {
       const outcome = buildDiagramCreationCommand({
@@ -10352,16 +10389,31 @@ const ADIA = () => {
         kind: 'Block',
         ownerId: 'model',
         diagramId: activeSysmlDiagramId,
-        position: { x: 100, y: 100 },
+        position: { x: 450, y: 100 },
       });
       if (outcome.ok) {
         const res = handleExecuteSysmlCommand(outcome.command);
         if (res.committed) {
-          handlePortTypeSelected(outcome.semanticId);
+          const plan = buildCreateOwnedPortCommand(res.repository, {
+            ownerBlockId: portTypePrompt.ownerBlockId,
+            portKind: portTypePrompt.portKind,
+            typeId: outcome.semanticId,
+            diagramId: activeSysmlDiagramId,
+          });
+          if (plan.ok && plan.command) {
+            const portRes = handleExecuteSysmlCommand(plan.command as any);
+            if (portRes.committed) {
+              setPortTypePrompt(null);
+              setShowErrorDialog(false);
+            } else {
+              portRes.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+              setPortTypePrompt(prev => prev ? { ...prev, error: portRes.diagnostics[0]?.message } : null);
+            }
+          }
         }
       }
     }
-  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, handlePortTypeSelected]);
+  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError, setShowErrorDialog]);
 
   const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
     if (selectedIds.length !== 1) {
@@ -10433,6 +10485,7 @@ const ADIA = () => {
 
   const [isCreatingConnector, setIsCreatingConnector] = useState(false);
   const [connectorSource, setConnectorSource] = useState<{ partId: string, portId: string } | null>(null);
+  const connectorSourceRef = useRef<{ partId: string, portId: string } | null>(null);
 
   const handlePortMouseDown = useCallback((e: MouseEvent<SVGRectElement>, elementId: string, portId: string) => {
     e.stopPropagation();
@@ -10458,18 +10511,20 @@ const ADIA = () => {
     }
 
     if (isCreatingConnector) {
-      if (connectorSource) {
-        if (connectorSource.partId === partId && connectorSource.portId === portId) {
+      const activeSource = connectorSourceRef.current;
+      if (activeSource) {
+        if (activeSource.partId === partId && activeSource.portId === portId) {
           setIsCreatingConnector(false);
           setConnectorSource(null);
+          connectorSourceRef.current = null;
           return;
         }
 
         const plan = buildCreateIbdConnectorCommand(canonicalSysmlRepository, {
           contextId: currentLayerId,
           source: {
-            occurrenceId: connectorSource.partId === currentLayerId ? null : connectorSource.partId,
-            portDefinitionId: connectorSource.portId,
+            occurrenceId: activeSource.partId === currentLayerId ? null : activeSource.partId,
+            portDefinitionId: activeSource.portId,
           },
           target: {
             occurrenceId: partId === currentLayerId ? null : partId,
@@ -10489,11 +10544,14 @@ const ADIA = () => {
         }
         setIsCreatingConnector(false);
         setConnectorSource(null);
+        connectorSourceRef.current = null;
       } else {
-        setConnectorSource({ partId, portId });
+        const nextSource = { partId, portId };
+        setConnectorSource(nextSource);
+        connectorSourceRef.current = nextSource;
       }
     }
-  }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId, canonicalSysmlRepository, handleExecuteSysmlCommand]);
+  }, [isCreatingConnector, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId, canonicalSysmlRepository, handleExecuteSysmlCommand]);
 
   const deleteConnector = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
@@ -15582,7 +15640,13 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(conn.id);
 
       return (
-        <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }} style={{ cursor: 'pointer' }}>
+        <g
+          key={conn.id}
+          data-presentation-kind="connector"
+          data-connector-id={conn.id}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }}
+          style={{ cursor: 'pointer' }}
+        >
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={12} />
           <path d={route.path} fill="none" stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
           {!isInteracting && (conn.itemFlow || conn.label) && (
@@ -17059,6 +17123,7 @@ const ADIA = () => {
                         if (isCreatingConnector) {
                           setIsCreatingConnector(false);
                           setConnectorSource(null);
+                          connectorSourceRef.current = null;
                         } else {
                           setIsCreatingConnector(true);
                         }
@@ -17307,13 +17372,13 @@ const ADIA = () => {
                             {renderBlocks()}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
-                            {renderParts()}
-                          </g>
-                          <g style={{ pointerEvents: 'all' }}>
                             {renderConnectors()}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
                             {renderInterfaceRealizations()}
+                          </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderParts()}
                           </g>
                         </>
                       ) : null
