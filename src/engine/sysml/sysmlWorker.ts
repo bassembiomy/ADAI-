@@ -7,6 +7,7 @@ import {
 } from './normalizedStore';
 import type { SysmlRepository } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic, type SysmlValidationReport } from './validation';
+import type { SemanticEndpointContext } from './semanticEndpointIndex';
 import { analyzeMutation, type MutationImpact } from './mutations';
 import { classifyDeletionTarget } from './policy';
 import { serializeRepository } from './persistence';
@@ -52,6 +53,25 @@ function ensureStore(payload: WorkerStoreSnapshot | SysmlRepository | Normalized
     return fromWorkerSnapshot(payload);
   }
   return fromRepository(payload as SysmlRepository);
+}
+
+/**
+ * Task 4 cross-domain endpoint context: when State context is available on
+ * the worker request (explicit `endpointContext`/`context` envelope, which
+ * needs no protocol change), validation resolves external State endpoints
+ * by stable semantic ID through the shared endpoint index. Without context,
+ * missing State endpoints are still diagnosed as before. Endpoint records
+ * are never invented from family labels here.
+ */
+function requestEndpointContext(request: WorkerRequest): SemanticEndpointContext | undefined {
+  const holder = request as unknown as {
+    endpointContext?: SemanticEndpointContext;
+    context?: SemanticEndpointContext;
+  };
+  const explicit = holder.endpointContext ?? holder.context;
+  const external = explicit?.externalEndpoints;
+  if (external instanceof Map && external.size > 0) return { externalEndpoints: external };
+  return undefined;
 }
 
 export function cancelRequest(requestId: string): void {
@@ -146,7 +166,7 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
           cancelledRequestIds.delete(requestId);
           return { requestId, revision, taskType, success: false, error: 'Cancelled', cancelled: true };
         }
-        const result: SysmlValidationReport = validateSysmlRepository(repo);
+        const result: SysmlValidationReport = validateSysmlRepository(repo, requestEndpointContext(request));
         return {
           requestId,
           revision,
@@ -178,7 +198,10 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
         };
         // Compact diagnostic codes for the projected revision (IDs only —
         // the repository itself is never embedded in the response).
-        const projectedDiagnostics = validateSysmlRepository(toRepository(store)).diagnostics;
+        const projectedDiagnostics = validateSysmlRepository(
+          toRepository(store),
+          requestEndpointContext(request),
+        ).diagnostics;
         return {
           requestId,
           revision,

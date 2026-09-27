@@ -1035,7 +1035,7 @@ export function executeSysmlCommand(
         const repo = toRepository(store);
         const nextCoords = Object.fromEntries(store.coordinates);
         const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-        const validation = validateSysmlRepository(repo);
+        const validation = validateSysmlRepository(repo, endpointContext);
         const view = getView(repo, nextCoords, nextDiagrams);
         const nextHistory: MutationHistory = {
           past: [],
@@ -1080,7 +1080,7 @@ export function executeSysmlCommand(
           }
           store.diagramPresentations = new Map(Object.entries(prev.diagramPresentations));
           store.revision += 1;
-          const validation = validateSysmlRepository(state.repository);
+          const validation = validateSysmlRepository(state.repository, endpointContext);
           const view = getView(state.repository, prev.coordinates, prev.diagramPresentations);
           return {
             repository: state.repository,
@@ -1106,7 +1106,7 @@ export function executeSysmlCommand(
     store.coordinates = new Map(Object.entries(coordinates));
     store.diagramPresentations = new Map(Object.entries(diagramPresentations));
 
-    const validation = validateSysmlRepository(repo);
+    const validation = validateSysmlRepository(repo, endpointContext);
     const view = getView(repo, coordinates, diagramPresentations);
     return {
       repository: repo,
@@ -1135,7 +1135,7 @@ export function executeSysmlCommand(
         const repo = toRepository(store);
         const nextCoords = Object.fromEntries(store.coordinates);
         const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-        const validation = validateSysmlRepository(repo);
+        const validation = validateSysmlRepository(repo, endpointContext);
         const view = getView(repo, nextCoords, nextDiagrams);
         const nextHistory: MutationHistory = {
           past: [],
@@ -1180,7 +1180,7 @@ export function executeSysmlCommand(
           }
           store.diagramPresentations = new Map(Object.entries(next.diagramPresentations));
           store.revision += 1;
-          const validation = validateSysmlRepository(state.repository);
+          const validation = validateSysmlRepository(state.repository, endpointContext);
           const view = getView(state.repository, next.coordinates, next.diagramPresentations);
           return {
             repository: state.repository,
@@ -1206,7 +1206,7 @@ export function executeSysmlCommand(
     store.coordinates = new Map(Object.entries(coordinates));
     store.diagramPresentations = new Map(Object.entries(diagramPresentations));
 
-    const validation = validateSysmlRepository(repo);
+    const validation = validateSysmlRepository(repo, endpointContext);
     const view = getView(repo, coordinates, diagramPresentations);
     return {
       repository: repo,
@@ -1308,7 +1308,7 @@ export function executeSysmlCommand(
     });
     pushPatch(patchHistory, patch, store);
 
-    const validation = validateSysmlRepository(state.repository);
+    const validation = validateSysmlRepository(state.repository, endpointContext);
     const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
     return {
       repository: state.repository,
@@ -1541,7 +1541,7 @@ export function executeSysmlCommand(
     // separate port pass is appended here (that would double-count port
     // diagnostics).
     // -----------------------------------------------------------------------
-    const stagedValidation = validateSysmlRepository(stagedRepo);
+    const stagedValidation = validateSysmlRepository(stagedRepo, endpointContext);
     const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
@@ -1617,7 +1617,7 @@ export function executeSysmlCommand(
     // never carry error-severity diagnostics. Any error aborts with the
     // original revision and state before repository, presentation,
     // persistence, or history is applied.
-    const finalValidation = validateSysmlRepository(nextRepo);
+    const finalValidation = validateSysmlRepository(nextRepo, endpointContext);
     if (finalValidation.diagnostics.some(d => d.severity === 'error')) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -1805,7 +1805,7 @@ export function executeSysmlCommand(
       present: nextRepo,
       future: [],
     };
-    const validation = validateSysmlRepository(nextRepo);
+    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, diagramPresentations);
 
     return {
@@ -1908,7 +1908,7 @@ export function executeSysmlCommand(
       present: nextRepo,
       future: [],
     };
-    const validation = validateSysmlRepository(nextRepo);
+    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, diagramPresentations);
 
     return {
@@ -2114,13 +2114,17 @@ export function executeSysmlCommand(
       future: [],
     };
     const view = getView(nextRepo, coordinates, nextDiagramPresentations);
+    // Post-commit validation resolves through the same endpoint context as
+    // admission, so an unrelated deletion cannot invalidate a valid
+    // State-to-Requirement link whose State lives outside the repository.
+    const postDeleteValidation = validateSysmlRepository(nextRepo, endpointContext);
 
     return {
       repository: nextRepo,
       store,
       patchHistory,
       view,
-      diagnostics: mutationResult.validation.diagnostics,
+      diagnostics: postDeleteValidation.diagnostics,
       impact,
       committed: true,
       history: nextHistory,
@@ -2175,7 +2179,7 @@ export function executeSysmlCommand(
     };
     const nextActionStack: Array<'semantic' | 'presentation'> = [...(state.actionStack ?? []), 'presentation'];
 
-    const validation = validateSysmlRepository(state.repository);
+    const validation = validateSysmlRepository(state.repository, endpointContext);
     const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
 
     return {
@@ -2313,7 +2317,7 @@ export function executeSysmlCommand(
       future: [],
     };
 
-    const validation = validateSysmlRepository(nextRepo);
+    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, diagramPresentations);
     return {
       repository: nextRepo,
@@ -2383,7 +2387,7 @@ export function executeSysmlCommand(
       future: [],
     };
 
-    const validation = validateSysmlRepository(nextRepo);
+    const validation = validateSysmlRepository(nextRepo, endpointContext);
     const view = getView(nextRepo, coordinates, nextDiagramPresentations);
     return {
       repository: nextRepo,
@@ -2562,7 +2566,7 @@ export function executeSysmlCommand(
     });
     pushPatch(patchHistory, patch, store);
 
-    const validation = validateSysmlRepository(state.repository);
+    const validation = validateSysmlRepository(state.repository, endpointContext);
     const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
     return {
       repository: state.repository,
@@ -2664,7 +2668,10 @@ export function buildCanonicalSysmlProjectPayload(
   };
 }
 
-export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
+export function loadCanonicalSysmlProject(
+  payload: Record<string, unknown>,
+  context?: SemanticEndpointContext,
+): {
   repository: SysmlRepository;
   store: NormalizedSysmlStore;
   view: LegacySysmlView;
@@ -2685,7 +2692,7 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
 
   if (!rawRepo) {
     // Fallback: migrate legacy payload
-    const loadRes = loadRepository(payload);
+    const loadRes = loadRepository(payload, context);
     const store = fromRepository(loadRes.repository, coordinates, diagramPresentations);
     const view = getCachedLegacyView(store);
     return {
@@ -2702,7 +2709,7 @@ export function loadCanonicalSysmlProject(payload: Record<string, unknown>): {
     };
   }
 
-  const loadRes = loadRepository(rawRepo);
+  const loadRes = loadRepository(rawRepo, context);
   const store = fromRepository(loadRes.repository, coordinates, diagramPresentations);
   const view = getCachedLegacyView(store);
 

@@ -2007,6 +2007,107 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect((redone.repository.definitions['blk-vehicle'] as BlockDefinition).properties.map(p => p.id)).toEqual(['prop-engine']);
     expect(redone.repository.usages['usage-engine']).toBeDefined();
   });
+
+  it('Task 4: preserves a valid State-to-Requirement link across mutation, undo, redo, and hydration with context', () => {
+    const repository = createEmptyRepository();
+    repository.requirements.req1 = {
+      id: 'req1', name: 'Req 1', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-1', text: 'Must hold', status: 'draft', version: '1',
+    };
+    const stateContext = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+    let state = createSysmlGatewayState(repository, {}, {}, undefined, stateContext);
+    // The UI carries family labels on the candidate; persistence must keep IDs only.
+    const link: SysmlRelationship = {
+      id: 'rel-state-req', kind: 'satisfy', sourceId: 'state-active', targetId: 'req1',
+      sourceFamily: 'state', targetFamily: 'requirement',
+    };
+    const created = executeSysmlCommand(state, { type: 'createElement', element: link });
+    expect(created.committed).toBe(true);
+    expect(created.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
+    state = { ...state, ...created };
+
+    const unrelated: BlockDefinition = {
+      id: 'blk-unrelated', name: 'Unrelated', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const mutated = executeSysmlCommand(state, { type: 'createElement', element: unrelated });
+    expect(mutated.committed).toBe(true);
+    expect(mutated.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    expect(mutated.repository.relationships['rel-state-req']).toMatchObject({
+      sourceId: 'state-active', targetId: 'req1',
+    });
+    state = { ...state, ...mutated };
+
+    const renamed = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'blk-unrelated', patch: { name: 'Renamed' },
+    });
+    expect(renamed.committed).toBe(true);
+    expect(renamed.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    state = { ...state, ...renamed };
+
+    const undone = executeSysmlCommand(state, { type: 'undo' });
+    expect(undone.repository.relationships['rel-state-req']).toMatchObject({
+      sourceId: 'state-active', targetId: 'req1',
+    });
+    expect(undone.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+    const redone = executeSysmlCommand({ ...state, ...undone }, { type: 'redo' });
+    expect(redone.repository.relationships['rel-state-req']).toMatchObject({
+      sourceId: 'state-active', targetId: 'req1',
+    });
+    expect(redone.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    state = { ...state, ...redone };
+
+    // Persistence is authoritative on IDs only: no stale State copies survive.
+    const payload = buildCanonicalSysmlProjectPayload(state, { version: '1', projectName: 'StateLink' });
+    const envelope = JSON.parse(payload.sysmlRepository as string);
+    expect(envelope.repository.relationships['rel-state-req']).toMatchObject({
+      sourceId: 'state-active', targetId: 'req1',
+    });
+    expect(envelope.repository.relationships['rel-state-req'].sourceFamily).toBeUndefined();
+    expect(envelope.repository.relationships['rel-state-req'].targetFamily).toBeUndefined();
+
+    // Hydration with the active State Machine endpoint context stays valid.
+    const loaded = loadCanonicalSysmlProject(payload, stateContext);
+    expect(loaded.repository.relationships['rel-state-req']).toMatchObject({
+      sourceId: 'state-active', targetId: 'req1',
+    });
+    expect(loaded.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    expect(loaded.diagnostics.map(d => d.code)).not.toContain('UNRESOLVED_ENDPOINT');
+
+    // Hydration without an integrated State diagnoses the missing endpoint.
+    const loadedBare = loadCanonicalSysmlProject(payload);
+    expect(loadedBare.valid).toBe(false);
+    expect(loadedBare.diagnostics.map(d => d.code)).toContain('UNRESOLVED_ENDPOINT');
+  });
+
+  it('Task 4: rejects reversed Requirement-to-State satisfy without mutation', () => {
+    const repository = createEmptyRepository();
+    repository.requirements.req1 = {
+      id: 'req1', name: 'Req 1', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-1', text: 'Must hold', status: 'draft', version: '1',
+    };
+    const stateContext = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+    const state = createSysmlGatewayState(repository, {}, {}, undefined, stateContext);
+    const revisionBefore = state.repository.revision;
+    const bad: SysmlRelationship = {
+      id: 'rel-bad-direction', kind: 'satisfy', sourceId: 'req1', targetId: 'state-active',
+    };
+    const res = executeSysmlCommand(state, { type: 'createElement', element: bad });
+    expect(res.committed).toBe(false);
+    expect(res.repository).toBe(state.repository);
+    expect(res.repository.revision).toBe(revisionBefore);
+    expect(res.repository.relationships['rel-bad-direction']).toBeUndefined();
+    expect(res.diagnostics.map(d => d.code)).toContain('INVALID_SATISFY_DIRECTION');
+  });
 });
 
 

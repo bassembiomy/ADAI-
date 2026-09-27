@@ -15,6 +15,7 @@ import {
   type UseCaseRelationshipKind,
 } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic } from './validation';
+import type { SemanticEndpointContext } from './semanticEndpointIndex';
 import {
   createEmptyInterchangeReport,
   mergeInterchangeReports,
@@ -52,6 +53,21 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
     Object.fromEntries(
       Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
     );
+  // Relationships persist endpoint IDs only. UI-supplied family labels
+  // (sourceFamily/targetFamily) are stale State copies once serialized, so
+  // they are stripped here; hydration re-resolves families by stable semantic
+  // ID through the endpoint index authority instead.
+  const relationships = Object.fromEntries(
+    Object.values(repository.relationships ?? {})
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(relationship => {
+        const { sourceFamily: _sourceFamily, targetFamily: _targetFamily, ...idsOnly } = relationship as SysmlRelationship & {
+          sourceFamily?: unknown;
+          targetFamily?: unknown;
+        };
+        return [relationship.id, idsOnly];
+      }),
+  );
   const definitions = Object.fromEntries(
     Object.values(repository.definitions ?? {})
       .sort((a, b) => a.id.localeCompare(b.id))
@@ -69,7 +85,7 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
     definitions,
     usages: sorted(repository.usages ?? {}),
     connectors: sorted(repository.connectors ?? {}),
-    relationships: sorted(repository.relationships ?? {}),
+    relationships,
     requirements: sorted(repository.requirements ?? {}),
     verificationCases: sorted(repository.verificationCases ?? {}),
     evidence: sorted(repository.evidence ?? {}),
@@ -130,7 +146,85 @@ function canonicalizeRepositoryForChecksum(repository: any): any {
   return canonicalizeRepository(repository);
 }
 
-export function loadRepository(input: string | unknown): LoadRepositoryResult {
+/**
+ * Task 4 cross-domain endpoint context for hydration. Quarantine only knows
+ * canonical repository records, so a valid State-to-Requirement relationship
+ * is stripped on reload when its State lives in the external State Machine
+ * model. When the caller supplies that model's endpoint context, restore
+ * quarantined relationships whose endpoints all resolve by stable semantic
+ * ID against the live repository plus the context — IDs only, never by
+ * family label. Relationships still missing an endpoint stay quarantined
+ * with their UNRESOLVED_ENDPOINT diagnostics intact.
+ */
+function collectHydratedEndpointIds(repository: SysmlRepository): Set<string> {
+  const ids = new Set<string>([
+    ...Object.keys(repository.packages ?? {}),
+    ...Object.keys(repository.diagrams ?? {}),
+    ...Object.keys(repository.definitions ?? {}),
+    ...Object.keys(repository.usages ?? {}),
+    ...Object.keys(repository.connectors ?? {}),
+    ...Object.keys(repository.relationships ?? {}),
+    ...Object.keys(repository.requirements ?? {}),
+    ...Object.keys(repository.verificationCases ?? {}),
+    ...Object.keys(repository.evidence ?? {}),
+    ...Object.keys(repository.baselines ?? {}),
+    ...Object.keys(repository.artifacts ?? {}),
+    ...Object.keys(repository.actors ?? {}),
+    ...Object.keys(repository.subjects ?? {}),
+    ...Object.keys(repository.useCases ?? {}),
+    ...Object.keys(repository.extensionPoints ?? {}),
+    ...Object.keys(repository.diagramReferences ?? {}),
+  ]);
+  for (const definition of Object.values(repository.definitions ?? {})) {
+    if (definition.kind === 'block') {
+      for (const feature of [...(definition.properties ?? []), ...(definition.ports ?? [])]) {
+        ids.add(feature.id);
+      }
+    }
+  }
+  return ids;
+}
+
+function restoreContextResolvedRelationships(
+  preQuarantine: SysmlRepository,
+  live: SysmlRepository,
+  report: InterchangeReport,
+  context: SemanticEndpointContext,
+): { repository: SysmlRepository; report: InterchangeReport } {
+  const known = collectHydratedEndpointIds(live);
+  for (const id of context.externalEndpoints?.keys() ?? []) known.add(id);
+  const restorable = report.quarantinedRelationshipIds.filter(id => {
+    const relationship = preQuarantine.relationships?.[id];
+    return Boolean(relationship) && known.has(relationship.sourceId) && known.has(relationship.targetId);
+  });
+  if (restorable.length === 0) return { repository: live, report };
+  const restorableIds = new Set(restorable);
+  const repository: SysmlRepository = {
+    ...live,
+    relationships: { ...(live.relationships ?? {}) },
+  };
+  for (const id of restorable) {
+    const original = preQuarantine.relationships[id];
+    const { sourceFamily: _sourceFamily, targetFamily: _targetFamily, ...idsOnly } = original as SysmlRelationship & {
+      sourceFamily?: unknown;
+      targetFamily?: unknown;
+    };
+    repository.relationships[id] = idsOnly;
+  }
+  const restoredReport: InterchangeReport = {
+    ...report,
+    unresolvedEndpoints: report.unresolvedEndpoints.filter(entry =>
+      !(entry.kind === 'relationship' && restorableIds.has(entry.id)),
+    ),
+    quarantinedRelationshipIds: report.quarantinedRelationshipIds.filter(id => !restorableIds.has(id)),
+    diagnostics: report.diagnostics.filter(diagnostic =>
+      !(restorableIds.has(diagnostic.elementId ?? '') && diagnostic.code === 'UNRESOLVED_ENDPOINT'),
+    ),
+  };
+  return { repository, report: restoredReport };
+}
+
+export function loadRepository(input: string | unknown, context?: SemanticEndpointContext): LoadRepositoryResult {
   const diagnostics: SysmlDiagnostic[] = [];
   const migrationReport = createEmptyInterchangeReport();
   let raw: unknown;
@@ -196,12 +290,23 @@ export function loadRepository(input: string | unknown): LoadRepositoryResult {
   }
   // Reject-or-quarantine: strip edges with dangling endpoints into an
   // explicit quarantine list. Never synthesize a generic association.
+  // Hydration with the active State Machine endpoint context restores
+  // relationships whose endpoints resolve by stable semantic ID against that
+  // context; without an integrated State they stay quarantined and diagnosed.
+  const preQuarantine = repository;
   const quarantined = quarantineUnresolvedEndpoints(repository);
   repository = quarantined.repository;
-  const interchangeReport = mergeInterchangeReports(migrationReport, quarantined.report);
-  diagnostics.push(...quarantined.report.diagnostics);
+  let interchangeReport = mergeInterchangeReports(migrationReport, quarantined.report);
+  if (context?.externalEndpoints?.size) {
+    const restored = restoreContextResolvedRelationships(preQuarantine, repository, interchangeReport, context);
+    repository = restored.repository;
+    interchangeReport = restored.report;
+  }
+  diagnostics.push(...interchangeReport.diagnostics.filter(diagnostic =>
+    !migrationReport.diagnostics.includes(diagnostic),
+  ));
   freezeBaselines(repository);
-  const validation = validateSysmlRepository(repository);
+  const validation = validateSysmlRepository(repository, context);
   diagnostics.push(...validation.diagnostics);
   return { repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated, interchangeReport };
 }
@@ -942,7 +1047,8 @@ export function serializeIncrementalChunks(
  */
 export function hydrateRepositoryFromChunks(
   manifest: ChunkManifest,
-  getChunk: (key: string) => string | unknown
+  getChunk: (key: string) => string | unknown,
+  context?: SemanticEndpointContext,
 ): LoadRepositoryResult {
   const diagnostics: SysmlDiagnostic[] = [];
   const repo = createEmptyRepository();
@@ -993,17 +1099,24 @@ export function hydrateRepositoryFromChunks(
 
   freezeBaselines(repo);
   const quarantined = quarantineUnresolvedEndpoints(repo);
-  diagnostics.push(...quarantined.report.diagnostics);
-  freezeBaselines(quarantined.repository);
-  const validation = validateSysmlRepository(quarantined.repository);
+  let liveRepository = quarantined.repository;
+  let chunkedReport = quarantined.report;
+  if (context?.externalEndpoints?.size) {
+    const restored = restoreContextResolvedRelationships(repo, liveRepository, chunkedReport, context);
+    liveRepository = restored.repository;
+    chunkedReport = restored.report;
+  }
+  diagnostics.push(...chunkedReport.diagnostics);
+  freezeBaselines(liveRepository);
+  const validation = validateSysmlRepository(liveRepository, context);
   diagnostics.push(...validation.diagnostics);
 
   return {
-    repository: quarantined.repository,
+    repository: liveRepository,
     diagnostics,
     valid: !diagnostics.some(d => d.severity === 'error'),
     migrated: false,
-    interchangeReport: quarantined.report,
+    interchangeReport: chunkedReport,
   };
 }
 

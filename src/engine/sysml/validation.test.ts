@@ -207,6 +207,65 @@ describe('validateSysmlRepository', () => {
     expect(withContext.valid).toBe(true);
   });
 
+  it('Task 4: keeps a valid State-to-Requirement link valid across unrelated mutations with context', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.req1 = {
+      id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'Must be fast', status: 'draft', version: '1',
+    };
+    repo.relationships.rel1 = {
+      id: 'rel1',
+      kind: 'satisfy',
+      sourceId: 'state-active',
+      targetId: 'req1',
+    };
+    const context = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+
+    expect(validateSysmlRepository(repo, context).valid).toBe(true);
+
+    // An unrelated repository mutation must not invalidate the link.
+    repo.definitions.unrelated = block('unrelated');
+    const after = validateSysmlRepository(repo, context);
+    expect(after.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    expect(after.valid).toBe(true);
+    expect(repo.relationships.rel1).toMatchObject({ sourceId: 'state-active', targetId: 'req1' });
+  });
+
+  it('Task 4: reports a structured INVALID_RELATIONSHIP_DIRECTION for reversed Requirement-to-State satisfy', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.req1 = {
+      id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'Must be fast', status: 'draft', version: '1',
+    };
+    repo.relationships.bad = {
+      id: 'bad',
+      kind: 'satisfy',
+      sourceId: 'req1',
+      targetId: 'state-active',
+    };
+    const context = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+
+    const report = validateSysmlRepository(repo, context);
+    const diagnostic = report.diagnostics.find(d => d.code === 'INVALID_RELATIONSHIP_DIRECTION');
+    expect(diagnostic).toBeDefined();
+    expect(report.valid).toBe(false);
+    expect(diagnostic!.message).toContain('satisfy');
+    expect(diagnostic!.message).toContain('req1');
+    expect(diagnostic!.message).toContain('requirement');
+    expect(diagnostic!.message).toContain('state-active');
+    expect(diagnostic!.message).toContain('state');
+    // Error diagnosis never mutates the repository.
+    expect(repo.relationships.bad).toMatchObject({ sourceId: 'req1', targetId: 'state-active' });
+  });
+
   it('validates repository nested ports and reports INVALID_NESTED_PROXY_PORT for non-proxy port in proxy port', () => {
     const repo = createEmptyRepository();
     repo.definitions.iface = {

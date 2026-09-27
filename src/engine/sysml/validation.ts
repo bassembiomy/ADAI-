@@ -1,4 +1,4 @@
-import { qualifiedName, type BlockDefinition, type SysmlRepository } from './model';
+import { qualifiedName, type BlockDefinition, type SysmlRelationship, type SysmlRepository } from './model';
 import { validateRequirementContainment } from './requirements';
 import { classifyRelationship, parsePolicyDiagnostic } from './policy';
 import {
@@ -7,7 +7,7 @@ import {
   isUseCaseRelationshipKind,
 } from './useCases';
 import { validateRepositoryPorts } from './validation/portRules';
-import type { SemanticEndpointContext } from './semanticEndpointIndex';
+import { resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
 
 export { validateRequirementContainment };
 
@@ -140,8 +140,21 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
     }
     if (relationship.kind === 'requirementContainment') {
       diagnostics.push(...validateRequirementContainment(repo, relationship.id));
-    } else if (!hasValidDirection(relationship.kind, relationship.sourceId, relationship.targetId, repo)) {
-      error('INVALID_RELATIONSHIP_DIRECTION', relationship.id, 'kind', `${relationship.kind} has invalid SysML endpoint direction`);
+    } else {
+      const direction = checkRelationshipDirection(repo, relationship);
+      if (!direction.valid) {
+        const sourceFamily = describeEndpointFamily(repo, relationship.sourceId, context);
+        const targetFamily = describeEndpointFamily(repo, relationship.targetId, context);
+        error(
+          'INVALID_RELATIONSHIP_DIRECTION',
+          relationship.id,
+          'kind',
+          `${relationship.kind} has invalid SysML endpoint direction: ` +
+          `source ${relationship.sourceId} (${sourceFamily}) to ` +
+          `target ${relationship.targetId} (${targetFamily}). ` +
+          `${direction.reason} ${directionCorrectiveAction(relationship.kind)}`,
+        );
+      }
     }
 
     // Imported models may contain relationships that are resolvable but no
@@ -203,16 +216,54 @@ function detectCycles<T extends { id: string }>(
   for (const id of byId.keys()) visit(id);
 }
 
-function hasValidDirection(kind: string, sourceId: string, targetId: string, repo: SysmlRepository): boolean {
-  const sourceRequirement = Boolean(repo.requirements[sourceId]);
-  const targetRequirement = Boolean(repo.requirements[targetId]);
+/**
+ * Task 4 cross-domain endpoint context: endpoint families in diagnostics are
+ * resolved by stable semantic ID through the shared endpoint index authority
+ * (repository records plus the caller-supplied external State Machine
+ * endpoints). Family labels carried on the relationship record itself are
+ * never trusted here, so stale copies cannot mask a broken link.
+ */
+function describeEndpointFamily(
+  repo: SysmlRepository, id: string, context?: SemanticEndpointContext,
+): string {
+  if (repo.requirements[id]) return 'requirement';
+  if (repo.verificationCases[id]) return 'verificationCase';
+  return resolveSemanticEndpoint(repo, id, context)?.family ?? 'unknown';
+}
+
+function directionCorrectiveAction(kind: string): string {
   switch (kind) {
+    case 'satisfy': return 'Connect the design element, Part, or State to a Requirement.';
+    case 'verify': return 'Connect a Verification Case to the Requirement it verifies.';
+    case 'refine': return 'Connect a model element to the Requirement it refines.';
     case 'deriveReqt':
-    case 'copy': return sourceRequirement && targetRequirement;
-    case 'composition': return !sourceRequirement && !targetRequirement;
-    case 'satisfy': return !sourceRequirement && targetRequirement;
-    case 'verify': return Boolean(repo.verificationCases[sourceId]) && targetRequirement;
-    case 'refine': return !sourceRequirement && targetRequirement;
-    default: return true;
+    case 'copy': return 'Connect the appropriate Requirement endpoints.';
+    default: return 'Choose endpoints legal for this relationship kind.';
+  }
+}
+
+function checkRelationshipDirection(
+  repo: SysmlRepository, relationship: SysmlRelationship,
+): { valid: boolean; reason: string } {
+  const sourceRequirement = Boolean(repo.requirements[relationship.sourceId]);
+  const targetRequirement = Boolean(repo.requirements[relationship.targetId]);
+  switch (relationship.kind) {
+    case 'deriveReqt':
+    case 'copy': return sourceRequirement && targetRequirement
+      ? { valid: true, reason: '' }
+      : { valid: false, reason: `${relationship.kind} requires Requirement to Requirement endpoints.` };
+    case 'composition': return !sourceRequirement && !targetRequirement
+      ? { valid: true, reason: '' }
+      : { valid: false, reason: 'Composition must not involve Requirement endpoints.' };
+    case 'satisfy': return !sourceRequirement && targetRequirement
+      ? { valid: true, reason: '' }
+      : { valid: false, reason: 'Satisfy requires a non-Requirement source and a Requirement target.' };
+    case 'verify': return Boolean(repo.verificationCases[relationship.sourceId]) && targetRequirement
+      ? { valid: true, reason: '' }
+      : { valid: false, reason: 'Verify requires a Verification Case source and a Requirement target.' };
+    case 'refine': return !sourceRequirement && targetRequirement
+      ? { valid: true, reason: '' }
+      : { valid: false, reason: 'Refine requires a non-Requirement source and a Requirement target.' };
+    default: return { valid: true, reason: '' };
   }
 }
