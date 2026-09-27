@@ -70,7 +70,6 @@ export { isTypeNotFound, type TypeNotFoundResult, type CreateNewTypeAction, type
 export * from '../engine/sysml/commands/presentationCommands';
 import type { OwnedFeatureIntent } from './sysmlOwnedFeatureCommands';
 import { createPortDefinitionFromIntent, createPropertyDefinitionFromIntent } from './sysmlOwnedFeatureCommands';
-import { validateRepositoryPorts } from '../engine/sysml/validation/portRules';
 export type { OwnedFeatureIntent } from './sysmlOwnedFeatureCommands';
 export {
   dispatchSysmlCommand,
@@ -1538,13 +1537,12 @@ export function executeSysmlCommand(
     // history, persistence, or projection state is touched. Any error
     // returns committed: false with the original revision and state; only a
     // clean staged repo proceeds to the single atomic transaction below.
+    // validateSysmlRepository already includes validateRepositoryPorts, so no
+    // separate port pass is appended here (that would double-count port
+    // diagnostics).
     // -----------------------------------------------------------------------
     const stagedValidation = validateSysmlRepository(stagedRepo);
-    const stagedPortErrors = validateRepositoryPorts(stagedRepo).filter(d => d.severity === 'error');
-    const stagedErrors = [
-      ...stagedValidation.diagnostics.filter(d => d.severity === 'error'),
-      ...stagedPortErrors,
-    ];
+    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {

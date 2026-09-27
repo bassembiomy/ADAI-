@@ -1945,6 +1945,39 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect(res.coordinates['prop-clash-1']).toBeUndefined();
   });
 
+  it('rolls back a staged-validation failure (duplicate port name) after passing admission without mutation', () => {
+    let state = seedVehicleWithMotor();
+    const first = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port', ownerBlockId: 'blk-vehicle', portKind: 'umlPort',
+        name: 'duplex', featureId: 'port-duplex-1',
+      },
+    } as any);
+    expect(first.committed).toBe(true);
+    state = advance(state, first);
+
+    const before = snapshot(state);
+    // Both IDs are fresh so atomic admission passes; the duplicate port name
+    // is detectable only by validating the staged repository.
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port', ownerBlockId: 'blk-vehicle', portKind: 'umlPort',
+        name: 'duplex', featureId: 'port-duplex-2',
+      },
+      diagramId: 'bdd',
+      presentation: { x: 5, y: 5 },
+    } as any);
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'PORT_NAME_NOT_UNIQUE' && d.severity === 'error')).toBe(true);
+    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_SEMANTIC_ID' || d.code === 'DUPLICATE_USAGE_ID')).toBe(false);
+    expectNoMutation(res, state, before);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(1);
+    expect(res.coordinates['port-duplex-2']).toBeUndefined();
+  });
+
   it('commits a valid property creation as one transaction with no error diagnostics', () => {
     const state = seedVehicleWithMotor();
     const before = snapshot(state);
