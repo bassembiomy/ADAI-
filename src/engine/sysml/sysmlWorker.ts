@@ -7,7 +7,7 @@ import {
 } from './normalizedStore';
 import type { SysmlRepository } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic, type SysmlValidationReport } from './validation';
-import type { SemanticEndpointContext } from './semanticEndpointIndex';
+import type { SemanticEndpointContext, ExternalSemanticEndpoint } from './semanticEndpointIndex';
 import { analyzeMutation, type MutationImpact } from './mutations';
 import { classifyDeletionTarget } from './policy';
 import { serializeRepository } from './persistence';
@@ -57,21 +57,38 @@ function ensureStore(payload: WorkerStoreSnapshot | SysmlRepository | Normalized
 
 /**
  * Task 4 cross-domain endpoint context: when State context is available on
- * the worker request (explicit `endpointContext`/`context` envelope, which
- * needs no protocol change), validation resolves external State endpoints
- * by stable semantic ID through the shared endpoint index. Without context,
- * missing State endpoints are still diagnosed as before. Endpoint records
- * are never invented from family labels here.
+ * the worker request via the typed `endpointContext` field (with the legacy
+ * `context` alias still accepted), validation resolves external State
+ * endpoints by stable semantic ID through the shared endpoint index.
+ * Without context, missing State endpoints are still diagnosed as before.
+ * Endpoint records are never invented from family labels here.
+ *
+ * Finding 1 review fix: plain-object externalEndpoints (postMessage/JSON
+ * round-trips) are coerced to Map instead of silently dropping to
+ * context-blind. Absent or empty context still yields undefined.
  */
+function coerceExternalEndpoints(
+  external: SemanticEndpointContext['externalEndpoints'] | Record<string, ExternalSemanticEndpoint> | undefined,
+): Map<string, ExternalSemanticEndpoint> | undefined {
+  if (external instanceof Map) return external.size > 0 ? external : undefined;
+  if (external && typeof external === 'object') {
+    const entries = Object.entries(external).filter(
+      (entry): entry is [string, ExternalSemanticEndpoint] =>
+        typeof entry[1]?.id === 'string',
+    );
+    return entries.length > 0 ? new Map(entries) : undefined;
+  }
+  return undefined;
+}
+
 function requestEndpointContext(request: WorkerRequest): SemanticEndpointContext | undefined {
   const holder = request as unknown as {
-    endpointContext?: SemanticEndpointContext;
-    context?: SemanticEndpointContext;
+    endpointContext?: SemanticEndpointContext | { externalEndpoints?: Record<string, ExternalSemanticEndpoint> };
+    context?: SemanticEndpointContext | { externalEndpoints?: Record<string, ExternalSemanticEndpoint> };
   };
   const explicit = holder.endpointContext ?? holder.context;
-  const external = explicit?.externalEndpoints;
-  if (external instanceof Map && external.size > 0) return { externalEndpoints: external };
-  return undefined;
+  const coerced = coerceExternalEndpoints(explicit?.externalEndpoints as SemanticEndpointContext['externalEndpoints'] | Record<string, ExternalSemanticEndpoint> | undefined);
+  return coerced ? { externalEndpoints: coerced } : undefined;
 }
 
 export function cancelRequest(requestId: string): void {

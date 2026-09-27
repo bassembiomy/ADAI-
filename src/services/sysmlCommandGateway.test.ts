@@ -2107,6 +2107,16 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect(res.repository.revision).toBe(revisionBefore);
     expect(res.repository.relationships['rel-bad-direction']).toBeUndefined();
     expect(res.diagnostics.map(d => d.code)).toContain('INVALID_SATISFY_DIRECTION');
+    // Finding 2: admission carries the same five structured elements as the
+    // validation layer (INVALID_RELATIONSHIP_DIRECTION), not a terse code.
+    const rejection = res.diagnostics.find(d => d.code === 'INVALID_SATISFY_DIRECTION')!;
+    expect(rejection.message).toContain('satisfy');
+    expect(rejection.message).toContain('req1');
+    expect(rejection.message).toContain('requirement');
+    expect(rejection.message).toContain('state-active');
+    expect(rejection.message).toContain('state');
+    expect(rejection.message).toContain('Satisfy requires');
+    expect(rejection.message).toContain('Connect the State to the Requirement');
   });
 });
 

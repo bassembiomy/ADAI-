@@ -51,7 +51,8 @@ import {
   validateCanonicalRelationshipCandidate,
 } from './sysmlCreationRules';
 import type { SemanticEndpointContext } from '../engine/sysml/semanticEndpointIndex';
-import { policyDiagnosticsToSysml } from '../engine/sysml/policy';
+import { resolveSemanticEndpoint } from '../engine/sysml/semanticEndpointIndex';
+import { classifyRelationship, parsePolicyDiagnostic, policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PackageData, PartData, RelationshipData, PortData } from '../types/sysml_types';
 
 import { resolveType } from '../engine/sysml/services/typeResolution';
@@ -779,6 +780,92 @@ function repositoryHasSemanticId(repo: SysmlRepository, id: string): boolean {
     && [...definition.properties, ...definition.ports].some(feature => feature.id === id));
 }
 
+// ---------------------------------------------------------------------------
+// Task 4 §3.4 preflight enrichment (Finding 2 review fix).
+//
+// Direction-code mapping across layers for the same defect (verdict is always
+// "reject"; only the code/message shape differs by layer):
+// - Admission/preflight (this gate, via validateCanonicalRelationshipCandidate
+//   → classifyRelationship → evaluateSysmlConnection in connectionPolicy.ts)
+//   emits the specific policy code, e.g. INVALID_SATISFY_DIRECTION for a
+//   reversed Requirement-to-State satisfy.
+// - The validation layer's generic direction check (validation.ts
+//   checkRelationshipDirection) reports the same defect as
+//   INVALID_RELATIONSHIP_DIRECTION, with kind, source id+family, target
+//   id+family, reason, and corrective action in the message.
+// - policy.ts requirementDirectionValid appends the secondary
+//   INVALID_REQUIREMENT_RELATION_DIRECTION for RTM kinds (also emitted by
+//   requirements.ts for containment relations).
+// The gate re-attaches those same five structured elements below so
+// preflight rejections carry what validation carries. Admission behavior is
+// unchanged: rejection, no mutation. Reason text is re-queried from
+// classifyRelationship (single source of truth); only the corrective-action
+// strings are mirrored here because they are dropped when the policy
+// stringifies diagnostics to `CODE: message` (see connectionPolicy.ts).
+// ---------------------------------------------------------------------------
+
+function admissionEndpointFamily(
+  repo: SysmlRepository, id: string, context?: SemanticEndpointContext,
+): string {
+  if (repo.requirements[id]) return 'requirement';
+  if (repo.verificationCases[id]) return 'verificationCase';
+  return resolveSemanticEndpoint(repo, id, context)?.family ?? 'unknown';
+}
+
+function relationshipCorrectiveAction(
+  code: string, sourceFamily: string, targetFamily: string,
+): string {
+  switch (code) {
+    case 'INVALID_SATISFY_DIRECTION':
+      return sourceFamily === 'requirement' && targetFamily === 'state'
+        ? 'Connect the State to the Requirement, not the Requirement to the State.'
+        : 'Connect the design element, Part, or State to a Requirement.';
+    case 'INVALID_VERIFY_DIRECTION':
+      return 'Connect a Verification Case or State to the Requirement it verifies.';
+    case 'INVALID_REFINE_DIRECTION':
+      return 'Connect a model element to the Requirement it refines.';
+    case 'INVALID_REQUIREMENT_RELATION_DIRECTION':
+    case 'INVALID_REQUIREMENT_CONTAINMENT_ENDPOINT':
+      return 'Connect the appropriate Requirement endpoints.';
+    case 'INVALID_TRACE_ENDPOINTS':
+      return 'Connect one endpoint to a Requirement.';
+    default:
+      return 'Choose endpoints legal for this relationship kind.';
+  }
+}
+
+function enrichedRelationshipRejection(
+  repo: SysmlRepository,
+  candidate: SysmlRelationship,
+  codes: readonly string[],
+  context: SemanticEndpointContext | undefined,
+  verb: 'rejected' | 'update rejected',
+): SysmlDiagnostic[] {
+  const staged: SysmlRepository = {
+    ...repo, relationships: { ...repo.relationships, [candidate.id]: candidate },
+  };
+  const reasonByCode = new Map<string, string>();
+  for (const entry of classifyRelationship(staged, candidate.id, context).diagnostics) {
+    const { code, message } = parsePolicyDiagnostic(entry);
+    if (!reasonByCode.has(code)) reasonByCode.set(code, message);
+  }
+  const sourceFamily = admissionEndpointFamily(repo, candidate.sourceId, context);
+  const targetFamily = admissionEndpointFamily(repo, candidate.targetId, context);
+  return codes.map(code => {
+    const reason = reasonByCode.get(code) ?? code;
+    const action = relationshipCorrectiveAction(code, sourceFamily, targetFamily);
+    return {
+      code,
+      severity: 'error' as const,
+      elementId: candidate.id,
+      message:
+        `Relationship ${candidate.id} ${verb}: ${code} — ` +
+        `${candidate.kind} source ${candidate.sourceId} (${sourceFamily}) to ` +
+        `target ${candidate.targetId} (${targetFamily}). ${reason} ${action}`,
+    };
+  });
+}
+
 function gateCreateElement(repo: SysmlRepository, element: SysmlElement, context?: SemanticEndpointContext): SysmlDiagnostic[] | null {
   if (elementExistsInRepository(repo, element.id)) {
     return [{
@@ -791,10 +878,7 @@ function gateCreateElement(repo: SysmlRepository, element: SysmlElement, context
   if (isRelationshipElement(element)) {
     const verdict = validateCanonicalRelationshipCandidate(repo, element, context);
     if (!verdict.valid) {
-      return verdict.codes.map(code => ({
-        code, severity: 'error' as const, elementId: element.id,
-        message: `Relationship ${element.id} rejected: ${code}`,
-      }));
+      return enrichedRelationshipRejection(repo, element, verdict.codes, context, 'rejected');
     }
     return null;
   }
@@ -844,10 +928,7 @@ function gateUpdateElement(
     const { [elementId]: _ignored, ...rest } = staged.relationships;
     const verdict = validateCanonicalRelationshipCandidate({ ...staged, relationships: rest }, candidate, context);
     if (!verdict.valid) {
-      return verdict.codes.map(code => ({
-        code, severity: 'error' as const, elementId,
-        message: `Relationship ${elementId} update rejected: ${code}`,
-      }));
+      return enrichedRelationshipRejection(repo, candidate, verdict.codes, context, 'update rejected');
     }
     return null;
   }
@@ -2035,6 +2116,9 @@ export function executeSysmlCommand(
       }
     }
 
+    // Task 4 note (Finding 3 deferred): direct engine callers of applyCommand
+    // bypass gateway compensation and get context-blind validation. This
+    // gateway delete path is the supported path for State-aware deletion.
     const mutationResult = applyCommand(
       state.repository,
       { kind: 'deleteElements', elementIds: command.elementIds },

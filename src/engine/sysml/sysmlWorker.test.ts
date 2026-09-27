@@ -4,6 +4,7 @@ import { SysmlWorkerClient } from '../../services/sysmlWorkerClient';
 import { generateSysmlModel } from './largeModelGenerator';
 import { fromRepository, toWorkerSnapshot, fromWorkerSnapshot, projectNormalizedDiagram } from './normalizedStore';
 import type { SysmlRepository } from './model';
+import { createEmptyRepository } from './model';
 import { validateSysmlRepository } from './validation';
 import { analyzeMutation } from './mutations';
 import { serializeRepository } from './persistence';
@@ -451,6 +452,57 @@ describe('SysML Worker Protocol & Execution', () => {
         expect(result.targets[0].targetKind).toBe('unknown');
         expect(result.diagnosticCodes).toContain('UNKNOWN_ELEMENT');
       }
+    });
+
+    it('Task 4 (Finding 1): validate resolves State endpoints with typed Map or plain-object context, stays context-blind without', () => {
+      const buildRepo = (): SysmlRepository => {
+        const repo = createEmptyRepository();
+        repo.requirements.req1 = {
+          id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+          text: 'Must hold', status: 'draft', version: '1',
+        };
+        repo.relationships.rel1 = {
+          id: 'rel1', kind: 'satisfy', sourceId: 'state-active', targetId: 'req1',
+        };
+        return repo;
+      };
+      const codesOf = (response: unknown): string[] =>
+        (response as { success: boolean; result?: { diagnosticCodes?: string[] } }).success
+          ? ((response as any).result.diagnosticCodes as string[])
+          : [];
+
+      // Without context: context-blind, missing State endpoint diagnosed as before.
+      const blind = handleWorkerMessage({
+        requestId: 'req-ctx-blind', revision: 0, taskType: 'validate', payload: buildRepo(),
+      });
+      expect(blind.success).toBe(true);
+      expect(codesOf(blind)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      // Typed Map context resolves the external State endpoint.
+      const withMap = handleWorkerMessage({
+        requestId: 'req-ctx-map', revision: 0, taskType: 'validate', payload: buildRepo(),
+        endpointContext: {
+          externalEndpoints: new Map([
+            ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+          ]),
+        },
+      });
+      expect(withMap.success).toBe(true);
+      expect(codesOf(withMap)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect((withMap as any).result.valid).toBe(true);
+
+      // Plain-object context (postMessage/JSON round-trip) coerces instead of dropping blind.
+      const withPlain = handleWorkerMessage({
+        requestId: 'req-ctx-plain', revision: 0, taskType: 'validate', payload: buildRepo(),
+        endpointContext: {
+          externalEndpoints: {
+            'state-active': { id: 'state-active', name: 'Active', family: 'state' as const },
+          },
+        },
+      });
+      expect(withPlain.success).toBe(true);
+      expect(codesOf(withPlain)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect((withPlain as any).result.valid).toBe(true);
     });
   });
 });
