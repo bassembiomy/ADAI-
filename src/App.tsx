@@ -137,7 +137,8 @@ import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
-import { createInterface, createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
+import { createInterface, createBlock as createBlockDefinition, createValueType as createValueTypeDefinition, createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
+import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
 import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
@@ -161,7 +162,7 @@ import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './servi
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortToolMenu } from './components/sysml/PortToolMenu';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
-import { buildCreateOwnedPortCommand, type CanonicalPortKind, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
+import { planOwnedPortCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
 import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
@@ -309,6 +310,18 @@ const normalizeNumerals = (val: string) => {
     .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
     .replace(/[٫،,]/g, '.');
 };
+
+// Task 2 canvas/tree parity: canvas port prompts display the same labels as
+// Model Explorer creation entries (single source: getElementKindLabel).
+const CANVAS_PORT_EXPLORER_KIND: Record<CanonicalPortKind, string> = {
+  umlPort: 'port',
+  proxyPort: 'proxyPort',
+  fullPort: 'fullPort',
+  flowPort: 'flowPort',
+};
+
+const canvasPortPromptLabel = (portKind: CanonicalPortKind): string =>
+  getElementKindLabel(CANVAS_PORT_EXPLORER_KIND[portKind]);
 
 const parseValue = (type: VariableType, value: string): number | boolean => {
   const trimmed = value.trim().toLowerCase();
@@ -6056,6 +6069,7 @@ const ADIA = () => {
     ownerBlockId: string;
     portKind: CanonicalPortKind;
     candidates: TypeCandidate[];
+    action: OwnedFeatureNewTypeAction;
     error?: string;
   } | null>(null);
   const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
@@ -10331,13 +10345,17 @@ const ADIA = () => {
 
   const handlePortTypeSelected = useCallback((typeId: string) => {
     if (!portTypePrompt) return;
-    const plan = buildCreateOwnedPortCommand(canonicalSysmlRepository, {
+    // Same surface-agnostic planner + canonical gateway command as Model
+    // Explorer (spec 3.2, 4.1): an explicitly selected but incompatible or
+    // unresolvable type is a structured error, never a silent substitution,
+    // and the gateway commit path never mutates on error.
+    const plan = planOwnedPortCreation(canonicalSysmlRepository, {
       ownerBlockId: portTypePrompt.ownerBlockId,
       portKind: portTypePrompt.portKind,
       typeId,
       diagramId: activeSysmlDiagramId,
     });
-    if (plan.ok && plan.command) {
+    if (plan.outcome === 'command') {
       const res = handleExecuteSysmlCommand(plan.command as any);
       if (res.committed) {
         setPortTypePrompt(null);
@@ -10346,6 +10364,15 @@ const ADIA = () => {
         res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
         setPortTypePrompt(prev => prev ? { ...prev, error: res.diagnostics[0]?.message } : null);
       }
+    } else if (plan.outcome === 'typeSelection') {
+      // Stale prompt (e.g. repository changed while the chooser was open):
+      // refresh candidates rather than committing a typed feature.
+      setPortTypePrompt(prev => prev ? {
+        ...prev,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+        error: undefined,
+      } : null);
     } else {
       setPortTypePrompt(prev => prev ? { ...prev, error: plan.diagnostics[0]?.message } : null);
     }
@@ -10353,67 +10380,96 @@ const ADIA = () => {
 
   const handleCreateNewTypeForPort = useCallback(() => {
     if (!portTypePrompt) return;
-    const isInterface = portTypePrompt.portKind === 'proxyPort';
-    if (isInterface) {
-      const iface = createInterface({
-        name: `InterfaceBlock_${(Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === 'interface').length) + 1}`,
-        ownerId: 'model',
-      });
-      const res = handleExecuteSysmlCommand({
-        type: 'createAndPresent',
-        diagramId: activeSysmlDiagramId,
-        element: iface,
-        presentation: { x: 450, y: 100 },
-      });
-      if (res.committed) {
-        const plan = buildCreateOwnedPortCommand(res.repository, {
-          ownerBlockId: portTypePrompt.ownerBlockId,
-          portKind: portTypePrompt.portKind,
-          typeId: iface.id,
-          diagramId: activeSysmlDiagramId,
-        });
-        if (plan.ok && plan.command) {
-          const portRes = handleExecuteSysmlCommand(plan.command as any);
-          if (portRes.committed) {
-            setPortTypePrompt(null);
-            setShowErrorDialog(false);
-          } else {
-            portRes.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
-            setPortTypePrompt(prev => prev ? { ...prev, error: portRes.diagnostics[0]?.message } : null);
-          }
-        }
-      }
+    // Canonical CreateNewType (spec 4.1): same element-kind derivation as
+    // Model Explorer (InterfaceBlock -> interface, ValueType -> valueType,
+    // otherwise block), committed through the semantic gateway with no
+    // diagram presentation. The pending port request resumes only after the
+    // new type commits; any failure clears the prompt without mutating the
+    // pending feature.
+    const metaclass = portTypePrompt.action.payload?.suggestedMetaclass;
+    const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
+    const ownerId = canonicalSysmlRepository.definitions[portTypePrompt.ownerBlockId]?.ownerId || 'model';
+    const siblingCount = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === elementKind).length + 1;
+    const baseName = metaclass === 'InterfaceBlock' ? 'InterfaceBlock' : metaclass === 'ValueType' ? 'ValueType' : 'Block';
+    const element = elementKind === 'interface'
+      ? createInterface({ name: `${baseName}_${siblingCount}`, ownerId })
+      : elementKind === 'valueType'
+        ? createValueTypeDefinition({ name: `${baseName}_${siblingCount}`, ownerId })
+        : createBlockDefinition({ name: `${baseName}_${siblingCount}`, ownerId });
+    const res = handleExecuteSysmlCommand({ type: 'createElement', element } as any);
+    if (!res.committed || !res.repository.definitions[element.id]) {
+      setPortTypePrompt(null);
+      res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
+    const plan = planOwnedPortCreation(res.repository, {
+      ownerBlockId: portTypePrompt.ownerBlockId,
+      portKind: portTypePrompt.portKind,
+      typeId: element.id,
+      diagramId: activeSysmlDiagramId,
+    });
+    if (plan.outcome !== 'command') {
+      setPortTypePrompt(prev => prev ? {
+        ...prev,
+        error: plan.outcome === 'error' ? plan.diagnostics[0]?.message : prev.error,
+      } : null);
+      return;
+    }
+    const portRes = handleExecuteSysmlCommand(plan.command as any);
+    if (portRes.committed) {
+      setPortTypePrompt(null);
+      setShowErrorDialog(false);
     } else {
-      const outcome = buildDiagramCreationCommand({
-        repository: canonicalSysmlRepository,
-        kind: 'Block',
-        ownerId: 'model',
-        diagramId: activeSysmlDiagramId,
-        position: { x: 450, y: 100 },
-      });
-      if (outcome.ok) {
-        const res = handleExecuteSysmlCommand(outcome.command);
-        if (res.committed) {
-          const plan = buildCreateOwnedPortCommand(res.repository, {
-            ownerBlockId: portTypePrompt.ownerBlockId,
-            portKind: portTypePrompt.portKind,
-            typeId: outcome.semanticId,
-            diagramId: activeSysmlDiagramId,
-          });
-          if (plan.ok && plan.command) {
-            const portRes = handleExecuteSysmlCommand(plan.command as any);
-            if (portRes.committed) {
-              setPortTypePrompt(null);
-              setShowErrorDialog(false);
-            } else {
-              portRes.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
-              setPortTypePrompt(prev => prev ? { ...prev, error: portRes.diagnostics[0]?.message } : null);
-            }
-          }
-        }
-      }
+      portRes.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      setPortTypePrompt(prev => prev ? { ...prev, error: portRes.diagnostics[0]?.message } : null);
     }
   }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError, setShowErrorDialog]);
+
+  // Task 2 canvas/tree parity (spec 3.2, 4.1, 4.2): toolbar and canvas port
+  // actions plan through the same surface-agnostic planner as Model
+  // Explorer, store the same pending type-selection request (compatible
+  // candidates + explicit CreateNewType action), and dispatch the same
+  // canonical gateway command. Standard Port plans an immediate untyped
+  // UML Port command (explicit no-type exception); every other kind
+  // without an explicit type opens the shared chooser. Cancelling performs
+  // no mutation.
+  const requestCanvasPortCreation = useCallback((ownerBlockId: string, portKind: CanonicalPortKind): { outcome: 'commanded' } | { outcome: 'prompted' } | { outcome: 'rejected' } => {
+    const plan = planOwnedPortCreation(canonicalSysmlRepository, {
+      ownerBlockId,
+      portKind,
+      diagramId: activeSysmlDiagramId,
+    });
+    if (plan.outcome === 'command') {
+      const res = handleExecuteSysmlCommand(plan.command as any);
+      if (!res.committed) {
+        res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+        return { outcome: 'rejected' };
+      }
+      return { outcome: 'commanded' };
+    }
+    if (plan.outcome === 'typeSelection') {
+      setPortTypePrompt({
+        ownerBlockId,
+        portKind,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+      });
+      return { outcome: 'prompted' };
+    }
+    const msg = plan.diagnostics[0]?.message ?? `No compatible type found for ${portKind}.`;
+    addError('error', msg, 'SysML', ownerBlockId);
+    setPortTypePrompt({
+      ownerBlockId,
+      portKind,
+      candidates: plan.candidates ?? [],
+      action: plan.action ?? {
+        kind: 'CreateNewType',
+        payload: { suggestedMetaclass: suggestedMetaclassForPortKind(portKind) },
+      },
+      error: msg,
+    });
+    return { outcome: 'prompted' };
+  }, [canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
 
   const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
     if (selectedIds.length !== 1) {
@@ -10436,39 +10492,11 @@ const ADIA = () => {
       return;
     }
 
-    const plan = buildCreateOwnedPortCommand(canonicalSysmlRepository, {
-      ownerBlockId: targetBlockId,
-      portKind: canonicalPortKind,
-      diagramId: activeSysmlDiagramId,
-    });
-
-    if (!plan.ok) {
-      if (plan.candidates && plan.candidates.length > 0) {
-        setPortTypePrompt({
-          ownerBlockId: targetBlockId,
-          portKind: canonicalPortKind,
-          candidates: plan.candidates,
-        });
-      } else {
-        const msg = plan.diagnostics[0]?.message ?? `No compatible type found for ${canonicalPortKind}.`;
-        addError('error', msg, 'SysML', targetBlockId);
-        setPortTypePrompt({
-          ownerBlockId: targetBlockId,
-          portKind: canonicalPortKind,
-          candidates: [],
-          error: msg,
-        });
-      }
-      return;
-    }
-
-    const res = handleExecuteSysmlCommand(plan.command as any);
-    if (res.committed) {
+    const result = requestCanvasPortCreation(targetBlockId, canonicalPortKind);
+    if (result.outcome === 'commanded') {
       addError('info', `Added ${kind} port.`);
-    } else {
-      res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [selectedIds, parts, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
+  }, [selectedIds, parts, requestCanvasPortCreation, addError]);
 
   const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
     addToHistory();
@@ -11213,37 +11241,12 @@ const ADIA = () => {
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
     e.stopPropagation();
     if (diagramMode === 'bdd' && activePortTool && e.button === 0) {
-      const plan = buildCreateOwnedPortCommand(canonicalSysmlRepository, {
-        ownerBlockId: blockId,
-        portKind: activePortTool,
-        diagramId: activeSysmlDiagramId,
-      });
-
-      if (!plan.ok) {
-        if (plan.candidates && plan.candidates.length > 0) {
-          setPortTypePrompt({
-            ownerBlockId: blockId,
-            portKind: activePortTool,
-            candidates: plan.candidates,
-          });
-        } else {
-          const msg = plan.diagnostics[0]?.message ?? `No compatible type found for ${activePortTool}.`;
-          addError('error', msg, 'SysML', blockId);
-          setPortTypePrompt({
-            ownerBlockId: blockId,
-            portKind: activePortTool,
-            candidates: [],
-            error: msg,
-          });
-        }
-        return;
-      }
-
-      const res = handleExecuteSysmlCommand(plan.command as any);
-      if (res.committed) {
-        // Keep activePortTool active for continuous placement
-      } else {
-        res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      // Same pending request + canonical gateway command as Model Explorer
+      // (see requestCanvasPortCreation). The tool stays active for
+      // continuous placement after a committed creation.
+      const result = requestCanvasPortCreation(blockId, activePortTool);
+      if (result.outcome === 'rejected') {
+        // Diagnostics already surfaced; keep the tool active.
       }
       return;
     }
@@ -19471,7 +19474,7 @@ const ADIA = () => {
         {portTypePrompt && (
           <TypeSelectionPrompt
             isOpen={true}
-            featureKind={portTypePrompt.portKind === 'proxyPort' ? 'Proxy Port' : portTypePrompt.portKind === 'fullPort' ? 'Full Port' : 'Flow Port'}
+            featureKind={canvasPortPromptLabel(portTypePrompt.portKind)}
             candidates={portTypePrompt.candidates}
             onSelectType={handlePortTypeSelected}
             onCreateNewType={handleCreateNewTypeForPort}

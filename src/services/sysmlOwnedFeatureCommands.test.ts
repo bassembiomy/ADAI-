@@ -5,6 +5,15 @@ import {
   buildCreateOwnedPropertyCommand,
   createOwnedPort,
   createPortDefinitionFromIntent,
+  getCompatiblePortCandidates,
+  getCompatiblePropertyCandidates,
+  isCompatiblePortType,
+  isCompatiblePropertyType,
+  isInterfaceBlockDefinition,
+  planOwnedPortCreation,
+  planOwnedPropertyCreation,
+  suggestedMetaclassForPortKind,
+  suggestedMetaclassForPropertyKind,
   type CreateOwnedPortIntent,
   type CreateOwnedPropertyIntent,
 } from './sysmlOwnedFeatureCommands';
@@ -250,6 +259,155 @@ describe('SysML Owned Feature Commands', () => {
       intent: expect.objectContaining({ featureKind: 'port', ownerBlockId: 'vehicle' }),
       diagramId: 'bdd',
       presentation: expect.any(Object),
+    });
+  });
+
+  describe('Task 2 canvas parity: explicit compatibility predicates', () => {
+    it('exposes InterfaceBlock detection matching the domain port validator', () => {
+      const repo = createFixture();
+      expect(isInterfaceBlockDefinition(repo.definitions.canBus)).toBe(true);
+      expect(isInterfaceBlockDefinition(repo.definitions.motor)).toBe(false);
+      expect(isInterfaceBlockDefinition(repo.definitions.voltage)).toBe(false);
+    });
+
+    it('accepts only InterfaceBlock types for ProxyPort candidates', () => {
+      const repo = createFixture();
+      const candidates = getCompatiblePortCandidates(repo, 'proxyPort');
+      expect(candidates.map(c => c.id).sort()).toEqual(['canBus']);
+      expect(isCompatiblePortType(repo.definitions.canBus, 'proxyPort')).toBe(true);
+      expect(isCompatiblePortType(repo.definitions.motor, 'proxyPort')).toBe(false);
+      expect(isCompatiblePortType(repo.definitions.voltage, 'proxyPort')).toBe(false);
+    });
+
+    it('excludes InterfaceBlock types from FullPort candidates', () => {
+      const repo = createFixture();
+      const ids = getCompatiblePortCandidates(repo, 'fullPort').map(c => c.id);
+      expect(ids).toContain('motor');
+      expect(ids).toContain('voltage');
+      expect(ids).not.toContain('canBus');
+      expect(isCompatiblePortType(repo.definitions.motor, 'fullPort')).toBe(true);
+      expect(isCompatiblePortType(repo.definitions.canBus, 'fullPort')).toBe(false);
+    });
+
+    it('restricts property candidates by semantic kind, not names or ordering', () => {
+      const repo = createFixture();
+      const partIds = getCompatiblePropertyCandidates(repo, 'part').map(c => c.id).sort();
+      const refIds = getCompatiblePropertyCandidates(repo, 'reference').map(c => c.id).sort();
+      expect(partIds).toEqual(refIds);
+      expect(partIds).toContain('motor');
+      expect(partIds).not.toContain('voltage');
+      expect(partIds).not.toContain('canBus');
+      const valueIds = getCompatiblePropertyCandidates(repo, 'value').map(c => c.id);
+      expect(valueIds).toEqual(['voltage']);
+      expect(isCompatiblePropertyType(repo.definitions.motor, 'part')).toBe(true);
+      expect(isCompatiblePropertyType(repo.definitions.voltage, 'part')).toBe(false);
+      expect(isCompatiblePropertyType(repo.definitions.voltage, 'value')).toBe(true);
+      expect(isCompatiblePropertyType(repo.definitions.motor, 'value')).toBe(false);
+    });
+
+    it('suggests canonical metaclasses for explicit CreateNewType actions', () => {
+      expect(suggestedMetaclassForPortKind('proxyPort')).toBe('InterfaceBlock');
+      expect(suggestedMetaclassForPortKind('fullPort')).toBe('Block');
+      expect(suggestedMetaclassForPortKind('flowPort')).toBe('Block');
+      expect(suggestedMetaclassForPortKind('umlPort')).toBe('Block');
+      expect(suggestedMetaclassForPropertyKind('value')).toBe('ValueType');
+      expect(suggestedMetaclassForPropertyKind('part')).toBe('Block');
+      expect(suggestedMetaclassForPropertyKind('reference')).toBe('Block');
+    });
+  });
+
+  describe('Task 2 canvas parity: surface-agnostic creation plans', () => {
+    it('plans Standard Port as an immediate untyped UML Port command (explicit no-type exception)', () => {
+      const repo = createFixture();
+      const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'umlPort' });
+      expect(plan.outcome).toBe('command');
+      if (plan.outcome !== 'command') return;
+      expect(plan.command.type).toBe('createOwnedFeature');
+      if (plan.command.intent.featureKind !== 'port') throw new Error('expected port intent');
+      expect(plan.command.intent.portKind).toBe('umlPort');
+      expect(plan.command.intent.typeId).toBeUndefined();
+    });
+
+    it.each(['proxyPort', 'fullPort', 'flowPort'] as const)(
+      'plans canvas %s without a type as type-selection, never a silent command',
+      (portKind) => {
+        const repo = createFixture();
+        const plan = planOwnedPortCreation(repo, {
+          ownerBlockId: 'vehicle',
+          portKind,
+          diagramId: 'bdd-1',
+          presentation: { x: 5, y: 5 },
+        });
+        expect(plan.outcome).toBe('typeSelection');
+        if (plan.outcome !== 'typeSelection') return;
+        expect(plan.request.ownerId).toBe('vehicle');
+        expect(plan.request.candidates.length).toBeGreaterThan(0);
+        expect(plan.request.action).toMatchObject({ kind: 'CreateNewType' });
+        expect(plan.request.candidates.every(c => c.id in repo.definitions)).toBe(true);
+      },
+    );
+
+    it('planning never mutates the repository, even when selection is cancelled', () => {
+      const repo = createFixture();
+      const before = JSON.stringify(repo);
+      const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'proxyPort' });
+      expect(plan.outcome).toBe('typeSelection');
+      // Cancel: no command is dispatched.
+      expect(JSON.stringify(repo)).toBe(before);
+    });
+
+    it('produces identical property candidate IDs for tree and canvas intents', () => {
+      const repo = createFixture();
+      const cases: CreateOwnedPropertyIntent['propertyKind'][] = ['part', 'reference', 'value'];
+      for (const propertyKind of cases) {
+        const tree = planOwnedPropertyCreation(repo, { ownerBlockId: 'vehicle', propertyKind });
+        const canvas = planOwnedPropertyCreation(repo, {
+          ownerBlockId: 'vehicle',
+          propertyKind,
+          diagramId: 'bdd-1',
+          presentation: { x: 1, y: 2 },
+        });
+        expect(tree.outcome).toBe('typeSelection');
+        expect(canvas.outcome).toBe('typeSelection');
+        if (tree.outcome !== 'typeSelection' || canvas.outcome !== 'typeSelection') continue;
+        expect(canvas.request.candidates.map(c => c.id).sort())
+          .toEqual(tree.request.candidates.map(c => c.id).sort());
+        expect(canvas.request.action).toEqual(tree.request.action);
+      }
+    });
+
+    it('produces equivalent OwnedFeatureIntent after selection on tree and canvas', () => {
+      const repo = createFixture();
+      const tree: CreateOwnedPropertyIntent = {
+        ownerBlockId: 'vehicle', propertyKind: 'part', typeId: 'motor',
+        name: 'engine', featureId: 'prop-engine', usageId: 'usage-engine',
+      };
+      const canvas: CreateOwnedPropertyIntent = {
+        ownerBlockId: 'vehicle', propertyKind: 'part', typeId: 'motor',
+        name: 'engine', featureId: 'prop-engine', usageId: 'usage-engine',
+        diagramId: 'bdd-1', presentation: { x: 1, y: 2 },
+      };
+      const treePlan = planOwnedPropertyCreation(repo, tree);
+      const canvasPlan = planOwnedPropertyCreation(repo, canvas);
+      expect(treePlan.outcome).toBe('command');
+      expect(canvasPlan.outcome).toBe('command');
+      if (treePlan.outcome !== 'command' || canvasPlan.outcome !== 'command') return;
+      expect(canvasPlan.command.intent).toEqual(treePlan.command.intent);
+      expect(canvasPlan.command.diagramId).toBe('bdd-1');
+      expect(canvasPlan.command.presentation).toEqual({ x: 1, y: 2 });
+    });
+
+    it('resumes port creation with the explicitly selected type and nothing else', () => {
+      const repo = createFixture();
+      const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'proxyPort' });
+      expect(plan.outcome).toBe('typeSelection');
+      if (plan.outcome !== 'typeSelection') return;
+      const selected = plan.request.candidates[0];
+      const resumed = buildCreateOwnedPortCommand(repo, {
+        ownerBlockId: 'vehicle', portKind: 'proxyPort', typeId: selected.id,
+      });
+      expect(resumed.ok).toBe(true);
+      expect(resumed.command?.intent).toMatchObject({ featureKind: 'port', portKind: 'proxyPort', typeId: selected.id });
     });
   });
 });

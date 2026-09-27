@@ -2,10 +2,12 @@ import type {
   BlockDefinition,
   PortDefinition,
   PropertyDefinition,
+  SysmlDefinition,
   SysmlRepository,
 } from '../engine/sysml/model';
 import type { CanonicalPortKind } from '../engine/sysml/domain/ports';
 import { validatePort } from '../engine/sysml/validation/portRules';
+import type { TypeSelectionRequest, TypedFeatureKind } from '../components/sysml/typeSelectionTypes';
 
 export type { CanonicalPortKind };
 
@@ -145,34 +147,109 @@ export interface CreateOwnedPortResult {
   diagnostics: Array<{ code: string; message: string }>;
 }
 
-function getCompatiblePortCandidates(repo: SysmlRepository, portKind: CanonicalPortKind): TypeCandidate[] {
-  const definitions = Object.values(repo.definitions);
-  if (portKind === 'proxyPort') {
-    return definitions
-      .filter(d => d.kind === 'interface' || (d as any).metaclass === 'InterfaceBlock' || (d as any).stereotype === 'interfaceBlock')
-      .map(d => ({ id: d.id, name: d.name }));
-  }
-  if (portKind === 'fullPort') {
-    return definitions
-      .filter(d => d.kind === 'block' || d.kind === 'valueType' || (d as any).metaclass === 'Block' || (d as any).metaclass === 'ValueType')
-      .map(d => ({ id: d.id, name: d.name }));
-  }
-  return definitions.map(d => ({ id: d.id, name: d.name }));
+/**
+ * Task 2 explicit compatibility predicates (spec sections 3.2, 4.1, 4.2).
+ *
+ * Candidate filtering uses the same semantic checks as the domain
+ * validators (notably `validatePort` in validation/portRules.ts): definition
+ * kind plus the InterfaceBlock/Block/ValueType markers. Candidate lists
+ * never use element names, diagram family, or type ordering as
+ * compatibility evidence, and repository insertion order is preserved.
+ * The repository validator remains authoritative; these predicates only
+ * filter the chooser.
+ */
+type DefinitionWithLegacyMarkers = SysmlDefinition & {
+  metaclass?: unknown;
+  stereotype?: unknown;
+};
+
+/** Matches the InterfaceBlock check in `validatePort`: kind or declared markers. */
+export function isInterfaceBlockDefinition(definition: SysmlDefinition | undefined): boolean {
+  if (!definition) return false;
+  const record = definition as DefinitionWithLegacyMarkers;
+  return (
+    definition.kind === 'interface' ||
+    record.metaclass === 'InterfaceBlock' ||
+    record.stereotype === 'interfaceBlock'
+  );
 }
 
-function getCompatiblePropertyCandidates(repo: SysmlRepository, propertyKind: CreateOwnedPropertyIntent['propertyKind']): TypeCandidate[] {
-  const definitions = Object.values(repo.definitions);
-  if (propertyKind === 'part' || propertyKind === 'reference') {
-    return definitions
-      .filter(d => d.kind === 'block' || (d as any).metaclass === 'Block')
-      .map(d => ({ id: d.id, name: d.name }));
+export function isBlockDefinitionKind(definition: SysmlDefinition | undefined): boolean {
+  if (!definition) return false;
+  const record = definition as DefinitionWithLegacyMarkers;
+  return definition.kind === 'block' || record.metaclass === 'Block';
+}
+
+export function isValueTypeDefinitionKind(definition: SysmlDefinition | undefined): boolean {
+  if (!definition) return false;
+  const record = definition as DefinitionWithLegacyMarkers;
+  return definition.kind === 'valueType' || record.metaclass === 'ValueType';
+}
+
+/** Every definition that can legally type a feature (legacy FlowPort included). */
+export function isTypeBearingDefinition(definition: SysmlDefinition | undefined): boolean {
+  return (
+    isInterfaceBlockDefinition(definition) ||
+    isBlockDefinitionKind(definition) ||
+    isValueTypeDefinitionKind(definition)
+  );
+}
+
+/**
+ * Port type compatibility by semantic kind. ProxyPort accepts only
+ * InterfaceBlocks; FullPort accepts Blocks and ValueTypes (never an
+ * InterfaceBlock, so a FullPort cannot silently become a ProxyPort);
+ * Standard UML Ports and legacy FlowPorts accept any type-bearing
+ * definition while the repository validator stays authoritative.
+ */
+export function isCompatiblePortType(definition: SysmlDefinition | undefined, portKind: CanonicalPortKind): boolean {
+  switch (portKind) {
+    case 'proxyPort':
+      return isInterfaceBlockDefinition(definition);
+    case 'fullPort':
+      return isBlockDefinitionKind(definition) || isValueTypeDefinitionKind(definition);
+    case 'flowPort':
+    case 'umlPort':
+      return isTypeBearingDefinition(definition);
   }
-  if (propertyKind === 'value') {
-    return definitions
-      .filter(d => d.kind === 'valueType' || (d as any).metaclass === 'ValueType')
-      .map(d => ({ id: d.id, name: d.name }));
+}
+
+/** Property type compatibility by semantic kind. */
+export function isCompatiblePropertyType(
+  definition: SysmlDefinition | undefined,
+  propertyKind: CreateOwnedPropertyIntent['propertyKind'],
+): boolean {
+  switch (propertyKind) {
+    case 'part':
+    case 'reference':
+      return isBlockDefinitionKind(definition);
+    case 'value':
+      return isValueTypeDefinitionKind(definition);
+    case 'flow':
+      return isTypeBearingDefinition(definition);
   }
-  return definitions.map(d => ({ id: d.id, name: d.name }));
+}
+
+/** Canonical metaclass suggested when no compatible type exists yet. */
+export function suggestedMetaclassForPortKind(portKind: CanonicalPortKind): string {
+  return portKind === 'proxyPort' ? 'InterfaceBlock' : 'Block';
+}
+
+/** Canonical metaclass suggested when no compatible type exists yet. */
+export function suggestedMetaclassForPropertyKind(propertyKind: CreateOwnedPropertyIntent['propertyKind']): string {
+  return propertyKind === 'value' ? 'ValueType' : 'Block';
+}
+
+export function getCompatiblePortCandidates(repo: SysmlRepository, portKind: CanonicalPortKind): TypeCandidate[] {
+  return Object.values(repo.definitions)
+    .filter(definition => isCompatiblePortType(definition, portKind))
+    .map(definition => ({ id: definition.id, name: definition.name }));
+}
+
+export function getCompatiblePropertyCandidates(repo: SysmlRepository, propertyKind: CreateOwnedPropertyIntent['propertyKind']): TypeCandidate[] {
+  return Object.values(repo.definitions)
+    .filter(definition => isCompatiblePropertyType(definition, propertyKind))
+    .map(definition => ({ id: definition.id, name: definition.name }));
 }
 
 export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: CreateOwnedPortIntent): CommandBuildResult {
@@ -206,7 +283,7 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
       action: {
         kind: 'CreateNewType',
         payload: {
-          suggestedMetaclass: intent.portKind === 'proxyPort' ? 'InterfaceBlock' : 'Block',
+          suggestedMetaclass: suggestedMetaclassForPortKind(intent.portKind),
         },
       },
     };
@@ -229,12 +306,8 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
   }
 
   if (intent.portKind === 'proxyPort') {
-    const isInterfaceBlock =
-      typeDef &&
-      (typeDef.kind === 'interface' ||
-        (typeDef as any).metaclass === 'InterfaceBlock' ||
-        (typeDef as any).stereotype === 'interfaceBlock');
-    if (!isInterfaceBlock) {
+    // Same InterfaceBlock check as the domain `validatePort` rule.
+    if (!isInterfaceBlockDefinition(typeDef)) {
       return {
         ok: false,
         diagnostics: [
@@ -306,7 +379,7 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
       action: {
         kind: 'CreateNewType',
         payload: {
-          suggestedMetaclass: intent.propertyKind === 'value' ? 'ValueType' : 'Block',
+          suggestedMetaclass: suggestedMetaclassForPropertyKind(intent.propertyKind),
         },
       },
     };
@@ -416,4 +489,106 @@ export function createOwnedPort(repo: SysmlRepository, intent: CreateOwnedPortIn
     },
     diagnostics: [],
   };
+}
+
+/**
+ * Task 2 surface-agnostic creation plans (spec sections 3.2, 4.1, 4.2).
+ *
+ * Tree and canvas entry points share these planners so both surfaces
+ * produce the same pending type-selection request
+ * (`TypeSelectionRequest`: owner identity, feature kind, compatible
+ * candidate IDs, explicit `CreateNewType` action) and the same canonical
+ * `createOwnedFeature` gateway command. Standard UML Port is the explicit
+ * no-type exception: it plans an immediate untyped command on both
+ * surfaces and is never converted into a SysML stereotype. Every other
+ * kind without an explicit `typeId` plans type-selection — never a silent
+ * first-candidate or implicit type creation. Planning is pure: it never
+ * mutates the repository, so cancelling selection leaves no trace.
+ */
+const PORT_KIND_TO_TYPED_FEATURE_KIND: Record<CanonicalPortKind, TypedFeatureKind> = {
+  umlPort: 'standardPort',
+  proxyPort: 'proxyPort',
+  fullPort: 'fullPort',
+  flowPort: 'flowPort',
+};
+
+const PROPERTY_KIND_TO_TYPED_FEATURE_KIND: Record<CreateOwnedPropertyIntent['propertyKind'], TypedFeatureKind> = {
+  part: 'part',
+  reference: 'reference',
+  value: 'valueProperty',
+  // Legacy FlowProperty has no dedicated chooser kind in the shared
+  // vocabulary; it reuses the legacy-flow member while candidates stay
+  // type-bearing definitions and the validator stays authoritative.
+  flow: 'flowPort',
+};
+
+export type OwnedPortCreationPlan =
+  | { outcome: 'command'; command: CreateOwnedFeatureCommand }
+  | { outcome: 'typeSelection'; request: TypeSelectionRequest }
+  | {
+      outcome: 'error';
+      diagnostics: CommandBuildResult['diagnostics'];
+      candidates?: TypeCandidate[];
+      action?: CreateNewTypeAction;
+    };
+
+export type OwnedPropertyCreationPlan = OwnedPortCreationPlan;
+
+function toTypeSelectionOutcome(
+  ownerId: string,
+  featureKind: TypedFeatureKind,
+  result: CommandBuildResult,
+): OwnedPortCreationPlan {
+  return {
+    outcome: 'typeSelection',
+    request: {
+      ownerId,
+      featureKind,
+      candidates: result.candidates ?? [],
+      // The builder always attaches the explicit CreateNewType action on
+      // TYPE_NOT_FOUND paths; the fallback keeps the contract total.
+      action: result.action ?? { kind: 'CreateNewType' },
+    },
+  };
+}
+
+function toErrorOutcome(result: CommandBuildResult): OwnedPortCreationPlan {
+  return {
+    outcome: 'error',
+    diagnostics: result.diagnostics,
+    ...(result.candidates ? { candidates: result.candidates } : {}),
+    ...(result.action ? { action: result.action } : {}),
+  };
+}
+
+export function planOwnedPortCreation(repo: SysmlRepository, intent: CreateOwnedPortIntent): OwnedPortCreationPlan {
+  const result = buildCreateOwnedPortCommand(repo, intent);
+  if (result.ok && result.command) {
+    return { outcome: 'command', command: result.command };
+  }
+  // Mirror the tree preflight rule: type-selection is offered only when no
+  // type was chosen yet. An explicitly chosen but unresolvable or
+  // incompatible type is a structured error, never a silent substitution.
+  if (!intent.typeId && result.diagnostics.some(diagnostic => diagnostic.code === 'TYPE_NOT_FOUND') && result.action) {
+    return toTypeSelectionOutcome(intent.ownerBlockId, PORT_KIND_TO_TYPED_FEATURE_KIND[intent.portKind], result);
+  }
+  return toErrorOutcome(result);
+}
+
+export function planOwnedPropertyCreation(
+  repo: SysmlRepository,
+  intent: CreateOwnedPropertyIntent,
+): OwnedPropertyCreationPlan {
+  const result = buildCreateOwnedPropertyCommand(repo, intent);
+  if (result.ok && result.command) {
+    return { outcome: 'command', command: result.command };
+  }
+  if (!intent.typeId && result.diagnostics.some(diagnostic => diagnostic.code === 'TYPE_NOT_FOUND') && result.action) {
+    return toTypeSelectionOutcome(
+      intent.ownerBlockId,
+      PROPERTY_KIND_TO_TYPED_FEATURE_KIND[intent.propertyKind],
+      result,
+    );
+  }
+  return toErrorOutcome(result);
 }

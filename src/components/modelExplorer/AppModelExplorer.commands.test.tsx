@@ -9,6 +9,12 @@ import type { StateMachineExplorerSnapshot } from '../../features/modelExplorer/
 import { createEmptyRepository, type BlockDefinition, type PartUsage, type RequirementDefinition, type SysmlRelationship } from '../../engine/sysml/model';
 import { createSysmlGatewayState, executeSysmlCommand } from '../../services/sysmlCommandGateway';
 import type { SysmlEditorCommand } from '../../services/sysmlCommandGateway';
+import { createSysmlExplorerAdapter } from '../../features/modelExplorer/adapters/sysmlExplorerAdapter';
+import type { ModelExplorerCommand } from '../../features/modelExplorer/modelExplorerTypes';
+import {
+  planOwnedPortCreation,
+  planOwnedPropertyCreation,
+} from '../../services/sysmlOwnedFeatureCommands';
 
 describe('AppModelExplorer Command Dispatch & State Machine History', () => {
   it('creates a real repository BDD under model from the Structural pillar', () => {
@@ -254,5 +260,181 @@ describe('AppModelExplorer Command Dispatch & State Machine History', () => {
     expect(vehicleRow).not.toBeNull();
     fireEvent.contextMenu(vehicleRow!);
     expect((screen.getByRole('menuitem', { name: /Paste/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe('Task 2 tree/canvas creation parity', () => {
+  function createParityFixture() {
+    const repository = createEmptyRepository();
+    const owner: BlockDefinition = {
+      id: 'block-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions[owner.id] = owner;
+    repository.definitions['block-motor'] = {
+      id: 'block-motor', name: 'Motor', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions['iface-can'] = {
+      id: 'iface-can', name: 'CANBus', kind: 'interface', namespace: [], ownerId: 'model', features: [],
+    };
+    repository.definitions['vt-voltage'] = {
+      id: 'vt-voltage', name: 'Voltage', kind: 'valueType', namespace: [], ownerId: 'model', unit: 'V',
+    };
+    return repository;
+  }
+
+  function createTreeHarness(repository: ReturnType<typeof createEmptyRepository>) {
+    let gateway = createSysmlGatewayState(repository);
+    const gatewayCommands: SysmlEditorCommand[] = [];
+    const adapter = createSysmlExplorerAdapter({
+      getState: () => gateway,
+      executeCommand: (cmd) => {
+        gatewayCommands.push(cmd);
+        const result = executeSysmlCommand(gateway, cmd);
+        if (result.committed) {
+          gateway = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
+        }
+        return result;
+      },
+    });
+    return { adapter, gatewayCommands, getGateway: () => gateway };
+  }
+
+  it.each([
+    ['part', 'part'],
+    ['reference', 'reference'],
+    ['valueProperty', 'value'],
+  ] as const)('tree and canvas %s share candidate IDs and equivalent intents', (elementKind, propertyKind) => {
+    const repository = createParityFixture();
+    const { adapter, gatewayCommands } = createTreeHarness(repository);
+    const typeId = propertyKind === 'value' ? 'vt-voltage' : 'block-motor';
+
+    const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind });
+    expect(treePreflight.committed).toBe(false);
+    expect(treePreflight.typeSelection).toBeDefined();
+
+    const canvasPlan = planOwnedPropertyCreation(repository, {
+      ownerBlockId: 'block-vehicle', propertyKind, diagramId: 'bdd-1', presentation: { x: 10, y: 20 },
+    });
+    expect(canvasPlan.outcome).toBe('typeSelection');
+    if (canvasPlan.outcome !== 'typeSelection') return;
+    expect(canvasPlan.request.candidates.map(c => c.id).sort())
+      .toEqual((treePreflight.typeSelection?.candidates ?? []).map(c => c.id).sort());
+    expect(canvasPlan.request.action).toEqual(treePreflight.typeSelection?.action);
+
+    const treeResult = adapter.execute({ type: 'createElement', ownerId: 'block-vehicle', elementKind, typeId } as ModelExplorerCommand);
+    expect(treeResult.committed).toBe(true);
+    const treeCommand = gatewayCommands.find(cmd => cmd.type === 'createOwnedFeature');
+    expect(treeCommand).toMatchObject({ type: 'createOwnedFeature' });
+
+    const canvasSelected = planOwnedPropertyCreation(repository, {
+      ownerBlockId: 'block-vehicle', propertyKind, typeId, diagramId: 'bdd-1', presentation: { x: 10, y: 20 },
+    });
+    expect(canvasSelected.outcome).toBe('command');
+    if (canvasSelected.outcome !== 'command' || treeCommand?.type !== 'createOwnedFeature') return;
+    // Same semantic feature on both surfaces; only generated identity and
+    // canvas presentation metadata may differ.
+    expect(canvasSelected.command.intent).toMatchObject({
+      featureKind: 'property',
+      ownerBlockId: 'block-vehicle',
+      propertyKind,
+      typeId,
+    });
+    expect(treeCommand.intent).toMatchObject({
+      featureKind: 'property',
+      ownerBlockId: 'block-vehicle',
+      propertyKind,
+      typeId,
+    });
+    expect(canvasSelected.command.diagramId).toBe('bdd-1');
+  });
+
+  it.each([
+    ['proxyPort', 'proxyPort', 'iface-can'],
+    ['fullPort', 'fullPort', 'block-motor'],
+    ['flowPort', 'flowPort', 'vt-voltage'],
+  ] as const)('tree and canvas %s share candidate IDs and equivalent intents', (elementKind, portKind, typeId) => {
+    const repository = createParityFixture();
+    const { adapter, gatewayCommands } = createTreeHarness(repository);
+
+    const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind });
+    expect(treePreflight.committed).toBe(false);
+    expect(treePreflight.typeSelection).toBeDefined();
+
+    const canvasPlan = planOwnedPortCreation(repository, {
+      ownerBlockId: 'block-vehicle', portKind, diagramId: 'bdd-1', presentation: { x: 7, y: 8 },
+    });
+    expect(canvasPlan.outcome).toBe('typeSelection');
+    if (canvasPlan.outcome !== 'typeSelection') return;
+    expect(canvasPlan.request.candidates.map(c => c.id).sort())
+      .toEqual((treePreflight.typeSelection?.candidates ?? []).map(c => c.id).sort());
+    expect(canvasPlan.request.action).toEqual(treePreflight.typeSelection?.action);
+
+    const treeResult = adapter.execute({ type: 'createElement', ownerId: 'block-vehicle', elementKind, typeId } as ModelExplorerCommand);
+    expect(treeResult.committed).toBe(true);
+
+    const canvasSelected = planOwnedPortCreation(repository, {
+      ownerBlockId: 'block-vehicle', portKind, typeId, diagramId: 'bdd-1', presentation: { x: 7, y: 8 },
+    });
+    expect(canvasSelected.outcome).toBe('command');
+    const treeCommand = gatewayCommands.find(cmd => cmd.type === 'createOwnedFeature');
+    if (canvasSelected.outcome !== 'command' || treeCommand?.type !== 'createOwnedFeature') return;
+    expect(canvasSelected.command.intent).toMatchObject({
+      featureKind: 'port',
+      ownerBlockId: 'block-vehicle',
+      portKind,
+      typeId,
+    });
+    expect(treeCommand.intent).toMatchObject({
+      featureKind: 'port',
+      ownerBlockId: 'block-vehicle',
+      portKind,
+      typeId,
+    });
+  });
+
+  it('tree and canvas Standard Port both create an untyped UML Port with no prompt', () => {
+    const repository = createParityFixture();
+    const { adapter, gatewayCommands } = createTreeHarness(repository);
+
+    const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind: 'port' });
+    expect(treePreflight.typeSelection).toBeUndefined();
+    const treeResult = adapter.execute({ type: 'createElement', ownerId: 'block-vehicle', elementKind: 'port' });
+    expect(treeResult.committed).toBe(true);
+
+    const canvasPlan = planOwnedPortCreation(repository, { ownerBlockId: 'block-vehicle', portKind: 'umlPort' });
+    expect(canvasPlan.outcome).toBe('command');
+    if (canvasPlan.outcome !== 'command') return;
+    const treeCommand = gatewayCommands.find(cmd => cmd.type === 'createOwnedFeature');
+    if (treeCommand?.type !== 'createOwnedFeature') throw new Error('expected tree port command');
+    expect(canvasPlan.command.intent).toMatchObject({
+      featureKind: 'port',
+      ownerBlockId: 'block-vehicle',
+      portKind: 'umlPort',
+    });
+    expect(treeCommand.intent).toMatchObject({
+      featureKind: 'port',
+      ownerBlockId: 'block-vehicle',
+      portKind: 'umlPort',
+    });
+    if (canvasPlan.command.intent.featureKind !== 'port') throw new Error('expected port intent');
+    expect(canvasPlan.command.intent.typeId).toBeUndefined();
+  });
+
+  it('cancelling type selection on either surface leaves the repository unchanged', () => {
+    const repository = createParityFixture();
+    const before = JSON.stringify(repository);
+    const { adapter } = createTreeHarness(repository);
+
+    const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind: 'proxyPort' });
+    expect(treePreflight.committed).toBe(false);
+    expect(treePreflight.typeSelection).toBeDefined();
+
+    const canvasPlan = planOwnedPortCreation(repository, { ownerBlockId: 'block-vehicle', portKind: 'proxyPort' });
+    expect(canvasPlan.outcome).toBe('typeSelection');
+
+    // Cancel on both surfaces: no command dispatched.
+    expect(JSON.stringify(repository)).toBe(before);
   });
 });

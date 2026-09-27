@@ -47,6 +47,13 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
 
   if (!isOpen) return null;
 
+  // A typed feature can only be created from an explicitly selected
+  // compatible candidate. The selection must still be present in the current
+  // candidate list: stale ids (e.g. after the repository changed while the
+  // chooser was open) can never confirm, so choosing no type cannot create
+  // a typed feature and the first candidate is never selected silently.
+  const hasValidSelection = selectedId !== '' && candidates.some(c => c.id === selectedId);
+
   return (
     <div
       role="dialog"
@@ -196,17 +203,17 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
             </button>
             <button
               type="button"
-              disabled={!selectedId}
+              disabled={!hasValidSelection}
               onClick={() => {
-                if (selectedId) onSelectType(selectedId);
+                if (hasValidSelection) onSelectType(selectedId);
               }}
               style={{
                 padding: '6px 14px',
                 borderRadius: '4px',
                 border: 'none',
-                background: selectedId ? '#2563eb' : '#4b5563',
+                background: hasValidSelection ? '#2563eb' : '#4b5563',
                 color: '#ffffff',
-                cursor: selectedId ? 'pointer' : 'not-allowed',
+                cursor: hasValidSelection ? 'pointer' : 'not-allowed',
                 fontSize: '12px',
                 fontWeight: 600,
               }}

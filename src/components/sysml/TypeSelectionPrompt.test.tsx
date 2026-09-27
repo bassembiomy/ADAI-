@@ -3,6 +3,30 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { TypeSelectionPrompt } from './TypeSelectionPrompt';
+import { createEmptyRepository } from '../../engine/sysml/model';
+import {
+  getCompatiblePortCandidates,
+  planOwnedPortCreation,
+} from '../../services/sysmlOwnedFeatureCommands';
+
+function createCanvasFixture() {
+  const repo = createEmptyRepository();
+  repo.definitions.motor = {
+    id: 'motor', name: 'Motor', namespace: [], kind: 'block',
+    isAbstract: false, isLeaf: false, supertypeIds: [], properties: [], ports: [], operations: [], constraints: [],
+  };
+  repo.definitions.canBus = {
+    id: 'canBus', name: 'CANBusInterface', namespace: [], kind: 'interface', features: [],
+  };
+  repo.definitions.voltage = {
+    id: 'voltage', name: 'Voltage', namespace: [], kind: 'valueType', unit: 'V',
+  };
+  repo.definitions.vehicle = {
+    id: 'vehicle', name: 'Vehicle', namespace: [], kind: 'block',
+    isAbstract: false, isLeaf: false, supertypeIds: [], properties: [], ports: [], operations: [], constraints: [],
+  };
+  return repo;
+}
 
 describe('TypeSelectionPrompt', () => {
   afterEach(() => {
@@ -81,6 +105,107 @@ describe('TypeSelectionPrompt', () => {
     expect(screen.getByText(/No compatible existing types/i)).toBeTruthy();
     expect(screen.getByText('TYPE_NOT_FOUND')).toBeTruthy();
     expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('canvas Standard Port needs no type selection: planner commands an untyped UML Port', () => {
+    const repo = createCanvasFixture();
+    const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'umlPort' });
+    expect(plan.outcome).toBe('command');
+    if (plan.outcome !== 'command' || plan.command.intent.featureKind !== 'port') return;
+    expect(plan.command.intent.portKind).toBe('umlPort');
+    expect(plan.command.intent.typeId).toBeUndefined();
+  });
+
+  it('canvas ProxyPort chooser offers only InterfaceBlock candidates', () => {
+    const repo = createCanvasFixture();
+    const candidates = getCompatiblePortCandidates(repo, 'proxyPort');
+    expect(candidates.map(c => c.id)).toEqual(['canBus']);
+    render(
+      <TypeSelectionPrompt
+        isOpen={true}
+        featureKind="Proxy Port"
+        candidates={candidates}
+        onSelectType={vi.fn()}
+        onCreateNewType={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('CANBusInterface')).toBeTruthy();
+    expect(screen.queryByText('Motor')).toBeNull();
+    expect(screen.queryByText('Voltage')).toBeNull();
+  });
+
+  it.each([
+    ['Full Port', 'fullPort'],
+    ['Legacy Flow Port', 'flowPort'],
+  ] as const)('canvas %s requires an explicit compatible selection, never the first candidate', (label, portKind) => {
+    const repo = createCanvasFixture();
+    const candidates = getCompatiblePortCandidates(repo, portKind);
+    expect(candidates.length).toBeGreaterThan(0);
+    const onSelect = vi.fn();
+    render(
+      <TypeSelectionPrompt
+        isOpen={true}
+        featureKind={label}
+        candidates={candidates}
+        onSelectType={onSelect}
+        onCreateNewType={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(new RegExp(`Select Type for ${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'))).toBeTruthy();
+    // No silent first-candidate selection on mount.
+    expect(onSelect).not.toHaveBeenCalled();
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText(candidates[0].name));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(candidates[0].id);
+  });
+
+  it('choosing no type cannot create a typed feature: Confirm stays disabled without selection', () => {
+    const onSelect = vi.fn();
+    render(
+      <TypeSelectionPrompt
+        isOpen={true}
+        featureKind="Proxy Port"
+        candidates={candidates}
+        onSelectType={onSelect}
+        onCreateNewType={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('drops a stale selection when candidates change so Confirm cannot fire for an absent id', () => {
+    const onSelect = vi.fn();
+    const { rerender } = render(
+      <TypeSelectionPrompt
+        isOpen={true}
+        featureKind="Proxy Port"
+        candidates={candidates}
+        onSelectType={onSelect}
+        onCreateNewType={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('CANBus'));
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(false);
+    rerender(
+      <TypeSelectionPrompt
+        isOpen={true}
+        featureKind="Proxy Port"
+        candidates={[{ id: 'if-power', name: 'PowerInterface' }]}
+        onSelectType={onSelect}
+        onCreateNewType={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
