@@ -32,6 +32,7 @@ describe('TypeSelectionPrompt', () => {
     expect(screen.getByText(/Select Type for Proxy Port/i)).toBeTruthy();
     expect(screen.getByText('CANBus')).toBeTruthy();
     expect(screen.getByText('PowerInterface')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
 
     // Select CANBus
     fireEvent.click(screen.getByText('CANBus'));
@@ -72,5 +73,14 @@ describe('TypeSelectionPrompt', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('shows empty candidates and permits only explicit Create New Type or Cancel', () => {
+    const onSelect = vi.fn();
+    render(<TypeSelectionPrompt isOpen featureKind="Proxy Port" candidates={[]} onSelectType={onSelect} onCreateNewType={vi.fn()} onCancel={vi.fn()} error="TYPE_NOT_FOUND" />);
+    expect(screen.getByText(/No compatible existing types/i)).toBeTruthy();
+    expect(screen.getByText('TYPE_NOT_FOUND')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Confirm/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

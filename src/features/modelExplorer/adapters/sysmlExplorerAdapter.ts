@@ -905,43 +905,24 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             return { committed: false, revision: repo.revision, diagnostics };
           }
 
-          // Part type check: must have a valid block definition
-          if (['part', 'reference', 'sharedPart'].includes(command.elementKind)) {
-            const blockDefs = Object.values(repo.definitions).filter(d => d.kind === 'block');
-            const typeId = (command as any).typeId || (blockDefs.find(b => b.id !== command.ownerId) ?? blockDefs[0])?.id;
-            if (!typeId) {
-              diagnostics.push({
-                code: 'TYPE_NOT_FOUND',
-                severity: 'error',
-                message: 'A valid block type is required to instantiate a part.',
-              });
-              return { committed: false, revision: repo.revision, diagnostics };
-            }
-          }
-
-          if (['valueProperty', 'value'].includes(command.elementKind)) {
-            const valueDefs = Object.values(repo.definitions).filter(d => d.kind === 'valueType');
-            const typeId = (command as any).typeId || valueDefs[0]?.id;
-            if (!typeId) {
-              diagnostics.push({
-                code: 'TYPE_NOT_FOUND',
-                severity: 'error',
-                message: 'A valid value type is required for value property.',
-              });
-              return { committed: false, revision: repo.revision, diagnostics };
-            }
-          }
-
-          if (canonicalKindToExplorerKind(command.elementKind) === 'proxyPort') {
-            const interfaceType = Object.values(repo.definitions).find(definition => definition.kind === 'interface');
-            if (!interfaceType) {
-              diagnostics.push({
-                code: 'TYPE_NOT_FOUND',
-                severity: 'error',
-                message: 'Proxy Port requires an existing Interface Block type. Create an Interface Block explicitly, then retry.',
-              });
-              return { committed: false, revision: repo.revision, diagnostics };
-            }
+          const requestedKind = canonicalKindToExplorerKind(command.elementKind);
+          const propertyKind = ['part', 'sharedPart', 'reference', 'valueProperty'].includes(requestedKind)
+            ? requestedKind === 'reference' ? 'reference' : requestedKind === 'valueProperty' ? 'value' : 'part'
+            : undefined;
+          const portKind = ({ proxyPort: 'proxyPort', fullPort: 'fullPort', flowPort: 'flowPort' } as Record<string, CanonicalPortKind>)[requestedKind];
+          const plan = propertyKind
+            ? buildCreateOwnedPropertyCommand(repo, { ownerBlockId: command.ownerId, propertyKind, typeId: command.typeId, name: command.name })
+            : portKind
+              ? buildCreateOwnedPortCommand(repo, { ownerBlockId: command.ownerId, portKind, typeId: command.typeId, name: command.name })
+              : null;
+          if (plan && !plan.ok) {
+            const needsSelection = !command.typeId && plan.diagnostics.some(item => item.code === 'TYPE_NOT_FOUND');
+            return {
+              committed: false,
+              revision: repo.revision,
+              diagnostics: needsSelection && plan.candidates?.length ? [] : plan.diagnostics.map(item => ({ ...item, severity: 'error' as const })),
+              ...(needsSelection && plan.action ? { typeSelection: { candidates: plan.candidates ?? [], action: plan.action } } : {}),
+            };
           }
           return { committed: false, revision: repo.revision, diagnostics: [] };
         }
@@ -1161,13 +1142,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           if (['part', 'reference', 'sharedPart'].includes(requestedKind)) {
-            const blockDefs = Object.values(repo.definitions).filter(d => d.kind === 'block');
             const propKind: 'part' | 'reference' = requestedKind === 'reference' ? 'reference' : 'part';
-            let typeId = (command as any).typeId as string | undefined;
-            if (!typeId) {
-              const typeBlock = blockDefs.find(b => b.id !== ownerId) ?? blockDefs[0];
-              typeId = typeBlock?.id;
-            }
+            const typeId = command.typeId;
             if (!typeId) {
               return {
                 committed: false,
@@ -1211,19 +1187,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 flowPort: 'flowPort',
               };
               const canonicalPortKind = portKindMap[requestedKind] ?? 'umlPort';
-              let typeId = (command as any).typeId as string | undefined;
-              if (!typeId) {
-                if (canonicalPortKind === 'proxyPort') {
-                  const iface = Object.values(repo.definitions).find(d => d.kind === 'interface');
-                  typeId = iface?.id;
-                } else if (canonicalPortKind === 'fullPort') {
-                  const blk = Object.values(repo.definitions).find(d => d.kind === 'block' || d.kind === 'valueType');
-                  typeId = blk?.id;
-                } else if (canonicalPortKind === 'flowPort') {
-                  const anyDef = Object.values(repo.definitions).find(d => d.kind === 'block' || d.kind === 'valueType' || d.kind === 'interface');
-                  typeId = anyDef?.id;
-                }
-              }
+              const typeId = command.typeId;
 
               const plan = buildCreateOwnedPortCommand(repo, {
                 ownerBlockId: ownerId,
@@ -1252,11 +1216,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           if (requestedKind === 'valueProperty' || requestedKind === 'value') {
-            const valueDefs = Object.values(repo.definitions).filter(d => d.kind === 'valueType');
-            let typeId = (command as any).typeId as string | undefined;
-            if (!typeId) {
-              typeId = valueDefs[0]?.id;
-            }
+            const typeId = command.typeId;
             if (!typeId) {
               return {
                 committed: false,
@@ -1288,10 +1248,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           if (requestedKind === 'flowProperty' || requestedKind === 'flow') {
-            let typeId = (command as any).typeId as string | undefined;
-            if (!typeId) {
-              typeId = Object.values(repo.definitions)[0]?.id;
-            }
+            const typeId = command.typeId;
             if (!typeId) {
               return {
                 committed: false,

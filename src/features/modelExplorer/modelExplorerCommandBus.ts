@@ -20,6 +20,7 @@ export function hasMaterialImpact(impact?: ExplorerImpact): boolean {
 
 export function isPreflightClear(result: ExplorerCommandResult): boolean {
   return !result.diagnostics.some(item => item.severity === 'error')
+    && !result.typeSelection
     && !hasMaterialImpact(result.impact);
 }
 

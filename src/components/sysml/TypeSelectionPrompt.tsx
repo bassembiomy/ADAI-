@@ -20,13 +20,15 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
   onCancel,
   error,
 }) => {
-  const [selectedId, setSelectedId] = useState<string>(candidates[0]?.id || '');
+  const [selectedId, setSelectedId] = useState<string>('');
 
   useEffect(() => {
-    if (candidates.length > 0 && (!selectedId || !candidates.some(c => c.id === selectedId))) {
-      setSelectedId(candidates[0].id);
-    }
+    if (selectedId && !candidates.some(c => c.id === selectedId)) setSelectedId('');
   }, [candidates, selectedId]);
+
+  useEffect(() => {
+    if (!isOpen) setSelectedId('');
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

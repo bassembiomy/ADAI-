@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import type {
   ModelTreeNode,
   ModelExplorerCommand,
@@ -13,6 +13,7 @@ import { hashImpact } from '../../features/modelExplorer/modelExplorerTypes';
 import { ModelExplorer } from './ModelExplorer';
 import { MoveImpactDialog } from './MoveImpactDialog';
 import { RelationshipWizard } from './RelationshipWizard';
+import { TypeSelectionPrompt } from '../sysml/TypeSelectionPrompt';
 import {
   copyOwnershipForest,
 } from '../../features/modelExplorer/modelExplorerClipboard';
@@ -42,7 +43,7 @@ import {
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
-import { getDiagramKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
+import { getDiagramKindLabel, getElementKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
 
 export interface CapabilityActionContext {
   activeDiagramId?: string;
@@ -321,6 +322,11 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     impactHash: string;
     command: ModelExplorerCommand;
   } | null>(null);
+  const [pendingType, setPendingType] = useState<{
+    command: Extract<ModelExplorerCommand, { type: 'createElement' }>;
+    selection: NonNullable<ExplorerCommandResult['typeSelection']>;
+    createdTypeId?: string;
+  } | null>(null);
 
   // Relationship wizard state
   const [relationshipWizardState, setRelationshipWizardState] = useState<{
@@ -508,12 +514,17 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       if (capability.kind === 'rename') return;
 
       if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {
-        const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
+        const command: Extract<ModelExplorerCommand, { type: 'createElement' }> = {
           type: 'createElement',
           ownerId: capabilityOwnerId,
           elementKind: capability.elementKind || 'Block',
-        });
-        acceptResult(res, { type: 'createElement', ownerId: capabilityOwnerId, elementKind: capability.elementKind || 'Block' });
+        };
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch(command);
+        if (res.typeSelection && explorerAdapterDomain(node) === 'sysml') {
+          setPendingType({ command, selection: res.typeSelection });
+        } else {
+          acceptResult(res, command);
+        }
         return;
       }
 
@@ -664,6 +675,35 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     ]
   );
 
+  const handleSelectType = useCallback((typeId: string) => {
+    if (!pendingType || !pendingType.selection.candidates.some(candidate => candidate.id === typeId)) return;
+    const command = { ...pendingType.command, typeId };
+    setPendingType(null);
+    acceptResult(createModelExplorerCommandBus(sysmlAdapter).dispatch(command), command);
+  }, [pendingType, sysmlAdapter, acceptResult]);
+
+  const handleCreateNewType = useCallback(() => {
+    if (!pendingType) return;
+    const metaclass = pendingType.selection.action.payload?.suggestedMetaclass;
+    const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
+    const ownerId = canonicalSysmlRepository?.definitions[pendingType.command.ownerId]?.ownerId || 'model';
+    const command: ModelExplorerCommand = { type: 'createElement', ownerId, elementKind };
+    const result = createModelExplorerCommandBus(sysmlAdapter).dispatch(command);
+    acceptResult(result, command);
+    if (result.committed && result.selectedIds?.[0]) {
+      setPendingType({ ...pendingType, createdTypeId: result.selectedIds[0] });
+    } else {
+      setPendingType(null);
+    }
+  }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult]);
+
+  useEffect(() => {
+    if (!pendingType?.createdTypeId || !canonicalSysmlRepository?.definitions[pendingType.createdTypeId]) return;
+    const command = { ...pendingType.command, typeId: pendingType.createdTypeId };
+    setPendingType(null);
+    acceptResult(createModelExplorerCommandBus(sysmlAdapter).dispatch(command), command);
+  }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult]);
+
   const handleMoveNode = useCallback(
     (draggedNode: ModelTreeNode, targetNode: ModelTreeNode) => {
       const cmd: ModelExplorerCommand = {
@@ -740,6 +780,18 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           impactHash={pendingImpact.impactHash}
           onConfirm={handleConfirmImpact}
           onCancel={() => setPendingImpact(null)}
+        />
+      )}
+
+      {pendingType && !pendingType.createdTypeId && (
+        <TypeSelectionPrompt
+          isOpen
+          featureKind={getElementKindLabel(pendingType.command.elementKind)}
+          candidates={pendingType.selection.candidates}
+          error={pendingType.selection.candidates.length === 0 ? 'TYPE_NOT_FOUND: No compatible existing type.' : undefined}
+          onSelectType={handleSelectType}
+          onCreateNewType={handleCreateNewType}
+          onCancel={() => setPendingType(null)}
         />
       )}
 
