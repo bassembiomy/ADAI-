@@ -313,21 +313,21 @@ git commit -m "test(sysml): exercise corrected diagram workflows"
 - Consumes: semantic test manifests and Task 5 browser evidence.
 - Produces: evidence records that cannot become `COMPLIANT` from self-declared JSON status alone.
 
-- [ ] **Step 1: Write a failing false-evidence test.** A JSON record containing four `PASS` strings but referencing an absent test ID or nonexistent exported evidence case must evaluate as `PARTIAL`, even if the test file exists.
+- [x] **Step 1: Write a failing false-evidence test.** A JSON record containing four `PASS` strings but referencing an absent test ID or nonexistent exported evidence case must evaluate as `PARTIAL`, even if the test file exists.
 
-- [ ] **Step 2: Define executable evidence IDs.** Each semantic test exports or registers stable case IDs such as `PORT_PROXY_WRONG_TYPE_REJECTED`, `STATE_SATISFY_REAL_ID_REQUIRED`, and `IBD_BOUNDARY_DELEGATION_PERSISTS`. The evaluator requires the expected IDs for each compliance level.
+- [x] **Step 2: Define executable evidence IDs.** Each semantic test exports or registers stable case IDs such as `PORT_PROXY_WRONG_TYPE_REJECTED`, `STATE_SATISFY_REAL_ID_REQUIRED`, and `IBD_BOUNDARY_DELEGATION_PERSISTS`. The evaluator requires the expected IDs for each compliance level.
 
-- [ ] **Step 3: Separate authority records.** Split Standard UML Port evidence to `UML_FOUNDATION`; keep ProxyPort/FullPort/FlowPort evidence under `OMG_SYSML_1_6`; keep palette and activation behavior under `CAMEO_TOOLING`; retain legacy VerificationCase mapping under `ADIA_EXTENSION`.
+- [x] **Step 3: Separate authority records.** Split Standard UML Port evidence to `UML_FOUNDATION`; keep ProxyPort/FullPort/FlowPort evidence under `OMG_SYSML_1_6`; keep palette and activation behavior under `CAMEO_TOOLING`; retain legacy VerificationCase mapping under `ADIA_EXTENSION`.
 
-- [ ] **Step 4: Recalculate status.** Mark each level `PASS` only when its semantic evidence case is registered and passing. A missing relationship, constraint, persistence, or projection case forces overall `PARTIAL`.
+- [x] **Step 4: Recalculate status.** Mark each level `PASS` only when its semantic evidence case is registered and passing. A missing relationship, constraint, persistence, or projection case forces overall `PARTIAL`.
 
-- [ ] **Step 5: Run compliance tests.**
+- [x] **Step 5: Run compliance tests.**
 
 Run: `npx vitest run src/engine/sysml/compliance/evaluator.test.ts src/engine/sysml/diagramInteractionCompliance.test.ts src/engine/sysml/conformanceManifest.test.ts`
 
 Expected: PASS, with deliberately incomplete fixtures evaluating as `PARTIAL` or `NON_COMPLIANT`.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```powershell
 git add src/engine/sysml/diagramInteractionCompliance.test.ts src/engine/sysml/compliance/evaluator.ts src/engine/sysml/compliance/evaluator.test.ts docs/sysml/compliance-evidence.json src/engine/sysml/conformanceManifest.ts
@@ -344,7 +344,7 @@ git commit -m "fix(sysml): bind compliance claims to executable evidence"
 - Consumes: completed repair implementation.
 - Produces: verified branch without the six reviewed defects.
 
-- [ ] **Step 1: Run TypeScript and architecture checks.**
+- [x] **Step 1: Run TypeScript and architecture checks.**
 
 Run: `npx tsc --noEmit`
 
@@ -352,13 +352,13 @@ Run: `npm run test:sysml:architecture`
 
 Expected: both exit 0 with no new allowlisted direct mutations.
 
-- [ ] **Step 2: Run the full SysML suite.**
+- [x] **Step 2: Run the full SysML suite.**
 
 Run: `npm run test:sysml`
 
 Expected: all test files pass, including owned features, nested Ports, relationship identity, connectors, TestCase, Package activation, persistence, and compliance.
 
-- [ ] **Step 3: Run release and identity gates.**
+- [x] **Step 3: Run release and identity gates.**
 
 Run: `npm run test:sysml:release-gate`
 
@@ -366,25 +366,25 @@ Run: `npx vitest run src/engine/sysml/semanticIdentityReleaseGate.test.ts src/en
 
 Expected: PASS.
 
-- [ ] **Step 4: Run performance checks in isolation.**
+- [x] **Step 4: Run performance checks in isolation.**
 
 Run: `npx vitest run src/engine/sysml/largeModelStress.test.ts src/services/sysmlIntegrityService.test.ts --no-file-parallelism`
 
 Expected: 26 tests pass within existing thresholds.
 
-- [ ] **Step 5: Run full browser workflows.**
+- [x] **Step 5: Run full browser workflows.**
 
 Run: `npx playwright test tests/e2e/sysml-diagram-interaction-corrections.spec.ts tests/e2e/sysml-repository-presentation.spec.ts --project=chromium`
 
 Expected: all workflows pass without conditional suppression of required assertions.
 
-- [ ] **Step 6: Run code-generation isolation.**
+- [x] **Step 6: Run code-generation isolation.**
 
 Run: `npm run verify:repository-codegen-isolation`
 
 Expected: golden and repository-isolation tests pass. Record unavailable sanitizer, MISRA, static-analysis, or target hardware gates separately.
 
-- [ ] **Step 7: Inspect the final diff.**
+- [x] **Step 7: Inspect the final diff.**
 
 Run: `git diff --check`
 
@@ -392,7 +392,7 @@ Run: `git status --short`
 
 Confirm there is no substring-based identity, ignored command property, post-commit validation error, unused production feature builder, conditional E2E core path, or self-declared compliance status.
 
-- [ ] **Step 8: Request fresh code review.** Review from this plan's base commit through final HEAD against both the original design and this repair plan. Resolve every High and Important finding before merge.
+- [x] **Step 8: Request fresh code review.** Review from this plan's base commit through final HEAD against both the original design and this repair plan. Resolve every High and Important finding before merge.
 
 ## Plan Self-Review
 
