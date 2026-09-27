@@ -171,7 +171,7 @@ import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyD
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 // Task 6 centralized semantic presentation resolver (spec 3.5): workflow
 // surfaces consume tokens instead of hard-coded palette colors.
-import { portKindToPresentationRole, semanticPresentationToken } from './engine/sysml/semanticPresentationStyles';
+import { elementPresentationColor, isValidPresentationColor, portKindToPresentationRole, semanticPresentationToken } from './engine/sysml/semanticPresentationStyles';
 import { buildCreateIbdConnectorCommand } from './services/sysmlIbdConnectorCommands';
 import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
 import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
@@ -761,12 +761,19 @@ const LegacyTraceabilityMatrix = ({
   blocks,
   relationships,
   parts,
-  onClose
+  onClose,
+  badgeColorFor
 }: {
   blocks: BlockData[],
   relationships: RelationshipData[],
   parts: PartData[],
-  onClose: () => void
+  onClose: () => void,
+  /**
+   * Review follow-up Finding 6a: optional per-element presentation color
+   * (a stored style.color override resolved via resolveSemanticPresentation).
+   * When absent, the «kind» glyph resolves to the role token.
+   */
+  badgeColorFor?: (elementId: string) => string | undefined
 }) => {
   const reqs = blocks.filter(b => b.stereotype === 'requirement');
   const [filterStatus, setFilterStatus] = useState('');
@@ -978,8 +985,9 @@ const LegacyTraceabilityMatrix = ({
                         return (
                           <div key={rel.id} className="flex items-center gap-1.5 bg-[#1a1a1a] px-2 py-1 rounded border border-[#222] w-max">
                             {/* Task 6 review fix: tree «kind» glyph resolves from the centralized
-                                semantic palette; the «kind» text stays as the non-color indicator. */}
-                            <span className="text-[10px] font-mono" style={{ color: semanticPresentationToken('validRequirementRelationship') }}>«{rel.type}»</span>
+                                semantic palette; the «kind» text stays as the non-color indicator.
+                                Review follow-up Finding 6a: a resolved stored override wins when supplied. */}
+                            <span className="text-[10px] font-mono" style={{ color: badgeColorFor?.(rel.id) ?? semanticPresentationToken('validRequirementRelationship') }}>«{rel.type}»</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                             <span className="text-[#ccc]">{t?.name}</span>
                           </div>
@@ -10183,8 +10191,15 @@ const ADIA = () => {
   // type-selection request; resume commits the same legacy usage +
   // definition-property records with IBD placement, mirroring the
   // portTypePrompt select/create-new-type/cancel flow.
-  const commitIbdPartAt = useCallback((typeId: string, ownerBlockId: string, x: number, y: number, name: string) => {
-    const resolved = createTypedUsageCommand(canonicalSysmlRepository, {
+  // Review follow-up (Finding 2): the resume accepts an explicit repository
+  // snapshot. Callers resuming immediately after a CreateNewType commit must
+  // pass the fresh `res.repository` — the render-closure
+  // `canonicalSysmlRepository` is stale until React state updates, and
+  // resolving the just-created type against it yields TYPE_NOT_FOUND.
+  // Existing callers omit the parameter and keep the closure behavior.
+  const commitIbdPartAt = useCallback((typeId: string, ownerBlockId: string, x: number, y: number, name: string, repository?: typeof canonicalSysmlRepository) => {
+    const repo = repository ?? canonicalSysmlRepository;
+    const resolved = createTypedUsageCommand(repo, {
       ownerId: ownerBlockId,
       name,
       typeId,
@@ -10215,7 +10230,7 @@ const ADIA = () => {
     initialX = Math.max(frameX + 30, Math.min(initialX, frameX + frameW - 180));
     initialY = Math.max(frameY + 40, Math.min(initialY, frameY + frameH - 140));
 
-    const result = handleExecuteSysmlCommand(buildCreatePartUsageCommand(canonicalSysmlRepository, part, {
+    const result = handleExecuteSysmlCommand(buildCreatePartUsageCommand(repo, part, {
       x: initialX,
       y: initialY,
       width: 150,
@@ -10294,8 +10309,8 @@ const ADIA = () => {
       res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       return;
     }
-    commitIbdPartAt(element.id, propertyTypePrompt.ownerBlockId, propertyTypePrompt.x, propertyTypePrompt.y, propertyTypePrompt.name);
-  }, [propertyTypePrompt, canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
+    commitIbdPartAt(element.id, propertyTypePrompt.ownerBlockId, propertyTypePrompt.x, propertyTypePrompt.y, propertyTypePrompt.name, res.repository);
+  }, [propertyTypePrompt, canonicalSysmlRepository, handleExecuteSysmlCommand, addError, commitIbdPartAt]);
 
   const handleCreateNewTypeAction = useCallback((action: CreateNewTypeAction) => {
     const result = handleExecuteSysmlCommand(buildCreateNewTypeCommand(action, canonicalSysmlRepository, () => uuidv4()));
@@ -10462,13 +10477,19 @@ const ADIA = () => {
     addError('info', 'Auto-layout applied to current layer.');
   }, [blocks, relationships, currentLayerId, sysmlDiagramPresentations, handleExecuteSysmlCommand, addError]);
 
-  const handlePortTypeSelected = useCallback((typeId: string) => {
+  // Review follow-up (Finding 2 audit): the port select path accepts the same
+  // explicit-repository parameter as the part resume. Interactive selection
+  // passes nothing and re-plans against the live closure repository (correct
+  // for a fresh user gesture); any future resume-after-create caller must
+  // pass the fresh `res.repository` so the just-created type resolves.
+  const handlePortTypeSelected = useCallback((typeId: string, repository?: typeof canonicalSysmlRepository) => {
     if (!portTypePrompt) return;
     // Same surface-agnostic planner + canonical gateway command as Model
     // Explorer (spec 3.2, 4.1): an explicitly selected but incompatible or
     // unresolvable type is a structured error, never a silent substitution,
     // and the gateway commit path never mutates on error.
-    const plan = planOwnedPortCreation(canonicalSysmlRepository, {
+    const repo = repository ?? canonicalSysmlRepository;
+    const plan = planOwnedPortCreation(repo, {
       ownerBlockId: portTypePrompt.ownerBlockId,
       portKind: portTypePrompt.portKind,
       typeId,
@@ -10521,6 +10542,9 @@ const ADIA = () => {
       res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       return;
     }
+    // Review follow-up (Finding 2 audit): the pending port request resumes
+    // against the fresh `res.repository`, never the stale render-closure
+    // repository, so the just-created type resolves on the resume.
     const plan = planOwnedPortCreation(res.repository, {
       ownerBlockId: portTypePrompt.ownerBlockId,
       portKind: portTypePrompt.portKind,
@@ -15202,6 +15226,8 @@ const ADIA = () => {
                   <g key={port.id}>
                     <IbdConnectorEndpoint
                       isBoundary={true}
+                      portKind={port.kind}
+                      overrideColor={sysmlDiagramPresentations[currentLayerId]?.presentations[port.id]?.style?.color}
                       definitionId={port.id}
                       ownerOccurrenceId={null}
                       name={port.name}
@@ -15420,11 +15446,15 @@ const ADIA = () => {
               )}
 
               {/* Ports (Task 6: stroke/glyph resolve from the centralized
-                  semantic palette via portKindToPresentationRole; legacy
-                  ports carry no presentation override so role defaults
-                  apply deterministically) */}
+                  semantic palette via portKindToPresentationRole; review
+                  follow-up Finding 6a: a stored style.color override for the
+                  port's element+diagram wins for rendering via
+                  resolveSemanticPresentation, absent/invalid resolves to the
+                  role token; legacy ports carry no presentation override so
+                  role defaults apply deterministically) */}
               {block.ports.map((port, i) => {
-                const portToken = semanticPresentationToken(portKindToPresentationRole(port.kind));
+                const portRole = portKindToPresentationRole(port.kind);
+                const portToken = elementPresentationColor(portRole, activeSysmlDiagramId, port.id, sysmlDiagramPresentations);
                 return (
                 <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
                   {/* Task 6 review fix: the token is applied through `style`
@@ -15473,7 +15503,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
@@ -15533,13 +15563,20 @@ const ADIA = () => {
       // the centralized semantic palette. Precedence (selection, then suspect
       // error, then valid requirement relationship) is presentational only;
       // validation state is computed upstream and color never drives it.
+      // Review follow-up Finding 6a: a stored style.color override for the
+      // relationship's element+diagram wins for rendering via
+      // resolveSemanticPresentation (kept in style props per the Task 6
+      // var()-in-style fix); absent/invalid resolves to the role default.
       const strokeColor = isSelected
-        ? semanticPresentationToken('selection')
+        ? elementPresentationColor('selection', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
         : isSuspect
-          ? semanticPresentationToken('error')
+          ? elementPresentationColor('error', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
           : isTrace
-            ? semanticPresentationToken('validRequirementRelationship')
-            : '#888';
+            ? elementPresentationColor('validRequirementRelationship', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
+            : (() => {
+                const stored = sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[rel.id]?.style?.color;
+                return isValidPresentationColor(stored) ? String(stored).trim() : '#888';
+              })();
       const isPackageRelation = ['packageImport', 'elementImport', 'packageMerge'].includes(rel.type);
       const strokeDash = ['allocation', 'dependency', 'packageImport', 'elementImport', 'packageMerge'].includes(rel.type) ? '5,5' : undefined;
       const isReqContainment = rel.type === 'requirementContainment';
@@ -15688,6 +15725,8 @@ const ADIA = () => {
               <g key={port.id} transform={`translate(${xOffset}, ${yOffset})`}>
                 <IbdConnectorEndpoint
                   isBoundary={false}
+                  portKind={port.kind}
+                  overrideColor={sysmlDiagramPresentations[currentLayerId]?.presentations[port.id]?.style?.color}
                   definitionId={port.id}
                   ownerOccurrenceId={part.id}
                   name={port.name}
@@ -15728,7 +15767,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
+  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId, sysmlDiagramPresentations]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode

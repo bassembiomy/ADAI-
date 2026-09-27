@@ -102,4 +102,74 @@ describe('IbdConnectorEndpoint Component', () => {
     expect(boundaryRect!.getAttribute('stroke')).toBeNull();
     expect(boundaryRect!.getAttribute('style') ?? '').toContain('--sysml-sem-proxy-port');
   });
+
+  it('resolves the default symbol from the supplied port kind, falling back to the boundary heuristic only when absent', () => {
+    // Finding 5a: an explicit kind wins over the boundary heuristic;
+    // unknown kinds fall back to the standard-port role (never a silent
+    // proxy promotion), and omitting the kind preserves legacy visuals.
+    const cases: Array<{ portKind?: unknown; isBoundary?: boolean; token: string }> = [
+      { portKind: 'full', token: '--sysml-sem-full-port' },
+      { portKind: 'fullPort', token: '--sysml-sem-full-port' },
+      { portKind: 'flow', token: '--sysml-sem-flow-port' },
+      { portKind: 'flowPort', token: '--sysml-sem-flow-port' },
+      { portKind: 'proxy', token: '--sysml-sem-proxy-port' },
+      { portKind: 'proxyPort', token: '--sysml-sem-proxy-port' },
+      { portKind: 'standard', token: '--sysml-sem-standard-port' },
+      { portKind: 'standardPort', token: '--sysml-sem-standard-port' },
+      { portKind: 'umlPort', token: '--sysml-sem-standard-port' },
+      { portKind: 'mystery-kind', token: '--sysml-sem-standard-port' },
+      // Supplied kind wins even on a boundary endpoint.
+      { portKind: 'flow', isBoundary: true, token: '--sysml-sem-flow-port' },
+      { portKind: 'full', isBoundary: true, token: '--sysml-sem-full-port' },
+      { portKind: 'standard', isBoundary: true, token: '--sysml-sem-standard-port' },
+      // Absent kind keeps the legacy boundary heuristic.
+      { isBoundary: true, token: '--sysml-sem-proxy-port' },
+      { isBoundary: false, token: '--sysml-sem-standard-port' },
+      { token: '--sysml-sem-standard-port' },
+    ];
+    for (const { portKind, isBoundary, token } of cases) {
+      const { container, unmount } = render(
+        <svg>
+          <IbdConnectorEndpoint definitionId="port-kind" x={10} y={10} portKind={portKind} isBoundary={isBoundary} />
+        </svg>,
+      );
+      const rect = container.querySelector('rect[width="12"]');
+      expect(rect!.getAttribute('stroke')).toBeNull();
+      expect(rect!.getAttribute('fill')).toBeNull();
+      expect(rect!.getAttribute('style') ?? '').toContain(token);
+      unmount();
+    }
+  });
+
+  it('renders a valid stored color override and falls back to the role token when absent or invalid', () => {
+    // Finding 6a: rendered style equals the override when valid, the role
+    // token when absent/invalid. Presentation only.
+    const { container, rerender } = render(
+      <svg>
+        <IbdConnectorEndpoint definitionId="port-o" x={10} y={10} portKind="full" overrideColor="#123456" />
+      </svg>,
+    );
+    const overridden = container.querySelector('rect[width="12"]');
+    // Note: jsdom serializes the hex override as rgb(); either form proves
+    // the rendered style equals the override rather than the role token.
+    expect(overridden!.getAttribute('style') ?? '').toMatch(/#123456|rgb\(18,\s*52,\s*86\)/);
+    expect(overridden!.getAttribute('style') ?? '').not.toContain('--sysml-sem-full-port');
+
+    rerender(
+      <svg>
+        <IbdConnectorEndpoint definitionId="port-o" x={10} y={10} portKind="full" />
+      </svg>,
+    );
+    const defaulted = container.querySelector('rect[width="12"]');
+    expect(defaulted!.getAttribute('style') ?? '').toContain('--sysml-sem-full-port');
+
+    rerender(
+      <svg>
+        <IbdConnectorEndpoint definitionId="port-o" x={10} y={10} portKind="full" overrideColor="not a color;;;" />
+      </svg>,
+    );
+    const invalid = container.querySelector('rect[width="12"]');
+    expect(invalid!.getAttribute('style') ?? '').toContain('--sysml-sem-full-port');
+    expect(invalid!.getAttribute('style') ?? '').not.toContain('not a color');
+  });
 });

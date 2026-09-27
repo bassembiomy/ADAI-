@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { semanticPresentationToken } from '../../engine/sysml/semanticPresentationStyles';
+import {
+  portKindToPresentationRole,
+  resolveSemanticPresentation,
+  semanticPresentationToken,
+} from '../../engine/sysml/semanticPresentationStyles';
 
 export interface IbdEndpointIdentity {
   usageId?: string;
@@ -14,6 +18,19 @@ export interface IbdConnectorEndpointProps {
   name?: string;
   direction?: 'in' | 'out' | 'inout';
   isBoundary?: boolean;
+  /**
+   * Underlying port kind (`standard`, `flow`, `proxy`, `full`, …). When
+   * supplied, the default symbol resolves via `portKindToPresentationRole`;
+   * when absent, the legacy boundary heuristic (boundary → proxy-port role)
+   * applies so existing visuals are preserved. Presentation only.
+   */
+  portKind?: unknown;
+  /**
+   * Stored `style.color` override for this endpoint's element+diagram.
+   * A valid override wins for rendering via `resolveSemanticPresentation`;
+   * absent/invalid values resolve to the role token. Presentation only.
+   */
+  overrideColor?: unknown;
   x: number;
   y: number;
   size?: number;
@@ -33,6 +50,8 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
   name,
   direction,
   isBoundary = false,
+  portKind,
+  overrideColor,
   x,
   y,
   size = 12,
@@ -50,20 +69,30 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
   // Task 6 review fix: IBD port symbols and connection-preview surfaces resolve
   // presentation from the centralized semantic palette (presentation only;
   // validation state is computed upstream and color never drives it).
-  // Boundary ports present via the proxy-port role; a valid/invalid
+  // The default symbol resolves from the supplied port kind via
+  // portKindToPresentationRole; only when no kind is supplied does the legacy
+  // boundary heuristic apply (boundary → proxy-port role). A valid/invalid
   // connection preview presents via the valid-requirement-relationship /
   // error roles; selection and hover present via the selection role.
-  // Tokens are applied through `style` (never SVG presentation attributes)
+  // A stored user color override wins for rendering through
+  // resolveSemanticPresentation; absent/invalid overrides resolve to the role
+  // token. Tokens are applied through `style` (never SVG presentation attributes)
   // because browsers do not resolve var() in presentation attributes.
+  const baseRole = portKind !== undefined && portKind !== null
+    ? portKindToPresentationRole(portKind)
+    : isBoundary
+      ? 'proxyPort'
+      : 'standardPort';
+  const baseToken = resolveSemanticPresentation(baseRole, {
+    customization: { color: overrideColor },
+  }).color;
   const strokeToken = isSelected
     ? semanticPresentationToken('selection')
     : isConnecting
       ? (isValidTarget ? semanticPresentationToken('validRequirementRelationship') : semanticPresentationToken('error'))
       : hovered
         ? semanticPresentationToken('selection')
-        : isBoundary
-          ? semanticPresentationToken('proxyPort')
-          : semanticPresentationToken('standardPort');
+        : baseToken;
 
   const fillToken = isSelected
     ? semanticPresentationToken('selection')
@@ -71,9 +100,7 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
       ? (isValidTarget ? semanticPresentationToken('validRequirementRelationship') : semanticPresentationToken('error'))
       : hovered
         ? semanticPresentationToken('selection')
-        : isBoundary
-          ? semanticPresentationToken('proxyPort')
-          : semanticPresentationToken('standardPort');
+        : baseToken;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();

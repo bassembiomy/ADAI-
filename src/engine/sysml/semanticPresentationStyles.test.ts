@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  elementPresentationColor,
   SEMANTIC_PRESENTATION_ROLES,
   SEMANTIC_PRESENTATION_ROLE_TOKENS,
   getSemanticPresentationStatusMeta,
@@ -160,6 +161,40 @@ describe('semanticPresentationStyles user overrides (spec 3.5)', () => {
     expect(first.role).toBe(second.role);
     expect(first.token).toBe(second.token);
     expect(first.color).not.toBe(second.color);
+  });
+});
+
+describe('elementPresentationColor stored overrides (review Finding 6a)', () => {
+  const presentationsFor = (color: unknown) => ({
+    bdd: { presentations: { 'rel-1': { style: { color } } } },
+  });
+  it('renders the stored override when valid and the role token when absent or invalid', () => {
+    const token = semanticPresentationToken('validRequirementRelationship');
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor('#123456')),
+    ).toBe('#123456');
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor(undefined)),
+    ).toBe(token);
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor('not a color;;;')),
+    ).toBe(token);
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor('')),
+    ).toBe(token);
+    // Overrides never leak across diagrams or elements.
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'other', 'rel-1', presentationsFor('#123456')),
+    ).toBe(token);
+    expect(
+      elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-2', presentationsFor('#123456')),
+    ).toBe(token);
+    expect(
+      elementPresentationColor('validRequirementRelationship', undefined, 'rel-1', presentationsFor('#123456')),
+    ).toBe(token);
+    expect(
+      elementPresentationColor('proxyPort', 'bdd', 'rel-1', presentationsFor('var(--my-custom)')),
+    ).toBe('var(--my-custom)');
   });
 });
 

@@ -205,6 +205,40 @@ export function resolveSemanticPresentation(
   return { role: normalized, token, variable, color: token, isOverride: false };
 }
 
+export interface DiagramPresentationStyleLookup {
+  presentations?: Record<string, { style?: Record<string, unknown> | undefined } | undefined>;
+}
+
+/**
+ * Effective canvas presentation color for one semantic role in one
+ * diagram/element presentation. Reads the stored `style.color` override for
+ * that element+diagram and resolves it through
+ * {@link resolveSemanticPresentation}: a valid override wins for rendering,
+ * while an absent/invalid override resolves to the role token. Pure
+ * presentation: never validates, admits, or rejects semantic content.
+ */
+export function elementPresentationColor(
+  role: unknown,
+  diagramId: string | undefined | null,
+  elementId: string | undefined | null,
+  diagramPresentations:
+    | Record<string, DiagramPresentationStyleLookup | undefined | null>
+    | undefined
+    | null,
+  state: unknown = 'default',
+): string {
+  const stored =
+    diagramId && elementId
+      ? diagramPresentations?.[diagramId]?.presentations?.[elementId]?.style?.color
+      : undefined;
+  return resolveSemanticPresentation(role, {
+    customization: { color: stored },
+    state,
+    ...(diagramId ? { diagramId } : {}),
+    ...(elementId ? { presentationId: elementId } : {}),
+  }).color;
+}
+
 export interface SemanticPresentationStatusMeta {
   label: string;
   iconName: string;
