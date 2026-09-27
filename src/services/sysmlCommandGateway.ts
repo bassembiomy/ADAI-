@@ -1393,22 +1393,38 @@ export function executeSysmlCommand(
       }
     }
 
+    // -----------------------------------------------------------------------
+    // Task 3 atomic admission: every semantic ID is checked before staging.
+    // Both generated and caller-provided feature and usage IDs are checked
+    // against every canonical repository collection (packages, diagrams,
+    // definitions, usages, connectors, relationships, requirements,
+    // verificationCases, evidence, baselines, artifacts, actors, subjects,
+    // useCases, extensionPoints, diagramReferences via
+    // repositoryHasSemanticId) plus nested block feature namespaces
+    // (properties/ports). Nothing is staged or mutated below until all IDs
+    // are admitted. Rejection leaves repository, history, store,
+    // presentation, and projections untouched with committed: false.
+    // -----------------------------------------------------------------------
     const featureId =
       intent.featureId ||
       `${intent.featureKind === 'port' ? 'port' : 'prop'}-${Math.random().toString(36).slice(2, 9)}`;
 
-    const allPortIds = Object.values(state.repository.definitions).flatMap(d =>
-      d.kind === 'block' ? (d.ports || []).map(p => p.id) : [],
-    );
-    const allPropIds = Object.values(state.repository.definitions).flatMap(d =>
-      d.kind === 'block' ? (d.properties || []).map(p => p.id) : [],
-    );
-    if (
-      repositoryHasSemanticId(state.repository, featureId) ||
-      allPortIds.includes(featureId) ||
-      allPropIds.includes(featureId)
-    ) {
-      return reject('DUPLICATE_ELEMENT_ID', `Feature ID '${featureId}' is already used.`, featureId);
+    if (repositoryHasSemanticId(state.repository, featureId)) {
+      return reject('DUPLICATE_SEMANTIC_ID', `Feature ID '${featureId}' is already used in the repository.`, featureId);
+    }
+
+    // The companion usage record for part/reference properties shares the
+    // global semantic ID namespace, so its generated (`part-<featureId>`)
+    // or caller-provided ID is admitted up front as well, including
+    // self-collision with the staged feature ID itself.
+    const pendingUsageId =
+      intent.featureKind === 'property' && (intent.propertyKind === 'part' || intent.propertyKind === 'reference')
+        ? intent.usageId || `part-${featureId}`
+        : undefined;
+    if (pendingUsageId) {
+      if (pendingUsageId === featureId || repositoryHasSemanticId(state.repository, pendingUsageId)) {
+        return reject('DUPLICATE_USAGE_ID', `Usage ID '${pendingUsageId}' is already used in the repository.`, pendingUsageId);
+      }
     }
 
     let nextCandidateBlock: BlockDefinition;
@@ -1488,7 +1504,8 @@ export function executeSysmlCommand(
       };
 
       if (intent.propertyKind === 'part' || intent.propertyKind === 'reference') {
-        const usageId = intent.usageId || `part-${featureId}`;
+        // pendingUsageId was admitted against every repo namespace above.
+        const usageId = pendingUsageId ?? `part-${featureId}`;
         createdUsage = {
           id: usageId,
           propertyId: featureId,
@@ -1515,16 +1532,27 @@ export function executeSysmlCommand(
           }
         : state.repository.usages,
     };
-    const stagedPortDiagnostics = validateRepositoryPorts(stagedRepo);
-    const stagedPortErrors = stagedPortDiagnostics.filter(d => d.severity === 'error');
-    if (stagedPortErrors.length > 0) {
+    // -----------------------------------------------------------------------
+    // Task 3 staged validation: the complete staged repository receives full
+    // semantic validation plus Port/property constraints BEFORE store,
+    // history, persistence, or projection state is touched. Any error
+    // returns committed: false with the original revision and state; only a
+    // clean staged repo proceeds to the single atomic transaction below.
+    // -----------------------------------------------------------------------
+    const stagedValidation = validateSysmlRepository(stagedRepo);
+    const stagedPortErrors = validateRepositoryPorts(stagedRepo).filter(d => d.severity === 'error');
+    const stagedErrors = [
+      ...stagedValidation.diagnostics.filter(d => d.severity === 'error'),
+      ...stagedPortErrors,
+    ];
+    if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
         repository: state.repository,
         store,
         patchHistory,
         view,
-        diagnostics: stagedPortErrors,
+        diagnostics: stagedErrors,
         committed: false,
         history: state.history,
         coordinates,
@@ -1535,17 +1563,12 @@ export function executeSysmlCommand(
       };
     }
 
-    upsertEntity(store, 'definitions', nextCandidateBlock);
-    if (createdUsage) {
-      upsertEntity(store, 'usages', createdUsage);
-    }
-
+    // Pure presentation staging: no store/history mutation yet.
     const nextCoordinates = { ...coordinates };
     let nextDiagramPresentations = { ...diagramPresentations };
 
     if (command.presentation) {
       nextCoordinates[featureId] = { ...command.presentation };
-      store.coordinates.set(featureId, { ...command.presentation });
       if (command.diagramId) {
         const diagPres = nextDiagramPresentations[command.diagramId] ?? {
           elementIds: [owner.id],
@@ -1574,7 +1597,6 @@ export function executeSysmlCommand(
             },
           },
         };
-        store.diagramPresentations.set(command.diagramId, nextDiagramPresentations[command.diagramId]);
       }
     }
 
@@ -1592,6 +1614,42 @@ export function executeSysmlCommand(
         },
       ],
     };
+
+    // Final guard on the exact committed revision: a successful result can
+    // never carry error-severity diagnostics. Any error aborts with the
+    // original revision and state before repository, presentation,
+    // persistence, or history is applied.
+    const finalValidation = validateSysmlRepository(nextRepo);
+    if (finalValidation.diagnostics.some(d => d.severity === 'error')) {
+      const view = getView(state.repository, coordinates, diagramPresentations);
+      return {
+        repository: state.repository,
+        store,
+        patchHistory,
+        view,
+        diagnostics: finalValidation.diagnostics.filter(d => d.severity === 'error'),
+        committed: false,
+        history: state.history,
+        coordinates,
+        diagramPresentations,
+        presentationHistory: state.presentationHistory,
+        actionStack: state.actionStack,
+        redoStack: state.redoStack,
+      };
+    }
+
+    // Single atomic transaction: repository, store projection, presentation,
+    // persistence records, and exactly one undo entry.
+    upsertEntity(store, 'definitions', nextCandidateBlock);
+    if (createdUsage) {
+      upsertEntity(store, 'usages', createdUsage);
+    }
+    if (command.presentation) {
+      store.coordinates.set(featureId, { ...command.presentation });
+      if (command.diagramId) {
+        store.diagramPresentations.set(command.diagramId, nextDiagramPresentations[command.diagramId]);
+      }
+    }
 
     const forwardOps: import('../engine/sysml/patches').PatchOperation[] = [
       { op: 'replace', collection: 'definitions', id: owner.id, oldValue: owner, value: nextCandidateBlock },
@@ -1650,7 +1708,6 @@ export function executeSysmlCommand(
       present: nextRepo,
       future: [],
     };
-    const validation = validateSysmlRepository(nextRepo);
     const view = getView(nextRepo, nextCoordinates, nextDiagramPresentations, command.diagramId);
 
     return {
@@ -1658,7 +1715,7 @@ export function executeSysmlCommand(
       store,
       patchHistory,
       view,
-      diagnostics: validation.diagnostics,
+      diagnostics: finalValidation.diagnostics,
       committed: true,
       history: nextHistory,
       coordinates: nextCoordinates,

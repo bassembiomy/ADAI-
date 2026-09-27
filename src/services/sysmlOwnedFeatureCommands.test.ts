@@ -410,5 +410,37 @@ describe('SysML Owned Feature Commands', () => {
       expect(resumed.command?.intent).toMatchObject({ featureKind: 'port', portKind: 'proxyPort', typeId: selected.id });
     });
   });
+
+  describe('Task 3 contract: caller-provided IDs pass through to the gateway intent', () => {
+    it('preserves caller featureId and usageId on property commands', () => {
+      const repo = createFixture();
+      const res = buildCreateOwnedPropertyCommand(repo, {
+        ownerBlockId: 'vehicle',
+        propertyKind: 'part',
+        typeId: 'motor',
+        name: 'engine',
+        featureId: 'prop-engine',
+        usageId: 'usage-engine',
+      });
+      expect(res.ok).toBe(true);
+      if (res.command?.intent.featureKind !== 'property') throw new Error('expected property intent');
+      expect(res.command.intent.featureId).toBe('prop-engine');
+      expect(res.command.intent.usageId).toBe('usage-engine');
+    });
+
+    it('preserves caller featureId on port commands', () => {
+      const repo = createFixture();
+      const res = buildCreateOwnedPortCommand(repo, {
+        ownerBlockId: 'vehicle',
+        portKind: 'umlPort',
+        typeId: 'voltage',
+        name: 'p',
+        featureId: 'port-custom-1',
+      });
+      expect(res.ok).toBe(true);
+      if (res.command?.intent.featureKind !== 'port') throw new Error('expected port intent');
+      expect(res.command.intent.featureId).toBe('port-custom-1');
+    });
+  });
 });
 

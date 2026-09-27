@@ -649,7 +649,7 @@ describe('sysmlCommandGateway', () => {
       },
     } as any);
     expect(duplicateRes.committed).toBe(false);
-    expect(duplicateRes.diagnostics.some(d => d.code === 'DUPLICATE_ELEMENT_ID')).toBe(true);
+    expect(duplicateRes.diagnostics.some(d => d.code === 'DUPLICATE_SEMANTIC_ID')).toBe(true);
 
     // 3. Missing diagram
     const missingDiagRes = executeSysmlCommand(state, {
@@ -1762,11 +1762,217 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     });
 
     expect(res.committed).toBe(false);
-    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_ELEMENT_ID')).toBe(true);
+    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_SEMANTIC_ID')).toBe(true);
     expect(res.repository.revision).toBe(revBefore);
     expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(1);
     expect(res.patchHistory?.past.length ?? 0).toBe(pastLengthBefore);
     expect(res.actionStack?.length ?? 0).toBe(actionStackLength);
+  });
+});
+
+describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged validation', () => {
+  const one = { lower: 1, upper: 1 as const, ordered: false, unique: true };
+  const taskBlock = (id: string): BlockDefinition => ({
+    id, name: id, kind: 'block', namespace: [], ownerId: 'model',
+    isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+  });
+
+  function advance(state: SysmlGatewayState, result: ReturnType<typeof executeSysmlCommand>): SysmlGatewayState {
+    return {
+      ...state,
+      repository: result.repository,
+      history: result.history,
+      store: result.store ?? state.store,
+      patchHistory: result.patchHistory ?? state.patchHistory,
+      coordinates: result.coordinates,
+      diagramPresentations: result.diagramPresentations,
+      actionStack: result.actionStack ?? state.actionStack,
+      redoStack: result.redoStack ?? state.redoStack,
+    };
+  }
+
+  function seedVehicleWithMotor(): SysmlGatewayState {
+    let state = createSysmlGatewayState();
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: taskBlock('blk-vehicle') }));
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: taskBlock('blk-motor') }));
+    return state;
+  }
+
+  function snapshot(state: SysmlGatewayState) {
+    return {
+      revision: state.repository.revision,
+      audit: state.repository.auditTrail.length,
+      patches: state.patchHistory?.past.length ?? 0,
+      actions: state.actionStack?.length ?? 0,
+      redos: state.redoStack?.length ?? 0,
+      usages: Object.keys(state.repository.usages).sort(),
+      coordinates: JSON.stringify(state.coordinates),
+      diagrams: JSON.stringify(state.diagramPresentations),
+    };
+  }
+
+  function expectNoMutation(result: ReturnType<typeof executeSysmlCommand>, state: SysmlGatewayState, before: ReturnType<typeof snapshot>) {
+    expect(result.repository).toBe(state.repository);
+    expect(result.repository.revision).toBe(before.revision);
+    expect(result.repository.auditTrail).toHaveLength(before.audit);
+    expect(result.history).toBe(state.history);
+    expect(result.patchHistory?.past.length ?? 0).toBe(before.patches);
+    expect(result.actionStack?.length ?? 0).toBe(before.actions);
+    expect(result.redoStack?.length ?? 0).toBe(before.redos);
+    expect(Object.keys(result.repository.usages).sort()).toEqual(before.usages);
+    expect(JSON.stringify(result.coordinates)).toBe(before.coordinates);
+    expect(JSON.stringify(result.diagramPresentations)).toBe(before.diagrams);
+  }
+
+  it('rejects property creation when caller usageId collides with repo.usages', () => {
+    let state = seedVehicleWithMotor();
+    const taken: PartUsage = {
+      id: 'usage-taken', name: 'taken', kind: 'part', ownerId: 'blk-vehicle', typeId: 'blk-motor',
+      aggregation: 'composite', multiplicity: { ...one },
+    };
+    const created = executeSysmlCommand(state, { type: 'createElement', element: taken });
+    expect(created.committed).toBe(true);
+    state = advance(state, created);
+
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
+        typeId: 'blk-motor', name: 'fresh', featureId: 'prop-fresh-1', usageId: 'usage-taken',
+      },
+    } as any);
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_USAGE_ID')).toBe(true);
+    expectNoMutation(res, state, before);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties).toHaveLength(0);
+    expect(res.repository.usages['prop-fresh-1']).toBeUndefined();
+  });
+
+  it('rejects feature IDs colliding with a different repo namespace', () => {
+    let state = seedVehicleWithMotor();
+    const req: RequirementDefinition = {
+      id: 'req-001', name: 'Req', kind: 'requirement', namespace: [],
+      requirementId: 'REQ-001', text: 'text', status: 'draft', version: '1.0',
+    };
+    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: req }));
+
+    const before = snapshot(state);
+    const crossNamespace = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port', ownerBlockId: 'blk-vehicle', portKind: 'umlPort',
+        name: 'p', featureId: 'req-001',
+      },
+    } as any);
+    expect(crossNamespace.committed).toBe(false);
+    expect(crossNamespace.diagnostics.some(d => d.code === 'DUPLICATE_SEMANTIC_ID')).toBe(true);
+    expectNoMutation(crossNamespace, state, before);
+
+    const definitionNamespace = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port', ownerBlockId: 'blk-vehicle', portKind: 'umlPort',
+        name: 'p', featureId: 'blk-motor',
+      },
+    } as any);
+    expect(definitionNamespace.committed).toBe(false);
+    expect(definitionNamespace.diagnostics.some(d => d.code === 'DUPLICATE_SEMANTIC_ID')).toBe(true);
+    expectNoMutation(definitionNamespace, state, before);
+    expect((definitionNamespace.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(0);
+  });
+
+  it('rejects staged usage/feature self-collision and generated usage collisions', () => {
+    const state = seedVehicleWithMotor();
+    const before = snapshot(state);
+
+    const selfCollision = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
+        typeId: 'blk-motor', name: 'self', featureId: 'dup-self', usageId: 'dup-self',
+      },
+    } as any);
+    expect(selfCollision.committed).toBe(false);
+    expect(selfCollision.diagnostics.some(d => d.code === 'DUPLICATE_USAGE_ID')).toBe(true);
+    expectNoMutation(selfCollision, state, before);
+
+    let staged = seedVehicleWithMotor();
+    const occupant: PartUsage = {
+      id: 'part-auto-feat', name: 'occupant', kind: 'part', ownerId: 'blk-vehicle', typeId: 'blk-motor',
+      aggregation: 'composite', multiplicity: { ...one },
+    };
+    staged = advance(staged, executeSysmlCommand(staged, { type: 'createElement', element: occupant }));
+    const stagedBefore = snapshot(staged);
+    const generatedCollision = executeSysmlCommand(staged, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
+        typeId: 'blk-motor', name: 'auto', featureId: 'auto-feat',
+      },
+    } as any);
+    expect(generatedCollision.committed).toBe(false);
+    expect(generatedCollision.diagnostics.some(d => d.code === 'DUPLICATE_USAGE_ID')).toBe(true);
+    expectNoMutation(generatedCollision, staged, stagedBefore);
+  });
+
+  it('rolls back a staged usage colliding with a nested feature namespace without mutation', () => {
+    let state = seedVehicleWithMotor();
+    state = advance(state, executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'port', ownerBlockId: 'blk-vehicle', portKind: 'umlPort',
+        name: 'nested', featureId: 'port-nested-1',
+      },
+    } as any));
+
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
+        typeId: 'blk-motor', name: 'clash', featureId: 'prop-clash-1', usageId: 'port-nested-1',
+      },
+      diagramId: 'bdd',
+      presentation: { x: 5, y: 5 },
+    } as any);
+
+    expect(res.committed).toBe(false);
+    expect(res.diagnostics.some(d => d.severity === 'error')).toBe(true);
+    expectNoMutation(res, state, before);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties).toHaveLength(0);
+    expect(res.coordinates['prop-clash-1']).toBeUndefined();
+  });
+
+  it('commits a valid property creation as one transaction with no error diagnostics', () => {
+    const state = seedVehicleWithMotor();
+    const before = snapshot(state);
+    const res = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
+        typeId: 'blk-motor', name: 'engine', featureId: 'prop-engine', usageId: 'usage-engine',
+      },
+    } as any);
+
+    expect(res.committed).toBe(true);
+    expect(res.diagnostics.filter(d => d.severity === 'error')).toHaveLength(0);
+    expect(res.repository.revision).toBe(before.revision + 1);
+    expect(res.repository.auditTrail).toHaveLength(before.audit + 1);
+    expect(res.repository.auditTrail[res.repository.auditTrail.length - 1].command).toBe('createOwnedFeature');
+    expect(res.patchHistory?.past.length ?? 0).toBe(before.patches + 1);
+    expect(res.actionStack?.length ?? 0).toBe(before.actions + 1);
+    expect(res.redoStack?.length ?? 0).toBe(0);
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties.map(p => p.id)).toEqual(['prop-engine']);
+    expect(res.repository.usages['usage-engine']).toMatchObject({ propertyId: 'prop-engine', ownerId: 'blk-vehicle', typeId: 'blk-motor' });
+
+    const undone = executeSysmlCommand(res, { type: 'undo' });
+    expect((undone.repository.definitions['blk-vehicle'] as BlockDefinition).properties).toHaveLength(0);
+    expect(undone.repository.usages['usage-engine']).toBeUndefined();
+    const redone = executeSysmlCommand(undone, { type: 'redo' });
+    expect((redone.repository.definitions['blk-vehicle'] as BlockDefinition).properties.map(p => p.id)).toEqual(['prop-engine']);
+    expect(redone.repository.usages['usage-engine']).toBeDefined();
   });
 });
 
