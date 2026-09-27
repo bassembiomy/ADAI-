@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { render, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, fireEvent, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BlockFeatureEditor } from './BlockFeatureEditor';
 import type { BlockDefinition, SysmlDefinition } from '../../engine/sysml/model';
 
 describe('BlockFeatureEditor', () => {
+  afterEach(() => {
+    cleanup();
+  });
   const definitions: Record<string, SysmlDefinition> = {
     Real: { id: 'Real', name: 'Real', namespace: [], kind: 'valueType', unit: 'kg', dimension: 'mass' },
     PowerIF: { id: 'PowerIF', name: 'PowerIF', namespace: [], kind: 'interface', features: ['voltage'] },
@@ -185,9 +188,9 @@ describe('BlockFeatureEditor', () => {
     expect(html).not.toContain('prop119');
   });
 
-  it('dispatches createOwnedFeature command when adding a property with selected type', () => {
+  it('requires explicit type selection before creating a property from the inspector', () => {
     const onDispatchCommand = vi.fn();
-    const { getByText } = render(
+    render(
       <BlockFeatureEditor
         block={currentBlock}
         definitions={definitions}
@@ -196,16 +199,128 @@ describe('BlockFeatureEditor', () => {
       />
     );
 
-    fireEvent.click(getByText('+ Add Property'));
+    fireEvent.click(screen.getByText('+ Add Property'));
+    expect(screen.getByRole('dialog', { name: /Select Type/i })).toBeTruthy();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /EngineBlock/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    expect(onDispatchCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({ featureKind: 'property', ownerBlockId: 'Vehicle', typeId: 'EngineBlock' }),
+    }));
+  });
 
-    expect(onDispatchCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'createOwnedFeature',
-        intent: expect.objectContaining({
-          featureKind: 'property',
-          ownerBlockId: 'Vehicle',
-        }),
-      })
+  it('requires explicit Port kind and type selection from the inspector', () => {
+    const onDispatchCommand = vi.fn();
+    const onChange = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onDispatchCommand={onDispatchCommand} onChange={onChange} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    expect(screen.getByRole('dialog', { name: /Port kind/i })).toBeTruthy();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+
+    // ProxyPort requires an explicitly selected InterfaceBlock: the chooser
+    // lists PowerIF but never EngineBlock, and confirming dispatches the
+    // canonical command with distinct port kind + explicit type.
+    fireEvent.click(screen.getByRole('button', { name: /ProxyPort/ }));
+    expect(screen.getByRole('dialog', { name: /Select Type for ProxyPort/i })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: /Port kind/i })).toBeNull();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /PowerIF/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /EngineBlock/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /PowerIF/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    expect(onDispatchCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({
+        featureKind: 'port',
+        ownerBlockId: 'Vehicle',
+        portKind: 'proxyPort',
+        typeId: 'PowerIF',
+      }),
+    }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('dispatches an untyped Standard UML Port without conversion to a SysML stereotype', () => {
+    const onDispatchCommand = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onDispatchCommand={onDispatchCommand} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: /Standard UML Port/ }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({
+        featureKind: 'port',
+        ownerBlockId: 'Vehicle',
+        portKind: 'umlPort',
+      }),
+    }));
+    const dispatched = onDispatchCommand.mock.calls[0][0];
+    expect(dispatched.intent.portKind).not.toBe('proxyPort');
+    expect(dispatched.intent.portKind).not.toBe('fullPort');
+    expect(dispatched.intent.typeId).toBeUndefined();
+  });
+
+  it('cancels inspector creation without mutation', () => {
+    const onDispatchCommand = vi.fn();
+    const onChange = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onDispatchCommand={onDispatchCommand} onChange={onChange} />);
+    fireEvent.click(screen.getByText('+ Add Property'));
+    expect(screen.getByRole('dialog', { name: /Select Type/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('reports TYPE_NOT_FOUND with CreateNewType when no compatible type exists', () => {
+    const onDispatchCommand = vi.fn();
+    const onCreateNewType = vi.fn();
+    const blockOnly: Record<string, SysmlDefinition> = {
+      EngineBlock: definitions.EngineBlock,
+    };
+    render(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={blockOnly}
+        onDispatchCommand={onDispatchCommand}
+        onCreateNewType={onCreateNewType}
+        onChange={vi.fn()}
+      />
     );
+    fireEvent.click(screen.getByText('+ Add Property'));
+    // Default Part kind is satisfied by EngineBlock; switch to Value kind
+    // so no ValueType candidate exists and TYPE_NOT_FOUND surfaces.
+    fireEvent.change(screen.getByLabelText('New property kind'), { target: { value: 'value' } });
+    expect(screen.getByRole('dialog', { name: /Select Type/i })).toBeTruthy();
+    expect(screen.getByText(/TYPE_NOT_FOUND/)).toBeTruthy();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Create New Type/i }));
+    expect(onCreateNewType).toHaveBeenCalledWith(expect.objectContaining({ kind: 'CreateNewType' }));
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+  });
+
+  it('filters FullPort candidates to Blocks and applies explicit local creation without a command bus', () => {
+    const onChange = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onChange={onChange} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: /FullPort/ }));
+    expect(screen.getByRole('dialog', { name: /Select Type for FullPort/i })).toBeTruthy();
+    // FullPort accepts Blocks but never Interfaces (no silent ProxyPort).
+    expect(screen.getByRole('button', { name: /EngineBlock/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /PowerIF/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /EngineBlock/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const next = onChange.mock.calls[0][0];
+    const added = next.ports[next.ports.length - 1];
+    expect(added).toMatchObject({ kind: 'full', typeId: 'EngineBlock' });
   });
 });

@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { BlockDefinition, PropertyDefinition, PortDefinition, SysmlDefinition, SysmlRepository } from '../../engine/sysml/model';
 import { createEmptyRepository } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
-import { buildCreateOwnedPropertyCommand, buildCreateOwnedPortCommand } from '../../services/sysmlOwnedFeatureCommands';
+import { TypeSelectionPrompt } from './TypeSelectionPrompt';
+import type { CreateNewTypeAction, TypeCandidate } from './typeSelectionTypes';
+import {
+  PORT_KIND_MAP,
+  planOwnedPortCreation,
+  planOwnedPropertyCreation,
+  suggestedMetaclassForPortKind,
+  suggestedMetaclassForPropertyKind,
+  type CanonicalPortKind,
+  type CreateOwnedFeatureCommand,
+  type CreateOwnedPropertyIntent,
+} from '../../services/sysmlOwnedFeatureCommands';
 import type { SysmlEditorCommand } from '../../services/sysmlCommandGateway';
 
 export interface BlockFeatureEditorProps {
@@ -24,6 +35,7 @@ export interface BlockFeatureEditorProps {
   maxVisibleInherited?: number;
   onChange: (block: BlockDefinition) => void;
   onDispatchCommand?: (command: SysmlEditorCommand) => void;
+  onCreateNewType?: (action: CreateNewTypeAction) => void;
   onRedefine?: (property: PropertyDefinition) => void;
   onSubset?: (property: PropertyDefinition) => void;
 }
@@ -44,6 +56,46 @@ const PROPERTY_KINDS: NonNullable<PropertyDefinition['kind']>[] = ['value', 'par
 const PORT_KINDS: NonNullable<PortDefinition['kind']>[] = ['standard', 'proxy', 'full', 'flow'];
 const PORT_DIRECTIONS: NonNullable<PortDefinition['direction']>[] = ['in', 'out', 'inout'];
 
+// Inspector creation kinds (spec 3.2, 4.1, 4.2). The inspector plans through
+// the same surface-agnostic planners as tree and canvas
+// (planOwnedPropertyCreation / planOwnedPortCreation) and renders the shared
+// TypeSelectionPrompt, so no production path silently selects the first
+// candidate or creates a type automatically.
+type InspectorPropertyKind = CreateOwnedPropertyIntent['propertyKind'];
+const INSPECTOR_PROPERTY_KINDS: InspectorPropertyKind[] = ['part', 'reference', 'value', 'flow'];
+const INSPECTOR_PROPERTY_KIND_LABELS: Record<InspectorPropertyKind, string> = {
+  part: 'Part Property',
+  reference: 'Reference Property',
+  value: 'Value Property',
+  flow: 'Flow Property',
+};
+const INSPECTOR_PORT_KINDS: Array<{ kind: CanonicalPortKind; label: string; description: string }> = [
+  { kind: 'umlPort', label: 'Standard UML Port', description: 'Generic UML Port; explicitly untyped' },
+  { kind: 'proxyPort', label: 'ProxyPort', description: 'Requires an explicitly selected InterfaceBlock' },
+  { kind: 'fullPort', label: 'FullPort', description: 'Requires an explicitly selected Block or ValueType' },
+  { kind: 'flowPort', label: 'Legacy FlowPort', description: 'Requires an explicitly selected compatible type' },
+];
+const INSPECTOR_PORT_TYPE_LABELS: Record<CanonicalPortKind, string> = {
+  umlPort: 'Standard Port',
+  proxyPort: 'ProxyPort',
+  fullPort: 'FullPort',
+  flowPort: 'Legacy FlowPort',
+};
+
+interface PendingPropertySelection {
+  propertyKind: InspectorPropertyKind;
+  candidates: TypeCandidate[];
+  action: CreateNewTypeAction;
+  error?: string;
+}
+
+interface PendingPortSelection {
+  portKind: CanonicalPortKind;
+  candidates: TypeCandidate[];
+  action: CreateNewTypeAction;
+  error?: string;
+}
+
 export function BlockFeatureEditor({
   block,
   definitions,
@@ -53,11 +105,21 @@ export function BlockFeatureEditor({
   maxVisibleInherited = DEFAULT_MAX_VISIBLE_INHERITED,
   onChange,
   onDispatchCommand,
+  onCreateNewType,
   onRedefine,
   onSubset,
 }: BlockFeatureEditorProps) {
   const update = (patch: Partial<BlockDefinition>) => {
     onChange({ ...block, ...patch });
+  };
+
+  const [propertyPrompt, setPropertyPrompt] = useState<PendingPropertySelection | null>(null);
+  const [portKindOpen, setPortKindOpen] = useState(false);
+  const [portPrompt, setPortPrompt] = useState<PendingPortSelection | null>(null);
+
+  const repositoryForPlanning = (): SysmlRepository => (block as any)._repo ?? {
+    ...createEmptyRepository(),
+    definitions: { ...definitions, [block.id]: block },
   };
 
   const updateProperty = (index: number, patch: Partial<PropertyDefinition>) => {
@@ -69,35 +131,94 @@ export function BlockFeatureEditor({
     update({ properties: block.properties.filter((_, i) => i !== index) });
   };
 
-  const addProperty = () => {
-    const firstDef = Object.values(definitions).find(d => d.kind === 'valueType') ??
-      Object.values(definitions).find(d => d.kind === 'block') ??
-      Object.values(definitions)[0];
-    if (onDispatchCommand) {
-      const repoForBuild: SysmlRepository = (block as any)._repo ?? {
-        ...createEmptyRepository(),
-        definitions: { ...definitions, [block.id]: block },
-      };
-      const kind = firstDef?.kind === 'block' ? 'part' : 'value';
-      const plan = buildCreateOwnedPropertyCommand(repoForBuild, {
-        ownerBlockId: block.id,
-        propertyKind: kind,
-        typeId: firstDef?.id ?? '',
-        name: `prop${block.properties.length + 1}`,
+  // Inspector property creation (spec 3.2, 4.1): clicking Add Property only
+  // opens the shared type-selection workflow. Nothing is dispatched or
+  // applied until the user explicitly confirms an explicitly selected
+  // compatible type; cancel performs no mutation. The property-kind dropdown
+  // is a visible chooser default, not a silent semantic selection — the
+  // command is built only after explicit Confirm with an explicit typeId.
+  const openPropertyPromptForKind = (propertyKind: InspectorPropertyKind) => {
+    const plan = planOwnedPropertyCreation(repositoryForPlanning(), {
+      ownerBlockId: block.id,
+      propertyKind,
+    });
+    if (plan.outcome === 'typeSelection') {
+      setPropertyPrompt({
+        propertyKind,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+        error: plan.request.candidates.length === 0
+          ? 'TYPE_NOT_FOUND: No compatible existing type.'
+          : undefined,
       });
-      if (plan.ok && plan.command) {
-        onDispatchCommand(plan.command as SysmlEditorCommand);
-        return;
-      }
+      return;
     }
+    if (plan.outcome === 'error') {
+      setPropertyPrompt({
+        propertyKind,
+        candidates: plan.candidates ?? [],
+        action: plan.action ?? {
+          kind: 'CreateNewType',
+          payload: { suggestedMetaclass: suggestedMetaclassForPropertyKind(propertyKind) },
+        },
+        error: plan.diagnostics[0]?.message ?? 'TYPE_NOT_FOUND: No compatible existing type.',
+      });
+    }
+  };
+
+  const openPropertyPrompt = () => {
+    openPropertyPromptForKind('part');
+  };
+
+  const dispatchOrApplyProperty = (command: CreateOwnedFeatureCommand, propertyKind: InspectorPropertyKind, typeId: string) => {
+    if (onDispatchCommand) {
+      onDispatchCommand(command as SysmlEditorCommand);
+      return;
+    }
+    // No command bus: apply the explicitly confirmed kind and type locally.
+    // The type was explicitly chosen in the dialog, so this is not silent.
     const newProp: PropertyDefinition = {
       id: crypto.randomUUID(),
       name: `prop${block.properties.length + 1}`,
-      kind: 'value',
-      typeId: firstDef?.id ?? '',
+      kind: propertyKind,
+      typeId,
       multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
     update({ properties: [...block.properties, newProp] });
+  };
+
+  const confirmPropertyType = (typeId: string) => {
+    if (!propertyPrompt) return;
+    const plan = planOwnedPropertyCreation(repositoryForPlanning(), {
+      ownerBlockId: block.id,
+      propertyKind: propertyPrompt.propertyKind,
+      typeId,
+    });
+    if (plan.outcome === 'command') {
+      const confirmed = propertyPrompt;
+      setPropertyPrompt(null);
+      dispatchOrApplyProperty(plan.command, confirmed.propertyKind, typeId);
+      return;
+    }
+    if (plan.outcome === 'typeSelection') {
+      // Stale prompt (repository changed while the chooser was open):
+      // refresh candidates rather than committing a typed feature.
+      setPropertyPrompt(prev => prev ? {
+        ...prev,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+        error: undefined,
+      } : prev);
+      return;
+    }
+    // Structured error (unresolvable or incompatible type): surface the
+    // message and leave repository, history, and presentations unchanged.
+    setPropertyPrompt(prev => prev ? { ...prev, error: plan.diagnostics[0]?.message } : prev);
+  };
+
+  const createNewPropertyType = () => {
+    if (!propertyPrompt || !onCreateNewType) return;
+    onCreateNewType(propertyPrompt.action);
   };
 
   const updatePort = (index: number, patch: Partial<PortDefinition>) => {
@@ -109,34 +230,97 @@ export function BlockFeatureEditor({
     update({ ports: block.ports.filter((_, i) => i !== index) });
   };
 
-  const addPort = () => {
-    const firstIF = Object.values(definitions).find(d => d.kind === 'interface') ?? Object.values(definitions)[0];
+  // Inspector port creation (spec 3.2, 4.1, 4.2): the user explicitly
+  // chooses Standard Port, ProxyPort, FullPort, or legacy FlowPort before
+  // choosing a compatible type where required. Standard UML Port is the
+  // explicit untyped exception and is never converted into a SysML
+  // stereotype; every other kind opens the shared type-selection workflow.
+  // Cancel performs no mutation; errors never mutate.
+  const dispatchOrApplyPort = (command: CreateOwnedFeatureCommand, portKind: CanonicalPortKind, typeId: string | undefined) => {
     if (onDispatchCommand) {
-      const repoForBuild: SysmlRepository = (block as any)._repo ?? {
-        ...createEmptyRepository(),
-        definitions: { ...definitions, [block.id]: block },
-      };
-      const plan = buildCreateOwnedPortCommand(repoForBuild, {
-        ownerBlockId: block.id,
-        portKind: firstIF?.kind === 'interface' ? 'proxyPort' : 'umlPort',
-        typeId: firstIF?.id,
-        name: `port${block.ports.length + 1}`,
-      });
-      if (plan.ok && plan.command) {
-        onDispatchCommand(plan.command as SysmlEditorCommand);
-        return;
-      }
+      onDispatchCommand(command as SysmlEditorCommand);
+      return;
     }
+    // No command bus: apply the explicitly confirmed kind and type locally.
     const newPort: PortDefinition = {
       id: crypto.randomUUID(),
       name: `port${block.ports.length + 1}`,
-      kind: 'proxy',
-      typeId: firstIF?.id ?? '',
+      kind: PORT_KIND_MAP[portKind],
+      typeId: typeId ?? '',
       direction: 'inout',
       isConjugated: false,
       multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
     update({ ports: [...block.ports, newPort] });
+  };
+
+  const choosePortKind = (portKind: CanonicalPortKind) => {
+    const plan = planOwnedPortCreation(repositoryForPlanning(), {
+      ownerBlockId: block.id,
+      portKind,
+    });
+    if (plan.outcome === 'command') {
+      // Standard UML Port explicit no-type exception: the kind was
+      // explicitly chosen, so the immediate untyped command is explicit.
+      setPortKindOpen(false);
+      dispatchOrApplyPort(plan.command, portKind, undefined);
+      return;
+    }
+    if (plan.outcome === 'typeSelection') {
+      setPortKindOpen(false);
+      setPortPrompt({
+        portKind,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+        error: plan.request.candidates.length === 0
+          ? 'TYPE_NOT_FOUND: No compatible existing type.'
+          : undefined,
+      });
+      return;
+    }
+    setPortKindOpen(false);
+    setPortPrompt({
+      portKind,
+      candidates: plan.candidates ?? [],
+      action: plan.action ?? {
+        kind: 'CreateNewType',
+        payload: { suggestedMetaclass: suggestedMetaclassForPortKind(portKind) },
+      },
+      error: plan.diagnostics[0]?.message ?? 'TYPE_NOT_FOUND: No compatible existing type.',
+    });
+  };
+
+  const confirmPortType = (typeId: string) => {
+    if (!portPrompt) return;
+    const plan = planOwnedPortCreation(repositoryForPlanning(), {
+      ownerBlockId: block.id,
+      portKind: portPrompt.portKind,
+      typeId,
+    });
+    if (plan.outcome === 'command') {
+      const confirmed = portPrompt;
+      setPortPrompt(null);
+      dispatchOrApplyPort(plan.command, confirmed.portKind, typeId);
+      return;
+    }
+    if (plan.outcome === 'typeSelection') {
+      // Stale prompt: refresh candidates rather than committing.
+      setPortPrompt(prev => prev ? {
+        ...prev,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+        error: undefined,
+      } : prev);
+      return;
+    }
+    // Structured error (unresolvable or incompatible type, e.g. a Block
+    // chosen for a ProxyPort): surface the message without mutation.
+    setPortPrompt(prev => prev ? { ...prev, error: plan.diagnostics[0]?.message } : prev);
+  };
+
+  const createNewPortType = () => {
+    if (!portPrompt || !onCreateNewType) return;
+    onCreateNewType(portPrompt.action);
   };
 
   const handleRedefine = (inheritedProp: PropertyDefinition) => {
@@ -227,7 +411,7 @@ export function BlockFeatureEditor({
           <h4 className="text-xs font-semibold uppercase text-gray-400">Properties</h4>
           <button
             type="button"
-            onClick={addProperty}
+            onClick={openPropertyPrompt}
             className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-300 hover:bg-gray-800"
           >
             + Add Property
@@ -379,7 +563,7 @@ export function BlockFeatureEditor({
           <h4 className="text-xs font-semibold uppercase text-gray-400">Ports</h4>
           <button
             type="button"
-            onClick={addPort}
+            onClick={() => setPortKindOpen(true)}
             className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-300 hover:bg-gray-800"
           >
             + Add Port
@@ -559,6 +743,85 @@ export function BlockFeatureEditor({
           </div>
         )}
       </div>
+
+      {/* Inspector type-selection workflows (spec 3.2, 4.1): shared
+          TypeSelectionPrompt plus an explicit port-kind chooser. */}
+      {propertyPrompt && (
+        <div className="space-y-2 rounded border border-gray-700 p-2 text-xs">
+          <label className="block text-gray-300">
+            New property kind
+            <select
+              aria-label="New property kind"
+              value={propertyPrompt.propertyKind}
+              onChange={e => openPropertyPromptForKind(e.target.value as InspectorPropertyKind)}
+              className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
+            >
+              {INSPECTOR_PROPERTY_KINDS.map(k => (
+                <option key={k} value={k}>{INSPECTOR_PROPERTY_KIND_LABELS[k]}</option>
+              ))}
+            </select>
+          </label>
+          <TypeSelectionPrompt
+            isOpen
+            featureKind={INSPECTOR_PROPERTY_KIND_LABELS[propertyPrompt.propertyKind]}
+            candidates={propertyPrompt.candidates}
+            error={propertyPrompt.error}
+            onSelectType={confirmPropertyType}
+            onCreateNewType={onCreateNewType ? createNewPropertyType : undefined}
+            onCancel={() => setPropertyPrompt(null)}
+          />
+        </div>
+      )}
+
+      {portKindOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select Port kind"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-[420px] max-w-[90vw] space-y-2 rounded-lg border border-gray-700 bg-[var(--surface-sunken)] p-5 text-xs text-gray-200 shadow-2xl">
+            <h3 className="text-sm font-semibold text-gray-100">Select Port kind</h3>
+            <p className="text-gray-400">
+              Choose the port stereotype before choosing a compatible type. Standard UML Port stays untyped.
+            </p>
+            <div className="flex flex-col gap-2">
+              {INSPECTOR_PORT_KINDS.map(({ kind, label, description }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => choosePortKind(kind)}
+                  className="rounded border border-gray-700 px-3 py-2 text-left hover:bg-gray-800"
+                >
+                  <span className="block font-medium text-gray-100">{label}</span>
+                  <span className="block text-gray-400">{description}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPortKindOpen(false)}
+                className="rounded border border-gray-600 px-3 py-1 text-gray-300 hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {portPrompt && (
+        <TypeSelectionPrompt
+          isOpen
+          featureKind={INSPECTOR_PORT_TYPE_LABELS[portPrompt.portKind]}
+          candidates={portPrompt.candidates}
+          error={portPrompt.error}
+          onSelectType={confirmPortType}
+          onCreateNewType={onCreateNewType ? createNewPortType : undefined}
+          onCancel={() => setPortPrompt(null)}
+        />
+      )}
     </div>
   );
 }
