@@ -414,6 +414,11 @@ export class DAEAssembler {
           branches.push({ name: 'current1', ports: [{ id: 'p1', sign: -1 }, { id: 'n1', sign: 1 }] });
           branches.push({ name: 'current2', ports: [{ id: 'p2', sign: -1 }, { id: 'n2', sign: 1 }] });
           break;
+        case 'cccs':
+        case 'ccvs':
+          branches.push({ name: 'current_out', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'current_ctrl', ports: [{ id: 'cp', sign: -1 }, { id: 'cn', sign: 1 }] });
+          break;
         case 'opamp':
           branches.push({ name: 'current_out', ports: [{ id: 'out', sign: 1 }] });
           break;

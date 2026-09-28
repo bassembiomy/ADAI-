@@ -278,13 +278,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Voltage-Controlled Current Source. A dependent source where output current is proportional to an input voltage.'
   },
   cccs: {
-    equations: ['I_out = gain * I_in'],
+    equations: ['I_out = gain * I_in', 'Vcp - Vcn = 0'],
     latex: ['i_{out} = \beta \cdot i_{in}'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'Current-Controlled Current Source. A dependent source where output current is proportional to an input current.'
   },
   ccvs: {
-    equations: ['Vp - Vn = gain * I_in'],
+    equations: ['Vp - Vn = gain * I_in', 'Vcp - Vcn = 0'],
     latex: ['v_{out} = r \cdot i_{in}'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'Current-Controlled Voltage Source. A dependent source where output voltage is proportional to an input current.'

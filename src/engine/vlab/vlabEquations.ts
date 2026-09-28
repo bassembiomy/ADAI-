@@ -284,15 +284,41 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   cccs: ({ across, branch, params }) => {
-    // We assume current source control current is branch[0] of control port
-    const gain = params.gain || 1;
-    return [branch[0] - gain * branch[1]];
+
+
+    // branch[0]: output current (p -> n), branch[1]: control current (cp -> cn)
+    const paramVal = (val: any, def: number) => {
+      const raw = val && typeof val === 'object' && 'value' in val ? val.value : val;
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : def;
+    };
+    const gain = paramVal(params.gain, 1);
+    const Rin = paramVal(params.R_in ?? params.Rin, 0);
+    const Vctrl = (across[2] ?? 0) - (across[3] ?? 0);
+    return [
+      branch[0] - gain * branch[1],
+      Vctrl - branch[1] * Rin
+    ];
   },
 
   ccvs: ({ across, branch, params }) => {
-    const gain = params.gain || 1;
-    const Vout = across[0] - across[1];
-    return [Vout - gain * branch[1]];
+
+
+    // branch[0]: output voltage source current (p -> n), branch[1]: control current (cp -> cn)
+    const paramVal = (val: any, def: number) => {
+      const raw = val && typeof val === 'object' && 'value' in val ? val.value : val;
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : def;
+    };
+    const gain = paramVal(params.gain, 1);
+    const Rin = paramVal(params.R_in ?? params.Rin, 0);
+    const Rout = paramVal(params.R_out ?? params.Rout, 0);
+    const Vout = (across[0] ?? 0) - (across[1] ?? 0);
+    const Vctrl = (across[2] ?? 0) - (across[3] ?? 0);
+    return [
+      Vout - gain * branch[1] - branch[0] * Rout,
+      Vctrl - branch[1] * Rin
+    ];
   },
 
   // ── ROTATIONAL DOMAIN ──────────────────────────────────────────────────────
