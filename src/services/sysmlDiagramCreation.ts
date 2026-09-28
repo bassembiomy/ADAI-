@@ -1,5 +1,6 @@
 import type { SysmlRepository } from '../engine/sysml/model';
 import type { PresentationCoordinates, SysmlElement } from './sysmlCommandGateway';
+import { resolveSysmlCreationOwner } from './sysmlDiagramCreationContext';
 import {
   createPackage,
   createBlock,
@@ -17,9 +18,11 @@ export type DiagramCreationKind = 'Package' | 'Block' | 'Requirement' | 'TestCas
 export interface DiagramCreationInput {
   repository: SysmlRepository;
   kind: DiagramCreationKind;
-  ownerId: string;
+  ownerId?: string;
   diagramId: string;
   position: { x: number; y: number };
+  diagramKind?: 'bdd' | 'ibd' | 'requirements' | 'package' | string;
+  contextElementId?: string;
 }
 
 export interface DiagramCreationDiagnostic {
@@ -78,14 +81,42 @@ function failure(code: string, message: string): DiagramCreationOutcome {
 }
 
 export function buildDiagramCreationCommand(input: DiagramCreationInput): DiagramCreationOutcome {
-  const ownerExists = input.ownerId === 'model'
-    || Boolean(input.repository.packages?.[input.ownerId])
-    || Boolean(input.repository.definitions?.[input.ownerId])
-    || Boolean(input.repository.requirements?.[input.ownerId]);
-  if (!ownerExists) return failure('OWNER_NOT_FOUND', `Owner '${input.ownerId}' does not exist.`);
   if (!input.diagramId) return failure('DIAGRAM_NOT_FOUND', 'An active diagram is required.');
-  if (input.diagramId !== 'bdd' && input.diagramId !== 'requirements' && input.diagramId !== 'ibd' && input.diagramId !== 'rtm') {
-    const diagram = input.repository.diagrams[input.diagramId];
+
+  const diagram = input.repository.diagrams?.[input.diagramId];
+  const effectiveDiagramKind = input.diagramKind
+    ?? diagram?.diagramKind
+    ?? (input.diagramId === 'bdd' || input.diagramId === 'ibd' || input.diagramId === 'requirements' || input.diagramId === 'package' ? input.diagramId : 'bdd');
+
+  let effectiveOwnerId = input.ownerId;
+  if (!effectiveOwnerId) {
+    const ownerResolution = resolveSysmlCreationOwner(input.repository, {
+      diagramId: input.diagramId,
+      diagramKind: effectiveDiagramKind,
+      contextElementId: input.contextElementId,
+    });
+    if (!ownerResolution.ok) {
+      return failure(ownerResolution.diagnostic.code, ownerResolution.diagnostic.message);
+    }
+    effectiveOwnerId = ownerResolution.ownerId;
+  } else if (effectiveDiagramKind === 'ibd') {
+    const ownerResolution = resolveSysmlCreationOwner(input.repository, {
+      diagramId: input.diagramId,
+      diagramKind: effectiveDiagramKind,
+      contextElementId: input.contextElementId,
+    });
+    if (!ownerResolution.ok) {
+      return failure(ownerResolution.diagnostic.code, ownerResolution.diagnostic.message);
+    }
+  }
+
+  const ownerExists = effectiveOwnerId === 'model'
+    || Boolean(input.repository.packages?.[effectiveOwnerId])
+    || Boolean(input.repository.definitions?.[effectiveOwnerId])
+    || Boolean(input.repository.requirements?.[effectiveOwnerId]);
+  if (!ownerExists) return failure('OWNER_NOT_FOUND', `Owner '${effectiveOwnerId}' does not exist.`);
+
+  if (input.diagramId !== 'bdd' && input.diagramId !== 'requirements' && input.diagramId !== 'ibd' && input.diagramId !== 'rtm' && input.diagramId !== 'package') {
     if (!diagram) return failure('DIAGRAM_NOT_FOUND', `Diagram '${input.diagramId}' does not exist.`);
     if (diagram.diagramKind === 'package' && input.kind !== 'Package' && input.kind !== 'Block' && input.kind !== 'Requirement' && input.kind !== 'TestCase' && input.kind !== 'UseCase') {
       return failure('INVALID_DIAGRAM_ELEMENT', `${input.kind} is not supported on Package Diagrams.`);
@@ -93,11 +124,11 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
   }
 
   const names = collectRepositoryNames(input.repository);
-  const element = input.kind === 'Package' ? createPackage({ ownerId: input.ownerId, existingNames: names })
-    : input.kind === 'Block' ? createBlock({ ownerId: input.ownerId, existingNames: names })
-    : input.kind === 'Requirement' ? createRequirement({ ownerId: input.ownerId, existingNames: names })
-    : input.kind === 'TestCase' ? createVerificationCase({ ownerId: input.ownerId, existingNames: names })
-    : createUseCase({ ownerId: input.ownerId });
+  const element = input.kind === 'Package' ? createPackage({ ownerId: effectiveOwnerId, existingNames: names })
+    : input.kind === 'Block' ? createBlock({ ownerId: effectiveOwnerId, existingNames: names })
+    : input.kind === 'Requirement' ? createRequirement({ ownerId: effectiveOwnerId, existingNames: names })
+    : input.kind === 'TestCase' ? createVerificationCase({ ownerId: effectiveOwnerId, existingNames: names })
+    : createUseCase({ ownerId: effectiveOwnerId });
 
   return {
     ok: true,

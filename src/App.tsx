@@ -141,6 +141,7 @@ import { createInterface, createBlock as createBlockDefinition, createValueType 
 import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
 import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
+import { resolveSysmlCreationOwner } from './services/sysmlDiagramCreationContext';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
 import { createLiveXbridgesStateAccessors, createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
@@ -9964,9 +9965,17 @@ const ADIA = () => {
     kind: DiagramCreationKind,
   ) => {
     const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
-    const ownerId = diagramMode === 'ibd' ? currentLayerId
-      : diagramMode === 'package' ? canonicalSysmlRepository.diagrams[diagramId]?.ownerId || 'model'
-      : 'model';
+    const contextElementId = diagramMode === 'ibd' ? currentLayerId : undefined;
+    const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
+      diagramId,
+      diagramKind: diagramMode,
+      contextElementId,
+    });
+    if (!ownerRes.ok) {
+      addError('error', ownerRes.diagnostic.message, 'SysML');
+      return;
+    }
+    const ownerId = ownerRes.ownerId;
     const parentRequirementId = diagramMode === 'requirements' && currentLayerId !== 'root' && currentLayerId !== 'requirements'
       ? (canonicalSysmlRepository.requirements[currentLayerId] ? currentLayerId : undefined)
       : undefined;
@@ -9976,6 +9985,8 @@ const ADIA = () => {
       kind,
       ownerId,
       diagramId,
+      diagramKind: diagramMode,
+      contextElementId,
       position: {
         x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
         y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
@@ -10363,14 +10374,16 @@ const ADIA = () => {
   }, [canonicalSysmlRepository, currentLayerId, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
 
   const createPart = useCallback((x: number, y: number) => {
-    const activeBlockId = canonicalSysmlRepository.definitions[currentLayerId]?.kind === 'block'
-      ? currentLayerId
-      : selectedIds.find(id => canonicalSysmlRepository.definitions[id]?.kind === 'block');
-
-    if (!activeBlockId) {
-      addError('error', 'Select a Block to add a Part.', 'SysML');
+    const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
+      diagramId: currentLayerId,
+      diagramKind: 'ibd',
+      contextElementId: currentLayerId,
+    });
+    if (!ownerRes.ok) {
+      addError('error', ownerRes.diagnostic.message, 'SysML');
       return;
     }
+    const activeBlockId = ownerRes.ownerId;
 
     const plan = planOwnedPropertyCreation(canonicalSysmlRepository, {
       activeBlockId,
@@ -11645,11 +11658,22 @@ const ADIA = () => {
       const blockToClone = blocks.find(b => b.id === blockId);
       if (!blockToClone) return;
       const kind: DiagramCreationKind = blockToClone.stereotype === 'requirement' ? 'Requirement' : 'Block';
+      const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
+        diagramId: activeSysmlDiagramId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+      });
+      if (!ownerRes.ok) {
+        addError('error', ownerRes.diagnostic.message, 'SysML');
+        return;
+      }
       const outcome = buildDiagramCreationCommand({
         repository: canonicalSysmlRepository,
         kind,
-        ownerId: diagramMode === 'package' ? canonicalSysmlRepository.diagrams[activeSysmlDiagramId]?.ownerId || 'model' : 'model',
+        ownerId: ownerRes.ownerId,
         diagramId: activeSysmlDiagramId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
         position: { x: worldX, y: worldY },
       });
       if (outcome.ok) {

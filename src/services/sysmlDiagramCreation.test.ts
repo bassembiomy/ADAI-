@@ -84,4 +84,51 @@ describe('sysmlDiagramCreation', () => {
     expect(projectedBlock).toBeDefined();
     expect(projectedBlock?.stereotype).toBe('testCase');
   });
+
+  it('proves a Block created on a Package Diagram is owned by the diagram package', () => {
+    const repo = createEmptyRepository();
+    repo.packages['pkg-sub'] = {
+      id: 'pkg-sub',
+      kind: 'package',
+      name: 'Subsystem',
+      namespace: ['Model'],
+      ownerId: 'model',
+    };
+    repo.diagrams['pkg-diag-1'] = {
+      id: 'pkg-diag-1',
+      kind: 'diagram',
+      diagramKind: 'package',
+      name: 'Subsystem Overview',
+      namespace: ['Model', 'Subsystem'],
+      ownerId: 'pkg-sub',
+    };
+
+    const outcome = buildDiagramCreationCommand({
+      repository: repo,
+      kind: 'Block',
+      diagramId: 'pkg-diag-1',
+      position: { x: 100, y: 100 },
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.command.element.ownerId).toBe('pkg-sub');
+  });
+
+  it('returns OWNER_CONTEXT_REQUIRED without a command for invalid/missing IBD context', () => {
+    const repo = createEmptyRepository();
+    const outcome = buildDiagramCreationCommand({
+      repository: repo,
+      kind: 'Block',
+      diagramId: 'ibd',
+      diagramKind: 'ibd',
+      position: { x: 100, y: 100 },
+    });
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.diagnostic.code).toBe('OWNER_CONTEXT_REQUIRED');
+    }
+  });
 });
+
