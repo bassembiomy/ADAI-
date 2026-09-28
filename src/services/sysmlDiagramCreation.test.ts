@@ -112,7 +112,7 @@ describe('sysmlDiagramCreation', () => {
 
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
-    expect(outcome.command.element.ownerId).toBe('pkg-sub');
+    expect((outcome.command.element as { ownerId?: string }).ownerId).toBe('pkg-sub');
   });
 
   it('returns OWNER_CONTEXT_REQUIRED without a command for invalid/missing IBD context', () => {

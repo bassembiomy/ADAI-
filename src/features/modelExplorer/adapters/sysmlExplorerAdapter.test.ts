@@ -890,4 +890,54 @@ describe('sysmlExplorerAdapter', () => {
     expect(partResult.diagnostics.some(d => d.code === 'TYPE_NOT_FOUND')).toBe(true);
     expect((harness.state.repository.definitions['block-isolated'] as BlockDefinition).properties).toHaveLength(0);
   });
+
+  it('dispatches createOwnedFeature with selected owner and preserves type-selection response for typed ports', () => {
+    const harness = createTestHarness();
+    const block: BlockDefinition = {
+      id: 'block-owner',
+      name: 'VehicleBlock',
+      kind: 'block',
+      namespace: [],
+      ownerId: 'model',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    harness.executeCommand({ type: 'createElement', element: block });
+
+    const adapter = createSysmlExplorerAdapter(harness);
+    const spy = vi.spyOn(harness, 'executeCommand');
+
+    // 1. Standard UML port creates directly with selected owner
+    const standardResult = adapter.execute({
+      type: 'createElement',
+      ownerId: 'block-owner',
+      elementKind: 'port',
+      name: 'stdPort',
+    });
+    expect(standardResult.committed).toBe(true);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'createOwnedFeature',
+        intent: expect.objectContaining({
+          featureKind: 'port',
+          ownerBlockId: 'block-owner',
+          portKind: 'umlPort',
+        }),
+      })
+    );
+
+    // 2. Typed ProxyPort without typeId returns TYPE_NOT_FOUND when no interface block exists
+    const proxyResult = adapter.execute({
+      type: 'createElement',
+      ownerId: 'block-owner',
+      elementKind: 'proxyPort',
+      name: 'proxyPort1',
+    });
+    expect(proxyResult.committed).toBe(false);
+    expect(proxyResult.diagnostics.some(d => d.code === 'TYPE_NOT_FOUND')).toBe(true);
+  });
 });

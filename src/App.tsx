@@ -161,7 +161,7 @@ import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelati
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './services/sysmlProjectionState';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
-import { PortToolMenu } from './components/sysml/PortToolMenu';
+import { PortKindActions } from './components/sysml/PortKindActions';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
 import { buildCreateOwnedPropertyCommand, planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
@@ -6088,7 +6088,7 @@ const ADIA = () => {
 
   // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
   const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<{ action: CreateNewTypeAction; candidates: import('./engine/sysml/commands/commandResult').TypeCandidate[] } | null>(null);
-  const [activePortTool, setActivePortTool] = useState<CanonicalPortKind | null>(null);
+
   const [portTypePrompt, setPortTypePrompt] = useState<{
     ownerBlockId: string;
     portKind: CanonicalPortKind;
@@ -11569,16 +11569,7 @@ const ADIA = () => {
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
     e.stopPropagation();
-    if (diagramMode === 'bdd' && activePortTool && e.button === 0) {
-      // Same pending request + canonical gateway command as Model Explorer
-      // (see requestCanvasPortCreation). The tool stays active for
-      // continuous placement after a committed creation.
-      const result = requestCanvasPortCreation(blockId, activePortTool);
-      if (result.outcome === 'rejected') {
-        // Diagnostics already surfaced; keep the tool active.
-      }
-      return;
-    }
+
     if (diagramMode === 'package' && packageRelationshipTool && e.button === 0) {
       if (!packageRelationshipSourceId) {
         setPackageRelationshipSourceId(blockId);
@@ -11709,7 +11700,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDiagramDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError, activePortTool]);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -14821,7 +14812,6 @@ const ADIA = () => {
         setIsCreatingTransition(false);
         setTransitionSourceId(null);
         setSelectedIds([]);
-        setActivePortTool(null);
         setPortTypePrompt(null);
         setPropertyTypePrompt(null);
       }
@@ -17468,19 +17458,7 @@ const ADIA = () => {
                       Block
                     </Button>
                     {diagramMode === 'bdd' && (
-                      <div className="flex gap-1 items-center">
-                        <PortToolMenu
-                          activePortTool={activePortTool}
-                          onSelectPortTool={(kind) => setActivePortTool(kind)}
-                          onClearPortTool={() => setActivePortTool(null)}
-                        />
-                        <div className="flex gap-0.5">
-                          <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }} title="Add Standard Port">+Std</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }} title="Add Flow Port">+Flow</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }} title="Add Proxy Port">+Prx</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }} title="Add Full Port">+Full</Button>
-                        </div>
-                      </div>
+                      <PortKindActions onAddPort={handleAddPortToSelected} />
                     )}
                     {diagramMode === 'package' && (
                       <div className="flex gap-0.5">
