@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import { semanticPresentationToken } from '../../engine/sysml/semanticPresentationStyles';
 import { PortKindActions } from './PortKindActions';
 
 describe('PortKindActions', () => {
@@ -36,5 +37,21 @@ describe('PortKindActions', () => {
     expect(onAddPort).toHaveBeenCalledWith('full');
 
     expect(onAddPort).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses the shared semantic presentation palette for each port kind', () => {
+    render(<PortKindActions onAddPort={vi.fn()} />);
+
+    const palette = [
+      ['Standard', 'standardPort'],
+      ['Flow', 'flowPort'],
+      ['Proxy', 'proxyPort'],
+      ['Full', 'fullPort'],
+    ] as const;
+    for (const [label, role] of palette) {
+      const button = screen.getByRole('button', { name: label });
+      expect(button.style.color).toBe(semanticPresentationToken(role));
+      expect(button.style.borderColor).toBe(semanticPresentationToken(role));
+    }
   });
 });

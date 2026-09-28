@@ -164,6 +164,28 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       hasChildren: false,
     });
   }
+  // Block ports are classifier features stored on the BlockDefinition, not
+  // top-level repository usages. Project them into the same containment tree
+  // so tree navigation and canvas/inspector creation expose one semantic port.
+  for (const block of Object.values(input.sysml.definitions).filter(item => item.kind === 'block')) {
+    for (const port of block.ports ?? []) {
+      const nodeId = sysmlNodeId(port.id);
+      if (nodes[nodeId]) continue;
+      const portKind = port.kind === 'standard' ? 'port' : `${port.kind}Port`;
+      register(nodes, {
+        nodeId,
+        semanticId: port.id,
+        domain: 'sysml',
+        kind: portKind,
+        label: port.name,
+        secondaryLabel: `${port.typeId ? input.sysml.definitions[port.typeId]?.name ?? port.typeId : 'untyped'} · ${port.direction}`,
+        parentNodeId: sysmlNodeId(block.id),
+        ownerSemanticId: block.id,
+        childNodeIds: [],
+        hasChildren: false,
+      });
+    }
+  }
   for (const diagram of Object.values(input.sysml.diagrams ?? {})) {
     const pillar = pillarForSysmlKind(diagram.diagramKind === 'requirements' ? 'requirement' : 'block');
     register(nodes, {

@@ -675,6 +675,9 @@ export function projectNormalizedDiagram(
   const visibleFilter = diagramId
     ? new Set(store.diagramPresentations.get(diagramId)?.elementIds ?? [])
     : null;
+  const hiddenFilter = diagramId
+    ? new Set(store.diagramPresentations.get(diagramId)?.hiddenElementIds ?? [])
+    : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
   const coordinatesFor = (semanticElementId: string): PresentationCoordinates | undefined => {
     const scoped = diagramId
@@ -911,6 +914,7 @@ export function projectNormalizedDiagram(
   };
 
   const projectRel = (rel: SysmlRelationship) => {
+    if (hiddenFilter?.has(rel.id)) return;
     if (!isVisible(rel.id)) {
       if (!isVisible(rel.sourceId) || !isVisible(rel.targetId)) return;
     }

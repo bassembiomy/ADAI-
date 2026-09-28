@@ -90,6 +90,29 @@ describe('buildUnifiedModelProjection', () => {
     });
   });
 
+  it('projects BlockDefinition ports as children of their owning Block', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.block = {
+      id: 'block', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [],
+      ports: [{ id: 'port-standard', name: 'power', kind: 'standard', typeId: '', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+      operations: [], constraints: [],
+    };
+
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [] },
+      externalModels: [],
+      revision: 0,
+    });
+
+    expect(projection.nodes['sysml:element:port-standard']).toMatchObject({
+      semanticId: 'port-standard', kind: 'port', label: 'power', parentNodeId: 'sysml:element:block', ownerSemanticId: 'block',
+    });
+    expect(projection.nodes['sysml:element:block'].childNodeIds).toContain('sysml:element:port-standard');
+    expect(projection.nodes['sysml:element:block'].hasChildren).toBe(true);
+  });
+
   it('does not expose a UUID as the port name when the port definition name is missing', () => {
     const repository = createEmptyRepository();
     const uuid = 'e6871056-81d2-429a-9597-48ce068bcdef';

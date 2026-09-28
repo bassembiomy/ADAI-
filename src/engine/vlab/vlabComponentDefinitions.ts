@@ -14,10 +14,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Implements a linear resistor following Ohm\'s law. Connect to model energy dissipation in electrical networks.'
   },
   diode: {
-    equations: ['I = Is*(exp(V/n*Vt) - 1)', 'simplified: V = I*Ron when V > Vf'],
-    latex: ['I = I_s \\left(e^{V/nV_T} - 1\\right)'],
+    equations: ['Forward: V = Vf + I*Ron', 'Reverse: V = I*Roff'],
+    latex: ['V = V_f + I R_{on} \\; (V > V_f)', 'V = I R_{off} \\; (V \\le V_f)'],
     across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Shockley diode model with smooth tanh transition. Parameters: Ron (forward resistance), Roff (reverse), Vf (forward drop).'
+    description: 'Piecewise-linear diode. Forward: V = Vf + I*Ron. Reverse: V = I*Roff.'
   },
   nmos: {
     equations: ['Id = kn/2*(Vgs-Vth)² (sat)', 'Id = kn*(Vov*Vds - Vds²/2) (lin)'],

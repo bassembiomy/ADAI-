@@ -130,5 +130,27 @@ describe('sysmlDiagramCreation', () => {
       expect(outcome.diagnostic.code).toBe('OWNER_CONTEXT_REQUIRED');
     }
   });
+
+  it('rejects an explicit IBD owner that differs from the contextual Block', () => {
+    const repo = createEmptyRepository();
+    for (const id of ['context-block', 'other-block']) {
+      repo.definitions[id] = {
+        id, name: id, kind: 'block', namespace: ['model'], ownerId: 'model',
+        isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+      };
+    }
+
+    const outcome = buildDiagramCreationCommand({
+      repository: repo,
+      kind: 'Block',
+      ownerId: 'other-block',
+      diagramId: 'ibd',
+      diagramKind: 'ibd',
+      contextElementId: 'context-block',
+      position: { x: 100, y: 100 },
+    });
+
+    expect(outcome).toMatchObject({ ok: false, diagnostic: { code: 'OWNER_CONTEXT_MISMATCH' } });
+  });
 });
 

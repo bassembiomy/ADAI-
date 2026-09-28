@@ -136,7 +136,7 @@ import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
 import { createInterface, createBlock as createBlockDefinition, createValueType as createValueTypeDefinition, createPartUsage, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
 import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
@@ -6112,7 +6112,7 @@ const ADIA = () => {
   } | null>(null);
   const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
     impact: import('./engine/sysml/mutations').MutationImpact;
-    transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
+    transaction?: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
     elementName: string;
     elementKind: string;
     severity: import('./services/sysmlTransactionAdapter').ImpactSeverity;
@@ -6198,17 +6198,7 @@ const ADIA = () => {
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
-  const setDiagramMode = useCallback((mode: DiagramMode) => {
-    setSelectedIds([]);
-    setPackageRelationshipTool(null);
-    setPackageRelationshipSourceId(null);
-    setDiagramModeState(mode);
-    setOpenTabs(prev => {
-      if (prev.includes(mode)) return prev;
-      return [...prev, mode];
-    });
-    syncTabRef.current(mode);
-  }, []);
+
   const [helpInitialTopic, setHelpInitialTopic] = useState<string>("getting-started");
 
   const handleOpenHelp = useCallback((topic?: string) => {
@@ -6276,6 +6266,32 @@ const ADIA = () => {
     : activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode
       ? activeSysmlDiagramIdState
       : Object.values(canonicalSysmlRepository.diagrams).find(d => d.diagramKind === diagramMode)?.id ?? diagramMode;
+
+  const setDiagramMode = useCallback((mode: DiagramMode) => {
+    setSelectedIds([]);
+    setPackageRelationshipTool(null);
+    setPackageRelationshipSourceId(null);
+    if (mode !== 'ibd') {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath(['Root']);
+      const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+      const targetDiagramId = mode === 'package'
+        ? (activePackageDiagramId && currentRepo.diagrams[activePackageDiagramId]?.diagramKind === 'package'
+            ? activePackageDiagramId
+            : Object.values(currentRepo.diagrams).find(d => d.diagramKind === 'package')?.id ?? 'package')
+        : (Object.values(currentRepo.diagrams).find(d => d.diagramKind === mode)?.id ?? (['bdd', 'requirements', 'package', 'rtm'].includes(mode) ? mode : null));
+      if (targetDiagramId) {
+        setActiveSysmlDiagramIdState(targetDiagramId);
+      }
+    }
+    setDiagramModeState(mode);
+    setOpenTabs(prev => {
+      if (prev.includes(mode)) return prev;
+      return [...prev, mode];
+    });
+    syncTabRef.current(mode);
+  }, [canonicalSysmlRepository, activePackageDiagramId]);
 
   useEffect(() => {
     const nav = recoverNavigationState(
@@ -9964,7 +9980,7 @@ const ADIA = () => {
     y: number,
     kind: DiagramCreationKind,
   ) => {
-    const diagramId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
+    const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
     const contextElementId = diagramMode === 'ibd' ? currentLayerId : undefined;
     const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
       diagramId,
@@ -10334,6 +10350,41 @@ const ADIA = () => {
     }
     applySysmlDeletion(transaction, 'Deleted relationship');
   }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
+
+  const deleteSemanticPackage = useCallback((id: string) => {
+    const pkg = canonicalSysmlRepository.packages[id];
+    if (!pkg || id === 'model') return;
+    const command = { type: 'deleteElements' as const, elementIds: [id], authorizedBaselineIds };
+    const result = handleExecuteSysmlCommand(command);
+    if (result.committed) {
+      setSelectedIds(previous => previous.filter(selectedId => selectedId !== id));
+      addError('info', `Deleted package: ${pkg.name}`);
+      return;
+    }
+    if (result.impact) {
+      const severity = impactSeverity(result.impact, authorizedBaselineIds);
+      setSysmlDeleteConfirm({
+        impact: result.impact,
+        elementName: pkg.name,
+        elementKind: 'package',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          const confirmed = handleExecuteSysmlCommand({
+            ...command,
+            confirmedImpactHash: computeImpactHash(result.impact!),
+          });
+          if (confirmed.committed) {
+            setSelectedIds(previous => previous.filter(selectedId => selectedId !== id));
+            addError('info', `Deleted package: ${pkg.name}`);
+          } else {
+            confirmed.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+          }
+        },
+      });
+      return;
+    }
+    result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+  }, [canonicalSysmlRepository, authorizedBaselineIds, handleExecuteSysmlCommand, addError]);
 
   // IBD OPERATIONS
   // Task 7 (spec 3.2, 4.1): IBD Part creation offers an explicit Block type
@@ -11377,7 +11428,30 @@ const ADIA = () => {
   }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    setBddFeatureDrag(null);
+    if (bddFeatureDrag) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const worldPoint = rect
+        ? {
+            x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+            y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+          }
+        : null;
+      const snapDistance = 24 / (uiZoom * view.scale);
+      const target = worldPoint
+        ? sysmlCanvasView.blocks
+            .filter(block => block.id !== bddFeatureDrag.ownerId)
+            .map(block => {
+              const bounds = computeBlockDisplayBounds(block);
+              const dx = Math.max(block.x - worldPoint.x, 0, worldPoint.x - (block.x + bounds.width));
+              const dy = Math.max(block.y - worldPoint.y, 0, worldPoint.y - (block.y + bounds.height));
+              return { block, distance: Math.hypot(dx, dy) };
+            })
+            .filter(candidate => candidate.distance <= snapDistance)
+            .sort((a, b) => a.distance - b.distance)[0]?.block
+        : undefined;
+      if (target) dropBddFeatureOnBlock(e as unknown as MouseEvent<SVGGElement>, target.id);
+      else setBddFeatureDrag(null);
+    }
     const pendingBlockGesture = pendingBddBlockGestureRef.current;
     if (pendingBlockGesture) {
       pendingBddBlockGestureRef.current = null;
@@ -11424,7 +11498,7 @@ const ADIA = () => {
     if (isPanning) {
       setIsPanning(false);
     }
-  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand]);
+  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand]);
 
   useEffect(() => {
     if (!pendingBddBlockId && !isDragging) return;
@@ -15517,7 +15591,6 @@ const ADIA = () => {
           data-semantic-id={block.id}
           transform={`translate(${block.x}, ${block.y})`}
           onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
-          onMouseUp={(e) => dropBddFeatureOnBlock(e, block.id)}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
             const decision = resolveBlockDoubleClickAction(diagramMode, block);
@@ -18581,6 +18654,10 @@ const ADIA = () => {
                   <div className="text-xs text-[#888]">Position: {Math.round(selectedPackage.x)}, {Math.round(selectedPackage.y)}</div>
                   <Button size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
                     Remove from Diagram
+                  </Button>
+                  <Button size="sm" variant="outline" className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
+                    onClick={() => deleteSemanticPackage(selectedPackage.id)}>
+                    Delete from Model…
                   </Button>
                 </>
               ) : selectedBlock ? (

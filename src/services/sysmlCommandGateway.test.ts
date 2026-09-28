@@ -63,6 +63,139 @@ describe('sysmlCommandGateway', () => {
     expect(undoneCreate.diagramPresentations.bdd?.elementIds ?? []).not.toContain(powertrain.id);
   });
 
+  it('keeps a removed relationship semantic but hides its presentation from the active diagram', () => {
+    const repository = createEmptyRepository();
+    const owner: BlockDefinition = {
+      id: 'owner', name: 'Owner', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false,
+      properties: [{ id: 'owner-property', name: 'motor', kind: 'part', typeId: 'motor', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+      ports: [], operations: [], constraints: [],
+    };
+    const motor: BlockDefinition = {
+      id: 'motor', name: 'Motor', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const relationship: SysmlRelationship = {
+      id: 'owner-motor-association', kind: 'association', name: 'Owner : Motor',
+      sourceId: 'owner', targetId: 'motor',
+    };
+    repository.definitions.owner = owner;
+    repository.definitions.motor = motor;
+    repository.relationships[relationship.id] = relationship;
+    let state = createSysmlGatewayState(repository, {}, {
+      bdd: { elementIds: ['owner', 'motor', relationship.id] },
+    });
+
+    state = executeSysmlCommand(state, {
+      type: 'removeFromDiagram', diagramId: 'bdd', elementIds: [relationship.id],
+    });
+
+    expect(state.repository.relationships[relationship.id]).toEqual(relationship);
+    expect(projectLegacyDiagram(state.repository, state.coordinates, state.diagramPresentations, 'bdd').relationships)
+      .not.toContainEqual(expect.objectContaining({ id: relationship.id }));
+
+    state = executeSysmlCommand(state, {
+      type: 'addToDiagram', diagramId: 'bdd', elementIds: [relationship.id],
+    });
+    expect(projectLegacyDiagram(state.repository, state.coordinates, state.diagramPresentations, 'bdd').relationships)
+      .toContainEqual(expect.objectContaining({ id: relationship.id }));
+  });
+
+  it('presents a newly created IBD Part usage immediately with the supplied canvas bounds', () => {
+    const repository = createEmptyRepository();
+    const vehicle: BlockDefinition = {
+      id: 'ibd-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const motor: BlockDefinition = {
+      id: 'ibd-motor', name: 'Motor', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions[vehicle.id] = vehicle;
+    repository.definitions[motor.id] = motor;
+    const state = createSysmlGatewayState(repository);
+
+    const result = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: vehicle.id, propertyKind: 'part',
+        typeId: motor.id, name: 'leftMotor', featureId: 'property-left-motor', usageId: 'part-left-motor',
+      },
+      diagramId: vehicle.id,
+      presentation: { x: 260, y: 180, width: 150, height: 100 },
+    });
+
+    expect(result.committed).toBe(true);
+    expect(result.view.parts).toContainEqual(expect.objectContaining({
+      id: 'part-left-motor', blockId: vehicle.id, typeId: motor.id, x: 260, y: 180,
+    }));
+    expect(result.diagramPresentations[vehicle.id].elementIds).toContain('part-left-motor');
+    expect(result.diagramPresentations[vehicle.id].presentations['part-left-motor']?.bounds).toMatchObject({ x: 260, y: 180 });
+  });
+
+  it('rejects creating an IBD Part under a Block other than the active IBD context', () => {
+    const repository = createEmptyRepository();
+    for (const [id, name] of [['ibd-vehicle', 'Vehicle'], ['ibd-airframe', 'Airframe'], ['ibd-motor', 'Motor']]) {
+      repository.definitions[id] = {
+        id, name, kind: 'block', namespace: [], ownerId: 'model',
+        isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+      };
+    }
+
+    const state = createSysmlGatewayState(repository);
+    const result = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'ibd-airframe', propertyKind: 'part',
+        typeId: 'ibd-motor', name: 'motor', featureId: 'property-airframe-motor', usageId: 'part-airframe-motor',
+      },
+      diagramId: 'ibd-vehicle',
+      presentation: { x: 200, y: 150 },
+    });
+
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'OWNER_CONTEXT_MISMATCH' }));
+    expect(result.repository.definitions['ibd-airframe']?.kind === 'block' && result.repository.definitions['ibd-airframe'].properties).toHaveLength(0);
+    expect(result.repository.usages['part-airframe-motor']).toBeUndefined();
+  });
+
+  it('accepts a BDD Association from a typed Block property to its target Block', () => {
+    const repository = createEmptyRepository();
+    const target: BlockDefinition = {
+      id: 'blk-engine', name: 'Engine', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const owner: BlockDefinition = {
+      id: 'blk-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false,
+      properties: [{
+        id: 'prop-engine', name: 'engine', kind: 'part', typeId: target.id,
+        multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+      }],
+      ports: [], operations: [], constraints: [],
+    };
+    repository.definitions[owner.id] = owner;
+    repository.definitions[target.id] = target;
+    let state = createSysmlGatewayState(repository);
+    state = executeSysmlCommand(state, {
+      type: 'addToDiagram', diagramId: 'bdd', elementIds: [owner.id, target.id],
+    });
+    const relation: SysmlRelationship = {
+      id: 'rel-engine-property', kind: 'association', sourceId: 'prop-engine', targetId: target.id,
+      name: 'engine : Engine', sourceMultiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+
+    const result = executeSysmlCommand(state, {
+      type: 'createAndPresent', diagramId: 'bdd', element: relation, presentation: {},
+    });
+
+    expect(result.committed).toBe(true);
+    expect(result.repository.relationships[relation.id]).toEqual(relation);
+    expect(result.view.relationships).toContainEqual(expect.objectContaining({
+      id: relation.id, sourceId: 'prop-engine', targetId: target.id, type: 'association',
+    }));
+  });
+
   it('adds a PartProperty to a BDD through its owning Block presentation', () => {
     const repository = createEmptyRepository();
     const vehicle: BlockDefinition = {
@@ -2568,5 +2701,57 @@ describe('sysmlCommandGateway Task 1 red phase: BDD/package semantic contracts',
     expect(invalidResult.repository.relationships['rel-composition-1']).toEqual(
       validResult.repository.relationships['rel-composition-1']
     );
+  });
+
+  it('rejects relationship role names that collide with Block properties atomically', () => {
+    const repository = createEmptyRepository();
+    const blockA: BlockDefinition = {
+      id: 'blk-role-a', name: 'BlockA', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false,
+      properties: [{ id: 'property-existing', name: 'existingRole', kind: 'value', typeId: 'real', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+      ports: [], operations: [], constraints: [],
+    };
+    const blockB: BlockDefinition = {
+      id: 'blk-role-b', name: 'BlockB', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions[blockA.id] = blockA;
+    repository.definitions[blockB.id] = blockB;
+    repository.relationships['rel-role'] = {
+      id: 'rel-role', kind: 'association', sourceId: blockA.id, targetId: blockB.id, sourceRole: 'safeRole',
+    };
+
+    const state = createSysmlGatewayState(repository);
+    const result = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'rel-role', patch: { sourceRole: 'existingRole' },
+    });
+
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'DUPLICATE_ROLE_NAME')).toBe(true);
+    expect(result.repository.relationships['rel-role'].sourceRole).toBe('safeRole');
+  });
+
+  it('rejects relationships with both ends non-navigable atomically', () => {
+    const repository = createEmptyRepository();
+    const block = (id: string): BlockDefinition => ({
+      id, name: id, kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    });
+    repository.definitions.a = block('a');
+    repository.definitions.b = block('b');
+    repository.relationships['rel-nav'] = {
+      id: 'rel-nav', kind: 'association', sourceId: 'a', targetId: 'b',
+      sourceNavigable: true, targetNavigable: true,
+    };
+
+    const state = createSysmlGatewayState(repository);
+    const result = executeSysmlCommand(state, {
+      type: 'updateElement', elementId: 'rel-nav',
+      patch: { sourceNavigable: false, targetNavigable: false },
+    });
+
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'NON_NAVIGABLE_ENDS')).toBe(true);
+    expect(result.repository.relationships['rel-nav']).toMatchObject({ sourceNavigable: true, targetNavigable: true });
   });
 });

@@ -367,6 +367,9 @@ export function projectLegacyDiagram(
   const visibleFilter = diagramId
     ? new Set(diagramPresentations[diagramId]?.elementIds ?? [])
     : null;
+  const hiddenFilter = diagramId
+    ? new Set(diagramPresentations[diagramId]?.hiddenElementIds ?? [])
+    : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
   const coordinatesFor = (semanticElementId: string): PresentationCoordinates =>
     (diagramId ? diagramPresentations[diagramId]?.presentations?.[semanticElementId]?.bounds : undefined)
@@ -560,6 +563,7 @@ export function projectLegacyDiagram(
 
   // Project relationships
   for (const rel of Object.values(repository.relationships)) {
+    if (hiddenFilter?.has(rel.id)) continue;
     if (!isVisible(rel.id)) {
       if (!isVisible(rel.sourceId) || !isVisible(rel.targetId)) continue;
     }
@@ -1498,6 +1502,9 @@ export function executeSysmlCommand(
 
     if (command.diagramId) {
       const isBlockIbdContext = state.repository.definitions[command.diagramId]?.kind === 'block';
+      if (isBlockIbdContext && command.diagramId !== intent.ownerBlockId) {
+        return reject('OWNER_CONTEXT_MISMATCH', `Part owner '${intent.ownerBlockId}' does not match active IBD context '${command.diagramId}'.`, intent.ownerBlockId);
+      }
       const isKnownDiagram =
         ['bdd', 'requirements', 'ibd', 'rtm', 'package'].includes(command.diagramId) ||
         Boolean(state.repository.diagrams[command.diagramId]) ||
@@ -1683,6 +1690,15 @@ export function executeSysmlCommand(
 
     if (command.presentation) {
       nextCoordinates[featureId] = { ...command.presentation };
+      const isIbdBlockContext = Boolean(
+        command.diagramId && state.repository.definitions[command.diagramId]?.kind === 'block',
+      );
+      if (createdUsage && isIbdBlockContext) {
+        // PartProperty is represented semantically by both its owned feature
+        // and a PartUsage projection. IBD renders the usage, so persist its
+        // own presentation record and bounds in the same atomic command.
+        nextCoordinates[createdUsage.id] = { ...command.presentation };
+      }
       if (command.diagramId) {
         const diagPres = nextDiagramPresentations[command.diagramId] ?? {
           elementIds: [owner.id],
@@ -1701,14 +1717,28 @@ export function executeSysmlCommand(
             [featureId]: { ...command.presentation },
           },
         };
+        const isIbdBlockContext = state.repository.definitions[command.diagramId]?.kind === 'block';
+        const nextElementIds = createdUsage && isIbdBlockContext
+          ? [...new Set([...diagPres.elementIds, createdUsage.id])]
+          : diagPres.elementIds;
+        const nextPresentations = {
+          ...diagPres.presentations,
+          [owner.id]: updatedOwnerPres,
+          ...(createdUsage && isIbdBlockContext ? {
+            [createdUsage.id]: {
+              id: stableDiagramPresentationId(command.diagramId, createdUsage.id),
+              diagramId: command.diagramId,
+              semanticElementId: createdUsage.id,
+              bounds: { ...command.presentation },
+            },
+          } : {}),
+        };
         nextDiagramPresentations = {
           ...nextDiagramPresentations,
           [command.diagramId]: {
             ...diagPres,
-            presentations: {
-              ...diagPres.presentations,
-              [owner.id]: updatedOwnerPres,
-            },
+            elementIds: nextElementIds,
+            presentations: nextPresentations,
           },
         };
       }
@@ -1762,6 +1792,11 @@ export function executeSysmlCommand(
       store.coordinates.set(featureId, { ...command.presentation });
       if (command.diagramId) {
         store.diagramPresentations.set(command.diagramId, nextDiagramPresentations[command.diagramId]);
+        const isIbdBlockContext = state.repository.definitions[command.diagramId]?.kind === 'block';
+        if (createdUsage && isIbdBlockContext) {
+          store.coordinates.set(createdUsage.id, { ...command.presentation });
+          store.indexes.diagramId.set(command.diagramId, new Set(nextDiagramPresentations[command.diagramId].elementIds));
+        }
       }
     }
 
@@ -1778,6 +1813,13 @@ export function executeSysmlCommand(
     if (command.presentation) {
       forwardOps.push({ op: 'add', collection: 'coordinates', id: featureId, value: command.presentation });
       inverseOps.push({ op: 'remove', collection: 'coordinates', id: featureId, oldValue: command.presentation });
+      const isIbdBlockContext = Boolean(
+        command.diagramId && state.repository.definitions[command.diagramId]?.kind === 'block',
+      );
+      if (createdUsage && isIbdBlockContext) {
+        forwardOps.push({ op: 'add', collection: 'coordinates', id: createdUsage.id, value: command.presentation });
+        inverseOps.push({ op: 'remove', collection: 'coordinates', id: createdUsage.id, oldValue: command.presentation });
+      }
       if (command.diagramId) {
         const prevDiag = diagramPresentations[command.diagramId];
         const nextDiag = nextDiagramPresentations[command.diagramId];
@@ -2330,9 +2372,14 @@ export function executeSysmlCommand(
     const nextIds = currentPresentation.elementIds.filter(id => !command.elementIds.includes(id));
     const nextPresentations = Object.fromEntries(Object.entries(currentPresentation.presentations)
       .filter(([semanticElementId]) => !command.elementIds.includes(semanticElementId)));
+    const hiddenElementIds = [...new Set([
+      ...(currentPresentation.hiddenElementIds ?? []),
+      ...command.elementIds.filter(id => Boolean(state.repository.relationships[id])),
+    ])];
     const nextPresentation = {
       elementIds: nextIds,
       presentations: nextPresentations,
+      ...(hiddenElementIds.length > 0 ? { hiddenElementIds } : {}),
     };
     const nextDiagramPresentations: Record<string, DiagramPresentation> = {
       ...diagramPresentations,
@@ -2792,6 +2839,10 @@ export function executeSysmlCommand(
     const nextPres: DiagramPresentation = {
       elementIds: [...currentPres.elementIds, ...addedIds],
       presentations: { ...currentPres.presentations, ...newRecords },
+      ...(() => {
+        const hiddenElementIds = (currentPres.hiddenElementIds ?? []).filter(id => !requestedElementIds.includes(id));
+        return hiddenElementIds.length > 0 ? { hiddenElementIds } : {};
+      })(),
     };
     const nextDiagramPresentations = {
       ...diagramPresentations,

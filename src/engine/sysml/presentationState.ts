@@ -19,6 +19,8 @@ export interface DiagramElementPresentation {
 export interface DiagramPresentation {
   elementIds: string[];
   presentations: Record<string, DiagramElementPresentation>;
+  /** Semantic IDs explicitly hidden in this diagram, despite visible endpoints. */
+  hiddenElementIds?: string[];
 }
 
 export type DiagramPresentationInput = Partial<DiagramPresentation> & { elementIds: string[] };
@@ -48,6 +50,6 @@ export function normalizeDiagramPresentations(
         bounds: { ...(legacyCoordinates[semanticElementId] ?? {}) },
       };
     }
-    return [diagramId, { elementIds, presentations }];
+    return [diagramId, { ...value, elementIds, presentations }];
   }));
 }

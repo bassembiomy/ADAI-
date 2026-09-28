@@ -386,7 +386,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "K"
           }
         ],
-        "equation": "V = I * Ron + Vf",
+        "equation": "Forward: V = Vf + I * Ron\\nReverse: V = I * Roff",
         "description": "An ideal diode with piecewise-linear behavior and forward voltage drop."
       },
       {

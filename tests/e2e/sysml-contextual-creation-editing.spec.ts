@@ -102,10 +102,14 @@ test.describe('SysML Contextual Creation and Editing E2E Gate', () => {
     expect(portData.kind).toBe('standard');
 
     // Confirm tree node has the port under Vehicle
-    await filterTree(page, 'Vehicle');
+    await filterTree(page, '');
+    await page.getByRole('button', { name: 'Expand All' }).click();
     await page.waitForTimeout(300);
     const treeRow = page.locator(`.model-tree-row[data-semantic-id="blk-vehicle"]`).first();
     await expect(treeRow).toBeVisible();
+    const portTreeRow = page.locator(`.model-tree-row[data-semantic-id="${portData.id}"]`);
+    await expect(portTreeRow).toBeVisible();
+    await expect(portTreeRow).toHaveAttribute('data-kind', 'port');
 
     // Confirm Block feature list in repository matches
     const vehiclePorts = await page.evaluate(() => {
@@ -161,6 +165,17 @@ test.describe('SysML Contextual Creation and Editing E2E Gate', () => {
         presentation: { x: 420, y: 100, width: 200, height: 140 },
       });
       execute({
+        type: 'createOwnedFeature',
+        intent: {
+          featureKind: 'property',
+          ownerBlockId: 'blk-chassis',
+          propertyKind: 'part',
+          typeId: 'blk-wheel',
+          featureId: 'property-existing-role',
+          name: 'existingRole',
+        },
+      });
+      execute({
         type: 'createElement',
         element: {
           id: 'rel-chassis-wheel',
@@ -200,14 +215,17 @@ test.describe('SysML Contextual Creation and Editing E2E Gate', () => {
     // TypeSelectionPrompt opens; select Wheel and confirm
     const typeDialog = page.locator('[role="dialog"][aria-labelledby="type-selection-title"]');
     await expect(typeDialog).toBeVisible({ timeout: 5000 });
-    await typeDialog.locator('button:has-text("Wheel")').first().click();
-    await typeDialog.locator('button:has-text("Confirm")').first().click();
+    await typeDialog.getByRole('button', { name: /Wheel/ }).click();
+    const confirmType = typeDialog.getByRole('button', { name: 'Confirm' });
+    await expect(confirmType).toBeEnabled();
+    await confirmType.click();
+    await expect(typeDialog).toBeHidden({ timeout: 5000 });
     await page.waitForTimeout(400);
 
     // Confirm Part usage created with Chassis as owner
     const createdPart = await page.evaluate(() => {
       const repo = (window as any).__sysmlRepository;
-      return Object.values(repo.usages).find((u: any) => u.kind === 'part' && u.typeId === 'blk-wheel') as any;
+      return Object.values(repo.usages).find((u: any) => u.kind === 'part' && u.typeId === 'blk-wheel' && u.name.startsWith('part_')) as any;
     });
     expect(createdPart).toBeDefined();
     expect(createdPart.ownerId).toBe('blk-chassis');
@@ -216,22 +234,29 @@ test.describe('SysML Contextual Creation and Editing E2E Gate', () => {
     await page.locator('button:has-text("Root")').first().click();
     await page.waitForTimeout(300);
 
-    // Update relationship properties via command
-    await page.evaluate(() => {
-      const execute = (window as any).__sysmlExecuteCommand;
-      execute({
-        type: 'updateElement',
-        elementId: 'rel-chassis-wheel',
-        patch: {
-          sourceRole: 'vehicleBody',
-          targetRole: 'rollingTires',
-          sourceMultiplicity: { lower: 0, upper: 1, ordered: false, unique: true },
-          targetMultiplicity: { lower: 2, upper: '*', ordered: false, unique: true },
-          sourceNavigable: true,
-          targetNavigable: true,
-        },
-      });
-    });
+    // Edit relationship properties through the actual selection + inspector workflow.
+    await page.locator('#adia-diagram-canvas g[data-semantic-id="rel-chassis-wheel"]').click();
+    const sourceRole = page.getByRole('textbox', { name: 'Source role name' });
+    const targetRole = page.getByRole('textbox', { name: 'Target role name' });
+    const sourceMultiplicity = page.getByRole('textbox', { name: 'Source multiplicity' });
+    const targetMultiplicity = page.getByRole('textbox', { name: 'Target multiplicity' });
+    await expect(sourceRole).toBeVisible({ timeout: 5000 });
+
+    // A duplicate role is rejected by semantic validation and must not mutate the model.
+    await sourceRole.fill('existingRole');
+    await sourceRole.press('Tab');
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__sysmlRepository.relationships['rel-chassis-wheel'].sourceRole,
+    )).toBe('body');
+    const validationDialog = page.getByRole('alertdialog');
+    await expect(validationDialog).toBeVisible();
+    await validationDialog.getByRole('button', { name: 'Dismiss' }).click();
+
+    await sourceRole.fill('vehicleBody');
+    await targetRole.fill('rollingTires');
+    await sourceMultiplicity.fill('0..1');
+    await targetMultiplicity.fill('2..*');
+    await targetMultiplicity.press('Tab');
 
     const relInRepo = await page.evaluate(() => {
       const repo = (window as any).__sysmlRepository;
@@ -251,7 +276,7 @@ test.describe('SysML Contextual Creation and Editing E2E Gate', () => {
     const reloaded = await page.evaluate(() => {
       const repo = (window as any).__sysmlRepository;
       return {
-        part: Object.values(repo.usages).find((u: any) => u.kind === 'part' && u.typeId === 'blk-wheel') as any,
+        part: Object.values(repo.usages).find((u: any) => u.kind === 'part' && u.typeId === 'blk-wheel' && u.name.startsWith('part_')) as any,
         rel: repo.relationships['rel-chassis-wheel'],
       };
     });
@@ -263,5 +288,63 @@ test.describe('SysML Contextual Creation and Editing E2E Gate', () => {
     expect(reloaded.rel.targetRole).toBe('rollingTires');
     expect(reloaded.rel.sourceMultiplicity).toEqual({ lower: 0, upper: 1, ordered: false, unique: true });
     expect(reloaded.rel.targetMultiplicity).toEqual({ lower: 2, upper: '*', ordered: false, unique: true });
+  });
+
+  test('3. Dragging a typed Block property onto its type Block creates a visible BDD association', async ({ page }) => {
+    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      execute({
+        type: 'createAndPresent', diagramId: 'bdd',
+        element: {
+          id: 'bdd-owner', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        },
+        presentation: { x: 140, y: 140, width: 220, height: 180 },
+      });
+      execute({
+        type: 'createAndPresent', diagramId: 'bdd',
+        element: {
+          id: 'bdd-target', name: 'Engine', kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        },
+        presentation: { x: 520, y: 180, width: 200, height: 150 },
+      });
+      execute({
+        type: 'createOwnedFeature',
+        intent: {
+          featureKind: 'property', propertyKind: 'part', ownerBlockId: 'bdd-owner',
+          typeId: 'bdd-target', name: 'engine', featureId: 'bdd-prop-engine', usageId: 'bdd-usage-engine',
+        },
+      });
+    });
+
+    const propertyText = page.locator('#adia-diagram-canvas [data-property-id="bdd-prop-engine"]');
+    const targetBlock = page.locator('#adia-diagram-canvas g[data-semantic-id="bdd-target"]');
+    await expect(propertyText).toBeVisible();
+    await expect(targetBlock).toBeVisible();
+    const source = await propertyText.boundingBox();
+    const target = await targetBlock.boundingBox();
+    expect(source).not.toBeNull();
+    expect(target).not.toBeNull();
+    await page.mouse.move(source!.x + source!.width / 2, source!.y + source!.height / 2);
+    await page.mouse.down();
+    // Releasing slightly outside the symbol border should still snap to the
+    // intended Block, matching the forgiving connector drop behavior in the UI.
+    await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height + 12, { steps: 8 });
+    await page.mouse.up();
+
+    await expect.poll(async () => page.evaluate(() => {
+      const repository = (window as any).__sysmlRepository;
+      return Object.values(repository.relationships).filter((relationship: any) =>
+        relationship.kind === 'association' && relationship.sourceId === 'bdd-prop-engine' && relationship.targetId === 'bdd-target',
+      ).length;
+    })).toBe(1);
+    const relationshipId = await page.evaluate(() => Object.values((window as any).__sysmlRepository.relationships)
+      .find((relationship: any) => relationship.sourceId === 'bdd-prop-engine' && relationship.targetId === 'bdd-target')?.id);
+    const relationshipGraphic = page.locator(`#adia-diagram-canvas g[data-semantic-id="${relationshipId}"]`);
+    await expect(relationshipGraphic).toBeVisible();
+    await expect(relationshipGraphic.locator('path').first()).not.toHaveAttribute('d', /^M\s*0\s+0\b/);
   });
 });

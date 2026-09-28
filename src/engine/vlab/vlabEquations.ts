@@ -78,8 +78,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   switch: ({ across, branch, params }) => {
     // V = I * (ctrl > threshold ? Ron : Roff)
-    const Ron = params.Ron || 0.01;
-    const Roff = params.Roff || 1e6;
+    const Ron = params.Ron ?? 0.01;
+    const Roff = params.Roff ?? 1e6;
     const threshold = params.threshold !== undefined ? params.threshold : 0.5;
     const ctrl = across[2] !== undefined ? across[2] : 0;
     const R = ctrl > threshold ? Ron : Roff;
@@ -87,18 +87,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   diode: ({ across, branch, params }) => {
-    const Ron = params.Ron || 0.01;
-    const Roff = params.Roff || 1e6;
+    const Ron = params.Ron ?? 0.01;
+    const Roff = params.Roff ?? 1e6;
     const Vf = params.Vf !== undefined ? params.Vf : 0.7;
-    const Is = params.Is || 1e-12;
-    const n = params.n || 1.0;
-    const Vt = 0.02585; // thermal voltage at 300K
     const V = across[0] - across[1];
-    
-    // Smooth approximation for switch conductance
-    const smooth = 0.5 * (1 + Math.tanh((V - Vf) / (n * Vt)));
-    const R = Ron * smooth + Roff * (1 - smooth);
-    return [(V - Vf * smooth) - branch[0] * R];
+    if (V > Vf) return [V - Vf - branch[0] * Ron];
+    return [V - branch[0] * Roff];
   },
   
   nmos: ({ across, branch, params }) => {
@@ -785,7 +779,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const step_time = params.time !== undefined ? params.time : (params.stepTime !== undefined ? params.stepTime : (params.step_time !== undefined ? params.step_time : 1.0));
     const initial = params.initial !== undefined ? params.initial : 0.0;
     const final = params.final !== undefined ? params.final : 1.0;
-    const val = ctx.time > step_time ? final : initial;
+    const val = ctx.time >= step_time ? final : initial;
     return [branch[0] - val];
   },
   

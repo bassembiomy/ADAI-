@@ -88,27 +88,30 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
     ?? diagram?.diagramKind
     ?? (input.diagramId === 'bdd' || input.diagramId === 'ibd' || input.diagramId === 'requirements' || input.diagramId === 'package' ? input.diagramId : 'bdd');
 
-  let effectiveOwnerId = input.ownerId;
-  if (!effectiveOwnerId) {
-    const ownerResolution = resolveSysmlCreationOwner(input.repository, {
-      diagramId: input.diagramId,
-      diagramKind: effectiveDiagramKind,
-      contextElementId: input.contextElementId,
-    });
-    if (!ownerResolution.ok) {
-      return failure(ownerResolution.diagnostic.code, ownerResolution.diagnostic.message);
-    }
-    effectiveOwnerId = ownerResolution.ownerId;
-  } else if (effectiveDiagramKind === 'ibd') {
-    const ownerResolution = resolveSysmlCreationOwner(input.repository, {
-      diagramId: input.diagramId,
-      diagramKind: effectiveDiagramKind,
-      contextElementId: input.contextElementId,
-    });
-    if (!ownerResolution.ok) {
-      return failure(ownerResolution.diagnostic.code, ownerResolution.diagnostic.message);
-    }
+  const ownerResolution = resolveSysmlCreationOwner(input.repository, {
+    diagramId: input.diagramId,
+    diagramKind: effectiveDiagramKind,
+    contextElementId: input.contextElementId,
+  });
+  if (!ownerResolution.ok) {
+    return failure(ownerResolution.diagnostic.code, ownerResolution.diagnostic.message);
   }
+  const requestedOwnerExists = input.ownerId === 'model'
+    || Boolean(input.ownerId && (
+      input.repository.packages?.[input.ownerId]
+      || input.repository.definitions?.[input.ownerId]
+      || input.repository.requirements?.[input.ownerId]
+    ));
+  if (input.ownerId && !requestedOwnerExists) {
+    return failure('OWNER_NOT_FOUND', `Owner '${input.ownerId}' does not exist.`);
+  }
+  if (input.ownerId && input.ownerId !== ownerResolution.ownerId) {
+    return failure(
+      'OWNER_CONTEXT_MISMATCH',
+      `Requested owner '${input.ownerId}' does not match the active diagram context owner '${ownerResolution.ownerId}'.`,
+    );
+  }
+  const effectiveOwnerId = ownerResolution.ownerId;
 
   const ownerExists = effectiveOwnerId === 'model'
     || Boolean(input.repository.packages?.[effectiveOwnerId])

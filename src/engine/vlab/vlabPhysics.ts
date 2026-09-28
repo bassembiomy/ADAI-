@@ -298,7 +298,7 @@ export class VLabPhysicsEngine {
           // --- Zero Crossing & Event Detection ---
           const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
           if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
-            const hEvent = Math.max(stepFloor, h * eventInfo.fraction);
+            const hEvent = h * eventInfo.fraction;
             throw new EventTriggerError(hEvent);
           }
           
@@ -357,15 +357,19 @@ export class VLabPhysicsEngine {
           
         } catch (error: any) {
           if (error instanceof EventTriggerError) {
-            if (error.hEvent >= h || h <= stepFloor) {
-              console.warn("Minimum step size reached during event. Forcing acceptance.");
+            if (error.hEvent < h) {
+              h = Math.max(stepFloor, error.hEvent);
+              bdfOrder = 1; // resolve the crossing before switching algebraic modes
+            } else {
+              // The threshold is now reached to solver precision. Accept the
+              // event-time state and start a fresh step in the new mode.
               stepAccepted = true;
-              xCurrent = nextX.length > 0 ? [...nextX] : [...xCurrent];
+              xCurrent = [...nextX];
+              prevX = [...xCurrent];
               t += h;
               acceptedSteps++;
-            } else {
-              h = error.hEvent;
-              bdfOrder = 1; // force BDF-1 across discontinuity
+              h = Math.max(stepFloor, Math.min(maxStep, Math.min(h, error.hEvent * 2)));
+              bdfOrder = 1;
             }
           } else {
             if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;

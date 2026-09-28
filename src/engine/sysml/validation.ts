@@ -8,6 +8,7 @@ import {
 } from './useCases';
 import { validateRepositoryPorts } from './validation/portRules';
 import { resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
+import { validateAssociationEnds } from './bdd';
 
 export { validateRequirementContainment };
 
@@ -130,6 +131,15 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
     if (isUseCaseRelationshipKind(relationship.kind)) {
       diagnostics.push(...validateUseCaseRelationship(repo, relationship));
       continue;
+    }
+
+    if (relationship.kind === 'association' || relationship.kind === 'composition' || relationship.kind === 'sharedAggregation') {
+      // These end constraints must be enforced by repository validation, not
+      // merely displayed in the inspector. Multiplicity bounds are validated
+      // below with the repository-wide numeric checks, so retain only the
+      // additional role-name and navigability diagnostics here.
+      diagnostics.push(...validateAssociationEnds(repo, relationship.id)
+        .filter(diagnostic => diagnostic.code !== 'INVALID_MULTIPLICITY'));
     }
 
     if (relationship.sourceMultiplicity) {
