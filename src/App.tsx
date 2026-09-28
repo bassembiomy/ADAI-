@@ -6127,6 +6127,16 @@ const ADIA = () => {
 
   // Selection state (supports multiple items)
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingBddBlockId, setPendingBddBlockId] = useState<string | null>(null);
+  const pendingBddBlockGestureRef = useRef<{
+    blockId: string;
+    startClientX: number;
+    startClientY: number;
+    startWorldX: number;
+    startWorldY: number;
+    ctrlKey: boolean;
+    moved: boolean;
+  } | null>(null);
   const [hoveredTransitionId, setHoveredTransitionId] = useState<string | null>(null);
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
@@ -10178,8 +10188,9 @@ const ADIA = () => {
 
   const dropBddFeatureOnBlock = useCallback((e: MouseEvent<SVGGElement>, targetId: string) => {
     if (diagramMode !== 'bdd' || !bddFeatureDrag) return;
-    const source = blocks.find(block => block.id === bddFeatureDrag.ownerId);
-    const target = blocks.find(block => block.id === targetId);
+    e.stopPropagation();
+    const source = sysmlCanvasView.blocks.find(block => block.id === bddFeatureDrag.ownerId) ?? blocks.find(block => block.id === bddFeatureDrag.ownerId);
+    const target = sysmlCanvasView.blocks.find(block => block.id === targetId) ?? blocks.find(block => block.id === targetId);
     if (!source || !target || source.id === target.id) {
       setBddFeatureDrag(null);
       return;
@@ -10193,20 +10204,23 @@ const ADIA = () => {
         propertyId: bddFeatureDrag.featureId,
         ownerBlockId: bddFeatureDrag.ownerId,
         targetBlockId: target.id,
-        blocks: blocks.map(b => ({
-          id: b.id,
-          name: b.name,
-          x: b.x,
-          y: b.y,
-          width: b.width,
-          height: b.height,
-          properties: b.properties?.map(p => ({
-            id: p.id,
-            name: p.name,
-            typeId: p.typeId,
-            typeName: p.type,
-          })),
-        })),
+        blocks: sysmlCanvasView.blocks.map(b => {
+          const bounds = computeBlockDisplayBounds(b);
+          return {
+            id: b.id,
+            name: b.name,
+            x: b.x,
+            y: b.y,
+            width: bounds.width,
+            height: bounds.height,
+            properties: b.properties?.map(p => ({
+              id: p.id,
+              name: p.name,
+              typeId: p.typeId,
+              typeName: p.type,
+            })),
+          };
+        }),
       });
       if (!geometryResult.ok && geometryResult.diagnostic) {
         addError('warning', geometryResult.diagnostic.message);
@@ -10241,7 +10255,12 @@ const ADIA = () => {
         kind: (candidate.type === 'aggregation' ? 'sharedAggregation' : candidate.type) as SysmlRelationship['kind'],
         name: candidate.label,
       };
-      const result = handleExecuteSysmlCommand({ type: 'createElement', element: rel });
+      const result = handleExecuteSysmlCommand({
+        type: 'createAndPresent',
+        diagramId: activeSysmlDiagramId,
+        element: rel,
+        presentation: {},
+      });
       if (result.committed) {
         setSelectedIds([candidate.id]);
         addError('info', `Created ${type} from ${bddFeatureDrag.kind}: ${bddFeatureDrag.name}`);
@@ -10250,7 +10269,7 @@ const ADIA = () => {
       }
     }
     setBddFeatureDrag(null);
-  }, [diagramMode, bddFeatureDrag, blocks, addError, relationships, parts, showConnectionPolicyError, addToHistory, handleExecuteSysmlCommand]);
+  }, [diagramMode, bddFeatureDrag, blocks, sysmlCanvasView, addError, relationships, parts, showConnectionPolicyError, addToHistory, handleExecuteSysmlCommand, activeSysmlDiagramId]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
     const patch: Record<string, unknown> = {};
@@ -10999,6 +11018,25 @@ const ADIA = () => {
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
     setMousePos({ x: worldX, y: worldY });
 
+    const pendingBlockGesture = pendingBddBlockGestureRef.current;
+    if (diagramMode === 'bdd' && pendingBlockGesture && !pendingBlockGesture.moved) {
+      const distance = Math.hypot(
+        e.clientX - pendingBlockGesture.startClientX,
+        e.clientY - pendingBlockGesture.startClientY,
+      );
+      if (distance < 4) return;
+
+      pendingBlockGesture.moved = true;
+      setPendingBddBlockId(null);
+      setSelectedIds(previous => pendingBlockGesture.ctrlKey
+        ? (previous.includes(pendingBlockGesture.blockId) ? previous : [...previous, pendingBlockGesture.blockId])
+        : [pendingBlockGesture.blockId]);
+      addToHistory();
+      setIsDragging(true);
+      setDiagramDragOffset({ x: pendingBlockGesture.startWorldX, y: pendingBlockGesture.startWorldY });
+      return;
+    }
+
     if (isPanning) {
       const dx = e.clientX - lastMousePos.current.x;
       const dy = e.clientY - lastMousePos.current.y;
@@ -11300,10 +11338,22 @@ const ADIA = () => {
       // Update drag offset to current position for next frame
       setDiagramDragOffset({ x: worldX, y: worldY });
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
     setBddFeatureDrag(null);
+    const pendingBlockGesture = pendingBddBlockGestureRef.current;
+    if (pendingBlockGesture) {
+      pendingBddBlockGestureRef.current = null;
+      setPendingBddBlockId(null);
+      if (!pendingBlockGesture.moved) {
+        setSelectedIds(previous => pendingBlockGesture.ctrlKey
+          ? (previous.includes(pendingBlockGesture.blockId)
+            ? previous.filter(id => id !== pendingBlockGesture.blockId)
+            : [...previous, pendingBlockGesture.blockId])
+          : [pendingBlockGesture.blockId]);
+      }
+    }
     if (e.button === 1) {
       midDown.current = false;
     }
@@ -11339,6 +11389,24 @@ const ADIA = () => {
       setIsPanning(false);
     }
   }, [isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand]);
+
+  useEffect(() => {
+    if (!pendingBddBlockId && !isDragging) return;
+    const handleWindowMouseMove = (event: globalThis.MouseEvent) => {
+      if (canvasRef.current?.contains(event.target as Node)) return;
+      handleMouseMove(event as unknown as MouseEvent<HTMLDivElement>);
+    };
+    const handleWindowMouseUp = (event: globalThis.MouseEvent) => {
+      if (canvasRef.current?.contains(event.target as Node)) return;
+      handleMouseUp(event as unknown as MouseEvent<HTMLDivElement>);
+    };
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [pendingBddBlockId, isDragging, handleMouseMove, handleMouseUp]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -11592,6 +11660,20 @@ const ADIA = () => {
           setDiagramDragOffset({ x: worldX, y: worldY });
         }
       }
+      return;
+    }
+
+    if (diagramMode === 'bdd' && e.button === 0) {
+      pendingBddBlockGestureRef.current = {
+        blockId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startWorldX: worldX,
+        startWorldY: worldY,
+        ctrlKey: e.ctrlKey,
+        moved: false,
+      };
+      setPendingBddBlockId(blockId);
       return;
     }
 
@@ -15377,7 +15459,7 @@ const ADIA = () => {
 
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
-      const isSelected = selectedIds.includes(block.id);
+      const isSelected = selectedIds.includes(block.id) && pendingBddBlockId !== block.id;
 
       const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
 
@@ -15460,12 +15542,14 @@ const ADIA = () => {
                   {block.properties.map((prop, i) => (
                     <text
                       key={prop.id}
+                      data-property-id={prop.id}
                       y={i * 12}
                       fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'property' && bddFeatureDrag.featureId === prop.id ? '#f97316' : '#aaa'}
                       fontSize={10}
                       fontFamily="monospace"
-                      style={{ cursor: diagramMode === 'bdd' ? (isCreatingTransition ? 'crosshair' : 'grab') : 'default', userSelect: 'none' }}
+                      style={{ cursor: diagramMode === 'bdd' ? (isCreatingTransition ? 'crosshair' : 'grab') : 'default', userSelect: 'none', pointerEvents: 'all' }}
                       onMouseDown={(e) => {
+                        e.stopPropagation();
                         if (isCreatingTransition) {
                           e.stopPropagation();
                           if (transitionSourceId) {
@@ -15619,7 +15703,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
@@ -15672,20 +15756,23 @@ const ADIA = () => {
           propertyId: rel.sourceId,
           ownerBlockId: source.id,
           targetBlockId: target.id,
-          blocks: blocks.map(b => ({
-            id: b.id,
-            name: b.name,
-            x: b.x,
-            y: b.y,
-            width: b.width,
-            height: b.height,
-            properties: b.properties?.map(p => ({
-              id: p.id,
-              name: p.name,
-              typeId: p.typeId,
-              typeName: p.type,
-            })),
-          })),
+          blocks: sysmlCanvasView.blocks.map(b => {
+            const bounds = computeBlockDisplayBounds(b);
+            return {
+              id: b.id,
+              name: b.name,
+              x: b.x,
+              y: b.y,
+              width: bounds.width,
+              height: bounds.height,
+              properties: b.properties?.map(p => ({
+                id: p.id,
+                name: p.name,
+                typeId: p.typeId,
+                typeName: p.type,
+              })),
+            };
+          }),
           allowFallback: true,
         });
         if (geom.source && geom.target) {
@@ -16900,6 +16987,10 @@ const ADIA = () => {
                         id,
                       );
                       setActiveSysmlDiagramIdState(nav.activeDiagramId);
+                      setDiagramNavigationStack(nav.returnStack);
+                      setCurrentLayerId('root');
+                      setLayerStack([]);
+                      setLayerPath(['Root']);
                       if (nav.diagramKind === 'package') {
                         setActivePackageDiagramId(id);
                       }
@@ -17616,7 +17707,10 @@ const ADIA = () => {
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={(e) => {
+                  if (pendingBddBlockGestureRef.current) return;
+                  handleMouseUp(e);
+                }}
                 onDoubleClick={handleDoubleClick}
                 onWheel={handleWheel}
                 onContextMenu={(e) => e.preventDefault()}
@@ -20140,6 +20234,10 @@ const ADIA = () => {
           >
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
+              externalElements={[
+                ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
+                ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
+              ]}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');

@@ -159,4 +159,34 @@ describe('SysML Diagram Navigation Service', () => {
     // Definitions must remain unmodified
     expect(Object.keys(repo.definitions)).toContain('motor');
   });
+
+  it('opening another diagram resets return stack so root navigation returns to the new diagram', () => {
+    const repo = createRepoWithMultipleDiagrams();
+    let state = createInitialNavigationState();
+
+    // 1. Enter Block 'vehicle' from BDD-A ('bdd-top-level')
+    state = openExactDiagram(state, repo, 'bdd-top-level');
+    state = enterBlockContext(state, repo, 'vehicle');
+    expect(state.activeDiagramId).toBe('vehicle');
+    expect(state.returnStack).toHaveLength(1);
+    expect(state.returnStack[0].diagramId).toBe('bdd-top-level');
+
+    // 2. Open BDD-B ('bdd-powertrain') via tree/tab (openExactDiagram)
+    state = openExactDiagram(state, repo, 'bdd-powertrain');
+    expect(state.activeDiagramId).toBe('bdd-powertrain');
+    expect(state.diagramKind).toBe('bdd');
+    expect(state.returnStack).toHaveLength(0);
+
+    // 3. Enter another Block ('motor') in BDD-B
+    state = enterBlockContext(state, repo, 'motor');
+    expect(state.activeDiagramId).toBe('motor');
+    expect(state.returnStack).toHaveLength(1);
+    expect(state.returnStack[0].diagramId).toBe('bdd-powertrain');
+
+    // 4. Navigate Root must return to BDD-B, NOT stale BDD-A
+    state = navigateRoot(state, repo);
+    expect(state.activeDiagramId).toBe('bdd-powertrain');
+    expect(state.diagramKind).toBe('bdd');
+    expect(state.returnStack).toHaveLength(0);
+  });
 });

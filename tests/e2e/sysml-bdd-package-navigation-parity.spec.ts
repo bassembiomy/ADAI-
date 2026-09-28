@@ -67,6 +67,7 @@ async function reloadAndReopenProject(page: import('@playwright/test').Page, sav
 
 test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () => {
   test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await openModeler(page);
   });
 
@@ -119,39 +120,61 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
         diagramId: 'bdd',
         intent: {
           featureKind: 'property',
+          featureId: 'prop-ctrl',
           ownerBlockId: 'blk-engine',
           name: 'ctrl',
           typeId: 'blk-controller',
           aggregation: 'none',
         },
       });
-      execute({
-        type: 'createAndPresent',
-        diagramId: 'bdd',
-        element: {
-          id: 'rel-engine-ctrl',
-          name: 'ctrlAssoc',
-          kind: 'association',
-          sourceId: 'blk-engine',
-          targetId: 'blk-controller',
-        },
-        presentation: {},
-      });
     });
 
-    // Verify association styling: edge uses dedicated association color
-    const state = await repoState(page);
-    expect(state.associationColor).toBe('var(--sysml-sem-association)');
-    expect(state.relationships).toContain('rel-engine-ctrl');
+    // Verify property appears in the Engine block compartment
+    const propElement = page.locator('text[data-property-id="prop-ctrl"]').first();
+    await expect(propElement).toBeVisible({ timeout: 5000 });
+
+    // Use Playwright pointer movement so hit-testing and the complete drag lifecycle run.
+    const targetBlock = page.locator('g[data-semantic-id="blk-controller"]').first();
+    await expect(targetBlock).toBeVisible({ timeout: 5000 });
+    await propElement.dragTo(targetBlock, { targetPosition: { x: 30, y: 50 } });
+
+    const createdRel = await page.evaluate(() => {
+      const repo = (window as any).__sysmlRepository;
+      return Object.values(repo.relationships).find((r: any) => r.sourceId === 'prop-ctrl' && r.targetId === 'blk-controller') as any;
+    });
+
+    // Verify created relationship has property ID as sourceId (not the owner block)
+    expect(createdRel).toBeDefined();
+    expect(createdRel.kind).toBe('association');
 
     // Check SVG canvas for the relationship edge
-    const edgeGroup = page.locator('g[data-semantic-id="rel-engine-ctrl"]').first();
+    const edgeGroup = page.locator(`g[data-semantic-id="${createdRel.id}"]`).first();
     await expect(edgeGroup).toBeVisible({ timeout: 5000 });
 
-    const stroke = await page.evaluate(() => {
-      const el = document.querySelector('g[data-semantic-id="rel-engine-ctrl"] path:nth-of-type(2)');
+    // Assert that the edge starts at the property compartment row
+    // Engine block is at x=100, y=100.
+    // Property row 0 is at local y = 45 + 0 * 12 + 6 = 51, so sp.y = 100 + 51 = 151.
+    // sp.x is at right boundary of owner block: 100 + ownerWidth >= 300.
+    const pathD = await page.evaluate((relId) => {
+      const el = document.querySelector(`g[data-semantic-id="${relId}"] path:nth-of-type(2)`);
+      return el ? el.getAttribute('d') : null;
+    }, createdRel.id);
+    expect(pathD).toBeTruthy();
+    const match = pathD!.match(/^M\s+([\d.]+)\s+([\d.]+)/);
+    expect(match).toBeTruthy();
+    const spX = parseFloat(match![1]);
+    const spY = parseFloat(match![2]);
+    expect(spX).toBeGreaterThanOrEqual(300);
+    expect(spY).toBeCloseTo(151, 0);
+
+    // Deselect newly created relationship to assert default semantic association styling
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    const stroke = await page.evaluate((relId) => {
+      const el = document.querySelector(`g[data-semantic-id="${relId}"] path:nth-of-type(2)`);
       return el ? getComputedStyle(el).stroke : '';
-    });
+    }, createdRel.id);
     expect(stroke).toMatch(/(167,\s*139,\s*250|a78bfa)/i);
 
     // Real save and reload
@@ -163,7 +186,55 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     const reloadedState = await repoState(page);
     expect(reloadedState.definitions).toContain('blk-engine');
     expect(reloadedState.definitions).toContain('blk-controller');
-    expect(reloadedState.relationships).toContain('rel-engine-ctrl');
+    expect(reloadedState.relationships).toContain(createdRel.id);
+  });
+
+  test('BDD block selects on release, but starts moving only after a held pointer drag', async ({ page }) => {
+    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.evaluate(() => {
+      (window as any).__sysmlExecuteCommand({
+        type: 'createAndPresent',
+        diagramId: 'bdd',
+        element: {
+          id: 'blk-click-drag',
+          name: 'ClickDragBlock',
+          kind: 'block',
+          namespace: [],
+          ownerId: 'model',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        },
+        presentation: { x: 120, y: 120, width: 180, height: 120 },
+      });
+    });
+
+    const block = page.locator('#adia-diagram-canvas g[data-semantic-id="blk-click-drag"]');
+    const selectionOutline = block.locator('rect[stroke-dasharray="5,5"]');
+    await expect(block).toBeVisible();
+    const box = await block.boundingBox();
+    expect(box).not.toBeNull();
+
+    await page.mouse.move(box!.x + 80, box!.y + 50);
+    await page.mouse.down();
+    await expect(selectionOutline).toHaveCount(0);
+    await page.mouse.up();
+    await expect(selectionOutline).toHaveCount(1);
+
+    const beforeDrag = await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramPresentations?.().bdd?.presentations?.['blk-click-drag']?.bounds?.x);
+    const transformBeforeDrag = await block.getAttribute('transform');
+    await page.mouse.move(box!.x + 80, box!.y + 50);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + 180, box!.y + 90, { steps: 5 });
+    await expect.poll(() => block.getAttribute('transform')).not.toBe(transformBeforeDrag);
+    const transformWhileHeld = await block.getAttribute('transform');
+    await page.mouse.up();
+    await page.mouse.move(box!.x + 220, box!.y + 100);
+    await expect.poll(() => block.getAttribute('transform')).toBe(transformWhileHeld);
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramPresentations?.().bdd?.presentations?.['blk-click-drag']?.bounds?.x)).toBeGreaterThan(beforeDrag);
   });
 
   test('2. Part creation inside active Block context without owner chooser and Root returns to origin BDD', async ({ page }) => {
@@ -313,6 +384,49 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     const mode2 = await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.());
     expect(activeId2).toBe('pkg-architecture');
     expect(mode2).toBe('package');
+
+    // Regression check: Opening another diagram clears return stack so Root returns to the new diagram
+    // 1. Double-click bdd-powertrain to activate it
+    await filterTree(page, 'Powertrain');
+    await page.locator('[data-semantic-id="bdd-powertrain"]').first().dblclick();
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('bdd-powertrain');
+
+    // 2. Create a block in bdd-powertrain and enter it
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      execute({
+        type: 'createAndPresent',
+        diagramId: 'bdd-powertrain',
+        element: {
+          id: 'blk-motor',
+          name: 'Motor',
+          kind: 'block',
+          namespace: [],
+          ownerId: 'model',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        },
+        presentation: { x: 200, y: 150, width: 180, height: 120 },
+      });
+    });
+
+    // Enter blk-motor
+    await page.locator('g[data-semantic-id="blk-motor"]').first().dblclick();
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('ibd');
+
+    // Click Root breadcrumb
+    await page.locator('button:has-text("Root")').first().click();
+    await page.waitForTimeout(300);
+
+    // Must return to bdd-powertrain, NOT bdd or stale diagram
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('bdd-powertrain');
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('bdd');
   });
 
   test('4. Package Diagram visual nesting and Show Contents without owner mutation; supported relationships', async ({ page }) => {
@@ -406,43 +520,71 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
       await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
     }
 
-    // Reveal package contents using Show Contents
-    const showContentsResult = await page.evaluate(() => {
-      const execute = (window as any).__sysmlExecuteCommand;
-      const res = execute({
-        type: 'showPackageContents',
-        diagramId: 'diag-pkg-test',
-        packageId: 'pkg-parent',
-        mode: 'direct',
-      });
-      const repo = (window as any).__sysmlRepository;
-      return {
-        committed: res.committed,
-        subOwner: repo.packages['pkg-sub']?.ownerId,
-        baseOwner: repo.definitions['blk-base']?.ownerId,
-      };
-    });
-    expect(showContentsResult.committed).toBe(true);
-    expect(showContentsResult.subOwner).toBe('pkg-parent');
-    expect(showContentsResult.baseOwner).toBe('pkg-parent');
+    // Reveal package contents via UI action on the Model Explorer tree
+    await filterTree(page, 'ParentPackage');
+    const parentRow = page.locator('.model-tree-row[data-semantic-id="pkg-parent"]').first();
+    await expect(parentRow).toBeVisible();
+    await parentRow.click({ button: 'right' });
+    const showContentsBtn = page.getByRole('menuitem', { name: 'Show Contents', exact: true });
+    await expect(showContentsBtn).toBeVisible();
+    await showContentsBtn.click();
+    await page.waitForTimeout(300);
 
-    // Create Generalization on Package Diagram: blk-derived specializes blk-base
-    const genResult = await page.evaluate(() => {
-      const execute = (window as any).__sysmlExecuteCommand;
-      const res = execute({
-        type: 'createAndPresent',
-        diagramId: 'diag-pkg-test',
-        element: {
-          id: 'rel-pkg-gen',
-          kind: 'generalization',
-          sourceId: 'blk-derived',
-          targetId: 'blk-base',
-        },
-        presentation: {},
-      });
-      return res.committed;
-    });
-    expect(genResult).toBe(true);
+    // Assert that the blocks inside ParentPackage are now presented on canvas
+    await expect(page.locator('g[data-semantic-id="blk-base"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('g[data-semantic-id="blk-derived"]')).toBeVisible({ timeout: 5000 });
+
+    // Verify semantic ownership in repository remains unchanged
+    const repoBeforeGen = await page.evaluate(() => (window as any).__sysmlRepository);
+    expect(repoBeforeGen.packages['pkg-sub']?.ownerId).toBe('pkg-parent');
+    expect(repoBeforeGen.definitions['blk-base']?.ownerId).toBe('pkg-parent');
+    expect(repoBeforeGen.definitions['blk-derived']?.ownerId).toBe('pkg-parent');
+
+    // Exercise every Package Diagram relationship tool through real canvas clicks.
+    // The resulting semantic relationship and its canvas projection must both exist.
+    const relationshipGestures = [
+      { label: 'Generalization', kind: 'generalization', source: 'blk-derived', target: 'blk-base' },
+      { label: 'Package Import', kind: 'packageImport', source: 'pkg-parent', target: 'pkg-sub' },
+      { label: 'Access', kind: 'packageImport', source: 'pkg-sub', target: 'pkg-parent', visibility: 'private' },
+      { label: 'Element Import', kind: 'elementImport', source: 'pkg-parent', target: 'blk-base' },
+      { label: 'Package Merge', kind: 'packageMerge', source: 'pkg-parent', target: 'pkg-sub' },
+      { label: 'Dependency', kind: 'dependency', source: 'blk-derived', target: 'blk-base' },
+    ] as const;
+
+    const createdRelationshipIds: string[] = [];
+    for (const gesture of relationshipGestures) {
+      await page.getByRole('button', { name: gesture.label, exact: true }).click();
+      const sourceNode = page.locator(`g[data-semantic-id="${gesture.source}"]`).first();
+      const targetNode = page.locator(`g[data-semantic-id="${gesture.target}"]`).first();
+      await sourceNode.click({ position: { x: 20, y: 45 } });
+      await targetNode.click({ position: { x: 20, y: 45 } });
+
+      const created = await page.evaluate(({ kind, source, target, visibility }) => {
+        const repo = (window as any).__sysmlRepository;
+        const relationship = Object.values(repo.relationships).find((rel: any) =>
+          rel.kind === kind && rel.sourceId === source && rel.targetId === target &&
+          (visibility === undefined || rel.visibility === visibility)
+        ) as any;
+        if (!relationship) return undefined;
+        const endpointSemanticsValid = kind === 'packageImport'
+          ? relationship.importingNamespaceId === source && relationship.importedPackageId === target
+          : kind === 'elementImport'
+            ? relationship.importingNamespaceId === source && relationship.importedElementId === target
+            : kind === 'packageMerge'
+              ? relationship.mergingPackageId === source && relationship.mergedPackageId === target
+              : relationship.sourceId === source && relationship.targetId === target;
+        return { id: relationship.id, endpointSemanticsValid };
+      }, gesture);
+      expect(created, `${gesture.label} should commit the expected semantic relationship`).toBeDefined();
+      expect(created!.endpointSemanticsValid, `${gesture.label} should preserve its typed semantic endpoints`).toBe(true);
+      createdRelationshipIds.push(created!.id);
+
+      await expect(page.locator(`g[data-semantic-id="${created!.id}"]`)).toBeVisible({ timeout: 5000 });
+    }
+
+    // Verify tree projection still maintains hierarchy
+    await filterTree(page, 'BaseClass');
+    await expect(page.locator('.model-tree-row[data-semantic-id="blk-base"]')).toBeVisible();
 
     // Save and reload
     const saved = await saveProject(page, 'package-diagram-parity.adia');
@@ -450,7 +592,9 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     await page.waitForTimeout(300);
 
     const reloaded = await repoState(page);
-    expect(reloaded.relationships).toContain('rel-pkg-gen');
+    for (const relationshipId of createdRelationshipIds) {
+      expect(reloaded.relationships).toContain(relationshipId);
+    }
     expect(reloaded.packages).toContain('pkg-parent');
     expect(reloaded.packages).toContain('pkg-sub');
   });

@@ -1,7 +1,7 @@
 import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import { deriveEvidenceStatus } from './evidence';
 import { hash, stableStringify } from './requirements';
-import { buildTraceabilityIndex, type TraceabilityIndex } from './traceabilityIndex';
+import { buildTraceabilityIndex, type TraceabilityExternalElement, type TraceabilityIndex } from './traceabilityIndex';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
 export type RtmChangeKind = 'unchanged' | 'added' | 'modified' | 'suspect';
@@ -29,7 +29,7 @@ export interface RtmCoveringElement {
   id: string;
   name: string;
   kind: SysmlRelationship['kind'];
-  type: 'block' | 'part';
+  type: string;
 }
 
 export interface RtmRequirementRelation {
@@ -105,8 +105,13 @@ export interface CoverageMetrics {
   verificationPercent: number;
 }
 
-export function buildTraceabilityMatrix(repo: SysmlRepository, filters: RtmFilters = {}, suppliedIndex?: TraceabilityIndex): TraceabilityMatrix {
-  const index = suppliedIndex ?? buildTraceabilityIndex(repo);
+export function buildTraceabilityMatrix(
+  repo: SysmlRepository,
+  filters: RtmFilters = {},
+  suppliedIndex?: TraceabilityIndex,
+  externalElements: TraceabilityExternalElement[] = [],
+): TraceabilityMatrix {
+  const index = suppliedIndex ?? buildTraceabilityIndex(repo, externalElements);
   const rows = Object.values(repo.requirements)
     .map(requirement => buildRow(repo, requirement, filters.compareBaselineId, index))
     .filter(row => matchesFilters(repo, row, filters))
@@ -269,23 +274,23 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
         coveringBlocks.push(item);
         satisfiedBy.push(item);
       } else {
-        const ref = resolveRef(repo, otherId);
-        const item: RtmCoveringElement = { id: otherId, name: ref.name, kind: r.kind, type: 'block' };
+        const ref = resolveRef(repo, otherId, index);
+        const item: RtmCoveringElement = { id: otherId, name: ref.name, kind: r.kind, type: ref.type ?? 'unknown' };
         coveringBlocks.push(item);
         satisfiedBy.push(item);
       }
     }
 
     if (r.kind === 'verify' && isTarget) {
-      verifiedBy.push(resolveRef(repo, otherId));
+      verifiedBy.push(resolveRef(repo, otherId, index));
     }
 
     if (r.kind === 'refine' && isTarget) {
-      refinedBy.push(resolveRef(repo, otherId));
+      refinedBy.push(resolveRef(repo, otherId, index));
     }
 
     if (r.kind === 'trace') {
-      tracedElements.push(resolveRef(repo, otherId));
+      tracedElements.push(resolveRef(repo, otherId, index));
     }
   }
 
@@ -301,7 +306,7 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     else if (artifact?.kind === 'behavior') behaviors.push(id);
     else if (artifact?.kind === 'simulation') simulations.push(id);
     else if (artifact) artifacts.push(id);
-    else if (!repo.requirements[id] && !repo.verificationCases[id]) unresolvedEndpointIds.push(id);
+    else if (!repo.requirements[id] && !repo.verificationCases[id] && !index.elementsById.has(id)) unresolvedEndpointIds.push(id);
   }
   const verificationCases = sortedUnique([
     ...(index.verificationCasesByRequirement.get(requirement.id) ?? []),
@@ -424,7 +429,7 @@ function csv(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function resolveRef(repo: SysmlRepository, id: string): RtmReference {
+function resolveRef(repo: SysmlRepository, id: string, index?: TraceabilityIndex): RtmReference {
   const req = repo.requirements[id];
   if (req) return { id, name: req.name || req.requirementId, kind: 'requirement', type: 'requirement' };
   const def = repo.definitions[id];
@@ -435,6 +440,8 @@ function resolveRef(repo: SysmlRepository, id: string): RtmReference {
   if (vc) return { id, name: vc.name, kind: 'verificationCase', type: 'verificationCase' };
   const art = repo.artifacts[id];
   if (art) return { id, name: art.name, kind: art.kind, type: art.kind };
+  const external = index?.elementsById.get(id) as TraceabilityExternalElement | undefined;
+  if (external) return { id, name: external.name, kind: external.kind, type: external.kind };
   return { id, name: id, kind: 'unknown', type: 'unknown' };
 }
 

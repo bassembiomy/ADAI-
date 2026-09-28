@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { SysmlRepository } from '../../engine/sysml/model';
+import type { TraceabilityExternalElement } from '../../engine/sysml/traceabilityIndex';
 import {
   buildTraceabilityMatrix,
   computeCoverageMetrics,
@@ -11,6 +12,7 @@ import { VirtualizedTraceabilityGrid } from './VirtualizedTraceabilityGrid';
 
 export interface TraceabilityMatrixProps {
   repository: SysmlRepository;
+  externalElements?: TraceabilityExternalElement[];
   onNavigate?: (elementId: string) => void;
   onExport?: (csv: string) => void;
 }
@@ -24,7 +26,7 @@ export function nextRtmFocusIndex(current: number, key: string, count: number): 
   return current;
 }
 
-export function TraceabilityMatrix({ repository, onNavigate, onExport }: TraceabilityMatrixProps) {
+export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onExport }: TraceabilityMatrixProps) {
   const [status, setStatus] = useState<RtmStatus | ''>('');
   const [owner, setOwner] = useState('');
   const [risk, setRisk] = useState('');
@@ -38,7 +40,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
   const complete = useMemo(() => buildTraceabilityMatrix(repository, {
     compareBaselineId: compareBaselineId || undefined,
     changeType: (changeType as any) || undefined,
-  }), [repository, compareBaselineId, changeType]);
+  }, undefined, externalElements), [repository, compareBaselineId, changeType, externalElements]);
 
   const matrix = useMemo(() => ({
     ...complete,

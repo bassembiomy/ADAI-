@@ -28,6 +28,7 @@ export function openExactDiagram(
   repo: Pick<SysmlRepository, 'diagrams' | 'definitions'>,
   diagramId: string,
   diagramKind?: string,
+  options?: { preserveReturnStack?: boolean },
 ): DiagramNavigationState {
   const existingDiagram = repo.diagrams[diagramId];
   const resolvedKind = existingDiagram?.diagramKind ?? diagramKind ?? (
@@ -38,7 +39,7 @@ export function openExactDiagram(
     activeDiagramId: diagramId,
     diagramKind: resolvedKind,
     contextElementId: undefined,
-    returnStack: state.returnStack,
+    returnStack: options?.preserveReturnStack ? state.returnStack : [],
   };
 }
 

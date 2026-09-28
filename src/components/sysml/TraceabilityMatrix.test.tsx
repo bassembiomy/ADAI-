@@ -76,6 +76,19 @@ describe('professional traceability matrix workspace', () => {
     expect(html).toContain('Controller');
   });
 
+  it('renders a State display name for a satisfy endpoint rather than its UUID', () => {
+    const repo = repository();
+    repo.relationships.stateSatisfy = { id: 'stateSatisfy', kind: 'satisfy', sourceId: 'state-uuid-123', targetId: 'r' };
+
+    const html = renderToStaticMarkup(<TraceabilityMatrix
+      repository={repo}
+      externalElements={[{ id: 'state-uuid-123', name: 'State_1', kind: 'state' }]}
+    />);
+
+    expect(html).toContain('State_1');
+    expect(html).not.toContain('state-uuid-123');
+  });
+
   it('renders deriveReqt, copy, refine, trace, and verify directional badges', () => {
     const repo = repository();
     repo.requirements.rDerived = {

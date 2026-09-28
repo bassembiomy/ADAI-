@@ -49,6 +49,18 @@ describe('canonical requirements traceability matrix', () => {
     expect(row.artifacts).toEqual(['code']);
   });
 
+  it('projects externally stored State endpoints by their display name, not their semantic ID', () => {
+    const repo = model();
+    repo.relationships.stateSatisfy = { id: 'stateSatisfy', kind: 'satisfy', sourceId: 'state-uuid-123', targetId: 'r1' };
+
+    const row = buildTraceabilityMatrix(repo, {}, undefined, [
+      { id: 'state-uuid-123', name: 'State_1', kind: 'state' },
+    ]).rows.find(item => item.requirement.id === 'r1')!;
+
+    expect(row.satisfiedBy).toContainEqual(expect.objectContaining({ id: 'state-uuid-123', name: 'State_1', type: 'state' }));
+    expect(row.unresolvedEndpointIds).not.toContain('state-uuid-123');
+  });
+
   it('assigns covered, failed, stale, suspect, uncovered, orphan, and unresolved statuses deterministically', () => {
     const repo = model();
     repo.requirements.r4 = requirement('r4');
