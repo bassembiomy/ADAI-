@@ -102,4 +102,27 @@ describe('BDD/IBD property usage reconciliation', () => {
     const second = reconcilePropertyUsages(first.blocks, first.parts, first.connectors, 'owner');
     expect(second).toEqual(first);
   });
+
+  it('reconciles canonical PartUsage ID into both BDD property compartment and IBD parts identically with no duplicate feature/usage on refresh', () => {
+    const vehicle = block('vehicle', 'Vehicle', [
+      { id: 'part-engine-1', name: 'engine', type: 'Motor', typeId: 'motor', kind: 'part', multiplicity: '1' }
+    ]);
+    const motor = block('motor', 'Motor');
+
+    // Reconcile from property to usages (BDD -> IBD)
+    const initial = reconcilePropertyUsages([vehicle, motor], [], [], 'vehicle', 'property');
+    expect(initial.parts).toHaveLength(1);
+    const partUsageId = initial.parts[0].id;
+    // The PartUsage ID in IBD must equal the property ID in BDD compartment
+    expect(partUsageId).toBe('part-engine-1');
+    expect(initial.parts[0].propertyId).toBe('part-engine-1');
+    expect(initial.blocks[0].properties[0].id).toBe('part-engine-1');
+
+    // Refresh (reconcileAllPropertyUsages)
+    const refreshed = reconcileAllPropertyUsages(initial.blocks, initial.parts, initial.connectors);
+    expect(refreshed.blocks.find(b => b.id === 'vehicle')?.properties).toHaveLength(1);
+    expect(refreshed.parts.filter(p => p.blockId === 'vehicle')).toHaveLength(1);
+    expect(refreshed.blocks.find(b => b.id === 'vehicle')?.properties[0].id).toBe('part-engine-1');
+    expect(refreshed.parts.find(p => p.blockId === 'vehicle')?.id).toBe('part-engine-1');
+  });
 });

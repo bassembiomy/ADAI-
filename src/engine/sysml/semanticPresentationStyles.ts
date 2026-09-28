@@ -40,6 +40,7 @@ export const SEMANTIC_PRESENTATION_ROLES: readonly SemanticPresentationRole[] = 
   'fullPort',
   'flowPort',
   'validRequirementRelationship',
+  'association',
   'selection',
   'warning',
   'error',
@@ -49,8 +50,8 @@ export const SEMANTIC_PRESENTATION_ROLES: readonly SemanticPresentationRole[] = 
  * Exactly one CSS custom property per role. Tokens are defined for both
  * light and dark themes in `src/index.css` and reuse existing ADIA palette
  * families (block blue, requirement neutral, state orange, port
- * blue/green/amber accents, requirement-relationship accent, application
- * orange/amber/red for selection/warning/error).
+ * blue/green/amber accents, requirement-relationship accent, association
+ * violet accent, application orange/amber/red for selection/warning/error).
  */
 export const SEMANTIC_PRESENTATION_ROLE_TOKENS: Record<
   SemanticPresentationRole,
@@ -64,6 +65,7 @@ export const SEMANTIC_PRESENTATION_ROLE_TOKENS: Record<
   fullPort: '--sysml-sem-full-port',
   flowPort: '--sysml-sem-flow-port',
   validRequirementRelationship: '--sysml-sem-valid-requirement-relationship',
+  association: '--sysml-sem-association',
   selection: '--sysml-sem-selection',
   warning: '--sysml-sem-warning',
   error: '--sysml-sem-error',

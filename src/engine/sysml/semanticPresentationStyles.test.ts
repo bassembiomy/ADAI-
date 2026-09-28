@@ -22,6 +22,7 @@ describe('semanticPresentationStyles role mapping (spec 3.5)', () => {
       'fullPort',
       'flowPort',
       'validRequirementRelationship',
+      'association',
       'selection',
       'warning',
       'error',
@@ -235,6 +236,33 @@ describe('elementPresentationColor status-role precedence (review follow-up)', (
     expect(
       elementPresentationColor('validRequirementRelationship', 'bdd', 'rel-1', presentationsFor('not a color;;;')),
     ).toBe(token);
+  });
+
+  it('proves Association uses its own token, distinct from other relationship roles, and override does not affect validation', () => {
+    const assocToken = semanticPresentationToken('association');
+    const reqRelToken = semanticPresentationToken('validRequirementRelationship');
+    const blockToken = semanticPresentationToken('block');
+
+    expect(assocToken).toBe('var(--sysml-sem-association)');
+    expect(assocToken).not.toBe(reqRelToken);
+    expect(assocToken).not.toBe(blockToken);
+
+    // Presentation override applies to rendering only
+    const resolved = resolveSemanticPresentation('association', {
+      customization: { color: '#8b5cf6' },
+    });
+    expect(resolved.role).toBe('association');
+    expect(resolved.color).toBe('#8b5cf6');
+    expect(resolved.isOverride).toBe(true);
+    expect(resolved.token).toBe('var(--sysml-sem-association)');
+
+    // Selection and error take precedence over base association role
+    expect(
+      elementPresentationColor('association', 'bdd', 'rel-assoc-1', presentationsFor('#8b5cf6'), 'selected'),
+    ).toBe(semanticPresentationToken('selection'));
+    expect(
+      elementPresentationColor('association', 'bdd', 'rel-assoc-1', presentationsFor('#8b5cf6'), 'error'),
+    ).toBe(semanticPresentationToken('error'));
   });
 });
 

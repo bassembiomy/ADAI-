@@ -442,5 +442,34 @@ describe('SysML Owned Feature Commands', () => {
       expect(res.command.intent.featureId).toBe('port-custom-1');
     });
   });
+
+  describe('Task 4: Active Block Owner Context and Canonical Part Creation', () => {
+    it('with Block Vehicle active, a canvas Add Part intent without ownerBlockId resolves owner to Vehicle, requires an explicit type, and creates one canonical PartUsage ID', () => {
+      const repo = createFixture();
+      // 1. Without type: requires explicit existing Block type
+      const noTypePlan = planOwnedPropertyCreation(repo, {
+        activeBlockId: 'vehicle',
+        propertyKind: 'part',
+      });
+      expect(noTypePlan.outcome).toBe('typeSelection');
+      if (noTypePlan.outcome !== 'typeSelection') return;
+      expect(noTypePlan.request.ownerId).toBe('vehicle');
+      expect(noTypePlan.request.candidates.map(c => c.id)).toContain('motor');
+
+      // 2. With explicit type: resolves owner to vehicle and creates one canonical PartUsage ID
+      const withType = buildCreateOwnedPropertyCommand(repo, {
+        activeBlockId: 'vehicle',
+        propertyKind: 'part',
+        typeId: 'motor',
+        name: 'engine',
+      });
+      expect(withType.ok).toBe(true);
+      expect(withType.command?.intent.ownerBlockId).toBe('vehicle');
+      if (withType.command?.intent.featureKind !== 'property') throw new Error('expected property intent');
+      expect(withType.command.intent.typeId).toBe('motor');
+      expect(withType.command.intent.usageId).toBeDefined();
+      expect(typeof withType.command.intent.usageId).toBe('string');
+    });
+  });
 });
 

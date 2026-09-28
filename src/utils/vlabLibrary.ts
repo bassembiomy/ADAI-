@@ -1024,6 +1024,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 50,
             "unit": "Hz",
             "label": "Frequency"
+          },
+          "phase": {
+            "value": 0.7853981633974483,
+            "unit": "rad",
+            "label": "Phase"
+          },
+          "R_int": {
+            "value": 0.001,
+            "unit": "Ω",
+            "label": "Internal Resistance"
           }
         },
         "ports": [
@@ -1040,7 +1050,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V(t) = Vpk * sin(2*π*f*t + φ)",
+        "equation": "V(t) = Vpk * sin(2*π*f*t + phase); Vp - Vn = V(t) + I * R_int",
         "description": "Sinusoidal AC voltage source generating harmonic electrical potential."
       },
       {

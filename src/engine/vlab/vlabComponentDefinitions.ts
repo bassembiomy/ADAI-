@@ -206,8 +206,8 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An ideal constant voltage source. Maintains a fixed potential regardless of the load current.'
   },
   ac_voltage: {
-    equations: ['Vp - Vn = Vpk * sin(2*pi*f*t)'],
-    latex: ['v = V_{pk} \sin(\omega t)'],
+    equations: ['Vp - Vn = Vpk * sin(2*pi*f*t + phase) + I * R_int'],
+    latex: ['v = V_{pk} \sin(\omega t + \phi) + i R_{int}'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'An ideal sinusoidal voltage source. Used for modeling mains power or signal generators.'
   },

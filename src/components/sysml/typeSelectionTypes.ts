@@ -50,6 +50,7 @@ export type SemanticPresentationRole =
   | 'fullPort'
   | 'flowPort'
   | 'validRequirementRelationship'
+  | 'association'
   | 'selection'
   | 'warning'
   | 'error';

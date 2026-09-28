@@ -173,13 +173,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   ac_voltage: ({ across, branch, params, ctx }) => {
-    // Vp - Vn - Vpk * sin(2*pi*f*t + pi/4) = 0
-    // Shifting by pi/4 ensures that at dt=0.05s steps (multiple of half-period for 50Hz/60Hz),
-    // the wave is sampled at exactly RMS magnitude (0.7071 * Vpk) instead of zero-crossings.
-    const Vpk = params.Vpk !== undefined ? params.Vpk : 230;
-    const f = params.f !== undefined ? params.f : 50;
-    const R_int = params.R_int || 1e-3;
-    const V_ac = Vpk * Math.sin(2 * Math.PI * f * ctx.time + Math.PI / 4);
+    // Vp - Vn - Vpk * sin(2*pi*f*t + phase) - I*R_int = 0
+    const parameterValue = (value: any, fallback: number) => {
+      const raw = value && typeof value === 'object' && 'value' in value ? value.value : value;
+      const numeric = Number(raw);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+    const Vpk = parameterValue(params.Vpk, 230);
+    const f = parameterValue(params.f, 50);
+    const phase = parameterValue(params.phase, Math.PI / 4);
+    const R_int = parameterValue(params.R_int, 1e-3);
+    const V_ac = Vpk * Math.sin(2 * Math.PI * f * ctx.time + phase);
     return [(across[0] - across[1]) - V_ac - branch[0] * R_int];
   },
   

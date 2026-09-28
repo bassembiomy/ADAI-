@@ -57,6 +57,7 @@
   --sysml-sem-full-port: #34d399;
   --sysml-sem-flow-port: #fbbf24;
   --sysml-sem-valid-requirement-relationship: #6c9ac6;
+  --sysml-sem-association: #a78bfa;
   --sysml-sem-selection: #f97316;
   --sysml-sem-warning: #fbbf24;
   --sysml-sem-error: #f87171;
@@ -109,6 +110,7 @@
   --sysml-sem-full-port: #087f73;
   --sysml-sem-flow-port: #92400e;
   --sysml-sem-valid-requirement-relationship: #0369a1;
+  --sysml-sem-association: #6d28d9;
   --sysml-sem-selection: #ea580c;
   --sysml-sem-warning: #92400e;
   --sysml-sem-error: #b91c1c;

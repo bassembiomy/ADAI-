@@ -929,6 +929,17 @@ function gateCreateElement(repo: SysmlRepository, element: SysmlElement, context
 function gateUpdateElement(
   repo: SysmlRepository, elementId: string, patch: Record<string, unknown>, context?: SemanticEndpointContext,
 ): SysmlDiagnostic[] | null {
+  if ('ownerId' in patch) {
+    const existing = repo.definitions[elementId] || repo.packages[elementId] || repo.requirements[elementId] || repo.diagrams[elementId] || repo.usages[elementId] || repo.connectors[elementId] || repo.relationships[elementId] || repo.verificationCases[elementId];
+    if (existing && 'ownerId' in existing && patch.ownerId !== (existing as any).ownerId) {
+      return [{
+        code: 'OWNERSHIP_CHANGE_REQUIRES_MOVE',
+        severity: 'error' as const,
+        elementId,
+        message: 'Direct modification of ownerId via updateElement is not allowed. Use the explicit moveElements command to change ownership.',
+      }];
+    }
+  }
   const definition = repo.definitions[elementId];
   if (definition && definition.kind === 'block') {
     const verdict = validateCanonicalBlockUpdate(repo, elementId, patch);
@@ -2696,7 +2707,8 @@ export function executeSysmlCommand(
       const packageRelationship = state.repository.relationships[elementId];
       const isPackageRelationship = packageRelationship && (
         packageRelationship.kind === 'packageImport' || packageRelationship.kind === 'elementImport' ||
-        packageRelationship.kind === 'packageMerge' || packageRelationship.kind === 'dependency'
+        packageRelationship.kind === 'packageMerge' || packageRelationship.kind === 'dependency' ||
+        packageRelationship.kind === 'generalization'
       );
       if (diagramKind === 'package' && isPackageRelationship &&
         (!presentedIds.has(packageRelationship.sourceId) || !presentedIds.has(packageRelationship.targetId))) {

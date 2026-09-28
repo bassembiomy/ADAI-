@@ -198,4 +198,37 @@ describe('AppModelExplorer Capability Coverage', () => {
     const result = capabilityToAction(enabledCapability(capabilityKind), selectedNode, context);
     expect(result.kind).not.toBe('unhandled');
   });
+
+  it('tree activation callback receives the exact diagram semantic ID and kind', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+    const repo = createEmptyRepository();
+    repo.diagrams['bdd-powertrain-1'] = {
+      id: 'bdd-powertrain-1',
+      name: 'Powertrain BDD',
+      ownerId: 'model',
+      namespace: [],
+      kind: 'diagram',
+      diagramKind: 'bdd',
+    };
+    const onDoubleClick = vi.fn();
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="bdd"
+        states={[]}
+        layers={[]}
+        transitions={[]}
+        junctions={[]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        canonicalSysmlRepository={repo}
+        onSelect={vi.fn()}
+        onDoubleClick={onDoubleClick}
+      />
+    );
+    const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:bdd-powertrain-1"]');
+    expect(row).not.toBeNull();
+    fireEvent.doubleClick(row!);
+    expect(onDoubleClick).toHaveBeenCalledWith('bdd-powertrain-1', 'diagram');
+  });
 });

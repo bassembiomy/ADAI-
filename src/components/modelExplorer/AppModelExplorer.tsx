@@ -263,7 +263,7 @@ export interface AppModelExplorerProps {
   selectedIds: string[];
   onSelect: (id: string, multiSelect?: boolean) => void;
   onSelectMultiple?: (ids: string[]) => void;
-  onDoubleClick: (id: string) => void;
+  onDoubleClick: (id: string, kind?: string) => void;
   onCommitStateMachineSnapshot?: (snapshot: StateMachineExplorerSnapshot, description: string) => void;
   onUpdateStates?: (states: StateData[]) => void;
   onUpdateLayers?: (layers: Layer[]) => void;
@@ -522,7 +522,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   const handleActivateNode = useCallback(
     (node: ModelTreeNode) => {
-      onDoubleClick(node.semanticId);
+      onDoubleClick(node.semanticId, node.kind);
     },
     [onDoubleClick]
   );
@@ -569,7 +569,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
       if (capability.kind === 'reveal') {
         if (node.kind === 'diagram') {
-          onDoubleClick(node.semanticId);
+          onDoubleClick(node.semanticId, node.kind);
         } else if (onRevealInContainment) {
           onRevealInContainment(node.semanticId);
         } else {

@@ -19,7 +19,8 @@ export interface PresentationCoordinates {
 }
 
 export interface CreateOwnedPortIntent {
-  ownerBlockId: string;
+  ownerBlockId?: string;
+  activeBlockId?: string;
   portKind: CanonicalPortKind;
   typeId?: string;
   name?: string;
@@ -31,7 +32,8 @@ export interface CreateOwnedPortIntent {
 }
 
 export interface CreateOwnedPropertyIntent {
-  ownerBlockId: string;
+  ownerBlockId?: string;
+  activeBlockId?: string;
   propertyKind: 'part' | 'reference' | 'value' | 'flow';
   typeId?: string;
   name?: string;
@@ -253,15 +255,27 @@ export function getCompatiblePropertyCandidates(repo: SysmlRepository, propertyK
 }
 
 export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: CreateOwnedPortIntent): CommandBuildResult {
-  const owner = repo.definitions[intent.ownerBlockId] as BlockDefinition | undefined;
+  const resolvedOwnerId = intent.ownerBlockId || intent.activeBlockId;
+  if (!resolvedOwnerId) {
+    return {
+      ok: false,
+      diagnostics: [
+        {
+          code: 'ELEMENT_NOT_FOUND',
+          message: 'No owner block specified or active.',
+        },
+      ],
+    };
+  }
+  const owner = repo.definitions[resolvedOwnerId] as BlockDefinition | undefined;
   if (!owner || owner.kind !== 'block') {
     return {
       ok: false,
       diagnostics: [
         {
           code: 'ELEMENT_NOT_FOUND',
-          message: `Owner block "${intent.ownerBlockId}" does not exist.`,
-          elementId: intent.ownerBlockId,
+          message: `Owner block "${resolvedOwnerId}" does not exist.`,
+          elementId: resolvedOwnerId,
         },
       ],
     };
@@ -329,7 +343,7 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
     type: 'createOwnedFeature',
     intent: {
       featureKind: 'port',
-      ownerBlockId: intent.ownerBlockId,
+      ownerBlockId: resolvedOwnerId,
       portKind: intent.portKind,
       ...(intent.typeId ? { typeId: intent.typeId } : {}),
       name: portName,
@@ -349,15 +363,27 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
 }
 
 export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: CreateOwnedPropertyIntent): CommandBuildResult {
-  const owner = repo.definitions[intent.ownerBlockId] as BlockDefinition | undefined;
+  const resolvedOwnerId = intent.ownerBlockId || intent.activeBlockId;
+  if (!resolvedOwnerId) {
+    return {
+      ok: false,
+      diagnostics: [
+        {
+          code: 'ELEMENT_NOT_FOUND',
+          message: 'No owner block specified or active.',
+        },
+      ],
+    };
+  }
+  const owner = repo.definitions[resolvedOwnerId] as BlockDefinition | undefined;
   if (!owner || owner.kind !== 'block') {
     return {
       ok: false,
       diagnostics: [
         {
           code: 'ELEMENT_NOT_FOUND',
-          message: `Owner block "${intent.ownerBlockId}" does not exist.`,
-          elementId: intent.ownerBlockId,
+          message: `Owner block "${resolvedOwnerId}" does not exist.`,
+          elementId: resolvedOwnerId,
         },
       ],
     };
@@ -372,7 +398,7 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
         {
           code: 'TYPE_NOT_FOUND',
           message: `A compatible type is required for ${intent.propertyKind} property.`,
-          elementId: intent.ownerBlockId,
+          elementId: resolvedOwnerId,
         },
       ],
       candidates,
@@ -393,7 +419,7 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
         {
           code: 'TYPE_NOT_FOUND',
           message: `Type "${intent.typeId}" not found in repository.`,
-          elementId: intent.ownerBlockId,
+          elementId: resolvedOwnerId,
         },
       ],
       candidates,
@@ -408,7 +434,7 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
         {
           code: 'INVALID_PROPERTY_TYPE',
           message: `${intent.propertyKind} property must be typed by a Block, but "${typeDef.name}" is a ${typeDef.kind}.`,
-          elementId: intent.ownerBlockId,
+          elementId: resolvedOwnerId,
         },
       ],
       candidates,
@@ -422,7 +448,7 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
         {
           code: 'INVALID_PROPERTY_TYPE',
           message: `Value property must be typed by a ValueType, but "${typeDef.name}" is a ${typeDef.kind}.`,
-          elementId: intent.ownerBlockId,
+          elementId: resolvedOwnerId,
         },
       ],
       candidates,
@@ -431,17 +457,18 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
 
   const propId = intent.featureId || `prop-${Math.random().toString(36).slice(2, 9)}`;
   const propName = intent.name || `prop${(owner.properties?.length ?? 0) + 1}`;
+  const canonicalUsageId = intent.usageId || (intent.propertyKind === 'part' || intent.propertyKind === 'reference' ? `part-${propId}` : undefined);
 
   const command: CreateOwnedFeatureCommand = {
     type: 'createOwnedFeature',
     intent: {
       featureKind: 'property',
-      ownerBlockId: intent.ownerBlockId,
+      ownerBlockId: resolvedOwnerId,
       propertyKind: intent.propertyKind,
       typeId: typeDef.id,
       name: propName,
       featureId: propId,
-      ...(intent.usageId ? { usageId: intent.usageId } : {}),
+      ...(canonicalUsageId ? { usageId: canonicalUsageId } : {}),
     },
     ...(intent.diagramId ? { diagramId: intent.diagramId } : {}),
     ...(intent.presentation ? { presentation: intent.presentation } : {}),
@@ -566,11 +593,12 @@ export function planOwnedPortCreation(repo: SysmlRepository, intent: CreateOwned
   if (result.ok && result.command) {
     return { outcome: 'command', command: result.command };
   }
+  const resolvedOwnerId = intent.ownerBlockId || intent.activeBlockId;
   // Mirror the tree preflight rule: type-selection is offered only when no
   // type was chosen yet. An explicitly chosen but unresolvable or
   // incompatible type is a structured error, never a silent substitution.
   if (!intent.typeId && result.diagnostics.some(diagnostic => diagnostic.code === 'TYPE_NOT_FOUND') && result.action) {
-    return toTypeSelectionOutcome(intent.ownerBlockId, PORT_KIND_TO_TYPED_FEATURE_KIND[intent.portKind], result);
+    return toTypeSelectionOutcome(resolvedOwnerId ?? '', PORT_KIND_TO_TYPED_FEATURE_KIND[intent.portKind], result);
   }
   return toErrorOutcome(result);
 }
@@ -583,9 +611,10 @@ export function planOwnedPropertyCreation(
   if (result.ok && result.command) {
     return { outcome: 'command', command: result.command };
   }
+  const resolvedOwnerId = intent.ownerBlockId || intent.activeBlockId;
   if (!intent.typeId && result.diagnostics.some(diagnostic => diagnostic.code === 'TYPE_NOT_FOUND') && result.action) {
     return toTypeSelectionOutcome(
-      intent.ownerBlockId,
+      resolvedOwnerId ?? '',
       PROPERTY_KIND_TO_TYPED_FEATURE_KIND[intent.propertyKind],
       result,
     );

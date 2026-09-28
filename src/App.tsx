@@ -162,7 +162,7 @@ import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './servi
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortToolMenu } from './components/sysml/PortToolMenu';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
-import { planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
+import { buildCreateOwnedPropertyCommand, planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
 import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
@@ -176,6 +176,15 @@ import { elementPresentationColor, isValidPresentationColor, portKindToPresentat
 import { buildCreateIbdConnectorCommand } from './services/sysmlIbdConnectorCommands';
 import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
 import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
+import {
+  createInitialNavigationState,
+  enterBlockContext,
+  navigateBack,
+  navigateRoot,
+  openExactDiagram,
+  recoverNavigationState,
+  type DiagramNavigationStackEntry,
+} from './services/sysmlDiagramNavigation';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -6122,7 +6131,7 @@ const ADIA = () => {
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
-  const [packageRelationshipTool, setPackageRelationshipTool] = useState<null | 'packageImport' | 'access' | 'elementImport' | 'packageMerge' | 'dependency'>(null);
+  const [packageRelationshipTool, setPackageRelationshipTool] = useState<null | 'generalization' | 'packageImport' | 'access' | 'elementImport' | 'packageMerge' | 'dependency'>(null);
   const [packageRelationshipSourceId, setPackageRelationshipSourceId] = useState<string | null>(null);
   const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -6172,6 +6181,8 @@ const ADIA = () => {
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
   const [activePackageDiagramId, setActivePackageDiagramId] = useState<string | null>(null);
+  const [activeSysmlDiagramIdState, setActiveSysmlDiagramIdState] = useState<string | null>(null);
+  const [diagramNavigationStack, setDiagramNavigationStack] = useState<DiagramNavigationStackEntry[]>([]);
   const [packageDiagramChooser, setPackageDiagramChooser] = useState<{ diagramIds: string[] } | null>(null);
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
@@ -6251,7 +6262,27 @@ const ADIA = () => {
     .find(diagram => diagram.diagramKind === 'package')?.id;
   const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId
     : diagramMode === 'package' ? (selectedPackageDiagram?.diagramKind === 'package' ? selectedPackageDiagram.id : fallbackPackageDiagramId ?? '')
-    : diagramMode;
+    : activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode
+      ? activeSysmlDiagramIdState
+      : Object.values(canonicalSysmlRepository.diagrams).find(d => d.diagramKind === diagramMode)?.id ?? diagramMode;
+
+  useEffect(() => {
+    const nav = recoverNavigationState(
+      {
+        activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+        returnStack: diagramNavigationStack,
+      },
+      canonicalSysmlRepository,
+    );
+    if (activeSysmlDiagramIdState && nav.activeDiagramId !== activeSysmlDiagramIdState) {
+      setActiveSysmlDiagramIdState(nav.activeDiagramId);
+    }
+    if (nav.returnStack.length !== diagramNavigationStack.length) {
+      setDiagramNavigationStack(nav.returnStack);
+    }
+  }, [canonicalSysmlRepository]);
   const sysmlCanvasView = useMemo(() => projectDiagramScopedCanvasView(
     { packages, blocks, relationships, parts, connectors },
     activeSysmlDiagramId,
@@ -6369,9 +6400,12 @@ const ADIA = () => {
       (window as any).__adiaTestHooks = {
         semanticToken: (role: string) => semanticPresentationToken(role),
         getDiagramPresentations: () => sysmlDiagramPresentations,
+        getActiveDiagramId: () => activeSysmlDiagramId,
+        getDiagramMode: () => diagramMode,
+        getNavigationStack: () => diagramNavigationStack,
       };
     }
-  }, [sysmlDiagramPresentations]);
+  }, [sysmlDiagramPresentations, activeSysmlDiagramId, diagramMode, diagramNavigationStack]);
 
   // Report Application Delegate connected to the real report export pipeline
   const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
@@ -9416,6 +9450,19 @@ const ADIA = () => {
     const block = blocks.find(b => b.id === blockId);
     if (!block) return;
 
+    const nav = enterBlockContext(
+      {
+        activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+        returnStack: diagramNavigationStack,
+      },
+      canonicalSysmlRepository,
+      blockId,
+    );
+    setDiagramNavigationStack(nav.returnStack);
+    setActiveSysmlDiagramIdState(nav.activeDiagramId);
+
     setLayerStack(prev => [...prev, currentLayerId]);
     setLayerPath(prev => [...prev, block.name]);
     setCurrentLayerId(blockId);
@@ -9423,7 +9470,7 @@ const ADIA = () => {
     setSelectedIds([]);
     setView({ scale: 1, offsetX: 0, offsetY: 0 });
     addError('info', `Entered block: ${block.name}`);
-  }, [blocks, currentLayerId, addError]);
+  }, [blocks, currentLayerId, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
 
   const exitLayer = useCallback(() => {
     if (layerStack.length === 0) return;
@@ -9432,13 +9479,26 @@ const ADIA = () => {
     setLayerPath(prev => prev.slice(0, -1));
     setCurrentLayerId(parentLayerId);
 
-    if (diagramMode === 'ibd' && parentLayerId === 'root') {
-      setDiagramMode('bdd');
+    if (diagramMode === 'ibd') {
+      const nav = navigateBack(
+        {
+          activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+          diagramKind: diagramMode,
+          contextElementId: currentLayerId,
+          returnStack: diagramNavigationStack,
+        },
+        canonicalSysmlRepository,
+      );
+      setDiagramNavigationStack(nav.returnStack);
+      setActiveSysmlDiagramIdState(nav.activeDiagramId);
+      if (nav.diagramKind !== diagramMode) {
+        setDiagramMode(nav.diagramKind as DiagramMode);
+      }
     }
 
     setSelectedIds([]);
     addError('info', 'Returned to parent layer');
-  }, [layerStack, diagramMode, addError]);
+  }, [layerStack, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
 
   const goToLayer = useCallback((index: number) => {
     if (index >= layerPath.length - 1) return;
@@ -9447,13 +9507,30 @@ const ADIA = () => {
     setLayerPath(prev => prev.slice(0, index + 1));
     setCurrentLayerId(targetLayerId);
 
-    if (diagramMode === 'ibd' && targetLayerId === 'root') {
-      setDiagramMode('bdd');
+    if (diagramMode === 'ibd') {
+      if (targetLayerId === 'root' || index === 0) {
+        const nav = navigateRoot(
+          {
+            activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+            diagramKind: diagramMode,
+            contextElementId: currentLayerId,
+            returnStack: diagramNavigationStack,
+          },
+          canonicalSysmlRepository,
+        );
+        setDiagramNavigationStack(nav.returnStack);
+        setActiveSysmlDiagramIdState(nav.activeDiagramId);
+        if (nav.diagramKind !== diagramMode) {
+          setDiagramMode(nav.diagramKind as DiagramMode);
+        }
+      } else {
+        setDiagramNavigationStack(prev => prev.slice(0, index));
+      }
     }
 
     setSelectedIds([]);
     addError('info', `Navigated to layer: ${layerPath[index]}`);
-  }, [layerStack, layerPath, diagramMode, addError]);
+  }, [layerStack, layerPath, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
 
   // STATE MACHINE EDITOR
   const createState = useCallback((x: number, y: number, parentId?: string) => {
@@ -10112,9 +10189,27 @@ const ADIA = () => {
     let label: string;
     let sourceMultiplicity = '1';
     if (bddFeatureDrag.kind === 'property') {
-      const typeMatchesTarget = bddFeatureDrag.typeId === target.id || bddFeatureDrag.typeName === target.name;
-      if (!typeMatchesTarget) {
-        addError('warning', `This property is typed by ${bddFeatureDrag.typeName}; drop it onto that Block to create its association.`);
+      const geometryResult = resolveBddPropertyRelationshipGeometry({
+        propertyId: bddFeatureDrag.featureId,
+        ownerBlockId: bddFeatureDrag.ownerId,
+        targetBlockId: target.id,
+        blocks: blocks.map(b => ({
+          id: b.id,
+          name: b.name,
+          x: b.x,
+          y: b.y,
+          width: b.width,
+          height: b.height,
+          properties: b.properties?.map(p => ({
+            id: p.id,
+            name: p.name,
+            typeId: p.typeId,
+            typeName: p.type,
+          })),
+        })),
+      });
+      if (!geometryResult.ok && geometryResult.diagnostic) {
+        addError('warning', geometryResult.diagnostic.message);
         setBddFeatureDrag(null);
         return;
       }
@@ -10202,25 +10297,6 @@ const ADIA = () => {
   // Existing callers omit the parameter and keep the closure behavior.
   const commitIbdPartAt = useCallback((typeId: string, ownerBlockId: string, x: number, y: number, name: string, repository?: typeof canonicalSysmlRepository) => {
     const repo = repository ?? canonicalSysmlRepository;
-    const resolved = createTypedUsageCommand(repo, {
-      ownerId: ownerBlockId,
-      name,
-      typeId,
-      kind: 'part',
-    });
-
-    if (!resolved.ok) {
-      setPropertyTypePrompt(prev => prev ? { ...prev, error: resolved.message } : null);
-      return;
-    }
-
-    const part = createPartUsage({
-      ownerId: ownerBlockId,
-      typeId: resolved.type.id,
-      name,
-      aggregation: 'composite',
-      existingNames: parts.map(p => p.name),
-    });
 
     const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId);
     const frameX = contextBlock?.ibdX ?? 50;
@@ -10233,31 +10309,57 @@ const ADIA = () => {
     initialX = Math.max(frameX + 30, Math.min(initialX, frameX + frameW - 180));
     initialY = Math.max(frameY + 40, Math.min(initialY, frameY + frameH - 140));
 
-    const result = handleExecuteSysmlCommand(buildCreatePartUsageCommand(repo, part, {
-      x: initialX,
-      y: initialY,
-      width: 150,
-      height: 100,
-    }, currentLayerId));
+    const plan = buildCreateOwnedPropertyCommand(repo, {
+      ownerBlockId,
+      propertyKind: 'part',
+      typeId,
+      name,
+      diagramId: currentLayerId,
+      presentation: {
+        x: initialX,
+        y: initialY,
+        width: 150,
+        height: 100,
+      },
+    });
+
+    if (!plan.ok || !plan.command) {
+      const msg = plan.diagnostics[0]?.message ?? 'Failed to build Part command';
+      setPropertyTypePrompt(prev => prev ? { ...prev, error: msg } : null);
+      plan.diagnostics.forEach(d => addError('error', d.message, 'SysML', d.elementId));
+      return;
+    }
+
+    const result = handleExecuteSysmlCommand(plan.command);
 
     if (result.committed) {
       setPropertyTypePrompt(null);
-      setSelectedIds([part.id]);
-      addError('info', `Created part: ${part.name}`);
+      const usageId = (plan.command.intent as any).usageId || `part-${(plan.command.intent as any).featureId}`;
+      setSelectedIds([usageId]);
+      addError('info', `Created part: ${name}`);
     } else {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       setPropertyTypePrompt(prev => prev ? { ...prev, error: result.diagnostics[0]?.message } : null);
     }
-  }, [canonicalSysmlRepository, currentLayerId, parts, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, currentLayerId, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
 
   const createPart = useCallback((x: number, y: number) => {
+    const activeBlockId = canonicalSysmlRepository.definitions[currentLayerId]?.kind === 'block'
+      ? currentLayerId
+      : selectedIds.find(id => canonicalSysmlRepository.definitions[id]?.kind === 'block');
+
+    if (!activeBlockId) {
+      addError('error', 'Select a Block to add a Part.', 'SysML');
+      return;
+    }
+
     const plan = planOwnedPropertyCreation(canonicalSysmlRepository, {
-      ownerBlockId: currentLayerId,
+      activeBlockId,
       propertyKind: 'part',
     });
     if (plan.outcome === 'typeSelection') {
       setPropertyTypePrompt({
-        ownerBlockId: currentLayerId,
+        ownerBlockId: activeBlockId,
         x,
         y,
         name: `part_${parts.length + 1}`,
@@ -10269,8 +10371,8 @@ const ADIA = () => {
     const msg = plan.outcome === 'error'
       ? plan.diagnostics[0]?.message ?? 'No compatible Block type found for Part.'
       : 'No compatible Block type found for Part.';
-    addError('error', msg, 'SysML', currentLayerId);
-  }, [canonicalSysmlRepository, currentLayerId, parts.length, addError]);
+    addError('error', msg, 'SysML', activeBlockId);
+  }, [canonicalSysmlRepository, currentLayerId, selectedIds, parts.length, addError]);
 
   const handlePropertyTypeSelected = useCallback((typeId: string) => {
     if (!propertyTypePrompt) return;
@@ -15563,12 +15665,50 @@ const ADIA = () => {
       const edgeIndex = group.indexOf(rel.id);
       const totalEdges = group.length;
 
-      const route = calculateSeparatedRelationshipPath(
-        { x: source.x, y: source.y, width: srcW, height: srcH },
-        { x: target.x, y: target.y, width: tgtW, height: tgtH },
-        edgeIndex,
-        totalEdges
-      );
+      const isPropertySource = diagramMode === 'bdd' && 'properties' in source && Boolean((source.properties as any[])?.some((p: any) => p.id === rel.sourceId));
+      let route: { path: string; sp: { x: number; y: number }; tp: { x: number; y: number }; labelPos: { x: number; y: number }; angle: number } | undefined;
+      if (isPropertySource) {
+        const geom = resolveBddPropertyRelationshipGeometry({
+          propertyId: rel.sourceId,
+          ownerBlockId: source.id,
+          targetBlockId: target.id,
+          blocks: blocks.map(b => ({
+            id: b.id,
+            name: b.name,
+            x: b.x,
+            y: b.y,
+            width: b.width,
+            height: b.height,
+            properties: b.properties?.map(p => ({
+              id: p.id,
+              name: p.name,
+              typeId: p.typeId,
+              typeName: p.type,
+            })),
+          })),
+          allowFallback: true,
+        });
+        if (geom.source && geom.target) {
+          const dx = geom.target.x - geom.source.x;
+          const dy = geom.target.y - geom.source.y;
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          route = {
+            path: `M ${geom.source.x} ${geom.source.y} L ${geom.target.x} ${geom.target.y}`,
+            sp: geom.source,
+            tp: geom.target,
+            labelPos: { x: (geom.source.x + geom.target.x) / 2, y: (geom.source.y + geom.target.y) / 2 - 8 },
+            angle,
+          };
+        }
+      }
+      if (!route) {
+        route = calculateSeparatedRelationshipPath(
+          { x: source.x, y: source.y, width: srcW, height: srcH },
+          { x: target.x, y: target.y, width: tgtW, height: tgtH },
+          edgeIndex,
+          totalEdges
+        );
+      }
 
       const isSelected = selectedIds.includes(rel.id);
       const isSuspect = Boolean((rel as any).suspect);
@@ -15584,16 +15724,19 @@ const ADIA = () => {
       // resolve to the role token so an override can never hide the
       // selection highlight or the suspect-error indicator.
       // Absent/invalid resolves to the role default.
+      const isAssociation = rel.type === 'association';
       const strokeColor = isSelected
         ? elementPresentationColor('selection', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
         : isSuspect
           ? elementPresentationColor('error', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
           : isTrace
             ? elementPresentationColor('validRequirementRelationship', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
-            : (() => {
-                const stored = sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[rel.id]?.style?.color;
-                return isValidPresentationColor(stored) ? String(stored).trim() : '#888';
-              })();
+            : isAssociation
+              ? elementPresentationColor('association', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
+              : (() => {
+                  const stored = sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[rel.id]?.style?.color;
+                  return isValidPresentationColor(stored) ? String(stored).trim() : '#888';
+                })();
       const isPackageRelation = ['packageImport', 'elementImport', 'packageMerge'].includes(rel.type);
       const strokeDash = ['allocation', 'dependency', 'packageImport', 'elementImport', 'packageMerge'].includes(rel.type) ? '5,5' : undefined;
       const isReqContainment = rel.type === 'requirementContainment';
@@ -15611,6 +15754,7 @@ const ADIA = () => {
           key={rel.id}
           data-semantic-id={rel.id}
           data-presentation-kind="relationship"
+          data-relationship-kind={rel.type}
           onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}
           style={{ cursor: 'pointer' }}
           role={isReqContainment ? "graphics-symbol" : undefined}
@@ -16740,17 +16884,28 @@ const ADIA = () => {
                   externalModels={hierarchyExternalModels}
                   canonicalSysmlRepository={canonicalSysmlRepository}
                   onSelect={(id: string) => setSelectedIds([id])}
-                  onDoubleClick={(id: string) => {
+                  onDoubleClick={(id: string, kind?: string) => {
                     const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
                     if (externalModelFile) {
                       openFileInTab(externalModelFile.id);
-                    } else if (canonicalSysmlRepository.diagrams[id]) {
-                      if (canonicalSysmlRepository.diagrams[id].diagramKind === 'package') {
+                    } else if (kind === 'diagram' || canonicalSysmlRepository.diagrams[id]) {
+                      const nav = openExactDiagram(
+                        {
+                          activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+                          diagramKind: diagramMode,
+                          contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+                          returnStack: diagramNavigationStack,
+                        },
+                        canonicalSysmlRepository,
+                        id,
+                      );
+                      setActiveSysmlDiagramIdState(nav.activeDiagramId);
+                      if (nav.diagramKind === 'package') {
                         setActivePackageDiagramId(id);
-                        setDiagramMode('package');
-                      } else {
-                        setDiagramMode(canonicalSysmlRepository.diagrams[id].diagramKind as DiagramMode);
                       }
+                      setDiagramMode(nav.diagramKind as DiagramMode);
+                    } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
+                      enterBlock(id);
                     } else if (diagramMode === "statemachine") {
                       enterLayer(id);
                     }
@@ -16762,9 +16917,9 @@ const ADIA = () => {
 
                   onExecuteSysmlCommand={handleExecuteSysmlCommand}
                   onCommandResult={handleExplorerCommand}
-                  activeDiagramId={diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode}
+                  activeDiagramId={activeSysmlDiagramId}
                   activeDiagramContext={(() => {
-                    const contextId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
+                    const contextId = activeSysmlDiagramId;
                     const presented = diagramMode === 'statemachine'
                       ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
                       : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
@@ -17215,6 +17370,7 @@ const ADIA = () => {
                     {diagramMode === 'package' && (
                       <div className="flex gap-0.5">
                         {([
+                          ['generalization', 'Generalization'],
                           ['packageImport', 'Package Import'],
                           ['access', 'Access'],
                           ['elementImport', 'Element Import'],
