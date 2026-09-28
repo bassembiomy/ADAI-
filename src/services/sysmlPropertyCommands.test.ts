@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository } from '../engine/sysml/model';
 import { createSysmlGatewayState, executeSysmlCommand } from './sysmlCommandGateway';
-import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './sysmlPropertyCommands';
+import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand, buildRelationshipUpdateCommand } from './sysmlPropertyCommands';
 
 describe('buildCreatePartDefinitionCommand', () => {
   it('creates the classifier and retargets its part usage atomically through the gateway', () => {
@@ -121,6 +121,9 @@ describe('buildCreatePartDefinitionCommand', () => {
       id: 'motor', name: 'Motor', kind: 'block', namespace: ['model'], ownerId: 'model',
       isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
     };
+    repository.diagrams['vehicle-ibd'] = {
+      id: 'vehicle-ibd', kind: 'diagram', diagramKind: 'ibd', name: 'Vehicle IBD', namespace: ['model'], ownerId: 'vehicle', contextElementId: 'vehicle',
+    };
     const before = structuredClone(repository);
     const state = createSysmlGatewayState(repository);
     const result = executeSysmlCommand(state, buildCreatePartUsageCommand(repository, {
@@ -143,5 +146,86 @@ describe('buildCreatePartDefinitionCommand', () => {
     expect(undone.repository.usages['left-motor']).toBeUndefined();
     expect(undone.repository.definitions.vehicle?.kind === 'block' && undone.repository.definitions.vehicle.properties).toHaveLength(0);
     expect(undone.diagramPresentations['vehicle-ibd']?.elementIds).not.toContain('left-motor');
+  });
+});
+
+describe('buildRelationshipUpdateCommand', () => {
+  it('constructs an updateElement command with normalized role names and parsed multiplicities', () => {
+    const repository = createEmptyRepository();
+    repository.relationships['rel-1'] = {
+      id: 'rel-1',
+      kind: 'association',
+      sourceId: 'blockA',
+      targetId: 'blockB',
+    };
+
+    const outcome = buildRelationshipUpdateCommand(repository, 'rel-1', {
+      sourceRole: ' sourceRoleVal ',
+      targetRole: 'targetRoleVal',
+      sourceMultiplicity: '0..*',
+      targetMultiplicity: '1..5',
+      sourceNavigable: true,
+      targetNavigable: false,
+      sourceAggregation: 'shared',
+      targetAggregation: 'none',
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.command).toEqual({
+      type: 'updateElement',
+      elementId: 'rel-1',
+      patch: {
+        sourceRole: 'sourceRoleVal',
+        targetRole: 'targetRoleVal',
+        sourceMultiplicity: { lower: 0, upper: '*', ordered: false, unique: true },
+        targetMultiplicity: { lower: 1, upper: 5, ordered: false, unique: true },
+        sourceNavigable: true,
+        targetNavigable: false,
+        sourceAggregation: 'shared',
+        targetAggregation: 'none',
+      },
+    });
+  });
+
+  it('rejects invalid multiplicity text before dispatch with INVALID_MULTIPLICITY diagnostic', () => {
+    const repository = createEmptyRepository();
+    repository.relationships['rel-1'] = {
+      id: 'rel-1',
+      kind: 'association',
+      sourceId: 'blockA',
+      targetId: 'blockB',
+    };
+
+    const outcome = buildRelationshipUpdateCommand(repository, 'rel-1', {
+      targetMultiplicity: 'not-a-multiplicity',
+    });
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.diagnostic.code).toBe('INVALID_MULTIPLICITY');
+    }
+  });
+
+  it('preserves immutable sourceId and targetId unchanged', () => {
+    const repository = createEmptyRepository();
+    repository.relationships['rel-1'] = {
+      id: 'rel-1',
+      kind: 'association',
+      sourceId: 'blockA',
+      targetId: 'blockB',
+    };
+
+    const outcome = buildRelationshipUpdateCommand(repository, 'rel-1', {
+      sourceId: 'hijackedSource',
+      targetId: 'hijackedTarget',
+      sourceRole: 'owner',
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.command.patch.sourceId).toBeUndefined();
+    expect(outcome.command.patch.targetId).toBeUndefined();
+    expect(outcome.command.patch.sourceRole).toBe('owner');
   });
 });

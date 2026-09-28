@@ -2507,6 +2507,66 @@ describe('sysmlCommandGateway Task 1 red phase: BDD/package semantic contracts',
     expect(legalCheck.committed).toBe(false);
     expect(state.repository.relationships['rel-coerced']).toBeUndefined();
   });
+
+  it('dispatches a valid relationship update and checks repository; rejects invalid multiplicity/constraint atomically', () => {
+    const repository = createEmptyRepository();
+    const blockA: BlockDefinition = {
+      id: 'blk-a', name: 'BlockA', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const blockB: BlockDefinition = {
+      id: 'blk-b', name: 'BlockB', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions['blk-a'] = blockA;
+    repository.definitions['blk-b'] = blockB;
+
+    const initialRel: SysmlRelationship = {
+      id: 'rel-composition-1',
+      kind: 'composition',
+      sourceId: 'blk-a',
+      targetId: 'blk-b',
+      sourceRole: 'whole',
+      targetRole: 'part',
+      sourceMultiplicity: { lower: 0, upper: 1, ordered: false, unique: true },
+      targetMultiplicity: { lower: 1, upper: '*', ordered: false, unique: true },
+    };
+    repository.relationships['rel-composition-1'] = initialRel;
+
+    const state = createSysmlGatewayState(repository);
+
+    // 1. Valid update: change role name and multiplicity to 0..4
+    const validResult = executeSysmlCommand(state, {
+      type: 'updateElement',
+      elementId: 'rel-composition-1',
+      patch: {
+        sourceRole: 'car',
+        targetRole: 'wheel',
+        targetMultiplicity: { lower: 0, upper: 4, ordered: false, unique: true },
+      },
+    });
+
+    expect(validResult.committed).toBe(true);
+    expect(validResult.repository.relationships['rel-composition-1']).toMatchObject({
+      sourceRole: 'car',
+      targetRole: 'wheel',
+      targetMultiplicity: { lower: 0, upper: 4, ordered: false, unique: true },
+    });
+
+    // 2. Invalid update: composition composite end upper multiplicity > 1
+    const invalidResult = executeSysmlCommand(validResult, {
+      type: 'updateElement',
+      elementId: 'rel-composition-1',
+      patch: {
+        sourceMultiplicity: { lower: 2, upper: 5, ordered: false, unique: true },
+      },
+    });
+
+    expect(invalidResult.committed).toBe(false);
+    expect(invalidResult.diagnostics.some(d => d.code === 'INVALID_MULTIPLICITY')).toBe(true);
+    // Repository remains unchanged from before the invalid command
+    expect(invalidResult.repository.relationships['rel-composition-1']).toEqual(
+      validResult.repository.relationships['rel-composition-1']
+    );
+  });
 });
-
-

@@ -132,6 +132,16 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
       continue;
     }
 
+    if (relationship.sourceMultiplicity) {
+      validateMultiplicity(relationship.id, relationship.sourceMultiplicity.lower, relationship.sourceMultiplicity.upper, error);
+      if (relationship.kind === 'composition' && (relationship.sourceMultiplicity.upper === '*' || relationship.sourceMultiplicity.upper > 1)) {
+        error('INVALID_MULTIPLICITY', relationship.id, 'sourceMultiplicity', 'Composition composite end multiplicity upper must be at most 1');
+      }
+    }
+    if (relationship.targetMultiplicity) {
+      validateMultiplicity(relationship.id, relationship.targetMultiplicity.lower, relationship.targetMultiplicity.upper, error);
+    }
+
     if (relationship.kind === 'composition') {
       const previous = compositionOwners.get(relationship.targetId);
       if (previous && previous !== relationship.sourceId) {

@@ -239,5 +239,20 @@ describe('RelationshipEndEditor', () => {
     );
     expect(html).toContain('No inheritance issues detected');
   });
-});
+  it('parses text 0..* into canonical Multiplicity { lower: 0, upper: "*", ordered: false, unique: true }', () => {
+    const onChange = vi.fn();
+    const editor = RelationshipEndEditor({
+      relationship,
+      diagnostics: [],
+      diagram: 'bdd',
+      onChange,
+    });
+    const multInput = findElementByAriaLabel(editor, 'Target multiplicity');
+    expect(multInput).toBeDefined();
+    multInput!.props.onChange({ target: { value: '0..*' } });
 
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      targetMultiplicity: { lower: 0, upper: '*', ordered: false, unique: true },
+    }));
+  });
+});

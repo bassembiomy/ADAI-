@@ -205,3 +205,111 @@ export function buildCreatePartDefinitionCommand(input: {
     commands,
   };
 }
+
+export type RelationshipUpdateOutcome =
+  | { ok: true; command: { type: 'updateElement'; elementId: string; patch: Record<string, unknown> } }
+  | { ok: false; diagnostic: { code: string; message: string } };
+
+export function buildRelationshipUpdateCommand(
+  repository: SysmlRepository,
+  relationshipId: string,
+  patch: Record<string, unknown>,
+): RelationshipUpdateOutcome {
+  const existing = repository.relationships?.[relationshipId];
+  if (!existing) {
+    return {
+      ok: false,
+      diagnostic: {
+        code: 'RELATIONSHIP_NOT_FOUND',
+        message: `Relationship '${relationshipId}' does not exist in repository.`,
+      },
+    };
+  }
+
+  const normalizedPatch: Record<string, unknown> = {};
+
+  if (typeof patch.name === 'string') {
+    normalizedPatch.name = patch.name;
+  }
+  if (typeof patch.label === 'string' && patch.name === undefined) {
+    normalizedPatch.name = patch.label;
+  }
+  if (typeof patch.kind === 'string') {
+    normalizedPatch.kind = patch.kind === 'aggregation' ? 'sharedAggregation' : patch.kind === 'derive' ? 'deriveReqt' : patch.kind;
+  }
+  if (typeof patch.type === 'string' && patch.kind === undefined) {
+    normalizedPatch.kind = patch.type === 'aggregation' ? 'sharedAggregation' : patch.type === 'derive' ? 'deriveReqt' : patch.type;
+  }
+  if ('sourceRole' in patch) {
+    normalizedPatch.sourceRole = typeof patch.sourceRole === 'string' && patch.sourceRole.trim() !== '' ? patch.sourceRole.trim() : undefined;
+  }
+  if ('targetRole' in patch) {
+    normalizedPatch.targetRole = typeof patch.targetRole === 'string' && patch.targetRole.trim() !== '' ? patch.targetRole.trim() : undefined;
+  }
+  if (typeof patch.sourceNavigable === 'boolean') {
+    normalizedPatch.sourceNavigable = patch.sourceNavigable;
+  }
+  if (typeof patch.targetNavigable === 'boolean') {
+    normalizedPatch.targetNavigable = patch.targetNavigable;
+  }
+  if (typeof patch.sourceAggregation === 'string') {
+    normalizedPatch.sourceAggregation = patch.sourceAggregation;
+  }
+  if (typeof patch.targetAggregation === 'string') {
+    normalizedPatch.targetAggregation = patch.targetAggregation;
+  }
+
+  if ('sourceMultiplicity' in patch) {
+    if (patch.sourceMultiplicity === undefined || patch.sourceMultiplicity === null || patch.sourceMultiplicity === '') {
+      normalizedPatch.sourceMultiplicity = undefined;
+    } else if (typeof patch.sourceMultiplicity === 'string') {
+      try {
+        normalizedPatch.sourceMultiplicity = parseMultiplicity(patch.sourceMultiplicity);
+      } catch (err) {
+        return {
+          ok: false,
+          diagnostic: {
+            code: 'INVALID_MULTIPLICITY',
+            message: `Invalid source multiplicity: ${(err as Error).message}`,
+          },
+        };
+      }
+    } else if (typeof patch.sourceMultiplicity === 'object') {
+      normalizedPatch.sourceMultiplicity = patch.sourceMultiplicity;
+    }
+  }
+
+  if ('targetMultiplicity' in patch) {
+    if (patch.targetMultiplicity === undefined || patch.targetMultiplicity === null || patch.targetMultiplicity === '') {
+      normalizedPatch.targetMultiplicity = undefined;
+    } else if (typeof patch.targetMultiplicity === 'string') {
+      try {
+        normalizedPatch.targetMultiplicity = parseMultiplicity(patch.targetMultiplicity);
+      } catch (err) {
+        return {
+          ok: false,
+          diagnostic: {
+            code: 'INVALID_MULTIPLICITY',
+            message: `Invalid target multiplicity: ${(err as Error).message}`,
+          },
+        };
+      }
+    } else if (typeof patch.targetMultiplicity === 'object') {
+      normalizedPatch.targetMultiplicity = patch.targetMultiplicity;
+    }
+  }
+
+  // Preserve immutable sourceId and targetId unchanged
+  delete normalizedPatch.sourceId;
+  delete normalizedPatch.targetId;
+
+  return {
+    ok: true,
+    command: {
+      type: 'updateElement',
+      elementId: relationshipId,
+      patch: normalizedPatch,
+    },
+  };
+}
+

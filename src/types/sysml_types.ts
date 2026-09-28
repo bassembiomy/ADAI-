@@ -76,8 +76,15 @@ export interface RelationshipData {
   targetId: string;
   type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'packageImport' | 'elementImport' | 'packageMerge' | 'requirementContainment';
   label: string;
+  name?: string;
+  sourceRole?: string;
+  targetRole?: string;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
+  sourceNavigable?: boolean;
+  targetNavigable?: boolean;
+  sourceAggregation?: 'none' | 'shared' | 'composite';
+  targetAggregation?: 'none' | 'shared' | 'composite';
 }
 
 /** UML Package notation projected from the semantic repository for a diagram. */

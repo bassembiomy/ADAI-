@@ -165,7 +165,7 @@ import { PortKindActions } from './components/sysml/PortKindActions';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
 import { buildCreateOwnedPropertyCommand, planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
-import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand } from './services/sysmlPropertyCommands';
+import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand, buildRelationshipUpdateCommand } from './services/sysmlPropertyCommands';
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
 import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
@@ -10284,13 +10284,36 @@ const ADIA = () => {
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
     const patch: Record<string, unknown> = {};
+    if (updates.name !== undefined) patch.name = updates.name;
     if (updates.label !== undefined) patch.name = updates.label;
-    if (updates.type !== undefined) patch.kind = updates.type === 'aggregation' ? 'sharedAggregation' : updates.type;
+    if (updates.type !== undefined) patch.kind = updates.type === 'aggregation' ? 'sharedAggregation' : updates.type === 'derive' ? 'deriveReqt' : updates.type;
+    if (updates.sourceRole !== undefined) patch.sourceRole = updates.sourceRole;
+    if (updates.targetRole !== undefined) patch.targetRole = updates.targetRole;
+    if (updates.sourceMultiplicity !== undefined) patch.sourceMultiplicity = updates.sourceMultiplicity;
+    if (updates.targetMultiplicity !== undefined) patch.targetMultiplicity = updates.targetMultiplicity;
+    if (updates.sourceNavigable !== undefined) patch.sourceNavigable = updates.sourceNavigable;
+    if (updates.targetNavigable !== undefined) patch.targetNavigable = updates.targetNavigable;
+    if (updates.sourceAggregation !== undefined) patch.sourceAggregation = updates.sourceAggregation;
+    if (updates.targetAggregation !== undefined) patch.targetAggregation = updates.targetAggregation;
+
+    if (canonicalSysmlRepository.relationships?.[id]) {
+      const outcome = buildRelationshipUpdateCommand(canonicalSysmlRepository, id, patch);
+      if (!outcome.ok) {
+        addError('error', outcome.diagnostic.message, 'SysML');
+        return;
+      }
+      const result = handleExecuteSysmlCommand(outcome.command);
+      if (!result.committed) {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+      return;
+    }
+
     const result = handleExecuteSysmlCommand(buildPartUsageUpdateCommand(canonicalSysmlRepository, id, patch));
     if (!result.committed) {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
