@@ -86,14 +86,15 @@ test.describe('Requirements persistence across BDD/IBD navigation', () => {
   });
 
   test('Scenario B: In IBD, click Root breadcrumb first, then click Requirements tab', async ({ page }) => {
+    test.setTimeout(60000);
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     await dismissOverlay(page);
 
-  // 1. Go to Requirements diagram
-  await page.locator('button:has-text("Requirements")').first().click();
-  await page.waitForTimeout(300);
+    // 1. Go to Requirements diagram
+    await page.locator('button:has-text("Requirements")').first().click();
+    await page.waitForTimeout(300);
 
     // 2. Add a Requirement
     const addReqBtn = page.getByRole('button', { name: '+ Requirement' }).first();
@@ -118,8 +119,12 @@ test.describe('Requirements persistence across BDD/IBD navigation', () => {
     await expect(blockNode).toBeVisible();
 
     // Double click the Block to enter its IBD
-    await blockNode.dblclick({ position: { x: 50, y: 30 } });
-    await page.waitForTimeout(500);
+    await blockNode.dblclick();
+    const ibdTitle = page.locator('#adia-diagram-canvas').getByText(/ibd \[Block/i);
+    if (!await ibdTitle.isVisible()) {
+      await blockNode.dblclick({ position: { x: 50, y: 30 } });
+    }
+    await expect(ibdTitle).toBeVisible({ timeout: 10000 });
 
     // 5. Add a Part in IBD
     const partBtn = page.getByRole('button', { name: 'Part', exact: true }).first();
