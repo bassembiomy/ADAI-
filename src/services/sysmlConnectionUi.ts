@@ -27,7 +27,7 @@ export function resolveUiConnectionEndpoint(
   for (const b of model.blocks) {
     const prop = b.properties?.find(p => p.id === id);
     if (prop) {
-      return { id: prop.id, name: prop.name, family: 'property', ownerId: b.id };
+      return { id: prop.id, name: prop.name, family: 'property', ownerId: b.id, typeId: prop.typeId };
     }
   }
   const part = model.parts.find(item => item.id === id);

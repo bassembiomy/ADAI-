@@ -674,7 +674,9 @@ export class VLabPhysicsEngine {
         else if (type === 'trans_hard_stop' || type === 'rot_hard_stop') {
           const lower = params.lower !== undefined ? params.lower : -0.1;
           const upper = params.upper !== undefined ? params.upper : 0.1;
-          const pos = (acrossVals[0] || 0) * 0.01;
+          const pos = type === 'rot_hard_stop'
+            ? xVec[comp.stateIndices[0]] || 0
+            : (acrossVals[0] || 0) * 0.01;
           indicators.push(pos - lower);
           indicators.push(pos - upper);
         }

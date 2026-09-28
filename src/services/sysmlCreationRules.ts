@@ -137,7 +137,7 @@ function legacyConnectionEndpoint(
   if (endpoint) return classifyLegacyEndpoint(endpoint);
   for (const b of blocks) {
     const prop = b.properties?.find(p => p.id === id);
-    if (prop) return { id: prop.id, name: prop.name, family: 'property', ownerId: b.id };
+    if (prop) return { id: prop.id, name: prop.name, family: 'property', ownerId: b.id, typeId: prop.typeId };
     const port = b.ports?.find(p => p.id === id);
     if (port) return { id: port.id, name: port.name, family: 'port', ownerId: b.id };
   }

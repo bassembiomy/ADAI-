@@ -47,6 +47,7 @@ export function resolveRepositoryEndpoint(
           name: prop.name,
           family: 'property',
           ownerId: def.id,
+          typeId: prop.typeId,
         };
       }
       const port = def.ports?.find(p => p.id === id);

@@ -2346,4 +2346,167 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
   });
 });
 
+describe('sysmlCommandGateway Task 1 red phase: BDD/package semantic contracts', () => {
+  // Task 1 step 3 — test-local inventory (no metamodel change): relationship
+  // kinds in the existing metamodel (SysmlRelationship['kind'] in
+  // src/engine/sysml/model.ts) mapped to Package Diagram tool support.
+  // Sources: model.ts kinds, capabilities/packagePolicy.ts validators
+  // (packageImport / elementImport / packageMerge), policy.ts
+  // classifyRelationship (dependency with a package endpoint renders on the
+  // package diagram; Generalization between compatible classifiers is a
+  // supported legal package connection per the design spec), and the gateway
+  // addToDiagram endpoint preflight. Association is BDD-scoped here: it must
+  // NOT be silently coerced into a dependency on a Package Diagram.
+  // OMG_SYSML_1_6 / UML_FOUNDATION govern endpoint semantics; ADIA_EXTENSION
+  // governs which tools are offered per diagram.
+  const PACKAGE_DIAGRAM_CONNECTION_INVENTORY = [
+    { kind: 'generalization', createTool: 'Package Diagram Generalization tool', display: true },
+    { kind: 'packageImport', createTool: 'Package Diagram Import/Access tool (public=«import», private=«access»)', display: true },
+    { kind: 'elementImport', createTool: 'Package Diagram Element Import tool', display: true },
+    { kind: 'packageMerge', createTool: 'Package Diagram Merge tool', display: true },
+    { kind: 'dependency', createTool: 'Package Diagram Dependency tool (package endpoints)', display: true },
+  ] as const;
+
+  const pkg = (id: string, ownerId = 'model'): PackageDefinition => ({
+    id, kind: 'package', name: id, namespace: [], ownerId,
+  });
+  const block = (id: string, ownerId = 'model'): BlockDefinition => ({
+    id, name: id, kind: 'block', namespace: [], ownerId,
+    isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+  });
+  const semanticIds = (repository: ReturnType<typeof createEmptyRepository>): string[] => [
+    ...Object.keys(repository.packages),
+    ...Object.keys(repository.diagrams),
+    ...Object.keys(repository.definitions),
+    ...Object.keys(repository.usages),
+    ...Object.keys(repository.connectors),
+    ...Object.keys(repository.relationships),
+    ...Object.keys(repository.requirements),
+    ...Object.keys(repository.verificationCases),
+  ].sort();
+
+  it('TASK1-C: Show Contents is presentation-only and only the explicit move command may change package ownership', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-parent'] = pkg('pkg-parent');
+    repository.packages['pkg-child'] = pkg('pkg-child', 'pkg-parent');
+    repository.packages['pkg-other'] = pkg('pkg-other');
+    repository.definitions['blk-direct'] = block('blk-direct', 'pkg-parent');
+    repository.diagrams['diag-packages'] = {
+      id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [], ownerId: 'model',
+    };
+    const state = createSysmlGatewayState(repository);
+    const revisionBefore = state.repository.revision;
+    const auditBefore = state.repository.auditTrail.length;
+    const semanticIdsBefore = semanticIds(state.repository);
+
+    const shown = executeSysmlCommand(state, {
+      type: 'showPackageContents', diagramId: 'diag-packages', packageId: 'pkg-parent', mode: 'recursive',
+    });
+    expect(shown.committed).toBe(true);
+    // Presentation only: ownerId of every shown member unchanged.
+    expect(shown.repository.packages['pkg-child'].ownerId).toBe('pkg-parent');
+    expect(shown.repository.definitions['blk-direct'].ownerId).toBe('pkg-parent');
+    // No semantic element created or removed, no revision/audit churn.
+    expect(semanticIds(shown.repository)).toEqual(semanticIdsBefore);
+    expect(shown.repository.revision).toBe(revisionBefore);
+    expect(shown.repository.auditTrail).toHaveLength(auditBefore);
+    expect(shown.diagramPresentations['diag-packages'].elementIds)
+      .toEqual(expect.arrayContaining(['pkg-child', 'blk-direct']));
+    // Single undo restores the presentation while semantics stay put.
+    const undone = executeSysmlCommand(shown, { type: 'undo' });
+    expect(undone.diagramPresentations['diag-packages']?.elementIds ?? []).toEqual([]);
+    expect(undone.repository.definitions['blk-direct'].ownerId).toBe('pkg-parent');
+
+    // Positive control: the explicit move command IS an ownership change.
+    const moved = executeSysmlCommand(shown, {
+      type: 'moveElements', elementIds: ['blk-direct'], targetOwnerId: 'pkg-other',
+    });
+    expect(moved.committed).toBe(true);
+    expect(moved.repository.definitions['blk-direct'].ownerId).toBe('pkg-other');
+
+    // RED (missing behavior): a generic updateElement ownerId patch must NOT
+    // silently reparent — the explicit Move-to-Package command remains the
+    // only ownership change (design spec § Package Diagram hierarchy).
+    const fresh = createSysmlGatewayState(repository);
+    const sneaky = executeSysmlCommand(fresh, {
+      type: 'updateElement', elementId: 'blk-direct', patch: { ownerId: 'pkg-other' },
+    });
+    expect(sneaky.committed).toBe(false);
+    expect(sneaky.diagnostics.map(d => d.code))
+      .toContain('OWNERSHIP_CHANGE_REQUIRES_MOVE');
+    expect(sneaky.repository.definitions['blk-direct'].ownerId).toBe('pkg-parent');
+  });
+
+  it('TASK1-D: every inventoried Package Diagram connection kind creates and presents by canonical ID', () => {
+    const repository = createEmptyRepository();
+    repository.packages.consumer = pkg('consumer');
+    repository.packages.types = pkg('types');
+    repository.definitions.base = block('base', 'types');
+    repository.definitions.sub = block('sub', 'consumer');
+    repository.definitions.standalone = block('standalone', 'types');
+    repository.diagrams['diag-packages'] = {
+      id: 'diag-packages', kind: 'diagram', diagramKind: 'package', name: 'Packages', namespace: [], ownerId: 'model',
+    };
+    let state = createSysmlGatewayState(repository);
+    state = {
+      ...state,
+      ...executeSysmlCommand(state, {
+        type: 'addToDiagram', diagramId: 'diag-packages',
+        elementIds: ['consumer', 'types', 'base', 'sub', 'standalone'],
+      }),
+    };
+
+    const candidates: SysmlRelationship[] = [
+      { id: 'rel-gen', kind: 'generalization', sourceId: 'sub', targetId: 'base' },
+      {
+        id: 'rel-import', kind: 'packageImport', sourceId: 'consumer', targetId: 'types',
+        importingNamespaceId: 'consumer', importedPackageId: 'types', visibility: 'public',
+      },
+      {
+        id: 'rel-access', kind: 'packageImport', sourceId: 'types', targetId: 'consumer',
+        importingNamespaceId: 'types', importedPackageId: 'consumer', visibility: 'private',
+      },
+      {
+        id: 'rel-elem-import', kind: 'elementImport', sourceId: 'consumer', targetId: 'standalone',
+        importingNamespaceId: 'consumer', importedElementId: 'standalone', visibility: 'public',
+      },
+      {
+        id: 'rel-merge', kind: 'packageMerge', sourceId: 'consumer', targetId: 'types',
+        mergingPackageId: 'consumer', mergedPackageId: 'types',
+      },
+      { id: 'rel-dep', kind: 'dependency', sourceId: 'consumer', targetId: 'types' },
+    ];
+    expect(candidates.map(c => c.kind).sort()).toEqual(
+      [...PACKAGE_DIAGRAM_CONNECTION_INVENTORY.map(row => row.kind), 'packageImport'].sort(),
+    );
+
+    for (const candidate of candidates) {
+      const created = executeSysmlCommand(state, { type: 'createElement', element: candidate });
+      expect({ kind: candidate.kind, committed: created.committed }).toEqual({ kind: candidate.kind, committed: true });
+      state = { ...state, repository: created.repository, history: created.history, store: created.store, patchHistory: created.patchHistory };
+      const presented = executeSysmlCommand(state, {
+        type: 'addToDiagram', diagramId: 'diag-packages', elementIds: [candidate.id],
+      });
+      // RED for generalization today: INVALID_DIAGRAM_ELEMENT — the gateway
+      // allowlist omits it although the policy/spec list it as supported.
+      expect({ kind: candidate.kind, committed: presented.committed })
+        .toEqual({ kind: candidate.kind, committed: true });
+      state = { ...state, diagramPresentations: presented.diagramPresentations, store: presented.store, patchHistory: presented.patchHistory };
+      expect(state.repository.relationships[candidate.id]).toMatchObject({
+        id: candidate.id, sourceId: candidate.sourceId, targetId: candidate.targetId,
+      });
+      expect(presented.diagramPresentations['diag-packages'].elementIds).toContain(candidate.id);
+    }
+
+    // No silent coercion: an unsupported Package Diagram connection is
+    // rejected with a diagnostic instead of being stored as another kind.
+    const legalCheck = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: { id: 'rel-coerced', kind: 'requirementContainment', sourceId: 'consumer', targetId: 'types' },
+    });
+    expect(legalCheck.committed).toBe(false);
+    expect(state.repository.relationships['rel-coerced']).toBeUndefined();
+  });
+});
+
 

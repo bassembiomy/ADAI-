@@ -264,6 +264,7 @@ export class DAEAssembler {
 
       const isPhysicalOutputPort = (portId: string) => {
         const id = portId.toLowerCase();
+        if (blockType === 'rot_motion_sensor' && ['w', 'a'].includes(id)) return true;
         if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
             id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
           return false;
@@ -453,15 +454,24 @@ export class DAEAssembler {
           break;
         case 'rot_motion_sensor':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          branches.push({ name: 'signal_w', ports: [{ id: 'w', sign: 1 }] });
+          branches.push({ name: 'signal_a', ports: [{ id: 'a', sign: 1 }] });
           states.push('theta');
+          break;
+        case 'wheel_axle':
+          branches.push({ name: 'torque', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'force', ports: [{ id: 'p', sign: -1 }] });
           break;
         case 'rot_damper':
         case 'rot_friction':
-        case 'rot_hard_stop':
         case 'torque_sensor':
         case 'torque_source':
         case 'ang_vel_source':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          break;
+        case 'rot_hard_stop':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          states.push('theta');
           break;
         case 'gear_box':
           if (ports.includes('r1') || ports.includes('c1')) {
@@ -481,6 +491,8 @@ export class DAEAssembler {
           break;
         case 'trans_motion_sensor':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          branches.push({ name: 'signal_v', ports: [{ id: 'v', sign: 1 }] });
+          branches.push({ name: 'signal_p', ports: [{ id: 'p', sign: 1 }] });
           states.push('x');
           break;
         case 'force_sensor':

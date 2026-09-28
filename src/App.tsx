@@ -168,6 +168,7 @@ import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buil
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
 import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
+import { resolveBddPropertyRelationshipGeometry } from './services/sysmlBddRelationshipGeometry';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 // Task 6 centralized semantic presentation resolver (spec 3.5): workflow
 // surfaces consume tokens instead of hard-coded palette colors.

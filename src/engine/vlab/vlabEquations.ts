@@ -329,17 +329,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - torque];
   },
   
-  rot_hard_stop: ({ across, branch, params }) => {
-    const lower = params.lower || -1.57;
-    const upper = params.upper || 1.57;
-    const k = params.k || 1000;
-    // We approximate position by integrating velocity (Euler approximation)
+  rot_hard_stop: ({ across, branch, state, dState, params }) => {
+    const lower = params.lower !== undefined ? Number(params.lower) : -1.57;
+    const upper = params.upper !== undefined ? Number(params.upper) : 1.57;
+    const k = params.k !== undefined ? Number(params.k) : 1000;
+    const c = params.c !== undefined ? Number(params.c) : 0.1;
     const omega = across[0] - (across[1] || 0);
-    const theta = (across[0] || 0) * 0.01; // simplified projection
+    const theta = state[0];
     let torque = 0;
-    if (theta > upper) torque = k * (theta - upper);
-    else if (theta < lower) torque = k * (theta - lower);
-    return [branch[0] - torque - 0.1 * omega];
+    if (theta > upper) torque = k * (theta - upper) + c * omega;
+    else if (theta < lower) torque = k * (theta - lower) + c * omega;
+    return [branch[0] - torque, dState[0] - omega];
   },
   
   torque_source: ({ across, branch, params }) => {
@@ -350,8 +350,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   rot_motion_sensor: ({ across, branch, state, dState }) => {
     // branch[0] is through torque (ideal sensor has 0 torque load)
-    // branch[1] is output signal w (velocity)
-    // branch[2] is output signal a (position/angle)
+    // branch[1] is output signal w (velocity); branch[2] is output signal a (angle)
     // state[0] is theta (position)
     const omega = across[0] - (across[1] || 0);
     return [
@@ -2365,15 +2364,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [across[0] - (across[1] || 0) - w];
   },
 
-  wheel_axle: ({ across, branch, params }) => {
-    const R = params.radius || params.R || 0.3;
-    const w = across[0] - across[1];
-    const v = across[2] - (across[3] || 0);
+  wheel_axle: ({ across, branch, params, ports = [] }) => {
+    const Rw = params.Rw !== undefined ? Number(params.Rw) : (params.radius !== undefined ? Number(params.radius) : 0.3);
+    const rotationalPort = ports.indexOf('a');
+    const translationalPort = ports.indexOf('p');
+    const w = rotationalPort >= 0 ? across[rotationalPort] : across[0];
+    const v = translationalPort >= 0 ? across[translationalPort] : across[1];
     const T = branch[0];
     const F = branch[1];
     return [
-      v - w * R,
-      T + F * R
+      v - w * Rw,
+      T + Rw * F
     ];
   },
 

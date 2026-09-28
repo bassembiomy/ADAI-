@@ -2316,7 +2316,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical"
           }
         ],
-        "equation": "w_out = ω, a_out = θ",
+        "equation": "w_out = ω, a_out = θ; dθ/dt = ω",
         "description": "Ideal rotational sensor measuring angular velocity ω and angular position θ."
       },
       {
@@ -2608,7 +2608,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "v_trans = R * ω_rot\nτ_rot = R * F_trans",
+        "equation": "v = Rw × ω\nτ + Rw × F = 0",
         "description": "Wheel and axle mechanism coupling vehicle linear road speed to axle rotational velocity."
       },
       {

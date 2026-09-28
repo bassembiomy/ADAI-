@@ -5,6 +5,7 @@ import {
   createEmptyRepository,
   type BlockDefinition,
   type PortDefinition,
+  type SysmlRelationship,
   type SysmlRepository,
 } from './model';
 import {
@@ -481,6 +482,62 @@ describe('SysML v1.6 Diagram Interaction Corrections Executable Cases', () => {
       if (activation.status === 'choose') {
         expect(activation.diagramIds).toEqual(['pkgDiag2', 'pkgDiag1']); // Sorted by name
       }
+    });
+  });
+
+  describe('BDD Association and Property Endpoints (UML Foundation / OMG SysML 1.6)', () => {
+    it('TASK1-A: typed Part property serves as Association member end with canonical endpoint identities', () => {
+      const { repo } = createFixture();
+      // vehicle owns prop-leftMotor typed by motor
+      const candidate: SysmlRelationship = {
+        id: 'rel-assoc-leftMotor',
+        kind: 'association',
+        sourceId: 'prop-leftMotor',
+        targetId: 'motor',
+      };
+      const result = validateCanonicalRelationshipCandidate(repo, candidate);
+      expect(result.valid).toBe(true);
+      repo.relationships['rel-assoc-leftMotor'] = candidate;
+      const parsed = JSON.parse(JSON.stringify(repo.relationships));
+      expect(parsed['rel-assoc-leftMotor'].sourceId).toBe('prop-leftMotor');
+      expect(parsed['rel-assoc-leftMotor'].targetId).toBe('motor');
+
+      // Incompatible property type rejected:
+      const badCandidate: SysmlRelationship = {
+        id: 'rel-assoc-incompatible',
+        kind: 'association',
+        sourceId: 'prop-leftMotor',
+        targetId: 'canBus',
+      };
+      const badResult = validateCanonicalRelationshipCandidate(repo, badCandidate);
+      expect(badResult.valid).toBe(false);
+      expect(badResult.codes).toContain('INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT');
+    });
+
+    it('TASK1-B: Association relationship endpoints remain canonical and do not coerce to owner Block or fabricate anchors', () => {
+      const { repo } = createFixture();
+      const candidate: SysmlRelationship = {
+        id: 'rel-assoc-prop',
+        kind: 'association',
+        sourceId: 'prop-rightMotor',
+        targetId: 'motor',
+      };
+      repo.relationships[candidate.id] = candidate;
+
+      // Endpoint identity remains the exact property id, not the parent vehicle block
+      expect(repo.relationships['rel-assoc-prop'].sourceId).toBe('prop-rightMotor');
+      expect(repo.relationships['rel-assoc-prop'].sourceId).not.toBe('vehicle');
+
+      // Stale or missing property endpoint is rejected
+      const staleCandidate: SysmlRelationship = {
+        id: 'rel-assoc-stale',
+        kind: 'association',
+        sourceId: 'prop-nonexistent',
+        targetId: 'motor',
+      };
+      const staleResult = validateCanonicalRelationshipCandidate(repo, staleCandidate);
+      expect(staleResult.valid).toBe(false);
+      expect(staleResult.codes).toContain('MISSING_RELATIONSHIP_ENDPOINT');
     });
   });
 });

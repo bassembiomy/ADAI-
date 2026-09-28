@@ -11,6 +11,7 @@ export interface ConnectionEndpoint {
   name: string;
   family: SysmlEndpointFamily;
   ownerId?: string;
+  typeId?: string;
 }
 
 export interface ConnectionPolicyDiagnostic {
@@ -74,6 +75,12 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
   if (kind === 'association') {
     if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Association requires declared classifier endpoint families.', 'Declare a supported stereotype family before using an association.');
     if (!ASSOCIATION_FAMILY.has(source.family) || !ASSOCIATION_FAMILY.has(target.family)) return reject(normalized, 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS', 'Association requires compatible classifier endpoints.', 'Choose two Block, Interface, ValueType, or Enumeration classifiers.');
+    if (source.family === 'property' && source.typeId && source.typeId !== target.id) {
+      return reject(normalized, 'INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT', `Property ${source.name} is typed by ${source.typeId}, but association targets ${target.name}.`, 'Connect to the classifier that types this property.');
+    }
+    if (target.family === 'property' && target.typeId && target.typeId !== source.id) {
+      return reject(normalized, 'INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT', `Property ${target.name} is typed by ${target.typeId}, but association targets ${source.name}.`, 'Connect to the classifier that types this property.');
+    }
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'composition' || kind === 'sharedAggregation') {
