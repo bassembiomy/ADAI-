@@ -61,10 +61,10 @@ export function resolveSysmlCreationOwner(
 
 Owner policy: IBD requires a real Block `contextElementId`; Package Diagram uses its owning Package or `model`; BDD and Requirements use an explicitly owned diagram's owner or `model`.
 
-- [ ] **Step 1: Write failing tests** for IBD Block context, IBD missing/invalid context, Package Diagram owner, root BDD/Requirements fallback, and explicit owner on a non-root diagram.
-- [ ] **Step 2: Verify red** with `npx vitest run src/services/sysmlDiagramCreationContext.test.ts`; expect import/export or missing-behavior failures for the new resolver.
-- [ ] **Step 3: Implement the pure resolver** using only repository diagrams, packages, and definitions; do not create or mutate entities.
-- [ ] **Step 4: Verify green** with `npx vitest run src/services/sysmlDiagramCreationContext.test.ts src/services/sysmlDiagramCreation.test.ts`.
+- [x] **Step 1: Write failing tests** for IBD Block context, IBD missing/invalid context, Package Diagram owner, root BDD/Requirements fallback, and explicit owner on a non-root diagram.
+- [x] **Step 2: Verify red** with `npx vitest run src/services/sysmlDiagramCreationContext.test.ts`; expect import/export or missing-behavior failures for the new resolver.
+- [x] **Step 3: Implement the pure resolver** using only repository diagrams, packages, and definitions; do not create or mutate entities.
+- [x] **Step 4: Verify green** with `npx vitest run src/services/sysmlDiagramCreationContext.test.ts src/services/sysmlDiagramCreation.test.ts`.
 
 ### Task 2: Use contextual ownership for canvas element and Part creation
 
@@ -78,10 +78,10 @@ Owner policy: IBD requires a real Block `contextElementId`; Package Diagram uses
 
 **Produces:** Each canvas create request passes the resolved `ownerId` to `buildDiagramCreationCommand`; Part creation uses the active Block context by default and retains explicit compatible type selection.
 
-- [ ] **Step 1: Add failing service tests** proving a Block created on a Package Diagram is owned by the diagram's Package and invalid IBD context returns `OWNER_CONTEXT_REQUIRED` without a command.
-- [ ] **Step 2: Verify red** with `npx vitest run src/services/sysmlDiagramCreation.test.ts`.
-- [ ] **Step 3: Update canvas handlers** to call the resolver. In an IBD, use the current Block as Part owner without an owner-selection prompt; keep the existing type chooser when an explicit Block type is required. Route right-click duplicate through the same resolved owner path.
-- [ ] **Step 4: Verify green** with `npx vitest run src/services/sysmlDiagramCreation.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx`.
+- [x] **Step 1: Add failing service tests** proving a Block created on a Package Diagram is owned by the diagram's Package and invalid IBD context returns `OWNER_CONTEXT_REQUIRED` without a command.
+- [x] **Step 2: Verify red** with `npx vitest run src/services/sysmlDiagramCreation.test.ts`.
+- [x] **Step 3: Update canvas handlers** to call the resolver. In an IBD, use the current Block as Part owner without an owner-selection prompt; keep the existing type chooser when an explicit Block type is required. Route right-click duplicate through the same resolved owner path.
+- [x] **Step 4: Verify green** with `npx vitest run src/services/sysmlDiagramCreation.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx`.
 
 ### Task 3: Make port-kind actions the single canvas creation path
 
@@ -96,10 +96,10 @@ Owner policy: IBD requires a real Block `contextElementId`; Package Diagram uses
 
 `PortKindActions` accepts `{ onAddPort: (kind: 'standard' | 'flow' | 'proxy' | 'full') => void }` and renders one button per kind.
 
-- [ ] **Step 1: Write failing component tests** proving `PortKindActions` renders four named actions and calls the matching callback for the requested kind; add adapter assertions for selected owner and preserved type-selection response.
-- [ ] **Step 2: Verify red** with `npx vitest run src/components/sysml/PortKindActions.test.tsx src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx`.
-- [ ] **Step 3: Remove the dropdown component** and its active-tool click-on-canvas path from BDD. Keep shared port-kind callbacks for explicit buttons and tree commands; do not remove IBD/property-inspector port editing.
-- [ ] **Step 4: Verify green** with `npx vitest run src/components/sysml/PortKindActions.test.tsx src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx` and `npx tsc --noEmit`.
+- [x] **Step 1: Write failing component tests** proving `PortKindActions` renders four named actions and calls the matching callback for the requested kind; add adapter assertions for selected owner and preserved type-selection response.
+- [x] **Step 2: Verify red** with `npx vitest run src/components/sysml/PortKindActions.test.tsx src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx`.
+- [x] **Step 3: Remove the dropdown component** and its active-tool click-on-canvas path from BDD. Keep shared port-kind callbacks for explicit buttons and tree commands; do not remove IBD/property-inspector port editing.
+- [x] **Step 4: Verify green** with `npx vitest run src/components/sysml/PortKindActions.test.tsx src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx` and `npx tsc --noEmit`.
 
 ### Task 4: Persist editable relationship-end properties through validated commands
 
@@ -112,11 +112,11 @@ Owner policy: IBD requires a real Block `contextElementId`; Package Diagram uses
 
 **Behavior:** Preserve edits for relationship `name`, `kind`, source/target role names, source/target multiplicity, navigability, and aggregation wherever legal for that relationship kind. Parse multiplicity text into canonical `Multiplicity` before dispatch. Keep immutable `sourceId`/`targetId` unchanged unless the user explicitly invokes an endpoint-reversal action. Invalid edits must be rejected atomically by gateway validation and leave the stored relationship unchanged.
 
-- [ ] **Step 1: Add failing tests** for relationship update command construction with role names and multiplicities; assert text `0..*` becomes `{ lower: 0, upper: '*', ordered: false, unique: true }` and invalid text is rejected before dispatch.
-- [ ] **Step 2: Verify red** with `npx vitest run src/services/sysmlPropertyCommands.test.ts src/components/sysml/RelationshipEndEditor.test.tsx`.
-- [ ] **Step 3: Implement relationship-specific normalization** in `src/services/sysmlPropertyCommands.ts`, parsing `sourceMultiplicity` and `targetMultiplicity` before constructing the `updateElement` command. Include `name`, `kind`, source/target role names, source/target multiplicities, navigability, and aggregation in `src/App.tsx` `updateRelationship`. Ensure non-relationship Part usage updates retain existing mirrored usage/property behavior.
-- [ ] **Step 4: Add a gateway persistence test** in `src/services/sysmlCommandGateway.test.ts` that dispatches a valid relationship update and checks the canonical repository; dispatch an invalid multiplicity/constraint update and assert `committed === false` and the original record is unchanged.
-- [ ] **Step 5: Verify green** with `npx vitest run src/services/sysmlPropertyCommands.test.ts src/components/sysml/RelationshipEndEditor.test.tsx src/services/sysmlCommandGateway.test.ts`.
+- [x] **Step 1: Add failing tests** for relationship update command construction with role names and multiplicities; assert text `0..*` becomes `{ lower: 0, upper: '*', ordered: false, unique: true }` and invalid text is rejected before dispatch.
+- [x] **Step 2: Verify red** with `npx vitest run src/services/sysmlPropertyCommands.test.ts src/components/sysml/RelationshipEndEditor.test.tsx`.
+- [x] **Step 3: Implement relationship-specific normalization** in `src/services/sysmlPropertyCommands.ts`, parsing `sourceMultiplicity` and `targetMultiplicity` before constructing the `updateElement` command. Include `name`, `kind`, source/target role names, source/target multiplicities, navigability, and aggregation in `src/App.tsx` `updateRelationship`. Ensure non-relationship Part usage updates retain existing mirrored usage/property behavior.
+- [x] **Step 4: Add a gateway persistence test** in `src/services/sysmlCommandGateway.test.ts` that dispatches a valid relationship update and checks the canonical repository; dispatch an invalid multiplicity/constraint update and assert `committed === false` and the original record is unchanged.
+- [x] **Step 5: Verify green** with `npx vitest run src/services/sysmlPropertyCommands.test.ts src/components/sysml/RelationshipEndEditor.test.tsx src/services/sysmlCommandGateway.test.ts`.
 
 ### Task 5: Verify repository identity and diagram/tree projections end to end
 
@@ -125,11 +125,11 @@ Owner policy: IBD requires a real Block `contextElementId`; Package Diagram uses
 - Reference: `tests/e2e/sysml-bdd-package-navigation-parity.spec.ts`
 - Verify: `src/engine/sysml/normalizedStore.test.ts`
 
-- [ ] **Step 1: Add a browser scenario** creating a port from a selected BDD Block, then confirm its tree node and Block feature list share one semantic ID and the correct owner/type.
-- [ ] **Step 2: Add a browser scenario** creating a Part in the active Block IBD, editing an applicable multiplicity/role field, switching to another relevant diagram, and confirming repository-backed name/field values remain consistent.
-- [ ] **Step 3: Exercise persistence** by saving/reloading through the application's real project persistence path and asserting owner, port type, relationship endpoint IDs, role names, and multiplicity survive.
-- [ ] **Step 4: Run focused verification:** `npx vitest run src/services/sysmlDiagramCreationContext.test.ts src/services/sysmlDiagramCreation.test.ts src/services/sysmlPropertyCommands.test.ts src/components/sysml/RelationshipEndEditor.test.tsx src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx`.
-- [ ] **Step 5: Run integration verification:** `npx playwright test tests/e2e/sysml-contextual-creation-editing.spec.ts`, `npx tsc --noEmit`, and `npm run build`.
+- [x] **Step 1: Add a browser scenario** creating a port from a selected BDD Block, then confirm its tree node and Block feature list share one semantic ID and the correct owner/type.
+- [x] **Step 2: Add a browser scenario** creating a Part in the active Block IBD, editing an applicable multiplicity/role field, switching to another relevant diagram, and confirming repository-backed name/field values remain consistent.
+- [x] **Step 3: Exercise persistence** by saving/reloading through the application's real project persistence path and asserting owner, port type, relationship endpoint IDs, role names, and multiplicity survive.
+- [x] **Step 4: Run focused verification:** `npx vitest run src/services/sysmlDiagramCreationContext.test.ts src/services/sysmlDiagramCreation.test.ts src/services/sysmlPropertyCommands.test.ts src/components/sysml/RelationshipEndEditor.test.tsx src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts src/components/modelExplorer/AppModelExplorer.commands.test.tsx`.
+- [x] **Step 5: Run integration verification:** `npx playwright test tests/e2e/sysml-contextual-creation-editing.spec.ts`, `npx tsc --noEmit`, and `npm run build`.
 
 ## Plan Self-Review
 
