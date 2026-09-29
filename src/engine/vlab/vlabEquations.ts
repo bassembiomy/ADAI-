@@ -1038,15 +1038,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ac_motor: ({ across, branch, state, dState, params, ctx }) => {
-    // 3-phase induction motor simplified dq-model
+    // 3-phase induction motor stationary alpha-beta rotor-flux model
     // state[0]: theta, state[1]: omega
+    // state[2]: rotor flux alpha, state[3]: rotor flux beta
     const Rs = params.Rs || 0.1;
+    const Rr = params.Rr ?? 0.08;
     const P = params.P || params.pole_pairs || 2;
-    const Lm = 0.05;
+    const Lm = params.Lm ?? 0.05;
     const Lr = 0.06;
-    const Kt = 1.5 * P * Lm / Lr;
-    const J = params.J || params.inertia || 0.05;
-    const B = params.B || params.damping || 0.005;
+    const Tr = Lr / Math.max(Rr, 1e-9);
+    const J = params.J ?? params.inertia ?? 0.05;
+    const B = params.B ?? params.damping ?? 0.005;
     
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
@@ -1056,18 +1058,31 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const ib = branch[1];
     const ic = branch[2];
     const torque = branch[3];
-    
-    // Clarke conversion of actual voltages to get instantaneous Valpha, Vbeta
-    const Valpha = (2 * Va - Vb - Vc) / 3;
-    const Vbeta = (Vb - Vc) / Math.sqrt(3);
-    const Vmag = Math.sqrt(Valpha * Valpha + Vbeta * Vbeta);
-    
-    // Read the grid frequency from global parameters (written by the controller/inverter)
-    const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
-    
-    // Electromagnetic torque is proportional to stator voltage magnitude, slip frequency
-    const slip_speed = w_sync / P - state[1];
-    const Te = Kt * 0.15 * Vmag * slip_speed;
+    const iAlpha = (2 * ia - ib - ic) / 3;
+    const iBeta = (ib - ic) / Math.sqrt(3);
+    const ratedCurrent = 10;
+    const normalizedIAlpha = Math.tanh(iAlpha / ratedCurrent);
+    const normalizedIBeta = Math.tanh(iBeta / ratedCurrent);
+    const psiRAlpha = state[2];
+    const psiRBeta = state[3];
+    const dPsiRAlpha = (Lm * normalizedIAlpha - psiRAlpha) / Tr;
+    const dPsiRBeta = (Lm * normalizedIBeta - psiRBeta) / Tr;
+
+    const vAlpha = (2 * Va - Vb - Vc) / 3;
+    const vBeta = (Vb - Vc) / Math.sqrt(3);
+    const voltageMagnitude = Math.sqrt(vAlpha * vAlpha + vBeta * vBeta);
+    const synchronousElectricalSpeed = ctx.parameters['grid_freq'] ?? 314.159;
+    const synchronousSpeed = synchronousElectricalSpeed / P;
+    const slipSpeed = synchronousSpeed - state[1];
+    const torqueConstant = 1.5 * P * Lm / Lr;
+    const rotorFluxMagnitude = Math.sqrt(psiRAlpha * psiRAlpha + psiRBeta * psiRBeta);
+    const fluxUtilization = Math.max(0.05, Math.min(1, rotorFluxMagnitude / Math.max(Lm, 1e-9)));
+    const slipTorque = torqueConstant * 0.15 * voltageMagnitude * slipSpeed * fluxUtilization;
+    const fluxTorque = torqueConstant * ratedCurrent * (
+      (psiRAlpha / Math.max(Lm, 1e-9)) * normalizedIBeta
+      - (psiRBeta / Math.max(Lm, 1e-9)) * normalizedIAlpha
+    );
+    const Te = slipTorque + fluxTorque;
     
     return [
       Va - ia * Rs,                                      // branch[0]: ia
@@ -1075,7 +1090,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       Vc - ic * Rs,                                      // branch[2]: ic
       across[4] - state[1],                              // branch[3]: torque (link port across to speed state)
       dState[0] - state[1],                              // state[0]: theta
-      torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega (torque equation)
+      torque - (Te - J * dState[1] - B * state[1]),      // state[1]: omega (torque equation)
+      dState[2] - dPsiRAlpha,                            // state[2]: rotor flux alpha
+      dState[3] - dPsiRBeta                              // state[3]: rotor flux beta
     ];
   },
 

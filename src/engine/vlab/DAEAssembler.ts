@@ -304,6 +304,11 @@ export class DAEAssembler {
         branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
         if (blockType === 'memristor') states.push('w');
         break;
+      case 'three_phase_source':
+        branches.push({ name: 'phase_a', ports: [{ id: 'a', sign: -1 }] });
+        branches.push({ name: 'phase_b', ports: [{ id: 'b', sign: -1 }] });
+        branches.push({ name: 'phase_c', ports: [{ id: 'c', sign: -1 }] });
+        break;
       case 'v_sensor':
       case 'i_sensor':
         branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
@@ -438,6 +443,12 @@ export class DAEAssembler {
           states.push('theta', 'omega');
           break;
         case 'ac_motor':
+          branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }] });
+          branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }] });
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
+          states.push('theta', 'omega', 'psi_r_alpha', 'psi_r_beta');
+          break;
         case 'bldc_motor':
         case 'pmsm':
           branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });

@@ -45,6 +45,21 @@ describe('VLab Library Search & Scoring', () => {
     });
   });
 
+  it('exposes the AC Motor mechanical parameters used by the simulation equation', () => {
+    const acMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'ac_motor');
+
+    expect(acMotor?.params.J).toEqual({
+      value: 0.05,
+      unit: 'kg-m^2',
+      label: 'Inertia'
+    });
+    expect(acMotor?.params.B).toEqual({
+      value: 0.005,
+      unit: 'N-m-s/rad',
+      label: 'Viscous Damping'
+    });
+  });
+
   it('prioritizes exact name/id match "constant" over description matches', () => {
     const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
     const results = searchVLabBlocks(allBlocks, 'constant');

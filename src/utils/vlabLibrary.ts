@@ -711,6 +711,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2,
             "unit": "",
             "label": "Pole Pairs"
+          },
+          "J": {
+            "value": 0.05,
+            "unit": "kg-m^2",
+            "label": "Inertia"
+          },
+          "B": {
+            "value": 0.005,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [
