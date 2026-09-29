@@ -598,4 +598,61 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     expect(reloaded.packages).toContain('pkg-parent');
     expect(reloaded.packages).toContain('pkg-sub');
   });
+
+  test('IBD context is unique per Block after returning to BDD', async ({ page }) => {
+    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      for (const [id, name, x] of [['blk-alpha', 'Alpha', 120], ['blk-beta', 'Beta', 420]]) {
+        execute({
+          type: 'createAndPresent',
+          diagramId: 'bdd',
+          element: {
+            id,
+            name,
+            kind: 'block',
+            namespace: [],
+            ownerId: 'model',
+            isAbstract: false,
+            isLeaf: false,
+            properties: [],
+            ports: [],
+            operations: [],
+            constraints: [],
+          },
+          presentation: { x, y: 150, width: 200, height: 140 },
+        });
+      }
+      execute({
+        type: 'createDiagram',
+        diagram: {
+          id: 'ibd-alpha',
+          name: 'Alpha IBD',
+          kind: 'diagram',
+          diagramKind: 'ibd',
+          namespace: [],
+          ownerId: 'blk-alpha',
+          contextElementId: 'blk-alpha',
+        },
+      });
+    });
+
+    await filterTree(page, 'Alpha');
+    await page.locator('[data-semantic-id="ibd-alpha"]').first().dblclick();
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('ibd');
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('ibd-alpha');
+
+    await page.locator('button:has-text("Root")').first().click();
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('bdd');
+
+    await filterTree(page, 'Beta');
+    await page.locator('[data-semantic-id="blk-beta"]').first().dblclick();
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('ibd');
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('blk-beta');
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getNavigationStack?.())).toEqual(
+      expect.arrayContaining([expect.objectContaining({ diagramKind: 'bdd' })]),
+    );
+  });
 });
