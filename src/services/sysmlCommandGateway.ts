@@ -1357,8 +1357,20 @@ export function executeSysmlCommand(
   }
 
   if (command.type === 'updatePresentation') {
-    let currentDiagram = diagramPresentations[command.diagramId];
-    if (!command.diagramId || (!currentDiagram && !state.repository.definitions?.[command.diagramId])) {
+    let targetDiagramId = command.diagramId;
+    let currentDiagram = diagramPresentations[targetDiagramId];
+    const fallbackDiagramId = targetDiagramId === 'adia-default-bdd' ? 'bdd'
+      : targetDiagramId === 'bdd' ? 'adia-default-bdd'
+      : targetDiagramId === 'adia-default-requirements' ? 'requirements'
+      : targetDiagramId === 'requirements' ? 'adia-default-requirements'
+      : undefined;
+
+    if (fallbackDiagramId && (!currentDiagram || !currentDiagram.elementIds.includes(command.elementId)) && diagramPresentations[fallbackDiagramId]?.elementIds.includes(command.elementId)) {
+      targetDiagramId = fallbackDiagramId;
+      currentDiagram = diagramPresentations[targetDiagramId];
+    }
+
+    if (!targetDiagramId || (!currentDiagram && !state.repository.definitions?.[targetDiagramId])) {
       return {
         repository: state.repository,
         store,
@@ -1380,20 +1392,20 @@ export function executeSysmlCommand(
       };
     }
     if (!currentDiagram) {
-      currentDiagram = { elementIds: [command.diagramId], presentations: {} };
+      currentDiagram = { elementIds: [targetDiagramId], presentations: {} };
     }
-    const isContextBlock = command.elementId === command.diagramId;
+    const isContextBlock = command.elementId === targetDiagramId;
     if (!currentDiagram.elementIds.includes(command.elementId) && !isContextBlock) {
       return {
         repository: state.repository,
         store,
         patchHistory,
-        view: getView(state.repository, coordinates, diagramPresentations, command.diagramId),
+        view: getView(state.repository, coordinates, diagramPresentations, targetDiagramId),
         diagnostics: [{
           code: 'PRESENTATION_NOT_FOUND',
           severity: 'error',
           elementId: command.elementId,
-          message: `Element '${command.elementId}' is not presented on diagram '${command.diagramId}'.`,
+          message: `Element '${command.elementId}' is not presented on diagram '${targetDiagramId}'.`,
         }],
         committed: false,
         history: state.history,
@@ -1412,8 +1424,8 @@ export function executeSysmlCommand(
     }
     const previousDiagram = currentDiagram;
     const existingPresentation = currentDiagram.presentations[command.elementId] ?? {
-      id: stableDiagramPresentationId(command.diagramId, command.elementId),
-      diagramId: command.diagramId,
+      id: stableDiagramPresentationId(targetDiagramId, command.elementId),
+      diagramId: targetDiagramId,
       semanticElementId: command.elementId,
       bounds: { ...(coordinates[command.elementId] ?? {}) },
     };
@@ -1427,15 +1439,25 @@ export function executeSysmlCommand(
       ...currentDiagram,
       presentations: { ...currentDiagram.presentations, [command.elementId]: nextPresentation },
     };
-    const nextDiagramPresentations = { ...diagramPresentations, [command.diagramId]: nextDiagram };
-    store.diagramPresentations.set(command.diagramId, nextDiagram);
+    const nextDiagramPresentations = { ...diagramPresentations, [targetDiagramId]: nextDiagram };
+    store.diagramPresentations.set(targetDiagramId, nextDiagram);
+    if (command.diagramId && command.diagramId !== targetDiagramId) {
+      const pairedDiagram = diagramPresentations[command.diagramId] ?? { elementIds: [], presentations: {} };
+      const nextPaired: DiagramPresentation = {
+        ...pairedDiagram,
+        elementIds: pairedDiagram.elementIds.includes(command.elementId) ? pairedDiagram.elementIds : [...pairedDiagram.elementIds, command.elementId],
+        presentations: { ...pairedDiagram.presentations, [command.elementId]: nextPresentation },
+      };
+      nextDiagramPresentations[command.diagramId] = nextPaired;
+      store.diagramPresentations.set(command.diagramId, nextPaired);
+    }
     store.revision += 1;
 
     const patch = createSysmlPatch({
       revision: state.repository.revision,
       coalesceKey: command.coalesceKey,
-      forward: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: previousDiagram, value: nextDiagram }],
-      inverse: [{ op: 'replace', collection: 'diagramPresentations', id: command.diagramId, oldValue: nextDiagram, value: previousDiagram }],
+      forward: [{ op: 'replace', collection: 'diagramPresentations', id: targetDiagramId, oldValue: previousDiagram, value: nextDiagram }],
+      inverse: [{ op: 'replace', collection: 'diagramPresentations', id: targetDiagramId, oldValue: nextDiagram, value: previousDiagram }],
       description: 'updatePresentation',
     });
     pushPatch(patchHistory, patch, store);

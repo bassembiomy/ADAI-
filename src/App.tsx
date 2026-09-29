@@ -39,7 +39,7 @@ import { AiArchitectSidebar } from './components/AiArchitectSidebar';
 import { executeAiActions } from './utils/aiActionProcessor';
 import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { LiveFpsMonitor } from './components/LiveFpsMonitor';
-import { 
+import {
   VariableType, VariableDef, VariableOverflowPolicy, StateData, JunctionData, TransitionData, Layer, ErrorItem
 } from './types/sm_types';
 import {
@@ -1549,7 +1549,7 @@ const OledDisplay = ({
         {tempText}
       </div>
       <div className="w-full h-1 bg-[#111] border border-[#222] rounded overflow-hidden">
-        <div 
+        <div
           className="h-full bg-gradient-to-r from-[#e8a020] to-[#3de88a] transition-all duration-300"
           style={{ width: `${Math.max(0, Math.min(100, progressVal))}%` }}
         />
@@ -1659,15 +1659,15 @@ const Encoder = ({
   return (
     <div className="w-full h-full flex flex-col items-center justify-between p-2 select-none">
       <div className="flex gap-2 w-full justify-center shrink-0">
-        <button 
-          onClick={() => rotate(-1)} 
+        <button
+          onClick={() => rotate(-1)}
           className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
           disabled={editMode}
         >
           ↺
         </button>
-        <button 
-          onClick={() => rotate(1)} 
+        <button
+          onClick={() => rotate(1)}
           className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
           disabled={editMode}
         >
@@ -1676,7 +1676,7 @@ const Encoder = ({
       </div>
 
       <div className="relative flex-1 flex items-center justify-center my-1">
-        <div 
+        <div
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
@@ -1693,7 +1693,7 @@ const Encoder = ({
             <span className="text-[10px] text-[#444] font-bold">✦</span>
           </div>
         </div>
-        <div 
+        <div
           className={`absolute w-24 h-24 rounded-full border-2 border-[#f97316] pointer-events-none transition-all duration-300 ${isLpActive ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
         />
       </div>
@@ -2313,7 +2313,7 @@ const findBestOA = (userLevels: number[]): TaguchiOADef | null => {
   for (const oa of OAs) {
     const sortedOA = [...oa.colLevels].sort((a, b) => b - a);
     if (sortedUser.length > sortedOA.length) continue;
-    
+
     let compatible = true;
     for (let i = 0; i < sortedUser.length; i++) {
       if (sortedUser[i] > sortedOA[i]) {
@@ -2333,7 +2333,7 @@ const findBestOA = (userLevels: number[]): TaguchiOADef | null => {
 const generateDesignMatrix = (factors: { name: string, levels: number }[], oa: TaguchiOADef): number[][] => {
   const mappedCols: number[] = [];
   const usedCols = new Set<number>();
-  
+
   factors.forEach((f, fIdx) => {
     let matchedCol = -1;
     for (let c = 0; c < oa.colLevels.length; c++) {
@@ -2347,7 +2347,7 @@ const generateDesignMatrix = (factors: { name: string, levels: number }[], oa: T
       usedCols.add(matchedCol);
     }
   });
-  
+
   factors.forEach((f, fIdx) => {
     if (mappedCols[fIdx] !== undefined) return;
     let matchedCol = -1;
@@ -2446,7 +2446,7 @@ const DoeWorkspace = ({
 }) => {
   const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Taguchi design builder state
   const [showDesignBuilder, setShowDesignBuilder] = useState(false);
   const [builderNumFactors, setBuilderNumFactors] = useState(3);
@@ -2649,17 +2649,17 @@ const DoeWorkspace = ({
               <section className="bg-[#18181c] p-3 rounded-xl border border-[#27272f]">
                 <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2.5">Model Deployment</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="h-7 text-xs font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition-colors whitespace-nowrap"
                     onClick={handleExportToXBridges}
                   >
                     <Network size={12} className="mr-1.5" /> X-Bridges
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="h-7 text-xs font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 transition-colors whitespace-nowrap"
                     onClick={handleExportToVLab}
                   >
@@ -2701,13 +2701,13 @@ const DoeWorkspace = ({
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Response Table</h3>
                       <div className="flex bg-[#1a1a1a] p-0.5 rounded border border-[#222]">
-                        <button 
+                        <button
                           className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'sn' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
                           onClick={() => setResponseTableTab('sn')}
                         >
                           S/N
                         </button>
-                        <button 
+                        <button
                           className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'mean' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
                           onClick={() => setResponseTableTab('mean')}
                         >
@@ -2857,17 +2857,17 @@ const DoeWorkspace = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
                   <div className="flex gap-1 items-center">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="h-6 px-2 text-[10px] font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 whitespace-nowrap"
                       onClick={handleExportToVLab}
                     >
                       <FlaskConical size={10} className="mr-1" /> V-Lab
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="h-6 px-2 text-[10px] font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 whitespace-nowrap"
                       onClick={handleExportToXBridges}
                     >
@@ -2968,7 +2968,7 @@ const DoeWorkspace = ({
                         {headers.slice(0, -1).map((h, i) => (
                           <div key={i} className="flex justify-between items-center gap-2">
                             <span className="text-[9px] text-gray-400 truncate w-24">{h}</span>
-                            <select 
+                            <select
                               className="bg-[#050505] border border-[#222] text-[9px] p-1 rounded text-white"
                               value={holdValues[i]}
                               onChange={(e) => {
@@ -3091,14 +3091,14 @@ const DoeWorkspace = ({
                   <h3 className="text-lg font-black text-white uppercase tracking-tight">Create Taguchi Design</h3>
                   <p className="text-xs text-gray-500">Configure factors and levels to generate a coded Orthogonal Array worksheet.</p>
                 </div>
-                
+
                 <div className="flex items-center gap-4 bg-[#141414] p-4 rounded-xl border border-[#222]">
                   <Label className="uppercase text-xs font-black tracking-widest text-[#f97316]">Number of Factors</Label>
-                  <input 
-                    type="number" 
-                    min={2} 
-                    max={15} 
-                    value={builderNumFactors} 
+                  <input
+                    type="number"
+                    min={2}
+                    max={15}
+                    value={builderNumFactors}
                     onChange={handleBuilderNumFactorsChange}
                     className="w-20 bg-[#050505] border border-[#333] p-1.5 text-center rounded text-sm text-white"
                   />
@@ -3118,16 +3118,16 @@ const DoeWorkspace = ({
                         <tr key={idx}>
                           <td className="p-2 font-bold text-gray-400">Factor {idx + 1}</td>
                           <td className="p-1">
-                            <input 
-                              type="text" 
-                              value={f.name} 
+                            <input
+                              type="text"
+                              value={f.name}
                               onChange={(e) => handleBuilderFactorNameChange(idx, e.target.value)}
                               className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
                             />
                           </td>
                           <td className="p-1">
-                            <select 
-                              value={f.levels} 
+                            <select
+                              value={f.levels}
                               onChange={(e) => handleBuilderFactorLevelsChange(idx, Number(e.target.value))}
                               className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
                             >
@@ -3165,7 +3165,7 @@ const DoeWorkspace = ({
 
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setShowDesignBuilder(false)}>Cancel</Button>
-                  <Button 
+                  <Button
                     variant="default"
                     disabled={!findBestOA(builderFactors.map(f => f.levels))}
                     onClick={handleGenerateDesign}
@@ -4261,7 +4261,7 @@ const WorkspaceFileDialog = ({
   const [selectedType, setSelectedType] = useState<string>('xbridges');
   const [fileName, setFileName] = useState('');
   const [projectName, setProjectName] = useState('');
-  
+
   // For import
   const [importedJson, setImportedJson] = useState<any>(null);
   const [detectedType, setDetectedType] = useState<string>('');
@@ -4296,7 +4296,7 @@ const WorkspaceFileDialog = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setImportFileName(file.name.replace(/\.[^/.]+$/, ""));
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -4336,7 +4336,7 @@ const WorkspaceFileDialog = ({
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300" onMouseDown={onClose}>
       <div className="bg-[#111] border border-[#f97316]/40 rounded-2xl w-[750px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-        
+
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-[#181818] to-[#111] border-b border-[#222] flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -4348,20 +4348,20 @@ const WorkspaceFileDialog = ({
 
         {/* Tab Buttons */}
         <div className="flex bg-[#0f0f0f] border-b border-[#222] p-1 gap-2 px-6">
-          <button 
-            onClick={() => setActiveTab('create')} 
+          <button
+            onClick={() => setActiveTab('create')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'create' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Create New Asset
           </button>
-          <button 
-            onClick={() => setActiveTab('manage')} 
+          <button
+            onClick={() => setActiveTab('manage')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'manage' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Manage Files ({existingFiles.length})
           </button>
-          <button 
-            onClick={() => setActiveTab('import')} 
+          <button
+            onClick={() => setActiveTab('import')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'import' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Import Module JSON
@@ -4375,7 +4375,7 @@ const WorkspaceFileDialog = ({
               {/* Asset Type Grid */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Project Option */}
-                <div 
+                <div
                   onClick={() => setSelectedType('project')}
                   className={`p-4 rounded-xl border transition-all cursor-pointer flex gap-4 items-start ${selectedType === 'project' ? 'bg-[#f97316]/10 border-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)]' : 'bg-[#181818] border-[#222] hover:border-[#333]'}`}
                 >
@@ -4393,7 +4393,7 @@ const WorkspaceFileDialog = ({
 
                 {/* Modules */}
                 {modules.map(m => (
-                  <div 
+                  <div
                     key={m.id}
                     onClick={() => setSelectedType(m.id)}
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex gap-3 items-center ${selectedType === m.id ? 'bg-[#181818] border-l-4 shadow-[0_0_15px_rgba(255,255,255,0.05)]' : 'bg-[#161616] border-[#222] hover:border-[#333]'}`}
@@ -4415,7 +4415,7 @@ const WorkspaceFileDialog = ({
                 {selectedType === 'project' ? (
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Project Name</label>
-                    <Input 
+                    <Input
                       autoFocus
                       value={projectName}
                       onChange={e => setProjectName(e.target.value)}
@@ -4427,7 +4427,7 @@ const WorkspaceFileDialog = ({
                 ) : (
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Asset File/Tab Name</label>
-                    <Input 
+                    <Input
                       autoFocus
                       value={fileName}
                       onChange={e => setFileName(e.target.value)}
@@ -4437,11 +4437,11 @@ const WorkspaceFileDialog = ({
                     />
                   </div>
                 )}
-                
+
                 <div className="flex justify-end gap-3 pt-2">
                   <Button onClick={onClose} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#181818]">Cancel</Button>
-                  <Button 
-                    onClick={handleCreate} 
+                  <Button
+                    onClick={handleCreate}
                     disabled={selectedType === 'project' ? !projectName.trim() : false}
                     className="px-5 bg-[#f97316] text-black hover:bg-[#ea580c] font-bold"
                   >
@@ -4486,7 +4486,7 @@ const WorkspaceFileDialog = ({
                           </td>
                           <td className="p-3 text-right space-x-2">
                             {!isOpen && (
-                              <button 
+                              <button
                                 onClick={() => onOpenFile(file.id)}
                                 className="text-xs text-[#f97316] hover:underline"
                               >
@@ -4496,7 +4496,7 @@ const WorkspaceFileDialog = ({
                             {file.id.startsWith('default_') ? (
                               <span className="text-[10px] text-slate-600 font-bold uppercase select-none">System Default</span>
                             ) : (
-                              <button 
+                              <button
                                 onClick={() => onDeleteFile(file.id)}
                                 className="text-xs text-red-500 hover:text-red-400 hover:underline"
                               >
@@ -4515,15 +4515,15 @@ const WorkspaceFileDialog = ({
 
           {activeTab === 'import' && (
             <div className="space-y-5">
-              <div 
+              <div
                 onClick={() => importInputRef.current?.click()}
                 className="border-2 border-dashed border-[#333] hover:border-[#f97316]/50 rounded-2xl p-10 text-center cursor-pointer transition-all bg-[#0a0a0a]"
               >
-                <input 
-                  type="file" 
-                  ref={importInputRef} 
-                  onChange={handleFileChange} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  ref={importInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
                   accept=".json"
                 />
                 <div className="text-4xl mb-4">📥</div>
@@ -4541,7 +4541,7 @@ const WorkspaceFileDialog = ({
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Import Asset Tab Name</label>
-                    <Input 
+                    <Input
                       value={importFileName}
                       onChange={e => setImportFileName(e.target.value)}
                       className="w-full mt-1.5 bg-[#111] border-[#222] focus:border-[#f97316] text-white font-mono"
@@ -4595,20 +4595,20 @@ const WorkspaceTabBar = ({
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
           if (!file) return null;
-          
+
           const isActive = activeFileId === tabId;
           const modInfo = modules.find(m => m.id === file.type);
-          
+
           return (
-            <div 
+            <div
               key={tabId}
               role="tab"
               aria-selected={isActive}
               data-workspace-type={file.type}
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
-                  isActive 
-                ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]' 
+                  isActive
+                ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
               }`}
               style={{
@@ -4617,7 +4617,7 @@ const WorkspaceTabBar = ({
             >
               <span style={{ color: modInfo?.color }}>{modInfo?.icon || '📁'}</span>
               <span className="truncate max-w-[120px]">{file.name}</span>
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseTab(tabId);
@@ -4631,7 +4631,7 @@ const WorkspaceTabBar = ({
           );
         })}
       </div>
-      <button 
+      <button
         onClick={onOpenDialog}
         className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
         title="Open Workspace Asset Manager"
@@ -4650,7 +4650,7 @@ const SaveSelectionDialog = ({
   onSave: (selectedKeys: string[]) => void;
 }) => {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([
-    'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges', 
+    'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges',
     'vlab', 'hmi', 'hil', 'doe', 'entropy', 'unified'
   ]);
 
@@ -4669,7 +4669,7 @@ const SaveSelectionDialog = ({
   ];
 
   const handleToggle = (id: string) => {
-    setSelectedKeys(prev => 
+    setSelectedKeys(prev =>
       prev.includes(id) ? prev.filter(k => k !== id) : [...prev, id]
     );
   };
@@ -4687,24 +4687,24 @@ const SaveSelectionDialog = ({
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-xl w-[500px] max-h-[90vh] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
         <div className="h-14 flex items-center justify-between px-6 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Select Modules to Save</h2>
-          <button 
-            onClick={handleToggleAll} 
+          <button
+            onClick={handleToggleAll}
             className="text-xs text-[#888] hover:text-[#f97316] transition-colors cursor-pointer"
           >
             {selectedKeys.length === modules.length ? 'Deselect All' : 'Select All'}
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
           <p className="text-xs text-[#888] mb-2">Check the modules you want to export. By default, all are selected.</p>
           <div className="space-y-2 border border-[#222] rounded-lg p-3 bg-[#111]/40">
             {modules.map(m => (
-              <label 
-                key={m.id} 
+              <label
+                key={m.id}
                 className="flex items-start gap-3 p-2 rounded hover:bg-[#222]/50 cursor-pointer transition-colors"
               >
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   checked={selectedKeys.includes(m.id)}
                   onChange={() => handleToggle(m.id)}
                   className="mt-0.5 rounded border-[#333] text-[#f97316] focus:ring-[#f97316] focus:ring-offset-0 focus:ring-0 bg-transparent w-4 h-4 cursor-pointer"
@@ -4719,8 +4719,8 @@ const SaveSelectionDialog = ({
         </div>
 
         <div className="h-16 flex items-center justify-end px-6 border-t border-[#222] gap-3">
-          <Button 
-            onClick={onClose} 
+          <Button
+            onClick={onClose}
             className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]"
           >
             Cancel
@@ -4948,7 +4948,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
       setShowArchitectureExplorer(false);
     }
   }, [initialTopic, isOpen]);
-  
+
   if (!isOpen) return null;
 
   const topic = HELP_DATA[activeTopic] || HELP_DATA["getting-started"];
@@ -4962,19 +4962,19 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
   });
 
   // Flattened library for search
-  const vlabBlocks = VLAB_LIBRARY.flatMap(domain => 
+  const vlabBlocks = VLAB_LIBRARY.flatMap(domain =>
     domain.blocks.map(b => ({ ...b, domain: domain.type, source: 'V-Lab' }))
   );
-  
+
   const xbridgesBlocks = Object.keys(XBRIDGES_LIBRARY).map(key => {
     try {
       const b = XBRIDGES_LIBRARY[key]('tmp', {});
-      return { 
-        id: key, 
-        name: key, 
-        domain: 'Control', 
-        source: 'X-Bridges', 
-        params: b.params, 
+      return {
+        id: key,
+        name: key,
+        domain: 'Control',
+        source: 'X-Bridges',
+        params: b.params,
         ports: [...(b.inputs || []), ...(b.outputs || [])],
         icon: b.icon,
         equation: b.equation,
@@ -4986,7 +4986,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
   });
 
   const allBlocks = [...vlabBlocks, ...xbridgesBlocks];
-  
+
   const domainsList = ["All", ...Array.from(new Set(allBlocks.map(b => b.domain)))];
 
   const filteredBlocks = allBlocks
@@ -5038,7 +5038,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-6 md:p-10 text-white font-sans">
       <div className="bg-[#0f0f0f] rounded-3xl border border-white/10 w-full h-full max-w-7xl flex flex-col shadow-[0_0_150px_rgba(0,0,0,0.8)] overflow-hidden">
-        
+
         {/* TOP HEADER */}
         <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 md:px-10 bg-[#151515]/50 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-6 md:gap-8">
@@ -5049,17 +5049,17 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                 <span className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Multi-Domain MBD & HIL Reference</span>
               </div>
             </div>
-            
+
             <div className="h-10 w-[1px] bg-white/10 hidden sm:block"></div>
-            
+
             <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
-              <button 
+              <button
                 onClick={() => setShowBlockRef(false)}
                 className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
               >
                 User Guide & Modules
               </button>
-              <button 
+              <button
                 onClick={() => setShowBlockRef(true)}
                 className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
               >
@@ -5067,21 +5067,21 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
               </button>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4 md:gap-6">
             <div className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors">
                 <Search size={16} />
               </div>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder={showBlockRef ? "Search 250+ blocks, equations, ports..." : "Search documentation topics & guides..."}
                 className="bg-black/60 border border-white/10 rounded-full py-2.5 pl-12 pr-6 text-xs w-64 md:w-80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all font-medium"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <button 
+            <button
               onClick={onClose}
               className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all group shrink-0"
               title="Close Help"
@@ -5092,7 +5092,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
         </header>
 
         <div className="flex flex-1 overflow-hidden">
-          
+
           {/* SIDEBAR */}
           <aside className="w-80 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0">
             {showBlockRef && (
@@ -5138,7 +5138,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                       <ul className="space-y-1">
                         {topicCategories[cat].map(key => (
                           <li key={key}>
-                            <button 
+                            <button
                               onClick={() => setActiveTopic(key)}
                               className={`w-full text-left px-4 py-2.5 rounded-xl text-xs transition-all flex items-center gap-3 ${activeTopic === key ? 'bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
                             >
@@ -5161,7 +5161,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                     )}
                   </div>
                   {filteredBlocks.map(block => (
-                    <button 
+                    <button
                       key={block.id}
                       onClick={() => setSelectedBlockId(block.id)}
                       className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[11px] transition-all flex items-center justify-between group ${selectedBlockId === block.id ? 'bg-orange-500 text-black font-black shadow-md shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}
@@ -5201,7 +5201,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                     <ChevronRight size={10} />
                     <span className="text-white">{topic.title}</span>
                   </nav>
-                  
+
                 <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
                     {topic.title}
                   </h1>
@@ -5242,7 +5242,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                         <div className="text-gray-400 leading-relaxed mb-6 whitespace-pre-wrap font-light text-sm">
                           {section.body}
                         </div>
-                        
+
                         {section.list && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
                             {section.list.map((item, i) => (
@@ -5271,7 +5271,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                       <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-8">Related Modules & Deep Dives</h3>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {topic.related.map(key => (
-                          <button 
+                          <button
                             key={key}
                             onClick={() => setActiveTopic(key)}
                             className="p-6 bg-[#151515] border border-white/5 rounded-3xl hover:border-orange-500/40 transition-all text-left group hover:-translate-y-1"
@@ -5334,13 +5334,13 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                             <div className="w-36 h-36 bg-orange-500/5 border-2 border-orange-500/30 rounded-3xl flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(249,115,22,0.1)] group">
                               <DynamicIcon name={selectedBlock.icon} size={40} className="text-orange-500 mb-1" />
                               <span className="text-[10px] font-black text-white/80 max-w-[100px] text-center truncate px-1">{selectedBlock.name}</span>
-                              
+
                               {/* Port Pins */}
                               {selectedBlock.ports?.map((p: any, i: number) => {
                                 const pos = p.position || (i % 2 === 0 ? 'left' : 'right');
                                 return (
-                                  <div 
-                                    key={i} 
+                                  <div
+                                    key={i}
                                     className={`absolute text-[8px] font-black uppercase text-gray-400 flex items-center gap-1 ${pos === 'left' ? '-left-14' : pos === 'right' ? '-right-14' : pos === 'top' ? '-top-8' : '-bottom-8'}`}
                                   >
                                     <span className="px-1 py-0.5 bg-black/80 rounded border border-white/10 text-orange-400/90">{p.label || p.name || `Pin ${i+1}`}</span>
@@ -5425,7 +5425,7 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
                         </section>
 
                         <section>
-                          <button 
+                          <button
                             onClick={() => {
                               setShowBlockRef(false);
                               if (selectedBlock.source === 'V-Lab') {
@@ -5492,14 +5492,14 @@ const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose
   );
 };
 
-const ReportPreviewModal = ({ 
-  isOpen, 
-  onClose, 
-  results, 
-  data, 
-  headers, 
-  plotFactors, 
-  holdValues 
+const ReportPreviewModal = ({
+  isOpen,
+  onClose,
+  results,
+  data,
+  headers,
+  plotFactors,
+  holdValues
 }: any) => {
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
   const previewRef = useRef<HTMLDivElement>(null);
@@ -5508,11 +5508,11 @@ const ReportPreviewModal = ({
 
   const exportToWord = async () => {
     if (!previewRef.current) return;
-    
+
     const clone = previewRef.current.cloneNode(true) as HTMLDivElement;
     const originalPlots = previewRef.current.querySelectorAll('.js-plotly-plot');
     const clonePlots = clone.querySelectorAll('.js-plotly-plot');
-    
+
     // We replace interactive plotly divs with static images for Word
     for (let i = 0; i < originalPlots.length; i++) {
       try {
@@ -5532,7 +5532,7 @@ const ReportPreviewModal = ({
     <head><meta charset='utf-8'><title>ADIA DOE Report</title></head><body style="background-color: #1a1a1a; color: #e0e0e0;">`;
     const footer = "</body></html>";
     const sourceHTML = header + DOMPurify.sanitize(clone.innerHTML) + footer;
-    
+
     const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -5572,22 +5572,22 @@ const ReportPreviewModal = ({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
-              <button 
-                onClick={() => setLayout('1-col')} 
+              <button
+                onClick={() => setLayout('1-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="1 Column Layout"
               >
                 <Rows size={16} />
               </button>
-              <button 
-                onClick={() => setLayout('2-col')} 
+              <button
+                onClick={() => setLayout('2-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="2 Columns Grid"
               >
                 <LayoutGrid size={16} />
               </button>
             </div>
-            
+
             <Button size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
               <Download size={14} className="mr-2" /> PDF
             </Button>
@@ -5601,8 +5601,8 @@ const ReportPreviewModal = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 bg-[#0a0a0a] flex justify-center custom-scrollbar">
-          <div 
-            ref={previewRef} 
+          <div
+            ref={previewRef}
             className="bg-[#1a1a1a] w-full max-w-[210mm] min-h-[297mm] shadow-2xl p-10 text-[#e0e0e0] border border-[#333]"
             style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
           >
@@ -5637,29 +5637,29 @@ const ReportPreviewModal = ({
             <div style={{ marginBottom: '20px' }}>
               <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>2. Model Equation</h2>
               <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '4px', border: '1px solid #333', fontFamily: 'monospace', fontSize: '12px', color: '#10b981' }}>
-                {results?.type === 'Taguchi' 
-                  ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.' 
+                {results?.type === 'Taguchi'
+                  ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.'
                   : (results?.equation || 'No equation available')}
               </div>
             </div>
 
             <div style={{ marginBottom: '20px' }}>
               <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', marginBottom: '15px', fontWeight: 'bold' }}>3. Analysis Diagrams</h2>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: layout === '2-col' ? '1fr 1fr' : '1fr', 
-                gap: '20px' 
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: layout === '2-col' ? '1fr 1fr' : '1fr',
+                gap: '20px'
               }}>
                 {plotsToShow.map(pt => (
                   <div key={pt} style={{ border: '1px solid #333', padding: '10px', borderRadius: '4px', background: '#1a1a1a' }}>
                     <div style={{ width: '100%', height: '350px', overflow: 'hidden' }}>
-                      <PlotlyPlots 
-                        type={pt as any} 
-                        results={results} 
-                        data={data} 
-                        headers={headers} 
-                        factors={plotFactors} 
-                        holdValues={holdValues} 
+                      <PlotlyPlots
+                        type={pt as any}
+                        results={results}
+                        data={data}
+                        headers={headers}
+                        factors={plotFactors}
+                        holdValues={holdValues}
                       />
                     </div>
                   </div>
@@ -5673,14 +5673,14 @@ const ReportPreviewModal = ({
   );
 };
 
-const GlobalReportPreviewModal = ({ 
-  isOpen, 
-  onClose, 
-  reportData 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  reportData: { html: string, projectName: string } | null 
+const GlobalReportPreviewModal = ({
+  isOpen,
+  onClose,
+  reportData
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  reportData: { html: string, projectName: string } | null
 }) => {
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
 
@@ -5803,22 +5803,22 @@ const GlobalReportPreviewModal = ({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
-              <button 
-                onClick={() => setLayout('1-col')} 
+              <button
+                onClick={() => setLayout('1-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="1 Column Layout"
               >
                 <Rows size={16} />
               </button>
-              <button 
-                onClick={() => setLayout('2-col')} 
+              <button
+                onClick={() => setLayout('2-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="2 Columns Grid"
               >
                 <LayoutGrid size={16} />
               </button>
             </div>
-            
+
             <Button size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
               <Download size={14} className="mr-2" /> HTML
             </Button>
@@ -6555,7 +6555,7 @@ const ADIA = () => {
         semanticToken: (role: string) => semanticPresentationToken(role),
         getDiagramPresentations: () => sysmlDiagramPresentations,
         getActiveDiagramId: () => activeSysmlDiagramId,
-        getDiagramMode: () => diagramMode,
+        getDiagramMode: () => (diagramMode === 'statemachine' ? 'stateMachine' : diagramMode),
         getNavigationStack: () => diagramNavigationStack,
         getDiagramWorkspace: () => diagramWorkspace,
       };
@@ -6950,7 +6950,7 @@ const ADIA = () => {
       type: type,
       data: null
     };
-    
+
     setWorkspaceFiles(prev => {
       let updatedFiles = prev;
       if (activeFileId) {
@@ -6958,12 +6958,12 @@ const ADIA = () => {
       }
       return [...updatedFiles, newFile];
     });
-    
+
     setOpenTabIds(prev => {
       if (prev.includes(newId)) return prev;
       return [...prev, newId];
     });
-    
+
     setActiveFileId(newId);
     setDiagramModeState(type as DiagramMode);
     loadStateForFile(newFile);
@@ -6973,7 +6973,7 @@ const ADIA = () => {
   const closeTab = useCallback((fileId: string) => {
     setOpenTabIds(prev => {
       const next = prev.filter(id => id !== fileId);
-      
+
       if (activeFileId === fileId) {
         if (next.length > 0) {
           const index = prev.indexOf(fileId);
@@ -7010,21 +7010,21 @@ const ADIA = () => {
     if (activeFile && activeFile.type === mode) {
       return; // Already active file of this type
     }
-    
+
     // 2. Find if a file of this type is already open in tabs
     const openTabFile = workspaceFiles.find(f => openTabIds.includes(f.id) && f.type === mode);
     if (openTabFile) {
       switchActiveFile(openTabFile.id);
       return;
     }
-    
+
     // 3. Find if a file of this type exists in workspaceFiles but not open in tabs
     const existingFile = workspaceFiles.find(f => f.type === mode);
     if (existingFile) {
       openFileInTab(existingFile.id);
       return;
     }
-    
+
     // 4. If no file of this type exists, create a default file of this type
     const defaultNames: Record<string, string> = {
       statemachine: 'Main State Machine',
@@ -7054,7 +7054,7 @@ const ADIA = () => {
     }
     // Prevent React events from being treated as block data
     const actualBlock = (block && block.nativeEvent) ? null : block;
-    
+
     let newNode: any = actualBlock;
     if (!newNode) {
       const exportRes = createVLabDOEBlock(results.canonicalResult || results);
@@ -7065,7 +7065,7 @@ const ADIA = () => {
       newNode = exportRes;
     }
     console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode);
-    
+
     const getTargetFileForMode = (mode: DiagramMode) => {
       const activeFile = workspaceFiles.find(f => f.id === activeFileId);
       if (activeFile && activeFile.type === mode) {
@@ -7087,9 +7087,9 @@ const ADIA = () => {
       const newId = `file_${Date.now()}`;
       return { id: newId, isNew: true, name };
     };
-    
+
     const target = getTargetFileForMode('vlab');
-    
+
     if (target.isNew) {
       const newFile: WorkspaceFile = {
         id: target.id,
@@ -7100,7 +7100,7 @@ const ADIA = () => {
           vlabEdges: []
         }
       };
-      
+
       setWorkspaceFiles(prev => {
         let updatedFiles = prev;
         if (activeFileId) {
@@ -7108,12 +7108,12 @@ const ADIA = () => {
         }
         return [...updatedFiles, newFile];
       });
-      
+
       setOpenTabIds(prev => {
         if (prev.includes(target.id)) return prev;
         return [...prev, target.id];
       });
-      
+
       setActiveFileId(target.id);
       setDiagramModeState('vlab');
       loadStateForFile(newFile);
@@ -7138,14 +7138,14 @@ const ADIA = () => {
           return f;
         });
       });
-      
+
       if (activeFileId === target.id) {
         setVlabNodes(prev => [...prev, newNode]);
       }
-      
+
       openFileInTab(target.id);
     }
-    
+
     toggleWindow('doe');
     addError('info', `Exported ${activeModel} model to V-Lab workspace.`);
   };
@@ -7161,11 +7161,11 @@ const ADIA = () => {
       return;
     }
     const newNode = exportRes;
-    
+
     if (xBridgesStateId) {
       // 1. If inside a state-specific sub-workspace, append node to that state's xBridgesModel.nodes
-      setStates(prev => prev.map(s => 
-        s.id === xBridgesStateId 
+      setStates(prev => prev.map(s =>
+        s.id === xBridgesStateId
           ? {
               ...s,
               xBridgesModel: {
@@ -7201,9 +7201,9 @@ const ADIA = () => {
         const newId = `file_${Date.now()}`;
         return { id: newId, isNew: true, name };
       };
-      
+
       const target = getTargetFileForMode('xbridges');
-      
+
       if (target.isNew) {
         const newFile: WorkspaceFile = {
           id: target.id,
@@ -7214,7 +7214,7 @@ const ADIA = () => {
             globalXBridgesEdges: []
           }
         };
-        
+
         setWorkspaceFiles(prev => {
           let updatedFiles = prev;
           if (activeFileId) {
@@ -7222,12 +7222,12 @@ const ADIA = () => {
           }
           return [...updatedFiles, newFile];
         });
-        
+
         setOpenTabIds(prev => {
           if (prev.includes(target.id)) return prev;
           return [...prev, target.id];
         });
-        
+
         setActiveFileId(target.id);
         setDiagramModeState('xbridges');
         loadStateForFile(newFile);
@@ -7252,16 +7252,16 @@ const ADIA = () => {
             return f;
           });
         });
-        
+
         if (activeFileId === target.id) {
           setGlobalXBridgesNodes(prev => [...prev, newNode]);
         }
-        
+
         openFileInTab(target.id);
       }
       addError('info', `Exported ${activeModel} model to X-Bridges workspace.`);
     }
-    
+
     toggleWindow('doe');
   };
 
@@ -8329,7 +8329,7 @@ const ADIA = () => {
         if (result && (result.status === 'saved' || result.success) && result.filePath) {
           setActiveProjectPath(result.filePath);
           lastSavedSnapshotRef.current = createProjectSnapshot(payload);
-          
+
           const fileName = result.filePath.split(/[/\\]/).pop() || '';
           const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
           if (nameWithoutExt) {
@@ -9252,9 +9252,9 @@ const ADIA = () => {
 
   const handleExecuteAiActions = useCallback((actions: any[]) => {
     executeAiActions(
-      actions, 
+      actions,
       { states, variables, junctions, layers, currentLayerId },
-      { 
+      {
         setStates, setVariables, setTransitions, addError,
         setFactors, setHeaders, setModelType: setActiveModel,
         calculateRSM, calculateGMDH, calculateTaguchi,
@@ -9752,14 +9752,16 @@ const ADIA = () => {
       );
       setDiagramNavigationStack(nav.returnStack);
       setActiveSysmlDiagramIdState(nav.activeDiagramId);
-      if (nav.diagramKind !== diagramMode) {
+      if (nav.activeDiagramId && (canonicalSysmlRepository.diagrams[nav.activeDiagramId] || seededStateMachineDiagrams.some(d => d.id === nav.activeDiagramId))) {
+        openExactDiagramById(nav.activeDiagramId, { preserveReturnStack: true });
+      } else if (nav.diagramKind !== diagramMode) {
         setDiagramMode(nav.diagramKind as DiagramMode);
       }
     }
 
     setSelectedIds([]);
     addError('info', 'Returned to parent layer');
-  }, [layerStack, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
+  }, [layerStack, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode]);
 
   const goToLayer = useCallback((index: number) => {
     if (index >= layerPath.length - 1) return;
@@ -9781,7 +9783,9 @@ const ADIA = () => {
         );
         setDiagramNavigationStack(nav.returnStack);
         setActiveSysmlDiagramIdState(nav.activeDiagramId);
-        if (nav.diagramKind !== diagramMode) {
+        if (nav.activeDiagramId && (canonicalSysmlRepository.diagrams[nav.activeDiagramId] || seededStateMachineDiagrams.some(d => d.id === nav.activeDiagramId))) {
+          openExactDiagramById(nav.activeDiagramId, { preserveReturnStack: true });
+        } else if (nav.diagramKind !== diagramMode) {
           setDiagramMode(nav.diagramKind as DiagramMode);
         }
       } else {
@@ -9791,7 +9795,7 @@ const ADIA = () => {
 
     setSelectedIds([]);
     addError('info', `Navigated to layer: ${layerPath[index]}`);
-  }, [layerStack, layerPath, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
+  }, [layerStack, layerPath, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode]);
 
   // STATE MACHINE EDITOR
   const createState = useCallback((x: number, y: number, parentId?: string) => {
@@ -13641,13 +13645,13 @@ const ADIA = () => {
       html += analysisErrors.length > 0
         ? `<p style="color: #b91c1c; font-weight: bold;">No test scenarios were derived because semantic validation failed.</p>`
         : `<p>Structurally derived test scenarios for critical paths and detected corner cases. Execute them in host, differential, embedded, and target-hardware gates before treating them as runtime evidence.</p>`;
-      
+
       analysis.testScenarios.forEach(ts => {
         html += `<div class="item" style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; margin-bottom: 20px; background-color: #fafafa;">
                   <div class="item-header" style="font-size: 1.1em; color: #1e293b; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 10px;">
                     <span class="tag" style="background-color: #f97316; color: #fff;">${escapeHtml(ts.category.toUpperCase())}</span> ${escapeHtml(ts.name)} <span style="font-family: monospace; font-size: 0.9em; color: #64748b; float: right;">${escapeHtml(ts.id)}</span>
                   </div>`;
-        
+
         if (ts.preconditions.length > 0) {
           html += `<div class="props" style="margin-bottom: 10px;">
                     <strong>Preconditions:</strong>
@@ -13836,8 +13840,8 @@ const ADIA = () => {
                 <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', -1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↺</button>
                 <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', 1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↻</button>
               </div>
-              <div style="position: relative; width: ${ch - 24}px; height: ${ch - 24}px; cursor: pointer;" 
-                   onmousedown="window.ADIA_SIM.knobPress('${c.id}', true)" 
+              <div style="position: relative; width: ${ch - 24}px; height: ${ch - 24}px; cursor: pointer;"
+                   onmousedown="window.ADIA_SIM.knobPress('${c.id}', true)"
                    onmouseup="window.ADIA_SIM.knobPress('${c.id}', false)"
                    onmouseleave="window.ADIA_SIM.knobPress('${c.id}', false)">
                 <div class="hmi-knob-circle" id="knob-${c.id}">
@@ -14528,7 +14532,7 @@ const ADIA = () => {
                     const stateEl = oled.querySelector(".oled-state");
                     const indicatorsEl = oled.querySelector(".oled-indicators");
                     const contextEl = oled.querySelector(".oled-context");
-                    
+
                     if (modeTextEl) {
                       const modeIdx = c.oledModeVarId ? Number(getVarValById(c.oledModeVarId)) || 0 : 0;
                       const modeNames = c.oledModeNames ? c.oledModeNames.split(",").map(s => s.trim()) : [
@@ -14853,7 +14857,7 @@ const ADIA = () => {
           const modal = document.getElementById('diagram-modal');
           const modalTitle = document.getElementById('diagram-modal-title');
           const modalContent = document.getElementById('diagram-modal-content');
-          
+
           if (modalTitle) modalTitle.textContent = '📊 ' + (title || 'SysML Diagram Viewer');
           if (modalContent) {
             modalContent.replaceChildren(svgEl.cloneNode(true));
@@ -16843,8 +16847,8 @@ const ADIA = () => {
         <IntroStandbyOverlay mode="standby" onClose={() => setShowStandby(false)} />
       )}
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} />
-      <FactoryIOGateway 
-        isOpen={showFactoryIOGateway} 
+      <FactoryIOGateway
+        isOpen={showFactoryIOGateway}
         onClose={() => setShowFactoryIOGateway(false)}
         variables={variables}
         mapping={factoryIOMapping}
@@ -16853,8 +16857,8 @@ const ADIA = () => {
         setIsEnabled={setFactoryIOEnabled}
         status={factoryIOStatus}
       />
-      <AiArchitectSidebar 
-        isOpen={isAiSidebarOpen} 
+      <AiArchitectSidebar
+        isOpen={isAiSidebarOpen}
         onToggle={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
         currentContext={{ states, variables, transitions, junctions, layers, blocks }}
         onExecuteActions={handleExecuteAiActions}
@@ -16881,14 +16885,14 @@ const ADIA = () => {
         onClose={() => setShowGlobalReportPreview(false)}
         reportData={globalReportData}
       />
-      <ReportPreviewModal 
-        isOpen={showReportPreview} 
-        onClose={() => setShowReportPreview(false)} 
-        results={results} 
-        data={data} 
-        headers={headers} 
-        plotFactors={plotFactors} 
-        holdValues={holdValues} 
+      <ReportPreviewModal
+        isOpen={showReportPreview}
+        onClose={() => setShowReportPreview(false)}
+        results={results}
+        data={data}
+        headers={headers}
+        plotFactors={plotFactors}
+        holdValues={holdValues}
       />
       <LargeModelDiagnostics
         isOpen={showSysmlDiagnostics}
@@ -19194,7 +19198,7 @@ const ADIA = () => {
                               <span>Attached PDFs</span>
                               <span className="text-[10px] text-[#666]">({(selectedBlock.attachedFiles || []).length})</span>
                             </Label>
-                            
+
                             <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
                               {(!selectedBlock.attachedFiles || selectedBlock.attachedFiles.length === 0) ? (
                                 <div className="text-xs text-[#666] italic py-1">No PDF files attached.</div>

@@ -13,6 +13,7 @@ async function openModeler(page: import('@playwright/test').Page) {
     await intro.first().click({ position: { x: 10, y: 10 }, force: true }).catch(() => {});
     await intro.first().waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
   }
+  await page.waitForFunction(() => typeof (window as any).__sysmlExecuteCommand === 'function', null, { timeout: 30000 });
 }
 
 async function dismissOverlay(page: import('@playwright/test').Page) {
@@ -72,7 +73,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
   });
 
   test('assigning a Requirement to a Block from the BDD inspector persists a canonical Satisfy relationship', async ({ page }) => {
-    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
     await page.waitForTimeout(300);
     await page.evaluate(() => {
       const execute = (window as any).__sysmlExecuteCommand;
@@ -121,7 +122,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
 
   test('1. BDD property connection routes from compartment row and uses association styling', async ({ page }) => {
     // Switch to SysML BDD
-    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
     await page.waitForTimeout(300);
 
     // Create two blocks: Engine and Controller
@@ -228,7 +229,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     // Real save and reload
     const saved = await saveProject(page, 'bdd-assoc-parity.adia');
     await reloadAndReopenProject(page, saved);
-    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
     await page.waitForTimeout(300);
 
     const reloadedState = await repoState(page);
@@ -238,7 +239,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
   });
 
   test('BDD block selects on release, but starts moving only after a held pointer drag', async ({ page }) => {
-    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
     await page.evaluate(() => {
       (window as any).__sysmlExecuteCommand({
         type: 'createAndPresent',
@@ -287,7 +288,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
 
   test('2. Part creation inside active Block context without owner chooser and Root returns to origin BDD', async ({ page }) => {
     // Switch to SysML BDD
-    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
     await page.waitForTimeout(300);
 
     // Create container Block Chassis and component Block Wheel
@@ -648,7 +649,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
   });
 
   test('IBD context is unique per Block after returning to BDD', async ({ page }) => {
-    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
     await page.waitForTimeout(300);
 
     await page.evaluate(() => {
@@ -703,4 +704,164 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
       expect.arrayContaining([expect.objectContaining({ diagramKind: 'bdd' })]),
     );
   });
+
+  test('creates and opens exact diagrams from Structural, Requirements, and Behavior', async ({ page }) => {
+    for (const [pillar, menuItem, expectedKind] of [
+      ['Structural', 'Block Definition Diagram (BDD)', 'bdd'],
+      ['Requirements', 'Requirements Diagram', 'requirements'],
+      ['Behavior', 'State Machine Diagram', 'stateMachine'],
+    ] as const) {
+      const row = page.locator('.model-tree-row', { hasText: pillar }).first();
+      await row.click({ button: 'right' });
+      await page.getByRole('menuitem', { name: menuItem, exact: true }).click();
+      await expect.poll(() => page.evaluate(kind => (window as any).__adiaTestHooks.getDiagramMode() === kind, expectedKind)).toBe(true);
+    }
+  });
+
+  test('creates multiple BDDs, presents distinct blocks, persists tabs, rejects duplicates, and returns to origin', async ({ page }) => {
+    // 1. Create BDD-A through the Structural context menu
+    const structuralRow = page.locator('.model-tree-row', { hasText: 'Structural' }).first();
+    await structuralRow.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Block Definition Diagram (BDD)', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('bdd');
+
+    const diagramIdA = await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.());
+    expect(diagramIdA).toBeTruthy();
+    // Rename diagram A to BDD-A for clarity in tree
+    await page.evaluate((id) => {
+      (window as any).__sysmlExecuteCommand({
+        type: 'updateElement',
+        elementId: id,
+        patch: { name: 'BDD-A' },
+      });
+    }, diagramIdA);
+
+    // 2. Create BDD-B through the Structural context menu
+    await structuralRow.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Block Definition Diagram (BDD)', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).not.toBe(diagramIdA);
+
+    const diagramIdB = await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.());
+    expect(diagramIdB).toBeTruthy();
+    // Rename diagram B to BDD-B
+    await page.evaluate((id) => {
+      (window as any).__sysmlExecuteCommand({
+        type: 'updateElement',
+        elementId: id,
+        patch: { name: 'BDD-B' },
+      });
+    }, diagramIdB);
+
+    // 3. Present distinct blocks in each diagram
+    await page.evaluate(({ diagA, diagB }) => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      execute({
+        type: 'createAndPresent',
+        diagramId: diagA,
+        element: {
+          id: 'blk-alpha-a',
+          name: 'BlockAlphaA',
+          kind: 'block',
+          namespace: [],
+          ownerId: 'model',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        },
+        presentation: { x: 100, y: 100, width: 200, height: 140 },
+      });
+      execute({
+        type: 'createAndPresent',
+        diagramId: diagB,
+        element: {
+          id: 'blk-beta-b',
+          name: 'BlockBetaB',
+          kind: 'block',
+          namespace: [],
+          ownerId: 'model',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+        },
+        presentation: { x: 200, y: 150, width: 200, height: 140 },
+      });
+    }, { diagA: diagramIdA, diagB: diagramIdB });
+
+    // 4. Double-click each tree node
+    await filterTree(page, 'BDD-A');
+    const rowA = page.locator(`.model-tree-row[data-semantic-id="${diagramIdA}"]`).first();
+    await expect(rowA).toBeVisible();
+    await rowA.dblclick();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe(diagramIdA);
+
+    await filterTree(page, 'BDD-B');
+    const rowB = page.locator(`.model-tree-row[data-semantic-id="${diagramIdB}"]`).first();
+    await expect(rowB).toBeVisible();
+    await rowB.dblclick();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe(diagramIdB);
+
+    // 5. Saves/reloads using existing helpers and asserts both [data-diagram-id] tabs and active exact ID survive
+    const saved = await saveProject(page, 'bdd-a-b-workspace.adia');
+    await reloadAndReopenProject(page, saved);
+    await page.waitForTimeout(400);
+
+    const tabA = page.locator(`[data-diagram-id="${diagramIdA}"]`);
+    const tabB = page.locator(`[data-diagram-id="${diagramIdB}"]`);
+    await expect(tabA).toBeVisible({ timeout: 10000 });
+    await expect(tabB).toBeVisible({ timeout: 10000 });
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe(diagramIdB);
+
+    // 6. Assert rejected duplicate creation adds no tree node/tab
+    const duplicateResult = await page.evaluate((id) => {
+      return (window as any).__sysmlExecuteCommand({
+        type: 'createDiagram',
+        diagram: {
+          id,
+          name: 'Duplicate Diagram',
+          kind: 'diagram',
+          diagramKind: 'bdd',
+          namespace: [],
+          ownerId: 'model',
+        },
+      });
+    }, diagramIdA);
+    expect(duplicateResult.committed).toBe(false);
+    expect(duplicateResult.diagnostics.some((d: any) => d.code === 'DUPLICATE_ELEMENT_ID')).toBe(true);
+    await expect(page.locator(`[data-diagram-id="${diagramIdA}"]`)).toHaveCount(1);
+
+    // 7. Closing BDD-A retains its repository diagram
+    const closeBtnA = page.locator(`[data-diagram-id="${diagramIdA}"] button[title="Close Tab"]`).first();
+    await closeBtnA.click();
+    await expect(page.locator(`[data-diagram-id="${diagramIdA}"]`)).toHaveCount(0);
+    const repoAfterClose = await page.evaluate(() => (window as any).__sysmlRepository);
+    expect(repoAfterClose.diagrams[diagramIdA]).toBeDefined();
+
+    // 8. Root from an IBD opened from BDD-B returns to BDD-B
+    // Make sure BDD-B is the active diagram tab
+    await page.locator(`[data-diagram-id="${diagramIdB}"]`).first().click();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe(diagramIdB);
+
+    // Enter blk-beta-b
+    await filterTree(page, 'BlockBetaB');
+    const blockBRow = page.locator('.model-tree-row[data-semantic-id="blk-beta-b"]').first();
+    await expect(blockBRow).toBeVisible();
+    await blockBRow.dblclick();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('ibd');
+
+    // Click Root breadcrumb
+    const rootBreadcrumb = page.locator('button:has-text("Root")').first();
+    await expect(rootBreadcrumb).toBeVisible();
+    await rootBreadcrumb.click();
+
+    // Returns to BDD-B
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('bdd');
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe(diagramIdB);
+  });
+
 });

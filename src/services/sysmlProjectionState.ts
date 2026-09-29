@@ -53,7 +53,21 @@ export function projectDiagramScopedCanvasView(
   contextElementIds: readonly string[] = [],
   presentationDrafts: Readonly<Record<string, import('./sysmlCommandGateway').PresentationCoordinates>> = {},
 ): LegacySysmlView {
-  const diagram = presentations[diagramId];
+  const primary = presentations[diagramId];
+  const legacyFallbackKey = diagramId === 'adia-default-bdd' ? 'bdd'
+    : diagramId === 'adia-default-requirements' ? 'requirements'
+    : diagramId === 'bdd' ? 'adia-default-bdd'
+    : diagramId === 'requirements' ? 'adia-default-requirements'
+    : undefined;
+  const legacyFallback = legacyFallbackKey ? presentations[legacyFallbackKey] : undefined;
+  const diagram = primary && legacyFallback
+    ? {
+        ...legacyFallback,
+        ...primary,
+        elementIds: Array.from(new Set([...(legacyFallback.elementIds ?? []), ...(primary.elementIds ?? [])])),
+        presentations: { ...(legacyFallback.presentations ?? {}), ...(primary.presentations ?? {}) },
+      }
+    : (primary ?? legacyFallback);
   const visibleIds = new Set([...(diagram?.elementIds ?? []), ...contextElementIds]);
   const isPresented = (elementId: string) => visibleIds.has(elementId);
   return {
