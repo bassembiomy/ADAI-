@@ -296,10 +296,15 @@ export class VLabPhysicsEngine {
           }
           
           // --- Zero Crossing & Event Detection ---
-          const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
-          if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
-            const hEvent = h * eventInfo.fraction;
-            throw new EventTriggerError(hEvent);
+          // The first algebraic solve establishes source and physical-signal values.
+          // Treating that initialization (for example Vg: 0 -> 4 V) as a temporal
+          // crossing repeatedly shrinks the step before the simulation can start.
+          if (prevState || acceptedSteps > 0) {
+            const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
+            if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
+              const hEvent = h * eventInfo.fraction;
+              throw new EventTriggerError(hEvent);
+            }
           }
           
           // --- Local Truncation Error (LTE) Control ---

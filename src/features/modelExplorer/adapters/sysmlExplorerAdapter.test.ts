@@ -762,6 +762,26 @@ describe('sysmlExplorerAdapter', () => {
     expect(harness.state.repository.verificationCases[tc!.id]).toBeDefined();
   });
 
+  it('adds Blocks and TestCases to a concrete owned Requirements diagram', () => {
+    const harness = createTestHarness();
+    harness.state.repository.diagrams['req-owned'] = {
+      id: 'req-owned', kind: 'diagram', diagramKind: 'requirements',
+      name: 'Owned Requirements', namespace: ['model'], ownerId: 'model',
+    };
+    harness.state.diagramPresentations = {
+      'req-owned': { elementIds: [], presentations: {} },
+    };
+    const adapter = createSysmlExplorerAdapter(harness);
+    const blockId = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'block', name: 'Controller' }).selectedIds![0];
+    const testCaseId = adapter.execute({ type: 'createElement', ownerId: 'model', elementKind: 'testCase', name: 'Controller verification' }).selectedIds![0];
+
+    expect(adapter.capabilities([blockId], 'req-owned')).toContainEqual(expect.objectContaining({ kind: 'addToDiagram', enabled: true }));
+    expect(adapter.capabilities([testCaseId], 'req-owned')).toContainEqual(expect.objectContaining({ kind: 'addToDiagram', enabled: true }));
+
+    expect(adapter.execute({ type: 'addToDiagram', diagramId: 'req-owned', elementIds: [blockId, testCaseId] }).committed).toBe(true);
+    expect(harness.state.diagramPresentations['req-owned'].elementIds).toEqual(expect.arrayContaining([blockId, testCaseId]));
+  });
+
   it('dispatches createOwnedFeature for Part and Value Property creation with selected existing types', () => {
     const harness = createTestHarness();
     const block: BlockDefinition = {

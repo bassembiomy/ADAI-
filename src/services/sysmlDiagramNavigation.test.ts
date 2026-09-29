@@ -314,4 +314,41 @@ describe('SysML Diagram Navigation Service', () => {
     expect(recovered.activeDiagramId).toBe('vehicle');
     expect(recovered.diagramKind).toBe('ibd');
   });
+
+  it('entering a second block does not resolve to the first block IBD diagram during navigation recovery', () => {
+    const repo = createRepoWithMultipleDiagrams();
+    // Add an IBD diagram specifically owned by vehicle
+    const vehicleIbd: ModelDiagramDefinition = {
+      id: 'ibd-vehicle',
+      name: 'Vehicle IBD',
+      ownerId: 'vehicle',
+      contextElementId: 'vehicle',
+      namespace: ['model'],
+      kind: 'diagram',
+      diagramKind: 'ibd',
+    };
+    repo.diagrams[vehicleIbd.id] = vehicleIbd;
+
+    let state = createInitialNavigationState();
+    // 1. Enter Block 'vehicle'
+    state = enterBlockContext(state, repo, 'vehicle');
+    expect(state.activeDiagramId).toBe('ibd-vehicle');
+    expect(state.contextElementId).toBe('vehicle');
+
+    // 2. Return to BDD
+    state = navigateRoot(state, repo);
+    expect(state.diagramKind).toBe('bdd');
+
+    // 3. Enter Block 'motor' (which has no dedicated IBD diagram yet)
+    state = enterBlockContext(state, repo, 'motor');
+    expect(state.activeDiagramId).toBe('motor');
+    expect(state.contextElementId).toBe('motor');
+
+    // 4. Recover navigation state: must NOT fall back to vehicle's IBD diagram
+    const recovered = recoverNavigationState(state, repo);
+    expect(recovered.contextElementId).toBe('motor');
+    expect(recovered.activeDiagramId).toBe('motor');
+    expect(recovered.activeDiagramId).not.toBe('ibd-vehicle');
+  });
 });
+

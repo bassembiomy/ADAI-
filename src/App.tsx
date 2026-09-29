@@ -187,6 +187,15 @@ import {
   recoverNavigationState,
   type DiagramNavigationStackEntry,
 } from './services/sysmlDiagramNavigation';
+import {
+  ensureDefaultSysmlDiagrams,
+  normalizeDiagramWorkspace,
+  openDiagramWorkspaceTab,
+  type DiagramWorkspaceTab,
+} from './services/sysmlDiagramWorkspace';
+import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
+import type { StateMachineDiagramData } from './types/sm_types';
+import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -520,6 +529,7 @@ const HierarchyTree: React.FC<any> = (props) => (
     currentLayerId={props.currentLayerId}
     blocks={props.blocks}
     parts={props.parts}
+    diagrams={props.diagrams}
     externalModels={props.externalModels}
     canonicalSysmlRepository={props.canonicalSysmlRepository}
     diagramPresentations={props.diagramPresentations}
@@ -6195,6 +6205,17 @@ const ADIA = () => {
   const [activePackageDiagramId, setActivePackageDiagramId] = useState<string | null>(null);
   const [activeSysmlDiagramIdState, setActiveSysmlDiagramIdState] = useState<string | null>(null);
   const [diagramNavigationStack, setDiagramNavigationStack] = useState<DiagramNavigationStackEntry[]>([]);
+  // Owned diagram workspace (Task 4): exact-ID tabs shared by the tree,
+  // canvas, tab strip, and save payload. `openTabs` (legacy mode labels)
+  // stays valid as a migration source and is normalized into this state.
+  const [diagramWorkspace, setDiagramWorkspace] = useState<{ tabs: DiagramWorkspaceTab[]; activeTab: DiagramWorkspaceTab | null }>(() => {
+    const seeded = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const normalized = normalizeDiagramWorkspace(seeded, []);
+    return { tabs: normalized.tabs, activeTab: normalized.activeTab };
+  });
+  // State-machine diagrams created this session (the repository holds SysML
+  // diagrams; the root SM default is derived below via ensureRootStateMachineDiagram).
+  const [sessionStateMachineDiagrams, setSessionStateMachineDiagrams] = useState<StateMachineDiagramData[]>([]);
   const [packageDiagramChooser, setPackageDiagramChooser] = useState<{ diagramIds: string[] } | null>(null);
   const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
@@ -6240,9 +6261,9 @@ const ADIA = () => {
   useEffect(() => {
     isDraggingRef.current = isDragging;
   }, [isDragging]);
-  const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
-  const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
-  const sysmlGatewayStateRef = useRef(createSysmlGatewayState());
+  const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(() => ensureDefaultSysmlDiagrams(createEmptyRepository()).repository);
+  const [sysmlStore, setSysmlStore] = useState(() => fromRepository(ensureDefaultSysmlDiagrams(createEmptyRepository()).repository));
+  const sysmlGatewayStateRef = useRef(createSysmlGatewayState(ensureDefaultSysmlDiagrams(createEmptyRepository()).repository));
   const sysmlCoordinates = useMemo(
     () => Object.fromEntries(sysmlStore.coordinates.entries()),
     [sysmlStore],
@@ -6262,14 +6283,103 @@ const ADIA = () => {
   const selectedPackageDiagram = activePackageDiagramId ? canonicalSysmlRepository.diagrams[activePackageDiagramId] : undefined;
   const fallbackPackageDiagramId = Object.values(canonicalSysmlRepository.diagrams)
     .find(diagram => diagram.diagramKind === 'package')?.id;
-  const activeSysmlDiagramId = diagramMode === 'ibd'
-    ? (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === 'ibd'
-      ? activeSysmlDiagramIdState
-      : currentLayerId)
+  const activeIbdDiagram = activeSysmlDiagramIdState ? canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState] : undefined;
+  const isMatchingIbdDiagram = activeIbdDiagram?.diagramKind === 'ibd' &&
+    (activeIbdDiagram.contextElementId === currentLayerId || activeIbdDiagram.ownerId === currentLayerId);
+  const matchingIbdDiagram = Object.values(canonicalSysmlRepository.diagrams).find(
+    d => d.diagramKind === 'ibd' && (d.contextElementId === currentLayerId || d.ownerId === currentLayerId)
+  );
+  const activeSysmlDiagramId: string = diagramMode === 'ibd'
+    ? ((isMatchingIbdDiagram && activeSysmlDiagramIdState) ? activeSysmlDiagramIdState : matchingIbdDiagram ? matchingIbdDiagram.id : currentLayerId)
     : diagramMode === 'package' ? (selectedPackageDiagram?.diagramKind === 'package' ? selectedPackageDiagram.id : fallbackPackageDiagramId ?? '')
-    : activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode
+    : (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode)
       ? activeSysmlDiagramIdState
       : Object.values(canonicalSysmlRepository.diagrams).find(d => d.diagramKind === diagramMode)?.id ?? diagramMode;
+
+  // Behavior default for the tree projection (Task 3 note): the unified
+  // projection only renders state-machine diagrams supplied by App state, so
+  // the root default is seeded here from the live layers. Idempotent and
+  // session diagrams created via the explorer are preserved.
+  const seededStateMachineDiagrams = useMemo(() => ensureRootStateMachineDiagram({
+    states,
+    layers,
+    transitions,
+    junctions,
+    diagrams: sessionStateMachineDiagrams,
+  }).diagrams ?? [], [states, layers, transitions, junctions, sessionStateMachineDiagrams]);
+
+  // Single exact-ID open path (Task 4) for creation, tree double-click, mode
+  // switching, and tabs. Rejected/unknown IDs return false and mutate
+  // nothing: no tab is synthesized for a failed command.
+  const openExactDiagramById = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean }) => {
+    const smDiagram = seededStateMachineDiagrams.find(diagram => diagram.id === diagramId);
+    if (smDiagram) {
+      const smTab: DiagramWorkspaceTab = { kind: 'stateMachineDiagram', diagramId, contextRegionId: smDiagram.contextRegionId };
+      setDiagramWorkspace(previous => ({
+        tabs: openDiagramWorkspaceTab(previous.tabs, smTab),
+        activeTab: smTab,
+      }));
+      setSelectedIds([]);
+      setPackageRelationshipTool(null);
+      setPackageRelationshipSourceId(null);
+      setDiagramModeState('statemachine');
+      return true;
+    }
+    const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    const diagram = currentRepo.diagrams[diagramId];
+    if (!diagram) return false;
+    const currentActiveId = activeSysmlDiagramIdState || activeSysmlDiagramId;
+    const baseStack = options?.preserveReturnStack ? diagramNavigationStack : [];
+    const returnStack = options?.pushOrigin
+      ? [...baseStack, {
+        diagramId: currentActiveId,
+        diagramKind: diagramMode,
+        contextElementId: undefined,
+        name: currentRepo.diagrams[currentActiveId]?.name,
+      }]
+      : baseStack;
+    const nav = openExactDiagram(
+      {
+        activeDiagramId: currentActiveId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+        returnStack,
+      },
+      currentRepo,
+      diagramId,
+    );
+    const workspaceTab: DiagramWorkspaceTab = { kind: 'sysmlDiagram', diagramId };
+    setDiagramWorkspace(previous => ({
+      tabs: openDiagramWorkspaceTab(previous.tabs, workspaceTab),
+      activeTab: workspaceTab,
+    }));
+    setActiveSysmlDiagramIdState(nav.activeDiagramId);
+    setDiagramNavigationStack(nav.returnStack);
+    setSelectedIds([]);
+    setPackageRelationshipTool(null);
+    setPackageRelationshipSourceId(null);
+    if (diagram.diagramKind === 'package') {
+      setActivePackageDiagramId(diagramId);
+    }
+    if (nav.diagramKind !== diagramMode) {
+      setDiagramModeState(nav.diagramKind as DiagramMode);
+    }
+    return true;
+  }, [seededStateMachineDiagrams, canonicalSysmlRepository, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
+
+  // Closing a tab removes only the workspace view. It never deletes the
+  // semantic diagram or its presentations. The neighbor tab becomes active.
+  const closeDiagramWorkspaceTab = useCallback((diagramId: string) => {
+    const remaining = diagramWorkspace.tabs.filter(tab => 'diagramId' in tab ? tab.diagramId !== diagramId : (tab as any).mode !== diagramId);
+    const wasActive = diagramWorkspace.activeTab && ('diagramId' in diagramWorkspace.activeTab ? diagramWorkspace.activeTab.diagramId === diagramId : (diagramWorkspace.activeTab as any).mode === diagramId);
+    setDiagramWorkspace({
+      tabs: remaining,
+      activeTab: wasActive ? (remaining[0] ?? null) : diagramWorkspace.activeTab,
+    });
+    if (wasActive && remaining.length > 0 && 'diagramId' in remaining[0]) {
+      openExactDiagramById((remaining[0] as any).diagramId, { preserveReturnStack: true });
+    }
+  }, [diagramWorkspace, openExactDiagramById]);
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
     setSelectedIds([]);
@@ -6279,13 +6389,18 @@ const ADIA = () => {
       setCurrentLayerId('root');
       setLayerStack([]);
       setLayerPath(['Root']);
+      setDiagramNavigationStack([]);
       const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
       const targetDiagramId = mode === 'package'
         ? (activePackageDiagramId && currentRepo.diagrams[activePackageDiagramId]?.diagramKind === 'package'
             ? activePackageDiagramId
             : Object.values(currentRepo.diagrams).find(d => d.diagramKind === 'package')?.id ?? 'package')
         : (Object.values(currentRepo.diagrams).find(d => d.diagramKind === mode)?.id ?? (['bdd', 'requirements', 'package', 'rtm'].includes(mode) ? mode : null));
-      if (targetDiagramId) {
+      if (targetDiagramId && currentRepo.diagrams[targetDiagramId]) {
+        openExactDiagramById(targetDiagramId, { preserveReturnStack: true });
+      } else if (targetDiagramId) {
+        // Legacy-compatible pseudo-ID path (no real diagram yet): keep the
+        // previous selection so the recovery effect can resolve it.
         setActiveSysmlDiagramIdState(targetDiagramId);
       }
     }
@@ -6295,7 +6410,7 @@ const ADIA = () => {
       return [...prev, mode];
     });
     syncTabRef.current(mode);
-  }, [canonicalSysmlRepository, activePackageDiagramId]);
+  }, [canonicalSysmlRepository, activePackageDiagramId, openExactDiagramById]);
 
   useEffect(() => {
     const nav = recoverNavigationState(
@@ -6390,12 +6505,17 @@ const ADIA = () => {
 
   const applyCanonicalProjectLoad = useCallback((loaded: ReturnType<typeof loadCanonicalSysmlProject>) => {
     if (!loaded.valid) throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
-    const store = fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
-    sysmlGatewayStateRef.current = createSysmlGatewayState(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+    // Owned-diagram bootstrap (Task 4): missing defaults are created
+    // idempotently before any projection/store is derived, so the tree,
+    // canvas, and workspace tabs resolve the same exact IDs.
+    const repository = ensureDefaultSysmlDiagrams(loaded.repository).repository;
+    const store = fromRepository(repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current = createSysmlGatewayState(repository, loaded.coordinates, loaded.diagramPresentations);
     sysmlGatewayStateRef.current.store = store;
-    setCanonicalSysmlRepository(loaded.repository);
+    setCanonicalSysmlRepository(repository);
     setSysmlStore(store);
-    projectCanonicalAppView(loaded.repository, loaded.coordinates, loaded.diagramPresentations);
+    projectCanonicalAppView(repository, loaded.coordinates, loaded.diagramPresentations);
+    return repository;
   }, [projectCanonicalAppView]);
 
   useEffect(() => {
@@ -6434,9 +6554,10 @@ const ADIA = () => {
         getActiveDiagramId: () => activeSysmlDiagramId,
         getDiagramMode: () => diagramMode,
         getNavigationStack: () => diagramNavigationStack,
+        getDiagramWorkspace: () => diagramWorkspace,
       };
     }
-  }, [sysmlDiagramPresentations, activeSysmlDiagramId, diagramMode, diagramNavigationStack]);
+  }, [sysmlDiagramPresentations, activeSysmlDiagramId, diagramMode, diagramNavigationStack, diagramWorkspace]);
 
   // Report Application Delegate connected to the real report export pipeline
   const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
@@ -6755,17 +6876,6 @@ const ADIA = () => {
           connectors: d.connectors || connectors,
         });
         if (d.interfaceRealizations) setInterfaceRealizations(d.interfaceRealizations);
-        if (d.parts && d.parts.length > 0) {
-          const firstBlockId = d.parts[0].blockId;
-          if (firstBlockId && d.parts.every((p: any) => p.blockId === firstBlockId)) {
-            const targetBlock = blocks.find((b: any) => b.id === firstBlockId);
-            if (targetBlock) {
-              setCurrentLayerId(firstBlockId);
-              setLayerStack([firstBlockId]);
-              setLayerPath(['Root', targetBlock.name]);
-            }
-          }
-        }
         break;
       case 'xbridges':
         setGlobalXBridgesNodes(d.globalXBridgesNodes || []);
@@ -7306,17 +7416,47 @@ const ADIA = () => {
 
   const handleExplorerCommand = useCallback((result: ExplorerCommandResult, command?: import('./features/modelExplorer/modelExplorerTypes').ModelExplorerCommand) => {
     handleExplorerCommandResult(result);
-    if (command?.type === 'createDiagram' && command.diagramKind === 'package' && result.committed && result.selectedIds?.[0]) {
-      setActivePackageDiagramId(result.selectedIds[0]);
-      setDiagramMode('package');
+    if (!result.committed || !result.selectedIds?.[0]) return;
+    if (command?.type !== 'createDiagram') return;
+    const createdDiagramId = result.selectedIds[0];
+    if (command.diagramKind === 'package') {
+      setActivePackageDiagramId(createdDiagramId);
     }
-  }, [handleExplorerCommandResult, setDiagramMode]);
+    if (command.diagramKind === 'stateMachine') {
+      // Track session state-machine diagrams so the tree projection and the
+      // exact-ID workspace open resolve the same record.
+      setSessionStateMachineDiagrams(previous => {
+        if (previous.some(diagram => diagram.id === createdDiagramId)) return previous;
+        return [...previous, {
+          id: createdDiagramId,
+          name: 'State Machine Diagram',
+          ownerId: command.ownerId,
+          contextRegionId: command.ownerId,
+        }];
+      });
+      const smTab: DiagramWorkspaceTab = {
+        kind: 'stateMachineDiagram',
+        diagramId: createdDiagramId,
+        contextRegionId: command.ownerId,
+      };
+      setDiagramWorkspace(previous => ({
+        tabs: openDiagramWorkspaceTab(previous.tabs, smTab),
+        activeTab: smTab,
+      }));
+      setSelectedIds([]);
+      setDiagramModeState('statemachine');
+      return;
+    }
+    // Open the created diagram's exact ID (rejected commands return early
+    // above, so no tab is synthesized for a failed command).
+    openExactDiagramById(createdDiagramId);
+  }, [handleExplorerCommandResult, openExactDiagramById]);
 
   const handleActivatePackageDiagram = useCallback(() => {
     const activation = resolvePackageDiagramActivation(canonicalSysmlRepository, activePackageDiagramId);
     if (activation.status === 'open') {
       setActivePackageDiagramId(activation.diagramId);
-      setDiagramMode('package');
+      openExactDiagramById(activation.diagramId, { preserveReturnStack: true });
     } else if (activation.status === 'choose') {
       setPackageDiagramChooser({ diagramIds: activation.diagramIds });
     } else if (activation.status === 'create') {
@@ -7335,12 +7475,12 @@ const ADIA = () => {
       });
       if (result.committed) {
         setActivePackageDiagramId(newDiagramId);
-        setDiagramMode('package');
+        openExactDiagramById(newDiagramId);
       } else {
         result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       }
     }
-  }, [canonicalSysmlRepository, activePackageDiagramId, setDiagramMode, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, activePackageDiagramId, openExactDiagramById, handleExecuteSysmlCommand, addError]);
 
   const showConnectionPolicyError = useCallback((rejection: {
     diagnostic: ConnectionPolicyDiagnostic;
@@ -7656,6 +7796,9 @@ const ADIA = () => {
         timestamp: new Date().toISOString(),
         projectName: currentProjectName,
         openTabs,
+        diagramWorkspace,
+        activeSysmlDiagramId,
+        diagramNavigationStack,
         ...persistedStateMachine, view,
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
@@ -7728,6 +7871,7 @@ const ADIA = () => {
     hilConfig,
     headers, data, activeModel, taguchiConfig, results, managedWindows, addError,
     entropyNodes, entropyEdges, opmSimulationConfig, currentProjectName, openTabs,
+    diagramWorkspace, activeSysmlDiagramId, diagramNavigationStack,
     workspaceFiles, openTabIds, activeFileId, saveCurrentFileState
   ]);
 
@@ -7769,13 +7913,35 @@ const ADIA = () => {
           });
         }
       }
-      applyCanonicalProjectLoad(loadCanonicalSysmlProject({
+      const hydratedRepository = applyCanonicalProjectLoad(loadCanonicalSysmlProject({
         ...importedData,
         sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
       }, hydrationEndpoints.size > 0 ? { externalEndpoints: hydrationEndpoints } : undefined));
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
+      // Exact-ID workspace restore: persisted tabs win, legacy mode-only
+      // openTabs stay valid as a migration source. Invalid tabs are
+      // discarded with diagnostics; the active valid diagram is restored.
+      // The canvas mode sync happens after the workspace-file restore below.
+      let restoredWorkspaceDiagramKind: string | null = null;
+      {
+        const rawWorkspace = importedData.diagramWorkspace;
+        const rawTabs = rawWorkspace?.tabs ?? rawWorkspace ?? importedData.openTabs ?? [];
+        const rawActive = rawWorkspace?.activeTab ?? importedData.activeSysmlDiagramId ?? null;
+        const normalized = normalizeDiagramWorkspace(hydratedRepository, rawTabs, rawActive);
+        setDiagramWorkspace({ tabs: normalized.tabs, activeTab: normalized.activeTab });
+        const restoredId = normalized.activeTab?.kind === 'sysmlDiagram' ? normalized.activeTab.diagramId : null;
+        if (restoredId && hydratedRepository.diagrams[restoredId]) {
+          setActiveSysmlDiagramIdState(restoredId);
+          const restoredKind = hydratedRepository.diagrams[restoredId].diagramKind;
+          if (restoredKind === 'package') setActivePackageDiagramId(restoredId);
+          if (restoredKind !== 'ibd') restoredWorkspaceDiagramKind = restoredKind;
+        }
+        if (Array.isArray(importedData.diagramNavigationStack)) {
+          setDiagramNavigationStack(importedData.diagramNavigationStack);
+        }
+      }
       if (importedData.states) setStates(importedData.states);
       if (importedData.junctions) setJunctions(importedData.junctions);
       if (importedData.transitions) setTransitions(importedData.transitions);
@@ -7985,6 +8151,13 @@ const ADIA = () => {
         setDiagramModeState('statemachine');
       }
 
+      // New-payload exact-workspace restore lands the canvas on the restored
+      // diagram. Legacy payloads without diagramWorkspace keep the
+      // workspace-file mode above.
+      if (restoredWorkspaceDiagramKind && importedData.diagramWorkspace !== undefined) {
+        setDiagramModeState(restoredWorkspaceDiagramKind as DiagramMode);
+      }
+
       // Reset runtime state
       setIsRunning(false);
       setActiveStates({});
@@ -8043,6 +8216,10 @@ const ADIA = () => {
       version: VERSION,
       projectName: currentProjectName,
       tickMs,
+      openTabs,
+      diagramWorkspace,
+      activeSysmlDiagramId,
+      diagramNavigationStack,
       states,
       junctions,
       transitions,
@@ -8086,6 +8263,10 @@ const ADIA = () => {
   }, [
     currentProjectName,
     tickMs,
+    openTabs,
+    diagramWorkspace,
+    activeSysmlDiagramId,
+    diagramNavigationStack,
     states,
     junctions,
     transitions,
@@ -9478,7 +9659,9 @@ const ADIA = () => {
   }, [blocks, currentLayerId, addError]);
 
   const enterBlock = useCallback((blockId: string) => {
-    const block = blocks.find(b => b.id === blockId);
+    console.log('[DEBUG_ENTER_BLOCK] called with blockId:', blockId);
+    const block = blocks.find(b => b.id === blockId) ?? (canonicalSysmlRepository.definitions[blockId]?.kind === 'block' ? { id: blockId, name: canonicalSysmlRepository.definitions[blockId].name } : null);
+    console.log('[DEBUG_ENTER_BLOCK] resolved block:', block);
     if (!block) return;
 
     const nav = enterBlockContext(
@@ -9502,6 +9685,45 @@ const ADIA = () => {
     setView({ scale: 1, offsetX: 0, offsetY: 0 });
     addError('info', `Entered block: ${block.name}`);
   }, [blocks, currentLayerId, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
+
+  const handleActivateIbdDiagram = useCallback(() => {
+    // 1. If a block is currently selected on the canvas, enter its IBD
+    const targetBlockId = (selectedIds.length === 1 ? selectedIds[0] : null)
+      ?? (selectedIds.length > 0 ? selectedIds.find(id => canonicalSysmlRepository.definitions[id]?.kind === 'block' || blocks.some(b => b.id === id && b.stereotype !== 'requirement')) : null);
+    const selectedBlock = targetBlockId
+      ? (blocks.find(b => b.id === targetBlockId && b.stereotype !== 'requirement')
+          ?? (canonicalSysmlRepository.definitions[targetBlockId]?.kind === 'block' ? canonicalSysmlRepository.definitions[targetBlockId] : null))
+      : null;
+    if (selectedBlock) {
+      enterBlock(selectedBlock.id);
+      return;
+    }
+
+    // 2. If already inside a valid block IBD, remain in it
+    if (diagramMode === 'ibd' && currentLayerId !== 'root' && canonicalSysmlRepository.definitions[currentLayerId]?.kind === 'block') {
+      return;
+    }
+
+    // 3. If active diagram state points to an IBD diagram, activate its context block
+    if (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === 'ibd') {
+      const diag = canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState];
+      const targetId = diag.contextElementId ?? diag.ownerId;
+      if (targetId && canonicalSysmlRepository.definitions[targetId]?.kind === 'block') {
+        enterBlock(targetId);
+        return;
+      }
+    }
+
+    // 4. If any block exists in the repository, enter the first block
+    const firstBlock = blocks.find(b => b.stereotype !== 'requirement') ?? Object.values(canonicalSysmlRepository.definitions).find(d => d.kind === 'block');
+    if (firstBlock) {
+      enterBlock(firstBlock.id);
+      return;
+    }
+
+    // 5. Fallback: switch mode to ibd
+    setDiagramMode('ibd');
+  }, [selectedIds, blocks, diagramMode, currentLayerId, canonicalSysmlRepository, activeSysmlDiagramIdState, enterBlock, setDiagramMode]);
 
   const exitLayer = useCallback(() => {
     if (layerStack.length === 0) return;
@@ -9984,7 +10206,11 @@ const ADIA = () => {
     y: number,
     kind: DiagramCreationKind,
   ) => {
-    const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
+    const diagramId = resolveActiveSysmlDiagramTarget({
+      diagramMode,
+      activeDiagramId: activeSysmlDiagramId,
+      currentLayerId,
+    });
     const contextElementId = diagramMode === 'ibd' ? currentLayerId : undefined;
     const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
       diagramId,
@@ -15638,7 +15864,9 @@ const ADIA = () => {
           }}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
+            console.log('[DEBUG_DBLCLICK] Block onDoubleClick fired for block:', block.id, block.name, 'diagramMode:', diagramMode);
             const decision = resolveBlockDoubleClickAction(diagramMode, block);
+            console.log('[DEBUG_DBLCLICK] Decision:', decision);
             if (decision.action === 'enterRequirement') {
               enterRequirement(decision.targetId!);
             } else if (decision.action === 'enterBlock') {
@@ -16762,6 +16990,8 @@ const ADIA = () => {
                 onClick={() => {
                   if (mode.id === 'package') {
                     handleActivatePackageDiagram();
+                  } else if (mode.id === 'ibd') {
+                    handleActivateIbdDiagram();
                   } else {
                     setDiagramMode(mode.id as DiagramMode);
                   }
@@ -17147,6 +17377,53 @@ const ADIA = () => {
           onOpenDialog={() => setShowWorkspaceFileDialog(true)}
         />
 
+        {/* Owned diagram workspace tabs: exact-ID views over the repository.
+            Each tab renders its diagram's real name; closing removes only
+            the workspace view, never the semantic diagram. */}
+        {diagramWorkspace.tabs.length > 0 && (
+          <div
+            data-testid="diagram-workspace-tabs"
+            className="ui-surface bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 select-none"
+          >
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-9 pt-1">
+              {diagramWorkspace.tabs.map(tab => {
+                const diagramId = 'diagramId' in tab ? tab.diagramId : tab.mode;
+                const name = tab.kind === 'stateMachineDiagram'
+                  ? (seededStateMachineDiagrams.find(diagram => diagram.id === diagramId)?.name ?? diagramId)
+                  : tab.kind === 'sysmlDiagram'
+                  ? (canonicalSysmlRepository.diagrams[diagramId]?.name ?? diagramId)
+                  : tab.mode;
+                const isActive = diagramWorkspace.activeTab?.kind === tab.kind
+                  && ('diagramId' in diagramWorkspace.activeTab ? diagramWorkspace.activeTab.diagramId === diagramId : (diagramWorkspace.activeTab as any).mode === diagramId);
+                return (
+                  <div
+                    key={`${tab.kind}:${diagramId}`}
+                    data-diagram-id={diagramId}
+                    onClick={() => openExactDiagramById(diagramId, { preserveReturnStack: true })}
+                    className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
+                      isActive
+                        ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
+                    }`}
+                  >
+                    <span className="truncate max-w-[160px]">{name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeDiagramWorkspaceTab(diagramId);
+                      }}
+                      className="ml-1 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
+                      title="Close Tab"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
@@ -17181,6 +17458,7 @@ const ADIA = () => {
                   diagramMode={diagramMode}
                   blocks={blocks}
                   parts={parts}
+                  diagrams={seededStateMachineDiagrams}
                   diagramPresentations={sysmlDiagramPresentations}
                   externalModels={hierarchyExternalModels}
                   canonicalSysmlRepository={canonicalSysmlRepository}
@@ -17191,49 +17469,35 @@ const ADIA = () => {
                       openFileInTab(externalModelFile.id);
                     } else if (kind === 'diagram' || canonicalSysmlRepository.diagrams[id]) {
                       const targetDiagram = canonicalSysmlRepository.diagrams[id];
-                      const nav = openExactDiagram(
-                        {
-                          activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
-                          diagramKind: diagramMode,
-                          contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
-                          returnStack: diagramNavigationStack,
-                        },
-                        canonicalSysmlRepository,
-                        id,
-                      );
-                      const ibdContextId = nav.diagramKind === 'ibd'
-                        ? (targetDiagram?.contextElementId ?? targetDiagram?.ownerId)
-                        : undefined;
-                      const ibdContextBlock = ibdContextId
-                        ? canonicalSysmlRepository.definitions[ibdContextId]
-                        : undefined;
-                      const navWithIbdOrigin = nav.diagramKind === 'ibd' && ibdContextBlock?.kind === 'block' && diagramMode !== 'ibd'
-                        ? {
-                          ...nav,
-                          contextElementId: ibdContextBlock.id,
-                          returnStack: [...diagramNavigationStack, {
-                            diagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
-                            diagramKind: diagramMode,
-                            contextElementId: undefined,
-                            name: canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState || activeSysmlDiagramId]?.name,
-                          }],
+                      if (!targetDiagram) {
+                        // State-machine (or other non-SysML) diagram node:
+                        // open its exact workspace view. Unknown IDs are
+                        // rejected without mutation.
+                        openExactDiagramById(id);
+                      } else if (targetDiagram.diagramKind === 'ibd') {
+                        const ibdContextId = targetDiagram.contextElementId ?? targetDiagram.ownerId;
+                        const ibdContextBlock = ibdContextId
+                          ? canonicalSysmlRepository.definitions[ibdContextId]
+                          : undefined;
+                        if (ibdContextBlock?.kind === 'block') {
+                          setCurrentLayerId(ibdContextBlock.id);
+                          setLayerStack(['root']);
+                          setLayerPath(['Root', ibdContextBlock.name]);
+                          // IBD navigation stays Block-contextual with a
+                          // return stack to its origin diagram.
+                          openExactDiagramById(id, diagramMode !== 'ibd' ? { pushOrigin: true } : undefined);
+                        } else {
+                          setCurrentLayerId('root');
+                          setLayerStack([]);
+                          setLayerPath(['Root']);
+                          openExactDiagramById(id);
                         }
-                        : nav;
-                      setActiveSysmlDiagramIdState(navWithIbdOrigin.activeDiagramId);
-                      setDiagramNavigationStack(navWithIbdOrigin.returnStack);
-                      if (nav.diagramKind === 'ibd' && ibdContextBlock?.kind === 'block') {
-                        setCurrentLayerId(ibdContextBlock.id);
-                        setLayerStack(['root']);
-                        setLayerPath(['Root', ibdContextBlock.name]);
                       } else {
                         setCurrentLayerId('root');
                         setLayerStack([]);
                         setLayerPath(['Root']);
+                        openExactDiagramById(id);
                       }
-                      if (navWithIbdOrigin.diagramKind === 'package') {
-                        setActivePackageDiagramId(id);
-                      }
-                      setDiagramMode(navWithIbdOrigin.diagramKind as DiagramMode);
                     } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
                       enterBlock(id);
                     } else if (diagramMode === "statemachine") {
@@ -17957,7 +18221,11 @@ const ADIA = () => {
                     x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
                     y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
                   };
-                  const activeDiagId = diagramMode === 'ibd' ? currentLayerId : diagramMode === 'package' ? activeSysmlDiagramId : diagramMode;
+                  const activeDiagId = resolveActiveSysmlDiagramTarget({
+                    diagramMode,
+                    activeDiagramId: activeSysmlDiagramId,
+                    currentLayerId,
+                  });
                   const elemIds = payload.semanticIds ?? [payload.semanticId];
                   handleExecuteSysmlCommand({
                     type: 'addToDiagram',
@@ -20298,7 +20566,7 @@ const ADIA = () => {
                       key={id}
                       onClick={() => {
                         setActivePackageDiagramId(id);
-                        setDiagramMode('package');
+                        openExactDiagramById(id, { preserveReturnStack: true });
                         setPackageDiagramChooser(null);
                       }}
                       className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
@@ -20330,7 +20598,7 @@ const ADIA = () => {
                     });
                     if (result.committed) {
                       setActivePackageDiagramId(newId);
-                      setDiagramMode('package');
+                      openExactDiagramById(newId);
                       setPackageDiagramChooser(null);
                     } else {
                       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));

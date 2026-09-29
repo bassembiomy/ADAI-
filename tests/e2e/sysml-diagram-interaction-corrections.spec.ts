@@ -21,10 +21,11 @@ async function openModeler(page: import('@playwright/test').Page) {
   await page.waitForLoadState('domcontentloaded');
 
   const intro = page.locator('[data-testid="welcome-overlay"]');
-  if (await intro.count() > 0) {
-    await intro.first().click({ position: { x: 10, y: 10 }, force: true }).catch(() => {});
-    await intro.first().waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
-  }
+  try {
+    await intro.waitFor({ state: 'visible', timeout: 5000 });
+    await intro.click({ position: { x: 10, y: 10 }, force: true });
+    await intro.waitFor({ state: 'detached', timeout: 10000 });
+  } catch {}
 }
 
 async function dismissOverlay(page: import('@playwright/test').Page) {
@@ -1233,4 +1234,77 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
       ).join('||')
     )).toMatch(/#123456|rgb\(18,\s*52,\s*86\)/);
   });
+
+  test('BDD to IBD navigation: double clicking block or using UI buttons opens the clicked block, not a previous block', async ({ page }) => {
+    test.setTimeout(120000);
+    page.on('console', msg => console.log(`[PAGE LOG] ${msg.type()}: ${msg.text()}`));
+    await openModeler(page);
+
+    // 1. Switch to BDD
+    await page.getByRole('button', { name: 'SysML BDD' }).first().click();
+    await page.waitForTimeout(300);
+
+    // 2. Create Block 1 and Block 2 on canvas
+    const alphaId = await createCanvasBlock(page, 'AlphaBlock');
+    const betaId = await createCanvasBlock(page, 'BetaBlock');
+    // Canvas Blocks spawn stacked: move BetaBlock aside so AlphaBlock stays clickable
+    await movePresentation(page, page.locator(`#adia-diagram-canvas [data-semantic-id="${betaId}"]`), 260, 0);
+
+    // 3. Double click Block 1 (AlphaBlock) on canvas to enter its IBD
+    const alphaBlock = page.locator(`#adia-diagram-canvas [data-semantic-id="${alphaId}"]`);
+    await expect(alphaBlock).toBeVisible({ timeout: 10000 });
+    await alphaBlock.dispatchEvent('dblclick');
+
+    // Verify inside AlphaBlock IBD
+    await expect(page.locator('#adia-diagram-canvas').getByText(/ibd \[Block\] AlphaBlock/i)).toBeVisible({ timeout: 10000 });
+
+    // 4. Add a part to AlphaBlock in IBD
+    await page.evaluate(({ alphaId, betaId }) => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      const ibdId = (window as any).__adiaTestHooks?.getActiveDiagramId?.() ?? alphaId;
+      execute({
+        type: 'createOwnedFeature',
+        diagramId: ibdId,
+        intent: {
+          featureKind: 'property',
+          featureId: 'prop-alpha-part',
+          ownerBlockId: alphaId,
+          name: 'alphaSubsystem',
+          propertyKind: 'part',
+          typeId: betaId,
+        },
+        presentation: { x: 150, y: 150, width: 140, height: 80 },
+      });
+    }, { alphaId, betaId });
+
+    // Verify part is visible inside AlphaBlock IBD
+    await expect(page.locator('text=alphaSubsystem')).toBeVisible({ timeout: 5000 });
+
+    // 5. Navigate back to BDD using UI button
+    await page.getByRole('button', { name: 'SysML BDD' }).first().click();
+    await page.waitForTimeout(300);
+
+    // 6. Double click Block 2 (BetaBlock) on canvas
+    const betaBlock = page.locator(`#adia-diagram-canvas [data-semantic-id="${betaId}"]`);
+    await expect(betaBlock).toBeVisible({ timeout: 10000 });
+    await betaBlock.dispatchEvent('dblclick');
+
+    // Verify inside BetaBlock IBD (NOT AlphaBlock)
+    await expect(page.locator('#adia-diagram-canvas').getByText(/ibd \[Block\] BetaBlock/i)).toBeVisible({ timeout: 10000 });
+    // And AlphaBlock's part must NOT be present in BetaBlock's IBD
+    await expect(page.locator('text=alphaSubsystem')).not.toBeVisible();
+
+    // 7. Navigate back to BDD
+    await page.getByRole('button', { name: 'SysML BDD' }).first().click();
+    await page.waitForTimeout(300);
+
+    // 8. Select BetaBlock on canvas and click SysML IBD UI button
+    await betaBlock.click({ force: true });
+    await page.getByRole('button', { name: 'SysML IBD' }).first().click();
+
+    // Verify SysML IBD UI button opened BetaBlock's IBD
+    await expect(page.locator('#adia-diagram-canvas').getByText(/ibd \[Block\] BetaBlock/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=alphaSubsystem')).not.toBeVisible();
+  });
 });
+

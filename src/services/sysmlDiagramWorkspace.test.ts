@@ -26,6 +26,55 @@ describe('sysmlDiagramWorkspace', () => {
     expect(result.diagnostics.map(d => d.code)).toContain('STALE_DIAGRAM_TAB');
   });
 
+  it('retains BDD-A and BDD-B as different persisted tabs', () => {
+    const tabs = openDiagramWorkspaceTab(
+      openDiagramWorkspaceTab([], { kind: 'sysmlDiagram', diagramId: 'bdd-a' }),
+      { kind: 'sysmlDiagram', diagramId: 'bdd-b' },
+    );
+    expect(tabs).toEqual([
+      { kind: 'sysmlDiagram', diagramId: 'bdd-a' },
+      { kind: 'sysmlDiagram', diagramId: 'bdd-b' },
+    ]);
+  });
+
+  it('restores BDD-A and BDD-B as distinct persisted tabs with the saved active tab', () => {
+    const base = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const repository = {
+      ...base,
+      diagrams: {
+        ...base.diagrams,
+        'bdd-a': {
+          id: 'bdd-a',
+          kind: 'diagram',
+          name: 'BDD-A',
+          namespace: ['model'],
+          ownerId: 'model',
+          diagramKind: 'bdd',
+        },
+        'bdd-b': {
+          id: 'bdd-b',
+          kind: 'diagram',
+          name: 'BDD-B',
+          namespace: ['model'],
+          ownerId: 'model',
+          diagramKind: 'bdd',
+        },
+      },
+    } as typeof base;
+    const persisted = openDiagramWorkspaceTab(
+      openDiagramWorkspaceTab([], { kind: 'sysmlDiagram', diagramId: 'bdd-a' }),
+      { kind: 'sysmlDiagram', diagramId: 'bdd-b' },
+    );
+    const result = normalizeDiagramWorkspace(
+      repository,
+      persisted,
+      { kind: 'sysmlDiagram', diagramId: 'bdd-b' },
+    );
+    expect(result.tabs).toEqual(persisted);
+    expect(result.activeTab).toEqual({ kind: 'sysmlDiagram', diagramId: 'bdd-b' });
+    expect(result.diagnostics).toEqual([]);
+  });
+
   it('does not create a default when an equivalent user diagram already exists', () => {
     const repository = createEmptyRepository();
     repository.diagrams['user-bdd'] = {

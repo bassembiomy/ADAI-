@@ -126,9 +126,10 @@ describe('V-Lab connected reference models', () => {
         dt: model.dt, time: model.dt, parameters: {}, prevStates: initial,
         states: initial, stateDerivatives: new Array(system.systemSize).fill(0),
       };
-      const solution = new ImplicitSolver().solve(system.residuals, initial, context);
+      const zeroDerivs = new Array(system.systemSize).fill(0);
+      const solution = new ImplicitSolver().solve((x, c) => system.residuals(x, zeroDerivs, c), initial, context);
       expect(solution.every(Number.isFinite)).toBe(true);
-      expect(system.residuals(solution, context).every(Number.isFinite)).toBe(true);
+      expect(system.residuals(solution, zeroDerivs, context).every(Number.isFinite)).toBe(true);
       const drainIndex = system.variableNames.findIndex(name => name === 'Across_nmos_d_(electrical)');
       const currentIndex = system.variableNames.findIndex(name => name === 'nmos_branch_drain_current');
       const gateIndex = system.variableNames.findIndex(name => name === 'Across_nmos_g_(physical)');
@@ -150,6 +151,32 @@ describe('V-Lab connected reference models', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('starts the physics engine when ps_constant drives the NMOS gate', () => {
+    const nodes = [
+      node('drain_source', 'dc_voltage', { V: 5, R_int: 0.1 }),
+      node('nmos', 'nmos'),
+      node('ground', 'ground'),
+      node('gate_voltage', 'ps_constant', { value: 4 }),
+    ];
+    const edges = [
+      edge('supply-drain', 'drain_source', 'p_s', 'nmos', 'd_t'),
+      edge('nmos-source-ground', 'nmos', 's_s', 'ground', 'a_t'),
+      edge('supply-ground', 'drain_source', 'n_s', 'ground', 'a_t'),
+      edge('gate-nmos', 'gate_voltage', 'y_s', 'nmos', 'g_t'),
+    ];
+
+    const state = new VLabPhysicsEngine().simulateStep(nodes, edges, null, 0.001);
+    const gateIndex = state.variableNames.indexOf('Across_nmos_g_(physical)');
+    const drainIndex = state.variableNames.indexOf('Across_nmos_d_(electrical)');
+    const currentIndex = state.variableNames.indexOf('nmos_branch_drain_current');
+
+    expect(state.time).toBeCloseTo(0.001, 9);
+    expect(state.x.every(Number.isFinite)).toBe(true);
+    expect(state.x[gateIndex]).toBeCloseTo(4, 6);
+    expect(Number.isFinite(state.x[drainIndex])).toBe(true);
+    expect(Number.isFinite(state.x[currentIndex])).toBe(true);
   });
 
   it('propagates a signal through a subsystem containing a gain block', () => {

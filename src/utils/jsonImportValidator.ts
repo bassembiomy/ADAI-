@@ -32,13 +32,32 @@ export function validateImportedJson(data: unknown): ValidationResult {
     'states', 'junctions', 'transitions', 'layers', 'variables',
     'blocks', 'relationships', 'parts', 'connectors', 'interfaceRealizations',
     'hmiComponents', 'vlabNodes', 'vlabEdges', 'globalXBridgesNodes',
-    'globalXBridgesEdges', 'entropyNodes', 'entropyEdges', 'workspaceFiles', 'openTabs'
+    'globalXBridgesEdges', 'entropyNodes', 'entropyEdges', 'workspaceFiles', 'openTabs',
+    'diagramNavigationStack'
   ];
 
   for (const field of arrayFields) {
     if (field in obj && obj[field] !== undefined && !Array.isArray(obj[field])) {
       errors.push(`Field '${field}' must be an array (found ${typeof obj[field]}).`);
     }
+  }
+
+  // Owned diagram workspace (optional): exact-ID tabs plus the active tab.
+  // Legacy mode-only `openTabs` stays valid as a migration source.
+  if ('diagramWorkspace' in obj && obj.diagramWorkspace !== undefined) {
+    const workspace = obj.diagramWorkspace;
+    const tabsValid = workspace
+      && typeof workspace === 'object'
+      && !Array.isArray(workspace)
+      && (workspace.tabs === undefined || Array.isArray(workspace.tabs));
+    if (!tabsValid) {
+      errors.push("Field 'diagramWorkspace' must be an object with an optional 'tabs' array.");
+    }
+  }
+
+  if ('activeSysmlDiagramId' in obj && obj.activeSysmlDiagramId !== undefined
+    && typeof obj.activeSysmlDiagramId !== 'string') {
+    errors.push("Field 'activeSysmlDiagramId' must be a string.");
   }
 
   // Validate Node Entities if arrays exist
@@ -110,7 +129,7 @@ export function validateImportedJson(data: unknown): ValidationResult {
 
   // Final check: if no recognizeable keys at all
   const hasRecognizedKeys = Boolean(
-    obj.projectName || obj.workspaceFiles || obj.openTabs ||
+    obj.projectName || obj.workspaceFiles || obj.openTabs || obj.diagramWorkspace ||
     arrayFields.some(f => f in obj) || obj.doe || obj.hilConfig ||
     obj.headers || obj.activeModel || obj.deploymentModel ||
     (obj.schemaVersion && obj.modelType)

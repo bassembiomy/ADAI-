@@ -45,6 +45,7 @@ import { projectModelTree } from '../../features/modelExplorer/modelExplorerProj
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import { getDiagramKindLabel, getElementKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
+import { resolveActiveSysmlDiagramTarget } from '../../services/sysmlDiagramTarget';
 
 export interface CapabilityActionContext {
   activeDiagramId?: string;
@@ -652,7 +653,11 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           mode: 'copy',
         };
       } else if (capability.kind === 'addToDiagram') {
-        const targetDiagramId = activeDiagramId || (diagramMode === 'ibd' ? currentLayerId : diagramMode);
+        const targetDiagramId = resolveActiveSysmlDiagramTarget({
+          diagramMode,
+          activeDiagramId,
+          currentLayerId,
+        });
         if (onAddToDiagram) {
           onAddToDiagram(
             selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
@@ -672,7 +677,11 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           mode: capability.elementKind === 'recursive' || capability.elementKind === 'packages' ? capability.elementKind : 'direct',
         };
       } else if (capability.kind === 'removeFromDiagram') {
-        const targetDiagramId = activeDiagramId || (diagramMode === 'ibd' ? currentLayerId : diagramMode);
+        const targetDiagramId = resolveActiveSysmlDiagramTarget({
+          diagramMode,
+          activeDiagramId,
+          currentLayerId,
+        });
         cmd = {
           type: 'removeFromDiagram',
           elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],

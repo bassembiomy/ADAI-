@@ -72,8 +72,12 @@ export function enterBlockContext(
     name: repo.diagrams[state.activeDiagramId]?.name ?? state.activeDiagramId,
   };
 
+  const matchingIbd = Object.values(repo.diagrams).find(
+    d => d.diagramKind === 'ibd' && (d.contextElementId === blockId || d.ownerId === blockId)
+  );
+
   return {
-    activeDiagramId: blockId,
+    activeDiagramId: matchingIbd?.id ?? blockId,
     diagramKind: 'ibd',
     contextElementId: blockId,
     returnStack: [...state.returnStack, originEntry],
@@ -186,13 +190,28 @@ export function recoverNavigationState(
     }
   }
 
-  const sameKindDiagrams = Object.values(repo.diagrams).filter(d => d.diagramKind === state.diagramKind);
+  const sameKindDiagrams = Object.values(repo.diagrams).filter(d => {
+    if (d.diagramKind !== state.diagramKind) return false;
+    if (state.diagramKind === 'ibd' && state.contextElementId) {
+      return d.contextElementId === state.contextElementId || d.ownerId === state.contextElementId;
+    }
+    return true;
+  });
   const sameKind = sameKindDiagrams.find(d => d.id === 'adia-default-bdd') ?? sameKindDiagrams[0];
   if (sameKind) {
     return {
       activeDiagramId: sameKind.id,
       diagramKind: sameKind.diagramKind,
-      contextElementId: undefined,
+      contextElementId: state.diagramKind === 'ibd' ? state.contextElementId : undefined,
+      returnStack: [],
+    };
+  }
+
+  if (state.diagramKind === 'ibd' && state.contextElementId && repo.definitions[state.contextElementId]) {
+    return {
+      activeDiagramId: state.contextElementId,
+      diagramKind: 'ibd',
+      contextElementId: state.contextElementId,
       returnStack: [],
     };
   }
