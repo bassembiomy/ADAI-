@@ -157,7 +157,7 @@ import type {
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
-import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
+import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './services/sysmlProjectionState';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
@@ -169,7 +169,8 @@ import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buil
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
 import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
-import { resolveBddPropertyRelationshipGeometry } from './services/sysmlBddRelationshipGeometry';
+import { resolveBddPropertyRelationshipGeometry, resolveBddPropertySourceAnchor } from './services/sysmlBddRelationshipGeometry';
+import { classifyBddRelationshipPresentation } from './services/sysmlConnectionUi';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 // Task 6 centralized semantic presentation resolver (spec 3.5): workflow
 // surfaces consume tokens instead of hard-coded palette colors.
@@ -10101,11 +10102,33 @@ const ADIA = () => {
       return;
     }
 
-    const result = handleExecuteSysmlCommand(buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, updates as Record<string, unknown>));
+    const command = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, updates as Record<string, unknown>);
+    const result = handleExecuteSysmlCommand(command);
     if (!result.committed) {
+      if (Array.isArray(updates.satisfiedReqIds) && result.impact && command.type === 'deleteElements') {
+        const severity = impactSeverity(result.impact, authorizedBaselineIds);
+        const blockName = canonicalSysmlRepository.definitions[id]?.name ?? id;
+        setSysmlDeleteConfirm({
+          impact: result.impact,
+          elementName: `Satisfy relationship(s) for ${blockName}`,
+          elementKind: 'relationship',
+          severity,
+          onConfirm: severity === 'blocked' ? () => {} : () => {
+            const confirmed = handleExecuteSysmlCommand({
+              ...command,
+              confirmedImpactHash: computeImpactHash(result.impact!),
+              authorizedBaselineIds,
+            });
+            if (!confirmed.committed) {
+              confirmed.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+            }
+          },
+        });
+        return;
+      }
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
     }
-  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft, activeSysmlDiagramId]);
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft, activeSysmlDiagramId, authorizedBaselineIds]);
 
   const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
     const deletedIds = new Set(transaction.impact.deletedElementIds);
@@ -10209,9 +10232,16 @@ const ADIA = () => {
   const startBddFeatureDrag = useCallback((e: MouseEvent<SVGTextElement>, feature: BddFeatureDrag) => {
     if (diagramMode !== 'bdd' || e.button !== 0) return;
     e.stopPropagation();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePos({
+        x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+        y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+      });
+    }
     setSelectedIds([feature.ownerId]);
     setBddFeatureDrag(feature);
-  }, [diagramMode]);
+  }, [diagramMode, uiZoom, view.offsetX, view.offsetY, view.scale]);
 
   const dropBddFeatureOnBlock = useCallback((e: MouseEvent<SVGGElement>, targetId: string) => {
     if (diagramMode !== 'bdd' || !bddFeatureDrag) return;
@@ -11704,6 +11734,9 @@ const ADIA = () => {
           const target = resolveEntity(blockId);
           if (!source || !target) return;
           const isPropertyEndpoint = ('typeId' in source && 'kind' in source) || ('typeId' in target && 'kind' in target);
+          const directPropertyKind = diagramMode === 'bdd'
+            ? getDirectBddPropertyRelationshipKind({ blocks, parts, relationships, states }, transitionSourceId, blockId)
+            : undefined;
           const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
           if (legalKinds.length === 0) {
             const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
@@ -11721,6 +11754,8 @@ const ADIA = () => {
                 },
               });
             }
+          } else if (directPropertyKind) {
+            createRelationship(transitionSourceId, blockId, directPropertyKind);
           } else if (diagramMode === 'requirements' || isPropertyEndpoint || !legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
           } else {
@@ -15591,6 +15626,13 @@ const ADIA = () => {
           data-semantic-id={block.id}
           transform={`translate(${block.x}, ${block.y})`}
           onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+          onMouseUp={(e: MouseEvent<SVGGElement>) => {
+            if (diagramMode === 'bdd' && bddFeatureDrag) {
+              e.stopPropagation();
+              if (block.id !== bddFeatureDrag.ownerId) dropBddFeatureOnBlock(e, block.id);
+              else setBddFeatureDrag(null);
+            }
+          }}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
             const decision = resolveBlockDoubleClickAction(diagramMode, block);
@@ -15859,12 +15901,26 @@ const ADIA = () => {
       const edgeIndex = group.indexOf(rel.id);
       const totalEdges = group.length;
 
-      const isPropertySource = diagramMode === 'bdd' && 'properties' in source && Boolean((source.properties as any[])?.some((p: any) => p.id === rel.sourceId));
-      let route: { path: string; sp: { x: number; y: number }; tp: { x: number; y: number }; labelPos: { x: number; y: number }; angle: number } | undefined;
+      const bddPresentation = diagramMode === 'bdd'
+        ? classifyBddRelationshipPresentation(
+            {
+              blocks: sysmlCanvasView.blocks,
+              parts: (sysmlCanvasView as any).parts || [],
+              relationships: sysmlCanvasView.relationships,
+            },
+            rel,
+          )
+        : undefined;
+
+      const isPropertySource = diagramMode === 'bdd' && (
+        bddPresentation?.kind === 'propertyAssociation' ||
+        ('properties' in source && Boolean((source.properties as any[])?.some((p: any) => p.id === rel.sourceId)))
+      );
+      let route: { path: string; sp: { x: number; y: number }; tp: { x: number; y: number }; labelPos: { x: number; y: number }; propertyLabelPos?: { x: number; y: number }; angle: number } | undefined;
       if (isPropertySource) {
         const geom = resolveBddPropertyRelationshipGeometry({
-          propertyId: rel.sourceId,
-          ownerBlockId: source.id,
+          propertyId: bddPresentation?.propertyId || rel.sourceId,
+          ownerBlockId: bddPresentation?.ownerBlockId || source.id,
           targetBlockId: target.id,
           blocks: sysmlCanvasView.blocks.map(b => {
             const bounds = computeBlockDisplayBounds(b);
@@ -15893,7 +15949,8 @@ const ADIA = () => {
             path: `M ${geom.source.x} ${geom.source.y} L ${geom.target.x} ${geom.target.y}`,
             sp: geom.source,
             tp: geom.target,
-            labelPos: { x: (geom.source.x + geom.target.x) / 2, y: (geom.source.y + geom.target.y) / 2 - 8 },
+            labelPos: geom.labelPos || { x: (geom.source.x + geom.target.x) / 2, y: (geom.source.y + geom.target.y) / 2 - 8 },
+            propertyLabelPos: geom.propertyLabelPos,
             angle,
           };
         }
@@ -15946,17 +16003,30 @@ const ADIA = () => {
         : undefined;
       const { sp, tp, labelPos, angle } = route;
 
+      const sourceProperty = 'properties' in source
+        ? (source.properties as any[])?.find((p: any) => p.id === (bddPresentation?.propertyId || rel.sourceId))
+        : undefined;
+      const propertyRole = sourceProperty?.name || '';
+      const propertyMult = sourceProperty?.multiplicity ? ` [${sourceProperty.multiplicity}]` : '';
+      const propertyLabel = `${propertyRole}${propertyMult}`.trim();
+
       return (
         <g
           key={rel.id}
           data-semantic-id={rel.id}
           data-presentation-kind="relationship"
           data-relationship-kind={rel.type}
+          data-bdd-presentation-kind={bddPresentation?.kind}
+          data-presentation-token={bddPresentation?.kind === 'propertyAssociation' ? 'property-association' : undefined}
           onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}
           style={{ cursor: 'pointer' }}
           role={isReqContainment ? "graphics-symbol" : undefined}
           aria-label={ariaLabel}
         >
+          <title>{bddPresentation?.kind === 'propertyAssociation'
+            ? `Property ${sourceProperty?.name || rel.sourceId} of ${source.name || source.id} -> ${target.name || target.id}`
+            : `${rel.type}: ${source.name || source.id} -> ${target.name || target.id}`}</title>
+
           {/* Broad click target */}
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
 
@@ -15966,6 +16036,32 @@ const ADIA = () => {
           <path d={route.path} fill="none" style={{ stroke: strokeColor }} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
 
           {/* Arrowheads & Markers */}
+          {bddPresentation?.kind === 'propertyAssociation' && (
+            <g data-presentation-role="property-end-adornment">
+              <circle
+                cx={sp.x}
+                cy={sp.y}
+                r={4}
+                style={{ fill: strokeColor }}
+                data-testid="bdd-property-end-marker"
+                data-presentation-role="property-end-marker"
+              />
+              {propertyLabel && (
+                <text
+                  x={route.propertyLabelPos?.x ?? (sp.x + (tp.x >= sp.x ? 12 : -12))}
+                  y={route.propertyLabelPos?.y ?? (sp.y - 6)}
+                  textAnchor={tp.x >= sp.x ? 'start' : 'end'}
+                  style={{ fill: strokeColor }}
+                  fontSize={10}
+                  fontWeight="500"
+                  data-testid="bdd-property-end-label"
+                  data-presentation-role="property-end-label"
+                >
+                  {propertyLabel}
+                </text>
+              )}
+            </g>
+          )}
           {rel.type === 'generalization' && (
             <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#1a1a1a" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
@@ -17897,14 +17993,34 @@ const ADIA = () => {
                           {renderRelationships()}
                         </g>
                         {diagramMode === 'bdd' && bddFeatureDrag && (() => {
-                          const source = blocks.find(block => block.id === bddFeatureDrag.ownerId);
+                          const source = sysmlCanvasView.blocks.find(block => block.id === bddFeatureDrag.ownerId);
                           if (!source) return null;
                           const bounds = computeBlockDisplayBounds(source);
-                          const featureY = bddFeatureDrag.kind === 'property'
-                            ? 45 + Math.max(0, source.properties.findIndex(property => property.id === bddFeatureDrag.featureId)) * 12
-                            : bounds.height - 15 + Math.max(0, source.operations.findIndex(operation => operation === bddFeatureDrag.name)) * 12;
-                          const startX = source.x + bounds.width;
-                          const startY = source.y + featureY;
+                          const featureY = bounds.height - 15 + Math.max(0, source.operations.findIndex(operation => operation === bddFeatureDrag.name)) * 12;
+                          const propertyLayouts = sysmlCanvasView.blocks.map(block => {
+                            const blockBounds = computeBlockDisplayBounds(block);
+                            return {
+                              id: block.id,
+                              x: block.x,
+                              y: block.y,
+                              width: blockBounds.width,
+                              height: blockBounds.height,
+                              properties: block.properties.map((property, index) => ({
+                                id: property.id,
+                                localY: 45 + index * 12 + 6,
+                              })),
+                            };
+                          });
+                          const propertyAnchor = bddFeatureDrag.kind === 'property'
+                            ? resolveBddPropertySourceAnchor({
+                                propertyId: bddFeatureDrag.featureId,
+                                ownerBlockId: source.id,
+                                toward: mousePos,
+                                blocks: propertyLayouts,
+                              })
+                            : undefined;
+                          const startX = propertyAnchor?.x ?? (mousePos.x >= source.x + bounds.width / 2 ? source.x + bounds.width : source.x);
+                          const startY = propertyAnchor?.y ?? source.y + featureY;
                           return (
                             <g pointerEvents="none">
                               <path d={`M ${startX} ${startY} L ${mousePos.x} ${mousePos.y}`} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="6 4" />

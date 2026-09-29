@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveBddPropertySourceAnchor,
   resolveBddPropertyRelationshipGeometry,
   type BddBlockLayout,
 } from './sysmlBddRelationshipGeometry';
@@ -50,6 +51,21 @@ describe('sysmlBddRelationshipGeometry', () => {
     },
   ];
 
+  it('anchors a live connection preview to the dragged property row toward the pointer', () => {
+    expect(resolveBddPropertySourceAnchor({
+      propertyId: 'prop-engine',
+      ownerBlockId: 'block-vehicle',
+      toward: { x: 500, y: 260 },
+      blocks,
+    })).toEqual({ x: 300, y: 210 });
+    expect(resolveBddPropertySourceAnchor({
+      propertyId: 'prop-engine',
+      ownerBlockId: 'block-vehicle',
+      toward: { x: 60, y: 260 },
+      blocks,
+    })).toEqual({ x: 100, y: 210 });
+  });
+
   it('resolves actual property row coordinate as source and target block boundary at nonzero origin, zoom, and pan', () => {
     const result = resolveBddPropertyRelationshipGeometry({
       propertyId: 'prop-engine',
@@ -86,6 +102,25 @@ describe('sysmlBddRelationshipGeometry', () => {
     // Path must start at source and end at target
     expect(result.path).toBe(`M ${result.source!.x} ${result.source!.y} L ${result.target!.x} ${result.target!.y}`);
   });
+
+  it('exposes a stable label position and property-end label position anchored to the property row', () => {
+    const result = resolveBddPropertyRelationshipGeometry({
+      propertyId: 'prop-engine',
+      ownerBlockId: 'block-vehicle',
+      targetBlockId: 'block-engine',
+      blocks,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toEqual({ x: 300, y: 210 });
+    expect(result.labelPos).toBeDefined();
+    expect(result.labelPos?.x).toBeCloseTo((300 + result.target!.x) / 2);
+    expect(result.labelPos?.y).toBeCloseTo((210 + result.target!.y) / 2 - 8);
+    expect(result.propertyLabelPos).toBeDefined();
+    expect(result.propertyLabelPos?.x).toBeGreaterThan(300);
+    expect(result.propertyLabelPos?.y).toBeCloseTo(202);
+  });
+
 
   it('resolves property with default row index when localY is omitted', () => {
     const result = resolveBddPropertyRelationshipGeometry({

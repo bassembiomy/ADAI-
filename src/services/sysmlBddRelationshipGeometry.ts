@@ -55,9 +55,39 @@ export interface BddRelationshipGeometryResult {
   target?: Point;
   screenSource?: Point;
   screenTarget?: Point;
+  labelPos?: Point;
+  propertyLabelPos?: Point;
   path?: string;
   diagnostic?: BddRelationshipGeometryDiagnostic;
 }
+
+export interface ResolveBddPropertySourceAnchorInput {
+  propertyId: string;
+  ownerBlockId: string;
+  toward: Point;
+  blocks: readonly BddBlockLayout[];
+}
+
+/** Resolve a live-drag anchor on the actual property row, facing the pointer. */
+export function resolveBddPropertySourceAnchor(
+  input: ResolveBddPropertySourceAnchorInput,
+): Point | undefined {
+  const owner = input.blocks.find(block => block.id === input.ownerBlockId);
+  if (!owner || !Number.isFinite(owner.x) || !Number.isFinite(owner.y)) return undefined;
+  const propertyIndex = owner.properties?.findIndex(property => property.id === input.propertyId) ?? -1;
+  if (propertyIndex < 0) return undefined;
+
+  const width = owner.width && owner.width > 0 ? owner.width : 150;
+  const property = owner.properties![propertyIndex];
+  const localY = property.localY ?? (45 + propertyIndex * 12 + 6);
+  if (!Number.isFinite(localY)) return undefined;
+
+  return {
+    x: input.toward.x >= owner.x + width / 2 ? owner.x + width : owner.x,
+    y: owner.y + localY,
+  };
+}
+
 
 /**
  * Calculates the intersection of a ray from `from` towards the center of `rect`
@@ -190,6 +220,14 @@ export function resolveBddPropertyRelationshipGeometry(
         ok: false,
         source: fallbackSource,
         target: fallbackTarget,
+        labelPos: {
+          x: (fallbackSource.x + fallbackTarget.x) / 2,
+          y: (fallbackSource.y + fallbackTarget.y) / 2 - 8,
+        },
+        propertyLabelPos: {
+          x: fallbackSource.x + 24,
+          y: fallbackSource.y - 8,
+        },
         diagnostic: {
           code: 'PROPERTY_NOT_FOUND',
           message: `Property "${propertyId}" was not found on Block "${ownerBlockId}".`,
@@ -256,12 +294,23 @@ export function resolveBddPropertyRelationshipGeometry(
     };
   }
 
+  const labelPos: Point = {
+    x: (sourcePoint.x + targetPoint.x) / 2,
+    y: (sourcePoint.y + targetPoint.y) / 2 - 8,
+  };
+  const propertyLabelPos: Point = {
+    x: sourcePoint.x + (targetIsRight ? 24 : -24),
+    y: sourcePoint.y - 8,
+  };
+
   return {
     ok: true,
     source: sourcePoint,
     target: targetPoint,
     screenSource,
     screenTarget,
+    labelPos,
+    propertyLabelPos,
     path,
   };
 }
