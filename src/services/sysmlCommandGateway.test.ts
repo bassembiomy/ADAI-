@@ -2477,6 +2477,25 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
     expect(res.repository.diagrams['diag-bdd']).toBeDefined();
     expect(res.store?.diagrams.has('diag-bdd')).toBe(true);
   });
+
+  it('rejects a duplicate diagram ID without changing repository or presentation state', () => {
+    let state = createSysmlGatewayState();
+    state = advance(state, executeSysmlCommand(state, {
+      type: 'createDiagram',
+      diagram: { id: 'diag-owned', kind: 'diagram', diagramKind: 'bdd', name: 'Owned BDD', namespace: ['model'], ownerId: 'model' },
+    }));
+    const existingDiagram = state.repository.diagrams['diag-owned'];
+    const before = snapshot(state);
+    const result = executeSysmlCommand(state, { type: 'createDiagram', diagram: existingDiagram });
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'DUPLICATE_ELEMENT_ID' }),
+    ]));
+    expect(snapshot(state)).toEqual(before);
+    expectNoMutation(result, state, before);
+    expect(result.repository.diagrams['diag-owned']).toMatchObject({ name: 'Owned BDD' });
+    expect(result.diagramPresentations['diag-owned']).toEqual(state.diagramPresentations?.['diag-owned']);
+  });
 });
 
 describe('sysmlCommandGateway Task 1 red phase: BDD/package semantic contracts', () => {

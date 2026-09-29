@@ -74,9 +74,10 @@ export function navigateRoot(
 ): DiagramNavigationState {
   if (state.returnStack.length > 0) {
     const rootOrigin = state.returnStack[0];
-    const isRootValid =
-      ['bdd', 'requirements', 'package', 'rtm'].includes(rootOrigin.diagramId) ||
-      Boolean(repo.diagrams[rootOrigin.diagramId]);
+    // Only real repository diagrams are valid return targets. Legacy
+    // mode-only pseudo-IDs ('bdd', 'requirements', 'rtm', 'package') never
+    // resolve to a diagram and fall through to exact-ID recovery below.
+    const isRootValid = Boolean(repo.diagrams[rootOrigin.diagramId]);
     if (isRootValid) {
       return {
         activeDiagramId: rootOrigin.diagramId,
@@ -122,15 +123,17 @@ export function recoverNavigationState(
   state: DiagramNavigationState,
   repo: Pick<SysmlRepository, 'diagrams' | 'definitions'>,
 ): DiagramNavigationState {
+  // Mode-only pseudo-IDs ('bdd', 'requirements', 'rtm', 'package') are never
+  // valid diagram targets: only real repository diagrams (or a live Block
+  // context for an IBD) count. Recovery never alters semantic ownership; it
+  // only reselects navigation state through the fallback chain below.
   const isContextValid = !state.contextElementId || Boolean(repo.definitions[state.contextElementId]);
   const isDiagramValid =
-    ['bdd', 'requirements', 'rtm', 'package'].includes(state.activeDiagramId) ||
     Boolean(repo.diagrams[state.activeDiagramId]) ||
     (state.diagramKind === 'ibd' && Boolean(repo.definitions[state.activeDiagramId]));
 
   if (isContextValid && isDiagramValid) {
     const validStack = state.returnStack.filter(entry =>
-      ['bdd', 'requirements', 'rtm', 'package'].includes(entry.diagramId) ||
       Boolean(repo.diagrams[entry.diagramId]) ||
       (entry.diagramKind === 'ibd' && Boolean(repo.definitions[entry.diagramId]))
     );
@@ -139,9 +142,7 @@ export function recoverNavigationState(
 
   for (let i = state.returnStack.length - 1; i >= 0; i--) {
     const entry = state.returnStack[i];
-    const entryValid =
-      ['bdd', 'requirements', 'rtm', 'package'].includes(entry.diagramId) ||
-      Boolean(repo.diagrams[entry.diagramId]);
+    const entryValid = Boolean(repo.diagrams[entry.diagramId]);
     if (entryValid) {
       return {
         activeDiagramId: entry.diagramId,
@@ -152,11 +153,22 @@ export function recoverNavigationState(
     }
   }
 
-  const sameKind = Object.values(repo.diagrams).find(d => d.diagramKind === state.diagramKind);
+  const sameKindDiagrams = Object.values(repo.diagrams).filter(d => d.diagramKind === state.diagramKind);
+  const sameKind = sameKindDiagrams.find(d => d.id === 'adia-default-bdd') ?? sameKindDiagrams[0];
   if (sameKind) {
     return {
       activeDiagramId: sameKind.id,
       diagramKind: sameKind.diagramKind,
+      contextElementId: undefined,
+      returnStack: [],
+    };
+  }
+
+  const defaultBdd = repo.diagrams['adia-default-bdd'];
+  if (defaultBdd) {
+    return {
+      activeDiagramId: defaultBdd.id,
+      diagramKind: 'bdd',
       contextElementId: undefined,
       returnStack: [],
     };

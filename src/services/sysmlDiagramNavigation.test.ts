@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type BlockDefinition, type ModelDiagramDefinition, type SysmlRepository } from '../engine/sysml/model';
+import { ensureDefaultSysmlDiagrams } from './sysmlDiagramWorkspace';
 import {
   createInitialNavigationState,
   enterBlockContext,
@@ -158,6 +159,12 @@ describe('SysML Diagram Navigation Service', () => {
     expect(fullyRecovered.diagramKind).toBe('bdd');
     // Definitions must remain unmodified
     expect(Object.keys(repo.definitions)).toContain('motor');
+  });
+
+  it('falls back to the default BDD rather than a mode-only pseudo-ID', () => {
+    const repository = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    expect(recoverNavigationState({ activeDiagramId: 'bdd', diagramKind: 'bdd', returnStack: [] }, repository).activeDiagramId)
+      .toBe('adia-default-bdd');
   });
 
   it('opening another diagram resets return stack so root navigation returns to the new diagram', () => {
