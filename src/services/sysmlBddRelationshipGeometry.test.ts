@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateBddParallelRoute,
   resolveBddPropertySourceAnchor,
   resolveBddPropertyRelationshipGeometry,
   type BddBlockLayout,
@@ -101,6 +102,13 @@ describe('sysmlBddRelationshipGeometry', () => {
 
     // Path must start at source and end at target
     expect(result.path).toBe(`M ${result.source!.x} ${result.source!.y} L ${result.target!.x} ${result.target!.y}`);
+  });
+
+  it('separates relationships that share the same visible Block pair', () => {
+    const first = calculateBddParallelRoute({ x: 300, y: 210 }, { x: 400, y: 260 }, 0, 2);
+    const second = calculateBddParallelRoute({ x: 300, y: 210 }, { x: 400, y: 260 }, 1, 2);
+    expect(first.path).not.toBe(second.path);
+    expect(first.labelPos).not.toEqual(second.labelPos);
   });
 
   it('exposes a stable label position and property-end label position anchored to the property row', () => {

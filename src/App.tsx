@@ -169,7 +169,7 @@ import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buil
 import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
 import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
 import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
-import { resolveBddPropertyRelationshipGeometry, resolveBddPropertySourceAnchor } from './services/sysmlBddRelationshipGeometry';
+import { calculateBddParallelRoute, resolveBddPropertyRelationshipGeometry, resolveBddPropertySourceAnchor } from './services/sysmlBddRelationshipGeometry';
 import { classifyBddRelationshipPresentation } from './services/sysmlConnectionUi';
 import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
 // Task 6 centralized semantic presentation resolver (spec 3.5): workflow
@@ -15861,10 +15861,14 @@ const ADIA = () => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
     const isInteracting = isDragging || isPanning;
     const packagesById = new Map(sysmlCanvasView.packages.map(pkg => [pkg.id, pkg]));
+    const visibleBlockIdForEndpoint = (endpointId: string) => {
+      if (sysmlCanvasView.blocks.some(block => block.id === endpointId)) return endpointId;
+      return sysmlCanvasView.blocks.find(block => block.properties?.some(property => property.id === endpointId))?.id ?? endpointId;
+    };
 
     const pairGroups = new Map<string, string[]>();
     targetRelationships.forEach(rel => {
-      const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
+      const pairKey = [visibleBlockIdForEndpoint(rel.sourceId), visibleBlockIdForEndpoint(rel.targetId)].sort().join(':::');
       if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
       pairGroups.get(pairKey)!.push(rel.id);
     });
@@ -15945,11 +15949,12 @@ const ADIA = () => {
           const dx = geom.target.x - geom.source.x;
           const dy = geom.target.y - geom.source.y;
           const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const parallelRoute = calculateBddParallelRoute(geom.source, geom.target, edgeIndex, totalEdges);
           route = {
-            path: `M ${geom.source.x} ${geom.source.y} L ${geom.target.x} ${geom.target.y}`,
+            path: parallelRoute.path,
             sp: geom.source,
             tp: geom.target,
-            labelPos: geom.labelPos || { x: (geom.source.x + geom.target.x) / 2, y: (geom.source.y + geom.target.y) / 2 - 8 },
+            labelPos: parallelRoute.labelPos,
             propertyLabelPos: geom.propertyLabelPos,
             angle,
           };

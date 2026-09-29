@@ -61,6 +61,36 @@ export interface BddRelationshipGeometryResult {
   diagnostic?: BddRelationshipGeometryDiagnostic;
 }
 
+export interface BddParallelRoute {
+  path: string;
+  labelPos: Point;
+}
+
+/** Build a stable curved lane for multiple relationships sharing visible Blocks. */
+export function calculateBddParallelRoute(
+  source: Point,
+  target: Point,
+  edgeIndex = 0,
+  totalEdges = 1,
+): BddParallelRoute {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const midX = (source.x + target.x) / 2;
+  const midY = (source.y + target.y) / 2;
+  if (totalEdges <= 1) {
+    return { path: `M ${source.x} ${source.y} L ${target.x} ${target.y}`, labelPos: { x: midX, y: midY - 8 } };
+  }
+  const distance = Math.hypot(dx, dy) || 1;
+  const nx = -dy / distance;
+  const ny = dx / distance;
+  const offset = (edgeIndex - (totalEdges - 1) / 2) * 32;
+  const control = { x: midX + nx * offset, y: midY + ny * offset };
+  return {
+    path: `M ${source.x} ${source.y} Q ${control.x} ${control.y} ${target.x} ${target.y}`,
+    labelPos: { x: control.x, y: control.y - 8 },
+  };
+}
+
 export interface ResolveBddPropertySourceAnchorInput {
   propertyId: string;
   ownerBlockId: string;

@@ -234,6 +234,8 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     await expect(b2bPresentation).toHaveAttribute('data-bdd-presentation-kind', 'blockAssociation');
     await expect(b2bPresentation.locator('[data-presentation-role="property-end-marker"]')).toHaveCount(0);
     await expect(b2bPresentation.locator('[data-presentation-role="property-end-label"]')).toHaveCount(0);
+    expect(await propertyRelPresentation.locator('path[stroke="transparent"]').getAttribute('d'))
+      .not.toBe(await b2bPresentation.locator('path[stroke="transparent"]').getAttribute('d'));
   });
 
   test('Workflow 1: BDD Port authoring from tree and canvas with explicit types, wrong-type rejection, and real save/reload stability', async ({ page }) => {
@@ -466,7 +468,6 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     const propertyAssociation = await page.evaluate(id => (window as any).__sysmlRepository.relationships[id], propertyAssociationId);
     expect(propertyAssociation).toMatchObject({ kind: 'association', sourceId: enginePropertyId, targetId: motorId });
     await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${propertyAssociationId}"][data-presentation-kind="relationship"]`)).toBeVisible();
-
     // Association Vehicle -> Motor through the explicit tree relationship wizard.
     const relsBefore = new Set(await repoRelationshipIds(page));
     await vehicleRow.click({ button: 'right' });
