@@ -216,6 +216,40 @@ describe('SysML Diagram Navigation Service', () => {
     expect(rooted.activeDiagramId).not.toBe('bdd');
   });
 
+  it('returns legacy IBD contexts to the legacy BDD mode when no concrete BDD exists', () => {
+    const repo = createEmptyRepository();
+    repo.definitions['vehicle'] = {
+      id: 'vehicle',
+      name: 'Vehicle',
+      ownerId: 'model',
+      namespace: [],
+      kind: 'block',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+
+    const rooted = navigateRoot(
+      {
+        activeDiagramId: 'vehicle',
+        diagramKind: 'ibd',
+        contextElementId: 'vehicle',
+        returnStack: [],
+      },
+      repo,
+    );
+
+    expect(rooted).toEqual({
+      activeDiagramId: 'bdd',
+      diagramKind: 'bdd',
+      contextElementId: undefined,
+      returnStack: [],
+    });
+  });
+
   it('self-heals the legacy initial seed to a real diagram ID via recovery', () => {
     const repository = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
     const healed = recoverNavigationState(createInitialNavigationState(), repository);

@@ -107,6 +107,16 @@ export function navigateRoot(
   const seedDiagram = Object.values(repo.diagrams).find(d => d.id === 'adia-default-bdd')
     ?? Object.values(repo.diagrams).find(d => d.diagramKind === 'bdd')
     ?? Object.values(repo.diagrams)[0];
+  if (!seedDiagram && state.diagramKind === 'ibd' &&
+    (Boolean(state.contextElementId && repo.definitions[state.contextElementId]) ||
+      Boolean(repo.definitions[state.activeDiagramId]))) {
+    return {
+      activeDiagramId: 'bdd',
+      diagramKind: 'bdd',
+      contextElementId: undefined,
+      returnStack: [],
+    };
+  }
   return recoverNavigationState(
     seedDiagram
       ? {
