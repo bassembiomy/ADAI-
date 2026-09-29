@@ -682,7 +682,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = Ra*I + La*dI/dt + Ke*ω\\nT = Ke*I = J*dω/dt + B*ω",
+        "equation": "V = Ra*I + La*dI/dt + Ke*ω\\nT = Kt*I = J*dω/dt + B*ω",
         "description": "DC motor coupling armature electrical circuit with rotor shaft mechanics."
       },
       {
@@ -780,10 +780,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "V/rad/s",
             "label": "Back EMF Const"
           },
+          "Kt": {
+            "value": 0.1,
+            "unit": "N-m/A",
+            "label": "Torque Const"
+          },
           "P": {
             "value": 4,
             "unit": "",
             "label": "Pole Pairs"
+          },
+          "J": {
+            "value": 0.02,
+            "unit": "kg-m^2",
+            "label": "Inertia"
+          },
+          "B": {
+            "value": 0.002,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [

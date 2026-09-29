@@ -33,6 +33,7 @@ describe('VLab Library Search & Scoring', () => {
   it('exposes every DC Motor parameter used by the simulation equation', () => {
     const dcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'dc_motor');
 
+    expect(dcMotor?.equation).toContain('T = Kt*I');
     expect(dcMotor?.params.Kt).toEqual({
       value: 0.05,
       unit: 'N-m/A',
@@ -40,6 +41,31 @@ describe('VLab Library Search & Scoring', () => {
     });
     expect(dcMotor?.params.B).toEqual({
       value: 0.001,
+      unit: 'N-m-s/rad',
+      label: 'Viscous Damping'
+    });
+  });
+
+  it('exposes the BLDC Motor electrical and mechanical runtime parameters', () => {
+    const bldcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'bldc_motor');
+
+    expect(bldcMotor?.params.Ls).toEqual({
+      value: 0.002,
+      unit: 'H',
+      label: 'Phase Ind'
+    });
+    expect(bldcMotor?.params.Kt).toEqual({
+      value: 0.1,
+      unit: 'N-m/A',
+      label: 'Torque Const'
+    });
+    expect(bldcMotor?.params.J).toEqual({
+      value: 0.02,
+      unit: 'kg-m^2',
+      label: 'Inertia'
+    });
+    expect(bldcMotor?.params.B).toEqual({
+      value: 0.002,
       unit: 'N-m-s/rad',
       label: 'Viscous Damping'
     });

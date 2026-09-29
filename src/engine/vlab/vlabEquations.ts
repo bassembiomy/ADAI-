@@ -22,6 +22,17 @@ export interface BlockEquationArgs {
 
 export type BlockEquationFactory = (args: BlockEquationArgs) => number[];
 
+const trapezoidalBackEmf = (angle: number): number => {
+  const twoPi = 2 * Math.PI;
+  const normalized = ((angle % twoPi) + twoPi) % twoPi;
+
+  if (normalized < Math.PI / 6) return 6 * normalized / Math.PI;
+  if (normalized < 5 * Math.PI / 6) return 1;
+  if (normalized < 7 * Math.PI / 6) return 1 - 6 * (normalized - 5 * Math.PI / 6) / Math.PI;
+  if (normalized < 11 * Math.PI / 6) return -1;
+  return -1 + 6 * (normalized - 11 * Math.PI / 6) / Math.PI;
+};
+
 export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── ELECTRICAL DOMAIN ──────────────────────────────────────────────────────
   ground: () => [],
@@ -1096,13 +1107,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  bldc_motor: ({ across, branch, state, dState, params, ctx }) => {
-    // state[0]: theta, state[1]: omega
-    const Rs = params.Rs || 0.2;
-    const P = params.P || 4;
-    const Ke = params.Ke || 0.1;
-    const J = params.J || params.inertia || 0.02;
-    const B = params.B || params.damping || 0.002;
+  bldc_motor: ({ across, branch, dBranch, state, dState, params }) => {
+    // state[0]: mechanical rotor angle theta, state[1]: mechanical speed omega
+    const Rs = params.Rs ?? 0.2;
+    const Ls = params.Ls ?? 0.002;
+    const Ke = params.Ke ?? 0.1;
+    const Kt = params.Kt ?? params.Ke ?? 0.1;
+    const P = params.P ?? 4;
+    const J = params.J ?? params.inertia ?? 0.02;
+    const B = params.B ?? params.damping ?? 0.002;
     
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
@@ -1112,22 +1125,23 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const ib = branch[1];
     const ic = branch[2];
     const torque = branch[3];
-    
-    // Clarke conversion of actual voltages to get instantaneous Valpha, Vbeta
-    const Valpha = (2 * Va - Vb - Vc) / 3;
-    const Vbeta = (Vb - Vc) / Math.sqrt(3);
-    const Vmag = Math.sqrt(Valpha * Valpha + Vbeta * Vbeta);
-    
-    const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
-    
-    // Synchronous torque coupling
-    const slip_speed = w_sync / P - state[1];
-    const Te = Ke * 0.15 * Vmag * slip_speed;
+    const electricalAngle = P * state[0];
+    const phaseA = trapezoidalBackEmf(electricalAngle);
+    const phaseB = trapezoidalBackEmf(electricalAngle - 2 * Math.PI / 3);
+    const phaseC = trapezoidalBackEmf(electricalAngle + 2 * Math.PI / 3);
+    const ea = Ke * state[1] * phaseA;
+    const eb = Ke * state[1] * phaseB;
+    const ec = Ke * state[1] * phaseC;
+    const shapedCurrent = phaseA * ia + phaseB * ib + phaseC * ic;
+    const backEmfPower = ea * ia + eb * ib + ec * ic;
+    const Te = Math.abs(state[1]) > 1e-9 && Math.abs(Ke) > 1e-9
+      ? (Kt / Ke) * backEmfPower / state[1]
+      : Kt * shapedCurrent;
     
     return [
-      Va - ia * Rs,                                      // branch[0]: ia
-      Vb - ib * Rs,                                      // branch[1]: ib
-      Vc - ic * Rs,                                      // branch[2]: ic
+      Va - ia * Rs - Ls * dBranch[0] - ea,               // branch[0]: ia
+      Vb - ib * Rs - Ls * dBranch[1] - eb,               // branch[1]: ib
+      Vc - ic * Rs - Ls * dBranch[2] - ec,               // branch[2]: ic
       across[4] - state[1],                              // branch[3]: torque
       dState[0] - state[1],                              // state[0]: theta
       torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega
