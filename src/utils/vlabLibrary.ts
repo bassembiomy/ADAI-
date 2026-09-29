@@ -646,10 +646,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "V/rad/s",
             "label": "Back EMF Const"
           },
+          "Kt": {
+            "value": 0.05,
+            "unit": "N-m/A",
+            "label": "Torque Const"
+          },
           "J": {
             "value": 0.001,
             "unit": "kg-m^2",
             "label": "Inertia"
+          },
+          "B": {
+            "value": 0.001,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [

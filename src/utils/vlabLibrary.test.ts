@@ -30,6 +30,21 @@ describe('VLab Library Search & Scoring', () => {
     expect(pmsm?.ports[4]?.domain).toBe('Rotational');
   });
 
+  it('exposes every DC Motor parameter used by the simulation equation', () => {
+    const dcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'dc_motor');
+
+    expect(dcMotor?.params.Kt).toEqual({
+      value: 0.05,
+      unit: 'N-m/A',
+      label: 'Torque Const'
+    });
+    expect(dcMotor?.params.B).toEqual({
+      value: 0.001,
+      unit: 'N-m-s/rad',
+      label: 'Viscous Damping'
+    });
+  });
+
   it('prioritizes exact name/id match "constant" over description matches', () => {
     const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
     const results = searchVLabBlocks(allBlocks, 'constant');
