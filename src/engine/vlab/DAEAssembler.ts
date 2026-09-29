@@ -16,7 +16,7 @@ const SIGNAL_CONTROL_BLOCKS = new Set([
   'pmsm_curr_ctrl', 'pmsm_ref_gen', 'pmsm_field_weakening', 'pmsm_tq_est',
   'pwm_3ph_3level', 'pwm_vienna', 'thyristor_6pulse', 'thyristor_12pulse',
   'ps_simulink_conv', 'simulink_ps_conv', 'vlab_probe', 'conn_label', 'doe_custom',
-  'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport'
+  'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport', 'nmos'
 ]);
 
 class UnionFind {
@@ -171,6 +171,7 @@ export class DAEAssembler {
 
     // 2. Connect ports according to edges
     const connectedPortKeys = new Set<string>();
+    const warnedUnconnectedNmosGates = new Set<string>();
     edges.forEach(edge => {
       let sourcePort = (edge.sourceHandle || 'p').replace(/_[st]$/, '');
       if (sourcePort.startsWith(edge.source + '-')) {
@@ -265,7 +266,7 @@ export class DAEAssembler {
       const isPhysicalOutputPort = (portId: string) => {
         const id = portId.toLowerCase();
         if (blockType === 'rot_motion_sensor' && ['w', 'a'].includes(id)) return true;
-        if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
+        if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'g', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
             id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
           return false;
         }
@@ -729,7 +730,11 @@ export class DAEAssembler {
           const key = `${node.id}_${portId}`;
           const domain = nodePortDomains.get(key);
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
-            return undefined as any;
+            if (type === 'nmos' && portId === 'g' && !warnedUnconnectedNmosGates.has(node.id)) {
+              warnedUnconnectedNmosGates.add(node.id);
+              console.warn(`NMOS gate input is unconnected on block "${node.id}"; using 0 V.`);
+            }
+            return 0;
           }
           const varIdx = portToVarIndex.get(key)!;
           return x[varIdx];
@@ -739,7 +744,7 @@ export class DAEAssembler {
           const key = `${node.id}_${portId}`;
           const domain = nodePortDomains.get(key);
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
-            return undefined as any;
+            return 0;
           }
           const varIdx = portToVarIndex.get(key)!;
           return dx[varIdx];

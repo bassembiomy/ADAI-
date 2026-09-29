@@ -1,4 +1,4 @@
-import { parseMultiplicity, type BlockDefinition, type PartUsage, type PropertyDefinition, type SysmlRepository } from '../engine/sysml/model';
+import { parseMultiplicity, type BlockDefinition, type PartUsage, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
 import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
 
 type SysmlMutationPlan = SysmlMutationCommand | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string };
@@ -93,29 +93,72 @@ export function buildBlockPropertyUpdateCommand(
   patch: Record<string, unknown>,
 ): SysmlMutationPlan {
   const definition = repository.definitions[elementId];
-  if (!definition || definition.kind !== 'block' || !Array.isArray(patch.properties)) {
+  const hasSatisfactionPatch = Array.isArray(patch.satisfiedReqIds);
+  if (!definition || definition.kind !== 'block' || (!Array.isArray(patch.properties) && !hasSatisfactionPatch)) {
     return { type: 'updateElement', elementId, patch };
   }
-  const properties = patch.properties.map(property => normalizeProperty(property as Record<string, unknown>));
-  const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = [
-    { type: 'updateElement', elementId, patch: { ...patch, properties } },
-  ];
-  const desired = new Map(properties.filter(property => property.kind === 'part' || property.kind === 'reference').map(property => [property.id, usageForProperty(elementId, property)]));
-  const retainedUsageIds = new Set<string>();
-  for (const [usageId, usage] of Object.entries(repository.usages)) {
-    if (usage.kind !== 'part' || usage.ownerId !== elementId) continue;
-    const [propertyId, next] = [...desired.entries()].find(([id, candidate]) => id === usage.propertyId || (!usage.propertyId && candidate.id === usageId)) ?? [];
-    if (!next || propertyId === undefined) commands.push({ type: 'deleteElements', elementIds: [usageId] });
-    else {
-      desired.delete(propertyId);
-      retainedUsageIds.add(usageId);
-      const updatedUsage = { ...next, id: usageId };
-      if (JSON.stringify(usage) !== JSON.stringify(updatedUsage)) commands.push({ type: 'updateElement', elementId: usageId, patch: updatedUsage as unknown as Record<string, unknown> });
+  const semanticPatch = { ...patch };
+  delete semanticPatch.satisfiedReqIds;
+  const properties = Array.isArray(patch.properties)
+    ? patch.properties.map(property => normalizeProperty(property as Record<string, unknown>))
+    : undefined;
+  if (properties) semanticPatch.properties = properties;
+  const commands: SysmlMutationCommand[] = [];
+  if (Object.keys(semanticPatch).length > 0) commands.push({ type: 'updateElement', elementId, patch: semanticPatch });
+
+  if (properties) {
+    const desired = new Map(properties.filter(property => property.kind === 'part' || property.kind === 'reference').map(property => [property.id, usageForProperty(elementId, property)]));
+    const retainedUsageIds = new Set<string>();
+    for (const [usageId, usage] of Object.entries(repository.usages)) {
+      if (usage.kind !== 'part' || usage.ownerId !== elementId) continue;
+      const [propertyId, next] = [...desired.entries()].find(([id, candidate]) => id === usage.propertyId || (!usage.propertyId && candidate.id === usageId)) ?? [];
+      if (!next || propertyId === undefined) commands.push({ type: 'deleteElements', elementIds: [usageId] });
+      else {
+        desired.delete(propertyId);
+        retainedUsageIds.add(usageId);
+        const updatedUsage = { ...next, id: usageId };
+        if (JSON.stringify(usage) !== JSON.stringify(updatedUsage)) commands.push({ type: 'updateElement', elementId: usageId, patch: updatedUsage as unknown as Record<string, unknown> });
+      }
+    }
+    for (const usage of desired.values()) {
+      if (!retainedUsageIds.has(usage.id)) commands.push({ type: 'createElement', element: usage });
     }
   }
-  for (const usage of desired.values()) {
-    if (!retainedUsageIds.has(usage.id)) commands.push({ type: 'createElement', element: usage });
+
+  if (hasSatisfactionPatch) {
+    const desiredRequirementIds = new Set((patch.satisfiedReqIds as unknown[]).filter((id): id is string => typeof id === 'string' && Boolean(id)));
+    const existingSatisfactions = Object.values(repository.relationships).filter(
+      relationship => relationship.kind === 'satisfy' && relationship.sourceId === elementId,
+    );
+    const unmatchedExisting = [...existingSatisfactions];
+    for (const relationship of existingSatisfactions) {
+      if (desiredRequirementIds.has(relationship.targetId)) {
+        desiredRequirementIds.delete(relationship.targetId);
+        unmatchedExisting.splice(unmatchedExisting.indexOf(relationship), 1);
+      }
+    }
+    for (const requirementId of desiredRequirementIds) {
+      const reusable = unmatchedExisting.shift();
+      if (reusable) {
+        commands.push({ type: 'updateElement', elementId: reusable.id, patch: { targetId: requirementId } });
+        continue;
+      }
+      const baseId = `satisfy-${elementId}-${requirementId}`;
+      let relationshipId = baseId;
+      let suffix = 2;
+      while (repository.relationships[relationshipId] || repository.definitions[relationshipId] || repository.requirements[relationshipId]) {
+        relationshipId = `${baseId}-${suffix++}`;
+      }
+      const relationship: SysmlRelationship = {
+        id: relationshipId, kind: 'satisfy', sourceId: elementId, targetId: requirementId,
+      };
+      commands.push({ type: 'createElement', element: relationship });
+    }
+    for (const relationship of unmatchedExisting) {
+      commands.push({ type: 'deleteElements', elementIds: [relationship.id] });
+    }
   }
+  if (commands.length === 1) return commands[0];
   return { type: 'batch', commands };
 }
 

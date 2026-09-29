@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Edge, Node } from '@xyflow/react';
 import { VLabPhysicsEngine } from './vlabPhysics';
+import { DAEAssembler } from './DAEAssembler';
+import { ImplicitSolver } from './ImplicitSolver';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { createVLabDOEBlock } from '../doe/integration';
 import { DOEDeploymentModel } from '../doe/types';
@@ -97,6 +99,57 @@ describe('V-Lab connected reference models', () => {
       ],
     });
     expect(result.readings.at(-1)).toBeCloseTo(10, 6);
+  });
+
+  it('simulates an NMOS with a 4 V physical gate and defaults an open gate to 0 V', () => {
+    const makeNmosModel = (connectGate: boolean): Model => ({
+      dt: 0.001, steps: 1,
+      nodes: [
+        node('drain_source', 'dc_voltage', { V: 5, R_int: 0.1 }),
+        node('nmos', 'nmos'),
+        node('ground', 'ground'),
+        node('gate_voltage', 'ps_constant', { value: 4 }),
+      ],
+      edges: [
+        edge('supply-drain', 'drain_source', 'p_s', 'nmos', 'd_t'),
+        edge('nmos-source-ground', 'nmos', 's_s', 'ground', 'a_t'),
+        edge('supply-ground', 'drain_source', 'n_s', 'ground', 'a_t'),
+        ...(connectGate ? [edge('gate-nmos', 'gate_voltage', 'y_s', 'nmos', 'g_t')] : []),
+      ],
+    });
+
+    const solveNmos = (connectGate: boolean) => {
+      const model = makeNmosModel(connectGate);
+      const system = new DAEAssembler().assemble(model.nodes, model.edges);
+      const initial = new Array(system.systemSize).fill(0);
+      const context = {
+        dt: model.dt, time: model.dt, parameters: {}, prevStates: initial,
+        states: initial, stateDerivatives: new Array(system.systemSize).fill(0),
+      };
+      const solution = new ImplicitSolver().solve(system.residuals, initial, context);
+      expect(solution.every(Number.isFinite)).toBe(true);
+      expect(system.residuals(solution, context).every(Number.isFinite)).toBe(true);
+      const drainIndex = system.variableNames.findIndex(name => name === 'Across_nmos_d_(electrical)');
+      const currentIndex = system.variableNames.findIndex(name => name === 'nmos_branch_drain_current');
+      const gateIndex = system.variableNames.findIndex(name => name === 'Across_nmos_g_(physical)');
+      return { vds: solution[drainIndex], id: solution[currentIndex], vg: solution[gateIndex] };
+    };
+
+    const connected = solveNmos(true);
+    expect(connected.vds).toBeGreaterThan(0);
+    expect(connected.id).toBeGreaterThan(0);
+    expect(connected.vg).toBeCloseTo(4, 6);
+    expect(Number.isFinite(connected.vds)).toBe(true);
+    expect(Number.isFinite(connected.id)).toBe(true);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const openGate = solveNmos(false);
+      expect(openGate.id).toBe(0);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('NMOS gate input is unconnected'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('propagates a signal through a subsystem containing a gain block', () => {

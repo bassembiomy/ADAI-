@@ -633,7 +633,7 @@ function formatMultiplicityText(m?: Multiplicity): string {
 interface EntityProjectionCache {
   packages: Map<string, { entity: PackageDefinition; coords?: PresentationCoordinates; result: PackageData }>;
   blocks: Map<string, { entity: SysmlEntity; coords?: PresentationCoordinates; dependencyKey?: string; result: BlockData }>;
-  parts: Map<string, { entity: SysmlUsage; coords?: PresentationCoordinates; result: PartData }>;
+  parts: Map<string, { entity: SysmlUsage; coords?: PresentationCoordinates; dependencyKey?: string; result: PartData }>;
   relationships: Map<string, { entity: SysmlRelationship; result: RelationshipData }>;
   connectors: Map<string, { entity: ConnectorUsage; result: ConnectorData }>;
 }
@@ -671,6 +671,13 @@ export function projectNormalizedDiagram(
   const connectors: ConnectorData[] = [];
 
   const entityCache = getEntityProjectionCache(store);
+  const satisfiedReqIdsBySource = new Map<string, string[]>();
+  for (const relationship of store.relationships.values()) {
+    if (relationship.kind !== 'satisfy') continue;
+    const requirementIds = satisfiedReqIdsBySource.get(relationship.sourceId) ?? [];
+    requirementIds.push(relationship.targetId);
+    satisfiedReqIdsBySource.set(relationship.sourceId, requirementIds);
+  }
 
   const visibleFilter = diagramId
     ? new Set(store.diagramPresentations.get(diagramId)?.elementIds ?? [])
@@ -712,7 +719,7 @@ export function projectNormalizedDiagram(
   const projectDef = (def: SysmlDefinition) => {
     const coords = coordinatesFor(def.id);
     const dependencyKey = def.kind === 'block'
-      ? def.properties.map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')
+      ? `${def.properties.map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')}::satisfies:${(satisfiedReqIdsBySource.get(def.id) ?? []).slice().sort().join('|')}`
       : undefined;
     const cached = entityCache.blocks.get(def.id);
     if (cached && cached.entity === def && cached.coords === coords && cached.dependencyKey === dependencyKey) {
@@ -760,6 +767,7 @@ export function projectNormalizedDiagram(
         constraints: b.constraints ?? [],
         classes: [],
         ports: legacyPorts,
+        satisfiedReqIds: satisfiedReqIdsBySource.get(b.id) ?? [],
       };
     } else {
       result = {
@@ -849,8 +857,9 @@ export function projectNormalizedDiagram(
     if (usage.kind === 'part') {
       const pUsage = usage as PartUsage;
       const coords = coordinatesFor(pUsage.id);
+      const satisfactionKey = (satisfiedReqIdsBySource.get(pUsage.id) ?? []).slice().sort().join('|');
       const cached = entityCache.parts.get(pUsage.id);
-      if (cached && cached.entity === pUsage && cached.coords === coords) {
+      if (cached && cached.entity === pUsage && cached.coords === coords && cached.dependencyKey === satisfactionKey) {
         parts.push(cached.result);
         return;
       }
@@ -864,6 +873,7 @@ export function projectNormalizedDiagram(
         typeId: pUsage.typeId,
         typeBlockId: pUsage.typeId,
         multiplicity: formatMultiplicityText(pUsage.multiplicity),
+        satisfiedReqIds: satisfiedReqIdsBySource.get(pUsage.id) ?? [],
         x: coords?.x ?? 0,
         y: coords?.y ?? 0,
         width: coords?.width ?? 150,
@@ -872,7 +882,7 @@ export function projectNormalizedDiagram(
           ? { portLayouts: store.diagramPresentations.get(diagramId)!.presentations[pUsage.id].portLayouts }
           : {}),
       };
-      entityCache.parts.set(pUsage.id, { entity: pUsage, coords, result });
+      entityCache.parts.set(pUsage.id, { entity: pUsage, coords, dependencyKey: satisfactionKey, result });
       parts.push(result);
     }
   };

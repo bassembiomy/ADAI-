@@ -704,8 +704,11 @@ export class VLabPhysicsEngine {
           indicators.push(V - Vf);
         }
         else if (type === 'nmos') {
-          const Vgs = getPortVal('g') - getPortVal('s');
-          const Vds = getPortVal('d') - getPortVal('s');
+          const Vd = getPortVal('d');
+          const Vs = getPortVal('s');
+          const Vg = getPortVal('g');
+          const Vgs = (Number.isFinite(Vg) ? Vg : 0) - (Number.isFinite(Vs) ? Vs : 0);
+          const Vds = (Number.isFinite(Vd) ? Vd : 0) - (Number.isFinite(Vs) ? Vs : 0);
           const Vth = params.Vth !== undefined ? params.Vth : 2.0;
           indicators.push(Vgs - Vth);
           indicators.push(Vds - (Vgs - Vth));

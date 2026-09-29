@@ -71,6 +71,54 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     await openModeler(page);
   });
 
+  test('assigning a Requirement to a Block from the BDD inspector persists a canonical Satisfy relationship', async ({ page }) => {
+    await page.locator('button:has-text("SysML BDD")').first().click();
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      execute({
+        type: 'createAndPresent', diagramId: 'bdd',
+        element: {
+          id: 'bdd-assign-controller', name: 'Controller', kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        },
+        presentation: { x: 180, y: 160, width: 220, height: 150 },
+      });
+      execute({
+        type: 'createAndPresent', diagramId: 'requirements',
+        element: {
+          id: 'bdd-assign-req', name: 'Controller shall regulate output', kind: 'requirement', namespace: [], ownerId: 'model',
+          requirementId: 'REQ-BDD-001', text: 'Controller shall regulate output.', status: 'draft', version: '1.0',
+        },
+        presentation: { x: 180, y: 160, width: 220, height: 120 },
+      });
+    });
+
+    await page.locator('#adia-diagram-canvas g[data-semantic-id="bdd-assign-controller"]').click();
+    await expect(page.getByText('Satisfied Requirements', { exact: true })).toBeVisible();
+    const requirementSelector = page.locator('select[multiple]').filter({ has: page.locator('option[value="bdd-assign-req"]') }).first();
+    await expect(requirementSelector).toBeVisible();
+    await requirementSelector.selectOption('bdd-assign-req');
+
+    await expect.poll(() => page.evaluate(() => {
+      const repository = (window as any).__sysmlRepository;
+      return Object.values(repository.relationships).filter((relationship: any) =>
+        relationship.kind === 'satisfy' && relationship.sourceId === 'bdd-assign-controller' && relationship.targetId === 'bdd-assign-req',
+      ).length;
+    })).toBe(1);
+    await expect.poll(() => requirementSelector.evaluate((select: HTMLSelectElement) =>
+      Array.from(select.selectedOptions, option => option.value),
+    )).toEqual(['bdd-assign-req']);
+
+    await requirementSelector.selectOption([]);
+    await expect(page.getByRole('heading', { name: 'Confirm Delete Relationship' })).toBeVisible();
+    await page.getByRole('button', { name: 'Delete Relationship' }).click();
+    await expect.poll(() => page.evaluate(() => Object.values((window as any).__sysmlRepository.relationships)
+      .filter((relationship: any) => relationship.kind === 'satisfy' && relationship.sourceId === 'bdd-assign-controller').length,
+    )).toBe(0);
+    await expect.poll(() => requirementSelector.evaluate((select: HTMLSelectElement) => select.selectedOptions.length)).toBe(0);
+  });
+
   test('1. BDD property connection routes from compartment row and uses association styling', async ({ page }) => {
     // Switch to SysML BDD
     await page.locator('button:has-text("SysML BDD")').first().click();

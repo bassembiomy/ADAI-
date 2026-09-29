@@ -1,7 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository } from '../engine/sysml/model';
-import { createSysmlGatewayState, executeSysmlCommand } from './sysmlCommandGateway';
+import { computeImpactHash, createSysmlGatewayState, executeSysmlCommand } from './sysmlCommandGateway';
 import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildCreatePartUsageCommand, buildPartUsageUpdateCommand, buildRelationshipUpdateCommand } from './sysmlPropertyCommands';
+
+describe('BDD property-end associations', () => {
+  it('persists and projects an Association whose member end is a typed Block property', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.vehicle = {
+      id: 'vehicle', name: 'Vehicle', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [{
+        id: 'engine-property', name: 'engine', kind: 'part', typeId: 'engine',
+        multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+      }], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions.engine = {
+      id: 'engine', name: 'Engine', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'createAndPresent', diagramId: 'bdd', presentation: {},
+      element: { id: 'vehicle-engine-association', kind: 'association', sourceId: 'engine-property', targetId: 'engine', name: 'engine : Engine' },
+    });
+
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect(result.repository.relationships['vehicle-engine-association']).toMatchObject({
+      kind: 'association', sourceId: 'engine-property', targetId: 'engine',
+    });
+    expect(result.view.relationships).toContainEqual(expect.objectContaining({
+      id: 'vehicle-engine-association', sourceId: 'engine-property', targetId: 'engine', type: 'association',
+    }));
+  });
+});
 
 describe('buildCreatePartDefinitionCommand', () => {
   it('creates the classifier and retargets its part usage atomically through the gateway', () => {
@@ -58,6 +88,61 @@ describe('buildCreatePartDefinitionCommand', () => {
     expect(Object.values(result.repository.usages)).toContainEqual(expect.objectContaining({ propertyId: 'property-left-motor', ownerId: 'vehicle', typeId: 'motor', kind: 'part' }));
     const undone = executeSysmlCommand(result, { type: 'undo' });
     expect(Object.values(undone.repository.usages)).toHaveLength(0);
+  });
+
+  it('persists Block Satisfied Requirements as canonical satisfy relationships and synchronizes reassignment', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.controller = {
+      id: 'controller', name: 'Controller', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    for (const id of ['req-a', 'req-b']) repository.requirements[id] = {
+      id, name: id.toUpperCase(), kind: 'requirement', namespace: ['model'], ownerId: 'model',
+      requirementId: id.toUpperCase(), text: '', status: 'draft', version: '1.0',
+    };
+
+    const assign = executeSysmlCommand(createSysmlGatewayState(repository),
+      buildBlockPropertyUpdateCommand(repository, 'controller', { satisfiedReqIds: ['req-a'] }));
+    expect(assign.committed, JSON.stringify(assign.diagnostics)).toBe(true);
+    expect(Object.values(assign.repository.relationships).filter(relation => relation.kind === 'satisfy'))
+      .toEqual([expect.objectContaining({ sourceId: 'controller', targetId: 'req-a' })]);
+    expect(assign.view.blocks.find(block => block.id === 'controller')?.satisfiedReqIds).toEqual(['req-a']);
+
+    const reassign = executeSysmlCommand(assign,
+      buildBlockPropertyUpdateCommand(assign.repository, 'controller', { satisfiedReqIds: ['req-b'] }));
+    expect(reassign.committed, JSON.stringify(reassign.diagnostics)).toBe(true);
+    expect(Object.values(reassign.repository.relationships).filter(relation => relation.kind === 'satisfy'))
+      .toEqual([expect.objectContaining({ sourceId: 'controller', targetId: 'req-b' })]);
+    expect(reassign.view.blocks.find(block => block.id === 'controller')?.satisfiedReqIds).toEqual(['req-b']);
+  });
+
+  it('removes a Block satisfy relationship when its requirement is unchecked', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.controller = {
+      id: 'controller', name: 'Controller', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.requirements['req-a'] = {
+      id: 'req-a', name: 'REQ-A', kind: 'requirement', namespace: ['model'], ownerId: 'model',
+      requirementId: 'REQ-A', text: '', status: 'draft', version: '1.0',
+    };
+    repository.relationships['satisfy-controller-req-a'] = {
+      id: 'satisfy-controller-req-a', kind: 'satisfy', sourceId: 'controller', targetId: 'req-a',
+    };
+
+    const state = createSysmlGatewayState(repository);
+    const command = buildBlockPropertyUpdateCommand(repository, 'controller', { satisfiedReqIds: [] });
+    const preflight = executeSysmlCommand(state, command);
+
+    expect(preflight.committed).toBe(false);
+    expect(preflight.impact?.requestedElementIds).toContain('satisfy-controller-req-a');
+    const result = executeSysmlCommand(state, {
+      ...(command as Extract<typeof command, { type: 'deleteElements' }>),
+      confirmedImpactHash: computeImpactHash(preflight.impact!),
+    });
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect(Object.values(result.repository.relationships).filter(relation => relation.kind === 'satisfy')).toHaveLength(0);
+    expect(result.view.blocks.find(block => block.id === 'controller')?.satisfiedReqIds).toEqual([]);
   });
 
   it('keeps a PartUsage type/name edit and its owner Block property synchronized atomically', () => {

@@ -363,6 +363,13 @@ export function projectLegacyDiagram(
   const parts: PartData[] = [];
   const relationships: RelationshipData[] = [];
   const connectors: ConnectorData[] = [];
+  const satisfiedReqIdsBySource = new Map<string, string[]>();
+  for (const relationship of Object.values(repository.relationships)) {
+    if (relationship.kind !== 'satisfy') continue;
+    const requirementIds = satisfiedReqIdsBySource.get(relationship.sourceId) ?? [];
+    requirementIds.push(relationship.targetId);
+    satisfiedReqIdsBySource.set(relationship.sourceId, requirementIds);
+  }
 
   const visibleFilter = diagramId
     ? new Set(diagramPresentations[diagramId]?.elementIds ?? [])
@@ -437,6 +444,7 @@ export function projectLegacyDiagram(
         constraints: b.constraints ?? [],
         classes: [],
         ports: legacyPorts,
+        satisfiedReqIds: satisfiedReqIdsBySource.get(b.id) ?? [],
       });
     } else {
       blocks.push({
@@ -522,6 +530,7 @@ export function projectLegacyDiagram(
         typeId: usage.typeId,
         typeBlockId: usage.typeId,
         multiplicity: formatMultiplicityText(usage.multiplicity),
+        satisfiedReqIds: satisfiedReqIdsBySource.get(usage.id) ?? [],
         x: coords.x ?? 0,
         y: coords.y ?? 0,
         width: coords.width ?? 150,

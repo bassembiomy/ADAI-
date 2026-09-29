@@ -95,14 +95,22 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [V - branch[0] * Roff];
   },
   
-  nmos: ({ across, branch, params }) => {
+  nmos: ({ across, branch, params, ports }) => {
     // across[0] = Vd, across[1] = Vs, across[2] = Vg
+    const portValue = (id: string, fallbackIndex: number) => {
+      const index = ports?.indexOf(id) ?? -1;
+      const value = index >= 0 ? across[index] : across[fallbackIndex];
+      return Number.isFinite(value) ? value : 0;
+    };
+    const Vd = portValue('d', 0);
+    const Vs = portValue('s', 1);
+    const Vg = portValue('g', 2);
     const kn = params.kn || 0.5;
     const Vth = params.Vth || 2.0;
     const lambda = params.lambda || 0.01;
     
-    const Vgs = across[2] - across[1];
-    const Vds = across[0] - across[1];
+    const Vgs = Vg - Vs;
+    const Vds = Vd - Vs;
     const Vov = Vgs - Vth;
     
     let Id_target = 0;
@@ -117,7 +125,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // Smooth transition at threshold Vgs = Vth
     const smooth = 0.5 * (1 + Math.tanh(Vov * 5));
     const Id = Id_target * smooth;
-    return [branch[0] - Id];
+    const residual = branch[0] - Id;
+    return [Number.isFinite(residual) ? residual : 0];
   },
   
   igbt: ({ across, branch, params }) => {
