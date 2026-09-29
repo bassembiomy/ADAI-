@@ -112,8 +112,9 @@ const PILLAR_DIAGRAM_KINDS: Record<string, readonly string[]> = {
 };
 
 /** Virtual explorer pillars are viewpoints, never semantic command owners. */
-export function resolveCapabilityOwnerId(node: ModelTreeNode): string {
+export function resolveCapabilityOwnerId(node: ModelTreeNode, diagramKind?: string): string {
   if (node.kind === 'pillar' || node.domain === 'project') {
+    if (node.virtualKind === 'behavior' || diagramKind === 'stateMachine') return 'root';
     return node.ownerSemanticId ?? 'model';
   }
   return node.semanticId;
@@ -171,7 +172,7 @@ export function capabilityToAction(
         kind: 'command',
         command: {
           type: 'createDiagram',
-          ownerId: resolveCapabilityOwnerId(node),
+          ownerId: resolveCapabilityOwnerId(node, capability.elementKind),
           diagramKind: capability.elementKind || 'bdd',
         },
       };
@@ -529,8 +530,17 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   const handleExecuteCapability = useCallback(
     (capability: ExplorerCapability, node: ModelTreeNode) => {
-      const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter;
-      const capabilityOwnerId = resolveCapabilityOwnerId(node);
+      const capabilityOwnerId = resolveCapabilityOwnerId(
+        node,
+        capability.kind === 'createDiagram' ? capability.elementKind : undefined,
+      );
+      // Behavior-pillar nodes carry domain 'project', so domain routing alone
+      // would send State Machine diagrams to the SysML store. Route by diagram
+      // kind so stateMachine creation always reaches the SM adapter/store.
+      const isStateMachineDiagramTarget =
+        capability.kind === 'createDiagram' &&
+        (capability.elementKind === 'stateMachine' || node.virtualKind === 'behavior');
+      const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' || isStateMachineDiagramTarget ? smAdapter : sysmlAdapter;
       if (capability.kind === 'rename') return;
 
       if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {

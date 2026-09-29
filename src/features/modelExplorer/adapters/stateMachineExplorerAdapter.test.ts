@@ -222,6 +222,20 @@ describe('stateMachineExplorerAdapter', () => {
     expect(ensured.diagrams!.map(diagram => diagram.id)).toEqual(['custom-sm']);
   });
 
+  it('preserves nested-only diagrams while still adding the root default', () => {
+    const harness = createSmHarness({
+      layers: [
+        { id: 'root', name: 'Root Region', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] },
+        { id: 'region-1', name: 'Region 1', parentStateId: 's1', stateIds: [], transitionIds: [], junctionIds: [] },
+      ],
+      diagrams: [{ id: 'nested-sm', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }],
+    });
+    const ensured = ensureRootStateMachineDiagram(harness.snapshot!);
+    expect(ensured.diagrams!.map(diagram => diagram.id)).toEqual(['nested-sm', 'adia-default-state-machine']);
+    expect(ensured.diagrams![0]).toMatchObject({ ownerId: 'region-1', contextRegionId: 'region-1' });
+    expect(ensured.diagrams![1]).toMatchObject({ ownerId: 'root', contextRegionId: 'root' });
+  });
+
   it('returns the exact new diagram ID when creating a state-machine diagram', () => {
     const harness = createSmHarness();
     const adapter = createStateMachineExplorerAdapter(harness);

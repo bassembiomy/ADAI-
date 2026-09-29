@@ -199,7 +199,8 @@ describe('AppModelExplorer Capability Coverage', () => {
     expect(result.kind).not.toBe('unhandled');
   });
 
-  it('tree activation callback receives the exact diagram semantic ID and kind', () => {    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  it('tree activation callback receives the exact diagram semantic ID and kind', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     const repo = createEmptyRepository();
     repo.diagrams['bdd-powertrain-1'] = {
       id: 'bdd-powertrain-1',
@@ -255,5 +256,145 @@ describe('AppModelExplorer Capability Coverage', () => {
       kind: 'command',
       command: { type: 'createDiagram', ownerId: 'model', diagramKind: 'bdd' },
     });
+  });
+
+  it('uses the root owner for a new State Machine Diagram from the Behavior pillar', () => {
+    const behavior: ModelTreeNode = {
+      nodeId: 'project:pillar:behavior',
+      semanticId: 'project:pillar:behavior',
+      domain: 'project',
+      kind: 'pillar',
+      virtualKind: 'behavior',
+      label: 'Behavior',
+      parentNodeId: 'project:model',
+      ownerSemanticId: 'model',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+    const capability: ExplorerCapability = {
+      id: 'createDiagram:stateMachine',
+      kind: 'createDiagram',
+      label: 'State Machine Diagram',
+      enabled: true,
+      elementKind: 'stateMachine',
+    };
+    expect(capabilityToAction(capability, behavior, {})).toMatchObject({
+      kind: 'command',
+      command: { type: 'createDiagram', ownerId: 'root', diagramKind: 'stateMachine' },
+    });
+  });
+
+  it('uses the model owner for a new Requirements Diagram from the Requirements pillar', () => {
+    const requirements: ModelTreeNode = {
+      nodeId: 'project:pillar:requirements',
+      semanticId: 'project:pillar:requirements',
+      domain: 'project',
+      kind: 'pillar',
+      virtualKind: 'requirements',
+      label: 'Requirements',
+      parentNodeId: 'project:model',
+      ownerSemanticId: 'model',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+    const capability: ExplorerCapability = {
+      id: 'createDiagram:requirements',
+      kind: 'createDiagram',
+      label: 'Requirements Diagram',
+      enabled: true,
+      elementKind: 'requirements',
+    };
+    expect(capabilityToAction(capability, requirements, {})).toMatchObject({
+      kind: 'command',
+      command: { type: 'createDiagram', ownerId: 'model', diagramKind: 'requirements' },
+    });
+  });
+
+  it('uses the element semantic ID as owner for a new diagram from a block node', () => {
+    const block: ModelTreeNode = {
+      nodeId: 'sysml:element:block-1',
+      semanticId: 'block-1',
+      domain: 'sysml',
+      kind: 'block',
+      label: 'Engine',
+      parentNodeId: 'project:pillar:structural',
+      ownerSemanticId: 'model',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+    const capability: ExplorerCapability = {
+      id: 'createDiagram:bdd',
+      kind: 'createDiagram',
+      label: 'Block Definition Diagram (BDD)',
+      enabled: true,
+      elementKind: 'bdd',
+    };
+    expect(capabilityToAction(capability, block, {})).toMatchObject({
+      kind: 'command',
+      command: { type: 'createDiagram', ownerId: 'block-1', diagramKind: 'bdd' },
+    });
+  });
+
+  it('uses the region semantic ID as owner for a new diagram from an SM region node', () => {
+    const region: ModelTreeNode = {
+      nodeId: 'sm:region:region-1',
+      semanticId: 'region-1',
+      domain: 'stateMachine',
+      kind: 'region',
+      label: 'Region 1',
+      parentNodeId: 'sm:state:s1',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+    const capability: ExplorerCapability = {
+      id: 'createDiagram:stateMachine',
+      kind: 'createDiagram',
+      label: 'State Machine Diagram',
+      enabled: true,
+      elementKind: 'stateMachine',
+    };
+    expect(capabilityToAction(capability, region, {})).toMatchObject({
+      kind: 'command',
+      command: { type: 'createDiagram', ownerId: 'region-1', diagramKind: 'stateMachine' },
+    });
+  });
+
+  it('routes Behavior pillar State Machine creation to the SM store with owner root', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+    const repository = createEmptyRepository();
+    const onExecute = vi.fn();
+    const onCommit = vi.fn();
+    const onCommandResult = vi.fn();
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="bdd"
+        states={[]}
+        layers={[{ id: 'root', name: 'Root Region', parentStateId: null, stateIds: [], junctionIds: [], transitionIds: [] }]}
+        transitions={[]}
+        junctions={[]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        canonicalSysmlRepository={repository}
+        onSelect={vi.fn()}
+        onDoubleClick={vi.fn()}
+        onCommitStateMachineSnapshot={onCommit}
+        onExecuteSysmlCommand={onExecute}
+        onCommandResult={onCommandResult}
+      />
+    );
+    const behaviorRow = container.querySelector('.model-tree-row[data-node-id="project:pillar:behavior"]');
+    expect(behaviorRow).not.toBeNull();
+    fireEvent.contextMenu(behaviorRow!);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^State Machine Diagram$/ }));
+    expect(onExecute).not.toHaveBeenCalled();
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0];
+    const created = committed.diagrams[committed.diagrams.length - 1];
+    expect(created).toMatchObject({ ownerId: 'root', contextRegionId: 'root' });
+    expect(onCommandResult).toHaveBeenCalledWith(
+      expect.objectContaining({ committed: true }),
+      expect.objectContaining({ type: 'createDiagram', ownerId: 'root' }),
+    );
   });
 });
