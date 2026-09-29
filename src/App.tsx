@@ -4602,6 +4602,9 @@ const WorkspaceTabBar = ({
           return (
             <div 
               key={tabId}
+              role="tab"
+              aria-selected={isActive}
+              data-workspace-type={file.type}
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
                   isActive 
@@ -6915,23 +6918,23 @@ const ADIA = () => {
 
   // Switch active file function
   const switchActiveFile = useCallback((newFileId: string) => {
+    if (newFileId === activeFileId) return;
+
+    const targetExists = workspaceFiles.some(file => file.id === newFileId);
+    if (!targetExists) return;
+
     setSelectedIds([]);
-    setWorkspaceFiles(prevFiles => {
-      let updatedFiles = prevFiles;
-      if (activeFileId) {
-        updatedFiles = saveCurrentFileState(prevFiles, activeFileId);
-      }
-      
-      const targetFile = updatedFiles.find(f => f.id === newFileId);
-      if (targetFile) {
-        loadStateForFile(targetFile);
-        setDiagramModeState(targetFile.type as DiagramMode);
-        setActiveFileId(newFileId);
-      }
-      
-      return updatedFiles;
-    });
-  }, [activeFileId, saveCurrentFileState, loadStateForFile]);
+    const updatedFiles = activeFileId
+      ? saveCurrentFileState(workspaceFiles, activeFileId)
+      : workspaceFiles;
+    const targetFile = updatedFiles.find(file => file.id === newFileId);
+    if (!targetFile) return;
+
+    setWorkspaceFiles(updatedFiles);
+    loadStateForFile(targetFile);
+    setDiagramModeState(targetFile.type as DiagramMode);
+    setActiveFileId(newFileId);
+  }, [activeFileId, workspaceFiles, saveCurrentFileState, loadStateForFile]);
 
   // Create new file function
   const createNewFile = useCallback((name: string, type: string) => {
@@ -16969,45 +16972,6 @@ const ADIA = () => {
               <div className="text-[10px] text-[var(--text-muted)] font-mono mt-[-2px]">{VERSION}</div>
             </div>
           </div>
-
-          <Separator orientation="vertical" className="h-6" />
-
-          {/* DIAGRAM MODE SWITCHER */}
-          <div className="flex ui-card bg-[var(--surface-raised)] rounded-lg border border-[var(--border-default)] p-0.5 shrink-0">
-            {[
-              { id: 'statemachine', label: 'State Machine' },
-              { id: 'bdd', label: 'SysML BDD' },
-              { id: 'requirements', label: 'Requirements' },
-              { id: 'ibd', label: 'SysML IBD' },
-              { id: 'package', label: 'Package Diagram' },
-              { id: 'xbridges', label: 'X-Bridges' },
-              { id: 'vlab', label: 'V-Lab' },
-              { id: 'hil', label: 'HIL' },
-              { id: 'entropy', label: 'ENTROPY OPM' },
-            ].map(mode => (
-              <button
-                key={mode.id}
-                onClick={() => {
-                  if (mode.id === 'package') {
-                    handleActivatePackageDiagram();
-                  } else if (mode.id === 'ibd') {
-                    handleActivateIbdDiagram();
-                  } else {
-                    setDiagramMode(mode.id as DiagramMode);
-                  }
-                }}
-                title={mode.id === 'package' ? 'Open or create a Package Diagram' : undefined}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
-                  diagramMode === mode.id
-                    ? 'bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-sm font-semibold'
-                    : 'text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)]'
-                }`}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
-
 
           <Separator orientation="vertical" className="h-6" />
 
