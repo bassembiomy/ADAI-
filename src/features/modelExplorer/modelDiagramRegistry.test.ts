@@ -36,10 +36,16 @@ describe('modelDiagramRegistry', () => {
       getPresentedIds: (id: string) => presentations[id]?.elementIds ?? [],
     });
 
-    const diagram = registry.create({ ownerId: 'block-1', diagramKind: 'ibd', name: 'Power IBD' });
+    const diagram = registry.create({ ownerId: 'block-1', diagramKind: 'ibd', name: 'Power IBD', contextElementId: 'block-1' });
     expect(diagram.id).toBe('diag-1');
     expect(registry.listForOwner('block-1')).toContainEqual(expect.objectContaining({ id: 'diag-1', name: 'Power IBD' }));
     expect(registry.presentedElementIds('diag-1')).toEqual([]);
+    expect(adapter.execute).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createDiagram',
+      ownerId: 'block-1',
+      diagramKind: 'ibd',
+      contextElementId: 'block-1',
+    }));
   });
 
   it('does not fabricate a diagram ID when semantic creation fails', () => {

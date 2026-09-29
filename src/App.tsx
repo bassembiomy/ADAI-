@@ -6262,7 +6262,10 @@ const ADIA = () => {
   const selectedPackageDiagram = activePackageDiagramId ? canonicalSysmlRepository.diagrams[activePackageDiagramId] : undefined;
   const fallbackPackageDiagramId = Object.values(canonicalSysmlRepository.diagrams)
     .find(diagram => diagram.diagramKind === 'package')?.id;
-  const activeSysmlDiagramId = diagramMode === 'ibd' ? currentLayerId
+  const activeSysmlDiagramId = diagramMode === 'ibd'
+    ? (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === 'ibd'
+      ? activeSysmlDiagramIdState
+      : currentLayerId)
     : diagramMode === 'package' ? (selectedPackageDiagram?.diagramKind === 'package' ? selectedPackageDiagram.id : fallbackPackageDiagramId ?? '')
     : activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode
       ? activeSysmlDiagramIdState
@@ -17187,6 +17190,7 @@ const ADIA = () => {
                     if (externalModelFile) {
                       openFileInTab(externalModelFile.id);
                     } else if (kind === 'diagram' || canonicalSysmlRepository.diagrams[id]) {
+                      const targetDiagram = canonicalSysmlRepository.diagrams[id];
                       const nav = openExactDiagram(
                         {
                           activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
@@ -17197,15 +17201,39 @@ const ADIA = () => {
                         canonicalSysmlRepository,
                         id,
                       );
-                      setActiveSysmlDiagramIdState(nav.activeDiagramId);
-                      setDiagramNavigationStack(nav.returnStack);
-                      setCurrentLayerId('root');
-                      setLayerStack([]);
-                      setLayerPath(['Root']);
-                      if (nav.diagramKind === 'package') {
+                      const ibdContextId = nav.diagramKind === 'ibd'
+                        ? (targetDiagram?.contextElementId ?? targetDiagram?.ownerId)
+                        : undefined;
+                      const ibdContextBlock = ibdContextId
+                        ? canonicalSysmlRepository.definitions[ibdContextId]
+                        : undefined;
+                      const navWithIbdOrigin = nav.diagramKind === 'ibd' && ibdContextBlock?.kind === 'block' && diagramMode !== 'ibd'
+                        ? {
+                          ...nav,
+                          contextElementId: ibdContextBlock.id,
+                          returnStack: [...diagramNavigationStack, {
+                            diagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+                            diagramKind: diagramMode,
+                            contextElementId: undefined,
+                            name: canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState || activeSysmlDiagramId]?.name,
+                          }],
+                        }
+                        : nav;
+                      setActiveSysmlDiagramIdState(navWithIbdOrigin.activeDiagramId);
+                      setDiagramNavigationStack(navWithIbdOrigin.returnStack);
+                      if (nav.diagramKind === 'ibd' && ibdContextBlock?.kind === 'block') {
+                        setCurrentLayerId(ibdContextBlock.id);
+                        setLayerStack(['root']);
+                        setLayerPath(['Root', ibdContextBlock.name]);
+                      } else {
+                        setCurrentLayerId('root');
+                        setLayerStack([]);
+                        setLayerPath(['Root']);
+                      }
+                      if (navWithIbdOrigin.diagramKind === 'package') {
                         setActivePackageDiagramId(id);
                       }
-                      setDiagramMode(nav.diagramKind as DiagramMode);
+                      setDiagramMode(navWithIbdOrigin.diagramKind as DiagramMode);
                     } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
                       enterBlock(id);
                     } else if (diagramMode === "statemachine") {

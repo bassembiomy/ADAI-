@@ -168,12 +168,15 @@ export function capabilityToAction(
         },
       };
     case 'createDiagram':
+      const diagramKind = capability.elementKind || 'bdd';
+      const ownerId = resolveCapabilityOwnerId(node, diagramKind);
       return {
         kind: 'command',
         command: {
           type: 'createDiagram',
-          ownerId: resolveCapabilityOwnerId(node, capability.elementKind),
-          diagramKind: capability.elementKind || 'bdd',
+          ownerId,
+          diagramKind,
+          ...(diagramKind === 'ibd' ? { contextElementId: ownerId } : {}),
         },
       };
     case 'createRelationship':
@@ -559,12 +562,19 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       }
 
       if (capability.kind === 'createDiagram') {
+        const diagramKind = capability.elementKind || 'bdd';
         const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
           type: 'createDiagram',
           ownerId: capabilityOwnerId,
-          diagramKind: capability.elementKind || 'bdd',
+          diagramKind,
+          ...(diagramKind === 'ibd' ? { contextElementId: capabilityOwnerId } : {}),
         });
-        acceptResult(res, { type: 'createDiagram', ownerId: capabilityOwnerId, diagramKind: capability.elementKind || 'bdd' });
+        acceptResult(res, {
+          type: 'createDiagram',
+          ownerId: capabilityOwnerId,
+          diagramKind,
+          ...(diagramKind === 'ibd' ? { contextElementId: capabilityOwnerId } : {}),
+        });
         return;
       }
 

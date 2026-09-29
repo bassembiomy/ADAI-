@@ -105,8 +105,7 @@ export function navigateRoot(
   // the 'bdd' pseudo-ID literal. With an empty repository there is no seed
   // and the caller's state flows through recovery unchanged (see below).
   const seedDiagram = Object.values(repo.diagrams).find(d => d.id === 'adia-default-bdd')
-    ?? Object.values(repo.diagrams).find(d => d.diagramKind === 'bdd')
-    ?? Object.values(repo.diagrams)[0];
+    ?? Object.values(repo.diagrams).find(d => d.diagramKind === 'bdd');
   if (!seedDiagram && state.diagramKind === 'ibd' &&
     (Boolean(state.contextElementId && repo.definitions[state.contextElementId]) ||
       Boolean(repo.definitions[state.activeDiagramId]))) {

@@ -335,6 +335,31 @@ describe('AppModelExplorer Capability Coverage', () => {
     });
   });
 
+  it('records the owning Block as the context for a new IBD diagram', () => {
+    const block: ModelTreeNode = {
+      nodeId: 'sysml:element:block-1',
+      semanticId: 'block-1',
+      domain: 'sysml',
+      kind: 'block',
+      label: 'Engine',
+      parentNodeId: 'project:pillar:structural',
+      ownerSemanticId: 'model',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+    const capability: ExplorerCapability = {
+      id: 'createDiagram:ibd',
+      kind: 'createDiagram',
+      label: 'Internal Block Diagram (IBD)',
+      enabled: true,
+      elementKind: 'ibd',
+    };
+    expect(capabilityToAction(capability, block, {})).toMatchObject({
+      kind: 'command',
+      command: { type: 'createDiagram', ownerId: 'block-1', diagramKind: 'ibd', contextElementId: 'block-1' },
+    });
+  });
+
   it('uses the region semantic ID as owner for a new diagram from an SM region node', () => {
     const region: ModelTreeNode = {
       nodeId: 'sm:region:region-1',

@@ -99,7 +99,7 @@ export interface ExplorerClipboardPayload {
 
 export type ModelExplorerCommand =
   | { type: 'createElement'; ownerId: string; elementKind: string; name?: string; typeId?: string }
-  | { type: 'createDiagram'; ownerId: string; diagramKind: string; name?: string }
+  | { type: 'createDiagram'; ownerId: string; diagramKind: string; name?: string; contextElementId?: string }
   | { type: 'rename'; elementId: string; name: string }
   | { type: 'move'; elementIds: string[]; targetOwnerId: string; confirmedImpactHash?: string }
   | { type: 'delete'; elementIds: string[]; confirmedImpactHash?: string }

@@ -49,6 +49,7 @@ export function createModelDiagramRegistry(options: ModelDiagramRegistryOptions)
         ownerId: createOptions.ownerId,
         diagramKind: createOptions.diagramKind,
         name: createOptions.name,
+        contextElementId: createOptions.contextElementId,
       });
 
       if (!result.committed || !result.selectedIds?.[0]) {

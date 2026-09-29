@@ -1317,6 +1317,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             name: command.name,
             ownerId: command.ownerId,
             diagramKind: command.diagramKind as any,
+            contextElementId: command.contextElementId,
           });
           const result = dispatchCommand({ type: 'createDiagram', diagram: diag });
           return toExplorerResult(result, [diag.id]);
