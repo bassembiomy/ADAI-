@@ -16,7 +16,7 @@ test.describe('workspace tab navigation', () => {
   });
 
   test('opens existing X-Bridges and V-Lab files from the lower tab bar', async ({ page }) => {
-    const tabs = page.locator('.workspace-tab-bar');
+    const tabs = page.getByTestId('diagram-workspace-tabs');
     const xbridges = tabs.locator('[data-workspace-type="xbridges"]');
     const vlab = tabs.locator('[data-workspace-type="vlab"]');
 
@@ -33,7 +33,8 @@ test.describe('workspace tab navigation', () => {
   });
 
   test('uses the lower workspace tabs as the only visible workspace navigator', async ({ page }) => {
-    await expect(page.locator('.workspace-tab-bar')).toHaveCount(1);
+    await expect(page.locator('.workspace-tab-bar')).toHaveCount(0);
+    await expect(page.getByTestId('diagram-workspace-tabs')).toHaveCount(1);
     const header = page.getByRole('banner');
     await expect(header.getByRole('button', { name: 'State Machine', exact: true })).toHaveCount(0);
     await expect(header.getByRole('button', { name: 'X-Bridges', exact: true })).toHaveCount(0);

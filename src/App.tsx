@@ -6698,6 +6698,11 @@ const ADIA = () => {
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
   const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
+  const moduleWorkspaceFiles = useMemo(() => openTabIds
+    .map(tabId => workspaceFiles.find(file => file.id === tabId))
+    .filter((file): file is WorkspaceFile => file !== undefined)
+    .filter(file => !['bdd', 'requirements', 'ibd', 'package'].includes(file.type)),
+  [openTabIds, workspaceFiles]);
   const hierarchyExternalModels = useMemo(() => workspaceFiles
     .filter(file => file.type === 'xbridges' || file.type === 'vlab')
     .map(file => ({
@@ -17331,25 +17336,43 @@ const ADIA = () => {
         </header>
 
 
-        {/* Workspace Tab Bar */}
-        <WorkspaceTabBar
-          openTabIds={openTabIds}
-          activeFileId={activeFileId}
-          workspaceFiles={workspaceFiles}
-          onSwitchTab={switchActiveFile}
-          onCloseTab={closeTab}
-          onOpenDialog={() => setShowWorkspaceFileDialog(true)}
-        />
-
-        {/* Owned diagram workspace tabs: exact-ID views over the repository.
-            Each tab renders its diagram's real name; closing removes only
-            the workspace view, never the semantic diagram. */}
-        {diagramWorkspace.tabs.length > 0 && (
+        {/* Unified workspace tabs: module files and exact-ID diagram views share
+            one navigation strip. Closing a diagram removes only its view. */}
+        {(moduleWorkspaceFiles.length > 0 || diagramWorkspace.tabs.length > 0) && (
           <div
             data-testid="diagram-workspace-tabs"
             className="ui-surface bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 select-none"
           >
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-9 pt-1">
+              {moduleWorkspaceFiles.map(file => {
+                const isActive = activeFileId === file.id;
+                return (
+                  <div
+                    key={`module:${file.id}`}
+                    role="tab"
+                    aria-selected={isActive}
+                    data-workspace-type={file.type}
+                    onClick={() => switchActiveFile(file.id)}
+                    className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
+                      isActive
+                        ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
+                    }`}
+                  >
+                    <span className="truncate max-w-[160px]">{file.name}</span>
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeTab(file.id);
+                      }}
+                      className="ml-1 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
+                      title="Close Tab"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
               {diagramWorkspace.tabs.map(tab => {
                 const diagramId = 'diagramId' in tab ? tab.diagramId : tab.mode;
                 const name = tab.kind === 'stateMachineDiagram'
@@ -17385,6 +17408,13 @@ const ADIA = () => {
                 );
               })}
             </div>
+            <button
+              onClick={() => setShowWorkspaceFileDialog(true)}
+              className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
+              title="Open Workspace Asset Manager"
+            >
+              <Plus size={16} />
+            </button>
           </div>
         )}
 
