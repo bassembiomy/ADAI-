@@ -178,6 +178,64 @@ function relationshipWizard(page: import('@playwright/test').Page) {
 }
 
 test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () => {
+  test('BDD connection pen immediately creates a typed property Association', async ({ page }) => {
+    test.setTimeout(60000);
+    await openModeler(page);
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    const diagramId = await page.evaluate(() => (window as any).__adiaTestHooks.getActiveDiagramId());
+    const seeded = await page.evaluate(({ diagramId }) => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      const owner = execute({ type: 'createAndPresent', diagramId, element: {
+        id: 'pen-owner', name: 'Owner', kind: 'block', namespace: [], ownerId: 'model', isAbstract: false, isLeaf: false,
+        properties: [], ports: [], operations: [], constraints: [],
+      }, presentation: { x: 100, y: 120, width: 200, height: 140 } });
+      const target = execute({ type: 'createAndPresent', diagramId, element: {
+        id: 'pen-motor', name: 'Motor', kind: 'block', namespace: [], ownerId: 'model', isAbstract: false, isLeaf: false,
+        properties: [], ports: [], operations: [], constraints: [],
+      }, presentation: { x: 430, y: 120, width: 180, height: 120 } });
+      const feature = execute({ type: 'createOwnedFeature', intent: {
+        featureKind: 'property', ownerBlockId: 'pen-owner', propertyKind: 'part', typeId: 'pen-motor',
+        featureId: 'pen-motor-property', usageId: 'pen-motor-usage', name: 'motor',
+      }});
+      return { owner: owner.committed, target: target.committed, feature: feature.committed };
+    }, { diagramId });
+    expect(seeded).toEqual({ owner: true, target: true, feature: true });
+
+    const before = new Set(await repoRelationshipIds(page));
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.locator('#adia-diagram-canvas text[data-property-id="pen-motor-property"]').dispatchEvent('mousedown', { button: 0 });
+    await expect(page.getByText('Click target state/junction to connect...')).toBeVisible();
+    await page.locator('#adia-diagram-canvas [data-semantic-id="pen-motor"]').dispatchEvent('mousedown', { button: 0 });
+    await expect.poll(async () => (await repoRelationshipIds(page)).filter(id => !before.has(id)).length).toBe(1);
+    const relationshipId = (await repoRelationshipIds(page)).find(id => !before.has(id))!;
+    expect(await page.evaluate(id => (window as any).__sysmlRepository.relationships[id], relationshipId)).toMatchObject({
+      kind: 'association', sourceId: 'pen-motor-property', targetId: 'pen-motor',
+    });
+    const propertyRelPresentation = page.locator(`#adia-diagram-canvas [data-semantic-id="${relationshipId}"][data-presentation-kind="relationship"]`);
+    await expect(propertyRelPresentation).toBeVisible();
+    await expect(propertyRelPresentation.locator('[data-presentation-role="property-end-marker"]')).toBeVisible();
+    await expect(propertyRelPresentation.locator('[data-presentation-role="property-end-label"]')).toContainText('motor');
+    await expect(propertyRelPresentation).toHaveAttribute('data-bdd-presentation-kind', 'propertyAssociation');
+
+    // Block-to-Block kind filtering & presentation verification:
+    // Connect Block-to-Block pen-owner -> pen-motor
+    const b2bBefore = new Set(await repoRelationshipIds(page));
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.locator('#adia-diagram-canvas [data-semantic-id="pen-owner"]').dispatchEvent('mousedown', { button: 0 });
+    await expect(page.getByText('Click target state/junction to connect...')).toBeVisible();
+    await page.locator('#adia-diagram-canvas [data-semantic-id="pen-motor"]').dispatchEvent('mousedown', { button: 0 });
+    await expect.poll(async () => (await repoRelationshipIds(page)).filter(id => !b2bBefore.has(id)).length).toBe(1);
+    const b2bRelId = (await repoRelationshipIds(page)).find(id => !b2bBefore.has(id))!;
+    expect(await page.evaluate(id => (window as any).__sysmlRepository.relationships[id], b2bRelId)).toMatchObject({
+      kind: 'association', sourceId: 'pen-owner', targetId: 'pen-motor',
+    });
+    const b2bPresentation = page.locator(`#adia-diagram-canvas [data-semantic-id="${b2bRelId}"][data-presentation-kind="relationship"]`);
+    await expect(b2bPresentation).toBeVisible();
+    await expect(b2bPresentation).toHaveAttribute('data-bdd-presentation-kind', 'blockAssociation');
+    await expect(b2bPresentation.locator('[data-presentation-role="property-end-marker"]')).toHaveCount(0);
+    await expect(b2bPresentation.locator('[data-presentation-role="property-end-label"]')).toHaveCount(0);
+  });
+
   test('Workflow 1: BDD Port authoring from tree and canvas with explicit types, wrong-type rejection, and real save/reload stability', async ({ page }) => {
     test.setTimeout(120000);
     await openModeler(page);
@@ -388,6 +446,26 @@ test.describe('SysML v1.6 Diagram Interaction Corrections End-to-End Gates', () 
     expect(usageTypes).toEqual([motorId, batteryId]);
     const vehicleProps = await page.evaluate(id => (window as any).__sysmlRepository.definitions[id]?.properties?.map((p: any) => p.typeId), vehicleId);
     expect(vehicleProps).toEqual([motorId, batteryId]);
+
+    // The connection pen must commit an unambiguous typed property Association
+    // directly when the target is the property's declared Block type.
+    const enginePropertyId = await page.evaluate(([ownerId, typeId]) =>
+      (window as any).__sysmlRepository.definitions[ownerId]?.properties?.find((property: any) => property.typeId === typeId)?.id,
+      [vehicleId, motorId],
+    );
+    expect(enginePropertyId).toBeTruthy();
+    const dragSource = page.locator(`#adia-diagram-canvas text[data-property-id="${enginePropertyId}"]`);
+    const dragTarget = page.locator(`#adia-diagram-canvas [data-semantic-id="${motorId}"]`);
+    const relationshipsBeforePropertyDrag = new Set(await repoRelationshipIds(page));
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await dragSource.click();
+    await dragTarget.click();
+    await expect(page.getByRole('dialog', { name: 'Create Relationship' })).toHaveCount(0);
+    await expect.poll(async () => (await repoRelationshipIds(page)).filter(id => !relationshipsBeforePropertyDrag.has(id)).length).toBe(1);
+    const propertyAssociationId = (await repoRelationshipIds(page)).find(id => !relationshipsBeforePropertyDrag.has(id))!;
+    const propertyAssociation = await page.evaluate(id => (window as any).__sysmlRepository.relationships[id], propertyAssociationId);
+    expect(propertyAssociation).toMatchObject({ kind: 'association', sourceId: enginePropertyId, targetId: motorId });
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${propertyAssociationId}"][data-presentation-kind="relationship"]`)).toBeVisible();
 
     // Association Vehicle -> Motor through the explicit tree relationship wizard.
     const relsBefore = new Set(await repoRelationshipIds(page));
