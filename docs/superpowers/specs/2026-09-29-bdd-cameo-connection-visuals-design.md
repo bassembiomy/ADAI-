@@ -63,3 +63,15 @@ semantics and Cameo-like relationship rules.
 4. Valid relationships persist with canonical SysML endpoints and reload with
    the same notation.
 5. Existing BDD, IBD, and requirement relationship behavior remains intact.
+
+## Shared visual routing for parallel relationships
+
+When a Block-to-Block relationship and a property-to-Block relationship use
+the same visible pair of Blocks, they are placed in one visual edge bundle.
+The property endpoint is normalized to its owning Block only for routing;
+the persisted relationship endpoints are unchanged.
+
+Each relationship receives a stable lane index within the bundle. The route
+uses a small perpendicular offset (or equivalent gentle curve) so every line
+remains separately selectable and its marker/label remains readable. Existing
+SysML relationship notation is preserved at the appropriate end.
