@@ -199,8 +199,7 @@ describe('AppModelExplorer Capability Coverage', () => {
     expect(result.kind).not.toBe('unhandled');
   });
 
-  it('tree activation callback receives the exact diagram semantic ID and kind', () => {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  it('tree activation callback receives the exact diagram semantic ID and kind', () => {    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     const repo = createEmptyRepository();
     repo.diagrams['bdd-powertrain-1'] = {
       id: 'bdd-powertrain-1',
@@ -230,5 +229,31 @@ describe('AppModelExplorer Capability Coverage', () => {
     expect(row).not.toBeNull();
     fireEvent.doubleClick(row!);
     expect(onDoubleClick).toHaveBeenCalledWith('bdd-powertrain-1', 'diagram');
+  });
+
+  it('uses the pillar owner instead of the virtual pillar ID for a new BDD', () => {
+    const structural: ModelTreeNode = {
+      nodeId: 'project:pillar:structural',
+      semanticId: 'project:pillar:structural',
+      domain: 'project',
+      kind: 'pillar',
+      virtualKind: 'structural',
+      label: 'Structural',
+      parentNodeId: 'project:model',
+      ownerSemanticId: 'model',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+    const capability: ExplorerCapability = {
+      id: 'createDiagram:bdd',
+      kind: 'createDiagram',
+      label: 'Block Definition Diagram (BDD)',
+      enabled: true,
+      elementKind: 'bdd',
+    };
+    expect(capabilityToAction(capability, structural, {})).toMatchObject({
+      kind: 'command',
+      command: { type: 'createDiagram', ownerId: 'model', diagramKind: 'bdd' },
+    });
   });
 });

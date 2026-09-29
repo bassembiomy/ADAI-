@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createStateMachineExplorerAdapter,
+  ensureRootStateMachineDiagram,
   type StateMachineExplorerSnapshot,
   type StateMachineAdapterHarness,
 } from './stateMachineExplorerAdapter';
@@ -199,5 +200,34 @@ describe('stateMachineExplorerAdapter', () => {
     expect(result.committed).toBe(true);
     expect(harness.snapshot!.layers.find((x: any) => x.id === 'region-b')?.stateIds).toContain('idle');
     expect(harness.snapshot!.transitions.map((t: any) => t.id)).not.toContain('t1');
+  });
+
+  it('ensures exactly one root state-machine diagram and stays idempotent', () => {
+    const ensured = ensureRootStateMachineDiagram(createSmHarness().snapshot!);
+    expect(ensured.diagrams).toHaveLength(1);
+    expect(ensured.diagrams![0]).toMatchObject({
+      id: 'adia-default-state-machine',
+      name: 'Main State Machine Diagram',
+      ownerId: 'root',
+      contextRegionId: 'root',
+    });
+    expect(ensureRootStateMachineDiagram(ensured).diagrams).toHaveLength(1);
+  });
+
+  it('does not add a root default when root already owns a diagram', () => {
+    const harness = createSmHarness({
+      diagrams: [{ id: 'custom-sm', name: 'Custom', ownerId: 'root', contextRegionId: 'root' }],
+    });
+    const ensured = ensureRootStateMachineDiagram(harness.snapshot!);
+    expect(ensured.diagrams!.map(diagram => diagram.id)).toEqual(['custom-sm']);
+  });
+
+  it('returns the exact new diagram ID when creating a state-machine diagram', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    const result = adapter.execute({ type: 'createDiagram', ownerId: 'root', diagramKind: 'stateMachine' });
+    expect(result.committed).toBe(true);
+    const createdId = result.selectedIds![0];
+    expect(harness.snapshot!.diagrams!.some(diagram => diagram.id === createdId)).toBe(true);
   });
 });

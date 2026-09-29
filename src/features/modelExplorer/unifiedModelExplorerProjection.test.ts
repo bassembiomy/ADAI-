@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository } from '../../engine/sysml/model';
-import { buildUnifiedModelProjection } from './unifiedModelExplorerProjection';
+import { ensureDefaultSysmlDiagrams } from '../../services/sysmlDiagramWorkspace';
+import { buildUnifiedModelProjection, type UnifiedExplorerInput } from './unifiedModelExplorerProjection';
+import { ensureRootStateMachineDiagram } from './adapters/stateMachineExplorerAdapter';
+
+function defaultWorkspaceInput(): UnifiedExplorerInput {
+  const { repository } = ensureDefaultSysmlDiagrams(createEmptyRepository());
+  return {
+    sysml: repository,
+    stateMachine: ensureRootStateMachineDiagram({
+      states: [],
+      layers: [{ id: 'root', name: 'Root Region', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }],
+      transitions: [],
+      junctions: [],
+      diagrams: [],
+      revision: 1,
+    }),
+    externalModels: [],
+    revision: 1,
+  };
+}
 
 describe('buildUnifiedModelProjection', () => {
   it('creates ordered pillars and classifies owned external models', () => {
@@ -111,6 +130,38 @@ describe('buildUnifiedModelProjection', () => {
     });
     expect(projection.nodes['sysml:element:block'].childNodeIds).toContain('sysml:element:port-standard');
     expect(projection.nodes['sysml:element:block'].hasChildren).toBe(true);
+  });
+
+  it('places default diagrams under Structural, Requirements, and Behavior', () => {
+    const projection = buildUnifiedModelProjection(defaultWorkspaceInput());
+    expect(projection.nodes['sysml:element:adia-default-bdd'].parentNodeId).toBe('project:pillar:structural');
+    expect(projection.nodes['sysml:element:adia-default-requirements'].parentNodeId).toBe('project:pillar:requirements');
+    expect(projection.nodes['sm:diagram:adia-default-state-machine'].parentNodeId).toBe('project:pillar:behavior');
+  });
+
+  it('keeps nested state-machine diagrams under their Region', () => {
+    const input = defaultWorkspaceInput();
+    input.stateMachine = {
+      ...input.stateMachine,
+      states: [
+        {
+          id: 's1', name: 'S1', x: 0, y: 0, width: 1, height: 1, entry: '', during: '', exit: '',
+          isActive: false, color: '#000', parentId: 'root', children: ['region-1'], priority: 0,
+          isParallel: false, regionId: 'root', autostart: false,
+        },
+      ],
+      layers: [
+        { id: 'root', name: 'Root Region', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] },
+        { id: 'region-1', name: 'Region 1', parentStateId: 's1', stateIds: [], transitionIds: [], junctionIds: [] },
+      ],
+      diagrams: [
+        ...(input.stateMachine.diagrams ?? []),
+        { id: 'nested-sm', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' },
+      ],
+    };
+    const projection = buildUnifiedModelProjection(input);
+    expect(projection.nodes['sm:diagram:nested-sm'].parentNodeId).toBe('sm:region:region-1');
+    expect(projection.nodes['sm:diagram:adia-default-state-machine'].parentNodeId).toBe('project:pillar:behavior');
   });
 
   it('does not expose a UUID as the port name when the port definition name is missing', () => {

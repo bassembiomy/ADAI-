@@ -32,6 +32,36 @@ import {
 
 export { type StateMachineExplorerSnapshot };
 
+export const ROOT_STATE_MACHINE_DIAGRAM_ID = 'adia-default-state-machine';
+
+/**
+ * Guarantees the Behavior default State Machine Diagram metadata. Adds exactly
+ * one `{ id: 'adia-default-state-machine', ownerId: 'root', contextRegionId: 'root' }`
+ * record only when root owns no state-machine diagram; otherwise returns the
+ * snapshot untouched so user diagrams are preserved. Idempotent.
+ */
+export function ensureRootStateMachineDiagram(
+  snapshot: StateMachineExplorerSnapshot,
+): StateMachineExplorerSnapshot {
+  const diagrams = snapshot.diagrams ?? [];
+  const rootOwnsDiagram = diagrams.some(
+    diagram => diagram.ownerId === 'root' || diagram.contextRegionId === 'root',
+  );
+  if (rootOwnsDiagram) return snapshot;
+  return {
+    ...snapshot,
+    diagrams: [
+      ...diagrams,
+      {
+        id: ROOT_STATE_MACHINE_DIAGRAM_ID,
+        name: 'Main State Machine Diagram',
+        ownerId: 'root',
+        contextRegionId: 'root',
+      },
+    ],
+  };
+}
+
 export interface StateMachineAdapterHarness {
   getSnapshot: () => StateMachineExplorerSnapshot;
   onCommit: (nextSnapshot: StateMachineExplorerSnapshot, description: string) => void;

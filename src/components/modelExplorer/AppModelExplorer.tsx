@@ -171,7 +171,7 @@ export function capabilityToAction(
         kind: 'command',
         command: {
           type: 'createDiagram',
-          ownerId: node.semanticId,
+          ownerId: resolveCapabilityOwnerId(node),
           diagramKind: capability.elementKind || 'bdd',
         },
       };

@@ -255,6 +255,26 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     projectLayer(rootLayer.id, machineId);
   }
 
+  // State-machine diagrams are owned views: the root diagram hangs directly
+  // below Behavior, while nested diagrams stay under their Region.
+  for (const diagram of input.stateMachine.diagrams ?? []) {
+    const isRootDiagram = diagram.ownerId === 'root' || diagram.contextRegionId === 'root';
+    const regionNodeId = `sm:region:${diagram.contextRegionId}`;
+    register(nodes, {
+      nodeId: `sm:diagram:${diagram.id}`,
+      semanticId: diagram.id,
+      domain: 'stateMachine',
+      kind: 'diagram',
+      label: diagram.name,
+      secondaryLabel: '[State Machine]',
+      diagramId: diagram.id,
+      parentNodeId: !isRootDiagram && nodes[regionNodeId] ? regionNodeId : behaviorId,
+      ownerSemanticId: diagram.ownerId || 'root',
+      childNodeIds: [],
+      hasChildren: false,
+    });
+  }
+
   for (const external of input.externalModels) {
     const nodeId = `${external.domain}:model:${external.id}`;
     const stateParent = external.ownerStateId && nodes[`sm:state:${external.ownerStateId}`];
