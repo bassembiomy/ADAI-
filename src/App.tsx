@@ -6510,9 +6510,9 @@ const ADIA = () => {
       blocks,
       relationships,
       currentLayerId,
-      new Set(sysmlDiagramPresentations.requirements?.elementIds ?? []),
+      new Set((sysmlDiagramPresentations[activeSysmlDiagramId] ?? sysmlDiagramPresentations.requirements)?.elementIds ?? []),
     ),
-    [blocks, relationships, currentLayerId, sysmlDiagramPresentations],
+    [blocks, relationships, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations],
   );
 
   // Schedule large validation asynchronously after edits with revision-based cancellation
@@ -10703,12 +10703,12 @@ const ADIA = () => {
     Object.entries(levelGroups).forEach(([lvlStr, ids]) => {
       const lvl = parseInt(lvlStr);
       ids.forEach((id, index) => {
-        const presentation = sysmlDiagramPresentations.requirements?.presentations[id];
+    const presentation = (sysmlDiagramPresentations[activeSysmlDiagramId] ?? sysmlDiagramPresentations.requirements)?.presentations[id];
         if (!presentation) return;
         updates.push({ elementId: id, x: 50 + index * 220, y: 50 + lvl * 180 });
       });
     });
-    const command = buildDiagramPresentationBatch('requirements', updates);
+    const command = buildDiagramPresentationBatch(activeSysmlDiagramId, updates);
     if (!command) {
       addError('warning', 'No requirement presentations are available to lay out on this diagram.');
       return;
