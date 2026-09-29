@@ -125,7 +125,7 @@ export interface BddRelationshipPresentation {
  */
 export function classifyBddRelationshipPresentation(
   model: UiModel,
-  relationship: Pick<RelationshipData, 'sourceId' | 'targetId' | 'type'>,
+  relationship: Pick<RelationshipData, 'sourceId' | 'targetId' | 'type'> & Partial<RelationshipData>,
 ): BddRelationshipPresentation | undefined {
   const source = resolveUiConnectionEndpoint(model, relationship.sourceId);
   const target = resolveUiConnectionEndpoint(model, relationship.targetId);
