@@ -1,12 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, RelationshipData } from '../types/sysml_types';
-import { getCanvasRelationshipKinds, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './sysmlConnectionUi';
+import {
+  classifyBddRelationshipPresentation,
+  getCanvasRelationshipKinds,
+  getDirectBddPropertyRelationshipKind,
+  rejectBlockConnectionChange,
+  rejectUiRelationship,
+  resolveUiConnectionEndpoint,
+} from './sysmlConnectionUi';
 
 const block = (id: string, stereotype = 'block'): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] });
 const relation = (type: RelationshipData['type'] = 'composition'): RelationshipData => ({ id: 'rel', sourceId: 'whole', targetId: 'part', type, label: '' });
 const model = (stereotype = 'block', relationships: RelationshipData[] = []) => ({ blocks: [block('whole'), block('part', stereotype)], parts: [], relationships });
 
 describe('SysML connection UI admission', () => {
+  it('selects Association directly when a BDD property targets its declared Block type', () => {
+    const owner = block('owner');
+    owner.properties = [{ id: 'motor-property', name: 'motor', kind: 'part', type: 'Motor', typeId: 'motor', multiplicity: '1' }];
+    const state = { blocks: [owner, block('motor')], parts: [], relationships: [] };
+
+    expect(getDirectBddPropertyRelationshipKind(state, 'motor-property', 'motor')).toBe('association');
+    expect(getDirectBddPropertyRelationshipKind(state, 'motor-property', 'owner')).toBeUndefined();
+  });
+
   it('rejects Block to ValueType composition with actionable endpoint details', () => {
     const state = model('valueType');
     const before = JSON.stringify(state);
@@ -143,5 +159,87 @@ describe('SysML connection UI admission', () => {
       label: 'engineAssociation',
     };
     expect(rejectUiRelationship(state, validRel, 'bdd')).toBeUndefined();
+  });
+
+  describe('classifyBddRelationshipPresentation', () => {
+    it('classifies Block-to-Block association as blockAssociation', () => {
+      const state = {
+        blocks: [block('sourceBlock'), block('targetBlock')],
+        parts: [],
+        relationships: [],
+      };
+      const rel: RelationshipData = {
+        id: 'rel-b2b',
+        sourceId: 'sourceBlock',
+        targetId: 'targetBlock',
+        type: 'association',
+        label: '',
+      };
+      expect(classifyBddRelationshipPresentation(state, rel)).toEqual({
+        kind: 'blockAssociation',
+      });
+    });
+
+    it('classifies valid property-to-Block association as propertyAssociation with property and ownerBlock ids', () => {
+      const owner = block('ownerBlock');
+      owner.properties = [
+        { id: 'prop-engine', name: 'engine', kind: 'part', type: 'Motor', typeId: 'targetBlock', multiplicity: '1' },
+      ];
+      const state = {
+        blocks: [owner, block('targetBlock')],
+        parts: [],
+        relationships: [],
+      };
+      const rel: RelationshipData = {
+        id: 'rel-prop',
+        sourceId: 'prop-engine',
+        targetId: 'targetBlock',
+        type: 'association',
+        label: '',
+      };
+      expect(classifyBddRelationshipPresentation(state, rel)).toEqual({
+        kind: 'propertyAssociation',
+        propertyId: 'prop-engine',
+        ownerBlockId: 'ownerBlock',
+      });
+    });
+
+    it('rejects invalid property typing for property-to-Block association returning undefined', () => {
+      const owner = block('ownerBlock');
+      owner.properties = [
+        { id: 'prop-engine', name: 'engine', kind: 'part', type: 'Motor', typeId: 'correctTarget', multiplicity: '1' },
+      ];
+      const state = {
+        blocks: [owner, block('correctTarget'), block('wrongTarget')],
+        parts: [],
+        relationships: [],
+      };
+      const rel: RelationshipData = {
+        id: 'rel-wrong',
+        sourceId: 'prop-engine',
+        targetId: 'wrongTarget',
+        type: 'association',
+        label: '',
+      };
+      expect(classifyBddRelationshipPresentation(state, rel)).toBeUndefined();
+    });
+
+    it('classifies other canonical BDD relationship kinds correctly', () => {
+      const state = {
+        blocks: [block('b1'), block('b2')],
+        parts: [],
+        relationships: [],
+      };
+      expect(classifyBddRelationshipPresentation(state, { id: 'r1', sourceId: 'b1', targetId: 'b2', type: 'composition', label: '' }))
+        .toEqual({ kind: 'composition' });
+      expect(classifyBddRelationshipPresentation(state, { id: 'r2', sourceId: 'b1', targetId: 'b2', type: 'aggregation', label: '' }))
+        .toEqual({ kind: 'aggregation' });
+      expect(classifyBddRelationshipPresentation(state, { id: 'r3', sourceId: 'b1', targetId: 'b2', type: 'generalization', label: '' }))
+        .toEqual({ kind: 'generalization' });
+      expect(classifyBddRelationshipPresentation(state, { id: 'r4', sourceId: 'b1', targetId: 'b2', type: 'dependency', label: '' }))
+        .toEqual({ kind: 'dependency' });
+      expect(classifyBddRelationshipPresentation(state, { id: 'r5', sourceId: 'b1', targetId: 'b2', type: 'allocation', label: '' }))
+        .toEqual({ kind: 'allocation' });
+    });
   });
 });

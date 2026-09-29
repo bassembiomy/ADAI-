@@ -86,3 +86,83 @@ const CANVAS_KINDS: RelationshipData['type'][] = ['association', 'generalization
 export function getCanvasRelationshipKinds(model: UiModel, sourceId: string, targetId: string, diagram: Diagram): RelationshipData['type'][] {
   return CANVAS_KINDS.filter(type => !rejectUiRelationship(model, { id: '', sourceId, targetId, type, label: '' }, diagram));
 }
+
+/**
+ * A property-to-classifier gesture is unambiguous when the target is the
+ * classifier declared by that property. In a BDD this is a UML Association
+ * member end, so the connection pen can commit it without a kind picker.
+ */
+export function getDirectBddPropertyRelationshipKind(
+  model: UiModel,
+  sourceId: string,
+  targetId: string,
+): RelationshipData['type'] | undefined {
+  const source = resolveUiConnectionEndpoint(model, sourceId);
+  if (source.family !== 'property' || source.typeId !== targetId) return undefined;
+  return getCanvasRelationshipKinds(model, sourceId, targetId, 'bdd').includes('association')
+    ? 'association'
+    : undefined;
+}
+
+export type BddRelationshipPresentationKind =
+  | 'blockAssociation'
+  | 'propertyAssociation'
+  | 'composition'
+  | 'aggregation'
+  | 'generalization'
+  | 'dependency'
+  | 'allocation';
+
+export interface BddRelationshipPresentation {
+  kind: BddRelationshipPresentationKind;
+  propertyId?: string;
+  ownerBlockId?: string;
+}
+
+/**
+ * Classify a BDD relationship's visual presentation semantics based on its
+ * endpoints and typing.
+ */
+export function classifyBddRelationshipPresentation(
+  model: UiModel,
+  relationship: Pick<RelationshipData, 'sourceId' | 'targetId' | 'type'>,
+): BddRelationshipPresentation | undefined {
+  const source = resolveUiConnectionEndpoint(model, relationship.sourceId);
+  const target = resolveUiConnectionEndpoint(model, relationship.targetId);
+
+  if (relationship.type === 'association') {
+    if (source.family === 'property') {
+      if (source.typeId && (source.typeId === target.id || source.typeId === target.name)) {
+        return {
+          kind: 'propertyAssociation',
+          propertyId: source.id,
+          ownerBlockId: source.ownerId,
+        };
+      }
+      return undefined;
+    }
+    if (source.family !== 'unknown' && target.family !== 'unknown' && target.family !== 'property') {
+      return { kind: 'blockAssociation' };
+    }
+    return undefined;
+  }
+
+  if (relationship.type === 'composition') {
+    return { kind: 'composition' };
+  }
+  if (relationship.type === 'aggregation' || (relationship.type as string) === 'sharedAggregation') {
+    return { kind: 'aggregation' };
+  }
+  if (relationship.type === 'generalization') {
+    return { kind: 'generalization' };
+  }
+  if (relationship.type === 'dependency') {
+    return { kind: 'dependency' };
+  }
+  if (relationship.type === 'allocation') {
+    return { kind: 'allocation' };
+  }
+
+  return undefined;
+}
+
