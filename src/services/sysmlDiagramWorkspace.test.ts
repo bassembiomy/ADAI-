@@ -63,4 +63,93 @@ describe('sysmlDiagramWorkspace', () => {
     expect(result.activeTab).toEqual({ kind: 'sysmlDiagram', diagramId: 'adia-default-bdd' });
     expect(result.diagnostics.map(d => d.code)).toContain('STALE_DIAGRAM_TAB');
   });
+
+  it('restores a persisted valid active tab instead of defaulting to the first tab', () => {
+    const repository = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const result = normalizeDiagramWorkspace(
+      repository,
+      ['adia-default-bdd', 'adia-default-requirements'],
+      'adia-default-requirements',
+    );
+    expect(result.activeTab).toEqual({ kind: 'sysmlDiagram', diagramId: 'adia-default-requirements' });
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('falls back to the default BDD tab with a diagnostic when the persisted active tab is stale', () => {
+    const repository = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const result = normalizeDiagramWorkspace(repository, ['adia-default-bdd'], 'stale-diagram-id');
+    expect(result.activeTab).toEqual({ kind: 'sysmlDiagram', diagramId: 'adia-default-bdd' });
+    expect(result.diagnostics.map(d => d.code)).toContain('STALE_DIAGRAM_TAB');
+    expect(result.diagnostics.map(d => d.tabId)).toContain('stale-diagram-id');
+  });
+
+  it('resolves legacy package and rtm labels to seeded diagrams', () => {
+    const base = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const repository = {
+      ...base,
+      diagrams: {
+        ...base.diagrams,
+        'pkg-diag': {
+          id: 'pkg-diag',
+          kind: 'diagram',
+          name: 'Package Diagram',
+          namespace: ['model'],
+          ownerId: 'model',
+          diagramKind: 'package',
+        },
+        'rtm-diag': {
+          id: 'rtm-diag',
+          kind: 'diagram',
+          name: 'RTM Diagram',
+          namespace: ['model'],
+          ownerId: 'model',
+          diagramKind: 'rtm',
+        },
+      },
+    } as typeof base;
+    const result = normalizeDiagramWorkspace(repository, ['package', 'rtm']);
+    expect(result.tabs).toEqual([
+      { kind: 'sysmlDiagram', diagramId: 'pkg-diag' },
+      { kind: 'sysmlDiagram', diagramId: 'rtm-diag' },
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('prefers an exact diagram ID over a legacy label collision', () => {
+    const base = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const repository = {
+      ...base,
+      diagrams: {
+        ...base.diagrams,
+        package: {
+          id: 'package',
+          kind: 'diagram',
+          name: 'Literal Package ID',
+          namespace: ['model'],
+          ownerId: 'model',
+          diagramKind: 'bdd',
+        },
+        'pkg-real': {
+          id: 'pkg-real',
+          kind: 'diagram',
+          name: 'Real Package Diagram',
+          namespace: ['model'],
+          ownerId: 'model',
+          diagramKind: 'package',
+        },
+      },
+    } as typeof base;
+    const result = normalizeDiagramWorkspace(repository, ['package']);
+    expect(result.tabs).toEqual([{ kind: 'sysmlDiagram', diagramId: 'package' }]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('returns the same repository reference without mutating input when defaults already exist', () => {
+    const first = ensureDefaultSysmlDiagrams(createEmptyRepository());
+    const snapshot = JSON.parse(JSON.stringify(first.repository));
+    const second = ensureDefaultSysmlDiagrams(first.repository);
+    expect(second.repository).toBe(first.repository);
+    expect(second.createdDiagramIds).toEqual([]);
+    expect(first.repository).toEqual(snapshot);
+  });
 });
