@@ -236,6 +236,15 @@ describe('stateMachineExplorerAdapter', () => {
     expect(ensured.diagrams![1]).toMatchObject({ ownerId: 'root', contextRegionId: 'root' });
   });
 
+  it('appends root default for divergent owner/context diagram (owner-based guard)', () => {
+    const harness = createSmHarness({
+      diagrams: [{ id: 'divergent-sm', name: 'Divergent SM', ownerId: 'region-1', contextRegionId: 'root' }],
+    });
+    const ensured = ensureRootStateMachineDiagram(harness.snapshot!);
+    expect(ensured.diagrams!.map(diagram => diagram.id)).toEqual(['divergent-sm', 'adia-default-state-machine']);
+    expect(ensured.diagrams![1]).toMatchObject({ ownerId: 'root', contextRegionId: 'root' });
+  });
+
   it('returns the exact new diagram ID when creating a state-machine diagram', () => {
     const harness = createSmHarness();
     const adapter = createStateMachineExplorerAdapter(harness);
