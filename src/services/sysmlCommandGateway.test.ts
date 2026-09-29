@@ -344,6 +344,45 @@ describe('sysmlCommandGateway', () => {
     expect(result.diagramPresentations['missing-diagram']).toBeUndefined();
   });
 
+  it('rejects diagram creation when the ID collides with a package or block definition (superset guard)', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-collision'] = {
+      id: 'pkg-collision', kind: 'package', name: 'Collision', namespace: ['model'], ownerId: 'model',
+    };
+    repository.definitions['blk-collision'] = {
+      id: 'blk-collision', name: 'Collision', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+
+    const packageCollision = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'createDiagram',
+      diagram: { id: 'pkg-collision', kind: 'diagram', diagramKind: 'package', name: 'Impostor', namespace: [], ownerId: 'model' },
+    });
+    expect(packageCollision.committed).toBe(false);
+    expect(packageCollision.diagnostics[0]?.code).toBe('DUPLICATE_ELEMENT_ID');
+    expect(packageCollision.repository.diagrams['pkg-collision']).toBeUndefined();
+
+    const definitionCollision = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'createDiagram',
+      diagram: { id: 'blk-collision', kind: 'diagram', diagramKind: 'bdd', name: 'Impostor', namespace: [], ownerId: 'model' },
+    });
+    expect(definitionCollision.committed).toBe(false);
+    expect(definitionCollision.diagnostics[0]?.code).toBe('DUPLICATE_ELEMENT_ID');
+    expect(definitionCollision.repository.diagrams['blk-collision']).toBeUndefined();
+  });
+
+  it('accepts the legacy package pseudo-ID as a package-mode presentation target', () => {
+    const repository = createEmptyRepository();
+    repository.packages['pkg-domain'] = {
+      id: 'pkg-domain', kind: 'package', name: 'Domain', namespace: ['model'], ownerId: 'model',
+    };
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'addToDiagram', diagramId: 'package', elementIds: ['pkg-domain'],
+    });
+    expect(result.committed).toBe(true);
+    expect(result.diagramPresentations['package'].elementIds).toEqual(['pkg-domain']);
+  });
+
   it('normalizes an omitted Package Diagram owner to the Model', () => {
     const result = executeSysmlCommand(createSysmlGatewayState(), {
       type: 'createDiagram',

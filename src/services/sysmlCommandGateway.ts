@@ -799,7 +799,10 @@ function elementExistsInRepository(repo: SysmlRepository, id: string): boolean {
 }
 
 function isLegacyDiagramId(id: string): boolean {
-  return id === 'bdd' || id === 'requirements' || id === 'rtm' || id === 'ibd';
+  // Mode-only pseudo-IDs predate exact-ID diagrams (navigation treats the
+  // same set — 'bdd', 'requirements', 'rtm', 'package' — as non-diagrams).
+  // 'ibd' is retained: block-context commands address the literal mode tab.
+  return id === 'bdd' || id === 'requirements' || id === 'rtm' || id === 'ibd' || id === 'package';
 }
 
 function repositoryHasSemanticId(repo: SysmlRepository, id: string): boolean {

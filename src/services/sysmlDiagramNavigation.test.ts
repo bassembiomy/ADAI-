@@ -196,4 +196,88 @@ describe('SysML Diagram Navigation Service', () => {
     expect(state.diagramKind).toBe('bdd');
     expect(state.returnStack).toHaveLength(0);
   });
+
+  it('preserves caller state unchanged when the repository has no diagrams (never fabricates an ID)', () => {
+    const repo = createEmptyRepository();
+    expect(Object.keys(repo.diagrams)).toHaveLength(0);
+    const caller = {
+      activeDiagramId: 'caller-diagram',
+      diagramKind: 'bdd',
+      contextElementId: undefined,
+      returnStack: [],
+    };
+    const recovered = recoverNavigationState(caller, repo);
+    expect(recovered).toEqual(caller);
+    expect(recovered.activeDiagramId).toBe('caller-diagram');
+    expect(recovered.activeDiagramId).not.toBe('bdd');
+
+    const rooted = navigateRoot(caller, repo);
+    expect(rooted).toEqual(caller);
+    expect(rooted.activeDiagramId).not.toBe('bdd');
+  });
+
+  it('self-heals the legacy initial seed to a real diagram ID via recovery', () => {
+    const repository = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const healed = recoverNavigationState(createInitialNavigationState(), repository);
+    expect(healed.activeDiagramId).toBe('adia-default-bdd');
+    expect(repository.diagrams[healed.activeDiagramId]).toBeDefined();
+  });
+
+  it('does not infer a diagram kind from an unknown or pseudo-ID', () => {
+    const repo = createRepoWithMultipleDiagrams();
+    const state = createInitialNavigationState();
+
+    const unknown = openExactDiagram(state, repo, 'unknown-diagram-id');
+    expect(unknown.activeDiagramId).toBe('unknown-diagram-id');
+    // Falls back to the caller kind, never echoes the requested ID as kind.
+    expect(unknown.diagramKind).toBe('bdd');
+
+    const pseudo = openExactDiagram(state, repo, 'requirements');
+    expect(pseudo.diagramKind).toBe('bdd');
+    expect(pseudo.diagramKind).not.toBe('requirements');
+  });
+
+  it('recovers root navigation to a real diagram ID when the stack root is stale', () => {
+    const repo = createRepoWithMultipleDiagrams();
+    const rooted = navigateRoot(
+      {
+        activeDiagramId: 'vehicle',
+        diagramKind: 'ibd',
+        contextElementId: 'vehicle',
+        returnStack: [{ diagramId: 'deleted-bdd', diagramKind: 'bdd' }],
+      },
+      repo,
+    );
+    expect(repo.diagrams[rooted.activeDiagramId]).toBeDefined();
+    expect(rooted.activeDiagramId).toBe('bdd-top-level');
+    expect(rooted.returnStack).toHaveLength(0);
+  });
+
+  it('recovers through a live IBD block origin in the return stack', () => {
+    const repo = createEmptyRepository();
+    repo.definitions['vehicle'] = {
+      id: 'vehicle',
+      name: 'Vehicle',
+      ownerId: 'model',
+      namespace: [],
+      kind: 'block',
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [],
+      operations: [],
+      constraints: [],
+    };
+    const recovered = recoverNavigationState(
+      {
+        activeDiagramId: 'deleted-diagram',
+        diagramKind: 'bdd',
+        contextElementId: undefined,
+        returnStack: [{ diagramId: 'vehicle', diagramKind: 'ibd', contextElementId: 'vehicle' }],
+      },
+      repo,
+    );
+    expect(recovered.activeDiagramId).toBe('vehicle');
+    expect(recovered.diagramKind).toBe('ibd');
+  });
 });

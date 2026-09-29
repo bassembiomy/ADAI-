@@ -14,6 +14,14 @@ export interface DiagramNavigationState {
   returnStack: DiagramNavigationStackEntry[];
 }
 
+/**
+ * Legacy-compatible initial seed. The 'bdd' defaults predate exact-ID
+ * navigation and do NOT reference a real repository diagram: callers must
+ * flow the result through {@link recoverNavigationState} (self-heal) before
+ * use so the active ID resolves to a real diagram ID or IBD block context.
+ * The App.tsx recovery effect already does this on every repository change.
+ * Signatures are unchanged for caller compatibility.
+ */
 export function createInitialNavigationState(initial?: Partial<DiagramNavigationState>): DiagramNavigationState {
   return {
     activeDiagramId: initial?.activeDiagramId ?? 'bdd',
@@ -31,9 +39,13 @@ export function openExactDiagram(
   options?: { preserveReturnStack?: boolean },
 ): DiagramNavigationState {
   const existingDiagram = repo.diagrams[diagramId];
-  const resolvedKind = existingDiagram?.diagramKind ?? diagramKind ?? (
-    ['bdd', 'ibd', 'requirements', 'rtm', 'package'].includes(diagramId) ? diagramId : state.diagramKind
-  );
+  // Kind resolves from the real diagram record, an explicit caller override,
+  // or the current state — never by echoing the requested ID. The previous
+  // pseudo-ID inference (treating an unknown 'bdd'/'package'/… ID as its own
+  // kind) fabricated kinds for dangling targets. Behavior-compatible: the
+  // live caller (App.tsx diagram double-click) only passes real diagram IDs,
+  // which resolve via existingDiagram exactly as before.
+  const resolvedKind = existingDiagram?.diagramKind ?? diagramKind ?? state.diagramKind;
 
   return {
     activeDiagramId: diagramId,
@@ -88,13 +100,22 @@ export function navigateRoot(
     }
   }
 
+  // No valid root origin: seed recovery with a real repository diagram
+  // (default BDD first, preserving the previous fallback priority) — never
+  // the 'bdd' pseudo-ID literal. With an empty repository there is no seed
+  // and the caller's state flows through recovery unchanged (see below).
+  const seedDiagram = Object.values(repo.diagrams).find(d => d.id === 'adia-default-bdd')
+    ?? Object.values(repo.diagrams).find(d => d.diagramKind === 'bdd')
+    ?? Object.values(repo.diagrams)[0];
   return recoverNavigationState(
-    {
-      activeDiagramId: 'bdd',
-      diagramKind: 'bdd',
-      contextElementId: undefined,
-      returnStack: [],
-    },
+    seedDiagram
+      ? {
+        activeDiagramId: seedDiagram.id,
+        diagramKind: seedDiagram.diagramKind,
+        contextElementId: undefined,
+        returnStack: [],
+      }
+      : state,
     repo,
   );
 }
@@ -142,7 +163,10 @@ export function recoverNavigationState(
 
   for (let i = state.returnStack.length - 1; i >= 0; i--) {
     const entry = state.returnStack[i];
-    const entryValid = Boolean(repo.diagrams[entry.diagramId]);
+    // Mirrors the validity filter above: a live Block context is a genuine
+    // IBD origin even though it has no diagram record.
+    const entryValid = Boolean(repo.diagrams[entry.diagramId]) ||
+      (entry.diagramKind === 'ibd' && Boolean(repo.definitions[entry.diagramId]));
     if (entryValid) {
       return {
         activeDiagramId: entry.diagramId,
@@ -184,10 +208,12 @@ export function recoverNavigationState(
     };
   }
 
-  return {
-    activeDiagramId: 'bdd',
-    diagramKind: 'bdd',
-    contextElementId: undefined,
-    returnStack: [],
-  };
+  // No valid target exists anywhere (empty repository, or every candidate
+  // deleted). Preserve the caller's state unchanged. This module is a pure
+  // state-transition helper with no diagnostics channel, so the only
+  // alternative — fabricating the 'bdd' pseudo-ID — would hand back a
+  // dangling reference to a diagram that does not exist. Callers (notably
+  // the App.tsx recovery effect) treat an unchanged result as a no-op and
+  // keep their current selection, so this is read-only and gate-safe.
+  return state;
 }
