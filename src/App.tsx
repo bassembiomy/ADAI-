@@ -11740,16 +11740,20 @@ const ADIA = () => {
           }
           const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
           try {
+            const copiedIds: string[] = [];
             const result = handleExecuteSysmlCommand(buildSysmlCloneElementsCommand({
               sourceIds: completedGesture.sourceIds,
               diagramId,
               drop: { x, y },
               repository: canonicalSysmlRepository,
+              idFactory: () => {
+                const id = uuidv4();
+                copiedIds.push(id);
+                return id;
+              },
             }));
             if (result.committed) {
-              // Re-render from the canonical command result; do not retain the
-              // original drag selection as though it were the new copy.
-              setSelectedIds([]);
+              setSelectedIds(copiedIds);
             } else {
               result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
             }

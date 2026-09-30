@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type BlockDefinition } from '../engine/sysml/model';
-import { createSysmlGatewayState, executeSysmlCommand } from './sysmlCommandGateway';
+import { buildCanonicalSysmlProjectPayload, createSysmlGatewayState, executeSysmlCommand, loadCanonicalSysmlProject } from './sysmlCommandGateway';
 import { buildSysmlCloneElementsCommand } from './sysmlCloneCommands';
 
 describe('buildSysmlCloneElementsCommand', () => {
@@ -15,6 +15,12 @@ describe('buildSysmlCloneElementsCommand', () => {
     expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
     expect(result.repository.definitions['motor-copy']).toMatchObject({ kind: 'block', name: 'Motor_1' });
     expect(result.diagramPresentations['bdd-a'].elementIds).toContain('motor-copy');
+    const undone = executeSysmlCommand(result, { type: 'undo' });
+    expect(undone.repository.definitions['motor-copy']).toBeUndefined();
+    const redone = executeSysmlCommand(undone, { type: 'redo' });
+    expect(redone.repository.definitions['motor-copy']).toBeDefined();
+    const loaded = loadCanonicalSysmlProject(buildCanonicalSysmlProjectPayload(redone, { version: '1', projectName: 'copy test' }));
+    expect(loaded.repository.definitions['motor-copy']).toBeDefined();
   });
 
   it('recreates only relationships with two copied endpoints', () => {
