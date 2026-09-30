@@ -141,6 +141,8 @@ import { createInterface, createBlock as createBlockDefinition, createValueType 
 import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
 import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
 import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
+import { buildSysmlCloneElementsCommand } from './services/sysmlCloneCommands';
+import { beginRightDragCopy, endRightDragCopy, moveRightDragCopy, type RightDragCopyState } from './services/rightDragCopyGesture';
 import { resolveSysmlCreationOwner } from './services/sysmlDiagramCreationContext';
 import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
 import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
@@ -6174,6 +6176,7 @@ const ADIA = () => {
   const lastMousePos = useRef<Point>({ x: 0, y: 0 });
   const midDown = useRef(false);
   const rightDown = useRef(false);
+  const rightDragCopyRef = useRef<RightDragCopyState | null>(null);
 
   // Simulation state
   const [activeStates, setActiveStates] = useState<Record<string, string>>({});
@@ -11376,6 +11379,14 @@ const ADIA = () => {
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
     setMousePos({ x: worldX, y: worldY });
 
+    if (rightDragCopyRef.current) {
+      rightDragCopyRef.current = moveRightDragCopy(rightDragCopyRef.current, {
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
+      return;
+    }
+
     const pendingBlockGesture = pendingBddBlockGestureRef.current;
     if (diagramMode === 'bdd' && pendingBlockGesture && !pendingBlockGesture.moved) {
       const distance = Math.hypot(
@@ -11699,6 +11710,59 @@ const ADIA = () => {
   }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if (e.button === 2 && rightDragCopyRef.current) {
+      const completedGesture = endRightDragCopy(rightDragCopyRef.current);
+      rightDragCopyRef.current = null;
+      if (completedGesture.kind === 'copy') {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const x = ((completedGesture.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+          const y = ((completedGesture.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+          const stateSources = completedGesture.sourceIds
+            .map(id => states.find(state => state.id === id))
+            .filter((state): state is StateData => Boolean(state));
+          if (stateSources.length === completedGesture.sourceIds.length) {
+            const origin = stateSources[0];
+            const clones = stateSources.map(source => ({
+              ...source,
+              id: uuidv4(),
+              name: `${source.name}_copy`,
+              x: x + (source.x - origin.x),
+              y: y + (source.y - origin.y),
+            }));
+            addToHistory();
+            setStates(previous => [...previous, ...clones]);
+            setLayers(previous => previous.map(layer => layer.id === currentLayerId
+              ? { ...layer, stateIds: [...layer.stateIds, ...clones.map(clone => clone.id)] }
+              : layer));
+            setSelectedIds(clones.map(clone => clone.id));
+            return;
+          }
+          const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
+          try {
+            const copiedIds: string[] = [];
+            const result = handleExecuteSysmlCommand(buildSysmlCloneElementsCommand({
+              sourceIds: completedGesture.sourceIds,
+              diagramId,
+              drop: { x, y },
+              repository: canonicalSysmlRepository,
+              idFactory: () => {
+                const id = uuidv4();
+                copiedIds.push(id);
+                return id;
+              },
+            }));
+            if (result.committed) {
+              setSelectedIds(copiedIds);
+            } else {
+              result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+            }
+          } catch (error) {
+            addError('error', error instanceof Error ? error.message : 'Copy request was rejected.', 'SysML');
+          }
+        }
+      }
+    }
     if (bddFeatureDrag) {
       const rect = canvasRef.current?.getBoundingClientRect();
       const worldPoint = rect
@@ -11839,25 +11903,11 @@ const ADIA = () => {
 
     if (e.button === 2) {
       e.preventDefault();
-      const stateToClone = states.find(s => s.id === stateId);
-      if (!stateToClone) return;
-      const newId = uuidv4();
-      const newState = {
-        ...stateToClone,
-        id: newId,
-        name: `${stateToClone.name}_copy`,
-        x: stateToClone.x,
-        y: stateToClone.y,
-      };
-      addToHistory();
-      setStates(prev => [...prev, newState]);
-      setLayers(prev => prev.map(l => l.id === currentLayerId ? {
-        ...l,
-        stateIds: [...l.stateIds, newId]
-      } : l));
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDiagramDragOffset({ x: worldX, y: worldY });
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(stateId) ? selectedIds : [stateId],
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
       return;
     }
 
@@ -12019,35 +12069,11 @@ const ADIA = () => {
 
     if (e.button === 2) {
       e.preventDefault();
-      const blockToClone = blocks.find(b => b.id === blockId);
-      if (!blockToClone) return;
-      const kind: DiagramCreationKind = blockToClone.stereotype === 'requirement' ? 'Requirement' : 'Block';
-      const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
-        diagramId: activeSysmlDiagramId,
-        diagramKind: diagramMode,
-        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(blockId) ? selectedIds : [blockId],
+        clientX: e.clientX,
+        clientY: e.clientY,
       });
-      if (!ownerRes.ok) {
-        addError('error', ownerRes.diagnostic.message, 'SysML');
-        return;
-      }
-      const outcome = buildDiagramCreationCommand({
-        repository: canonicalSysmlRepository,
-        kind,
-        ownerId: ownerRes.ownerId,
-        diagramId: activeSysmlDiagramId,
-        diagramKind: diagramMode,
-        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
-        position: { x: worldX, y: worldY },
-      });
-      if (outcome.ok) {
-        const result = handleExecuteSysmlCommand(outcome.command);
-        if (result.committed) {
-          setSelectedIds([outcome.semanticId]);
-          setIsDragging(true);
-          setDiagramDragOffset({ x: worldX, y: worldY });
-        }
-      }
       return;
     }
 
@@ -12086,9 +12112,11 @@ const ADIA = () => {
 
     if (e.button === 2) {
       e.preventDefault();
-      const partToClone = parts.find(p => p.id === partId);
-      if (!partToClone) return;
-      createPart(worldX, worldY);
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(partId) ? selectedIds : [partId],
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
       return;
     }
 
