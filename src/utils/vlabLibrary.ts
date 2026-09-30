@@ -5842,10 +5842,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "pwm_3ph",
         "category": "Power Electronics",
         "params": {
+          "model_mode": {
+            "value": "averaged",
+            "unit": "",
+            "label": "Model Mode"
+          },
+          "control_mode": {
+            "value": "three_phase_modulation",
+            "unit": "",
+            "label": "Control Mode"
+          },
+          "output_frequency_hz": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Output Frequency"
+          },
           "f_sw": {
             "value": 5000,
             "unit": "Hz",
             "label": "Switch Freq"
+          },
+          "output_resistance_ohm": {
+            "value": 0.001,
+            "unit": "ohm",
+            "label": "Output Resistance"
           }
         },
         "ports": [
@@ -5853,6 +5873,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "vabc",
             "pos": "left",
             "label": "Vabc",
+            "domain": "Physical"
+          },
+          {
+            "id": "ma",
+            "pos": "left",
+            "label": "ma",
+            "domain": "Physical"
+          },
+          {
+            "id": "mb",
+            "pos": "left",
+            "label": "mb",
+            "domain": "Physical"
+          },
+          {
+            "id": "mc",
+            "pos": "left",
+            "label": "mc",
             "domain": "Physical"
           },
           {

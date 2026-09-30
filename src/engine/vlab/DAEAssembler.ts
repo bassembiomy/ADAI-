@@ -570,6 +570,7 @@ export class DAEAssembler {
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           break;
         case 'pwm_3ph_2level':
+          branches.push({ name: 'dc_link', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_a', ports: [{ id: 'a', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_b', ports: [{ id: 'b', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_c', ports: [{ id: 'c', sign: -1 }, { id: 'n', sign: 1 }] });

@@ -117,4 +117,14 @@ describe('VLab Library Search & Scoring', () => {
     expect(constantScore).toBeGreaterThan(dcVoltageScore);
     expect(constantScore).toBe(1000);
   });
+
+
+  it('exposes an explicit inverter control contract', () => {
+    const inverter = VLAB_LIBRARY.flatMap(d => d.blocks).find(b => b.id === 'pwm_3ph_2level');
+    expect(inverter?.params.model_mode).toEqual({ value: 'averaged', unit: '', label: 'Model Mode' });
+    expect(inverter?.params.control_mode).toEqual({ value: 'three_phase_modulation', unit: '', label: 'Control Mode' });
+    expect(inverter?.params.output_frequency_hz).toEqual({ value: 50, unit: 'Hz', label: 'Output Frequency' });
+    expect(inverter?.params.output_resistance_ohm).toEqual({ value: 0.001, unit: 'ohm', label: 'Output Resistance' });
+    expect(inverter?.ports.map(p => p.id)).toEqual(['vabc', 'ma', 'mb', 'mc', 'p', 'n', 'a', 'b', 'c']);
+  });
 });
