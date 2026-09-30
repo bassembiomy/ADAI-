@@ -253,4 +253,32 @@ describe('stateMachineExplorerAdapter', () => {
     const createdId = result.selectedIds![0];
     expect(harness.snapshot!.diagrams!.some(diagram => diagram.id === createdId)).toBe(true);
   });
+
+  it('returns strictly State, Junction, and X-Bridges State as creatable children for regions', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+
+    const caps = adapter.capabilities(['root']);
+    const createCaps = caps.filter(c => c.kind === 'createElement').map(c => c.elementKind);
+    expect(createCaps).toEqual(['state', 'junction', 'xBridgesState']);
+  });
+
+  it('creates an X-Bridges state with isXBridges: true', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+
+    const res = adapter.execute({
+      type: 'createElement',
+      ownerId: 'root',
+      elementKind: 'xBridgesState',
+    });
+
+    expect(res.committed).toBe(true);
+    expect(harness.snapshot!.states).toHaveLength(1);
+    expect(harness.snapshot!.states[0]).toMatchObject({
+      isXBridges: true,
+      parentId: 'root',
+      regionId: 'root',
+    });
+  });
 });

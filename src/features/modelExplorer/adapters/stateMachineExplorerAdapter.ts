@@ -70,17 +70,8 @@ const STATE_MACHINE_CHILDREN: Record<string, readonly string[]> = {
   stateMachine: ['region'],
   region: [
     'state',
-    'final',
-    'initial',
-    'choice',
     'junction',
-    'fork',
-    'join',
-    'history',
-    'deep-history',
-    'entry-point',
-    'exit-point',
-    'terminate',
+    'xBridgesState',
   ],
   state: ['region'],
 };
@@ -561,6 +552,58 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
               layers: nextLayers,
             };
             commitSnapshot(nextSnapshot, `Create state ${name}`);
+            return {
+              committed: true,
+              revision: this.getRevision(),
+              diagnostics: [],
+              selectedIds: [stateId],
+            };
+          }
+
+          if (command.elementKind === 'xBridgesState') {
+            const name = command.name ?? generateUniqueName('XBridges_State', existingNames);
+            const stateId = generateId('xbState');
+            const newState: StateData = {
+              id: stateId,
+              name,
+              x: 100,
+              y: 100,
+              width: 140,
+              height: 70,
+              entry: '',
+              during: '',
+              exit: '',
+              isActive: false,
+              color: '#4caf50',
+              parentId: ownerId,
+              children: [],
+              priority: 0,
+              isParallel: false,
+              regionId: ownerId,
+              autostart: false,
+              isXBridges: true,
+              xBridgesModel: {
+                nodes: [],
+                edges: [],
+                mappings: [],
+                solver: { kind: 'euler', stepSeconds: 0.01 },
+                policy: { memory: 'reset', numericFault: 'escalate' },
+              },
+            };
+
+            const nextLayers = snapshot.layers.map(l => {
+              if (l.id === ownerId) {
+                return { ...l, stateIds: [...l.stateIds, stateId] };
+              }
+              return l;
+            });
+
+            const nextSnapshot: StateMachineExplorerSnapshot = {
+              ...snapshot,
+              states: [...snapshot.states, newState],
+              layers: nextLayers,
+            };
+            commitSnapshot(nextSnapshot, `Create X-Bridges state ${name}`);
             return {
               committed: true,
               revision: this.getRevision(),
