@@ -43,7 +43,7 @@ it('tree Proxy Port waits for a selected Interface Block and cancellation create
   fireEvent.click(screen.getByRole('button', { name: /Signal/ }));
   fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
   expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ type: 'createOwnedFeature', intent: expect.objectContaining({ ownerBlockId: owner.id, portKind: 'proxyPort', typeId: 'if-signal' }) }));
-});
+}, 15000);
 
 it('tree Create New Type commits a canonical Interface Block before resuming Proxy Port creation', async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });

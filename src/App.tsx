@@ -123,6 +123,7 @@ import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
+import { StateMachineCanvasContextMenu } from './components/statemachine/StateMachineCanvasContextMenu';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
@@ -5867,7 +5868,7 @@ const ADIA = () => {
   const [showWelcome, setShowWelcome] = useState(() => !window.location.search.includes('projectName'));
   const [showStandby, setShowStandby] = useState(false);
 
-  // Standby Timeout Listener (30 seconds of inactivity)
+  // Standby Timeout Listener (3 minutes of inactivity)
   useEffect(() => {
     if (showWelcome || (typeof navigator !== 'undefined' && navigator.webdriver)) return; // Don't trigger standby if the initial welcome/intro screen is visible or in test environment
 
@@ -5877,7 +5878,7 @@ const ADIA = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         setShowStandby(true);
-      }, 30000); // 30 seconds
+      }, 180000); // 3 minutes
     };
 
     const handleActivity = () => {
@@ -6177,6 +6178,12 @@ const ADIA = () => {
   const midDown = useRef(false);
   const rightDown = useRef(false);
   const rightDragCopyRef = useRef<RightDragCopyState | null>(null);
+  const [smCanvasContextMenu, setSmCanvasContextMenu] = useState<{
+    x: number;
+    y: number;
+    worldX: number;
+    worldY: number;
+  } | null>(null);
 
   // Simulation state
   const [activeStates, setActiveStates] = useState<Record<string, string>>({});
@@ -18230,7 +18237,21 @@ const ADIA = () => {
                 }}
                 onDoubleClick={handleDoubleClick}
                 onWheel={handleWheel}
-                onContextMenu={(e) => e.preventDefault()}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (diagramMode === 'statemachine') {
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+                    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+                    setSmCanvasContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      worldX,
+                      worldY,
+                    });
+                  }
+                }}
                 onDragOver={(e) => {
                   if (e.dataTransfer.types.includes('application/x-adia-model-element')) {
                     e.preventDefault();
@@ -18600,6 +18621,18 @@ const ADIA = () => {
                     </div>
                   )}
                 </div>
+              )}
+              {smCanvasContextMenu && (
+                <StateMachineCanvasContextMenu
+                  x={smCanvasContextMenu.x}
+                  y={smCanvasContextMenu.y}
+                  worldX={smCanvasContextMenu.worldX}
+                  worldY={smCanvasContextMenu.worldY}
+                  onAddState={(wx, wy) => createState(wx, wy)}
+                  onAddJunction={(wx, wy) => createJunction(wx, wy)}
+                  onAddXBridgesState={(wx, wy) => createXBridgesState(wx, wy)}
+                  onClose={() => setSmCanvasContextMenu(null)}
+                />
               )}
             </div>
 
