@@ -192,6 +192,7 @@ import {
 } from './services/sysmlDiagramNavigation';
 import {
   closeDiagramWorkspaceTab as closeDiagramWorkspaceTabState,
+  ensureDefaultStateMachineWorkspaceFile,
   ensureDefaultSysmlDiagrams,
   normalizeDiagramWorkspace,
   openDiagramWorkspaceTab,
@@ -6980,20 +6981,23 @@ const ADIA = () => {
   ]);
 
   // Switch active file function
-  const switchActiveFile = useCallback((newFileId: string) => {
+  const switchActiveFile = useCallback((newFileId: string, fallbackFile?: WorkspaceFile) => {
     const targetExists = workspaceFiles.some(file => file.id === newFileId);
-    if (!targetExists) return;
+    if (!targetExists && fallbackFile?.id !== newFileId) return;
 
     // Selecting the tab that is already showing must not reload its model
     // state. While an exact-ID diagram view is the rendered one, the workspace
     // file underneath it is not the active tab, so selecting that file must
     // still bring its canvas back on a single press.
-    if (newFileId === activeFileId && !activeWorkspaceTab.diagramView) return;
+    if (targetExists && newFileId === activeFileId && !activeWorkspaceTab.diagramView && diagramWorkspace.activeTab === null) return;
 
     setSelectedIds([]);
+    const availableFiles = targetExists
+      ? workspaceFiles
+      : ensureDefaultStateMachineWorkspaceFile(workspaceFiles, () => fallbackFile!).files;
     const updatedFiles = activeFileId
-      ? saveCurrentFileState(workspaceFiles, activeFileId)
-      : workspaceFiles;
+      ? saveCurrentFileState(availableFiles, activeFileId)
+      : availableFiles;
     const targetFile = updatedFiles.find(file => file.id === newFileId);
     if (!targetFile) return;
 
@@ -7017,16 +7021,17 @@ const ADIA = () => {
     activeFileId,
     activeWorkspaceTab.diagramView,
     currentLayerId,
+    diagramWorkspace.activeTab,
     layers,
     loadStateForFile,
     saveCurrentFileState,
     workspaceFiles,
   ]);
 
-  const activateWorkspaceTarget = useCallback((target: WorkspaceTarget, options?: { workspaceAlreadyUpdated?: boolean }) => {
+  const activateWorkspaceTarget = useCallback((target: WorkspaceTarget, options?: { workspaceAlreadyUpdated?: boolean; fallbackFile?: WorkspaceFile }) => {
     if (target.kind === 'file') {
-      if (!workspaceFiles.some(file => file.id === target.fileId)) return;
-      switchActiveFile(target.fileId);
+      if (!workspaceFiles.some(file => file.id === target.fileId) && options?.fallbackFile?.id !== target.fileId) return;
+      switchActiveFile(target.fileId, options?.fallbackFile);
       return;
     }
 
@@ -7059,13 +7064,15 @@ const ADIA = () => {
       return;
     }
 
-    const stateMachineFile = workspaceFiles.find(file => file.id === 'default_sm') ??
-      workspaceFiles.find(file => file.type === 'statemachine');
-    if (stateMachineFile) {
-      setOpenTabIds(previous => previous.includes(stateMachineFile.id) ? previous : [...previous, stateMachineFile.id]);
-      activateWorkspaceTarget({ kind: 'file', fileId: stateMachineFile.id });
-    }
-  }, [activateWorkspaceTarget, diagramWorkspace, workspaceFiles]);
+    const stateMachineFile = ensureDefaultStateMachineWorkspaceFile(workspaceFiles, (): WorkspaceFile => ({
+      id: 'default_sm',
+      name: 'Main State Machine',
+      type: 'statemachine',
+      data: getActiveStateData('statemachine'),
+    })).file;
+    setOpenTabIds(previous => previous.includes(stateMachineFile.id) ? previous : [...previous, stateMachineFile.id]);
+    activateWorkspaceTarget({ kind: 'file', fileId: stateMachineFile.id }, { fallbackFile: stateMachineFile });
+  }, [activateWorkspaceTarget, diagramWorkspace, getActiveStateData, workspaceFiles]);
 
   // Create new file function
   const createNewFile = useCallback((name: string, type: string) => {

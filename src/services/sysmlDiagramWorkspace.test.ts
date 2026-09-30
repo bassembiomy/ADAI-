@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository } from '../engine/sysml/model';
 import {
   closeDiagramWorkspaceTab,
+  ensureDefaultStateMachineWorkspaceFile,
   ensureDefaultSysmlDiagrams,
   normalizeDiagramWorkspace,
   openDiagramWorkspaceTab,
@@ -139,6 +140,28 @@ describe('sysmlDiagramWorkspace', () => {
     const afterFinalClose = closeDiagramWorkspaceTab(tabs, tabs[2], 'adia-default-bdd');
     expect(afterFinalClose.tabs).toEqual([tabs[0], tabs[1]]);
     expect(afterFinalClose.activeTab).toEqual(tabs[1]);
+  });
+
+  it('recreates the required State Machine file when an imported workspace omits it', () => {
+    const files = [{ id: 'imported-xbridges', type: 'xbridges', name: 'Imported X-Bridges', data: {} }];
+    const fallback = { id: 'default_sm', type: 'statemachine', name: 'Main State Machine', data: { states: [] } };
+
+    const result = ensureDefaultStateMachineWorkspaceFile(files, () => fallback);
+
+    expect(result.file).toEqual(fallback);
+    expect(result.files).toEqual([...files, fallback]);
+    expect(files).toHaveLength(1);
+  });
+
+  it('keeps an existing State Machine file instead of recreating it', () => {
+    const fallback = { id: 'default_sm', type: 'statemachine', name: 'Main State Machine', data: { states: ['saved'] } };
+    const files = [fallback];
+    const result = ensureDefaultStateMachineWorkspaceFile(files, () => {
+      throw new Error('existing file must be preserved');
+    });
+
+    expect(result.file).toBe(fallback);
+    expect(result.files).toBe(files);
   });
 
   it('falls back to the default BDD tab with a diagnostic when the persisted active tab is stale', () => {

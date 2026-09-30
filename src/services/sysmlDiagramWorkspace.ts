@@ -65,6 +65,19 @@ export function openDiagramWorkspaceTab(
     : [...tabs, tab];
 }
 
+/** Keep the State Machine workspace available when the last diagram is closed. */
+export function ensureDefaultStateMachineWorkspaceFile<T extends { id: string; type: string }>(
+  files: T[],
+  createDefault: () => T,
+): { files: T[]; file: T } {
+  const existing = files.find(file => file.id === 'default_sm') ??
+    files.find(file => file.type === 'statemachine');
+  if (existing) return { files, file: existing };
+
+  const file = createDefault();
+  return { files: [...files, file], file };
+}
+
 /** Remove a workspace diagram tab and select the right neighbor at its index,
  * falling back to the preceding tab when the closed tab was last. */
 export function closeDiagramWorkspaceTab(
