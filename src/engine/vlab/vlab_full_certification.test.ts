@@ -103,6 +103,7 @@ const collectCatalogIssues = (): CertificationIssue[] => {
 const VALID_PORT_POSITIONS = new Set(['left', 'right', 'top', 'bottom']);
 const VALID_PORT_DOMAINS = new Set([
   'Any',
+  'BeltProperty',
   'Electrical',
   'Fluid',
   'isothermal_liquid',

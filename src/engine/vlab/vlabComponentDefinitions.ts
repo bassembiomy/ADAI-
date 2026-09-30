@@ -1140,25 +1140,25 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   belt_properties: {
     equations: ['rho = density', 'E = youngs', 'publish(belt_density, belt_youngs)'],
     latex: ['E, \rho = \\text{const}'],
-    across: 'Physical Inputs', through: 'Physical Outputs',
-    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into wired (P port) or model-wide belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
+    across: 'None', through: 'Belt Properties',
+    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
   },
   belt_end: {
     equations: ['F = k * x', 'dx/dt = v_r - v_e', 'k = E*A/L (material) or stiffness'],
     latex: ['F = k \Delta x'],
-    across: 'Velocity (m/s)', through: 'Force (N)',
+    across: 'Translational Velocity (m/s)', through: 'Force (N)',
     description: 'Compliant termination of a belt/cable. Axial stiffness comes from the linked belt_properties material (k = youngs*area/length) and falls back to the fixed stiffness param when no material is available.'
   },
   belt_spool: {
     equations: ['v = omega * R', 'T + F*R = J*dw/dt', 'J = inertia + 2*pi*rho*R^3'],
     latex: ['v = \omega R', '\\tau = F R'],
-    across: 'Velocity, Ang. Vel', through: 'Force, Torque',
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
     description: 'Converts between rotational and translational motion using a spool or winch mechanism. Torque balance includes spool inertia plus wrapped-belt inertia from the linked belt_properties density (one circumference: m = rho*2*pi*R).'
   },
   pulley: {
     equations: ['vA = omega * R', 'vB = -omega * R', 'T + (FA - FB)*R = J*dw/dt'],
     latex: ['v = \pm \omega R', '\\tau = (F_A - F_B) R'],
-    across: 'Velocity, Ang. Vel', through: 'Force, Torque',
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
     description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel; inertia adds the wrapped-belt term from the linked belt_properties density.'
   },
   world_frame: {

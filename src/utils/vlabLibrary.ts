@@ -6325,9 +6325,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "p",
-            "pos": "left",
+            "pos": "right",
             "label": "P",
-            "domain": "Physical"
+            "domain": "BeltProperty"
           }
         ],
         "equation": "Belt-Cable Properties governing physical equation",
@@ -6361,12 +6361,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "r",
             "pos": "left",
             "label": "R",
-            "domain": "Physical"
+            "domain": "Translational"
           },
           {
             "id": "e",
             "pos": "right",
             "label": "E",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "f",
+            "pos": "bottom",
+            "label": "F",
             "domain": "Physical"
           }
         ],
@@ -6396,12 +6408,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "r",
             "pos": "left",
             "label": "R",
-            "domain": "Physical"
+            "domain": "Rotational"
           },
           {
             "id": "a",
             "pos": "right",
             "label": "A",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "t",
+            "pos": "bottom",
+            "label": "T",
             "domain": "Physical"
           }
         ],
@@ -6431,18 +6455,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "r",
             "pos": "left",
             "label": "R",
-            "domain": "Physical"
+            "domain": "Rotational"
           },
           {
             "id": "a",
             "pos": "right",
             "label": "A",
-            "domain": "Physical"
+            "domain": "Translational"
           },
           {
             "id": "b",
             "pos": "right",
             "label": "B",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "t",
+            "pos": "bottom",
+            "label": "T",
             "domain": "Physical"
           }
         ],
