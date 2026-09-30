@@ -1,16 +1,25 @@
-# State Machine Canvas Right-Click & Tree Creation Parity
+# VLab Belt, Spool, and Pulley Domain Separation & Scope Outputs
 
-- [x] Task 1: Prune Model Explorer capabilities and add X-Bridges creation support
-  - [x] Step 1: Write the failing unit tests in `src/features/modelExplorer/adapters/stateMachineExplorerAdapter.test.ts`
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Update `stateMachineExplorerAdapter.ts` and `modelExplorerCapabilities.ts`
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 2: Implement State Machine Canvas Right-Click Context Menu in `App.tsx`
-  - [x] Step 1: Check existing context menu in `App.tsx`
-  - [x] Step 2: Add canvas context menu state, handler, and rendering matching toolbar actions
-  - [x] Step 3: Run Vitest tests to ensure no regressions
-  - [x] Step 4: Commit changes
-- [x] Task 3: Regression Suite & Golden Verification
-  - [x] Step 1: Run all related Vitest suites
-  - [x] Step 2: Commit any snapshot/test updates
+- [ ] Task 1: Update Port Definitions and Domain Specifications
+  - [ ] Step 1: Write failing unit test for port domain definitions (`src/engine/vlab/vlab_belt_domains.test.ts`)
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Update `src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`, and certification whitelist
+  - [ ] Step 4: Run test to verify it passes
+  - [ ] Step 5: Commit changes
+- [ ] Task 2: Strict Port P Wiring and Removal of Silent Fallback in DAEAssembler
+  - [ ] Step 1: Write failing test for strict property injection and no silent fallback
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Refactor `injectBeltMaterial` in `src/engine/vlab/DAEAssembler.ts`
+  - [ ] Step 4: Run test to verify it passes
+  - [ ] Step 5: Commit changes
+- [ ] Task 3: Measurement Signal Branches and Equation Coupling in DAEAssembler & vlabEquations
+  - [ ] Step 1: Write failing test for Scope connection to measurement ports (`f`, `t`)
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Update `getComponentSpec` and equation factories
+  - [ ] Step 4: Run test to verify it passes
+  - [ ] Step 5: Commit changes
+- [ ] Task 4: Dynamic Sensitivity Verification (Young's Modulus & Density Influence on Simulation)
+  - [ ] Step 1: Write integration tests verifying physics sensitivity
+  - [ ] Step 2: Run test to verify it passes
+  - [ ] Step 3: Run full regression and certification suite
+  - [ ] Step 4: Commit changes
