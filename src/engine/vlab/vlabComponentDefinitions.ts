@@ -1124,10 +1124,18 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port and the reference angle theta (deg) from the theta port (time-based ramp at freq when floating); each pulse has a defined width (pulse_width_deg) and fires 60° apart.'
   },
   thyristor_12pulse: {
-    equations: ['G_delta = Trigger(alpha)', 'G_wye = Trigger(alpha + 30)'],
-    latex: ['G_{12} = \\{G_{\\Delta}, G_{Y}\\}'],
-    across: 'None', through: 'None',
-    description: 'Generates coordinated firing pulses for a 12-pulse converter, consisting of delta and wye connected bridges with a 30-degree phase shift.'
+    equations: [
+      'theta(t) = theta_0 + 2*pi*freq*t',
+      'delta_g[k] = pulse(theta - (alpha + 60*k), pulse_width)',
+      'wye_g[k] = pulse(theta - (alpha + 30 + 60*k), pulse_width), k = 0..5'
+    ],
+    latex: [
+      '\\theta(t) = \\theta_0 + 2\\pi f t',
+      'G_{\\Delta,k} = \\operatorname{pulse}(\\theta - (\\alpha + 60k))',
+      'G_{Y,k} = \\operatorname{pulse}(\\theta - (\\alpha + 30 + 60k))'
+    ],
+    across: 'Physical Inputs', through: 'Physical Gate Outputs',
+    description: 'Generates twelve independent, finite-width thyristor firing pulses: six delta gates and six wye gates. The wye bridge is shifted by 30 degrees and successive gates in each bridge are separated by 60 degrees.'
   },
   belt_properties: {
     equations: ['rho = density', 'E = youngs', 'publish(belt_density, belt_youngs)'],
