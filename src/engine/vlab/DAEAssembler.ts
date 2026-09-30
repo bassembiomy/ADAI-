@@ -576,6 +576,7 @@ export class DAEAssembler {
           branches.push({ name: 'current_c', ports: [{ id: 'c', sign: -1 }, { id: 'n', sign: 1 }] });
           break;
         case 'pwm_3ph_3level':
+        case 'pwm_vienna':
           for (const name of ['ga', 'gb', 'gc', 'ma', 'mb', 'mc']) {
             branches.push({ name, ports: [{ id: name, sign: 1 }] });
           }
