@@ -1,25 +1,25 @@
 # Vienna Rectifier PWM Generator Implementation Plan
 
-- [ ] Task 1: Library Port Definitions, Parameters, and Component Metadata
-  - [ ] Step 1: Write the failing library unit test (`src/utils/vlabLibrary.test.ts`)
-  - [ ] Step 2: Run test to verify it fails
-  - [ ] Step 3: Update `vlabLibrary.ts`, `vlabComponentDefinitions.ts`, `blockDimensions.ts`, and `VLabWorkspace.tsx`
-  - [ ] Step 4: Run library tests to verify pass
-  - [ ] Step 5: Commit changes
-- [ ] Task 2: DAE Assembler Output Branch Allocation for `pwm_vienna`
-  - [ ] Step 1: Write the failing branch allocation test (`src/engine/vlab/viennaPwmModel.test.ts`)
-  - [ ] Step 2: Run test to verify it fails
-  - [ ] Step 3: Update `DAEAssembler.ts` to allocate output branches
-  - [ ] Step 4: Run test to verify it passes
-  - [ ] Step 5: Commit changes
-- [ ] Task 3: Physical Equations and Switching Logic for `pwm_vienna`
-  - [ ] Step 1: Write comprehensive failing tests for equations in `viennaPwmModel.test.ts`
-  - [ ] Step 2: Run tests to verify they fail
-  - [ ] Step 3: Implement `pwm_vienna` equation in `src/engine/vlab/vlabEquations.ts`
-  - [ ] Step 4: Run unit tests to verify they pass
-  - [ ] Step 5: Commit changes
-- [ ] Task 4: Full Suite Validation and TypeScript Check
-  - [ ] Step 1: Run all VLab tests
-  - [ ] Step 2: Run SysML and system test suite
-  - [ ] Step 3: Run TypeScript compiler validation
-  - [ ] Step 4: Commit any remaining adjustments
+- [x] Task 1: Library Port Definitions, Parameters, and Component Metadata
+  - [x] Step 1: Write the failing library unit test (`src/utils/vlabLibrary.test.ts`)
+  - [x] Step 2: Run test to verify it fails
+  - [x] Step 3: Update `vlabLibrary.ts`, `vlabComponentDefinitions.ts`, `blockDimensions.ts`, and `VLabWorkspace.tsx`
+  - [x] Step 4: Run library tests to verify pass
+  - [x] Step 5: Commit changes
+- [x] Task 2: DAE Assembler Output Branch Allocation for `pwm_vienna`
+  - [x] Step 1: Write the failing branch allocation test (`src/engine/vlab/viennaPwmModel.test.ts`)
+  - [x] Step 2: Run test to verify it fails
+  - [x] Step 3: Update `DAEAssembler.ts` to allocate output branches
+  - [x] Step 4: Run test to verify it passes
+  - [x] Step 5: Commit changes
+- [x] Task 3: Physical Equations and Switching Logic for `pwm_vienna`
+  - [x] Step 1: Write comprehensive failing tests for equations in `viennaPwmModel.test.ts`
+  - [x] Step 2: Run tests to verify they fail
+  - [x] Step 3: Implement `pwm_vienna` equation in `src/engine/vlab/vlabEquations.ts`
+  - [x] Step 4: Run unit tests to verify they pass
+  - [x] Step 5: Commit changes
+- [x] Task 4: Full Suite Validation and TypeScript Check
+  - [x] Step 1: Run all VLab tests
+  - [x] Step 2: Run SysML and system test suite
+  - [x] Step 3: Run TypeScript compiler validation
+  - [x] Step 4: Commit any remaining adjustments
