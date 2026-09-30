@@ -517,16 +517,25 @@ export class DAEAssembler {
           break;
         case 'belt_end':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'e', sign: 1 }] });
+          if (ports.includes('f')) {
+            branches.push({ name: 'signal_f', ports: [{ id: 'f', sign: 1 }] });
+          }
           states.push('x');
           break;
         case 'belt_spool':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           branches.push({ name: 'force', ports: [{ id: 'a', sign: -1 }] });
+          if (ports.includes('t')) {
+            branches.push({ name: 'signal_t', ports: [{ id: 't', sign: 1 }] });
+          }
           break;
         case 'pulley':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           branches.push({ name: 'force_a', ports: [{ id: 'a', sign: -1 }] });
           branches.push({ name: 'force_b', ports: [{ id: 'b', sign: -1 }] });
+          if (ports.includes('t')) {
+            branches.push({ name: 'signal_t', ports: [{ id: 't', sign: 1 }] });
+          }
           break;
         case 'trans_motion_sensor':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
@@ -1055,6 +1064,10 @@ export class DAEAssembler {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_phi' || b.name.includes('phi'));
               } else if (sourceType === 'mag_mmf_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name.includes('f'));
+              } else if (sourceType === 'belt_end') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name === 'force');
+              } else if (sourceType === 'belt_spool' || sourceType === 'pulley') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t' || b.name === 'torque');
               }
             }
 

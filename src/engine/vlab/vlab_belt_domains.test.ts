@@ -113,5 +113,115 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
     expect(unwiredParams.belt_youngs).toBeUndefined();
     expect(unwiredParams.belt_properties_source).toBeUndefined();
   });
+
+  it('assembles measurement signal branches for Scope connections on belt_end, belt_spool, and pulley', () => {
+    const assembler = new DAEAssembler();
+    const nodes = [
+      {
+        id: 'be1',
+        type: 'default',
+        position: { x: 0, y: 0 },
+        data: {
+          type: 'belt_end',
+          params: { stiffness: 1e5, length: 1, area: 0.001 },
+          ports: [{ id: 'r' }, { id: 'e' }, { id: 'p' }, { id: 'f' }]
+        }
+      },
+      {
+        id: 'spool1',
+        type: 'default',
+        position: { x: 0, y: 100 },
+        data: {
+          type: 'belt_spool',
+          params: { radius: 0.1, inertia: 0.01 },
+          ports: [{ id: 'r' }, { id: 'a' }, { id: 'p' }, { id: 't' }]
+        }
+      },
+      {
+        id: 'pulley1',
+        type: 'default',
+        position: { x: 0, y: 200 },
+        data: {
+          type: 'pulley',
+          params: { radius: 0.1, inertia: 0.01 },
+          ports: [{ id: 'r' }, { id: 'a' }, { id: 'b' }, { id: 'p' }, { id: 't' }]
+        }
+      },
+      {
+        id: 'scope1',
+        type: 'default',
+        position: { x: 200, y: 0 },
+        data: {
+          type: 'scope',
+          params: {},
+          ports: [{ id: 'in' }]
+        }
+      },
+      {
+        id: 'scope2',
+        type: 'default',
+        position: { x: 200, y: 100 },
+        data: {
+          type: 'scope',
+          params: {},
+          ports: [{ id: 'in' }]
+        }
+      },
+      {
+        id: 'scope3',
+        type: 'default',
+        position: { x: 200, y: 200 },
+        data: {
+          type: 'scope',
+          params: {},
+          ports: [{ id: 'in' }]
+        }
+      }
+    ];
+
+    const edges = [
+      { id: 'e_f', source: 'be1', target: 'scope1', sourceHandle: 'f', targetHandle: 'in' },
+      { id: 'e_t1', source: 'spool1', target: 'scope2', sourceHandle: 't', targetHandle: 'in' },
+      { id: 'e_t2', source: 'pulley1', target: 'scope3', sourceHandle: 't', targetHandle: 'in' }
+    ];
+
+    const system = assembler.assemble(nodes as any, edges as any);
+    expect(system.variableNames).toContain('be1_branch_signal_f');
+    expect(system.variableNames).toContain('spool1_branch_signal_t');
+    expect(system.variableNames).toContain('pulley1_branch_signal_t');
+
+    // Scopes should have mapped the measurement signal branch variables
+    const fVarIdx = system.variableNames.indexOf('be1_branch_signal_f');
+    const tSpoolVarIdx = system.variableNames.indexOf('spool1_branch_signal_t');
+    const tPulleyVarIdx = system.variableNames.indexOf('pulley1_branch_signal_t');
+    expect(system.scopeOutputs.get('scope1')).toEqual([fVarIdx]);
+    expect(system.scopeOutputs.get('scope2')).toEqual([tSpoolVarIdx]);
+    expect(system.scopeOutputs.get('scope3')).toEqual([tPulleyVarIdx]);
+
+    // Residual evaluation should match systemSize without unhandled equation gaps
+    const x = Array(system.systemSize).fill(0);
+    const dx = Array(system.systemSize).fill(0);
+    const ctx = {
+      dt: 0.001,
+      time: 0,
+      parameters: {},
+      prevStates: [],
+      prevPrevStates: [],
+      prevDt: 0.001,
+      order: 1,
+      states: [],
+      stateDerivatives: []
+    };
+    const residuals = system.residuals(x, dx, ctx);
+    expect(residuals.length).toBe(system.systemSize);
+
+    // Verify numerical coupling of signal_f to physical force
+    const forceVarIdx = system.variableNames.indexOf('be1_branch_force');
+    x[forceVarIdx] = 120.0;
+    x[fVarIdx] = 75.0;
+    const resCoupled = system.residuals(x, dx, ctx);
+    expect(resCoupled[fVarIdx]).toBeCloseTo(75.0 - 120.0);
+  });
 });
+
 

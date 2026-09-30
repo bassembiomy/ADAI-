@@ -2648,10 +2648,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const eIdx = portIndex(ports, 'e', 1);
     const v = (across[rIdx] || 0) - (across[eIdx] || 0);
     const x = state[0] || 0;
-    return [
+    const res = [
       branch[0] - k * x,
-      dState[0] - v
     ];
+    if (branch.length > 1) {
+      // Measurement signal f couples to tensile force
+      res.push(branch[1] - branch[0]);
+    }
+    res.push(dState[0] - v);
+    return res;
   },
 
   belt_spool: ({ across, dAcross, branch, params, ctx, ports = [] }) => {
@@ -2664,10 +2669,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // Spool inertia + wrapped-belt inertia (one circumference: m = rho*2*pi*R).
     const J = Math.max(0, numParam(params?.inertia, 0)) + (mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
     const dw = (dAcross[rIdx] || 0);
-    return [
+    const res = [
       v - w * R,
       branch[0] + branch[1] * R - J * dw
     ];
+    if (branch.length > 2) {
+      // Measurement signal t couples to torque
+      res.push(branch[2] - branch[0]);
+    }
+    return res;
   },
 
   pulley: ({ across, dAcross, branch, params, ctx, ports = [] }) => {
@@ -2681,11 +2691,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const vB = across[bIdx] || 0;
     const J = Math.max(0, numParam(params?.inertia, 0.01)) + (mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
     const dw = (dAcross[rIdx] || 0);
-    return [
+    const res = [
       vA - w * R,
       vB + w * R,
       branch[0] + (branch[1] - branch[2]) * R - J * dw
     ];
+    if (branch.length > 3) {
+      // Measurement signal t couples to torque
+      res.push(branch[3] - branch[0]);
+    }
+    return res;
   },
 
   angle_constraint: ({ across, branch, params }) => {
