@@ -80,7 +80,7 @@ export function closeDiagramWorkspaceTab(
   return {
     tabs: remaining,
     activeTab: closedWasActive
-      ? remaining[Math.min(closedIndex, remaining.length - 1)] ?? null
+      ? remaining[closedIndex] ?? remaining[closedIndex - 1] ?? null
       : activeTab,
   };
 }

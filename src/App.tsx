@@ -5861,6 +5861,10 @@ const moduleWorkspaceTabKey = (fileId: string): string => `module:${fileId}`;
 const diagramWorkspaceTabKey = (tab: DiagramWorkspaceTab): string =>
   tab.kind === 'module' ? `module:${tab.mode}` : `${tab.kind}:${tab.diagramId}`;
 
+type WorkspaceTarget =
+  | { kind: 'diagram'; tab: DiagramWorkspaceTab }
+  | { kind: 'file'; fileId: string };
+
 const ADIA = () => {
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
 
@@ -6335,14 +6339,16 @@ const ADIA = () => {
   // Single exact-ID open path (Task 4) for creation, tree double-click, mode
   // switching, and tabs. Rejected/unknown IDs return false and mutate
   // nothing: no tab is synthesized for a failed command.
-  const openExactDiagramById = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean }) => {
+  const openExactDiagramById = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean; workspaceAlreadyUpdated?: boolean }) => {
     const smDiagram = seededStateMachineDiagrams.find(diagram => diagram.id === diagramId);
     if (smDiagram) {
       const smTab: DiagramWorkspaceTab = { kind: 'stateMachineDiagram', diagramId, contextRegionId: smDiagram.contextRegionId };
-      setDiagramWorkspace(previous => ({
-        tabs: openDiagramWorkspaceTab(previous.tabs, smTab),
-        activeTab: smTab,
-      }));
+      if (!options?.workspaceAlreadyUpdated) {
+        setDiagramWorkspace(previous => ({
+          tabs: openDiagramWorkspaceTab(previous.tabs, smTab),
+          activeTab: smTab,
+        }));
+      }
       setSelectedIds([]);
       setPackageRelationshipTool(null);
       setPackageRelationshipSourceId(null);
@@ -6373,10 +6379,12 @@ const ADIA = () => {
       diagramId,
     );
     const workspaceTab: DiagramWorkspaceTab = { kind: 'sysmlDiagram', diagramId };
-    setDiagramWorkspace(previous => ({
-      tabs: openDiagramWorkspaceTab(previous.tabs, workspaceTab),
-      activeTab: workspaceTab,
-    }));
+    if (!options?.workspaceAlreadyUpdated) {
+      setDiagramWorkspace(previous => ({
+        tabs: openDiagramWorkspaceTab(previous.tabs, workspaceTab),
+        activeTab: workspaceTab,
+      }));
+    }
     setActiveSysmlDiagramIdState(nav.activeDiagramId);
     setDiagramNavigationStack(nav.returnStack);
     setSelectedIds([]);
@@ -6390,23 +6398,6 @@ const ADIA = () => {
     }
     return true;
   }, [seededStateMachineDiagrams, canonicalSysmlRepository, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
-
-  // Closing a tab removes only the workspace view. It never deletes the
-  // semantic diagram or its presentations. The neighbor tab becomes active.
-  const closeDiagramWorkspaceTab = useCallback((diagramId: string) => {
-    const nextWorkspace = closeDiagramWorkspaceTabState(
-      diagramWorkspace.tabs,
-      diagramWorkspace.activeTab,
-      diagramId,
-    );
-    const wasActive = diagramWorkspace.activeTab && ('diagramId' in diagramWorkspace.activeTab
-      ? diagramWorkspace.activeTab.diagramId === diagramId
-      : (diagramWorkspace.activeTab as any).mode === diagramId);
-    setDiagramWorkspace(nextWorkspace);
-    if (wasActive && nextWorkspace.activeTab && 'diagramId' in nextWorkspace.activeTab) {
-      openExactDiagramById(nextWorkspace.activeTab.diagramId, { preserveReturnStack: true });
-    }
-  }, [diagramWorkspace, openExactDiagramById]);
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
     setSelectedIds([]);
@@ -7031,6 +7022,50 @@ const ADIA = () => {
     saveCurrentFileState,
     workspaceFiles,
   ]);
+
+  const activateWorkspaceTarget = useCallback((target: WorkspaceTarget, options?: { workspaceAlreadyUpdated?: boolean }) => {
+    if (target.kind === 'file') {
+      if (!workspaceFiles.some(file => file.id === target.fileId)) return;
+      switchActiveFile(target.fileId);
+      return;
+    }
+
+    const { tab } = target;
+    if (tab.kind === 'module' || !diagramWorkspace.tabs.some(openTab => diagramWorkspaceTabKey(openTab) === diagramWorkspaceTabKey(tab))) return;
+    if (tab.kind === 'sysmlDiagram' && !canonicalSysmlRepository.diagrams[tab.diagramId]) return;
+    if (tab.kind === 'stateMachineDiagram' && !seededStateMachineDiagrams.some(diagram => diagram.id === tab.diagramId)) return;
+    openExactDiagramById(tab.diagramId, {
+      preserveReturnStack: true,
+      workspaceAlreadyUpdated: options?.workspaceAlreadyUpdated,
+    });
+  }, [canonicalSysmlRepository, diagramWorkspace.tabs, openExactDiagramById, seededStateMachineDiagrams, switchActiveFile, workspaceFiles]);
+
+  // Closing a tab removes only its view. The adjacent tab is activated by the
+  // same path as a click, while an empty diagram strip returns to State Machine.
+  const closeDiagramWorkspaceTab = useCallback((diagramId: string) => {
+    const closedTab = diagramWorkspace.tabs.find(tab => 'diagramId' in tab && tab.diagramId === diagramId);
+    if (!closedTab) return;
+    const wasActive = diagramWorkspace.activeTab !== null &&
+      diagramWorkspaceTabKey(diagramWorkspace.activeTab) === diagramWorkspaceTabKey(closedTab);
+    const nextWorkspace = closeDiagramWorkspaceTabState(
+      diagramWorkspace.tabs,
+      diagramWorkspace.activeTab,
+      diagramId,
+    );
+    setDiagramWorkspace(nextWorkspace);
+    if (!wasActive) return;
+    if (nextWorkspace.activeTab) {
+      activateWorkspaceTarget({ kind: 'diagram', tab: nextWorkspace.activeTab }, { workspaceAlreadyUpdated: true });
+      return;
+    }
+
+    const stateMachineFile = workspaceFiles.find(file => file.id === 'default_sm') ??
+      workspaceFiles.find(file => file.type === 'statemachine');
+    if (stateMachineFile) {
+      setOpenTabIds(previous => previous.includes(stateMachineFile.id) ? previous : [...previous, stateMachineFile.id]);
+      activateWorkspaceTarget({ kind: 'file', fileId: stateMachineFile.id });
+    }
+  }, [activateWorkspaceTarget, diagramWorkspace, workspaceFiles]);
 
   // Create new file function
   const createNewFile = useCallback((name: string, type: string) => {
@@ -17525,7 +17560,7 @@ const ADIA = () => {
                     role="tab"
                     aria-selected={isActive}
                     data-workspace-type={file.type}
-                    onClick={() => switchActiveFile(file.id)}
+                    onClick={() => activateWorkspaceTarget({ kind: 'file', fileId: file.id })}
                     className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
                       isActive
                         ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
@@ -17560,7 +17595,7 @@ const ADIA = () => {
                     role="tab"
                     aria-selected={isActive}
                     data-diagram-id={diagramId}
-                    onClick={() => openExactDiagramById(diagramId, { preserveReturnStack: true })}
+                    onClick={() => activateWorkspaceTarget({ kind: 'diagram', tab })}
                     className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
                       isActive
                         ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'

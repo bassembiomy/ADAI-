@@ -94,4 +94,19 @@ test.describe('workspace tab highlight parity', () => {
     await expect(selectedTabs).toHaveText(/State Machine/i);
     await expect(page.getByText(/^States:/)).toBeVisible();
   });
+
+  test('closing the last active diagram returns to the State Machine workspace', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const stateMachineTab = tabs.locator('[data-workspace-type="statemachine"]');
+    const bddTab = tabs.locator('[data-diagram-id="adia-default-bdd"]');
+
+    await page.locator('[data-node-id][data-kind="diagram"]', { hasText: 'Main SysML BDD' }).first().click();
+    await expect(bddTab).toHaveAttribute('aria-selected', 'true');
+    await bddTab.getByTitle('Close Tab').click();
+
+    await expect(bddTab).toHaveCount(0);
+    await expect(stateMachineTab).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+    await expect(page.getByText(/^States:/)).toBeVisible();
+  });
 });
