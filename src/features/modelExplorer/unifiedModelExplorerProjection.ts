@@ -1,6 +1,8 @@
 import type { SysmlRepository } from '../../engine/sysml/model';
 import { resolvePortUsage } from '../../engine/sysml/ibd';
+import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
+import { buildDiagramVisualParentIndex } from './diagramTreeContext';
 import type {
   ModelPillar,
   ModelTreeNode,
@@ -20,6 +22,11 @@ export interface UnifiedExplorerInput {
   stateMachine: StateMachineExplorerSnapshot;
   externalModels: ExternalModelDescriptor[];
   revision: number;
+  /**
+   * Presentation membership per diagram. It groups what the tree shows under
+   * the diagram that presents it; it never changes semantic ownership.
+   */
+  diagramPresentations?: Record<string, DiagramPresentationInput>;
 }
 
 const pillarOrder: Array<[ModelPillar, string]> = [
@@ -31,6 +38,17 @@ const pillarOrder: Array<[ModelPillar, string]> = [
 
 const pillarForSysmlKind = (kind: string): ModelPillar => {
   if (kind === 'requirement' || kind === 'verificationCase') return 'requirements';
+  return 'structural';
+};
+
+/**
+ * Diagrams are viewpoints: a parametric diagram belongs under the Parametric
+ * pillar, requirements and traceability views under Requirements, everything
+ * else (BDD, IBD, Package) under Structural.
+ */
+const pillarForDiagramKind = (diagramKind: string): ModelPillar => {
+  if (diagramKind === 'requirements' || diagramKind === 'rtm') return 'requirements';
+  if (diagramKind === 'parametric') return 'parametric';
   return 'structural';
 };
 
@@ -80,6 +98,11 @@ const requirementContainmentParents = (sysml: SysmlRepository) => {
 
 export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelTreeProjection {
   const nodes: Record<string, ModelTreeNode> = {};
+  const visualParentBySemanticId = buildDiagramVisualParentIndex({
+    sysml: input.sysml,
+    stateMachine: input.stateMachine,
+    diagramPresentations: input.diagramPresentations ?? {},
+  });
   const modelId = 'project:model';
   register(nodes, {
     nodeId: modelId,
@@ -187,7 +210,8 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     }
   }
   for (const diagram of Object.values(input.sysml.diagrams ?? {})) {
-    const pillar = pillarForSysmlKind(diagram.diagramKind === 'requirements' ? 'requirement' : 'block');
+    const diagramKind: string = diagram.diagramKind;
+    const pillar = pillarForDiagramKind(diagramKind);
     register(nodes, {
       nodeId: sysmlNodeId(diagram.id),
       semanticId: diagram.id,
@@ -244,6 +268,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
           kind: 'state',
           label: state.name,
           parentNodeId: regionId,
+          ownerSemanticId: layer.id,
           childNodeIds: [],
           hasChildren: false,
         });
@@ -294,6 +319,47 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     });
   }
 
+  applyDiagramVisualParents(nodes, visualParentBySemanticId);
   rebuildChildren(nodes);
   return { roots: [modelId], nodes, revision: input.revision };
+}
+
+/**
+ * Moves presented elements under the diagram that shows them. The diagram node
+ * must already exist, and a rewrite is skipped whenever it would close a
+ * containment cycle (a diagram owned by an element it also presents), so the
+ * primary containment projection stays a forest.
+ */
+function applyDiagramVisualParents(
+  nodes: Record<string, ModelTreeNode>,
+  visualParentBySemanticId: Map<string, string>,
+): void {
+  const isDiagramMember = (node: ModelTreeNode): boolean =>
+    (node.domain === 'sysml' || node.domain === 'stateMachine')
+    && !node.virtualKind
+    && node.kind !== 'diagram'
+    && node.kind !== 'group'
+    && node.kind !== 'model'
+    && node.kind !== 'pillar'
+    && nodes[node.nodeId] === node;
+
+  const wouldCreateCycle = (childId: string, parentId: string): boolean => {
+    let current: string | null | undefined = parentId;
+    const seen = new Set<string>();
+    while (current && !seen.has(current)) {
+      if (current === childId) return true;
+      seen.add(current);
+      current = nodes[current]?.parentNodeId;
+    }
+    return false;
+  };
+
+  for (const node of Object.values(nodes)) {
+    if (!isDiagramMember(node)) continue;
+    const visualParentId = visualParentBySemanticId.get(node.semanticId);
+    if (!visualParentId || !nodes[visualParentId]) continue;
+    if (node.parentNodeId === visualParentId) continue;
+    if (wouldCreateCycle(node.nodeId, visualParentId)) continue;
+    node.parentNodeId = visualParentId;
+  }
 }

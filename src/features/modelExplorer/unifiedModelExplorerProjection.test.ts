@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyRepository } from '../../engine/sysml/model';
+import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import { ensureDefaultSysmlDiagrams } from '../../services/sysmlDiagramWorkspace';
 import { buildUnifiedModelProjection, type UnifiedExplorerInput } from './unifiedModelExplorerProjection';
 import { ensureRootStateMachineDiagram } from './adapters/stateMachineExplorerAdapter';
+
+function emptyStateMachine(): UnifiedExplorerInput['stateMachine'] {
+  return { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 };
+}
 
 function defaultWorkspaceInput(): UnifiedExplorerInput {
   const { repository } = ensureDefaultSysmlDiagrams(createEmptyRepository());
@@ -162,6 +166,160 @@ describe('buildUnifiedModelProjection', () => {
     const projection = buildUnifiedModelProjection(input);
     expect(projection.nodes['sm:diagram:nested-sm'].parentNodeId).toBe('sm:region:region-1');
     expect(projection.nodes['sm:diagram:adia-default-state-machine'].parentNodeId).toBe('project:pillar:behavior');
+  });
+
+  it('groups BDD-presented elements under the diagram while preserving their semantic owner', () => {
+    const repository = createEmptyRepository();
+    repository.definitions['block-1'] = {
+      id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.diagrams['bdd-1'] = {
+      id: 'bdd-1', name: 'Engine BDD', namespace: ['model'], ownerId: 'model', kind: 'diagram', diagramKind: 'bdd',
+    };
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+      diagramPresentations: { 'bdd-1': { elementIds: ['block-1'] } },
+    });
+
+    expect(projection.nodes['sysml:element:block-1']).toMatchObject({
+      parentNodeId: 'sysml:element:bdd-1',
+      ownerSemanticId: 'model',
+    });
+    expect(projection.nodes['sysml:element:bdd-1'].childNodeIds).toContain('sysml:element:block-1');
+    // One primary containment location: the semantic pillar no longer lists it.
+    expect(projection.nodes['project:pillar:structural'].childNodeIds).not.toContain('sysml:element:block-1');
+  });
+
+  it('groups requirements-diagram content under that diagram', () => {
+    const repository = createEmptyRepository();
+    repository.requirements['req-1'] = {
+      id: 'req-1', name: 'Safety', namespace: ['model'], ownerId: 'model', kind: 'requirement',
+      requirementId: 'REQ-1', text: 'safe', status: 'draft', version: '1',
+    };
+    repository.diagrams['req-diagram-1'] = {
+      id: 'req-diagram-1', name: 'Safety Requirements', namespace: ['model'], ownerId: 'model',
+      kind: 'diagram', diagramKind: 'requirements',
+    };
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+      diagramPresentations: { 'req-diagram-1': { elementIds: ['req-1'] } },
+    });
+
+    expect(projection.nodes['sysml:element:req-1']).toMatchObject({
+      parentNodeId: 'sysml:element:req-diagram-1',
+      ownerSemanticId: 'model',
+    });
+    expect(projection.nodes['project:pillar:requirements'].childNodeIds)
+      .not.toContain('sysml:element:req-1');
+  });
+
+  it('groups parametric-diagram content and classifies parametric diagrams under the Parametric pillar', () => {
+    const repository = createEmptyRepository();
+    repository.definitions['block-1'] = {
+      id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.usages['constraint-1'] = {
+      id: 'constraint-1', name: 'Torque Constraint', kind: 'part', ownerId: 'block-1', typeId: 'block-1',
+      aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    };
+    // The canonical SysML domain accepts a parametric DiagramKind; the legacy V3
+    // record type is narrower than the domain it serializes.
+    repository.diagrams['parametric-1'] = {
+      id: 'parametric-1', name: 'Engine Parametric', namespace: ['model'], ownerId: 'block-1',
+      kind: 'diagram', diagramKind: 'parametric',
+    } as unknown as SysmlRepository['diagrams'][string];
+    repository.diagrams['parametric-orphan'] = {
+      id: 'parametric-orphan', name: 'Orphan Parametric', namespace: ['model'], ownerId: 'missing-owner',
+      kind: 'diagram', diagramKind: 'parametric',
+    } as unknown as SysmlRepository['diagrams'][string];
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+      diagramPresentations: { 'parametric-1': { elementIds: ['constraint-1'] } },
+    });
+
+    expect(projection.nodes['sysml:element:constraint-1']).toMatchObject({
+      parentNodeId: 'sysml:element:parametric-1',
+      ownerSemanticId: 'block-1',
+    });
+    expect(projection.nodes['project:pillar:parametric'].childNodeIds)
+      .toContain('sysml:element:parametric-orphan');
+    expect(projection.nodes['project:pillar:structural'].childNodeIds)
+      .not.toContain('sysml:element:parametric-orphan');
+  });
+
+  it('groups state-machine states and junctions under the diagram that presents them', () => {
+    const input = defaultWorkspaceInput();
+    input.stateMachine = ensureRootStateMachineDiagram({
+      states: [
+        {
+          id: 's1', name: 'S1', x: 0, y: 0, width: 1, height: 1, entry: '', during: '', exit: '',
+          isActive: false, color: '#000', parentId: 'root', children: ['region-1'], priority: 0,
+          isParallel: false, regionId: 'root', autostart: false,
+        },
+        {
+          id: 's2', name: 'S2', x: 0, y: 0, width: 1, height: 1, entry: '', during: '', exit: '',
+          isActive: false, color: '#000', parentId: 'region-1', children: [], priority: 0,
+          isParallel: false, regionId: 'region-1', autostart: false,
+        },
+      ],
+      layers: [
+        { id: 'root', name: 'Root Region', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] },
+        { id: 'region-1', name: 'Region 1', parentStateId: 's1', stateIds: ['s2'], transitionIds: [], junctionIds: [] },
+      ],
+      transitions: [],
+      junctions: [],
+      diagrams: [{ id: 'nested-sm-1', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }],
+      revision: 1,
+    });
+    const projection = buildUnifiedModelProjection(input);
+
+    expect(projection.nodes['sm:state:s1']).toMatchObject({
+      parentNodeId: 'sm:diagram:adia-default-state-machine',
+      ownerSemanticId: 'root',
+    });
+    expect(projection.nodes['sm:state:s2']).toMatchObject({
+      parentNodeId: 'sm:diagram:nested-sm-1',
+      ownerSemanticId: 'region-1',
+    });
+    // A diagram keeps its semantic parent: grouping is presentation, not ownership.
+    expect(projection.nodes['sm:diagram:nested-sm-1'].parentNodeId).toBe('sm:region:region-1');
+    expect(projection.nodes['sm:region:region-1'].parentNodeId).toBe('sm:state:s1');
+  });
+
+  it('ignores stale presentation IDs and never nests a diagram inside its own presenter', () => {
+    const repository = createEmptyRepository();
+    repository.definitions['block-1'] = {
+      id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    // A block-owned diagram that also presents its owner must not become the
+    // parent of that owner: the two would form a containment cycle.
+    repository.diagrams['bdd-1'] = {
+      id: 'bdd-1', name: 'Engine BDD', namespace: ['model'], ownerId: 'block-1', kind: 'diagram', diagramKind: 'bdd',
+    };
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+      diagramPresentations: { 'bdd-1': { elementIds: ['block-1', 'deleted-element'] } },
+    });
+
+    expect(projection.nodes['sysml:element:deleted-element']).toBeUndefined();
+    expect(projection.nodes['sysml:element:block-1'].parentNodeId).toBe('project:pillar:structural');
+    expect(projection.nodes['sysml:element:bdd-1'].parentNodeId).toBe('sysml:element:block-1');
+    expect(projection.nodes['sysml:element:block-1'].childNodeIds).toContain('sysml:element:bdd-1');
   });
 
   it('does not expose a UUID as the port name when the port definition name is missing', () => {
