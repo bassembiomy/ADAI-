@@ -1,31 +1,31 @@
 # V-Lab Gas Properties Cleanup and Port Domains
 
-- [ ] Task 1: Canonical Runtime Port-Domain Validation
-  - [ ] Step 1: Write the failing port-domain tests (`src/engine/vlab/vlabPortDomains.test.ts`)
-  - [ ] Step 2: Run the test and verify the intended RED state
-  - [ ] Step 3: Add the runtime tuple and derive the engine type from it (`src/engine/vlab/types.ts`)
-  - [ ] Step 4: Implement the V-Lab validator (`src/engine/vlab/vlabPortDomains.ts`)
-  - [ ] Step 5: Run focused tests and type checking
-  - [ ] Step 6: Commit the domain source and validator
-- [ ] Task 2: Legacy `gas_properties` Graph Migration
-  - [ ] Step 1: Write failing migration tests (`src/components/vlab/vlabModelMigration.test.ts`)
-  - [ ] Step 2: Run the migration test and verify RED
-  - [ ] Step 3: Implement the pure normalizer (`src/components/vlab/vlabModelMigration.ts`)
-  - [ ] Step 4: Run migration tests and verify GREEN
-  - [ ] Step 5: Apply normalization at all V-Lab workspace ingress points (`src/components/vlab/VLabWorkspace.tsx`)
-  - [ ] Step 6: Run focused workspace and migration tests
-  - [ ] Step 7: Commit the legacy migration
-- [ ] Task 3: Remove Obsolete Registries and Fix Certification
-  - [ ] Step 1: Extend the existing removal regression before production edits (`src/utils/vlabLibrary.test.ts`)
-  - [ ] Step 2: Run the regression and verify RED
-  - [ ] Step 3: Remove production remnants (`vlabEquations.ts`, `vlabComponentDefinitions.ts`, `VLabSymbols.tsx`)
-  - [ ] Step 4: Replace the handwritten certification domain allowlist (`vlab_full_certification.test.ts`)
-  - [ ] Step 5: Run the focused removal test and full certification
-  - [ ] Step 6: Verify no source remnants remain outside migration and tests
-  - [ ] Step 7: Commit registry cleanup and certification fix
-- [ ] Task 4: Integrated Verification
-  - [ ] Step 1: Run all focused tests together
-  - [ ] Step 2: Run the standard V-Lab suite
-  - [ ] Step 3: Run TypeScript validation
-  - [ ] Step 4: Inspect the final diff and whitespace
-  - [ ] Step 5: Commit any verification-only correction
+- [x] Task 1: Canonical Runtime Port-Domain Validation
+  - [x] Step 1: Write the failing port-domain tests (`src/engine/vlab/vlabPortDomains.test.ts`)
+  - [x] Step 2: Run the test and verify the intended RED state
+  - [x] Step 3: Add the runtime tuple and derive the engine type from it (`src/engine/vlab/types.ts`)
+  - [x] Step 4: Implement the V-Lab validator (`src/engine/vlab/vlabPortDomains.ts`)
+  - [x] Step 5: Run focused tests and type checking
+  - [x] Step 6: Commit the domain source and validator
+- [x] Task 2: Legacy `gas_properties` Graph Migration
+  - [x] Step 1: Write failing migration tests (`src/components/vlab/vlabModelMigration.test.ts`)
+  - [x] Step 2: Run the migration test and verify RED
+  - [x] Step 3: Implement the pure normalizer (`src/components/vlab/vlabModelMigration.ts`)
+  - [x] Step 4: Run migration tests and verify GREEN
+  - [x] Step 5: Apply normalization at all V-Lab workspace ingress points (`src/components/vlab/VLabWorkspace.tsx`)
+  - [x] Step 6: Run focused workspace and migration tests
+  - [x] Step 7: Commit the legacy migration
+- [x] Task 3: Remove Obsolete Registries and Fix Certification
+  - [x] Step 1: Extend the existing removal regression before production edits (`src/utils/vlabLibrary.test.ts`)
+  - [x] Step 2: Run the regression and verify RED
+  - [x] Step 3: Remove production remnants (`vlabEquations.ts`, `vlabComponentDefinitions.ts`, `VLabSymbols.tsx`)
+  - [x] Step 4: Replace the handwritten certification domain allowlist (`vlab_full_certification.test.ts`)
+  - [x] Step 5: Run the focused removal test and full certification
+  - [x] Step 6: Verify no source remnants remain outside migration and tests
+  - [x] Step 7: Commit registry cleanup and certification fix
+- [x] Task 4: Integrated Verification
+  - [x] Step 1: Run all focused tests together
+  - [x] Step 2: Run the standard V-Lab suite
+  - [x] Step 3: Run TypeScript validation
+  - [x] Step 4: Inspect the final diff and whitespace
+  - [x] Step 5: Commit any verification-only correction
