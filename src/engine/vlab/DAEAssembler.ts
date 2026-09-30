@@ -278,6 +278,7 @@ export class DAEAssembler {
         if (blockType === 'neural_neuron_learning' && ['x1', 'x2', 'target', 'lr'].includes(id)) return false;
         if (blockType === 'rl_q_learning_controller' && ['error', 'reward', 'reset'].includes(id)) return false;
         if (blockType === 'ac_motor_pid_control' && ['w_ref', 'tl'].includes(id)) return false;
+        if (blockType === 'thyristor_6pulse' && ['theta', 'alpha'].includes(id)) return false;
 
         const key = `${blockId}_${portId}`;
         const pos = nodePortPositions.get(key);
@@ -578,6 +579,11 @@ export class DAEAssembler {
         case 'pwm_3ph_3level':
         case 'pwm_vienna':
           for (const name of ['ga', 'gb', 'gc', 'ma', 'mb', 'mc']) {
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          break;
+        case 'thyristor_6pulse':
+          for (const name of ['g1', 'g2', 'g3', 'g4', 'g5', 'g6']) {
             branches.push({ name, ports: [{ id: name, sign: 1 }] });
           }
           break;

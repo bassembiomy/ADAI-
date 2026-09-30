@@ -6137,23 +6137,61 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 50,
             "unit": "Hz",
             "label": "Freq"
+          },
+          "pulse_width_deg": {
+            "value": 20,
+            "unit": "deg",
+            "label": "Pulse Width"
           }
         },
         "ports": [
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "alpha",
             "pos": "left",
-            "label": "alpha"
+            "label": "alpha",
+            "domain": "Physical"
           },
           {
-            "id": "p",
+            "id": "g1",
             "pos": "right",
-            "label": "P"
+            "label": "G1",
+            "domain": "Physical"
+          },
+          {
+            "id": "g2",
+            "pos": "right",
+            "label": "G2",
+            "domain": "Physical"
+          },
+          {
+            "id": "g3",
+            "pos": "right",
+            "label": "G3",
+            "domain": "Physical"
+          },
+          {
+            "id": "g4",
+            "pos": "right",
+            "label": "G4",
+            "domain": "Physical"
+          },
+          {
+            "id": "g5",
+            "pos": "right",
+            "label": "G5",
+            "domain": "Physical"
+          },
+          {
+            "id": "g6",
+            "pos": "right",
+            "label": "G6",
+            "domain": "Physical"
           }
         ],
         "equation": "Thyristor 6-Pulse Generator governing physical equation",

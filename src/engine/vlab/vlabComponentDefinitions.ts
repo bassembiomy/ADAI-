@@ -1118,10 +1118,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Three-phase Vienna Rectifier PWM generator with explicit ga/gb/gc switching gates and ma/mb/mc modulation indices. Uses carrier-based PWM at f_sw, DC voltage regulation, and neutral-point midpoint balancing.'
   },
   thyristor_6pulse: {
-    equations: ['Trigger if theta > alpha + phase_offset'],
-    latex: ['G = \\delta(t - t_{\\alpha})'],
-    across: 'None', through: 'None',
-    description: 'Generates firing pulses for a 6-pulse thyristor bridge (Graetz circuit). Controlled by the firing angle alpha.'
+    equations: ['g_k = 1 if wrap(theta - (alpha + 60k)) < pulse_width else 0', 'k = 0..5'],
+    latex: ['g_k = \\mathbf{1}_{[0, w_p)}(\\mathrm{wrap}(\\theta - (\\alpha + 60k)))'],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port and the reference angle theta (deg) from the theta port (time-based ramp at freq when floating); each pulse has a defined width (pulse_width_deg) and fires 60° apart.'
   },
   thyristor_12pulse: {
     equations: ['G_delta = Trigger(alpha)', 'G_wye = Trigger(alpha + 30)'],
