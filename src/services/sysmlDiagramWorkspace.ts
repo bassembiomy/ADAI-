@@ -65,6 +65,26 @@ export function openDiagramWorkspaceTab(
     : [...tabs, tab];
 }
 
+/** Remove a workspace diagram tab and select the right neighbor at its index,
+ * falling back to the preceding tab when the closed tab was last. */
+export function closeDiagramWorkspaceTab(
+  tabs: readonly DiagramWorkspaceTab[],
+  activeTab: DiagramWorkspaceTab | null,
+  diagramId: string,
+): DiagramWorkspaceState {
+  const closedIndex = tabs.findIndex((tab) => ('diagramId' in tab ? tab.diagramId : tab.mode) === diagramId);
+  if (closedIndex < 0) return { tabs: [...tabs], activeTab };
+
+  const remaining = tabs.filter((_, index) => index !== closedIndex);
+  const closedWasActive = activeTab !== null && workspaceTabKey(activeTab) === workspaceTabKey(tabs[closedIndex]);
+  return {
+    tabs: remaining,
+    activeTab: closedWasActive
+      ? remaining[Math.min(closedIndex, remaining.length - 1)] ?? null
+      : activeTab,
+  };
+}
+
 function findDefaultDiagramId(
   repository: Pick<SysmlRepository, 'diagrams'>,
   diagramKind: ModelDiagramDefinition['diagramKind'],

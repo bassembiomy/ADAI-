@@ -69,12 +69,14 @@ test.describe('workspace tab highlight parity', () => {
     const bddTab = page.locator('[data-diagram-id="adia-default-bdd"]');
     const selectedTabs = tabs.locator('[role="tab"][aria-selected="true"]');
 
-    // Open both diagrams in order so Requirements is between the workspace
-    // tab and BDD. Close the active middle tab and require its right neighbor.
+    // Establish a deterministic order after the State Machine workspace tab.
+    for (const diagramTab of [bddTab, requirementsTab]) {
+      if (await diagramTab.count()) await diagramTab.getByTitle('Close Tab').click();
+    }
     await page.locator('[data-node-id][data-kind="diagram"]', { hasText: 'Main Requirements Diagram' }).first().click();
     await page.locator('[data-node-id][data-kind="diagram"]', { hasText: 'Main SysML BDD' }).first().click();
     await requirementsTab.click();
-    await expect(page.getByText(/^Requirements:/)).toBeVisible();
+    await expect(requirementsTab).toHaveAttribute('aria-selected', 'true');
     await requirementsTab.getByTitle('Close Tab').click();
     await expect(bddTab).toHaveAttribute('aria-selected', 'true');
     await expect(selectedTabs).toHaveCount(1);

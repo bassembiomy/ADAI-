@@ -191,6 +191,7 @@ import {
   type DiagramNavigationStackEntry,
 } from './services/sysmlDiagramNavigation';
 import {
+  closeDiagramWorkspaceTab as closeDiagramWorkspaceTabState,
   ensureDefaultSysmlDiagrams,
   normalizeDiagramWorkspace,
   openDiagramWorkspaceTab,
@@ -6393,14 +6394,17 @@ const ADIA = () => {
   // Closing a tab removes only the workspace view. It never deletes the
   // semantic diagram or its presentations. The neighbor tab becomes active.
   const closeDiagramWorkspaceTab = useCallback((diagramId: string) => {
-    const remaining = diagramWorkspace.tabs.filter(tab => 'diagramId' in tab ? tab.diagramId !== diagramId : (tab as any).mode !== diagramId);
-    const wasActive = diagramWorkspace.activeTab && ('diagramId' in diagramWorkspace.activeTab ? diagramWorkspace.activeTab.diagramId === diagramId : (diagramWorkspace.activeTab as any).mode === diagramId);
-    setDiagramWorkspace({
-      tabs: remaining,
-      activeTab: wasActive ? (remaining[0] ?? null) : diagramWorkspace.activeTab,
-    });
-    if (wasActive && remaining.length > 0 && 'diagramId' in remaining[0]) {
-      openExactDiagramById((remaining[0] as any).diagramId, { preserveReturnStack: true });
+    const nextWorkspace = closeDiagramWorkspaceTabState(
+      diagramWorkspace.tabs,
+      diagramWorkspace.activeTab,
+      diagramId,
+    );
+    const wasActive = diagramWorkspace.activeTab && ('diagramId' in diagramWorkspace.activeTab
+      ? diagramWorkspace.activeTab.diagramId === diagramId
+      : (diagramWorkspace.activeTab as any).mode === diagramId);
+    setDiagramWorkspace(nextWorkspace);
+    if (wasActive && nextWorkspace.activeTab && 'diagramId' in nextWorkspace.activeTab) {
+      openExactDiagramById(nextWorkspace.activeTab.diagramId, { preserveReturnStack: true });
     }
   }, [diagramWorkspace, openExactDiagramById]);
 
