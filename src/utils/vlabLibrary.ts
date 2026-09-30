@@ -6257,7 +6257,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical"
           }
         ],
         "equation": "Belt-Cable Properties governing physical equation",
@@ -6274,18 +6275,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1000000,
             "unit": "N/m",
             "label": "Stiffness"
+          },
+          "length": {
+            "value": 1,
+            "unit": "m",
+            "label": "Belt Length"
+          },
+          "area": {
+            "value": 0.001,
+            "unit": "m2",
+            "label": "Section Area"
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Physical"
           },
           {
             "id": "e",
             "pos": "right",
-            "label": "E"
+            "label": "E",
+            "domain": "Physical"
           }
         ],
         "equation": "Belt-Cable End governing physical equation",
@@ -6302,18 +6315,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "m",
             "label": "Radius"
+          },
+          "inertia": {
+            "value": 0,
+            "unit": "kg-m2",
+            "label": "Spool Inertia"
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Physical"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           }
         ],
         "equation": "Belt-Cable Spool governing physical equation",
@@ -6341,17 +6361,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Physical"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Physical"
           }
         ],
         "equation": "Pulley governing physical equation",

@@ -1130,28 +1130,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates coordinated firing pulses for a 12-pulse converter, consisting of delta and wye connected bridges with a 30-degree phase shift.'
   },
   belt_properties: {
-    equations: ['E = youngs', 'rho = density'],
+    equations: ['rho = density', 'E = youngs', 'publish(belt_density, belt_youngs)'],
     latex: ['E, \rho = \\text{const}'],
-    across: 'None', through: 'None',
-    description: 'Defines the material and physical properties for a connected belt or cable network, such as elasticity and linear mass density.'
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into wired (P port) or model-wide belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
   },
   belt_end: {
-    equations: ['F = k * x', 'v = dx/dt'],
+    equations: ['F = k * x', 'dx/dt = v_r - v_e', 'k = E*A/L (material) or stiffness'],
     latex: ['F = k \Delta x'],
     across: 'Velocity (m/s)', through: 'Force (N)',
-    description: 'Models the termination point of a belt or cable, typically connected to a translational reference or load.'
+    description: 'Compliant termination of a belt/cable. Axial stiffness comes from the linked belt_properties material (k = youngs*area/length) and falls back to the fixed stiffness param when no material is available.'
   },
   belt_spool: {
-    equations: ['v = omega * R', 'T = F * R'],
+    equations: ['v = omega * R', 'T + F*R = J*dw/dt', 'J = inertia + 2*pi*rho*R^3'],
     latex: ['v = \omega R', '\\tau = F R'],
     across: 'Velocity, Ang. Vel', through: 'Force, Torque',
-    description: 'Converts between rotational and translational motion using a spool or winch mechanism. The coupling is defined by the spool radius.'
+    description: 'Converts between rotational and translational motion using a spool or winch mechanism. Torque balance includes spool inertia plus wrapped-belt inertia from the linked belt_properties density (one circumference: m = rho*2*pi*R).'
   },
   pulley: {
-    equations: ['vA = omega * R', 'vB = -omega * R', 'T = (FA - FB) * R'],
+    equations: ['vA = omega * R', 'vB = -omega * R', 'T + (FA - FB)*R = J*dw/dt'],
     latex: ['v = \pm \omega R', '\\tau = (F_A - F_B) R'],
     across: 'Velocity, Ang. Vel', through: 'Force, Torque',
-    description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel.'
+    description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel; inertia adds the wrapped-belt term from the linked belt_properties density.'
   },
   world_frame: {
     equations: ['R = Identity', 'P = [0 0 0]'],

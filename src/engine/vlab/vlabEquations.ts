@@ -33,6 +33,47 @@ const trapezoidalBackEmf = (angle: number): number => {
   return -1 + 6 * (normalized - 11 * Math.PI / 6) / Math.PI;
 };
 
+// ── Shared belt/cable helpers ──────────────────────────────────────────────
+const numParam = (v: unknown, fallback: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const positiveParam = (v: unknown, fallback: number): number => {
+  const n = numParam(v, fallback);
+  return n > 0 ? n : fallback;
+};
+
+const portIndex = (ports: string[], name: string, fallback: number): number => {
+  const idx = (ports || []).findIndex(p => (p || '').toLowerCase() === name);
+  return idx !== -1 ? idx : fallback;
+};
+
+// Belt/cable material resolution. Precedence: live ctx.parameters broadcast
+// (published by belt_properties) > assembly-injected belt_density/belt_youngs
+// > block's own density/youngs params. Returns null when no material source
+// exists so consumers keep their legacy standalone behavior.
+const resolveBeltMaterial = (
+  params: Record<string, any> | undefined,
+  ctx: EquationContext | undefined
+): { density: number; youngs: number } | null => {
+  const broadcastDensity = ctx?.parameters ? numParam(ctx.parameters['belt_density'], NaN) : NaN;
+  const broadcastYoungs = ctx?.parameters ? numParam(ctx.parameters['belt_youngs'], NaN) : NaN;
+  const injectedDensity = params ? numParam(params.belt_density, NaN) : NaN;
+  const injectedYoungs = params ? numParam(params.belt_youngs, NaN) : NaN;
+  const ownDensity = params ? numParam(params.density, NaN) : NaN;
+  const ownYoungs = params ? numParam(params.youngs, NaN) : NaN;
+  const densityRaw = Number.isFinite(broadcastDensity) ? broadcastDensity
+    : Number.isFinite(injectedDensity) ? injectedDensity : ownDensity;
+  const youngsRaw = Number.isFinite(broadcastYoungs) ? broadcastYoungs
+    : Number.isFinite(injectedYoungs) ? injectedYoungs : ownYoungs;
+  if (!Number.isFinite(densityRaw) && !Number.isFinite(youngsRaw)) return null;
+  return {
+    density: Math.max(0, Number.isFinite(densityRaw) ? densityRaw : 1.1),
+    youngs: Number.isFinite(youngsRaw) && (youngsRaw as number) > 0 ? (youngsRaw as number) : 1e9,
+  };
+};
+
 export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── ELECTRICAL DOMAIN ──────────────────────────────────────────────────────
   ground: () => [],
@@ -2533,26 +2574,81 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  belt_properties: () => [],
-  belt_end: ({ branch }) => [branch[0] - 0],
+  // ── BELT & CABLE MATERIAL ────────────────────────────────────────────────
+  // belt_properties is a property-link block: it contributes no DAE residuals
+  // itself, but publishes density/youngs so belt/cable parts absorb them into
+  // stiffness (k = E*A/L), wrapped-belt inertia (J = 2*pi*rho*R^3) and tension.
+  // Propagation has two layers: DAEAssembler injects belt_density/belt_youngs
+  // into consumer params at assembly time (wired P port wins, else model-wide),
+  // and this factory mirrors them onto ctx.parameters (grid_freq precedent)
+  // for live evaluation paths.
+  belt_properties: ({ params, ctx, nodeId }) => {
+    const num = (v: unknown, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const density = Math.max(0, num(params?.density, 1.1));
+    const youngsRaw = num(params?.youngs, 1e9);
+    const youngs = youngsRaw > 0 ? youngsRaw : 1e9;
+    if (ctx?.parameters) {
+      ctx.parameters['belt_density'] = density;
+      ctx.parameters['belt_youngs'] = youngs;
+      if (nodeId) {
+        ctx.parameters[`belt_density@${nodeId}`] = density;
+        ctx.parameters[`belt_youngs@${nodeId}`] = youngs;
+      }
+    }
+    return [];
+  },
 
-  belt_spool: ({ across, branch, params }) => {
-    const R = params.radius || 0.1;
-    const w = across[0];
-    const v = across[1];
+  belt_end: ({ across, branch, state, dState, params, ctx, ports = [] }) => {
+    const mat = resolveBeltMaterial(params, ctx);
+    const len = positiveParam(params?.length, 1.0);
+    const area = positiveParam(params?.area, 1e-3);
+    // Axial stiffness from material (k = E*A/L); legacy fixed stiffness param
+    // when no belt_properties material is available.
+    const k = mat ? (mat.youngs * area) / len : positiveParam(params?.stiffness, 1e6);
+    const rIdx = portIndex(ports, 'r', 0);
+    const eIdx = portIndex(ports, 'e', 1);
+    const v = (across[rIdx] || 0) - (across[eIdx] || 0);
+    const x = state[0] || 0;
     return [
-      v - w * R,
-      branch[0] + branch[1] * R
+      branch[0] - k * x,
+      dState[0] - v
     ];
   },
 
-  pulley: ({ across, branch, params }) => {
-    const ratio = params.ratio || 1.0;
-    const w1 = across[0];
-    const w2 = across[1];
+  belt_spool: ({ across, dAcross, branch, params, ctx, ports = [] }) => {
+    const R = positiveParam(params?.radius, 0.1);
+    const mat = resolveBeltMaterial(params, ctx);
+    const rIdx = portIndex(ports, 'r', 0);
+    const aIdx = portIndex(ports, 'a', 1);
+    const w = across[rIdx] || 0;
+    const v = across[aIdx] || 0;
+    // Spool inertia + wrapped-belt inertia (one circumference: m = rho*2*pi*R).
+    const J = Math.max(0, numParam(params?.inertia, 0)) + (mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
+    const dw = (dAcross[rIdx] || 0);
     return [
-      w2 - w1 * ratio,
-      branch[0] + branch[1] * ratio
+      v - w * R,
+      branch[0] + branch[1] * R - J * dw
+    ];
+  },
+
+  pulley: ({ across, dAcross, branch, params, ctx, ports = [] }) => {
+    const R = positiveParam(params?.radius, 0.1);
+    const mat = resolveBeltMaterial(params, ctx);
+    const rIdx = portIndex(ports, 'r', 0);
+    const aIdx = portIndex(ports, 'a', 1);
+    const bIdx = portIndex(ports, 'b', 2);
+    const w = across[rIdx] || 0;
+    const vA = across[aIdx] || 0;
+    const vB = across[bIdx] || 0;
+    const J = Math.max(0, numParam(params?.inertia, 0.01)) + (mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
+    const dw = (dAcross[rIdx] || 0);
+    return [
+      vA - w * R,
+      vB + w * R,
+      branch[0] + (branch[1] - branch[2]) * R - J * dw
     ];
   },
 

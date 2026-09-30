@@ -507,6 +507,24 @@ export class DAEAssembler {
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
           states.push('x');
           break;
+        case 'belt_properties':
+          // Property link block: no DAE branches or states. Its density/youngs
+          // are injected into belt consumer params (see injectBeltMaterial) and
+          // broadcast via ctx.parameters by its equation factory.
+          break;
+        case 'belt_end':
+          branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'e', sign: 1 }] });
+          states.push('x');
+          break;
+        case 'belt_spool':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          branches.push({ name: 'force', ports: [{ id: 'a', sign: -1 }] });
+          break;
+        case 'pulley':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          branches.push({ name: 'force_a', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'force_b', ports: [{ id: 'b', sign: -1 }] });
+          break;
         case 'trans_motion_sensor':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
           branches.push({ name: 'signal_v', ports: [{ id: 'v', sign: 1 }] });
@@ -693,11 +711,49 @@ export class DAEAssembler {
       return { branches, states };
     };
 
+    // Belt/Cable material sources: collect belt_properties blocks so their
+    // density/youngs can be injected into belt consumer params below.
+    // A consumer wired (via the P property-link port) to a properties block
+    // inherits that block; otherwise the single model-wide block applies.
+    const BELT_CONSUMER_TYPES = new Set(['belt_end', 'belt_spool', 'pulley']);
+    const unwrapNodeParam = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+    const toFiniteNumber = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+    const beltMaterialSources: { nodeId: string; root: string; density: number; youngs: number }[] = [];
+    nodes.forEach(node => {
+      const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+      if (type !== 'belt_properties') return;
+      const p = (node.data as any)?.params || {};
+      const density = toFiniteNumber(unwrapNodeParam(p.density)) ?? 1.1;
+      const youngs = toFiniteNumber(unwrapNodeParam(p.youngs)) ?? 1e9;
+      beltMaterialSources.push({
+        nodeId: node.id,
+        root: uf.find(`${node.id}_p`),
+        density: Math.max(0, density),
+        youngs: youngs > 0 ? youngs : 1e9,
+      });
+    });
+    const warnedAmbiguousBeltProps = new Set<string>();
+    const injectBeltMaterial = (nodeId: string, blockType: string, ports: string[], params: Record<string, any>) => {
+      if (!BELT_CONSUMER_TYPES.has(blockType) || beltMaterialSources.length === 0) return;
+      const roots = new Set(ports.map(portId => uf.find(`${nodeId}_${portId}`)));
+      const wired = beltMaterialSources.filter(s => roots.has(s.root));
+      let src = wired[0];
+      if (!src) {
+        if (beltMaterialSources.length > 1 && !warnedAmbiguousBeltProps.has(nodeId)) {
+          warnedAmbiguousBeltProps.add(nodeId);
+          console.warn(`Multiple belt_properties blocks found; "${nodeId}" (${blockType}) inherits belt material from "${beltMaterialSources[0].nodeId}". Wire its P port for explicit scoping.`);
+        }
+        src = beltMaterialSources[0];
+      }
+      params.belt_density = src.density;
+      params.belt_youngs = src.youngs;
+      params.belt_properties_source = src.nodeId;
+    };
+
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       const ports = nodePorts.get(node.id) || [];
       const spec = getComponentSpec(node.id, type, ports);
-      
       const branchIndices: number[] = [];
       const stateIndices: number[] = [];
       
@@ -737,6 +793,9 @@ export class DAEAssembler {
           }
         });
       }
+
+      // Inject belt/cable material (density, youngs) from belt_properties blocks
+      injectBeltMaterial(node.id, type, ports, params);
 
       // Look up equation factory
       const equationFactory = blockEquations[type];
