@@ -222,6 +222,182 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
     const resCoupled = system.residuals(x, dx, ctx);
     expect(resCoupled[fVarIdx]).toBeCloseTo(75.0 - 120.0);
   });
+
+  it('changing Young modulus alters calculated belt stiffness and force', () => {
+    const runBeltSystem = (youngs: number) => {
+      const assembler = new DAEAssembler();
+      const nodes = [
+        {
+          id: 'bp',
+          type: 'default',
+          position: { x: 0, y: 0 },
+          data: {
+            type: 'belt_properties',
+            params: { density: 1.0, youngs },
+            ports: [{ id: 'p' }]
+          }
+        },
+        {
+          id: 'be',
+          type: 'default',
+          position: { x: 100, y: 0 },
+          data: {
+            type: 'belt_end',
+            params: { stiffness: 1e5, length: 1.0, area: 1e-4 },
+            ports: [{ id: 'r' }, { id: 'e' }, { id: 'p' }, { id: 'f' }]
+          }
+        },
+        {
+          id: 'scope',
+          type: 'default',
+          position: { x: 200, y: 0 },
+          data: {
+            type: 'scope',
+            params: {},
+            ports: [{ id: 'in' }]
+          }
+        }
+      ];
+
+      const edges = [
+        { id: 'e1', source: 'bp', target: 'be', sourceHandle: 'p', targetHandle: 'p' },
+        { id: 'e2', source: 'be', target: 'scope', sourceHandle: 'f', targetHandle: 'in' }
+      ];
+
+      const sys = assembler.assemble(nodes as any, edges as any);
+      return { sys, beParams: (nodes[1].data as any).params };
+    };
+
+    const simSteel = runBeltSystem(2e11); // Steel: 200 GPa
+    const simRubber = runBeltSystem(1e8);  // Rubber: 100 MPa
+
+    expect(simSteel.beParams.belt_youngs).toBe(2e11);
+    expect(simRubber.beParams.belt_youngs).toBe(1e8);
+
+    // Dynamic ratio of stiffness: (2e11 * 1e-4 / 1) / (1e8 * 1e-4 / 1) = 2000
+    expect(simSteel.beParams.belt_youngs / simRubber.beParams.belt_youngs).toBe(2000);
+
+    // Verify equation residual calculation with elongation x = 0.01m
+    // For steel: F = 2e11 * 1e-4 / 1 * 0.01 = 200,000 N
+    // For rubber: F = 1e8 * 1e-4 / 1 * 0.01 = 100 N
+    const ctx = {
+      dt: 0.001,
+      time: 0,
+      parameters: {},
+      prevStates: [],
+      prevPrevStates: [],
+      prevDt: 0.001,
+      order: 1,
+      states: [],
+      stateDerivatives: []
+    };
+
+    const evalSystem = (sysInfo: ReturnType<typeof runBeltSystem>, testForce: number) => {
+      const sys = sysInfo.sys;
+      const x = Array(sys.systemSize).fill(0);
+      const dx = Array(sys.systemSize).fill(0);
+      const forceIdx = sys.variableNames.indexOf('be_branch_force');
+      const stateIdx = sys.variableNames.indexOf('be_state_x');
+      x[forceIdx] = testForce;
+      x[stateIdx] = 0.01; // 0.01 m elongation
+      const r = sys.residuals(x, dx, ctx);
+      return r[forceIdx]; // residual = branch[0] - k * x
+    };
+
+    // At correct force, residual must be 0
+    expect(evalSystem(simSteel, 200000)).toBeCloseTo(0);
+    expect(evalSystem(simRubber, 100)).toBeCloseTo(0);
+  });
+
+  it('changing linear density alters calculated pulley wrapped-belt inertia and torque', () => {
+    const runPulleySystem = (density: number) => {
+      const assembler = new DAEAssembler();
+      const nodes = [
+        {
+          id: 'bp',
+          type: 'default',
+          position: { x: 0, y: 0 },
+          data: {
+            type: 'belt_properties',
+            params: { density, youngs: 1e9 },
+            ports: [{ id: 'p' }]
+          }
+        },
+        {
+          id: 'pulley',
+          type: 'default',
+          position: { x: 100, y: 0 },
+          data: {
+            type: 'pulley',
+            params: { radius: 0.2, inertia: 0 }, // pure belt inertia test
+            ports: [{ id: 'r' }, { id: 'a' }, { id: 'b' }, { id: 'p' }, { id: 't' }]
+          }
+        },
+        {
+          id: 'scope',
+          type: 'default',
+          position: { x: 200, y: 0 },
+          data: {
+            type: 'scope',
+            params: {},
+            ports: [{ id: 'in' }]
+          }
+        }
+      ];
+
+      const edges = [
+        { id: 'e1', source: 'bp', target: 'pulley', sourceHandle: 'p', targetHandle: 'p' },
+        { id: 'e2', source: 'pulley', target: 'scope', sourceHandle: 't', targetHandle: 'in' }
+      ];
+
+      const sys = assembler.assemble(nodes as any, edges as any);
+      return { sys, pParams: (nodes[1].data as any).params };
+    };
+
+    const sysHeavy = runPulleySystem(5.0); // 5.0 kg/m
+    const sysLight = runPulleySystem(0.5); // 0.5 kg/m
+
+    expect(sysHeavy.pParams.belt_density).toBe(5.0);
+    expect(sysLight.pParams.belt_density).toBe(0.5);
+    expect(sysHeavy.pParams.belt_density / sysLight.pParams.belt_density).toBe(10);
+
+    // Wrapped-belt inertia: J = 2 * pi * rho * R^3
+    // For R = 0.2: R^3 = 0.008
+    // J_heavy = 2 * pi * 5 * 0.008 = 0.08 * pi
+    // J_light = 2 * pi * 0.5 * 0.008 = 0.008 * pi
+    const ctx = {
+      dt: 0.001,
+      time: 0,
+      parameters: {},
+      prevStates: [],
+      prevPrevStates: [],
+      prevDt: 0.001,
+      order: 1,
+      states: [],
+      stateDerivatives: []
+    };
+
+    const evalTorqueResidual = (sysInfo: ReturnType<typeof runPulleySystem>, appliedTorque: number) => {
+      const sys = sysInfo.sys;
+      const x = Array(sys.systemSize).fill(0);
+      const dx = Array(sys.systemSize).fill(0);
+      const torqueIdx = sys.variableNames.indexOf('pulley_branch_torque');
+      x[torqueIdx] = appliedTorque;
+      // dw/dt = 10 rad/s^2 on shaft across variable
+      // Find across variable for shaft port 'r'
+      const acrossRIdx = 0; // Across_pulley_r
+      dx[acrossRIdx] = 10.0;
+      const r = sys.residuals(x, dx, ctx);
+      // Residual is: branch[0] + (FA - FB)*R - J*dw
+      return r[torqueIdx];
+    };
+
+    const expectedTorqueHeavy = (2 * Math.PI * 5.0 * (0.2 ** 3)) * 10.0;
+    const expectedTorqueLight = (2 * Math.PI * 0.5 * (0.2 ** 3)) * 10.0;
+
+    expect(evalTorqueResidual(sysHeavy, expectedTorqueHeavy)).toBeCloseTo(0);
+    expect(evalTorqueResidual(sysLight, expectedTorqueLight)).toBeCloseTo(0);
+  });
 });
 
 
