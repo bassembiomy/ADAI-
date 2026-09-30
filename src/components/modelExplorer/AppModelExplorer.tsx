@@ -2,6 +2,7 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import type {
   ModelTreeNode,
   ModelExplorerCommand,
+  ModelExplorerAdapter,
   ExplorerCapability,
   ExplorerImpact,
   ExplorerClipboardPayload,
@@ -44,6 +45,7 @@ import {
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
+import { resolveDiagramSemanticOwner } from '../../features/modelExplorer/diagramTreeContext';
 import { getDiagramKindLabel, getElementKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
 import { resolveActiveSysmlDiagramTarget } from '../../services/sysmlDiagramTarget';
 
@@ -119,6 +121,24 @@ export function resolveCapabilityOwnerId(node: ModelTreeNode, diagramKind?: stri
     return node.ownerSemanticId ?? 'model';
   }
   return node.semanticId;
+}
+
+/**
+ * Resolves where a capability executed from `node` must create its element.
+ * A diagram row is a viewpoint, so creation is redirected to the legal
+ * semantic owner of the diagram and the diagram is only recorded as the
+ * presentation target of whatever gets created.
+ */
+export function resolveCreationContext(
+  node: ModelTreeNode,
+  sysml: SysmlRepository,
+  stateMachine: StateMachineExplorerSnapshot,
+): { ownerId: string; diagramId?: string } {
+  if (node.kind !== 'diagram') return { ownerId: resolveCapabilityOwnerId(node) };
+  return {
+    ownerId: resolveDiagramSemanticOwner(node, sysml, stateMachine),
+    diagramId: node.semanticId,
+  };
 }
 
 export function capabilitiesForExplorerNode(
@@ -399,38 +419,29 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     onUpdateJunctions,
   ]);
 
+  // One repository instance backs the adapter, the tree projection, and
+  // diagram-context creation resolution so all three agree on element identity.
+  const sysmlRepository = useMemo<SysmlRepository>(() => {
+    if (canonicalSysmlRepository) return canonicalSysmlRepository;
+    const repository = createEmptyRepository();
+    for (const block of blocks) {
+      repository.definitions[block.id] = {
+        id: block.id, name: block.name, namespace: ['model'], ownerId: 'model', kind: 'block',
+        isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+      };
+    }
+    for (const part of parts) {
+      repository.usages[part.id] = {
+        id: part.id, name: part.name, ownerId: part.blockId || 'model', kind: 'part', typeId: part.typeId || '',
+        aggregation: 'composite', multiplicity: parseMultiplicity(part.multiplicity || '1'),
+      };
+    }
+    return repository;
+  }, [canonicalSysmlRepository, blocks, parts]);
+
   // SysML adapter
   const sysmlAdapter = useMemo(() => {
-    let repo = canonicalSysmlRepository;
-    if (!repo) {
-      repo = createEmptyRepository();
-      for (const block of blocks) {
-        repo.definitions[block.id] = {
-          id: block.id,
-          name: block.name,
-          namespace: ['model'],
-          ownerId: 'model',
-          kind: 'block',
-          isAbstract: false,
-          isLeaf: false,
-          properties: [],
-          ports: [],
-          operations: [],
-          constraints: [],
-        };
-      }
-      for (const part of parts) {
-        repo.usages[part.id] = {
-          id: part.id,
-          name: part.name,
-          ownerId: part.blockId || 'model',
-          kind: 'part',
-          typeId: part.typeId || '',
-          aggregation: 'composite',
-          multiplicity: parseMultiplicity(part.multiplicity || '1'),
-        };
-      }
-    }
+    const repo = sysmlRepository;
 
     const state: SysmlGatewayState = {
       repository: repo,
@@ -464,34 +475,25 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return result;
       },
     });
-  }, [canonicalSysmlRepository, blocks, parts, diagramPresentations, onExecuteSysmlCommand]);
+  }, [sysmlRepository, diagramPresentations, onExecuteSysmlCommand]);
 
   const activeAdapter = isStateMachine ? smAdapter : sysmlAdapter;
 
+  const stateMachineSnapshot = useMemo<StateMachineExplorerSnapshot>(
+    () => ({ states, layers, transitions, junctions, diagrams: diagrams ?? [], revision: smAdapter.getRevision() }),
+    [states, layers, transitions, junctions, diagrams, smAdapter],
+  );
+
   // Project tree
   const projection = useMemo(() => {
-    const repository = canonicalSysmlRepository ?? createEmptyRepository();
-    if (!canonicalSysmlRepository) {
-      for (const block of blocks) {
-        repository.definitions[block.id] = {
-          id: block.id, name: block.name, namespace: ['model'], ownerId: 'model', kind: 'block',
-          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
-        };
-      }
-      for (const part of parts) {
-        repository.usages[part.id] = {
-          id: part.id, name: part.name, ownerId: part.blockId || 'model', kind: 'part', typeId: part.typeId || '',
-          aggregation: 'composite', multiplicity: parseMultiplicity(part.multiplicity || '1'),
-        };
-      }
-    }
     return buildUnifiedModelProjection({
-      sysml: repository,
-      stateMachine: { states, layers, transitions, junctions, diagrams: diagrams ?? [], revision: smAdapter.getRevision() },
+      sysml: sysmlRepository,
+      stateMachine: stateMachineSnapshot,
       externalModels,
       revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision()),
+      diagramPresentations,
     });
-  }, [blocks, canonicalSysmlRepository, diagrams, externalModels, junctions, layers, parts, smAdapter, states, sysmlAdapter, transitions]);
+  }, [diagramPresentations, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository]);
 
   const selectedNodeIds = useMemo(() => {
     const set = new Set<string>();
@@ -532,12 +534,31 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     [onDoubleClick]
   );
 
+  /**
+   * Records a freshly created element on the diagram the command was issued
+   * from. State-machine diagrams derive membership from the region a state is
+   * created in, so only SysML diagrams need an explicit presentation command.
+   */
+  const presentCreatedElement = useCallback(
+    (adapter: ModelExplorerAdapter, diagramId: string | undefined, creation: ExplorerCommandResult) => {
+      if (!diagramId || adapter.domain !== 'sysml') return;
+      if (!creation.committed || !creation.selectedIds?.length) return;
+      const presentationCommand: ModelExplorerCommand = {
+        type: 'addToDiagram',
+        diagramId,
+        elementIds: creation.selectedIds,
+      };
+      acceptResult(createModelExplorerCommandBus(adapter).dispatch(presentationCommand), presentationCommand);
+    },
+    [acceptResult],
+  );
+
   const handleExecuteCapability = useCallback(
     (capability: ExplorerCapability, node: ModelTreeNode) => {
-      const capabilityOwnerId = resolveCapabilityOwnerId(
-        node,
-        capability.kind === 'createDiagram' ? capability.elementKind : undefined,
-      );
+      // A diagram row offers the capabilities of the element that legally owns
+      // what it presents; the diagram itself is never a semantic owner.
+      const creationContext = resolveCreationContext(node, sysmlRepository, stateMachineSnapshot);
+      const capabilityOwnerId = creationContext.ownerId;
       // Behavior-pillar nodes carry domain 'project', so domain routing alone
       // would send State Machine diagrams to the SysML store. Route by diagram
       // kind so stateMachine creation always reaches the SM adapter/store.
@@ -558,6 +579,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           setPendingType({ command, selection: res.typeSelection });
         } else {
           acceptResult(res, command);
+          presentCreatedElement(nodeAdapter, creationContext.diagramId, res);
         }
         return;
       }
@@ -718,6 +740,9 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       smAdapter,
       states,
       sysmlAdapter,
+      sysmlRepository,
+      stateMachineSnapshot,
+      presentCreatedElement,
       transitions,
       clipboardPayload,
       acceptResult,
@@ -789,7 +814,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
               capabilitiesForExplorerNode(
                 node,
                 (domain === 'stateMachine' ? smAdapter : sysmlAdapter)
-                  .capabilities([resolveCapabilityOwnerId(node)], activeDiagramId, { includeAllTypes: true }),
+                  .capabilities([resolveCreationContext(node, sysmlRepository, stateMachineSnapshot).ownerId], activeDiagramId, { includeAllTypes: true }),
               )
             ),
             clipboardPayload,

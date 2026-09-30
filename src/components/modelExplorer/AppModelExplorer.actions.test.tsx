@@ -2,10 +2,10 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createEmptyRepository, type BlockDefinition } from '../../engine/sysml/model';
+import { createEmptyRepository, type BlockDefinition, type SysmlRepository } from '../../engine/sysml/model';
 import { createSysmlGatewayState, executeSysmlCommand, type SysmlEditorCommand } from '../../services/sysmlCommandGateway';
 import type { CapabilityKind, ExplorerCapability, ModelTreeNode } from '../../features/modelExplorer/modelExplorerTypes';
-import { AppModelExplorer, capabilityToAction, explorerAdapterDomain, filterNonCreatingCapabilities, gateClipboardCapabilities, type CapabilityActionContext } from './AppModelExplorer';
+import { AppModelExplorer, capabilityToAction, explorerAdapterDomain, filterNonCreatingCapabilities, gateClipboardCapabilities, resolveCreationContext, type CapabilityActionContext } from './AppModelExplorer';
 
 afterEach(cleanup);
 
@@ -421,5 +421,215 @@ describe('AppModelExplorer Capability Coverage', () => {
       expect.objectContaining({ committed: true }),
       expect.objectContaining({ type: 'createDiagram', ownerId: 'root' }),
     );
+  });
+});
+
+describe('AppModelExplorer diagram-context creation', () => {
+  function diagramNode(id: string, domain: 'sysml' | 'stateMachine' = 'sysml'): ModelTreeNode {
+    return {
+      nodeId: domain === 'sysml' ? `sysml:element:${id}` : `sm:diagram:${id}`,
+      semanticId: id,
+      domain,
+      kind: 'diagram',
+      label: id,
+      parentNodeId: domain === 'sysml' ? 'project:pillar:structural' : 'project:pillar:behavior',
+      childNodeIds: [],
+      hasChildren: false,
+    };
+  }
+
+  function repositoryWithDiagrams(): SysmlRepository {
+    const repository = createEmptyRepository();
+    repository.definitions['block-1'] = {
+      id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.diagrams['bdd-1'] = {
+      id: 'bdd-1', name: 'Engine BDD', namespace: ['model'], ownerId: 'model', kind: 'diagram', diagramKind: 'bdd',
+    };
+    repository.diagrams['req-diagram-1'] = {
+      id: 'req-diagram-1', name: 'Safety Requirements', namespace: ['model'], ownerId: 'model',
+      kind: 'diagram', diagramKind: 'requirements',
+    };
+    // The canonical SysML domain accepts a parametric DiagramKind; the legacy V3
+    // record type is narrower than the domain it serializes.
+    repository.diagrams['parametric-1'] = {
+      id: 'parametric-1', name: 'Engine Parametric', namespace: ['model'], ownerId: 'block-1',
+      kind: 'diagram', diagramKind: 'parametric',
+    } as unknown as SysmlRepository['diagrams'][string];
+    return repository;
+  }
+
+  function stateMachineWithDiagram() {
+    return {
+      states: [],
+      layers: [{ id: 'root', name: 'Root Region', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }],
+      transitions: [],
+      junctions: [],
+      diagrams: [{ id: 'nested-sm-1', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }],
+      revision: 1,
+    };
+  }
+
+  it('resolves diagram rows to a legal semantic owner plus the initiating diagram', () => {
+    const repository = repositoryWithDiagrams();
+    const stateMachine = stateMachineWithDiagram();
+
+    expect(resolveCreationContext(diagramNode('bdd-1'), repository, stateMachine))
+      .toEqual({ ownerId: 'model', diagramId: 'bdd-1' });
+    expect(resolveCreationContext(diagramNode('req-diagram-1'), repository, stateMachine))
+      .toEqual({ ownerId: 'model', diagramId: 'req-diagram-1' });
+    expect(resolveCreationContext(diagramNode('parametric-1'), repository, stateMachine))
+      .toEqual({ ownerId: 'block-1', diagramId: 'parametric-1' });
+    expect(resolveCreationContext(diagramNode('nested-sm-1', 'stateMachine'), repository, stateMachine))
+      .toEqual({ ownerId: 'region-1', diagramId: 'nested-sm-1' });
+    // Non-diagram rows keep their own semantic identity and initiate no presentation.
+    expect(resolveCreationContext({ ...diagramNode('block-1'), kind: 'block' }, repository, stateMachine))
+      .toEqual({ ownerId: 'block-1' });
+  });
+
+  it('creates a model-owned Block from a BDD diagram row and presents it on that diagram', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+    const repository = repositoryWithDiagrams();
+    const calls: SysmlEditorCommand[] = [];
+    let gateway = createSysmlGatewayState(repository);
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="bdd"
+        states={[]}
+        layers={[]}
+        transitions={[]}
+        junctions={[]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        canonicalSysmlRepository={repository}
+        onSelect={vi.fn()}
+        onDoubleClick={vi.fn()}
+        onExecuteSysmlCommand={(cmd) => {
+          calls.push(cmd);
+          const result = executeSysmlCommand(gateway, cmd);
+          if (result.committed) {
+            gateway = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
+          }
+          return result;
+        }}
+      />
+    );
+
+    const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:bdd-1"]');
+    expect(row).not.toBeNull();
+    fireEvent.contextMenu(row!);
+    fireEvent.click(screen.getAllByRole('menuitem', { name: /^Block$/ })[0]);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      type: 'createElement',
+      element: { kind: 'block', ownerId: 'model' },
+    });
+    expect(calls[1]).toMatchObject({
+      type: 'addToDiagram',
+      diagramId: 'bdd-1',
+      elementIds: [expect.any(String)],
+    });
+    const createdBlockId = (calls[1] as Extract<SysmlEditorCommand, { type: 'addToDiagram' }>).elementIds[0];
+    expect(gateway.repository.definitions[createdBlockId]).toMatchObject({ kind: 'block', ownerId: 'model' });
+    expect(gateway.diagramPresentations['bdd-1'].elementIds).toContain(createdBlockId);
+  });
+
+  it('creates a model-owned Requirement from a requirements diagram row and presents it', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+    const repository = repositoryWithDiagrams();
+    const calls: SysmlEditorCommand[] = [];
+    let gateway = createSysmlGatewayState(repository);
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="requirements"
+        states={[]}
+        layers={[]}
+        transitions={[]}
+        junctions={[]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        canonicalSysmlRepository={repository}
+        onSelect={vi.fn()}
+        onDoubleClick={vi.fn()}
+        onExecuteSysmlCommand={(cmd) => {
+          calls.push(cmd);
+          const result = executeSysmlCommand(gateway, cmd);
+          if (result.committed) {
+            gateway = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
+          }
+          return result;
+        }}
+      />
+    );
+
+    const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:req-diagram-1"]');
+    expect(row).not.toBeNull();
+    fireEvent.contextMenu(row!);
+    fireEvent.click(screen.getAllByRole('menuitem', { name: /^Requirement$/ })[0]);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      type: 'createElement',
+      element: { kind: 'requirement', ownerId: 'model' },
+    });
+    expect(calls[1]).toMatchObject({
+      type: 'addToDiagram',
+      diagramId: 'req-diagram-1',
+      elementIds: [expect.any(String)],
+    });
+  });
+
+  it('creates a state from a state-machine diagram row inside the region that diagram renders', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+    const onCommit = vi.fn();
+    const onExecute = vi.fn();
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="statemachine"
+        states={[
+          {
+            id: 's1', name: 'S1', x: 0, y: 0, width: 1, height: 1, entry: '', during: '', exit: '',
+            isActive: false, color: '#000', parentId: 'root', children: ['region-1'], priority: 0,
+            isParallel: false, regionId: 'root', autostart: false,
+          },
+        ]}
+        layers={[
+          { id: 'root', name: 'Root Region', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] },
+          { id: 'region-1', name: 'Region 1', parentStateId: 's1', stateIds: [], transitionIds: [], junctionIds: [] },
+        ]}
+        transitions={[]}
+        junctions={[]}
+        diagrams={[{ id: 'nested-sm-1', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        onSelect={vi.fn()}
+        onDoubleClick={vi.fn()}
+        onCommitStateMachineSnapshot={onCommit}
+        onExecuteSysmlCommand={onExecute}
+      />
+    );
+
+    // Expand the composite state so its region (expanded by default) reveals the
+    // nested diagram row.
+    fireEvent.doubleClick(container.querySelector('.model-tree-row[data-node-id="sm:state:s1"]')!);
+    const row = container.querySelector('.model-tree-row[data-node-id="sm:diagram:nested-sm-1"]');
+    expect(row).not.toBeNull();
+
+    fireEvent.contextMenu(row!);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^State$/ }));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0];
+    const created = committed.states.find((state: { id: string }) => state.id !== 's1');
+    expect(created).toMatchObject({ parentId: 'region-1', regionId: 'region-1' });
+    expect(committed.layers.find((layer: { id: string }) => layer.id === 'region-1').stateIds).toContain(created.id);
+    // State-machine diagram membership is derived from the region, so no
+    // SysML presentation command may be issued.
+    expect(onExecute).not.toHaveBeenCalled();
   });
 });
