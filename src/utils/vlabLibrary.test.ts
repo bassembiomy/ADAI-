@@ -135,4 +135,19 @@ describe('VLab Library Search & Scoring', () => {
     expect(block?.params.output_frequency_hz).toEqual({ value: 50, unit: 'Hz', label: 'Output Frequency' });
     expect(block?.params.neutral_balance_gain).toEqual({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
   });
+
+  it('exposes physical Vienna Rectifier PWM inputs and scalar outputs', () => {
+    const block = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(item => item.id === 'pwm_vienna');
+    expect(block).toBeDefined();
+    expect(block?.ports.map(port => port.id)).toEqual([
+      'va', 'vb', 'vc', 'ia', 'ib', 'ic', 'vdc', 'vneut',
+      'ga', 'gb', 'gc', 'ma', 'mb', 'mc'
+    ]);
+    expect(block?.ports.every(port => port.domain === 'Physical')).toBe(true);
+    expect(block?.params.f_sw).toEqual({ value: 10000, unit: 'Hz', label: 'Switch Freq' });
+    expect(block?.params.vdc_ref).toEqual({ value: 800, unit: 'V', label: 'Vdc Ref' });
+    expect(block?.params.kp_v).toEqual({ value: 0.1, unit: 'A/V', label: 'Voltage Prop Gain' });
+    expect(block?.params.neutral_balance_gain).toEqual({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
+  });
 });
+

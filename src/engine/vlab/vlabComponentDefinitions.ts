@@ -1103,10 +1103,19 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Three-level PWM generator with explicit ga/gb/gc and ma/mb/mc outputs. Uses two triangular carriers at f_sw and a bounded vneut-based neutral-point correction; vabc=0 remains zero modulation.'
   },
   pwm_vienna: {
-    equations: ['g = f(Vabc, Iabc, Vdc, Neutral)'],
-    latex: ['g = \\text{Logic}(V, I, V_{dc})'],
-    across: 'None', through: 'None',
-    description: 'Specialized PWM generator for Vienna Rectifiers. Ensures sinusoidal input currents and neutral-point balance.'
+    equations: [
+      'I^* = max(0, kp_v * (vdc_ref - vdc))',
+      'Δ_neut = clamp(k_neut * v_neut / max(|vdc|, 1), -0.2, 0.2)',
+      'm_x = clamp(2*v_x/max(|vdc|, 1) + 0.05 * e_ix + Δ_neut, -1, 1)',
+      'g_x = 1 if C_tri(f_sw, t) < (1 - |m_x|) else 0'
+    ],
+    latex: [
+      'g_x \\in \\{0, 1\\}',
+      'd_x = 1 - |m_x|',
+      '\\Delta_{neut} = \\text{clamp}(k_{neut} v_{neut} / \\max(|v_{dc}|, 1), -0.2, 0.2)'
+    ],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Three-phase Vienna Rectifier PWM generator with explicit ga/gb/gc switching gates and ma/mb/mc modulation indices. Uses carrier-based PWM at f_sw, DC voltage regulation, and neutral-point midpoint balancing.'
   },
   thyristor_6pulse: {
     equations: ['Trigger if theta > alpha + phase_offset'],

@@ -1,59 +1,25 @@
-# SysML Diagram Interaction Review Repairs Implementation Plan
+# Vienna Rectifier PWM Generator Implementation Plan
 
-- [x] Task 1: Replace Caller-Asserted State Existence with Authoritative Endpoint Resolution
-  - [x] Step 1: Write failing forged-State tests
-  - [x] Step 2: Write valid external-State test
-  - [x] Step 3: Run focused tests and verify failure
-  - [x] Step 4: Implement endpoint resolution (`src/engine/sysml/semanticEndpointIndex.ts`)
-  - [x] Step 5: Pass State context through all callers
-  - [x] Step 6: Make repository validation cross-domain aware
-  - [x] Step 7: Run tests and commit
-- [x] Task 2: Introduce Atomic, Validated Owned-Feature Gateway Commands
-  - [x] Step 1: Write a failing command-shape test
-  - [x] Step 2: Write failing atomicity tests
-  - [x] Step 3: Write success/undo tests
-  - [x] Step 4: Run tests and verify failure
-  - [x] Step 5: Make builders deterministic and side-effect free
-  - [x] Step 6: Validate staged repository state before commit
-  - [x] Step 7: Ensure presentation has a real consumer
-  - [x] Step 8: Run tests, typecheck, and commit
-- [x] Task 3: Wire Property Creation Through Canvas and Model Explorer
-  - [x] Step 1: Write failing production-wiring tests
-  - [x] Step 2: Write type-selection tests
-  - [x] Step 3: Write Property relationship tests
-  - [x] Step 4: Run tests and verify failure
-  - [x] Step 5: Replace local/ad hoc Property edits
-  - [x] Step 6: Preserve explicit relationship choice
-  - [x] Step 7: Run tests and commit
-- [x] Task 4: Validate Nested Ports from Persisted Repository Structure
-  - [x] Step 1: Write failing persisted nesting test
-  - [x] Step 2: Write valid nesting tests
-  - [x] Step 3: Run focused tests and verify failure
-  - [x] Step 4: Build repository Port index
-  - [x] Step 5: Validate imported and updated Blocks before commit
-  - [x] Step 6: Run tests and commit
-- [ ] Task 5: Replace Shallow Browser Checks with Behavioral Workflows
-  - [ ] Step 1: Replace Port existence check
-  - [ ] Step 2: Replace IBD navigation check
-  - [ ] Step 3: Add complete Property workflow
-  - [ ] Step 4: Add TestCase behavior
-  - [ ] Step 5: Make Satisfy assertions mandatory
-  - [ ] Step 6: Cover Package activation zero/one/many cases
-  - [ ] Step 7: Run browser suite repeatedly
-  - [ ] Step 8: Commit
-- [ ] Task 6: Recalculate Compliance from Executable Evidence
-  - [ ] Step 1: Write failing false-evidence test
-  - [ ] Step 2: Define executable evidence IDs
-  - [ ] Step 3: Separate authority records
-  - [ ] Step 4: Recalculate status
-  - [ ] Step 5: Run compliance tests
-  - [ ] Step 6: Commit
-- [ ] Task 7: Final Regression and Release Review
-  - [ ] Step 1: Run TypeScript and architecture checks
-  - [ ] Step 2: Run full SysML suite
-  - [ ] Step 3: Run release and identity gates
-  - [ ] Step 4: Run performance checks in isolation
-  - [ ] Step 5: Run full browser workflows
-  - [ ] Step 6: Run code-generation isolation
-  - [ ] Step 7: Inspect final diff
-  - [ ] Step 8: Request fresh code review
+- [ ] Task 1: Library Port Definitions, Parameters, and Component Metadata
+  - [ ] Step 1: Write the failing library unit test (`src/utils/vlabLibrary.test.ts`)
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Update `vlabLibrary.ts`, `vlabComponentDefinitions.ts`, `blockDimensions.ts`, and `VLabWorkspace.tsx`
+  - [ ] Step 4: Run library tests to verify pass
+  - [ ] Step 5: Commit changes
+- [ ] Task 2: DAE Assembler Output Branch Allocation for `pwm_vienna`
+  - [ ] Step 1: Write the failing branch allocation test (`src/engine/vlab/viennaPwmModel.test.ts`)
+  - [ ] Step 2: Run test to verify it fails
+  - [ ] Step 3: Update `DAEAssembler.ts` to allocate output branches
+  - [ ] Step 4: Run test to verify it passes
+  - [ ] Step 5: Commit changes
+- [ ] Task 3: Physical Equations and Switching Logic for `pwm_vienna`
+  - [ ] Step 1: Write comprehensive failing tests for equations in `viennaPwmModel.test.ts`
+  - [ ] Step 2: Run tests to verify they fail
+  - [ ] Step 3: Implement `pwm_vienna` equation in `src/engine/vlab/vlabEquations.ts`
+  - [ ] Step 4: Run unit tests to verify they pass
+  - [ ] Step 5: Commit changes
+- [ ] Task 4: Full Suite Validation and TypeScript Check
+  - [ ] Step 1: Run all VLab tests
+  - [ ] Step 2: Run SysML and system test suite
+  - [ ] Step 3: Run TypeScript compiler validation
+  - [ ] Step 4: Commit any remaining adjustments

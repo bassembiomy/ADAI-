@@ -2564,6 +2564,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       case 'pwm_3ph_2level':
       case 'pwm_3ph_3level':
       case 'microwave_cavity':
+        return { width: 80, height: 60 };
+      case 'pwm_vienna':
+        return { width: 80, height: 120 };
       case 'lms_adaptive_filter':
         return { width: 80, height: 60 };
       case 'im_foc_ctrl':

@@ -6020,33 +6020,107 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10000,
             "unit": "Hz",
             "label": "Switch Freq"
+          },
+          "vdc_ref": {
+            "value": 800,
+            "unit": "V",
+            "label": "Vdc Ref"
+          },
+          "kp_v": {
+            "value": 0.1,
+            "unit": "A/V",
+            "label": "Voltage Prop Gain"
+          },
+          "neutral_balance_gain": {
+            "value": 0.1,
+            "unit": "1/V",
+            "label": "Neutral Balance Gain"
           }
         },
         "ports": [
           {
-            "id": "vabc",
+            "id": "va",
             "pos": "left",
-            "label": "Vabc"
+            "label": "Va",
+            "domain": "Physical"
           },
           {
-            "id": "iabc",
+            "id": "vb",
             "pos": "left",
-            "label": "Iabc"
+            "label": "Vb",
+            "domain": "Physical"
+          },
+          {
+            "id": "vc",
+            "pos": "left",
+            "label": "Vc",
+            "domain": "Physical"
+          },
+          {
+            "id": "ia",
+            "pos": "left",
+            "label": "Ia",
+            "domain": "Physical"
+          },
+          {
+            "id": "ib",
+            "pos": "left",
+            "label": "Ib",
+            "domain": "Physical"
+          },
+          {
+            "id": "ic",
+            "pos": "left",
+            "label": "Ic",
+            "domain": "Physical"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical"
           },
           {
             "id": "vneut",
             "pos": "left",
-            "label": "vNeutral"
+            "label": "vNeutral",
+            "domain": "Physical"
           },
           {
-            "id": "g",
+            "id": "ga",
             "pos": "right",
-            "label": "g"
+            "label": "Gate A",
+            "domain": "Physical"
+          },
+          {
+            "id": "gb",
+            "pos": "right",
+            "label": "Gate B",
+            "domain": "Physical"
+          },
+          {
+            "id": "gc",
+            "pos": "right",
+            "label": "Gate C",
+            "domain": "Physical"
+          },
+          {
+            "id": "ma",
+            "pos": "right",
+            "label": "Mod A",
+            "domain": "Physical"
+          },
+          {
+            "id": "mb",
+            "pos": "right",
+            "label": "Mod B",
+            "domain": "Physical"
+          },
+          {
+            "id": "mc",
+            "pos": "right",
+            "label": "Mod C",
+            "domain": "Physical"
           }
         ],
         "equation": "PWM Generator (Vienna Rectifier) governing physical equation",
