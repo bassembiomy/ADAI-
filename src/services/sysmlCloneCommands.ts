@@ -19,21 +19,35 @@ function findElement(repository: SysmlRepository, id: string): SysmlElement | un
     repository.diagramReferences?.[id];
 }
 
-function uniqueName(repository: SysmlRepository, name: string): string {
-  const names = new Set(Object.values(repository.definitions).map(item => item.name));
-  if (!names.has(name)) return name;
+function uniqueName(names: Set<string>, name: string): string {
+  if (!names.has(name)) {
+    names.add(name);
+    return name;
+  }
   let suffix = 1;
   while (names.has(`${name}_${suffix}`)) suffix += 1;
-  return `${name}_${suffix}`;
+  const next = `${name}_${suffix}`;
+  names.add(next);
+  return next;
 }
 
 /** Builds a repository-first clone transaction. Unsupported/missing IDs are rejected by the gateway. */
 export function buildSysmlCloneElementsCommand(input: SysmlCloneElementsInput): SysmlEditorCommand {
   const idFactory = input.idFactory ?? (() => crypto.randomUUID());
-  const sourceElements = input.sourceIds.map(sourceId => ({ sourceId, source: findElement(input.repository, sourceId) }))
-    .filter((entry): entry is { sourceId: string; source: SysmlElement } => Boolean(entry.source));
+  const explicitSources = input.sourceIds.map(sourceId => ({ sourceId, source: findElement(input.repository, sourceId) }));
+  const missing = explicitSources.find(entry => !entry.source);
+  if (missing) throw new Error(`TYPE_NOT_FOUND: '${missing.sourceId}' cannot be copied because it does not exist.`);
+  const sourceElements = explicitSources as Array<{ sourceId: string; source: SysmlElement }>;
   const idMap = new Map(sourceElements.map(({ sourceId }) => [sourceId, idFactory()]));
-  const commands = sourceElements.flatMap(({ sourceId, source }, index) => {
+  // Relationships are derived from the selected endpoint set, rather than
+  // requiring users to select the line as well as both nodes.
+  const internalRelationships = Object.values(input.repository.relationships)
+    .filter(relation => idMap.has(relation.sourceId) && idMap.has(relation.targetId))
+    .filter(relation => !idMap.has(relation.id))
+    .map(relation => ({ sourceId: relation.id, source: relation as SysmlElement }));
+  for (const relation of internalRelationships) idMap.set(relation.sourceId, idFactory());
+  const reservedNames = new Set(Object.values(input.repository.definitions).map(item => item.name));
+  const commands = [...sourceElements, ...internalRelationships].flatMap(({ sourceId, source }, index) => {
     const cloneId = idMap.get(sourceId)!;
     // Relations only make sense when both endpoints are cloned. This matches
     // Simulink's copy behavior: external connections stay with the source.
@@ -42,7 +56,7 @@ export function buildSysmlCloneElementsCommand(input: SysmlCloneElementsInput): 
     clone.id = cloneId;
     if ('sourceId' in clone && idMap.has(clone.sourceId)) clone.sourceId = idMap.get(clone.sourceId)!;
     if ('targetId' in clone && idMap.has(clone.targetId)) clone.targetId = idMap.get(clone.targetId)!;
-    if ('name' in clone && typeof clone.name === 'string') clone.name = uniqueName(input.repository, clone.name);
+    if ('name' in clone && typeof clone.name === 'string') clone.name = uniqueName(reservedNames, clone.name);
     return [{
       type: 'createAndPresent' as const,
       element: clone,

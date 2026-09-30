@@ -11739,18 +11739,22 @@ const ADIA = () => {
             return;
           }
           const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
-          const result = handleExecuteSysmlCommand(buildSysmlCloneElementsCommand({
-            sourceIds: completedGesture.sourceIds,
-            diagramId,
-            drop: { x, y },
-            repository: canonicalSysmlRepository,
-          }));
-          if (result.committed) {
-            // Re-render from the canonical command result; do not retain the
-            // original drag selection as though it were the new copy.
-            setSelectedIds([]);
-          } else {
-            result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+          try {
+            const result = handleExecuteSysmlCommand(buildSysmlCloneElementsCommand({
+              sourceIds: completedGesture.sourceIds,
+              diagramId,
+              drop: { x, y },
+              repository: canonicalSysmlRepository,
+            }));
+            if (result.committed) {
+              // Re-render from the canonical command result; do not retain the
+              // original drag selection as though it were the new copy.
+              setSelectedIds([]);
+            } else {
+              result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+            }
+          } catch (error) {
+            addError('error', error instanceof Error ? error.message : 'Copy request was rejected.', 'SysML');
           }
         }
       }
