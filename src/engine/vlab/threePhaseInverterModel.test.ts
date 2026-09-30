@@ -30,4 +30,12 @@ describe('threePhaseInverterModel', () => {
     const p = { model_mode: 'averaged', control_mode: 'sinusoidal_modulation', output_frequency_hz: 50, output_resistance_ohm: 0.001 };
     expect(residuals(0, p).slice(1)).toEqual(residuals(0.1, p).slice(1));
   });
+
+  it('uses f_sw only in switching mode', () => {
+    const common = { control_mode: 'three_phase_modulation', output_resistance_ohm: 0.001 };
+    expect(residuals(0.00017, { ...common, model_mode: 'averaged', f_sw: 1000 }))
+      .toEqual(residuals(0.00017, { ...common, model_mode: 'averaged', f_sw: 20000 }));
+    expect(residuals(0.00017, { ...common, model_mode: 'switching', f_sw: 1000 }))
+      .not.toEqual(residuals(0.00017, { ...common, model_mode: 'switching', f_sw: 20000 }));
+  });
 });
