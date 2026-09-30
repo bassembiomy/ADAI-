@@ -1,5 +1,6 @@
 // src/components/xbridges/XbridgesWorkspace.tsx
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
 import {
   ReactFlow,
   addEdge,
@@ -1595,6 +1596,8 @@ export const XbridgesWorkspace: React.FC<{
     startNodeX: number;
     startNodeY: number;
   } | null>(null);
+  const rightCopyGestureRef = React.useRef<ReturnType<typeof beginRightDragCopy> | null>(null);
+  const pendingRightCopyNodeRef = React.useRef<string | null>(null);
   const isDraggingCopyRef = React.useRef(false);
 
   useEffect(() => {
@@ -1643,6 +1646,31 @@ export const XbridgesWorkspace: React.FC<{
       window.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [rightClickDrag, reactFlowInstance, setNodes, onSave, persistWorkspace]);
+
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      const gesture = rightCopyGestureRef.current;
+      const nodeId = pendingRightCopyNodeRef.current;
+      if (!gesture || !nodeId || rightClickDrag) return;
+      const moved = moveRightDragCopy(gesture, { clientX: event.clientX, clientY: event.clientY });
+      rightCopyGestureRef.current = moved;
+      if (moved.phase !== 'dragging') return;
+      const node = nodesRef.current.find(candidate => candidate.id === nodeId);
+      if (!node) return;
+      const newNodeId = `${node.data.type || 'block'}-${Date.now()}`;
+      setHistory(previous => [...previous.slice(-19), { nodes: nodesRef.current, edges: edgesRef.current }]);
+      setNodes(current => [...current.map(candidate => ({ ...candidate, selected: false })), {
+        ...node, id: newNodeId, selected: true,
+        data: { ...node.data, id: newNodeId, selected: true },
+      }]);
+      setSelectedNodeId(newNodeId);
+      setRightClickDrag({ clonedNodeId: newNodeId, startMouseX: event.clientX, startMouseY: event.clientY, startNodeX: node.position.x, startNodeY: node.position.y });
+    };
+    const handleUp = () => { rightCopyGestureRef.current = null; pendingRightCopyNodeRef.current = null; };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+  }, [rightClickDrag, setNodes, setSelectedNodeId]);
 
   // Select and focus programmatic node from V-Lab
   useEffect(() => {
@@ -1941,33 +1969,10 @@ export const XbridgesWorkspace: React.FC<{
       if (!node) return;
       event.preventDefault();
       event.stopPropagation();
-      saveHistory();
-      const newNodeId = `${node.data.type || 'block'}-${Date.now()}`;
-      const clonedNode: Node = {
-        ...node,
-        id: newNodeId,
-        position: {
-          x: node.position.x,
-          y: node.position.y
-        },
-        selected: true,
-        data: {
-          ...node.data,
-          id: newNodeId,
-          selected: true
-        }
-      };
-      setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), clonedNode]);
-      setSelectedNodeId(newNodeId);
-      setRightClickDrag({
-        clonedNodeId: newNodeId,
-        startMouseX: event.clientX,
-        startMouseY: event.clientY,
-        startNodeX: node.position.x,
-        startNodeY: node.position.y
-      });
+      rightCopyGestureRef.current = beginRightDragCopy({ sourceIds: [nodeId], clientX: event.clientX, clientY: event.clientY });
+      pendingRightCopyNodeRef.current = nodeId;
     }
-  }, [nodes, saveHistory, setNodes, setSelectedNodeId]);
+  }, [nodes]);
 
   // Auto-save on unmount to prevent data loss (FR-Persistence)
   React.useEffect(() => {

@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
 import {
   ReactFlow,
   Background,
@@ -1267,6 +1268,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     startNodeX: number;
     startNodeY: number;
   } | null>(null);
+  const rightCopyGestureRef = useRef<ReturnType<typeof beginRightDragCopy> | null>(null);
+  const pendingRightCopyNodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!rightClickDrag) return;
@@ -1307,37 +1310,39 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     };
   }, [rightClickDrag, reactFlowInstance, setNodes]);
 
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      const gesture = rightCopyGestureRef.current;
+      const nodeId = pendingRightCopyNodeRef.current;
+      if (!gesture || !nodeId || rightClickDrag) return;
+      const moved = moveRightDragCopy(gesture, { clientX: event.clientX, clientY: event.clientY });
+      rightCopyGestureRef.current = moved;
+      if (moved.phase !== 'dragging') return;
+      const node = nodes.find(candidate => candidate.id === nodeId);
+      if (!node) return;
+      const newNodeId = `${node.data.type}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      setHistory(history => [...history, { nodes, edges }].slice(-20));
+      setNodes(current => [...current.map(candidate => ({ ...candidate, selected: false })), {
+        ...node, id: newNodeId, selected: true,
+        data: { ...node.data, id: newNodeId, selected: true },
+      }]);
+      setSelectedNodeId(newNodeId);
+      setRightClickDrag({ clonedNodeId: newNodeId, startMouseX: event.clientX, startMouseY: event.clientY, startNodeX: node.position.x, startNodeY: node.position.y });
+    };
+    const handleUp = () => { rightCopyGestureRef.current = null; pendingRightCopyNodeRef.current = null; };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+  }, [rightClickDrag, nodes, edges, setNodes]);
+
   const handleNodeMouseDown = useCallback((event: React.MouseEvent, node: Node) => {
     if (event.button === 2) {
       event.preventDefault();
       event.stopPropagation();
-      setHistory(h => [...h, { nodes, edges }].slice(-20));
-      const newNodeId = `${node.data.type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-      const clonedNode: Node = {
-        ...node,
-        id: newNodeId,
-        position: {
-          x: node.position.x,
-          y: node.position.y
-        },
-        selected: true,
-        data: {
-          ...node.data,
-          id: newNodeId,
-          selected: true
-        }
-      };
-      setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), clonedNode]);
-      setSelectedNodeId(newNodeId);
-      setRightClickDrag({
-        clonedNodeId: newNodeId,
-        startMouseX: event.clientX,
-        startMouseY: event.clientY,
-        startNodeX: node.position.x,
-        startNodeY: node.position.y
-      });
+      rightCopyGestureRef.current = beginRightDragCopy({ sourceIds: [node.id], clientX: event.clientX, clientY: event.clientY });
+      pendingRightCopyNodeRef.current = node.id;
     }
-  }, [nodes, edges, setNodes, setSelectedNodeId]);
+  }, []);
 
   const scopeParamsRef = useRef<any>({});
   useEffect(() => {
