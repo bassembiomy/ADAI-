@@ -5850,6 +5850,16 @@ const GlobalReportPreviewModal = ({
 };
 
 
+/**
+ * Tab-strip identity for the unified workspace strip. Module workspace files
+ * (keyed by file id) and exact-ID diagram views (keyed by kind + diagram id)
+ * share one strip, so both need keys from the same namespace.
+ */
+const moduleWorkspaceTabKey = (fileId: string): string => `module:${fileId}`;
+
+const diagramWorkspaceTabKey = (tab: DiagramWorkspaceTab): string =>
+  tab.kind === 'module' ? `module:${tab.mode}` : `${tab.kind}:${tab.diagramId}`;
+
 const ADIA = () => {
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
 
@@ -6713,6 +6723,49 @@ const ADIA = () => {
     .filter((file): file is WorkspaceFile => file !== undefined)
     .filter(file => !['bdd', 'requirements', 'ibd', 'package'].includes(file.type)),
   [openTabIds, workspaceFiles]);
+
+  /**
+   * True when this exact-ID diagram view is the one the canvas renders. Diagram
+   * tabs and workspace-file tabs used to carry independent "active" signals,
+   * which left a second, stale tab highlighted beside the rendered one.
+   */
+  const isDiagramWorkspaceTabRendered = useCallback((tab: DiagramWorkspaceTab): boolean => {
+    if (tab.kind === 'stateMachineDiagram') {
+      return diagramMode === 'statemachine';
+    }
+    if (tab.kind !== 'sysmlDiagram') return false;
+    const diagramKind = canonicalSysmlRepository.diagrams[tab.diagramId]?.diagramKind;
+    if (!diagramKind || diagramKind !== diagramMode) return false;
+    const renderedDiagramId = canonicalSysmlRepository.diagrams[activeSysmlDiagramId]
+      ? activeSysmlDiagramId
+      : null;
+    return renderedDiagramId === null || renderedDiagramId === tab.diagramId;
+  }, [activeSysmlDiagramId, canonicalSysmlRepository, diagramMode]);
+
+  /**
+   * The one active tab of the unified strip: an explicitly opened diagram view
+   * wins while it is rendered, otherwise the workspace file whose canvas is
+   * showing. Falls back to the last opened diagram view so the strip never
+   * renders with no active tab at all.
+   */
+  const activeWorkspaceTab = useMemo((): { key: string; diagramView: boolean } => {
+    const activeTab = diagramWorkspace.activeTab;
+    if (activeTab && isDiagramWorkspaceTabRendered(activeTab)) {
+      return { key: diagramWorkspaceTabKey(activeTab), diagramView: true };
+    }
+    const moduleFile = moduleWorkspaceFiles.find(file => file.id === activeFileId);
+    if (moduleFile) {
+      return { key: moduleWorkspaceTabKey(moduleFile.id), diagramView: false };
+    }
+    const renderedTab = diagramWorkspace.tabs.find(isDiagramWorkspaceTabRendered);
+    if (renderedTab) {
+      return { key: diagramWorkspaceTabKey(renderedTab), diagramView: true };
+    }
+    return activeTab
+      ? { key: diagramWorkspaceTabKey(activeTab), diagramView: true }
+      : { key: '', diagramView: false };
+  }, [activeFileId, diagramWorkspace, isDiagramWorkspaceTabRendered, moduleWorkspaceFiles]);
+
   const hierarchyExternalModels = useMemo(() => workspaceFiles
     .filter(file => file.type === 'xbridges' || file.type === 'vlab')
     .map(file => ({
@@ -6933,10 +6986,14 @@ const ADIA = () => {
 
   // Switch active file function
   const switchActiveFile = useCallback((newFileId: string) => {
-    if (newFileId === activeFileId) return;
-
     const targetExists = workspaceFiles.some(file => file.id === newFileId);
     if (!targetExists) return;
+
+    // Selecting the tab that is already showing must not reload its model
+    // state. While an exact-ID diagram view is the rendered one, the workspace
+    // file underneath it is not the active tab, so selecting that file must
+    // still bring its canvas back on a single press.
+    if (newFileId === activeFileId && !activeWorkspaceTab.diagramView) return;
 
     setSelectedIds([]);
     const updatedFiles = activeFileId
@@ -6949,7 +7006,27 @@ const ADIA = () => {
     loadStateForFile(targetFile);
     setDiagramModeState(targetFile.type as DiagramMode);
     setActiveFileId(newFileId);
-  }, [activeFileId, workspaceFiles, saveCurrentFileState, loadStateForFile]);
+    // This workspace file is the rendered view now, so no diagram tab may stay
+    // highlighted beside it.
+    setDiagramWorkspace(previous => (
+      previous.activeTab === null ? previous : { ...previous, activeTab: null }
+    ));
+    // View-only guard: a block context entered from an IBD must never leak into
+    // a layer-scoped canvas as an unknown layer.
+    if (targetFile.type === 'statemachine' && !layers.some(layer => layer.id === currentLayerId)) {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath(['Root']);
+    }
+  }, [
+    activeFileId,
+    activeWorkspaceTab.diagramView,
+    currentLayerId,
+    layers,
+    loadStateForFile,
+    saveCurrentFileState,
+    workspaceFiles,
+  ]);
 
   // Create new file function
   const createNewFile = useCallback((name: string, type: string) => {
@@ -16871,7 +16948,60 @@ const ADIA = () => {
   const visibleVariables = useMemo(() => variables.filter(v => v.visibleInScope), [variables]);
   const colors = ['#f97316', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
 
+  /**
+   * Activates a hierarchy node's own view: workspace model files open their tab,
+   * exact-ID diagrams open their exact canvas, blocks enter their IBD context,
+   * and states enter their nested layer.
+   */
+  const activateHierarchyNode = (id: string, kind?: string) => {
+    const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
+    if (externalModelFile) {
+      openFileInTab(externalModelFile.id);
+    } else if (kind === 'diagram' || canonicalSysmlRepository.diagrams[id]) {
+      const targetDiagram = canonicalSysmlRepository.diagrams[id];
+      if (!targetDiagram) {
+        // State-machine (or other non-SysML) diagram node:
+        // open its exact workspace view. Unknown IDs are
+        // rejected without mutation.
+        openExactDiagramById(id);
+      } else if (targetDiagram.diagramKind === 'ibd') {
+        const ibdContextId = targetDiagram.contextElementId ?? targetDiagram.ownerId;
+        const ibdContextBlock = ibdContextId
+          ? canonicalSysmlRepository.definitions[ibdContextId]
+          : undefined;
+        if (ibdContextBlock?.kind === 'block') {
+          setCurrentLayerId(ibdContextBlock.id);
+          setLayerStack(['root']);
+          setLayerPath(['Root', ibdContextBlock.name]);
+          // IBD navigation stays Block-contextual with a
+          // return stack to its origin diagram.
+          openExactDiagramById(id, diagramMode !== 'ibd' ? { pushOrigin: true } : undefined);
+        } else {
+          setCurrentLayerId('root');
+          setLayerStack([]);
+          setLayerPath(['Root']);
+          openExactDiagramById(id);
+        }
+      } else {
+        setCurrentLayerId('root');
+        setLayerStack([]);
+        setLayerPath(['Root']);
+        openExactDiagramById(id);
+      }
+    } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
+      enterBlock(id);
+    } else if (diagramMode === "statemachine") {
+      enterLayer(id);
+    }
+  };
 
+  /**
+   * A hierarchy row that owns a diagram view: selecting it once must bring that
+   * diagram into the canvas so the pressed row is the highlighted tab.
+   */
+  const isDiagramHierarchyNode = (id: string): boolean =>
+    Boolean(canonicalSysmlRepository.diagrams[id])
+    || seededStateMachineDiagrams.some(diagram => diagram.id === id);
 
   return (
     <>
@@ -17384,7 +17514,7 @@ const ADIA = () => {
           >
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-9 pt-1">
               {moduleWorkspaceFiles.map(file => {
-                const isActive = activeFileId === file.id;
+                const isActive = activeWorkspaceTab.key === moduleWorkspaceTabKey(file.id);
                 return (
                   <div
                     key={`module:${file.id}`}
@@ -17419,11 +17549,12 @@ const ADIA = () => {
                   : tab.kind === 'sysmlDiagram'
                   ? (canonicalSysmlRepository.diagrams[diagramId]?.name ?? diagramId)
                   : tab.mode;
-                const isActive = diagramWorkspace.activeTab?.kind === tab.kind
-                  && ('diagramId' in diagramWorkspace.activeTab ? diagramWorkspace.activeTab.diagramId === diagramId : (diagramWorkspace.activeTab as any).mode === diagramId);
+                const isActive = activeWorkspaceTab.key === diagramWorkspaceTabKey(tab);
                 return (
                   <div
                     key={`${tab.kind}:${diagramId}`}
+                    role="tab"
+                    aria-selected={isActive}
                     data-diagram-id={diagramId}
                     onClick={() => openExactDiagramById(diagramId, { preserveReturnStack: true })}
                     className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
@@ -17495,48 +17626,13 @@ const ADIA = () => {
                   diagramPresentations={sysmlDiagramPresentations}
                   externalModels={hierarchyExternalModels}
                   canonicalSysmlRepository={canonicalSysmlRepository}
-                  onSelect={(id: string) => setSelectedIds([id])}
-                  onDoubleClick={(id: string, kind?: string) => {
-                    const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
-                    if (externalModelFile) {
-                      openFileInTab(externalModelFile.id);
-                    } else if (kind === 'diagram' || canonicalSysmlRepository.diagrams[id]) {
-                      const targetDiagram = canonicalSysmlRepository.diagrams[id];
-                      if (!targetDiagram) {
-                        // State-machine (or other non-SysML) diagram node:
-                        // open its exact workspace view. Unknown IDs are
-                        // rejected without mutation.
-                        openExactDiagramById(id);
-                      } else if (targetDiagram.diagramKind === 'ibd') {
-                        const ibdContextId = targetDiagram.contextElementId ?? targetDiagram.ownerId;
-                        const ibdContextBlock = ibdContextId
-                          ? canonicalSysmlRepository.definitions[ibdContextId]
-                          : undefined;
-                        if (ibdContextBlock?.kind === 'block') {
-                          setCurrentLayerId(ibdContextBlock.id);
-                          setLayerStack(['root']);
-                          setLayerPath(['Root', ibdContextBlock.name]);
-                          // IBD navigation stays Block-contextual with a
-                          // return stack to its origin diagram.
-                          openExactDiagramById(id, diagramMode !== 'ibd' ? { pushOrigin: true } : undefined);
-                        } else {
-                          setCurrentLayerId('root');
-                          setLayerStack([]);
-                          setLayerPath(['Root']);
-                          openExactDiagramById(id);
-                        }
-                      } else {
-                        setCurrentLayerId('root');
-                        setLayerStack([]);
-                        setLayerPath(['Root']);
-                        openExactDiagramById(id);
-                      }
-                    } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
-                      enterBlock(id);
-                    } else if (diagramMode === "statemachine") {
-                      enterLayer(id);
+                  onSelect={(id: string, multiSelect?: boolean) => {
+                    if (!multiSelect && isDiagramHierarchyNode(id)) {
+                      activateHierarchyNode(id, 'diagram');
                     }
+                    setSelectedIds([id]);
                   }}
+                  onDoubleClick={(id: string, kind?: string) => activateHierarchyNode(id, kind)}
                   selectedIds={selectedIds}
                   onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
 
