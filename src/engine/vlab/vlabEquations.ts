@@ -2317,29 +2317,94 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  pwm_vienna: ({ across, branch }) => {
-    const error = (across[0] || 0) - (across[1] || 0);
+  pwm_vienna: ({ across, branch, params, ctx }) => {
+    const va = across[0] ?? 0;
+    const vb = across[1] ?? 0;
+    const vc = across[2] ?? 0;
+    const ia = across[3] ?? 0;
+    const ib = across[4] ?? 0;
+    const ic = across[5] ?? 0;
+    const vdc = Math.abs(across[6] ?? 0);
+    const vneut = across[7] ?? 0;
+
+    const fSw = Math.max(1, params.f_sw ?? 10000);
+    const vdcRef = params.vdc_ref ?? 800;
+    const kpV = params.kp_v ?? 0.1;
+    const neutralGain = params.neutral_balance_gain ?? 0.1;
+
+    // 1. DC voltage regulation loop
+    const vdcError = vdcRef - vdc;
+    const iRefAmplitude = Math.max(0, kpV * vdcError);
+
+    // 2. Neutral-point midpoint balance correction
+    const neutralCorrection = Math.max(-0.2, Math.min(0.2, neutralGain * vneut / Math.max(vdc, 1)));
+
+    // 3. Phase modulation indices calculation
+    const vNormDenom = Math.max(vdc, 1);
+    const vMag = Math.max(Math.sqrt(va * va + vb * vb + vc * vc), 1);
+
+    const phases = [
+      { v: va, i: ia },
+      { v: vb, i: ib },
+      { v: vc, i: ic }
+    ];
+
+    const mods = phases.map(p => {
+      const vNormalized = (2 * p.v) / vNormDenom;
+      const iTarget = (iRefAmplitude * p.v) / vMag;
+      const iError = iTarget - p.i;
+      const rawMod = vNormalized + 0.05 * iError + neutralCorrection;
+      return Math.max(-1, Math.min(1, rawMod));
+    });
+
+    // 4. Triangular carrier at f_sw in [0, 1]
+    const carrierPhase = (ctx.time * fSw) % 1;
+    const carrier = 2 * Math.abs(carrierPhase - 0.5);
+
+    // 5. Switching gates: switch is ON (1) when carrier < duty (1 - |m|), else OFF (0)
+    const gates = mods.map(m => {
+      const duty = 1 - Math.abs(m);
+      return carrier < duty ? 1 : 0;
+    });
+
     return [
-      branch[0] - Math.max(0, Math.min(1.0, error * 0.1)),
-      branch[1] - Math.max(0, Math.min(1.0, error * 0.1)),
-      branch[2] - Math.max(0, Math.min(1.0, error * 0.1))
+      branch[0] - gates[0],
+      branch[1] - gates[1],
+      branch[2] - gates[2],
+      branch[3] - mods[0],
+      branch[4] - mods[1],
+      branch[5] - mods[2]
     ];
   },
 
-  thyristor_6pulse: ({ across, branch, ctx }) => {
-    const alpha = across[0] || 30;
-    const alpha_rad = alpha * Math.PI / 180;
-    const w = 2 * Math.PI * 50;
-    const t_mod = ctx.time % (1/50);
-    const g1 = t_mod > (alpha_rad / w) ? 1 : 0;
-    return [
-      branch[0] - g1,
-      branch[1] - g1,
-      branch[2] - g1,
-      branch[3] - g1,
-      branch[4] - g1,
-      branch[5] - g1
-    ];
+  thyristor_6pulse: ({ across, branch, params, ctx, ports }) => {
+    const findPort = (name: string, fallback: number) => {
+      const idx = (ports || []).findIndex(p => (p || '').toLowerCase() === name);
+      return idx !== -1 ? idx : fallback;
+    };
+    const thetaIdx = findPort('theta', 0);
+    const alphaIdx = findPort('alpha', 1);
+    const freqRaw = params?.freq;
+    const freq = (typeof freqRaw === 'number' && Number.isFinite(freqRaw) && freqRaw > 0) ? freqRaw : 50;
+    const pulseRaw = params?.pulse_width_deg;
+    const pulseWidth = (typeof pulseRaw === 'number' && Number.isFinite(pulseRaw))
+      ? Math.max(1, Math.min(60, pulseRaw)) : 20;
+    const alphaRaw = across[alphaIdx];
+    const alpha = (alphaRaw === undefined || alphaRaw === null || !Number.isFinite(alphaRaw)) ? 30 : alphaRaw;
+    const wrap360 = (deg: number) => ((deg % 360) + 360) % 360;
+    const thetaRaw = across[thetaIdx];
+    // Reference angle in degrees: prefer the driven theta port; fall back to
+    // the internal time-based ramp so freq is honoured when theta is floating.
+    const thetaDriven = (thetaRaw !== undefined && thetaRaw !== null && Number.isFinite(thetaRaw) && Math.abs(thetaRaw) > 1e-12);
+    const thetaDeg = thetaDriven ? wrap360(thetaRaw as number) : wrap360(ctx.time * freq * 360);
+    const alphaDeg = wrap360(alpha);
+    const gates: number[] = [];
+    for (let k = 0; k < 6; k++) {
+      const fireAngle = wrap360(alphaDeg + k * 60);
+      const dist = wrap360(thetaDeg - fireAngle);
+      gates.push(dist < pulseWidth ? 1 : 0);
+    }
+    return gates.map((g, i) => branch[i] - g);
   },
 
   thyristor_12pulse: ({ across, branch, ctx }) => {
