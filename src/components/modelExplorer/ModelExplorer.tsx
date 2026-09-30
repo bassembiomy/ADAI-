@@ -45,6 +45,13 @@ export interface ModelExplorerProps {
   height?: number;
 }
 
+/**
+ * Height used before the real viewport has been measured. Hosts without layout
+ * (jsdom, SSR) never report a positive height, so this keeps the virtual tree
+ * mounted there while a real browser replaces it with the measured value.
+ */
+const DEFAULT_TREE_VIEWPORT_HEIGHT = 400;
+
 export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   nodesById,
   rootNodeIds,
@@ -142,25 +149,28 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
 
   const effectiveRenamingId = renamingNodeId !== undefined ? renamingNodeId : localRenamingNodeId;
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [measuredHeight, setMeasuredHeight] = useState(400);
+  // The tree viewport is the flex child that actually owns the vertical
+  // overflow, so it is measured directly. Subtracting a toolbar estimate from
+  // the outer panel produced a height that did not match the real viewport and
+  // pushed the virtual rows outside the scrollable area.
+  const treeViewportRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(DEFAULT_TREE_VIEWPORT_HEIGHT);
 
-  // Measure tree viewport height
   useEffect(() => {
-    if (height) return;
-    if (!containerRef.current) return;
+    if (height !== undefined) return;
+    const viewport = treeViewportRef.current;
+    if (!viewport) return;
 
     const updateHeight = () => {
-      if (containerRef.current) {
-        // Toolbar is approx 75px
-        const totalH = containerRef.current.clientHeight;
-        setMeasuredHeight(Math.max(150, totalH - 75));
-      }
+      // Layout-less hosts (jsdom, SSR hydration, display:none) report 0; keep
+      // the last usable height instead of collapsing the virtual tree.
+      const next = viewport.clientHeight;
+      if (next > 0) setMeasuredHeight(next);
     };
 
     updateHeight();
     const observer = new ResizeObserver(updateHeight);
-    observer.observe(containerRef.current);
+    observer.observe(viewport);
     return () => observer.disconnect();
   }, [height]);
 
@@ -324,7 +334,6 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
 
   return (
     <div
-      ref={containerRef}
       className={`model-explorer-container flex flex-col h-full w-full bg-[var(--surface-panel)] border-r border-[var(--border-default)] ${className}`}
       onKeyDown={(e) => {
         if (e.key === 'F2') {
@@ -349,7 +358,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
         diagramAvailable={Boolean(activeDiagramContext)}
       />
 
-      <div className="flex-1 min-h-0 w-full relative">
+      <div ref={treeViewportRef} className="flex-1 min-h-0 w-full relative">
         {visibleRows.length === 0 ? (
           <div className="p-4 text-center text-xs text-[var(--text-muted)]">
             {searchQuery
@@ -362,7 +371,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
               ? 'No favorite elements marked'
               : 'Model is empty'}
           </div>
-        ) : (
+        ) : treeHeight > 0 ? (
           <VirtualTree
             rows={visibleRows}
             height={treeHeight}
@@ -432,7 +441,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
               />
             )}
           />
-        )}
+        ) : null}
       </div>
 
       {contextMenu && (

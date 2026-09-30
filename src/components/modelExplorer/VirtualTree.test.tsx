@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
   VirtualTree,
+  clampVirtualTreeScrollTop,
   computeVirtualTreeWindow,
   handleTreeKeyNavigation,
 } from './VirtualTree';
@@ -76,6 +77,31 @@ describe('VirtualTree', () => {
     expect(window.endIndex).toBe(69);
     expect(window.endIndex - window.startIndex).toBeLessThan(50);
     expect(window.totalHeight).toBe(240_000);
+  });
+
+  it('clamps scrolling to the complete virtual row range', () => {
+    expect(clampVirtualTreeScrollTop(10_000, 100, 26, 260)).toBe(2340);
+    expect(clampVirtualTreeScrollTop(500, 5, 26, 260)).toBe(0);
+    // A viewport that is not taller than the content has a single legal offset.
+    expect(clampVirtualTreeScrollTop(-40, 100, 26, 260)).toBe(0);
+    expect(clampVirtualTreeScrollTop(120, 1000, 26, 0)).toBe(120);
+  });
+
+  it('renders the virtual tree as an owned vertical scroll viewport', () => {
+    const html = renderToStaticMarkup(
+      <VirtualTree
+        rows={sampleRows}
+        height={130}
+        rowHeight={26}
+        focusedIndex={0}
+        onFocusIndex={() => {}}
+        isExpanded={() => false}
+        onToggleExpand={() => {}}
+        renderRow={row => <div>{row.node.label}</div>}
+      />
+    );
+    expect(html).toContain('height:130px');
+    expect(html).toContain('overflow-y:auto');
   });
 
   it('moves focus and expands with tree keyboard semantics', () => {

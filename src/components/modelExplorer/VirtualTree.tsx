@@ -44,6 +44,22 @@ export function computeVirtualTreeWindow({
   };
 }
 
+/**
+ * Keeps a scroll offset inside the range the virtual spacer actually occupies.
+ * Row-count changes (expand/collapse, filter, reload) can leave a stale offset
+ * past the end of the new content, which renders an empty viewport until the
+ * user scrolls again.
+ */
+export function clampVirtualTreeScrollTop(
+  scrollTop: number,
+  totalRows: number,
+  rowHeight: number,
+  containerHeight: number,
+): number {
+  const maximum = Math.max(0, totalRows * rowHeight - containerHeight);
+  return Math.min(Math.max(0, scrollTop), maximum);
+}
+
 export interface TreeKeyNavigationOptions {
   key: string;
   focusedIndex: number;
@@ -199,6 +215,17 @@ export const VirtualTree: React.FC<VirtualTreeProps> = ({
     },
     [rows, focusedIndex, isExpanded, onToggleExpand, onFocusIndex, onActivateRow]
   );
+
+  // Re-clamp both the DOM offset and the React offset whenever the virtual row
+  // range or the viewport height changes, so a stale offset cannot outlive the
+  // content that produced it.
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const next = clampVirtualTreeScrollTop(element.scrollTop, rows.length, rowHeight, height);
+    if (next !== element.scrollTop) element.scrollTop = next;
+    setScrollTop(current => (current === next ? current : next));
+  }, [rows.length, rowHeight, height]);
 
   // Auto-scroll focused item into view
   useEffect(() => {
