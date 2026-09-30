@@ -124,6 +124,32 @@ describe('sysmlDiagramWorkspace', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it('keeps the tab now at the closed index selected, then selects the preceding tab when the final tab closes', () => {
+    const base = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const repository = {
+      ...base,
+      diagrams: {
+        ...base.diagrams,
+        'bdd-extra': {
+          id: 'bdd-extra', kind: 'diagram', name: 'Extra BDD', namespace: ['model'],
+          ownerId: 'model', diagramKind: 'bdd',
+        },
+      },
+    } as typeof base;
+    const tabs = [
+      { kind: 'sysmlDiagram', diagramId: 'adia-default-bdd' },
+      { kind: 'sysmlDiagram', diagramId: 'adia-default-requirements' },
+      { kind: 'sysmlDiagram', diagramId: 'bdd-extra' },
+    ] as const;
+    const withMiddleRemoved = tabs.filter((_, index) => index !== 1);
+
+    const afterMiddleClose = normalizeDiagramWorkspace(repository, withMiddleRemoved, withMiddleRemoved[1]);
+    expect(afterMiddleClose.activeTab).toEqual({ kind: 'sysmlDiagram', diagramId: 'bdd-extra' });
+
+    const afterFinalClose = normalizeDiagramWorkspace(repository, withMiddleRemoved.slice(0, 1), withMiddleRemoved[0]);
+    expect(afterFinalClose.activeTab).toEqual({ kind: 'sysmlDiagram', diagramId: 'adia-default-bdd' });
+  });
+
   it('falls back to the default BDD tab with a diagnostic when the persisted active tab is stale', () => {
     const repository = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
     const result = normalizeDiagramWorkspace(repository, ['adia-default-bdd'], 'stale-diagram-id');

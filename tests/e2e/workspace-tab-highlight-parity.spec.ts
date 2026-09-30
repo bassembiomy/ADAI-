@@ -61,4 +61,35 @@ test.describe('workspace tab highlight parity', () => {
     await expect(selectedTabs).toHaveCount(1);
     await expect(page.getByText(/^States:/)).toBeVisible();
   });
+
+  test('closing tabs keeps the selected tab and canvas in parity', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const stateMachineTab = page.locator('[data-workspace-type="statemachine"]');
+    const requirementsTab = page.locator('[data-diagram-id="adia-default-requirements"]');
+    const bddTab = page.locator('[data-diagram-id="adia-default-bdd"]');
+    const selectedTabs = tabs.locator('[role="tab"][aria-selected="true"]');
+
+    // Open both diagrams in order so Requirements is between the workspace
+    // tab and BDD. Close the active middle tab and require its right neighbor.
+    await page.locator('[data-node-id][data-kind="diagram"]', { hasText: 'Main Requirements Diagram' }).first().click();
+    await page.locator('[data-node-id][data-kind="diagram"]', { hasText: 'Main SysML BDD' }).first().click();
+    await requirementsTab.click();
+    await expect(page.getByText(/^Requirements:/)).toBeVisible();
+    await requirementsTab.getByTitle('Close Tab').click();
+    await expect(bddTab).toHaveAttribute('aria-selected', 'true');
+    await expect(selectedTabs).toHaveCount(1);
+    await expect(page.getByText(/^Blocks:/)).toBeVisible();
+
+    // Open Requirements again, return to State Machine, then remove every
+    // diagram tab while preserving the workspace canvas.
+    await page.locator('[data-node-id][data-kind="diagram"]', { hasText: 'Main Requirements Diagram' }).first().click();
+    await stateMachineTab.click();
+    await expect(page.getByText(/^States:/)).toBeVisible();
+    await bddTab.getByTitle('Close Tab').click();
+    await requirementsTab.getByTitle('Close Tab').click();
+    await expect(stateMachineTab).toHaveAttribute('aria-selected', 'true');
+    await expect(selectedTabs).toHaveCount(1);
+    await expect(selectedTabs).toHaveText(/State Machine/i);
+    await expect(page.getByText(/^States:/)).toBeVisible();
+  });
 });
