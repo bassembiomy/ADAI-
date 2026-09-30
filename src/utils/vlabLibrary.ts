@@ -583,10 +583,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "Ω",
             "label": "Stator Res"
           },
-          "Kt": {
-            "value": 0.2,
-            "unit": "N-m/A",
-            "label": "Torque Const"
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "D-axis Inductance"
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "Q-axis Inductance"
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM Flux"
+          },
+          "J": {
+            "value": 0.02,
+            "unit": "kg-m^2",
+            "label": "Inertia"
+          },
+          "B": {
+            "value": 0.002,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [

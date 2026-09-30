@@ -1148,13 +1148,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  pmsm: ({ across, branch, state, dState, params, ctx }) => {
-    // state[0]: theta, state[1]: omega
-    const Rs = params.Rs || 0.1;
-    const P = params.pole_pairs || 4;
-    const Kt = params.Kt || 0.2;
-    const J = params.J || params.inertia || 0.02;
-    const B = params.B || params.damping || 0.002;
+  pmsm: ({ across, branch, dBranch, state, dState, params }) => {
+    // state[0]: mechanical rotor angle theta, state[1]: mechanical speed omega
+    const Rs = params.Rs ?? 0.1;
+    const P = params.pole_pairs ?? 4;
+    const Ld = params.Ld ?? 0.005;
+    const Lq = params.Lq ?? 0.005;
+    const flux = params.flux ?? 0.1;
+    const J = params.J ?? params.inertia ?? 0.02;
+    const B = params.B ?? params.damping ?? 0.002;
     
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
@@ -1164,22 +1166,35 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const ib = branch[1];
     const ic = branch[2];
     const torque = branch[3];
-    
-    // Clarke conversion of actual voltages to get instantaneous Valpha, Vbeta
-    const Valpha = (2 * Va - Vb - Vc) / 3;
-    const Vbeta = (Vb - Vc) / Math.sqrt(3);
-    const Vmag = Math.sqrt(Valpha * Valpha + Vbeta * Vbeta);
-    
-    const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
-    
-    // Synchronous torque coupling
-    const slip_speed = w_sync / P - state[1];
-    const Te = Kt * 0.15 * Vmag * slip_speed;
+
+    const vAlpha = (2 * Va - Vb - Vc) / 3;
+    const vBeta = (Vb - Vc) / Math.sqrt(3);
+    const vZero = (Va + Vb + Vc) / 3;
+    const iAlpha = (2 * ia - ib - ic) / 3;
+    const iBeta = (ib - ic) / Math.sqrt(3);
+    const iZero = (ia + ib + ic) / 3;
+    const dIAlpha = (2 * dBranch[0] - dBranch[1] - dBranch[2]) / 3;
+    const dIBeta = (dBranch[1] - dBranch[2]) / Math.sqrt(3);
+    const dIZero = (dBranch[0] + dBranch[1] + dBranch[2]) / 3;
+
+    const electricalAngle = P * state[0];
+    const electricalSpeed = P * state[1];
+    const cosTheta = Math.cos(electricalAngle);
+    const sinTheta = Math.sin(electricalAngle);
+    const vd = cosTheta * vAlpha + sinTheta * vBeta;
+    const vq = -sinTheta * vAlpha + cosTheta * vBeta;
+    const id = cosTheta * iAlpha + sinTheta * iBeta;
+    const iq = -sinTheta * iAlpha + cosTheta * iBeta;
+    const dId = cosTheta * dIAlpha + sinTheta * dIBeta + electricalSpeed * iq;
+    const dIq = -sinTheta * dIAlpha + cosTheta * dIBeta - electricalSpeed * id;
+
+    const Te = 1.5 * P * (flux * iq + (Ld - Lq) * id * iq);
+    const zeroSequenceInductance = (Ld + Lq) / 2;
     
     return [
-      Va - ia * Rs,                                      // branch[0]: ia
-      Vb - ib * Rs,                                      // branch[1]: ib
-      Vc - ic * Rs,                                      // branch[2]: ic
+      vd - Rs * id - Ld * dId + electricalSpeed * Lq * iq,
+      vq - Rs * iq - Lq * dIq - electricalSpeed * (Ld * id + flux),
+      vZero - Rs * iZero - zeroSequenceInductance * dIZero,
       across[4] - state[1],                              // branch[3]: torque
       dState[0] - state[1],                              // state[0]: theta
       torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega

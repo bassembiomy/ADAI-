@@ -30,6 +30,17 @@ describe('VLab Library Search & Scoring', () => {
     expect(pmsm?.ports[4]?.domain).toBe('Rotational');
   });
 
+  it('exposes the PMSM dq and mechanical parameters used by its equation', () => {
+    const pmsm = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'pmsm');
+
+    expect(pmsm?.params.Kt).toBeUndefined();
+    expect(pmsm?.params.Ld).toEqual({ value: 0.005, unit: 'H', label: 'D-axis Inductance' });
+    expect(pmsm?.params.Lq).toEqual({ value: 0.005, unit: 'H', label: 'Q-axis Inductance' });
+    expect(pmsm?.params.flux).toEqual({ value: 0.1, unit: 'Wb', label: 'PM Flux' });
+    expect(pmsm?.params.J).toEqual({ value: 0.02, unit: 'kg-m^2', label: 'Inertia' });
+    expect(pmsm?.params.B).toEqual({ value: 0.002, unit: 'N-m-s/rad', label: 'Viscous Damping' });
+  });
+
   it('exposes every DC Motor parameter used by the simulation equation', () => {
     const dcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'dc_motor');
 
