@@ -543,7 +543,7 @@ describe('AppModelExplorer diagram-context creation', () => {
     });
     const createdBlockId = (calls[1] as Extract<SysmlEditorCommand, { type: 'addToDiagram' }>).elementIds[0];
     expect(gateway.repository.definitions[createdBlockId]).toMatchObject({ kind: 'block', ownerId: 'model' });
-    expect(gateway.diagramPresentations['bdd-1'].elementIds).toContain(createdBlockId);
+    expect(gateway.diagramPresentations?.['bdd-1']?.elementIds ?? []).toContain(createdBlockId);
   });
 
   it('creates a model-owned Requirement from a requirements diagram row and presents it', () => {
