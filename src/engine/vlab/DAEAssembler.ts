@@ -266,6 +266,9 @@ export class DAEAssembler {
       const isPhysicalOutputPort = (portId: string) => {
         const id = portId.toLowerCase();
         if (blockType === 'rot_motion_sensor' && ['w', 'a'].includes(id)) return true;
+        // The thyristor phase and firing-angle ports are inputs even though
+        // their names also appear in the generic signal-output vocabulary.
+        if (blockType === 'thyristor_12pulse' && ['theta', 'alpha', 'pdelta', 'pwye'].includes(id)) return false;
         if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'g', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
             id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
           return false;
@@ -577,6 +580,18 @@ export class DAEAssembler {
           break;
         case 'pwm_3ph_3level':
           for (const name of ['ga', 'gb', 'gc', 'ma', 'mb', 'mc']) {
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          break;
+        case 'thyristor_12pulse':
+          // Keep the equation ordering and the visible port ordering in sync:
+          // six independent delta gate branches followed by six wye branches.
+          for (let gate = 1; gate <= 6; gate++) {
+            const name = `delta_g${gate}`;
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          for (let gate = 1; gate <= 6; gate++) {
+            const name = `wye_g${gate}`;
             branches.push({ name, ports: [{ id: name, sign: 1 }] });
           }
           break;

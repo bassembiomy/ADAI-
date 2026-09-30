@@ -2342,13 +2342,49 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  thyristor_12pulse: ({ across, branch, ctx }) => {
-    const alpha = across[0] || 30;
-    const alpha_rad = alpha * Math.PI / 180;
-    const w = 2 * Math.PI * 50;
-    const t_mod = ctx.time % (1/50);
-    const g1 = t_mod > (alpha_rad / w) ? 1 : 0;
-    return new Array(12).fill(0).map((_, i) => branch[i] - g1);
+  thyristor_12pulse: ({ across, branch, params, ctx, ports }) => {
+    // theta is the electrical phase offset in radians (the convention used by
+    // the other electrical angle blocks).  alpha is the firing angle in
+    // degrees, while freq advances theta through the simulation time.
+    const valueAtPort = (portId: string, fallbackIndex: number, fallback: number) => {
+      const index = ports.indexOf(portId);
+      const value = across[index >= 0 ? index : fallbackIndex];
+      const numeric = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+    const theta = valueAtPort('theta', 0, 0);
+    const alphaDeg = valueAtPort('alpha', 1, 30);
+    const frequencyValue = params.freq;
+    const frequency = typeof frequencyValue === 'number' ? frequencyValue : Number(frequencyValue);
+    const freq = Number.isFinite(frequency) ? Math.max(0, frequency) : 50;
+    const pulseWidthValue = params.pulse_width_deg;
+    const pulseWidth = typeof pulseWidthValue === 'number' ? pulseWidthValue : Number(pulseWidthValue);
+    const pulseWidthDeg = Number.isFinite(pulseWidth) ? Math.max(0, Math.min(60, pulseWidth)) : 5;
+
+    const twoPi = 2 * Math.PI;
+    const normalizeAngle = (angle: number) => ((angle % twoPi) + twoPi) % twoPi;
+    const phase = normalizeAngle(theta + twoPi * freq * ctx.time);
+    const alphaRad = alphaDeg * Math.PI / 180;
+    const pulseWidthRad = pulseWidthDeg * Math.PI / 180;
+    const isFiringPulse = (phaseOffsetDeg: number) => {
+      const firingAngle = alphaRad + phaseOffsetDeg * Math.PI / 180;
+      const elapsed = normalizeAngle(phase - firingAngle);
+      return elapsed < pulseWidthRad ? 1 : 0;
+    };
+
+    // Each bridge fires at alpha + k*60 degrees.  The wye transformer shifts
+    // its complete six-pulse sequence by 30 degrees relative to delta.
+    const deltaGates = Array.from({ length: 6 }, (_, index) => isFiringPulse(index * 60));
+    const wyeGates = Array.from({ length: 6 }, (_, index) => isFiringPulse(30 + index * 60));
+    const gates = [...deltaGates, ...wyeGates];
+
+    // There is one allocated branch for every visible gate output.  The
+    // fallback prevents a malformed legacy caller from turning a residual into
+    // NaN; normal assembly always supplies all twelve branches.
+    return gates.map((gate, index) => {
+      const residual = (branch[index] ?? 0) - gate;
+      return residual === 0 ? 0 : residual;
+    });
   },
 
   dc_current_ctrl: ({ across, branch }) => {

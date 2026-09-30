@@ -6096,28 +6096,97 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 50,
             "unit": "Hz",
             "label": "Freq"
+          },
+          "pulse_width_deg": {
+            "value": 5,
+            "unit": "deg",
+            "label": "Pulse Width"
           }
         },
         "ports": [
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "alpha",
             "pos": "left",
-            "label": "alpha"
+            "label": "alpha",
+            "domain": "Physical"
           },
           {
-            "id": "pdelta",
+            "id": "delta_g1",
             "pos": "right",
-            "label": "Pdelta"
+            "label": "Delta G1",
+            "domain": "Physical"
           },
           {
-            "id": "pwye",
+            "id": "delta_g2",
             "pos": "right",
-            "label": "Pwye"
+            "label": "Delta G2",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g3",
+            "pos": "right",
+            "label": "Delta G3",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g4",
+            "pos": "right",
+            "label": "Delta G4",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g5",
+            "pos": "right",
+            "label": "Delta G5",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g6",
+            "pos": "right",
+            "label": "Delta G6",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g1",
+            "pos": "right",
+            "label": "Wye G1",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g2",
+            "pos": "right",
+            "label": "Wye G2",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g3",
+            "pos": "right",
+            "label": "Wye G3",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g4",
+            "pos": "right",
+            "label": "Wye G4",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g5",
+            "pos": "right",
+            "label": "Wye G5",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g6",
+            "pos": "right",
+            "label": "Wye G6",
+            "domain": "Physical"
           }
         ],
         "equation": "Thyristor 12-Pulse Generator governing physical equation",
