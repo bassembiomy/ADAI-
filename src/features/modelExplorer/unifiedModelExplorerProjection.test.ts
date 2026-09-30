@@ -275,10 +275,10 @@ describe('buildUnifiedModelProjection', () => {
       ],
       layers: [
         { id: 'root', name: 'Root Region', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] },
-        { id: 'region-1', name: 'Region 1', parentStateId: 's1', stateIds: ['s2'], transitionIds: [], junctionIds: [] },
+        { id: 'region-1', name: 'Region 1', parentStateId: 's1', stateIds: ['s2'], transitionIds: [], junctionIds: ['j1'] },
       ],
       transitions: [],
-      junctions: [],
+      junctions: [{ id: 'j1', name: 'J1', type: 'junction', x: 0, y: 0, color: '#000', parentId: 'region-1' }],
       diagrams: [{ id: 'nested-sm-1', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }],
       revision: 1,
     });
@@ -289,6 +289,10 @@ describe('buildUnifiedModelProjection', () => {
       ownerSemanticId: 'root',
     });
     expect(projection.nodes['sm:state:s2']).toMatchObject({
+      parentNodeId: 'sm:diagram:nested-sm-1',
+      ownerSemanticId: 'region-1',
+    });
+    expect(projection.nodes['sm:junction:j1']).toMatchObject({
       parentNodeId: 'sm:diagram:nested-sm-1',
       ownerSemanticId: 'region-1',
     });

@@ -138,6 +138,7 @@ export const DIAGRAM_KIND_LABELS: Record<string, string> = {
   rtm: 'Requirements Traceability Matrix (RTM)',
   package: 'Package Diagram',
   stateMachine: 'State Machine Diagram',
+  parametric: 'Parametric Diagram',
 };
 
 export function getElementKindLabel(kind: string): string {

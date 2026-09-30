@@ -38,6 +38,29 @@ async function createChildElement(page: Page, ownerNodeId: string, label: RegExp
   await expect(menu).not.toBeVisible();
 }
 
+async function createAndFindChildElement(page: Page, ownerNodeId: string, label: RegExp): Promise<Locator> {
+  const existingIds = new Set(await page.locator('.model-explorer-container [role="treeitem"][data-node-id]').evaluateAll(
+    elements => elements.map(el => el.getAttribute('data-node-id')!).filter(Boolean),
+  ));
+
+  await createChildElement(page, ownerNodeId, label);
+
+  let newId: string | null = null;
+  await expect.poll(async () => {
+    const currentIds = await page.locator('.model-explorer-container [role="treeitem"][data-node-id]').evaluateAll(
+      elements => elements.map(el => el.getAttribute('data-node-id')!).filter(Boolean),
+    );
+    const added = currentIds.find(id => !existingIds.has(id));
+    if (added) {
+      newId = added;
+      return added;
+    }
+    return null;
+  }).not.toBeNull();
+
+  return page.locator(`.model-explorer-container [role="treeitem"][data-node-id="${newId}"]`);
+}
+
 async function ariaLevel(locator: Locator): Promise<number> {
   await expect(locator).toBeVisible();
   return Number(await locator.getAttribute('aria-level'));
@@ -71,25 +94,29 @@ test.describe('Model Explorer diagram grouping', () => {
     await expect(page.locator('.model-explorer-container [role="treeitem"]').first()).toBeVisible();
   });
 
-  test('groups elements created from BDD, requirements, and state-machine diagram rows', async ({ page }) => {
+  test('groups elements created from BDD, requirements, parametric, and state-machine diagram rows', async ({ page }) => {
     await openModelExplorer(page);
 
     // 1. Block Definition Diagram
-    await createChildElement(page, 'sysml:element:adia-default-bdd', /^Block$/);
     const bdd = page.locator(treeItem('sysml:element:adia-default-bdd'));
-    const createdBlock = page.locator('[role="treeitem"][data-node-id^="sysml:element:blk-"]').first();
+    const createdBlock = await createAndFindChildElement(page, 'sysml:element:adia-default-bdd', /^Block$/);
     expect(await ariaLevel(createdBlock)).toBe(await ariaLevel(bdd) + 1);
 
     // 2. Requirements Diagram
-    await createChildElement(page, 'sysml:element:adia-default-requirements', /^Requirement$/);
     const requirementsDiagram = page.locator(treeItem('sysml:element:adia-default-requirements'));
-    const createdRequirement = page.locator('[role="treeitem"][data-node-id^="sysml:element:req-"]').first();
+    const createdRequirement = await createAndFindChildElement(page, 'sysml:element:adia-default-requirements', /^Requirement$/);
     expect(await ariaLevel(createdRequirement)).toBe(await ariaLevel(requirementsDiagram) + 1);
 
-    // 3. State Machine Diagram (membership derives from the rendered region)
-    await createChildElement(page, 'sm:diagram:adia-default-state-machine', /^State$/);
+    // 3. Parametric Diagram (created under the Parametric pillar, then populated)
+    const createdParametricDiagram = await createAndFindChildElement(page, 'project:pillar:parametric', /Parametric/i);
+    const parametricDiagramNodeId = await createdParametricDiagram.getAttribute('data-node-id');
+    expect(parametricDiagramNodeId).toBeTruthy();
+    const createdParametricBlock = await createAndFindChildElement(page, parametricDiagramNodeId!, /^Block$/);
+    expect(await ariaLevel(createdParametricBlock)).toBe(await ariaLevel(createdParametricDiagram) + 1);
+
+    // 4. State Machine Diagram (membership derives from the rendered region)
     const stateMachineDiagram = page.locator(treeItem('sm:diagram:adia-default-state-machine'));
-    const createdState = page.locator('[role="treeitem"][data-node-id^="sm:state:state-"]').first();
+    const createdState = await createAndFindChildElement(page, 'sm:diagram:adia-default-state-machine', /^State$/);
     expect(await ariaLevel(createdState)).toBe(await ariaLevel(stateMachineDiagram) + 1);
   });
 });

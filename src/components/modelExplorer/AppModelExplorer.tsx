@@ -351,6 +351,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   const [pendingType, setPendingType] = useState<{
     command: Extract<ModelExplorerCommand, { type: 'createElement' }>;
     selection: TypeSelectionPayload;
+    diagramId?: string;
   } | null>(null);
 
   // Relationship wizard state
@@ -576,7 +577,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         };
         const res = createModelExplorerCommandBus(nodeAdapter).dispatch(command);
         if (res.typeSelection && explorerAdapterDomain(node) === 'sysml') {
-          setPendingType({ command, selection: res.typeSelection });
+          setPendingType({ command, selection: res.typeSelection, diagramId: creationContext.diagramId });
         } else {
           acceptResult(res, command);
           presentCreatedElement(nodeAdapter, creationContext.diagramId, res);
@@ -752,12 +753,16 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   const handleSelectType = useCallback((typeId: string) => {
     if (!pendingType || !pendingType.selection.candidates.some(candidate => candidate.id === typeId)) return;
     const command = { ...pendingType.command, typeId };
+    const diagramId = pendingType.diagramId;
     setPendingType(null);
-    acceptResult(createModelExplorerCommandBus(sysmlAdapter).dispatch(command), command);
-  }, [pendingType, sysmlAdapter, acceptResult]);
+    const result = createModelExplorerCommandBus(sysmlAdapter).dispatch(command);
+    acceptResult(result, command);
+    presentCreatedElement(sysmlAdapter, diagramId, result);
+  }, [pendingType, sysmlAdapter, acceptResult, presentCreatedElement]);
 
   const handleCreateNewType = useCallback(() => {
     if (!pendingType) return;
+    const diagramId = pendingType.diagramId;
     const metaclass = pendingType.selection.action.payload?.suggestedMetaclass;
     const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
     const ownerId = canonicalSysmlRepository?.definitions[pendingType.command.ownerId]?.ownerId || 'model';
@@ -767,11 +772,13 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     if (result.committed && result.selectedIds?.[0]) {
       const featureCommand = { ...pendingType.command, typeId: result.selectedIds[0] };
       setPendingType(null);
-      acceptResult(createModelExplorerCommandBus(sysmlAdapter).dispatch(featureCommand), featureCommand);
+      const featureResult = createModelExplorerCommandBus(sysmlAdapter).dispatch(featureCommand);
+      acceptResult(featureResult, featureCommand);
+      presentCreatedElement(sysmlAdapter, diagramId, featureResult);
     } else {
       setPendingType(null);
     }
-  }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult]);
+  }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult, presentCreatedElement]);
 
   const handleMoveNode = useCallback(
     (draggedNode: ModelTreeNode, targetNode: ModelTreeNode) => {

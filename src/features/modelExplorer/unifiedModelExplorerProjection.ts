@@ -3,6 +3,7 @@ import { resolvePortUsage } from '../../engine/sysml/ibd';
 import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 import { buildDiagramVisualParentIndex } from './diagramTreeContext';
+import { getElementKindLabel } from './modelExplorerCapabilities';
 import type {
   ModelPillar,
   ModelTreeNode,
@@ -243,6 +244,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       hasChildren: false,
     });
     const statesById = new Map(input.stateMachine.states.map(state => [state.id, state]));
+    const junctionsById = new Map((input.stateMachine.junctions ?? []).map(junction => [junction.id, junction]));
     const projectLayer = (layerId: string, parentId: string) => {
       const layer = input.stateMachine.layers.find(item => item.id === layerId);
       if (!layer) return;
@@ -257,6 +259,22 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
         childNodeIds: [],
         hasChildren: false,
       });
+      for (const junctionId of layer.junctionIds ?? []) {
+        const junction = junctionsById.get(junctionId);
+        if (!junction) continue;
+        const junctionNodeId = `sm:junction:${junction.id}`;
+        register(nodes, {
+          nodeId: junctionNodeId,
+          semanticId: junction.id,
+          domain: 'stateMachine',
+          kind: junction.type ?? 'junction',
+          label: junction.name || getElementKindLabel(junction.type ?? 'junction'),
+          parentNodeId: regionId,
+          ownerSemanticId: layer.id,
+          childNodeIds: [],
+          hasChildren: false,
+        });
+      }
       for (const stateId of layer.stateIds ?? []) {
         const state = statesById.get(stateId);
         if (!state) continue;
