@@ -1082,13 +1082,14 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   pwm_3ph_2level: {
     equations: [
-      'Va = Vn + (Vp - Vn) * Vabc[0]',
-      'Vb = Vn + (Vp - Vn) * Vabc[1]',
-      'Vc = Vn + (Vp - Vn) * Vabc[2]'
+      'Va = Vn + Vdc * ma',
+      'Vb = Vn + Vdc * mb',
+      'Vc = Vn + Vdc * mc',
+      'Idc + ma*Ia + mb*Ib + mc*Ic = 0'
     ],
-    latex: ['V_a = V_n + (V_p - V_n) \\cdot m_a'],
-    across: 'Voltage (V)', through: 'Duty Cycle',
-    description: '3-Phase Inverter Bridge using Averaged Model. Converts DC input power to AC potentials based on modulation indices (Vabc).'
+    latex: ['V_x = V_n + V_{dc} \\cdot m_x', 'I_{dc} + \\sum m_x I_x = 0'],
+    across: 'Voltage (V)', through: 'Current (A)',
+    description: '3-Phase Inverter Bridge. In averaged mode (default), generates continuous phase voltages Vx = Vn + Vdc * mx with zero PWM ripple. In switching mode, compares modulation references against a triangular carrier at f_sw to produce two voltage levels and ripple.'
   },
   pwm_3ph_3level: {
     equations: ['g = 1 if Vabc > C1 else 0 if Vabc < C2 else 0.5'],

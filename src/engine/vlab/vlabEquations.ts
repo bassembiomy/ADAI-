@@ -1203,48 +1203,30 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── INVERTERS & CONTROL BLOCKS ─────────────────────────────────────────────
   pwm_3ph_2level: ({ across, branch, params, ctx }) => {
-    // across[0]: vabc (Physical control input: can be v_mag or w_ref)
-    // across[1]: p (DC+), across[2]: n (DC-)
-    // across[3]: a (Phase A), across[4]: b (Phase B), across[5]: c (Phase C)
-    // branch[0]: current_a, branch[1]: current_b, branch[2]: current_c (through variables)
-    
-    const ctrl = across[0] !== undefined ? across[0] : 0.5;
-    const Vp = across[1];
-    const Vn = across[2];
-    const Vdc = Vp - Vn;
-    
-    let ma = 0.5, mb = 0.5, mc = 0.5;
-    let w_rad = 314.159;
-    
-    // Auto-detect control mode based on magnitude
-    if (Math.abs(ctrl) > 10.0) {
-      // Input is speed reference (RPM or rad/s)
-      w_rad = ctrl > 100 ? ctrl * (2 * Math.PI / 60) : ctrl; // RPM to rad/s if large
-      ma = 0.5 + 0.4 * Math.sin(w_rad * ctx.time);
-      mb = 0.5 + 0.4 * Math.sin(w_rad * ctx.time - 2 * Math.PI / 3);
-      mc = 0.5 + 0.4 * Math.sin(w_rad * ctx.time + 2 * Math.PI / 3);
-    } else {
-      // Input is duty cycle or voltage magnitude (e.g. from PID)
-      const v_mag = Math.max(0.0, Math.min(1.0, ctrl));
-      w_rad = 314.159; // Nominal 50Hz
-      ma = 0.5 + 0.4 * v_mag * Math.sin(w_rad * ctx.time);
-      mb = 0.5 + 0.4 * v_mag * Math.sin(w_rad * ctx.time - 2 * Math.PI / 3);
-      mc = 0.5 + 0.4 * v_mag * Math.sin(w_rad * ctx.time + 2 * Math.PI / 3);
+    const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+    const f_out = (params.output_frequency_hz as number) ?? 50;
+    const refs = params.control_mode === 'sinusoidal_modulation'
+      ? [0, -2 * Math.PI / 3, 2 * Math.PI / 3].map(offset => 0.5 + 0.4 * clamp(across[0]) * Math.sin(2 * Math.PI * ((ctx.time * f_out) % 1) + offset))
+      : [clamp(across[1]), clamp(across[2]), clamp(across[3])];
+
+    const carrierPhase = (ctx.time * Math.max(1, (params.f_sw as number) ?? 5000)) % 1;
+    const carrier = carrierPhase < 0.5 ? 2 * carrierPhase : 2 - 2 * carrierPhase;
+    const duties = params.model_mode === 'switching' ? refs.map(ref => ref >= carrier ? 1 : 0) : refs;
+
+    const [ma, mb, mc] = duties;
+    const Vdc = across[4] - across[5];
+    const Rout = (params.output_resistance_ohm as number) ?? 0.001;
+    const [Idc = 0, Ia = 0, Ib = 0, Ic = 0] = branch ?? [];
+
+    if (ctx.parameters && ctx.parameters['grid_freq'] === undefined) {
+      ctx.parameters['grid_freq'] = 2 * Math.PI * f_out;
     }
-    
-    if (ctx.parameters['grid_freq'] === undefined) {
-      ctx.parameters['grid_freq'] = w_rad;
-    }
-    
-    const Va_target = Vn + Vdc * ma;
-    const Vb_target = Vn + Vdc * mb;
-    const Vc_target = Vn + Vdc * mc;
-    
-    const R_out = 1e-3;
+
     return [
-      (across[3] - Va_target) - branch[0] * R_out,
-      (across[4] - Vb_target) - branch[1] * R_out,
-      (across[5] - Vc_target) - branch[2] * R_out
+      Idc + ma * Ia + mb * Ib + mc * Ic,
+      across[6] - (across[5] + Vdc * ma) - Ia * Rout,
+      across[7] - (across[5] + Vdc * mb) - Ib * Rout,
+      across[8] - (across[5] + Vdc * mc) - Ic * Rout
     ];
   },
 

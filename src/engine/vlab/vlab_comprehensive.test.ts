@@ -409,7 +409,7 @@ const LEARNING_LABS = [
       { id: 'error_calc', blockId: 'ps_subtract', position: { x: 200, y: 100 }, label: 'Error' },
       { id: 'speed_pid', blockId: 'ps_pid_ctrl', position: { x: 350, y: 100 }, label: 'Speed PID', params: { Kp: 2.5, Ki: 1.2 } },
       { id: 'dc_bus', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'ac_motor', blockId: 'ac_motor', position: { x: 700, y: 300 }, label: 'Induction Motor', params: { P: 2 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Encoder' },
       { id: 'scope', blockId: 'scope', position: { x: 1000, y: 150 }, label: 'PID Response', params: { time_range: 10 } },
@@ -438,7 +438,7 @@ const LEARNING_LABS = [
     difficulty: 'Advanced',
     nodes: [
       { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'vfd_controller', blockId: 'im_foc_ctrl', position: { x: 300, y: 100 }, label: 'VFD Controller', params: { mode: 1 } },
       { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
       { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
@@ -466,7 +466,7 @@ const LEARNING_LABS = [
     nodes: [
       { id: 'washing_ctrl', blockId: 'im_foc_ctrl', position: { x: 50, y: 100 }, label: 'Wash Cycle Controller', params: { target_rpm: 600 } },
       { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Bus (320V)', params: { V: 320 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'wash_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Direct Drive Motor' },
       { id: 'basket_load', blockId: 'washing_basket', position: { x: 750, y: 300 }, label: 'Washing Basket', params: { load_mass: 6 } },
       { id: 'wash_scope', blockId: 'scope', position: { x: 950, y: 200 }, label: 'Cycle Analysis', params: { time_range: 10 } },
