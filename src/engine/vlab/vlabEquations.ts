@@ -1647,7 +1647,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
   gas_flow_sensor: ({ across, branch }) => [across[0] - across[1], branch[1] + branch[0]],
-  gas_properties: () => [],
 
   // ── MAGNETIC DOMAIN ────────────────────────────────────────────────────────
   mag_ref: () => [],

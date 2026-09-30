@@ -1434,8 +1434,6 @@ export const RawSymbolRenderer = ({ type, color }: { type: string, color?: strin
       return <SymGlyph w={60} h={60} color={color} text="G-SRC" sub="FLOW" />;
     case 'gas_pressure_source':
       return <SymGlyph w={60} h={60} color={color} text="G-SRC" sub="PRESS" />;
-    case 'gas_properties':
-      return <SymGlyph w={60} h={60} color={color} text="GAS" sub="PROPS" />;
     // Magnetic
     case 'fundamental_reluctance':
       return <SymGlyph w={60} h={60} color={color} text="REL" sub="FUNDAMENTAL" />;

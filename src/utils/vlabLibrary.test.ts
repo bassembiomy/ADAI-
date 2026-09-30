@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { VLAB_LIBRARY, scoreVLabBlock, searchVLabBlocks } from './vlabLibrary';
+import { blockEquations } from '../engine/vlab/vlabEquations';
+import { VLAB_COMPONENT_DEFINITIONS } from '../engine/vlab/vlabComponentDefinitions';
 
 describe('VLab Library Search & Scoring', () => {
+  it('has no registered remnants of the removed gas_properties block', () => {
+    expect(blockEquations).not.toHaveProperty('gas_properties');
+    expect(VLAB_COMPONENT_DEFINITIONS).not.toHaveProperty('gas_properties');
+  });
+
   it('defines functional Gas sensors and the requested Gas port domains', () => {
     const blocks = new Map(VLAB_LIBRARY.flatMap(d => d.blocks).map(block => [block.id, block]));
     const portDomains = (id: string) => Object.fromEntries((blocks.get(id)?.ports ?? []).map(port => [port.id, port.domain]));

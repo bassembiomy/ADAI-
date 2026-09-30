@@ -415,12 +415,6 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Measures gas mass flow through an ideal zero-pressure-loss pass-through.'
   },
-  gas_properties: {
-    equations: ['P = rho * R * T'],
-    latex: ['P = \rho R T'],
-    across: 'None', through: 'None',
-    description: 'Defines the working fluid properties (R, Cp, etc.) for the connected gas network.'
-  },
   mag_ref: {
     equations: ['mmf = 0'],
     latex: ['\\mathcal{F} = 0'],
