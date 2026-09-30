@@ -1,15 +1,17 @@
-// Domain classification for across/through variable semantics
-export type PhysicalDomain = 
-  | 'electrical'    // across: Voltage,     through: Current
-  | 'rotational'    // across: Ang. Vel,    through: Torque
-  | 'translational' // across: Velocity,    through: Force
-  | 'thermal'       // across: Temperature, through: Heat Flow
-  | 'magnetic'      // across: MMF,         through: Flux
-  | 'gas'           // across: Pressure,    through: Mass Flow
-  | 'fluid'         // across: P/T/H,       through: m/Q/mw
-  | 'isothermal_liquid' // across: Pressure, through: Mass Flow
-  | 'physical'      // signal domain (no conservation law)
-  | 'multibody';    // frame-based
+export const PHYSICAL_DOMAINS = [
+  'electrical',
+  'rotational',
+  'translational',
+  'thermal',
+  'magnetic',
+  'gas',
+  'fluid',
+  'isothermal_liquid',
+  'physical',
+  'multibody',
+] as const;
+
+export type PhysicalDomain = (typeof PHYSICAL_DOMAINS)[number];
 
 export interface EquationContext {
   dt: number;
