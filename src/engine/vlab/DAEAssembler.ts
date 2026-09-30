@@ -114,14 +114,14 @@ export class DAEAssembler {
       edges.forEach(edge => {
         if (edge.source === node.id && edge.sourceHandle) {
           let pId = edge.sourceHandle.replace(/_[st]$/, '');
-          if (pId.startsWith(node.id + '-')) {
+          if (pId.startsWith(node.id + '-') || pId.startsWith(node.id + '_')) {
             pId = pId.slice(node.id.length + 1);
           }
           portsSet.add(pId);
         }
         if (edge.target === node.id && edge.targetHandle) {
           let pId = edge.targetHandle.replace(/_[st]$/, '');
-          if (pId.startsWith(node.id + '-')) {
+          if (pId.startsWith(node.id + '-') || pId.startsWith(node.id + '_')) {
             pId = pId.slice(node.id.length + 1);
           }
           portsSet.add(pId);
@@ -174,11 +174,11 @@ export class DAEAssembler {
     const warnedUnconnectedNmosGates = new Set<string>();
     edges.forEach(edge => {
       let sourcePort = (edge.sourceHandle || 'p').replace(/_[st]$/, '');
-      if (sourcePort.startsWith(edge.source + '-')) {
+      if (sourcePort.startsWith(edge.source + '-') || sourcePort.startsWith(edge.source + '_')) {
         sourcePort = sourcePort.slice(edge.source.length + 1);
       }
       let targetPort = (edge.targetHandle || 'p').replace(/_[st]$/, '');
-      if (targetPort.startsWith(edge.target + '-')) {
+      if (targetPort.startsWith(edge.target + '-') || targetPort.startsWith(edge.target + '_')) {
         targetPort = targetPort.slice(edge.target.length + 1);
       }
       
@@ -748,21 +748,23 @@ export class DAEAssembler {
       });
     });
     const warnedAmbiguousBeltProps = new Set<string>();
-    const injectBeltMaterial = (nodeId: string, blockType: string, ports: string[], params: Record<string, any>) => {
+    const injectBeltMaterial = (nodeId: string, blockType: string, ports: string[], params: Record<string, any>, nodeData?: any) => {
       if (!BELT_CONSUMER_TYPES.has(blockType) || beltMaterialSources.length === 0) return;
-      const roots = new Set(ports.map(portId => uf.find(`${nodeId}_${portId}`)));
-      const wired = beltMaterialSources.filter(s => roots.has(s.root));
-      let src = wired[0];
-      if (!src) {
-        if (beltMaterialSources.length > 1 && !warnedAmbiguousBeltProps.has(nodeId)) {
-          warnedAmbiguousBeltProps.add(nodeId);
-          console.warn(`Multiple belt_properties blocks found; "${nodeId}" (${blockType}) inherits belt material from "${beltMaterialSources[0].nodeId}". Wire its P port for explicit scoping.`);
-        }
-        src = beltMaterialSources[0];
+      // Strictly check the dedicated property port 'p'
+      const pRoot = uf.find(`${nodeId}_p`);
+      const matchedSource = beltMaterialSources.find(s => s.root === pRoot);
+      if (!matchedSource) {
+        // Unwired to any belt_properties: strictly do NOT inject fallback
+        return;
       }
-      params.belt_density = src.density;
-      params.belt_youngs = src.youngs;
-      params.belt_properties_source = src.nodeId;
+      params.belt_density = matchedSource.density;
+      params.belt_youngs = matchedSource.youngs;
+      params.belt_properties_source = matchedSource.nodeId;
+      if (nodeData && typeof nodeData === 'object' && nodeData.params) {
+        nodeData.params.belt_density = matchedSource.density;
+        nodeData.params.belt_youngs = matchedSource.youngs;
+        nodeData.params.belt_properties_source = matchedSource.nodeId;
+      }
     };
 
     nodes.forEach(node => {
@@ -810,7 +812,7 @@ export class DAEAssembler {
       }
 
       // Inject belt/cable material (density, youngs) from belt_properties blocks
-      injectBeltMaterial(node.id, type, ports, params);
+      injectBeltMaterial(node.id, type, ports, params, node.data);
 
       // Look up equation factory
       const equationFactory = blockEquations[type];
