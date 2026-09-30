@@ -3,8 +3,15 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyRepository, type BlockDefinition, type SysmlRepository } from '../../engine/sysml/model';
-import { createSysmlGatewayState, executeSysmlCommand, type SysmlEditorCommand } from '../../services/sysmlCommandGateway';
+import {
+  buildCanonicalSysmlProjectPayload,
+  createSysmlGatewayState,
+  executeSysmlCommand,
+  loadCanonicalSysmlProject,
+  type SysmlEditorCommand,
+} from '../../services/sysmlCommandGateway';
 import type { CapabilityKind, ExplorerCapability, ModelTreeNode } from '../../features/modelExplorer/modelExplorerTypes';
+import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import { AppModelExplorer, capabilityToAction, explorerAdapterDomain, filterNonCreatingCapabilities, gateClipboardCapabilities, resolveCreationContext, type CapabilityActionContext } from './AppModelExplorer';
 
 afterEach(cleanup);
@@ -424,52 +431,54 @@ describe('AppModelExplorer Capability Coverage', () => {
   });
 });
 
+function explorerDiagramNode(id: string, domain: 'sysml' | 'stateMachine' = 'sysml'): ModelTreeNode {
+  return {
+    nodeId: domain === 'sysml' ? `sysml:element:${id}` : `sm:diagram:${id}`,
+    semanticId: id,
+    domain,
+    kind: 'diagram',
+    label: id,
+    parentNodeId: domain === 'sysml' ? 'project:pillar:structural' : 'project:pillar:behavior',
+    childNodeIds: [],
+    hasChildren: false,
+  };
+}
+
+function repositoryWithDiagrams(): SysmlRepository {
+  const repository = createEmptyRepository();
+  repository.definitions['block-1'] = {
+    id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
+    isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+  };
+  repository.diagrams['bdd-1'] = {
+    id: 'bdd-1', name: 'Engine BDD', namespace: ['model'], ownerId: 'model', kind: 'diagram', diagramKind: 'bdd',
+  };
+  repository.diagrams['req-diagram-1'] = {
+    id: 'req-diagram-1', name: 'Safety Requirements', namespace: ['model'], ownerId: 'model',
+    kind: 'diagram', diagramKind: 'requirements',
+  };
+  // The canonical SysML domain accepts a parametric DiagramKind; the legacy V3
+  // record type is narrower than the domain it serializes.
+  repository.diagrams['parametric-1'] = {
+    id: 'parametric-1', name: 'Engine Parametric', namespace: ['model'], ownerId: 'block-1',
+    kind: 'diagram', diagramKind: 'parametric',
+  } as unknown as SysmlRepository['diagrams'][string];
+  return repository;
+}
+
+function stateMachineWithDiagram() {
+  return {
+    states: [],
+    layers: [{ id: 'root', name: 'Root Region', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }],
+    transitions: [],
+    junctions: [],
+    diagrams: [{ id: 'nested-sm-1', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }],
+    revision: 1,
+  };
+}
+
 describe('AppModelExplorer diagram-context creation', () => {
-  function diagramNode(id: string, domain: 'sysml' | 'stateMachine' = 'sysml'): ModelTreeNode {
-    return {
-      nodeId: domain === 'sysml' ? `sysml:element:${id}` : `sm:diagram:${id}`,
-      semanticId: id,
-      domain,
-      kind: 'diagram',
-      label: id,
-      parentNodeId: domain === 'sysml' ? 'project:pillar:structural' : 'project:pillar:behavior',
-      childNodeIds: [],
-      hasChildren: false,
-    };
-  }
-
-  function repositoryWithDiagrams(): SysmlRepository {
-    const repository = createEmptyRepository();
-    repository.definitions['block-1'] = {
-      id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
-      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
-    };
-    repository.diagrams['bdd-1'] = {
-      id: 'bdd-1', name: 'Engine BDD', namespace: ['model'], ownerId: 'model', kind: 'diagram', diagramKind: 'bdd',
-    };
-    repository.diagrams['req-diagram-1'] = {
-      id: 'req-diagram-1', name: 'Safety Requirements', namespace: ['model'], ownerId: 'model',
-      kind: 'diagram', diagramKind: 'requirements',
-    };
-    // The canonical SysML domain accepts a parametric DiagramKind; the legacy V3
-    // record type is narrower than the domain it serializes.
-    repository.diagrams['parametric-1'] = {
-      id: 'parametric-1', name: 'Engine Parametric', namespace: ['model'], ownerId: 'block-1',
-      kind: 'diagram', diagramKind: 'parametric',
-    } as unknown as SysmlRepository['diagrams'][string];
-    return repository;
-  }
-
-  function stateMachineWithDiagram() {
-    return {
-      states: [],
-      layers: [{ id: 'root', name: 'Root Region', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }],
-      transitions: [],
-      junctions: [],
-      diagrams: [{ id: 'nested-sm-1', name: 'Nested SM', ownerId: 'region-1', contextRegionId: 'region-1' }],
-      revision: 1,
-    };
-  }
+  const diagramNode = explorerDiagramNode;
 
   it('resolves diagram rows to a legal semantic owner plus the initiating diagram', () => {
     const repository = repositoryWithDiagrams();
@@ -631,5 +640,58 @@ describe('AppModelExplorer diagram-context creation', () => {
     // State-machine diagram membership is derived from the region, so no
     // SysML presentation command may be issued.
     expect(onExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe('Model Explorer diagram grouping lifecycle', () => {
+  it('keeps diagram membership undoable, redoable, and persistent across a project round trip', () => {
+    const repository = repositoryWithDiagrams();
+    const created: BlockDefinition = {
+      id: 'blk-created', name: 'Created Block', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+
+    const afterCreate = executeSysmlCommand(createSysmlGatewayState(repository), {
+      type: 'createElement',
+      element: created,
+    });
+    expect(afterCreate.committed).toBe(true);
+    expect(afterCreate.repository.definitions[created.id]).toBeDefined();
+
+    const afterPresent = executeSysmlCommand(afterCreate, {
+      type: 'addToDiagram',
+      diagramId: 'bdd-1',
+      elementIds: [created.id],
+    });
+    expect(afterPresent.committed).toBe(true);
+    expect(afterPresent.diagramPresentations['bdd-1'].elementIds).toContain(created.id);
+
+    // Undo removes the presentation only: the element stays in the model.
+    const afterUndo = executeSysmlCommand(afterPresent, { type: 'undo' });
+    expect(afterUndo.diagramPresentations['bdd-1']?.elementIds ?? []).not.toContain(created.id);
+    expect(afterUndo.repository.definitions[created.id]).toBeDefined();
+
+    const afterRedo = executeSysmlCommand(afterUndo, { type: 'redo' });
+    expect(afterRedo.diagramPresentations['bdd-1'].elementIds).toContain(created.id);
+
+    // The presentation survives the project persistence path and still drives
+    // the containment grouping after a reload.
+    const payload = JSON.parse(JSON.stringify(
+      buildCanonicalSysmlProjectPayload(afterRedo, { version: '1.0', projectName: 'Grouping' }),
+    ));
+    const loaded = loadCanonicalSysmlProject(payload);
+    expect(loaded.valid).toBe(true);
+    const projection = buildUnifiedModelProjection({
+      sysml: loaded.repository,
+      stateMachine: stateMachineWithDiagram(),
+      externalModels: [],
+      revision: loaded.repository.revision,
+      diagramPresentations: loaded.diagramPresentations,
+    });
+
+    expect(projection.nodes[`sysml:element:${created.id}`]).toMatchObject({
+      parentNodeId: 'sysml:element:bdd-1',
+      ownerSemanticId: 'model',
+    });
   });
 });
