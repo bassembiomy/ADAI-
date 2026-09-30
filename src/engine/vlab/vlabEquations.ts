@@ -1218,10 +1218,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Rout = (params.output_resistance_ohm as number) ?? 0.001;
     const [Idc = 0, Ia = 0, Ib = 0, Ic = 0] = branch ?? [];
 
-    if (ctx.parameters && ctx.parameters['grid_freq'] === undefined) {
-      ctx.parameters['grid_freq'] = 2 * Math.PI * f_out;
-    }
-
     return [
       Idc + ma * Ia + mb * Ib + mc * Ic,
       across[6] - (across[5] + Vdc * ma) - Ia * Rout,
