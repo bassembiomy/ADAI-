@@ -575,6 +575,11 @@ export class DAEAssembler {
           branches.push({ name: 'current_b', ports: [{ id: 'b', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_c', ports: [{ id: 'c', sign: -1 }, { id: 'n', sign: 1 }] });
           break;
+        case 'pwm_3ph_3level':
+          for (const name of ['ga', 'gb', 'gc', 'ma', 'mb', 'mc']) {
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          break;
         case 'ma_pipe':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
           break;
@@ -672,7 +677,7 @@ export class DAEAssembler {
         const domain = nodePortDomains.get(key);
         if (domain === 'physical' && isPhysicalOutputPort(portId)) {
           // Check if this branch is already added
-          if (!branches.some(b => b.name === `signal_${portId}`)) {
+          if (!branches.some(b => b.name === `signal_${portId}` || b.ports.some(port => port.id === portId))) {
             branches.push({ name: `signal_${portId}`, ports: [{ id: portId, sign: 1 }] });
           }
         }

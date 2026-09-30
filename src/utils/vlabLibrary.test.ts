@@ -127,4 +127,12 @@ describe('VLab Library Search & Scoring', () => {
     expect(inverter?.params.output_resistance_ohm).toEqual({ value: 0.001, unit: 'ohm', label: 'Output Resistance' });
     expect(inverter?.ports.map(p => p.id)).toEqual(['vabc', 'ma', 'mb', 'mc', 'p', 'n', 'a', 'b', 'c']);
   });
+
+  it('exposes physical three-level PWM inputs and scalar outputs', () => {
+    const block = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(item => item.id === 'pwm_3ph_3level');
+    expect(block?.ports.map(port => port.id)).toEqual(['vabc', 'vdc', 'vneut', 'ga', 'gb', 'gc', 'ma', 'mb', 'mc']);
+    expect(block?.ports.every(port => port.domain === 'Physical')).toBe(true);
+    expect(block?.params.output_frequency_hz).toEqual({ value: 50, unit: 'Hz', label: 'Output Frequency' });
+    expect(block?.params.neutral_balance_gain).toEqual({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
+  });
 });

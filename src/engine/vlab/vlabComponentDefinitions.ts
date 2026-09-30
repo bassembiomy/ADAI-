@@ -1092,10 +1092,15 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: '3-Phase Inverter Bridge. In averaged mode (default), generates continuous phase voltages Vx = Vn + Vdc * mx with zero PWM ripple. In switching mode, compares modulation references against a triangular carrier at f_sw to produce two voltage levels and ripple.'
   },
   pwm_3ph_3level: {
-    equations: ['g = 1 if Vabc > C1 else 0 if Vabc < C2 else 0.5'],
-    latex: ['g \\in \\{-1, 0, 1\\}'],
-    across: 'None', through: 'None',
-    description: 'Generates gate signals for three-level inverters (e.g., NPC). Uses two vertically offset carriers to create three output voltage levels.'
+    equations: [
+      'ma,mb,mc = 0.8*vabc*sin(2π*f_out*t + [0,-120,+120]°)',
+      'g_x = +1 if m_x + Δ_neut >= C_upper',
+      'g_x = -1 if m_x + Δ_neut <= C_lower',
+      'g_x = 0 otherwise'
+    ],
+    latex: ['g_x \\in \\{-1, 0, 1\\}', '\\Delta_{neut} = clamp(k_{neut} v_{neut}/max(|v_{dc}|,1))'],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Three-level PWM generator with explicit ga/gb/gc and ma/mb/mc outputs. Uses two triangular carriers at f_sw and a bounded vneut-based neutral-point correction; vabc=0 remains zero modulation.'
   },
   pwm_vienna: {
     equations: ['g = f(Vabc, Iabc, Vdc, Neutral)'],

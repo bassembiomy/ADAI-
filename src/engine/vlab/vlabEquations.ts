@@ -2285,16 +2285,35 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - firing_angle];
   },
 
-  pwm_3ph_3level: ({ across, branch, ctx }) => {
-    const ctrl = across[0] || 0.5;
-    const w = ctx.parameters['grid_freq'] || 314.159;
-    const ma = 0.5 + 0.4 * ctrl * Math.sin(w * ctx.time);
-    const mb = 0.5 + 0.4 * ctrl * Math.sin(w * ctx.time - 2*Math.PI/3);
-    const mc = 0.5 + 0.4 * ctrl * Math.sin(w * ctx.time + 2*Math.PI/3);
+  pwm_3ph_3level: ({ across, branch, params, ctx }) => {
+    const amplitude = Math.max(0, Math.min(1, across[0] ?? 0.5));
+    const vdc = Math.abs(across[1] ?? 0);
+    const vneut = across[2] ?? 0;
+    const fOut = params.output_frequency_hz ?? 50;
+    const fSw = Math.max(1, params.f_sw ?? 2000);
+    const neutralGain = params.neutral_balance_gain ?? 0.1;
+    const neutralCorrection = Math.max(-0.15, Math.min(0.15, neutralGain * vneut / Math.max(vdc, 1)));
+    const phase = 2 * Math.PI * fOut * ctx.time;
+    const refs = [
+      0.8 * amplitude * Math.sin(phase),
+      0.8 * amplitude * Math.sin(phase - 2 * Math.PI / 3),
+      0.8 * amplitude * Math.sin(phase + 2 * Math.PI / 3)
+    ];
+    const carrierPhase = (ctx.time * fSw) % 1;
+    const carrier = carrierPhase < 0.5 ? 4 * carrierPhase - 1 : 3 - 4 * carrierPhase;
+    const upper = carrier + 0.5;
+    const lower = carrier - 0.5;
+    const gates = refs.map(ref => {
+      const corrected = ref + neutralCorrection;
+      return corrected >= upper ? 1 : corrected <= lower ? -1 : 0;
+    });
     return [
-      branch[0] - ma,
-      branch[1] - mb,
-      branch[2] - mc
+      branch[0] - gates[0],
+      branch[1] - gates[1],
+      branch[2] - gates[2],
+      branch[3] - refs[0],
+      branch[4] - refs[1],
+      branch[5] - refs[2]
     ];
   },
 

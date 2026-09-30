@@ -5938,33 +5938,72 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2000,
             "unit": "Hz",
             "label": "Switch Freq"
+          },
+          "output_frequency_hz": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Output Frequency"
+          },
+          "neutral_balance_gain": {
+            "value": 0.1,
+            "unit": "1/V",
+            "label": "Neutral Balance Gain"
           }
         },
         "ports": [
           {
             "id": "vabc",
             "pos": "left",
-            "label": "Vabc"
+            "label": "Vabc",
+            "domain": "Physical"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical"
           },
           {
             "id": "vneut",
             "pos": "left",
-            "label": "vNeutral"
+            "label": "vNeutral",
+            "domain": "Physical"
           },
           {
-            "id": "g",
+            "id": "ga",
             "pos": "right",
-            "label": "g"
+            "label": "Gate A",
+            "domain": "Physical"
           },
           {
-            "id": "mod",
+            "id": "gb",
             "pos": "right",
-            "label": "ModWave"
+            "label": "Gate B",
+            "domain": "Physical"
+          },
+          {
+            "id": "gc",
+            "pos": "right",
+            "label": "Gate C",
+            "domain": "Physical"
+          },
+          {
+            "id": "ma",
+            "pos": "right",
+            "label": "Mod A",
+            "domain": "Physical"
+          },
+          {
+            "id": "mb",
+            "pos": "right",
+            "label": "Mod B",
+            "domain": "Physical"
+          },
+          {
+            "id": "mc",
+            "pos": "right",
+            "label": "Mod C",
+            "domain": "Physical"
           }
         ],
         "equation": "PWM Generator (3-Phase, 3-Level) governing physical equation",
