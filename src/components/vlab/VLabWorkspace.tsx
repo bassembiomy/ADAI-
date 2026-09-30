@@ -21,6 +21,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import * as math from 'mathjs';
 import { VLabWorkspaceProps, VLabNode as AppVLabNode, VLabEdge as AppVLabEdge } from './VLabWorkspaceTypes';
+import { normalizeLegacyVLabGraph } from './vlabModelMigration';
 import { VLabNode, NodeErrorBoundary } from './VLabNode';
 import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
@@ -950,8 +951,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onNavigateToXbridges,
   initialSelectedNodeId
 }) => {
-  const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialNodes);
-  const [edges, setEdges, onLocalEdgesChange] = useEdgesState<AppVLabEdge>(initialEdges);
+  const initialGraphRef = useRef(normalizeLegacyVLabGraph(initialNodes, initialEdges));
+  const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialGraphRef.current.nodes);
+  const [edges, setEdges, onLocalEdgesChange] = useEdgesState<AppVLabEdge>(initialGraphRef.current.edges);
 
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
@@ -985,19 +987,18 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
   // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
   useEffect(() => {
-    if (initialNodes === initialNodesRef.current) return;
+    const nodesChanged = initialNodes !== initialNodesRef.current;
+    const edgesChanged = initialEdges !== initialEdgesRef.current;
+    if (!nodesChanged && !edgesChanged) return;
     initialNodesRef.current = initialNodes;
-    if (isSavingRef.current) return;
-    setNodes(initialNodes);
-    setViewPath(['root']);
-  }, [initialNodes, setNodes]);
-
-  useEffect(() => {
-    if (initialEdges === initialEdgesRef.current) return;
     initialEdgesRef.current = initialEdges;
     if (isSavingRef.current) return;
-    setEdges(initialEdges);
-  }, [initialEdges, setEdges]);
+
+    const normalized = normalizeLegacyVLabGraph(initialNodes, initialEdges);
+    setNodes(normalized.nodes);
+    setEdges(normalized.edges);
+    setViewPath(['root']);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   // --- Subsystem Port Synchronization ---
   useEffect(() => {
@@ -1218,8 +1219,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       if (res.success && res.content) {
         const data = JSON.parse(res.content);
         if (data.nodes && data.edges) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
+          const normalized = normalizeLegacyVLabGraph(data.nodes, data.edges);
+          setNodes(normalized.nodes);
+          setEdges(normalized.edges);
           setSyncStatus('success');
           setTimeout(() => setShow3dxSyncModal(false), 1500);
         } else {
