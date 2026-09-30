@@ -1,25 +1,31 @@
-# VLab Belt, Spool, and Pulley Domain Separation & Scope Outputs
+# V-Lab Gas Properties Cleanup and Port Domains
 
-- [x] Task 1: Update Port Definitions and Domain Specifications
-  - [x] Step 1: Write failing unit test for port domain definitions (`src/engine/vlab/vlab_belt_domains.test.ts`)
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Update `src/utils/vlabLibrary.ts`, `src/engine/vlab/vlabComponentDefinitions.ts`, and certification whitelist
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 2: Strict Port P Wiring and Removal of Silent Fallback in DAEAssembler
-  - [x] Step 1: Write failing test for strict property injection and no silent fallback
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Refactor `injectBeltMaterial` in `src/engine/vlab/DAEAssembler.ts`
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 3: Measurement Signal Branches and Equation Coupling in DAEAssembler & vlabEquations
-  - [x] Step 1: Write failing test for Scope connection to measurement ports (`f`, `t`)
-  - [x] Step 2: Run test to verify it fails
-  - [x] Step 3: Update `getComponentSpec` and equation factories
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 4: Dynamic Sensitivity Verification (Young's Modulus & Density Influence on Simulation)
-  - [x] Step 1: Write integration tests verifying physics sensitivity
-  - [x] Step 2: Run test to verify it passes
-  - [x] Step 3: Run full regression and certification suite
-  - [x] Step 4: Commit changes
+- [ ] Task 1: Canonical Runtime Port-Domain Validation
+  - [ ] Step 1: Write the failing port-domain tests (`src/engine/vlab/vlabPortDomains.test.ts`)
+  - [ ] Step 2: Run the test and verify the intended RED state
+  - [ ] Step 3: Add the runtime tuple and derive the engine type from it (`src/engine/vlab/types.ts`)
+  - [ ] Step 4: Implement the V-Lab validator (`src/engine/vlab/vlabPortDomains.ts`)
+  - [ ] Step 5: Run focused tests and type checking
+  - [ ] Step 6: Commit the domain source and validator
+- [ ] Task 2: Legacy `gas_properties` Graph Migration
+  - [ ] Step 1: Write failing migration tests (`src/components/vlab/vlabModelMigration.test.ts`)
+  - [ ] Step 2: Run the migration test and verify RED
+  - [ ] Step 3: Implement the pure normalizer (`src/components/vlab/vlabModelMigration.ts`)
+  - [ ] Step 4: Run migration tests and verify GREEN
+  - [ ] Step 5: Apply normalization at all V-Lab workspace ingress points (`src/components/vlab/VLabWorkspace.tsx`)
+  - [ ] Step 6: Run focused workspace and migration tests
+  - [ ] Step 7: Commit the legacy migration
+- [ ] Task 3: Remove Obsolete Registries and Fix Certification
+  - [ ] Step 1: Extend the existing removal regression before production edits (`src/utils/vlabLibrary.test.ts`)
+  - [ ] Step 2: Run the regression and verify RED
+  - [ ] Step 3: Remove production remnants (`vlabEquations.ts`, `vlabComponentDefinitions.ts`, `VLabSymbols.tsx`)
+  - [ ] Step 4: Replace the handwritten certification domain allowlist (`vlab_full_certification.test.ts`)
+  - [ ] Step 5: Run the focused removal test and full certification
+  - [ ] Step 6: Verify no source remnants remain outside migration and tests
+  - [ ] Step 7: Commit registry cleanup and certification fix
+- [ ] Task 4: Integrated Verification
+  - [ ] Step 1: Run all focused tests together
+  - [ ] Step 2: Run the standard V-Lab suite
+  - [ ] Step 3: Run TypeScript validation
+  - [ ] Step 4: Inspect the final diff and whitespace
+  - [ ] Step 5: Commit any verification-only correction
