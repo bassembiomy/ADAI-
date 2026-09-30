@@ -5,7 +5,7 @@ import type { SysmlEditorCommand, SysmlElement } from './sysmlCommandGateway';
 export type SysmlCloneElementsInput = {
   sourceIds: string[];
   diagramId: string;
-  drop: Pick<PresentationCoordinates, 'x' | 'y'>;
+  drop: { x: number; y: number };
   repository: SysmlRepository;
   idFactory?: () => string;
 };

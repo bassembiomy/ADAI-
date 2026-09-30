@@ -84,6 +84,7 @@ describe('semanticEndpointIndex', () => {
       name: 'rpm',
       family: 'property',
       ownerId: 'block1',
+      typeId: 'Real',
     });
     expect(resolveRepositoryEndpoint(repo, 'port1')).toEqual({
       id: 'port1',

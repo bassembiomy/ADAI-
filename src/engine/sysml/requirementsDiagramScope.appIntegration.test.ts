@@ -8,7 +8,7 @@ describe('requirements diagram scope App integration', () => {
     expect(source).toContain("import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';");
     expect(source).toContain('getRequirementsDiagramScope(');
     expect(source).toContain('Object.fromEntries(sysmlStore.diagramPresentations.entries())');
-    expect(source).toContain('new Set(sysmlDiagramPresentations.requirements?.elementIds ?? [])');
+    expect(source).toContain('new Set((sysmlDiagramPresentations[activeSysmlDiagramId] ?? sysmlDiagramPresentations.requirements)?.elementIds ?? [])');
     expect(source).toContain('setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations))');
     expect(source).toContain("type: 'createElement'");
     expect(source).toContain("kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type)");
