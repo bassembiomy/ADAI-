@@ -2,6 +2,8 @@ export type ExplorerDomain = 'project' | 'stateMachine' | 'sysml' | 'xbridges' |
 
 export type ModelPillar = 'structural' | 'behavior' | 'parametric' | 'requirements';
 
+export type SelectionOrigin = 'tree' | 'canvas' | 'propertyPanel' | 'breadcrumb' | 'tab';
+
 export interface ActiveDiagramContext {
   diagramId: string;
   name: string;
@@ -47,6 +49,7 @@ export interface ModelTreeNode {
   virtualKind?: 'model' | ModelPillar | 'group' | 'unresolved' | 'unclassified';
   ownerSemanticId?: string | null;
   diagramId?: string;
+  targetSemanticId?: string;
 }
 
 export interface ModelTreeProjection {

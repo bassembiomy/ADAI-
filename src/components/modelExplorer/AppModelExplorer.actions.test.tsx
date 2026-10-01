@@ -799,4 +799,74 @@ describe('Model Explorer diagram grouping lifecycle', () => {
       ownerSemanticId: 'model',
     });
   });
+
+  it('navigates to the semantic target on relationship endpoint double-click and reveal', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+    const repo = createEmptyRepository();
+    repo.definitions['block-1'] = {
+      id: 'block-1',
+      name: 'System',
+      kind: 'block',
+      ownerId: 'model',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      ports: [
+        { id: 'port-1', name: 'p1', kind: 'standard', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+      ],
+      operations: [],
+      constraints: [],
+    };
+    (repo as any).relationships = {
+      'connector-1': {
+        id: 'connector-1',
+        name: 'c1',
+        metaclass: 'Connector',
+        sourceId: 'port-1',
+        targetId: 'port-2',
+        sourceEnd: { id: 'end-a', roleId: 'port-1' },
+      },
+    };
+
+    const onSelect = vi.fn();
+    const onDoubleClick = vi.fn();
+    const onRevealInContainment = vi.fn();
+
+    const { container } = render(
+      <AppModelExplorer
+        diagramMode="ibd"
+        states={[]}
+        layers={[]}
+        transitions={[]}
+        junctions={[]}
+        blocks={[]}
+        parts={[]}
+        selectedIds={[]}
+        canonicalSysmlRepository={repo}
+        onSelect={onSelect}
+        onDoubleClick={onDoubleClick}
+        onRevealInContainment={onRevealInContainment}
+      />
+    );
+
+    const connRow = container.querySelector('.model-tree-row[data-node-id="sysml:element:connector-1"]');
+    expect(connRow).not.toBeNull();
+    fireEvent.doubleClick(connRow!);
+
+    const endRow = container.querySelector('.model-tree-row[data-node-id="sysml:element:end-a"]');
+    expect(endRow).not.toBeNull();
+
+    // 1. Double click navigates to port-1
+    fireEvent.doubleClick(endRow!);
+    expect(onSelect).toHaveBeenCalledWith('port-1');
+    expect(onDoubleClick).toHaveBeenCalledWith('port-1', 'port');
+
+    // 2. Reveal in context menu reveals port-1
+    fireEvent.contextMenu(endRow!);
+    const revealItem = screen.getByRole('menuitem', { name: /^Reveal in Tree$/i });
+    fireEvent.click(revealItem);
+    expect(onRevealInContainment).toHaveBeenCalledWith('port-1');
+  });
 });
+

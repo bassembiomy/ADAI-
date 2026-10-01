@@ -177,6 +177,17 @@ export function capabilitiesForExplorerNode(
   node: ModelTreeNode,
   capabilities: ExplorerCapability[],
 ): ExplorerCapability[] {
+  if (node.kind === 'connectorEnd') {
+    return [
+      ...capabilities,
+      {
+        id: `reveal:${node.semanticId}`,
+        kind: 'reveal',
+        label: 'Reveal in Tree',
+        enabled: true,
+      },
+    ];
+  }
   if (node.kind !== 'pillar' || !node.virtualKind) return capabilities;
   const allowedDiagramKinds = PILLAR_DIAGRAM_KINDS[node.virtualKind] ?? [];
   const allowed = new Set(allowedDiagramKinds);
@@ -562,9 +573,17 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
 
   const handleActivateNode = useCallback(
     (node: ModelTreeNode) => {
+      if (node.kind === 'connectorEnd') {
+        const targetId = node.targetSemanticId || node.label;
+        if (targetId) {
+          onSelect(targetId);
+          onDoubleClick(targetId, 'port');
+          return;
+        }
+      }
       onDoubleClick(node.semanticId, node.kind);
     },
-    [onDoubleClick]
+    [onDoubleClick, onSelect]
   );
 
   /**
@@ -645,6 +664,14 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       }
 
       if (capability.kind === 'reveal') {
+        if (node.kind === 'connectorEnd') {
+          const targetId = node.targetSemanticId || node.label;
+          if (targetId) {
+            onSelect(targetId);
+            if (onRevealInContainment) onRevealInContainment(targetId);
+            return;
+          }
+        }
         if (node.kind === 'diagram') {
           onDoubleClick(node.semanticId, node.kind);
         } else if (onRevealInContainment) {

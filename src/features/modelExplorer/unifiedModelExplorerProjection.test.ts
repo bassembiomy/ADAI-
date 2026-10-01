@@ -349,4 +349,141 @@ describe('buildUnifiedModelProjection', () => {
       secondaryLabel: `: CommandSignal · in · ID ${uuid}`,
     });
   });
+
+  it('projects structural, behavioral, requirement, and relationship elements', () => {
+    const fullRepositoryFixture: UnifiedExplorerInput = {
+      sysml: {
+        ...createEmptyRepository(),
+        definitions: {
+          'block-1': {
+            id: 'block-1',
+            name: 'Block1',
+            namespace: ['model'],
+            ownerId: 'model',
+            kind: 'block',
+            isAbstract: false,
+            isLeaf: false,
+            properties: [
+              { id: 'property-1', name: 'prop1', kind: 'part', typeId: 'block-1', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+            ],
+            ports: [
+              { id: 'port-1', name: 'port1', kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+            ],
+            operations: ['operation-1'],
+            constraints: [],
+          },
+        },
+        elements: {
+          'block-1': { id: 'block-1', name: 'Block1', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' },
+          'port-1': { id: 'port-1', name: 'port1', metaclass: 'Port', namespace: [], ownerId: 'block-1', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true }, portKind: 'proxyPort' },
+          'property-1': { id: 'property-1', name: 'prop1', metaclass: 'PartProperty', namespace: [], ownerId: 'block-1', typeId: 'block-1', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true }, aggregation: 'composite' },
+          'operation-1': { id: 'operation-1', name: 'op1', metaclass: 'Operation', namespace: [], ownerId: 'block-1', parameterIds: [] },
+          'transition-1': { id: 'transition-1', name: 'trans1', metaclass: 'Transition', namespace: [], ownerId: 'block-1' },
+          'activity-edge-1': { id: 'activity-edge-1', name: 'edge1', metaclass: 'ControlFlow', namespace: [], ownerId: 'block-1' },
+        },
+        relationships: {
+          'connector-1': {
+            id: 'connector-1',
+            name: 'connector1',
+            metaclass: 'Connector',
+            sourceId: 'port-1',
+            targetId: 'port-2',
+            sourceEnd: { id: 'connector-end-a', roleId: 'port-1' },
+            targetEnd: { id: 'connector-end-b', roleId: 'port-2' },
+          },
+          'allocate-1': {
+            id: 'allocate-1',
+            name: 'allocate1',
+            metaclass: 'Allocate',
+            sourceId: 'block-1',
+            targetId: 'subsystem-1',
+          },
+          'satisfy-1': {
+            id: 'satisfy-1',
+            name: 'satisfy1',
+            metaclass: 'Satisfy',
+            sourceId: 'block-1',
+            targetId: 'req-1',
+          },
+        },
+        itemFlows: {
+          'item-flow-1': {
+            id: 'item-flow-1',
+            name: 'itemFlow1',
+            realizingRelationshipId: 'connector-1',
+            conveyedClassifierIds: ['signal-1'],
+            sourceId: 'port-1',
+            targetId: 'port-2',
+          },
+        },
+        diagrams: {
+          'diagram-2': {
+            id: 'diagram-2',
+            name: 'Other Diagram',
+            namespace: [],
+            ownerId: 'model',
+            kind: 'diagram',
+            diagramKind: 'bdd',
+          },
+        },
+      } as any,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+      diagramPresentations: {
+        'diagram-2': { elementIds: ['port-1'] },
+      },
+    };
+
+    const projection = buildUnifiedModelProjection(fullRepositoryFixture);
+    for (const id of ['port-1', 'property-1', 'operation-1', 'connector-1', 'connector-end-a', 'item-flow-1', 'allocate-1', 'transition-1', 'activity-edge-1', 'satisfy-1']) {
+      expect(projection.nodes[`sysml:element:${id}`], id).toBeDefined();
+    }
+  });
+
+  it('nests by semantic owner even when presented on another diagram', () => {
+    const fullRepositoryFixture: UnifiedExplorerInput = {
+      sysml: {
+        ...createEmptyRepository(),
+        definitions: {
+          'block-1': {
+            id: 'block-1',
+            name: 'Block1',
+            namespace: ['model'],
+            ownerId: 'model',
+            kind: 'block',
+            isAbstract: false,
+            isLeaf: false,
+            properties: [],
+            ports: [
+              { id: 'port-1', name: 'port1', kind: 'proxy', typeId: 'signal', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+            ],
+            operations: [],
+            constraints: [],
+          },
+        },
+        diagrams: {
+          'diagram-2': {
+            id: 'diagram-2',
+            name: 'Other Diagram',
+            namespace: [],
+            ownerId: 'model',
+            kind: 'diagram',
+            diagramKind: 'bdd',
+          },
+        },
+      } as any,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+      diagramPresentations: {
+        'diagram-2': { elementIds: ['port-1'] },
+      },
+    };
+
+    const projection = buildUnifiedModelProjection(fullRepositoryFixture);
+    expect(projection.nodes['sysml:element:port-1'].ownerSemanticId).toBe('block-1');
+    expect(projection.nodes['sysml:element:port-1'].parentNodeId).toBe('sysml:element:block-1');
+  });
 });
+

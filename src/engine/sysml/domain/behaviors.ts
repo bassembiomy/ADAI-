@@ -34,3 +34,6 @@ export interface ActivityPartition extends SemanticElement {
   nodeIds: string[];
   subPartitionIds?: string[];
 }
+
+export type BehaviorElement = UseCase | Activity | ActivityPartition | SemanticElement;
+
