@@ -48,6 +48,9 @@ import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifi
 import { resolveDiagramSemanticOwner } from '../../features/modelExplorer/diagramTreeContext';
 import { getDiagramKindLabel, getElementKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
 import { resolveActiveSysmlDiagramTarget } from '../../services/sysmlDiagramTarget';
+import { resolveInteractionContext } from '../../features/sysml/interactionContext';
+import { migrateV3ToV4 } from '../../engine/sysml/persistence/migrateV3ToV4';
+import type { SysmlRepositoryV4 } from '../../engine/sysml/domain';
 
 export interface CapabilityActionContext {
   activeDiagramId?: string;
@@ -133,12 +136,41 @@ export function resolveCreationContext(
   node: ModelTreeNode,
   sysml: SysmlRepository,
   stateMachine: StateMachineExplorerSnapshot,
+  requestedMetaclass: string = 'Block',
 ): { ownerId: string; diagramId?: string } {
-  if (node.kind !== 'diagram') return { ownerId: resolveCapabilityOwnerId(node) };
-  return {
-    ownerId: resolveDiagramSemanticOwner(node, sysml, stateMachine),
-    diagramId: node.semanticId,
-  };
+  if (node.domain === 'stateMachine' || node.virtualKind === 'behavior') {
+    if (node.kind !== 'diagram') return { ownerId: resolveCapabilityOwnerId(node) };
+    return {
+      ownerId: resolveDiagramSemanticOwner(node, sysml, stateMachine),
+      diagramId: node.semanticId,
+    };
+  }
+
+  const canonicalRepo: SysmlRepositoryV4 = (sysml as any)?.elements
+    ? (sysml as unknown as SysmlRepositoryV4)
+    : migrateV3ToV4(sysml);
+
+  const resolved = resolveInteractionContext({
+    repository: canonicalRepo,
+    source: 'tree',
+    treeElementId: node.semanticId,
+    requestedMetaclass: requestedMetaclass as any,
+  });
+
+  if (resolved.status === 'resolved') {
+    return {
+      ownerId: resolved.ownerId,
+      diagramId: resolved.diagramId,
+    };
+  }
+
+  if (node.kind === 'diagram') {
+    return {
+      ownerId: resolveDiagramSemanticOwner(node, sysml, stateMachine),
+      diagramId: node.semanticId,
+    };
+  }
+  return { ownerId: resolveCapabilityOwnerId(node) };
 }
 
 export function capabilitiesForExplorerNode(
@@ -184,13 +216,13 @@ export function capabilityToAction(
         kind: 'command',
         command: {
           type: 'createElement',
-          ownerId: node.semanticId,
+          ownerId: node.kind === 'diagram' ? (node.ownerSemanticId ?? 'model') : node.semanticId,
           elementKind: capability.elementKind || 'block',
         },
       };
     case 'createDiagram':
       const diagramKind = capability.elementKind || 'bdd';
-      const ownerId = resolveCapabilityOwnerId(node, diagramKind);
+      const ownerId = node.kind === 'diagram' ? (node.ownerSemanticId ?? 'model') : resolveCapabilityOwnerId(node, diagramKind);
       return {
         kind: 'command',
         command: {
@@ -567,6 +599,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         capability.kind === 'createDiagram' &&
         (capability.elementKind === 'stateMachine' || node.virtualKind === 'behavior');
       const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' || isStateMachineDiagramTarget ? smAdapter : sysmlAdapter;
+      if (capability.enabled === false) return;
       if (capability.kind === 'rename') return;
 
       if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {

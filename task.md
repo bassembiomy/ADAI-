@@ -1,31 +1,68 @@
-# VLab Multibody Frame Kinematics & Constraints Plan
+# SysML Package Diagram and Contextual Editing Implementation Plan
 
-- [x] Task 1: Domain System & Library Contract Updates
-  - [x] Step 1: Write failing test for Frame port domain validity and block library contracts
-  - [x] Step 2: Run test to verify it fails (RED)
-  - [x] Step 3: Implement domain definitions and library metadata (GREEN)
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 2: Vector Parsing & 3D Kinematics Utility
-  - [x] Step 1: Write failing test for kinematics utilities
-  - [x] Step 2: Run test to verify it fails (RED)
-  - [x] Step 3: Implement `vlabFrameKinematics.ts` (GREEN)
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 3: DAE Assembler Multi-variable Allocation & World Frame Pinning
-  - [x] Step 1: Write failing test for Frame variable stride and World pinning
-  - [x] Step 2: Run test to verify it fails (RED)
-  - [x] Step 3: Update `DAEAssembler.ts` for Frame variable allocation and reference pinning (GREEN)
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 4: Component Governing Equations, Branches, and Scope Mapping
-  - [x] Step 1: Write failing test for component branches, equations, and Scope measurements
-  - [x] Step 2: Run test to verify it fails (RED)
-  - [x] Step 3: Implement equations, branches, and scope mappings in `vlabEquations.ts`, `DAEAssembler.ts`, `VLabSymbols.tsx` (GREEN)
-  - [x] Step 4: Run test to verify it passes
-  - [x] Step 5: Commit changes
-- [x] Task 5: End-to-End Simulation & Benchmark B39 Certification Suite
-  - [x] Step 1: Write Benchmark B39 reproduction and certification test
-  - [x] Step 2: Run test suite to verify B39 passes
-  - [x] Step 3: Run full VLab test suite to ensure zero regressions
-  - [x] Step 4: Commit changes
+- [x] Task 1: Shared Semantic Interaction Context and Capability Guardrails
+  - [x] Step 1: Write failing precedence and legality tests (`src/features/sysml/interactionContext.test.ts`, `src/engine/sysml/capabilities/ownershipPolicy.test.ts`)
+  - [x] Step 2: Run the focused tests and verify failure
+  - [x] Step 3: Implement the resolver as a pure domain-facing service (`src/features/sysml/interactionContext.ts`, `src/engine/sysml/capabilities/ownershipPolicy.ts`)
+  - [x] Step 4: Replace explorer-only owner calculations with the shared resolver (`src/components/modelExplorer/AppModelExplorer.tsx`)
+  - [x] Step 5: Run focused and architecture tests (`src/features/sysml/interactionContext.test.ts`, `src/components/modelExplorer/AppModelExplorer.test.tsx`, `src/engine/sysml/architectureGuards.test.ts`)
+  - [x] Step 6: Commit Task 1 changes
+- [ ] Task 2: Complete Package Diagram Creation and Exact Navigation
+  - [ ] Step 1: Add failing tests for the complete package-diagram lifecycle
+  - [ ] Step 2: Run focused tests and verify missing behavior
+  - [ ] Step 3: Centralize package-diagram eligibility and command construction
+  - [ ] Step 4: Make creation one repository transaction and open by returned ID
+  - [ ] Step 5: Implement deterministic navigation target selection
+  - [ ] Step 6: Add Playwright coverage
+  - [ ] Step 7: Run package/navigation verification
+  - [ ] Step 8: Commit Task 2 changes
+- [ ] Task 3: Context-Aware Creation Without Redundant Parent Prompts
+  - [ ] Step 1: Write command-parity and no-parent-dialog tests
+  - [ ] Step 2: Run tests and verify failure
+  - [ ] Step 3: Implement one creation planner
+  - [ ] Step 4: Route BDD toolbar/canvas and block inspector buttons through the planner
+  - [ ] Step 5: Extend the path to all supported owned elements
+  - [ ] Step 6: Add end-to-end parity assertions
+  - [ ] Step 7: Run verification
+  - [ ] Step 8: Commit Task 3 changes
+- [ ] Task 4: Repository-Complete Model Explorer Projection and Selection Alignment
+  - [ ] Step 1: Write a complete projection contract test
+  - [ ] Step 2: Run projection tests and capture missing collections
+  - [ ] Step 3: Add focused projector functions
+  - [ ] Step 4: Unify selection synchronization
+  - [ ] Step 5: Add navigation tests for relationship endpoints
+  - [ ] Step 6: Run verification
+  - [ ] Step 7: Commit Task 4 changes
+- [ ] Task 5: Typed, Schema-Driven Property Panel With Real Commands
+  - [ ] Step 1: Write schema completeness tests
+  - [ ] Step 2: Write atomic update tests
+  - [ ] Step 3: Run tests and verify failure
+  - [ ] Step 4: Define metaclass field/action schemas
+  - [ ] Step 5: Implement debounced/coalesced canonical updates
+  - [ ] Step 6: Replace conditional `App.tsx` SysML editor branches
+  - [ ] Step 7: Verify field round trips
+  - [ ] Step 8: Commit Task 5 changes
+- [ ] Task 6: First-Class Relationships, Connections, and Behavioral Elements
+  - [ ] Step 1: Write failing relationship round-trip tests
+  - [ ] Step 2: Run relationship tests and verify failure
+  - [ ] Step 3: Add explicit endpoint and item-flow command payloads
+  - [ ] Step 4: Route relationship wizards and canvas connectors through the same commands
+  - [ ] Step 5: Project behavioral relationships and enable inspector editing
+  - [ ] Step 6: Run cross-diagram verification
+  - [ ] Step 7: Commit Task 6 changes
+- [ ] Task 7: Retire Parallel Writable UI State and Migrate Persistence
+  - [ ] Step 1: Strengthen the single-writable-model guard before deleting code
+  - [ ] Step 2: Run release gates and verify failure
+  - [ ] Step 3: Convert legacy arrays to memoized projections
+  - [ ] Step 4: Add a versioned migration
+  - [ ] Step 5: Prove save/load/undo identity
+  - [ ] Step 6: Run full repository and persistence verification
+  - [ ] Step 7: Commit Task 7 changes
+- [ ] Task 8: End-to-End Release Certification and Documentation
+  - [ ] Step 1: Add a single user-journey certification test
+  - [ ] Step 2: Add negative and accessibility scenarios
+  - [ ] Step 3: Run the focused certification matrix
+  - [ ] Step 4: Run static and release gates
+  - [ ] Step 5: Update conformance evidence and architecture documentation
+  - [ ] Step 6: Verify the final diff contains no placeholders or UI-only controls
+  - [ ] Step 7: Commit Task 8 changes

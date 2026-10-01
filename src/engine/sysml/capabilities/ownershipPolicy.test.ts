@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { SemanticElement, Package, Requirement, Block } from '../domain';
 import {
   evaluateOwnership,
+  getLegalOwnerGuidance,
   getOwnedElementCapabilities,
+  resolveSemanticElement,
 } from './ownershipPolicy';
 import { getSupportedElementKinds } from './catalog';
 
@@ -101,4 +103,30 @@ describe('ownershipPolicy', () => {
     expect(portDef?.authority).toBe('UML_FOUNDATION');
     expect(portDef?.category).toBe('feature');
   });
+
+  it('provides legal owner guidance when no valid owner is selected', () => {
+    expect(getLegalOwnerGuidance('Port')).toBe('Select a Block to add a Port.');
+    expect(getLegalOwnerGuidance('PartProperty')).toBe('Select a Block to add a PartProperty.');
+    expect(getLegalOwnerGuidance('Block')).toBe('Select a Package to add a Block.');
+  });
+
+  it('resolves semantic element from canonical repository or fallback model root', () => {
+    const mockRepo = {
+      schemaVersion: 4,
+      profileId: 'OMG-SysML-1.6-ADIA',
+      revision: 0,
+      elements: {
+        'pkg-root': { id: 'pkg-root', name: 'Model', metaclass: 'Model', namespace: [], ownerId: null },
+        'block-1': block,
+      },
+      relationships: {},
+      diagrams: {},
+      presentations: {},
+      indexes: {} as any,
+    };
+    expect(resolveSemanticElement(mockRepo, 'block-1')).toEqual(block);
+    expect(resolveSemanticElement(mockRepo, 'model')?.id).toBe('pkg-root');
+    expect(resolveSemanticElement(mockRepo, 'non-existent')).toBeUndefined();
+  });
 });
+

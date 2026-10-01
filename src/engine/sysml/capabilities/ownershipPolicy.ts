@@ -196,3 +196,84 @@ export function getOwnedElementCapabilities(
     };
   });
 }
+
+export function getLegalOwnerGuidance(childKind: MetaclassKind): string {
+  if (
+    childKind === 'Port' ||
+    childKind === 'PartProperty' ||
+    childKind === 'ReferenceProperty' ||
+    childKind === 'ValueProperty' ||
+    childKind === 'FlowProperty' ||
+    childKind === 'Operation' ||
+    childKind === 'Reception'
+  ) {
+    return `Select a Block to add a ${childKind}.`;
+  }
+  if (
+    childKind === 'Block' ||
+    childKind === 'Package' ||
+    childKind === 'Requirement' ||
+    childKind === 'TestCase' ||
+    childKind === 'UseCase' ||
+    childKind === 'Activity'
+  ) {
+    return `Select a Package to add a ${childKind}.`;
+  }
+  if (childKind === 'Parameter') {
+    return 'Select an Operation or Activity to add a Parameter.';
+  }
+  for (const [ownerKind, allowedKinds] of Object.entries(OWNERSHIP_MATRIX)) {
+    if (allowedKinds.includes(childKind)) {
+      return `Select a ${ownerKind} to add a ${childKind}.`;
+    }
+  }
+  return `Select a legal owner to add a ${childKind}.`;
+}
+
+export function resolveSemanticElement(
+  repository: SysmlRepositoryV4 | any,
+  id: string
+): SemanticElement | undefined {
+  if (!id || !repository) return undefined;
+  if (repository.elements && repository.elements[id]) {
+    return repository.elements[id];
+  }
+  if (repository.elements && (id === 'model' || id === 'root')) {
+    return (
+      repository.elements['pkg-root'] ??
+      (Object.values(repository.elements).find(
+        (e: any) => e.metaclass === 'Model'
+      ) as SemanticElement | undefined)
+    );
+  }
+  if (repository.definitions && repository.definitions[id]) {
+    const def = repository.definitions[id];
+    return {
+      id: def.id,
+      name: def.name,
+      metaclass:
+        def.kind === 'block'
+          ? 'Block'
+          : def.kind === 'package'
+          ? 'Package'
+          : def.kind === 'requirement'
+          ? 'Requirement'
+          : def.kind === 'interface'
+          ? 'InterfaceBlock'
+          : 'Block',
+      namespace: def.namespace ?? [],
+      ownerId: def.ownerId ?? null,
+    } as SemanticElement;
+  }
+  if (repository.definitions && (id === 'model' || id === 'root')) {
+    return {
+      id: 'pkg-root',
+      name: 'Model',
+      metaclass: 'Model',
+      namespace: [],
+      ownerId: null,
+    };
+  }
+  return undefined;
+}
+
