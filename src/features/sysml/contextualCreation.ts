@@ -345,14 +345,11 @@ export function buildOwnedElementPlan(
       break;
     }
     default: {
-      element = {
-        id: `${intent.metaclass.toLowerCase()}_${Date.now()}_${uid}`,
-        name: intent.name ?? intent.metaclass,
-        kind: intent.metaclass.toLowerCase() as any,
-        ownerId,
-        namespace: [],
-      } as any;
-      break;
+      return {
+        kind: 'disabled',
+        code: 'UNSUPPORTED_CONTEXTUAL_METACLASS',
+        reason: `${intent.metaclass} creation is not yet available through the canonical editor gateway.`,
+      };
     }
   }
 

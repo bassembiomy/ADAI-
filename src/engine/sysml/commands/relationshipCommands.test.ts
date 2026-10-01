@@ -149,5 +149,24 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
     expect(updateRes.nextState.indexes.bySourceEndpoint['out2']).toContain(relId);
     expect(updateRes.nextState.indexes.byTargetEndpoint['in1']).toContain(relId);
   });
-});
 
+  it('rejects an endpoint update that violates the relationship metaclass policy', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.elements['block-a'] = { id: 'block-a', name: 'A', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' } as Block;
+    repository.elements['block-b'] = { id: 'block-b', name: 'B', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' } as Block;
+    repository.elements['port-a'] = { id: 'port-a', name: 'p', metaclass: 'Port', namespace: [], ownerId: 'block-a' } as unknown as Port;
+    const relationship: SemanticRelationship = {
+      id: 'association-1', metaclass: 'Association', sourceId: 'block-a', targetId: 'block-b',
+    };
+    const created = handleCreateRelationship(repository, { type: 'CreateRelationship', relationship });
+    expect(created.success).toBe(true);
+
+    const updated = handleUpdateRelationship(created.nextState, {
+      type: 'UpdateRelationship', relationshipId: relationship.id, patch: { targetId: 'port-a' },
+    });
+
+    expect(updated.success).toBe(false);
+    expect(updated.code).toBe('INVALID_ENDPOINT_METACLASS');
+    expect(updated.nextState).toBe(created.nextState);
+  });
+});

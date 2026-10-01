@@ -15,6 +15,14 @@ import type { SysmlElement } from './sysmlCommandGateway';
 import { buildCreateOwnedPortCommand } from './sysmlOwnedFeatureCommands';
 
 describe('sysmlCommandGateway', () => {
+  it('always writes the current schema version even when metadata contains a stale version', () => {
+    const state = createSysmlGatewayState(createEmptyRepository());
+    const payload = buildCanonicalSysmlProjectPayload(state, {
+      projectName: 'Schema precedence', version: '1.0', schemaVersion: 2,
+    });
+    expect(payload.schemaVersion).toBe(4);
+  });
+
   it('projects a presented UML Package as a package presentation without inventing a Block', () => {
     const repository = createEmptyRepository();
     const powertrain: PackageDefinition = {

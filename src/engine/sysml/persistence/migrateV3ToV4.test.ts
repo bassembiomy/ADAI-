@@ -161,4 +161,36 @@ describe('Schema v4 Persistence and Migration (Task 13)', () => {
     expect(elementsOfKind(loaded, 'Block')).toHaveLength(1);
     expect(presentationsForElement(loaded, 'motor')).toHaveLength(2);
   });
+
+  it('preserves non-block definitions, usages, and exact diagram metadata for the inspector', () => {
+    const v3: SysmlRepository = createEmptyRepository();
+    v3.definitions['if-control'] = {
+      id: 'if-control', name: 'ControlIF', kind: 'interface', namespace: ['model'], ownerId: 'model', features: [],
+    };
+    v3.definitions['voltage'] = {
+      id: 'voltage', name: 'Voltage', kind: 'valueType', namespace: ['model'], ownerId: 'model', unit: 'V', quantityKind: 'electricPotential',
+    } as any;
+    v3.definitions['controller'] = {
+      id: 'controller', name: 'Controller', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    v3.usages['controller-port'] = {
+      id: 'controller-port', name: 'control', kind: 'port', ownerId: 'controller', definitionId: 'if-control',
+    } as any;
+    v3.diagrams['pkg-structure'] = {
+      id: 'pkg-structure', name: 'Package Structure', kind: 'diagram', diagramKind: 'package',
+      namespace: ['model'], ownerId: 'model', contextElementId: 'model',
+    };
+
+    const v4 = migrateV3ToV4(v3);
+
+    expect(v4.elements['if-control']).toMatchObject({ metaclass: 'InterfaceBlock', ownerId: 'pkg-root' });
+    expect(v4.elements['voltage']).toMatchObject({ metaclass: 'ValueType', unit: 'V' });
+    expect(v4.elements['controller-port']).toMatchObject({ metaclass: 'Port', ownerId: 'controller', typeId: 'if-control' });
+    expect(v4.diagrams['pkg-structure']).toMatchObject({
+      id: 'pkg-structure', name: 'Package Structure', diagramKind: 'package', contextElementId: 'pkg-root',
+    });
+    expect(v4.indexes.byOwner['controller']).toContain('controller-port');
+    expect(v4.indexes.byType['InterfaceBlock']).toContain('if-control');
+  });
 });

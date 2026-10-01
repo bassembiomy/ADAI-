@@ -307,6 +307,18 @@ export function handleUpdateRelationship(
 
   const updated: SemanticRelationship = { ...current, ...patch, id: current.id, metaclass: current.metaclass };
 
+  if (patch.sourceId !== undefined || patch.targetId !== undefined) {
+    const endpointValidation = validateRelationshipEndpoints(updated, state);
+    if (!endpointValidation.allowed) {
+      return {
+        success: false,
+        code: endpointValidation.code ?? 'INVALID_RELATIONSHIP_ENDPOINTS',
+        message: endpointValidation.message ?? 'Relationship endpoints are invalid.',
+        nextState: state,
+      };
+    }
+  }
+
   // If connector ends exist, keep their roleIds aligned with new source/target
   if (updated.sourceEnd && 'roleId' in updated.sourceEnd && patch.sourceId && patch.sourceId !== current.sourceId) {
     updated.sourceEnd = { ...updated.sourceEnd, roleId: patch.sourceId };

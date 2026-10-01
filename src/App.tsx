@@ -19835,10 +19835,15 @@ const ADIA = () => {
                 </>
               ) : selectedRelationship ? (
                 <>
-                  <div>
-                    <Label>Label</Label>
-                    <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
-                  </div>
+                  <SysmlPropertyPanel
+                    selection={{ repository: inspectorRepoV4, relationshipId: selectedRelationship.id }}
+                    onExecuteCommand={(cmd) => {
+                      const editorCmd = sysmlCommandToEditorCommand(cmd);
+                      if (!editorCmd) return;
+                      const result = handleExecuteSysmlCommand(editorCmd);
+                      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                    }}
+                  />
                   <RelationshipEndEditor
                     relationship={{
                       id: selectedRelationship.id,
@@ -19885,10 +19890,15 @@ const ADIA = () => {
                 </>
               ) : selectedPart ? (
                 <>
-                  <div>
-                    <Label>Part Name</Label>
-                    <Input value={selectedPart.name} onChange={(e) => updatePart(selectedPart.id, { name: e.target.value })} className="mt-1" />
-                  </div>
+                  <SysmlPropertyPanel
+                    selection={{ repository: inspectorRepoV4, elementId: selectedPart.id }}
+                    onExecuteCommand={(cmd) => {
+                      const editorCmd = sysmlCommandToEditorCommand(cmd);
+                      if (!editorCmd) return;
+                      const result = handleExecuteSysmlCommand(editorCmd);
+                      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                    }}
+                  />
                   <div>
                     <Label>Multiplicity</Label>
                     <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
@@ -20250,6 +20260,21 @@ const ADIA = () => {
                     Delete Transition
                   </Button>
                 </>
+              ) : selectedIds.length === 1 && (
+                  inspectorRepoV4.elements[selectedIds[0]] ||
+                  inspectorRepoV4.relationships[selectedIds[0]] ||
+                  inspectorRepoV4.diagrams[selectedIds[0]] ||
+                  inspectorRepoV4.itemFlows?.[selectedIds[0]]
+                ) ? (
+                <SysmlPropertyPanel
+                  selection={{ repository: inspectorRepoV4, elementId: selectedIds[0] }}
+                  onExecuteCommand={(cmd) => {
+                    const editorCmd = sysmlCommandToEditorCommand(cmd);
+                    if (!editorCmd) return;
+                    const result = handleExecuteSysmlCommand(editorCmd);
+                    if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                  }}
+                />
               ) : (
                 <div className="text-center py-8 text-[#666]">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-50">

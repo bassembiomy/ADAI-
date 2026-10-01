@@ -16,6 +16,15 @@ export function migrateV3ToV4(
 ): SysmlRepositoryV4 {
   const v4 = createEmptyRepositoryV4();
   v4.revision = v3.revision;
+  const canonicalOwnerId = (ownerId?: string | null): string =>
+    !ownerId || ownerId === 'model' ? 'pkg-root' : ownerId;
+  const registerElement = (element: SysmlRepositoryV4['elements'][string]): void => {
+    v4.elements[element.id] = element;
+    if (element.ownerId) {
+      const owned = v4.indexes.byOwner[element.ownerId] ?? [];
+      if (!owned.includes(element.id)) v4.indexes.byOwner[element.ownerId] = [...owned, element.id];
+    }
+  };
 
   // 1. Migrate Packages
   for (const [id, pkg] of Object.entries(v3.packages || {})) {
@@ -25,18 +34,13 @@ export function migrateV3ToV4(
       }
       continue;
     }
-    v4.elements[id] = {
+    registerElement({
       id: pkg.id,
       name: pkg.name,
       metaclass: 'Package',
       namespace: pkg.namespace || [],
-      ownerId: pkg.ownerId || 'pkg-root',
-    };
-    const parentId = pkg.ownerId || 'pkg-root';
-    if (!v4.indexes.byOwner[parentId]) v4.indexes.byOwner[parentId] = [];
-    if (!v4.indexes.byOwner[parentId].includes(id)) {
-      v4.indexes.byOwner[parentId].push(id);
-    }
+      ownerId: canonicalOwnerId(pkg.ownerId),
+    });
   }
 
   // 1.1 Migrate Definitions (Blocks, ValueTypes, Interfaces)
@@ -47,12 +51,12 @@ export function migrateV3ToV4(
         name: def.name,
         metaclass: 'Block',
         namespace: def.namespace || [],
-        ownerId: def.ownerId || 'pkg-root',
+        ownerId: canonicalOwnerId(def.ownerId),
         isAbstract: def.isAbstract,
         isLeaf: def.isLeaf,
         generalIds: def.supertypeIds,
       };
-      v4.elements[block.id] = block;
+      registerElement(block);
 
       // Migrate owned properties
       for (const prop of def.properties || []) {
@@ -64,7 +68,7 @@ export function migrateV3ToV4(
             : prop.kind === 'flow'
             ? 'FlowProperty'
             : 'ValueProperty';
-        v4.elements[prop.id] = {
+        registerElement({
           id: prop.id,
           name: prop.name,
           metaclass: propMeta as any,
@@ -72,14 +76,12 @@ export function migrateV3ToV4(
           ownerId: block.id,
           typeId: prop.typeId,
           multiplicity: prop.multiplicity,
-        } as any;
-        if (!v4.indexes.byOwner[block.id]) v4.indexes.byOwner[block.id] = [];
-        v4.indexes.byOwner[block.id].push(prop.id);
+        } as any);
       }
 
       // Migrate owned ports
       for (const port of def.ports || []) {
-        v4.elements[port.id] = {
+        registerElement({
           id: port.id,
           name: port.name,
           metaclass: 'Port',
@@ -96,10 +98,63 @@ export function migrateV3ToV4(
           direction: port.direction,
           isConjugated: port.isConjugated,
           multiplicity: port.multiplicity,
-        } as any;
-        if (!v4.indexes.byOwner[block.id]) v4.indexes.byOwner[block.id] = [];
-        v4.indexes.byOwner[block.id].push(port.id);
+        } as any);
       }
+    } else if (def.kind === 'interface') {
+      registerElement({
+        id: def.id,
+        name: def.name,
+        metaclass: 'InterfaceBlock',
+        namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+        flowPropertyIds: [],
+      } as any);
+    } else if (def.kind === 'valueType') {
+      registerElement({
+        id: def.id,
+        name: def.name,
+        metaclass: 'ValueType',
+        namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+        unitId: (def as any).unit,
+        quantityKindId: (def as any).quantityKind,
+        unit: (def as any).unit,
+        quantityKind: (def as any).quantityKind,
+        customProperties: {
+          ...((def as any).unit ? { unit: (def as any).unit } : {}),
+          ...((def as any).quantityKind ? { quantityKind: (def as any).quantityKind } : {}),
+        },
+      } as any);
+    }
+  }
+
+  // 1.2 Migrate usages that are not already represented by owned Block features.
+  for (const usage of Object.values(v3.usages || {})) {
+    if (v4.elements[usage.id]) continue;
+    if (usage.kind === 'port') {
+      registerElement({
+        id: usage.id,
+        name: usage.name,
+        metaclass: 'Port',
+        namespace: [],
+        ownerId: canonicalOwnerId(usage.ownerId),
+        typeId: usage.definitionId,
+        portKind: 'umlPort',
+        direction: 'inout',
+        isConjugated: false,
+        multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+      } as any);
+    } else {
+      registerElement({
+        id: usage.id,
+        name: usage.name,
+        metaclass: usage.kind === 'part' ? 'PartProperty' : 'ReferenceProperty',
+        namespace: [],
+        ownerId: canonicalOwnerId(usage.ownerId),
+        typeId: usage.typeId,
+        aggregation: usage.aggregation,
+        multiplicity: usage.multiplicity,
+      } as any);
     }
   }
 
@@ -114,7 +169,7 @@ export function migrateV3ToV4(
       status: req.status,
       version: req.version,
       namespace: req.namespace || [],
-      ownerId: req.ownerId || 'pkg-root',
+      ownerId: canonicalOwnerId(req.ownerId),
       risk: req.risk,
       priority: req.priority,
       baselineId: req.baselineId,
@@ -122,7 +177,7 @@ export function migrateV3ToV4(
       rationale: req.rationale,
       copiedFromId: req.copiedFromId,
     };
-    v4.elements[requirement.id] = requirement;
+    registerElement(requirement);
   }
 
   // 3. Migrate VerificationCases to TestCase
@@ -132,12 +187,12 @@ export function migrateV3ToV4(
       name: vc.name,
       metaclass: 'TestCase',
       namespace: vc.namespace || [],
-      ownerId: vc.ownerId || 'pkg-root',
+      ownerId: canonicalOwnerId(vc.ownerId),
       verifiesRequirementIds: vc.verifiesRequirementIds || [],
       testCaseKind: vc.method === 'inspection' ? 'inspection' : vc.method === 'analysis' ? 'analysis' : 'test',
       status: 'ready',
     };
-    v4.elements[testCase.id] = testCase;
+    registerElement(testCase);
   }
 
   // 4. Migrate Relationships
@@ -158,6 +213,7 @@ export function migrateV3ToV4(
     const metaclass = kindMap[rel.kind] || 'Association';
     const relationship: SemanticRelationship = {
       id: rel.id,
+      name: rel.name,
       metaclass,
       sourceId: rel.sourceId,
       targetId: rel.targetId,
@@ -170,6 +226,20 @@ export function migrateV3ToV4(
 
     if (!v4.indexes.byTargetEndpoint[rel.targetId]) v4.indexes.byTargetEndpoint[rel.targetId] = [];
     v4.indexes.byTargetEndpoint[rel.targetId].push(relationship.id);
+  }
+
+  // 4.1 Preserve repository diagram identity and kind independently of presentations.
+  for (const diagram of Object.values(v3.diagrams || {})) {
+    v4.diagrams[diagram.id] = {
+      id: diagram.id,
+      name: diagram.name,
+      metaclass: 'Diagram',
+      diagramKind: diagram.diagramKind,
+      namespace: diagram.namespace || [],
+      ownerId: canonicalOwnerId(diagram.ownerId),
+      contextElementId: diagram.contextElementId ? canonicalOwnerId(diagram.contextElementId) : undefined,
+      presentationIds: [],
+    };
   }
 
   // Rebuild byType index

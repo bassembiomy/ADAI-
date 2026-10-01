@@ -193,5 +193,19 @@ describe('planContextualCreation', () => {
       expect(blk.constraints).toEqual(['power <= 100W']);
     }
   });
-});
 
+  it('rejects Activity instead of storing a malformed generic definition', () => {
+    const plan = planContextualCreation({
+      repository,
+      source: 'tree',
+      selectedId: 'pkg-1',
+      intent: { metaclass: 'Activity' },
+    });
+
+    expect(plan).toEqual({
+      kind: 'disabled',
+      code: 'UNSUPPORTED_CONTEXTUAL_METACLASS',
+      reason: 'Activity creation is not yet available through the canonical editor gateway.',
+    });
+  });
+});

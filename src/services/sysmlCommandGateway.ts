@@ -3028,8 +3028,8 @@ export function buildCanonicalSysmlProjectPayload(
 ): Record<string, unknown> {
   const serializedRepo = serializeRepository(state.repository);
   return {
-    schemaVersion: 4,
     ...metadata,
+    schemaVersion: 4,
     sysmlRepository: serializedRepo,
     sysmlCoordinates: state.coordinates,
     diagramPresentations: state.diagramPresentations ?? {},
