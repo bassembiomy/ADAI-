@@ -16,15 +16,15 @@
   - [x] Step 6: Add Playwright coverage
   - [x] Step 7: Run package/navigation verification
   - [x] Step 8: Commit Task 2 changes
-- [ ] Task 3: Context-Aware Creation Without Redundant Parent Prompts
-  - [ ] Step 1: Write command-parity and no-parent-dialog tests
-  - [ ] Step 2: Run tests and verify failure
-  - [ ] Step 3: Implement one creation planner
-  - [ ] Step 4: Route BDD toolbar/canvas and block inspector buttons through the planner
-  - [ ] Step 5: Extend the path to all supported owned elements
-  - [ ] Step 6: Add end-to-end parity assertions
-  - [ ] Step 7: Run verification
-  - [ ] Step 8: Commit Task 3 changes
+- [x] Task 3: Context-Aware Creation Without Redundant Parent Prompts
+  - [x] Step 1: Write command-parity and no-parent-dialog tests
+  - [x] Step 2: Run tests and verify failure
+  - [x] Step 3: Implement one creation planner
+  - [x] Step 4: Route BDD toolbar/canvas and block inspector buttons through the planner
+  - [x] Step 5: Extend the path to all supported owned elements
+  - [x] Step 6: Add end-to-end parity assertions
+  - [x] Step 7: Run verification
+  - [x] Step 8: Commit Task 3 changes
 - [ ] Task 4: Repository-Complete Model Explorer Projection and Selection Alignment
   - [ ] Step 1: Write a complete projection contract test
   - [ ] Step 2: Run projection tests and capture missing collections

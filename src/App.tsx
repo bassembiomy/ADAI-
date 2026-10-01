@@ -202,6 +202,7 @@ import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters
 import { resolveCanvasSymbolDiagramTarget, resolveExactDiagramCanvasContext } from './features/modelExplorer/diagramTreeContext';
 import type { StateMachineDiagramData } from './types/sm_types';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
+import { planContextualCreation } from './features/sysml/contextualCreation';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -11229,12 +11230,14 @@ const ADIA = () => {
   // without an explicit type opens the shared chooser. Cancelling performs
   // no mutation.
   const requestCanvasPortCreation = useCallback((ownerBlockId: string, portKind: CanonicalPortKind): { outcome: 'commanded' } | { outcome: 'prompted' } | { outcome: 'rejected' } => {
-    const plan = planOwnedPortCreation(canonicalSysmlRepository, {
-      ownerBlockId,
-      portKind,
+    const plan = planContextualCreation({
+      repository: canonicalSysmlRepository,
+      source: 'canvas',
+      selectedId: ownerBlockId,
+      intent: { metaclass: 'Port', portKind },
       diagramId: activeSysmlDiagramId,
     });
-    if (plan.outcome === 'command') {
+    if (plan.kind === 'command') {
       const res = handleExecuteSysmlCommand(plan.command as any);
       if (!res.committed) {
         res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
@@ -11242,7 +11245,7 @@ const ADIA = () => {
       }
       return { outcome: 'commanded' };
     }
-    if (plan.outcome === 'typeSelection') {
+    if (plan.kind === 'typeSelection') {
       setPortTypePrompt({
         ownerBlockId,
         portKind,
@@ -11251,19 +11254,9 @@ const ADIA = () => {
       });
       return { outcome: 'prompted' };
     }
-    const msg = plan.diagnostics[0]?.message ?? `No compatible type found for ${portKind}.`;
+    const msg = plan.reason;
     addError('error', msg, 'SysML', ownerBlockId);
-    setPortTypePrompt({
-      ownerBlockId,
-      portKind,
-      candidates: plan.candidates ?? [],
-      action: plan.action ?? {
-        kind: 'CreateNewType',
-        payload: { suggestedMetaclass: suggestedMetaclassForPortKind(portKind) },
-      },
-      error: msg,
-    });
-    return { outcome: 'prompted' };
+    return { outcome: 'rejected' };
   }, [canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
 
   const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {

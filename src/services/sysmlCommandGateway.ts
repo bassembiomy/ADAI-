@@ -208,6 +208,7 @@ export type SysmlMutationCommand =
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'createAndPresent'; element: SysmlElement; diagramId: string; presentation: PresentationCoordinates }
   | { type: 'createOwnedFeature'; intent: OwnedFeatureIntent; diagramId?: string; presentation?: PresentationCoordinates; coalesceKey?: string }
+  | { type: 'createOwnedPort'; ownerBlockId: string; portKind: any; typeId?: string; name?: string; diagramId?: string; presentation?: PresentationCoordinates }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown>; coalesceKey?: string }
   | { type: 'deleteElements'; elementIds: string[]; confirmedImpactHash?: string; authorizedBaselineIds?: string[] }
   | { type: 'removeFromDiagram'; diagramId: string; elementIds: string[] }
@@ -1525,6 +1526,36 @@ export function executeSysmlCommand(
         },
       ],
     }, command.diagramId, endpointContext);
+  }
+
+  if (command.type === 'createOwnedPort') {
+    const rawKind = command.portKind;
+    const canonicalPortKind =
+      rawKind === 'standardPort' || rawKind === 'standard' || rawKind === 'umlPort'
+        ? 'umlPort'
+        : rawKind === 'proxyPort' || rawKind === 'proxy'
+        ? 'proxyPort'
+        : rawKind === 'fullPort' || rawKind === 'full'
+        ? 'fullPort'
+        : rawKind === 'flowPort' || rawKind === 'flow'
+        ? 'flowPort'
+        : rawKind;
+    return executeSysmlMutation(
+      state,
+      {
+        type: 'createOwnedFeature',
+        intent: {
+          featureKind: 'port',
+          ownerBlockId: command.ownerBlockId,
+          portKind: canonicalPortKind,
+          ...(command.typeId ? { typeId: command.typeId } : {}),
+          ...(command.name ? { name: command.name } : {}),
+        },
+        diagramId: command.diagramId,
+        presentation: command.presentation,
+      },
+      endpointContext
+    );
   }
 
   if (command.type === 'createOwnedFeature') {
