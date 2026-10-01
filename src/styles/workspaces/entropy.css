@@ -1,0 +1,38 @@
+.entropy-workspace {
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.entropy-workspace .opm-panel,
+.entropy-workspace .opm-inspector {
+  background: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.entropy-workspace .opm-node {
+  background: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.entropy-workspace .opm-console,
+.entropy-workspace .opm-code-surface {
+  background: var(--surface-terminal);
+  color: #dbeafe;
+}
+
+[data-theme='light'] .entropy-workspace .opm-node.opm-object,
+.light .entropy-workspace .opm-node.opm-object {
+  background: #f0fdf4;
+}
+
+[data-theme='light'] .entropy-workspace .opm-node.opm-process,
+.light .entropy-workspace .opm-node.opm-process {
+  background: #f0f9ff;
+}
+
+[data-theme='light'] .entropy-workspace .opm-node.opm-state,
+.light .entropy-workspace .opm-node.opm-state {
+  background: #fffbeb;
+}

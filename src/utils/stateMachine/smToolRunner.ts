@@ -3,28 +3,42 @@ import {
   computeFileSha256,
 } from './smVerificationEvidence';
 
-const getSpawn = (): any => {
+const getNodeBuiltin = (name: string): any => {
   if (typeof process !== 'undefined' && process.versions?.node) {
+    if (typeof (process as any).getBuiltinModule === 'function') {
+      try {
+        return (process as any).getBuiltinModule(name);
+      } catch {
+        // fallback
+      }
+    }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      return eval("require('child_process')").spawn;
+      if (typeof require === 'function') {
+        return require(name);
+      }
     } catch {
-      return null;
+      // fallback
+    }
+    try {
+      const req = (globalThis as any).require;
+      if (typeof req === 'function') {
+        return req(name);
+      }
+    } catch {
+      // fallback
     }
   }
   return null;
 };
 
+const getSpawn = (): any => {
+  const cp = getNodeBuiltin('node:child_process') || getNodeBuiltin('child_process');
+  return cp?.spawn ?? null;
+};
+
 const getResolve = (): any => {
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      return eval("require('path')").resolve;
-    } catch {
-      // fallback
-    }
-  }
-  return (...parts: string[]) => parts.filter(Boolean).join('/');
+  const p = getNodeBuiltin('node:path') || getNodeBuiltin('path');
+  return p?.resolve ?? ((...parts: string[]) => parts.filter(Boolean).join('/'));
 };
 
 export interface ToolRunRequest {
@@ -49,6 +63,22 @@ export interface ToolRunResult {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024; // 1 MB
 
+export const getToolExecutionEnv = (customEnv?: Readonly<Record<string, string>>): NodeJS.ProcessEnv => {
+  const base: Record<string, string | undefined> = { ...process.env, ...(customEnv ?? {}) };
+  if (process.platform === 'win32') {
+    const fs = getNodeBuiltin('node:fs') || getNodeBuiltin('fs');
+    const path = getNodeBuiltin('node:path') || getNodeBuiltin('path');
+    if (fs && path) {
+      const bundledBin = path.resolve(process.cwd(), 'toolchains', 'w64devkit', 'w64devkit', 'bin');
+      if (fs.existsSync(path.join(bundledBin, 'gcc.exe'))) {
+        base.PATH = `${bundledBin};${base.PATH ?? ''}`;
+        base.Path = `${bundledBin};${base.Path ?? ''}`;
+      }
+    }
+  }
+  return base as NodeJS.ProcessEnv;
+};
+
 const probeToolVersion = async (
   executable: string,
   versionArgs: readonly string[],
@@ -65,7 +95,7 @@ const probeToolVersion = async (
       const proc = spawnFn(executable, [...versionArgs], {
         cwd,
         shell: false,
-        env: env ? { ...process.env, ...env } : process.env,
+        env: getToolExecutionEnv(env),
         windowsHide: true,
       });
 
@@ -165,7 +195,7 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
       child = spawnFn(request.executable, [...request.args], {
         cwd,
         shell: false,
-        env: request.env ? { ...process.env, ...request.env } : process.env,
+        env: getToolExecutionEnv(request.env),
         windowsHide: true,
       });
     } catch (err) {

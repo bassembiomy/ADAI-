@@ -1,0 +1,818 @@
+[
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_addition",
+    "canonicalName": "Addition",
+    "aliases": [
+      "add",
+      "sum",
+      "plus"
+    ],
+    "domain": "arithmetic",
+    "description": "Computes sum of numeric inputs",
+    "functionalRoles": [
+      "calculation"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [],
+    "inputs": [
+      {
+        "name": "in1",
+        "type": "number",
+        "description": "First summand"
+      },
+      {
+        "name": "in2",
+        "type": "number",
+        "description": "Second summand"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "sum",
+        "type": "number",
+        "description": "Arithmetic sum"
+      }
+    ],
+    "designParameters": [],
+    "constraints": [],
+    "assumptions": [
+      "Pure arithmetic operation"
+    ],
+    "applicableMethods": [
+      "algebraic"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_math_addition"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_iso_math"
+    ],
+    "contentHash": "eda6e092cb3a9fa82016c7530f86e330bfa5a31916ed4e333c96f904ebda6ff4"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_pid_loop",
+    "canonicalName": "PID Control Loop",
+    "aliases": [
+      "pid",
+      "proportional integral derivative",
+      "feedback controller"
+    ],
+    "domain": "control",
+    "description": "Proportional-Integral-Derivative feedback regulatory loop",
+    "functionalRoles": [
+      "control",
+      "regulation"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [
+      "concept_state_feedback"
+    ],
+    "inputs": [
+      {
+        "name": "setpoint",
+        "type": "number"
+      },
+      {
+        "name": "process_variable",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "control_effort",
+        "type": "number"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "kp",
+        "type": "number",
+        "defaultValue": 1,
+        "description": "Proportional gain",
+        "required": true
+      },
+      {
+        "name": "ki",
+        "type": "number",
+        "defaultValue": 0.1,
+        "description": "Integral gain",
+        "required": true
+      },
+      {
+        "name": "kd",
+        "type": "number",
+        "defaultValue": 0.01,
+        "description": "Derivative gain",
+        "required": false
+      }
+    ],
+    "constraints": [
+      "kp >= 0",
+      "ki >= 0",
+      "kd >= 0"
+    ],
+    "assumptions": [
+      "Linear time-invariant process"
+    ],
+    "applicableMethods": [
+      "continuous_pid",
+      "discrete_pid"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_astrom_pid"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_astrom_control"
+    ],
+    "contentHash": "47b61fa496c8d9b2807419ea3b455d6bea31b3d67296da2d64fbbb100d19a894"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_bldc_drive",
+    "canonicalName": "BLDC Motor Drive",
+    "aliases": [
+      "bldc",
+      "brushless dc motor",
+      "bldc speed control"
+    ],
+    "domain": "motor_control",
+    "description": "Permanent magnet brushless DC motor drive system with electronic commutation",
+    "functionalRoles": [
+      "system",
+      "actuation"
+    ],
+    "requiredConcepts": [
+      "concept_inverter",
+      "concept_bldc_motor",
+      "concept_speed_controller"
+    ],
+    "optionalConcepts": [
+      "concept_hall_sensor"
+    ],
+    "alternatives": [],
+    "inputs": [
+      {
+        "name": "speed_setpoint",
+        "type": "number",
+        "unit": "rpm"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "measured_speed",
+        "type": "number",
+        "unit": "rpm"
+      },
+      {
+        "name": "rotor_position",
+        "type": "number",
+        "unit": "rad"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "commutation_strategy",
+        "type": "string",
+        "description": "Motor commutation method (foc or six_step)",
+        "required": true
+      },
+      {
+        "name": "supply_voltage",
+        "type": "number",
+        "defaultValue": 24,
+        "unit": "V",
+        "description": "Nominal DC bus supply voltage",
+        "required": true
+      }
+    ],
+    "constraints": [
+      "supply_voltage > 0"
+    ],
+    "assumptions": [
+      "Balanced three-phase windings"
+    ],
+    "applicableMethods": [
+      "foc",
+      "six_step"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_ieee_bldc"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_ieee_motor_std"
+    ],
+    "contentHash": "3460a32d4eefb72a01c535d8703c207d25e53cdaf6ad09022c06c5ec8dcc60ff"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_foc",
+    "canonicalName": "Field-Oriented Control",
+    "aliases": [
+      "foc",
+      "vector control"
+    ],
+    "domain": "motor_control",
+    "description": "Decoupled torque and flux control using Clarke and Park transformations",
+    "functionalRoles": [
+      "control"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [
+      "concept_six_step"
+    ],
+    "inputs": [
+      {
+        "name": "id_ref",
+        "type": "number"
+      },
+      {
+        "name": "iq_ref",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "vd",
+        "type": "number"
+      },
+      {
+        "name": "vq",
+        "type": "number"
+      }
+    ],
+    "designParameters": [],
+    "constraints": [],
+    "assumptions": [
+      "Sinusoidal back-EMF"
+    ],
+    "applicableMethods": [
+      "svpwm",
+      "spwm"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_blaschke_foc"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_motor_handbook"
+    ],
+    "contentHash": "cb8d135029dfa6487ddbbfbfe34b52cce27f5ff801e513f0c36ad58d6bde61c6"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_six_step",
+    "canonicalName": "Six-Step Commutation",
+    "aliases": [
+      "trapezoidal commutation",
+      "block commutation"
+    ],
+    "domain": "motor_control",
+    "description": "120-degree conduction commutation based on 6 discrete rotor states",
+    "functionalRoles": [
+      "control"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [
+      "concept_foc"
+    ],
+    "inputs": [
+      {
+        "name": "hall_states",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "phase_enable",
+        "type": "string"
+      }
+    ],
+    "designParameters": [],
+    "constraints": [],
+    "assumptions": [
+      "Trapezoidal back-EMF"
+    ],
+    "applicableMethods": [
+      "bipolar",
+      "unipolar"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_six_step_commutation"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_motor_handbook"
+    ],
+    "contentHash": "3d10f9fd39ebe23a12c481002ffb5eff7eac34e89a4afb443a94914ce1a2711a"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_buck_boost_converter",
+    "canonicalName": "Buck-Boost DC-DC Converter",
+    "aliases": [
+      "buck boost",
+      "switched mode converter"
+    ],
+    "domain": "power_electronics",
+    "description": "Switched-mode DC-DC converter capable of stepping up or down voltage",
+    "functionalRoles": [
+      "power_conversion"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [],
+    "inputs": [
+      {
+        "name": "v_in",
+        "type": "number",
+        "unit": "V"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "v_out",
+        "type": "number",
+        "unit": "V"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "duty_cycle",
+        "type": "number",
+        "defaultValue": 0.5,
+        "required": true
+      },
+      {
+        "name": "switching_frequency",
+        "type": "number",
+        "defaultValue": 100000,
+        "unit": "Hz",
+        "required": false
+      }
+    ],
+    "constraints": [
+      "duty_cycle >= 0",
+      "duty_cycle <= 1"
+    ],
+    "assumptions": [
+      "Continuous conduction mode"
+    ],
+    "applicableMethods": [
+      "pwm"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_erickson_power"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_erickson_pe"
+    ],
+    "contentHash": "2a3c9ccc5e09b1de91f5f0c7bffb6f8a4ef506201c1fdbc36cfe6609ddcd7f7a"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_thermal_loop",
+    "canonicalName": "Thermal Conduction Loop",
+    "aliases": [
+      "thermal loop",
+      "heat transfer",
+      "thermal management"
+    ],
+    "domain": "thermal",
+    "description": "Lumped thermal capacitance and resistance modeling heat flow and temperature rise",
+    "functionalRoles": [
+      "thermal"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [],
+    "inputs": [
+      {
+        "name": "heat_flow_in",
+        "type": "number",
+        "unit": "W"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "temperature",
+        "type": "number",
+        "unit": "K"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "thermal_resistance",
+        "type": "number",
+        "defaultValue": 2.5,
+        "unit": "K/W",
+        "required": true
+      },
+      {
+        "name": "thermal_capacitance",
+        "type": "number",
+        "defaultValue": 15,
+        "unit": "J/K",
+        "required": true
+      }
+    ],
+    "constraints": [
+      "thermal_resistance > 0",
+      "thermal_capacitance > 0"
+    ],
+    "assumptions": [
+      "Uniform spatial temperature distribution"
+    ],
+    "applicableMethods": [
+      "lumped_parameter"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_incropera_heat"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_incropera"
+    ],
+    "contentHash": "91201519a54efd653bb71136567b66948437196d5979afcc0edb978023b66116"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_hydraulic_actuator",
+    "canonicalName": "Hydraulic Cylinder Actuator",
+    "aliases": [
+      "hydraulic piston",
+      "fluid actuator"
+    ],
+    "domain": "fluid_power",
+    "description": "Linear hydraulic cylinder driven by pressurized fluid flow",
+    "functionalRoles": [
+      "actuation"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [
+      "concept_electromechanical_actuator"
+    ],
+    "inputs": [
+      {
+        "name": "fluid_flow",
+        "type": "number",
+        "unit": "m3/s"
+      },
+      {
+        "name": "supply_pressure",
+        "type": "number",
+        "unit": "Pa"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "rod_position",
+        "type": "number",
+        "unit": "m"
+      },
+      {
+        "name": "actuator_force",
+        "type": "number",
+        "unit": "N"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "piston_area",
+        "type": "number",
+        "defaultValue": 0.005,
+        "unit": "m2",
+        "required": true
+      }
+    ],
+    "constraints": [
+      "piston_area > 0"
+    ],
+    "assumptions": [
+      "Incompressible hydraulic oil"
+    ],
+    "applicableMethods": [
+      "fluid_dynamics_1d"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_merritt_hydraulics"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_merritt"
+    ],
+    "contentHash": "3f60fb6d909e60c330aa6dc573b759afe1a6e758350a7002346422e1f31ca475"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_differential_drive",
+    "canonicalName": "Differential Drive Robot Kinematics",
+    "aliases": [
+      "diff drive",
+      "two wheel mobile robot"
+    ],
+    "domain": "robotics",
+    "description": "Non-holonomic differential wheeled mobile robot planar kinematics",
+    "functionalRoles": [
+      "motion"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [
+      "concept_ackermann_steering"
+    ],
+    "inputs": [
+      {
+        "name": "wheel_speed_left",
+        "type": "number",
+        "unit": "rad/s"
+      },
+      {
+        "name": "wheel_speed_right",
+        "type": "number",
+        "unit": "rad/s"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "linear_velocity",
+        "type": "number",
+        "unit": "m/s"
+      },
+      {
+        "name": "angular_velocity",
+        "type": "number",
+        "unit": "rad/s"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "wheel_radius",
+        "type": "number",
+        "defaultValue": 0.05,
+        "unit": "m",
+        "required": true
+      },
+      {
+        "name": "track_width",
+        "type": "number",
+        "defaultValue": 0.3,
+        "unit": "m",
+        "required": true
+      }
+    ],
+    "constraints": [
+      "wheel_radius > 0",
+      "track_width > 0"
+    ],
+    "assumptions": [
+      "No slip rolling condition"
+    ],
+    "applicableMethods": [
+      "forward_kinematics"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_siciliano_robotics"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_robotics_handbook"
+    ],
+    "contentHash": "88a67a8d49bddc3a2f0174222e01624597d0d853e66dbdad1f53ca73d257e778"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_state_machine",
+    "canonicalName": "Finite State Machine",
+    "aliases": [
+      "fsm",
+      "state chart",
+      "discrete logic"
+    ],
+    "domain": "discrete_logic",
+    "description": "Deterministic discrete state transition model with events and actions",
+    "functionalRoles": [
+      "supervision"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [],
+    "inputs": [
+      {
+        "name": "event_trigger",
+        "type": "string"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "active_state",
+        "type": "string"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "initial_state",
+        "type": "string",
+        "defaultValue": "IDLE",
+        "required": true
+      }
+    ],
+    "constraints": [],
+    "assumptions": [
+      "Synchronous transition execution"
+    ],
+    "applicableMethods": [
+      "mealy",
+      "moore"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_harel_statecharts"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_harel"
+    ],
+    "contentHash": "4cd7aa9fe5258b110cb16c673eb09a57223a54141a18efe05e42e1f1224a9031"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_kalman_filter",
+    "canonicalName": "Linear Kalman Filter",
+    "aliases": [
+      "kalman filter",
+      "state estimator"
+    ],
+    "domain": "estimation",
+    "description": "Optimal recursive Bayesian state estimator for linear dynamic systems with Gaussian noise",
+    "functionalRoles": [
+      "filtering",
+      "estimation"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [
+      "concept_particle_filter"
+    ],
+    "inputs": [
+      {
+        "name": "measurement_z",
+        "type": "number"
+      },
+      {
+        "name": "control_u",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state_estimate_x",
+        "type": "number"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "process_noise_q",
+        "type": "number",
+        "defaultValue": 0.01,
+        "required": true
+      },
+      {
+        "name": "measurement_noise_r",
+        "type": "number",
+        "defaultValue": 0.1,
+        "required": true
+      }
+    ],
+    "constraints": [
+      "process_noise_q > 0",
+      "measurement_noise_r > 0"
+    ],
+    "assumptions": [
+      "Zero-mean white Gaussian noise"
+    ],
+    "applicableMethods": [
+      "kalman_update"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_kalman_1960"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_kalman_paper"
+    ],
+    "contentHash": "9d26291d273b4e33c0df055cb42f0d45e1526f8877a62b8a96e9874d08263103"
+  },
+  {
+    "schemaVersion": "1.0.0",
+    "id": "concept_vibration_system",
+    "canonicalName": "Mass-Spring-Damper System",
+    "aliases": [
+      "vibration system",
+      "harmonic oscillator"
+    ],
+    "domain": "mechanical",
+    "description": "Second-order single degree-of-freedom mechanical translational vibration system",
+    "functionalRoles": [
+      "plant"
+    ],
+    "requiredConcepts": [],
+    "optionalConcepts": [],
+    "alternatives": [],
+    "inputs": [
+      {
+        "name": "force_input",
+        "type": "number",
+        "unit": "N"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "displacement",
+        "type": "number",
+        "unit": "m"
+      },
+      {
+        "name": "velocity",
+        "type": "number",
+        "unit": "m/s"
+      }
+    ],
+    "designParameters": [
+      {
+        "name": "mass",
+        "type": "number",
+        "defaultValue": 10,
+        "unit": "kg",
+        "required": true
+      },
+      {
+        "name": "damping_c",
+        "type": "number",
+        "defaultValue": 5,
+        "unit": "N*s/m",
+        "required": true
+      },
+      {
+        "name": "spring_k",
+        "type": "number",
+        "defaultValue": 200,
+        "unit": "N/m",
+        "required": true
+      }
+    ],
+    "constraints": [
+      "mass > 0",
+      "spring_k > 0",
+      "damping_c >= 0"
+    ],
+    "assumptions": [
+      "Linear spring and viscous damping"
+    ],
+    "applicableMethods": [
+      "state_space",
+      "ode2"
+    ],
+    "validationRuleIds": [],
+    "referenceIds": [
+      "ref_thomson_vibration"
+    ],
+    "lifecycle": "verified",
+    "confidence": 1,
+    "provenanceIds": [
+      "source_thomson"
+    ],
+    "contentHash": "1dc87d7c973dcae58566b85758fd134622d871b8b8b1094cb8c7d4f17abd94a7"
+  }
+]

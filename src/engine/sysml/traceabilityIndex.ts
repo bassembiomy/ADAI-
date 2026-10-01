@@ -21,6 +21,12 @@ export interface TraceabilityIndex {
   diagnostics: TraceabilityDiagnostic[];
 }
 
+export interface TraceabilityExternalElement {
+  id: string;
+  name: string;
+  kind: string;
+}
+
 const add = <T>(map: Map<string, T[]>, key: string, value: T): void => {
   const values = map.get(key) ?? [];
   values.push(value);
@@ -29,7 +35,7 @@ const add = <T>(map: Map<string, T[]>, key: string, value: T): void => {
 
 const sortedUnique = (values: string[]): string[] => [...new Set(values)].sort();
 
-export function buildTraceabilityIndex(repo: SysmlRepository): TraceabilityIndex {
+export function buildTraceabilityIndex(repo: SysmlRepository, externalElements: TraceabilityExternalElement[] = []): TraceabilityIndex {
   const index: TraceabilityIndex = {
     relationshipsByEndpoint: new Map(),
     relationshipsByKind: new Map(),
@@ -57,6 +63,13 @@ export function buildTraceabilityIndex(repo: SysmlRepository): TraceabilityIndex
       }
       index.elementsById.set(id, entity);
     }
+  }
+
+  // Some legacy-owned semantic elements (notably State Machine states) are
+  // persisted outside the canonical SysML repository. Include their identity
+  // and display metadata in projections without changing repository ownership.
+  for (const element of externalElements) {
+    if (!index.elementsById.has(element.id)) index.elementsById.set(element.id, element);
   }
 
   const knownIds = new Set(index.elementsById.keys());

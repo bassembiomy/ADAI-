@@ -386,7 +386,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "K"
           }
         ],
-        "equation": "V = I * Ron + Vf",
+        "equation": "Forward: V = Vf + I * Ron\\nReverse: V = I * Roff",
         "description": "An ideal diode with piecewise-linear behavior and forward voltage drop."
       },
       {
@@ -583,10 +583,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "Ω",
             "label": "Stator Res"
           },
-          "Kt": {
-            "value": 0.2,
-            "unit": "N-m/A",
-            "label": "Torque Const"
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "D-axis Inductance"
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "Q-axis Inductance"
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM Flux"
+          },
+          "J": {
+            "value": 0.02,
+            "unit": "kg-m^2",
+            "label": "Inertia"
+          },
+          "B": {
+            "value": 0.002,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [
@@ -646,10 +666,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "V/rad/s",
             "label": "Back EMF Const"
           },
+          "Kt": {
+            "value": 0.05,
+            "unit": "N-m/A",
+            "label": "Torque Const"
+          },
           "J": {
             "value": 0.001,
             "unit": "kg-m^2",
             "label": "Inertia"
+          },
+          "B": {
+            "value": 0.001,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [
@@ -672,7 +702,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = Ra*I + La*dI/dt + Ke*ω\\nT = Ke*I = J*dω/dt + B*ω",
+        "equation": "V = Ra*I + La*dI/dt + Ke*ω\\nT = Kt*I = J*dω/dt + B*ω",
         "description": "DC motor coupling armature electrical circuit with rotor shaft mechanics."
       },
       {
@@ -701,6 +731,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2,
             "unit": "",
             "label": "Pole Pairs"
+          },
+          "J": {
+            "value": 0.05,
+            "unit": "kg-m^2",
+            "label": "Inertia"
+          },
+          "B": {
+            "value": 0.005,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [
@@ -760,10 +800,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "V/rad/s",
             "label": "Back EMF Const"
           },
+          "Kt": {
+            "value": 0.1,
+            "unit": "N-m/A",
+            "label": "Torque Const"
+          },
           "P": {
             "value": 4,
             "unit": "",
             "label": "Pole Pairs"
+          },
+          "J": {
+            "value": 0.02,
+            "unit": "kg-m^2",
+            "label": "Inertia"
+          },
+          "B": {
+            "value": 0.002,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping"
           }
         },
         "ports": [
@@ -808,6 +863,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "thermal_resistor",
         "category": "Thermal",
         "params": {
+          "R": {
+            "value": 10,
+            "unit": "Ω",
+            "label": "Electrical Resistance"
+          },
           "Rth": {
             "value": 10,
             "unit": "K/W",
@@ -834,7 +894,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "V = I * R(T)\nR(T) = R0 * (1 + α * (T - T0))\nQ_gen = I² * R(T)",
+        "equation": "V = I * R\nQ_gen = I² * R",
         "description": "Temperature-dependent electrical resistor dissipating Joule heating into the thermal domain."
       },
       {
@@ -1019,6 +1079,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 50,
             "unit": "Hz",
             "label": "Frequency"
+          },
+          "phase": {
+            "value": 0.7853981633974483,
+            "unit": "rad",
+            "label": "Phase"
+          },
+          "R_int": {
+            "value": 0.001,
+            "unit": "Ω",
+            "label": "Internal Resistance"
           }
         },
         "ports": [
@@ -1035,7 +1105,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V(t) = Vpk * sin(2*π*f*t + φ)",
+        "equation": "V(t) = Vpk * sin(2*π*f*t + phase); Vp - Vn = V(t) + I * R_int",
         "description": "Sinusoidal AC voltage source generating harmonic electrical potential."
       },
       {
@@ -1462,7 +1532,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = 0 kg/s",
@@ -1513,12 +1584,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "s",
             "pos": "left",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical"
           }
         ],
         "equation": "P_node = P_param (or P_ctrl)",
@@ -1541,12 +1614,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = k * (Pa - Pb)",
@@ -1591,17 +1666,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "ar",
             "pos": "top",
-            "label": "AR"
+            "label": "AR",
+            "domain": "Physical"
           }
         ],
         "equation": "mdot = Cd * A * √(2*ρ*|ΔP|) * sign(ΔP)",
@@ -1636,14 +1714,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "right",
             "label": "B"
           },
-          {
-            "id": "h",
-            "pos": "top",
-            "label": "H"
-          }
         ],
         "equation": "ΔP = f * (L/D) * (ρv²/2)",
-        "description": "Models gas flow through a cylindrical conduit, accounting for friction-induced pressure drop and heat transfer."
+        "description": "Models gas flow through a cylindrical conduit with friction-induced pressure drop. Heat transfer is not represented."
       },
       {
         "id": "gas_fixed_res",
@@ -1685,25 +1758,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Gas"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           }
         ],
-        "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Pb)",
+        "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Ph)",
         "description": "Pneumatic rotary motor/compressor converting gas pressure differentials into shaft torque."
       },
       {
@@ -1723,26 +1800,59 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Gas"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Translational"
           }
         ],
-        "equation": "mdot = A * v * ρ\nF = A * (Pa - Pb)",
+        "equation": "mdot = A * v * ρ\nF = A * (Pa - Ph)",
         "description": "Pneumatic cylinder converting differential gas pressure into translational piston force."
+      },
+      {
+        "id": "gas_pressure_sensor",
+        "name": "Pressure Sensor (G)",
+        "color": "#f59e0b",
+        "icon": "gas_pressure_sensor",
+        "category": "Sensors",
+        "params": {},
+        "ports": [
+          { "id": "p", "pos": "left", "label": "P", "domain": "Gas" },
+          { "id": "out", "pos": "right", "label": "OUT", "domain": "Physical" }
+        ],
+        "equation": "mass_flow = 0\nout = P(p)",
+        "description": "Measures gas pressure at a node without drawing mass flow; connect OUT to a Scope for Pa."
+      },
+      {
+        "id": "gas_flow_sensor",
+        "name": "Flow Sensor (G)",
+        "color": "#f59e0b",
+        "icon": "gas_flow_sensor",
+        "category": "Sensors",
+        "params": {},
+        "ports": [
+          { "id": "p", "pos": "left", "label": "P", "domain": "Gas" },
+          { "id": "n", "pos": "left", "label": "N", "domain": "Gas" },
+          { "id": "out", "pos": "right", "label": "OUT", "domain": "Physical" }
+        ],
+        "equation": "P(p) = P(n)\nout = mdot",
+        "description": "Ideal gas flow sensor that passes the line without pressure loss; connect OUT to a Scope for kg/s."
       },
       {
         "id": "gas_flow_source",
@@ -1761,17 +1871,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "m",
             "pos": "top",
-            "label": "M"
+            "label": "M",
+            "domain": "Physical"
           }
         ],
         "equation": "mdot = mdot_cmd",
@@ -1794,44 +1907,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "p",
             "pos": "top",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical"
           }
         ],
         "equation": "Pb - Pa = P_source",
         "description": "Ideal pneumatic pressure source maintaining a specified pressure differential across ports."
       },
-      {
-        "id": "gas_properties",
-        "name": "Gas Properties (G)",
-        "color": "#d946ef",
-        "icon": "gas_props",
-        "category": "Utilities",
-        "params": {
-          "R": {
-            "value": 287,
-            "unit": "J/kg/K",
-            "label": "Gas Constant"
-          },
-          "gamma": {
-            "value": 1.4,
-            "unit": "1",
-            "label": "Specific Heat Ratio"
-          }
-        },
-        "ports": [],
-        "equation": "P = ρ * R * T\\nγ = Cp / Cv",
-        "description": "Defines working gas thermodynamic parameters including specific gas constant R and specific heat ratio γ."
-      }
     ]
   },
   {
@@ -1936,6 +2030,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "ctrl",
+            "domain": "Physical",
             "pos": "top",
             "label": "C"
           }
@@ -1954,6 +2049,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1000,
             "unit": "A/m",
             "label": "Coercivity"
+          },
+          "Lm": {
+            "value": 0.05,
+            "unit": "m",
+            "label": "Magnet Length"
+          },
+          "Rm": {
+            "value": 0,
+            "unit": "A-t/Wb",
+            "label": "Internal Reluctance"
           }
         },
         "ports": [
@@ -2016,30 +2121,39 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rel_force",
         "category": "Couplings",
         "params": {
+          "R0": {
+            "value": 1000000,
+            "unit": "A-t/Wb",
+            "label": "Initial Reluctance"
+          },
           "K": {
-            "value": 1,
-            "unit": "N-m/Wb^2",
-            "label": "Force Constant"
+            "value": 10000000,
+            "unit": "A-t/(Wb-m)",
+            "label": "Reluctance Gradient (dR/dx)"
           }
         },
         "ports": [
           {
             "id": "n",
+            "domain": "Magnetic",
             "pos": "left",
             "label": "N"
           },
           {
             "id": "s",
+            "domain": "Magnetic",
             "pos": "left",
             "label": "S"
           },
           {
             "id": "r",
+            "domain": "Translational",
             "pos": "right",
             "label": "R"
           },
           {
             "id": "c",
+            "domain": "Translational",
             "pos": "right",
             "label": "C"
           }
@@ -2067,6 +2181,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "phi",
+            "domain": "Physical",
             "pos": "top",
             "label": "Φ"
           }
@@ -2094,6 +2209,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "f",
+            "domain": "Physical",
             "pos": "right",
             "label": "F"
           }
@@ -2177,6 +2293,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "src",
+            "domain": "Physical",
             "pos": "left",
             "label": "S"
           }
@@ -2264,7 +2381,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical"
           }
         ],
-        "equation": "w_out = ω, a_out = θ",
+        "equation": "w_out = ω, a_out = θ; dθ/dt = ω",
         "description": "Ideal rotational sensor measuring angular velocity ω and angular position θ."
       },
       {
@@ -2556,7 +2673,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "v_trans = R * ω_rot\nτ_rot = R * F_trans",
+        "equation": "v = Rw × ω\nτ + Rw × F = 0",
         "description": "Wheel and axle mechanism coupling vehicle linear road speed to axle rotational velocity."
       },
       {
@@ -5725,10 +5842,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "pwm_3ph",
         "category": "Power Electronics",
         "params": {
+          "model_mode": {
+            "value": "averaged",
+            "unit": "",
+            "label": "Model Mode"
+          },
+          "control_mode": {
+            "value": "three_phase_modulation",
+            "unit": "",
+            "label": "Control Mode"
+          },
+          "output_frequency_hz": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Output Frequency"
+          },
           "f_sw": {
             "value": 5000,
             "unit": "Hz",
             "label": "Switch Freq"
+          },
+          "output_resistance_ohm": {
+            "value": 0.001,
+            "unit": "ohm",
+            "label": "Output Resistance"
           }
         },
         "ports": [
@@ -5736,6 +5873,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "vabc",
             "pos": "left",
             "label": "Vabc",
+            "domain": "Physical"
+          },
+          {
+            "id": "ma",
+            "pos": "left",
+            "label": "ma",
+            "domain": "Physical"
+          },
+          {
+            "id": "mb",
+            "pos": "left",
+            "label": "mb",
+            "domain": "Physical"
+          },
+          {
+            "id": "mc",
+            "pos": "left",
+            "label": "mc",
             "domain": "Physical"
           },
           {
@@ -5783,33 +5938,72 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2000,
             "unit": "Hz",
             "label": "Switch Freq"
+          },
+          "output_frequency_hz": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Output Frequency"
+          },
+          "neutral_balance_gain": {
+            "value": 0.1,
+            "unit": "1/V",
+            "label": "Neutral Balance Gain"
           }
         },
         "ports": [
           {
             "id": "vabc",
             "pos": "left",
-            "label": "Vabc"
+            "label": "Vabc",
+            "domain": "Physical"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical"
           },
           {
             "id": "vneut",
             "pos": "left",
-            "label": "vNeutral"
+            "label": "vNeutral",
+            "domain": "Physical"
           },
           {
-            "id": "g",
+            "id": "ga",
             "pos": "right",
-            "label": "g"
+            "label": "Gate A",
+            "domain": "Physical"
           },
           {
-            "id": "mod",
+            "id": "gb",
             "pos": "right",
-            "label": "ModWave"
+            "label": "Gate B",
+            "domain": "Physical"
+          },
+          {
+            "id": "gc",
+            "pos": "right",
+            "label": "Gate C",
+            "domain": "Physical"
+          },
+          {
+            "id": "ma",
+            "pos": "right",
+            "label": "Mod A",
+            "domain": "Physical"
+          },
+          {
+            "id": "mb",
+            "pos": "right",
+            "label": "Mod B",
+            "domain": "Physical"
+          },
+          {
+            "id": "mc",
+            "pos": "right",
+            "label": "Mod C",
+            "domain": "Physical"
           }
         ],
         "equation": "PWM Generator (3-Phase, 3-Level) governing physical equation",
@@ -5826,33 +6020,107 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10000,
             "unit": "Hz",
             "label": "Switch Freq"
+          },
+          "vdc_ref": {
+            "value": 800,
+            "unit": "V",
+            "label": "Vdc Ref"
+          },
+          "kp_v": {
+            "value": 0.1,
+            "unit": "A/V",
+            "label": "Voltage Prop Gain"
+          },
+          "neutral_balance_gain": {
+            "value": 0.1,
+            "unit": "1/V",
+            "label": "Neutral Balance Gain"
           }
         },
         "ports": [
           {
-            "id": "vabc",
+            "id": "va",
             "pos": "left",
-            "label": "Vabc"
+            "label": "Va",
+            "domain": "Physical"
           },
           {
-            "id": "iabc",
+            "id": "vb",
             "pos": "left",
-            "label": "Iabc"
+            "label": "Vb",
+            "domain": "Physical"
+          },
+          {
+            "id": "vc",
+            "pos": "left",
+            "label": "Vc",
+            "domain": "Physical"
+          },
+          {
+            "id": "ia",
+            "pos": "left",
+            "label": "Ia",
+            "domain": "Physical"
+          },
+          {
+            "id": "ib",
+            "pos": "left",
+            "label": "Ib",
+            "domain": "Physical"
+          },
+          {
+            "id": "ic",
+            "pos": "left",
+            "label": "Ic",
+            "domain": "Physical"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical"
           },
           {
             "id": "vneut",
             "pos": "left",
-            "label": "vNeutral"
+            "label": "vNeutral",
+            "domain": "Physical"
           },
           {
-            "id": "g",
+            "id": "ga",
             "pos": "right",
-            "label": "g"
+            "label": "Gate A",
+            "domain": "Physical"
+          },
+          {
+            "id": "gb",
+            "pos": "right",
+            "label": "Gate B",
+            "domain": "Physical"
+          },
+          {
+            "id": "gc",
+            "pos": "right",
+            "label": "Gate C",
+            "domain": "Physical"
+          },
+          {
+            "id": "ma",
+            "pos": "right",
+            "label": "Mod A",
+            "domain": "Physical"
+          },
+          {
+            "id": "mb",
+            "pos": "right",
+            "label": "Mod B",
+            "domain": "Physical"
+          },
+          {
+            "id": "mc",
+            "pos": "right",
+            "label": "Mod C",
+            "domain": "Physical"
           }
         ],
         "equation": "PWM Generator (Vienna Rectifier) governing physical equation",
@@ -5869,23 +6137,61 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 50,
             "unit": "Hz",
             "label": "Freq"
+          },
+          "pulse_width_deg": {
+            "value": 20,
+            "unit": "deg",
+            "label": "Pulse Width"
           }
         },
         "ports": [
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "alpha",
             "pos": "left",
-            "label": "alpha"
+            "label": "alpha",
+            "domain": "Physical"
           },
           {
-            "id": "p",
+            "id": "g1",
             "pos": "right",
-            "label": "P"
+            "label": "G1",
+            "domain": "Physical"
+          },
+          {
+            "id": "g2",
+            "pos": "right",
+            "label": "G2",
+            "domain": "Physical"
+          },
+          {
+            "id": "g3",
+            "pos": "right",
+            "label": "G3",
+            "domain": "Physical"
+          },
+          {
+            "id": "g4",
+            "pos": "right",
+            "label": "G4",
+            "domain": "Physical"
+          },
+          {
+            "id": "g5",
+            "pos": "right",
+            "label": "G5",
+            "domain": "Physical"
+          },
+          {
+            "id": "g6",
+            "pos": "right",
+            "label": "G6",
+            "domain": "Physical"
           }
         ],
         "equation": "Thyristor 6-Pulse Generator governing physical equation",
@@ -5902,28 +6208,97 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 50,
             "unit": "Hz",
             "label": "Freq"
+          },
+          "pulse_width_deg": {
+            "value": 5,
+            "unit": "deg",
+            "label": "Pulse Width"
           }
         },
         "ports": [
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "alpha",
             "pos": "left",
-            "label": "alpha"
+            "label": "alpha",
+            "domain": "Physical"
           },
           {
-            "id": "pdelta",
+            "id": "delta_g1",
             "pos": "right",
-            "label": "Pdelta"
+            "label": "Delta G1",
+            "domain": "Physical"
           },
           {
-            "id": "pwye",
+            "id": "delta_g2",
             "pos": "right",
-            "label": "Pwye"
+            "label": "Delta G2",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g3",
+            "pos": "right",
+            "label": "Delta G3",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g4",
+            "pos": "right",
+            "label": "Delta G4",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g5",
+            "pos": "right",
+            "label": "Delta G5",
+            "domain": "Physical"
+          },
+          {
+            "id": "delta_g6",
+            "pos": "right",
+            "label": "Delta G6",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g1",
+            "pos": "right",
+            "label": "Wye G1",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g2",
+            "pos": "right",
+            "label": "Wye G2",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g3",
+            "pos": "right",
+            "label": "Wye G3",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g4",
+            "pos": "right",
+            "label": "Wye G4",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g5",
+            "pos": "right",
+            "label": "Wye G5",
+            "domain": "Physical"
+          },
+          {
+            "id": "wye_g6",
+            "pos": "right",
+            "label": "Wye G6",
+            "domain": "Physical"
           }
         ],
         "equation": "Thyristor 12-Pulse Generator governing physical equation",
@@ -5950,8 +6325,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "p",
-            "pos": "left",
-            "label": "P"
+            "pos": "right",
+            "label": "P",
+            "domain": "BeltProperty"
           }
         ],
         "equation": "Belt-Cable Properties governing physical equation",
@@ -5968,18 +6344,42 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1000000,
             "unit": "N/m",
             "label": "Stiffness"
+          },
+          "length": {
+            "value": 1,
+            "unit": "m",
+            "label": "Belt Length"
+          },
+          "area": {
+            "value": 0.001,
+            "unit": "m2",
+            "label": "Section Area"
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "e",
             "pos": "right",
-            "label": "E"
+            "label": "E",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "f",
+            "pos": "bottom",
+            "label": "F",
+            "domain": "Physical"
           }
         ],
         "equation": "Belt-Cable End governing physical equation",
@@ -5996,18 +6396,37 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "m",
             "label": "Radius"
+          },
+          "inertia": {
+            "value": 0,
+            "unit": "kg-m2",
+            "label": "Spool Inertia"
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "t",
+            "pos": "bottom",
+            "label": "T",
+            "domain": "Physical"
           }
         ],
         "equation": "Belt-Cable Spool governing physical equation",
@@ -6035,17 +6454,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Translational"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "t",
+            "pos": "bottom",
+            "label": "T",
+            "domain": "Physical"
           }
         ],
         "equation": "Pulley governing physical equation",
@@ -6062,7 +6496,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Frame"
           }
         ],
         "equation": "World Frame governing physical equation",
@@ -6079,7 +6514,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Frame"
           }
         ],
         "equation": "Reference Frame governing physical equation",
@@ -6107,16 +6543,78 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
           }
         ],
         "equation": "Rigid Transform governing physical equation",
         "description": "Physical component model for Rigid Transform."
+      },
+      {
+        "id": "transform_sensor",
+        "name": "Transform Sensor",
+        "color": "#4b5563",
+        "icon": "rigid_trans",
+        "category": "Frames & Transforms",
+        "params": {},
+        "ports": [
+          {
+            "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
+            "pos": "left",
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "X",
+            "domain": "Physical"
+          },
+          {
+            "id": "y",
+            "pos": "right",
+            "label": "Y",
+            "domain": "Physical"
+          },
+          {
+            "id": "z",
+            "pos": "right",
+            "label": "Z",
+            "domain": "Physical"
+          },
+          {
+            "id": "rx",
+            "pos": "right",
+            "label": "Rx",
+            "domain": "Physical"
+          },
+          {
+            "id": "ry",
+            "pos": "right",
+            "label": "Ry",
+            "domain": "Physical"
+          },
+          {
+            "id": "rz",
+            "pos": "right",
+            "label": "Rz",
+            "domain": "Physical"
+          }
+        ],
+        "equation": "Transform Sensor governing physical equation",
+        "description": "Physical component model for Transform Sensor."
       },
       {
         "id": "dist_constraint",
@@ -6135,12 +6633,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "d",
+            "pos": "right",
+            "label": "d",
+            "domain": "Physical"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "F",
+            "domain": "Physical"
           }
         ],
         "equation": "Distance Constraint governing physical equation",
@@ -6163,12 +6675,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "ang",
+            "pos": "right",
+            "label": "θ",
+            "domain": "Physical"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "T",
+            "domain": "Physical"
           }
         ],
         "equation": "Angle Constraint governing physical equation",
@@ -6185,18 +6711,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 9.81,
             "unit": "m/s2",
             "label": "Gravity"
+          },
+          "mass": {
+            "value": 1,
+            "unit": "kg",
+            "label": "Mass"
+          },
+          "direction": {
+            "value": "[0 0 -1]",
+            "unit": "1",
+            "label": "Direction"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "|F|",
+            "domain": "Physical"
           }
         ],
         "equation": "Gravitational Field governing physical equation",
@@ -6218,18 +6762,43 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10,
             "unit": "N-s/m",
             "label": "Damping"
+          },
+          "x0": {
+            "value": 0,
+            "unit": "m",
+            "label": "Natural Length"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "x",
+            "domain": "Physical"
+          },
+          {
+            "id": "v",
+            "pos": "right",
+            "label": "v",
+            "domain": "Physical"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "F",
+            "domain": "Physical"
           }
         ],
         "equation": "Spring and Damper Force governing physical equation",
@@ -6255,14 +6824,64 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "f",
+            "id": "in_fx",
             "pos": "left",
-            "label": "F"
+            "label": "Fx",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_fy",
+            "pos": "left",
+            "label": "Fy",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_fz",
+            "pos": "left",
+            "label": "Fz",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_tx",
+            "pos": "left",
+            "label": "Tx",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_ty",
+            "pos": "left",
+            "label": "Ty",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_tz",
+            "pos": "left",
+            "label": "Tz",
+            "domain": "Physical"
           },
           {
             "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
             "pos": "right",
-            "label": "B"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "|F|",
+            "domain": "Physical"
+          },
+          {
+            "id": "tm",
+            "pos": "right",
+            "label": "|T|",
+            "domain": "Physical"
           }
         ],
         "equation": "External Force and Torque governing physical equation",
@@ -6991,16 +7610,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
-        "equation": "Q = (k * A / L) * (T1 - T2)",
-        "description": "Fourier conductive heat transfer through a solid medium with conductivity k and area A."
+        "equation": "Q = k * (T1 - T2)",
+        "description": "Fourier conductive heat transfer with thermal conductance k."
       },
       {
         "id": "convective_heat",
@@ -7024,12 +7645,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = h * A * (T_solid - T_fluid)",
@@ -7057,12 +7680,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = ε * σ * A * (T1⁴ - T2⁴)",
@@ -7085,7 +7710,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = m * c_p * dT/dt",
@@ -7102,7 +7728,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
         "equation": "T = 293.15 K (20 °C)",
@@ -7119,12 +7746,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "h",
@@ -7147,12 +7776,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "t",
@@ -7181,12 +7812,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Heat Flow Rate Source governing physical equation",
@@ -7209,7 +7842,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
         "equation": "T_node = T_param (or T_cmd)",
@@ -7256,12 +7890,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "s",
@@ -8176,6 +8812,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Steam"
           },
           {
+            "id": "n",
+            "pos": "left",
+            "label": "Return"
+          },
+          {
             "id": "q_in",
             "pos": "left",
             "label": "Heat",
@@ -8236,10 +8877,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "p",
             "pos": "left",
             "label": "In"
+          },
+          {
+            "id": "n",
+            "pos": "right",
+            "label": "Out"
           }
         ],
-        "equation": "mdot = Cd * A_throat * P0 * √(γ/(R*T0)) * (2/(γ+1))^((γ+1)/(2*(γ-1)))",
-        "description": "Convergent-divergent steam expansion nozzle accelerating high-pressure steam into velocity jet."
+        "equation": "mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))",
+        "description": "Two-port steam nozzle whose mass flow is driven by the nonnegative upstream-to-downstream pressure difference."
       },
       {
         "id": "pressure_sensor",

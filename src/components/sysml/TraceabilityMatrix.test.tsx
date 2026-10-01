@@ -15,6 +15,8 @@ function repository() {
 describe('professional traceability matrix workspace', () => {
   it('renders accessible status text, metrics, filters, source cells, and export control', () => {
     const html = renderToStaticMarkup(<TraceabilityMatrix repository={repository()} />);
+    expect(html).toContain('traceability-grid');
+    expect(html).toContain('engineering-table');
     expect(html).toContain('Requirements Traceability Matrix');
     expect(html).toContain('covered');
     expect(html).toContain('Controller');
@@ -72,5 +74,63 @@ describe('professional traceability matrix workspace', () => {
     expect(html).toContain('REQ-2');
     expect(html).toContain('«satisfy»');
     expect(html).toContain('Controller');
+  });
+
+  it('renders a State display name for a satisfy endpoint rather than its UUID', () => {
+    const repo = repository();
+    repo.relationships.stateSatisfy = { id: 'stateSatisfy', kind: 'satisfy', sourceId: 'state-uuid-123', targetId: 'r' };
+
+    const html = renderToStaticMarkup(<TraceabilityMatrix
+      repository={repo}
+      externalElements={[{ id: 'state-uuid-123', name: 'State_1', kind: 'state' }]}
+    />);
+
+    expect(html).toContain('State_1');
+    expect(html).not.toContain('state-uuid-123');
+  });
+
+  it('renders deriveReqt, copy, refine, trace, and verify directional badges', () => {
+    const repo = repository();
+    repo.requirements.rDerived = {
+      id: 'rDerived',
+      name: 'Derived Safety',
+      namespace: [],
+      kind: 'requirement',
+      requirementId: 'REQ-3',
+      text: 'Derived',
+      status: 'approved',
+      version: '1',
+    };
+    repo.requirements.rCopy = {
+      id: 'rCopy',
+      name: 'Copy Safety',
+      namespace: [],
+      kind: 'requirement',
+      requirementId: 'REQ-4',
+      text: 'Copy',
+      status: 'approved',
+      version: '1',
+    };
+    repo.verificationCases.vc1 = {
+      id: 'vc1',
+      name: 'Safety Test Case',
+      namespace: [],
+      kind: 'verificationCase',
+      method: 'test',
+      verifiesRequirementIds: [],
+    };
+    repo.relationships.rDer = { id: 'rDer', kind: 'deriveReqt', sourceId: 'rDerived', targetId: 'r' };
+    repo.relationships.rCp = { id: 'rCp', kind: 'copy', sourceId: 'rCopy', targetId: 'r' };
+    repo.relationships.rRef = { id: 'rRef', kind: 'refine', sourceId: 'b', targetId: 'r' };
+    repo.relationships.rTr = { id: 'rTr', kind: 'trace', sourceId: 'r', targetId: 'rCopy' };
+    repo.relationships.rVer = { id: 'rVer', kind: 'verify', sourceId: 'vc1', targetId: 'r' };
+
+    const html = renderToStaticMarkup(<TraceabilityMatrix repository={repo} />);
+    expect(html).toContain('«deriveReqt»');
+    expect(html).toContain('«copy»');
+    expect(html).toContain('«refine»');
+    expect(html).toContain('«trace»');
+    expect(html).toContain('«verify»');
+    expect(html).toContain('Safety Test Case');
   });
 });

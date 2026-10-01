@@ -1,0 +1,41 @@
+/* Scoped theme rules for HIL (Hardware-in-the-Loop) Workspace */
+
+.hil-workspace {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.hil-workspace .hil-panel,
+.hil-panel {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.hil-workspace .hil-target-card,
+.hil-target-card {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hil-workspace .hil-target-card:hover,
+.hil-target-card:hover {
+  border-color: var(--border-strong);
+}
+
+.hil-workspace .hil-terminal,
+.hil-terminal {
+  background-color: var(--surface-terminal) !important;
+  color: #f8fafc !important;
+}
+
+.hil-workspace .hil-status,
+.hil-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}

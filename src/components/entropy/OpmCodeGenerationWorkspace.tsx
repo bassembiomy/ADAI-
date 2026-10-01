@@ -393,8 +393,8 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
     (state.lifecycle === 'verified' ? 'qualified' : state.lifecycle === 'failed' ? 'failed' : 'pending');
 
   return (
-    <div className="flex flex-col gap-3 p-3 text-xs" data-testid="opm-codegen-workspace">
-      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
+    <div className="opm-panel flex flex-col gap-3 p-3 text-xs" data-testid="opm-codegen-workspace">
+      <div className="opm-panel ui-card bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
         <div className="flex items-center justify-between">
           <span className="uppercase text-[10px] font-extrabold tracking-wider text-gray-400">Artifact lifecycle</span>
           <span className="text-[10px] font-bold text-emerald-300" data-testid="opm-lifecycle">{LIFECYCLE_LABEL[state.lifecycle]}</span>
@@ -545,21 +545,21 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
                 </button>
               ))}
             </div>
-            <pre className="mt-1 max-h-48 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
+            <pre className="opm-code-surface ui-terminal mt-1 max-h-48 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
               {activeContent}
             </pre>
           </>
         )}
       </div>
 
-      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
+      <div className="opm-panel ui-card bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
         <span className="uppercase text-[10px] font-extrabold tracking-wider text-gray-400">Manifest</span>
-        <pre className="mt-1 max-h-40 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
+        <pre className="opm-code-surface ui-terminal mt-1 max-h-40 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
           {state.manifest ? JSON.stringify(state.manifest, null, 2) : 'No manifest yet.'}
         </pre>
       </div>
 
-      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
+      <div className="opm-console opm-panel ui-terminal bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
         <span className="uppercase text-[10px] font-extrabold tracking-wider text-gray-400">Compiler output &amp; parity</span>
         {!state.evidence ? (
           <div className="mt-1 text-[10px] text-gray-600 italic">No verification evidence yet.</div>

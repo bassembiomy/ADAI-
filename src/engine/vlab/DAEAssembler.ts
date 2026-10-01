@@ -3,6 +3,11 @@ import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations } from './vlabEquations';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
+import {
+  ConstraintTopology,
+  MultibodyConstraintDiagnosticError,
+  validateMultibodyConstraintTopology,
+} from './vlabConstraintDiagnostics';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
   'ps_lookup_2d', 'bldc_commutation', 'bldc_current_ctrl', 'bldc_pwm_ctrl',
@@ -16,7 +21,23 @@ const SIGNAL_CONTROL_BLOCKS = new Set([
   'pmsm_curr_ctrl', 'pmsm_ref_gen', 'pmsm_field_weakening', 'pmsm_tq_est',
   'pwm_3ph_3level', 'pwm_vienna', 'thyristor_6pulse', 'thyristor_12pulse',
   'ps_simulink_conv', 'simulink_ps_conv', 'vlab_probe', 'conn_label', 'doe_custom',
-  'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport'
+  'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport', 'nmos'
+]);
+
+const FRAME_WRENCH_BRANCHES = ['fx', 'fy', 'fz', 'tx', 'ty', 'tz'];
+
+// Physical-signal measurement outputs of the multibody force elements, in equation order.
+const FRAME_FORCE_MEASUREMENTS: Record<string, string[]> = {
+  grav_field: ['fm'],
+  spring_damper_force: ['x', 'v', 'fm'],
+  external_force: ['fm', 'tm'],
+};
+
+// Blocks that load or observe a frame without constraining its pose. A frame
+// node touched only by these has no kinematic definition and is held at origin.
+const FRAME_NON_KINEMATIC_TYPES = new Set([
+  'grav_field', 'spring_damper_force', 'external_force', 'transform_sensor',
+  'scope', 'vlab_probe', 'conn_label',
 ]);
 
 class UnionFind {
@@ -60,11 +81,20 @@ export class DAEAssembler {
       for (const domain of VLAB_LIBRARY) {
         const block = domain.blocks.find(b => b.id === blockType);
         if (block) {
-          return block.ports.map(p => ({
-            id: p.id,
-            domain: (p.domain || domain.type).toLowerCase() as PhysicalDomain,
-            pos: p.pos
-          }));
+          return block.ports.map(p => {
+            let d = p.domain;
+            if (!d) {
+              const pid = p.id.toLowerCase();
+              if (['ctrl', 'src', 'phi'].includes(pid)) d = 'Physical';
+              else if (domain.type === 'Magnetic' && (pid === 'n' || pid === 's')) d = 'Magnetic';
+              else d = domain.type;
+            }
+            return {
+              id: p.id,
+              domain: d.toLowerCase() as PhysicalDomain,
+              pos: p.pos
+            };
+          });
         }
       }
       return [];
@@ -105,14 +135,14 @@ export class DAEAssembler {
       edges.forEach(edge => {
         if (edge.source === node.id && edge.sourceHandle) {
           let pId = edge.sourceHandle.replace(/_[st]$/, '');
-          if (pId.startsWith(node.id + '-')) {
+          if (pId.startsWith(node.id + '-') || pId.startsWith(node.id + '_')) {
             pId = pId.slice(node.id.length + 1);
           }
           portsSet.add(pId);
         }
         if (edge.target === node.id && edge.targetHandle) {
           let pId = edge.targetHandle.replace(/_[st]$/, '');
-          if (pId.startsWith(node.id + '-')) {
+          if (pId.startsWith(node.id + '-') || pId.startsWith(node.id + '_')) {
             pId = pId.slice(node.id.length + 1);
           }
           portsSet.add(pId);
@@ -162,13 +192,14 @@ export class DAEAssembler {
 
     // 2. Connect ports according to edges
     const connectedPortKeys = new Set<string>();
+    const warnedUnconnectedNmosGates = new Set<string>();
     edges.forEach(edge => {
       let sourcePort = (edge.sourceHandle || 'p').replace(/_[st]$/, '');
-      if (sourcePort.startsWith(edge.source + '-')) {
+      if (sourcePort.startsWith(edge.source + '-') || sourcePort.startsWith(edge.source + '_')) {
         sourcePort = sourcePort.slice(edge.source.length + 1);
       }
       let targetPort = (edge.targetHandle || 'p').replace(/_[st]$/, '');
-      if (targetPort.startsWith(edge.target + '-')) {
+      if (targetPort.startsWith(edge.target + '-') || targetPort.startsWith(edge.target + '_')) {
         targetPort = targetPort.slice(edge.target.length + 1);
       }
       
@@ -215,7 +246,10 @@ export class DAEAssembler {
         domain = nodePortDomains.get(ports[0]) || 'physical';
       }
       
-      const acrossIndex = varCount++;
+      const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
+      const stride = isFrameDomain ? 6 : 1;
+      const acrossIndex = varCount;
+      varCount += stride;
       nodeAcrossIndex.set(root, acrossIndex);
       
       physicalNodes.push({
@@ -224,8 +258,16 @@ export class DAEAssembler {
         acrossVarIndex: acrossIndex
       });
       
-      variableNames.push(`Across_${root}_(${domain})`);
-      isDifferentialState.push(false);
+      if (isFrameDomain) {
+        const frameSuffixes = ['Px', 'Py', 'Pz', 'Rx', 'Ry', 'Rz'];
+        frameSuffixes.forEach(s => {
+          variableNames.push(`Across_${root}_${s}_(${domain})`);
+          isDifferentialState.push(false);
+        });
+      } else {
+        variableNames.push(`Across_${root}_(${domain})`);
+        isDifferentialState.push(false);
+      }
     });
 
     // Map each port key to its across variable index
@@ -254,18 +296,31 @@ export class DAEAssembler {
       }
 
       const isPhysicalOutputPort = (portId: string) => {
-        if (blockType === 'lms_adaptive_filter' && ['x', 'd', 'lr'].includes(portId)) return false;
-        if (blockType === 'neural_neuron_learning' && ['x1', 'x2', 'target', 'lr'].includes(portId)) return false;
-        if (blockType === 'rl_q_learning_controller' && ['error', 'reward', 'reset'].includes(portId)) return false;
-        if (blockType === 'ac_motor_pid_control' && ['w_ref', 'tl'].includes(portId)) return false;
+        const id = portId.toLowerCase();
+        if (blockType === 'rot_motion_sensor' && ['w', 'a'].includes(id)) return true;
+        // The thyristor phase and firing-angle ports are inputs even though
+        // their names also appear in the generic signal-output vocabulary.
+        if (blockType === 'thyristor_12pulse' && ['theta', 'alpha', 'pdelta', 'pwye'].includes(id)) return false;
+        if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'g', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
+            id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
+          return false;
+        }
+        if (['n', 's', 'p', 'p1', 'p2', 'n1', 'n2', 'r', 'c', 'r1', 'r2', 'c1', 'c2', 's1', 's2', 'a', 'b'].includes(id) &&
+            !['v_sensor', 'i_sensor', 'temp_sensor', 'heat_sensor', 'heat_flow_sensor', 'pressure_sensor', 'flow_sensor'].includes(blockType)) {
+          return false;
+        }
+        if (blockType === 'lms_adaptive_filter' && ['x', 'd', 'lr'].includes(id)) return false;
+        if (blockType === 'neural_neuron_learning' && ['x1', 'x2', 'target', 'lr'].includes(id)) return false;
+        if (blockType === 'rl_q_learning_controller' && ['error', 'reward', 'reset'].includes(id)) return false;
+        if (blockType === 'ac_motor_pid_control' && ['w_ref', 'tl'].includes(id)) return false;
+        if (blockType === 'thyristor_6pulse' && ['theta', 'alpha'].includes(id)) return false;
 
         const key = `${blockId}_${portId}`;
         const pos = nodePortPositions.get(key);
         if (pos === 'right' || pos === 'bottom') {
           return true;
         }
-        const id = portId.toLowerCase();
-        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'p', 'f', 'x', 'h', 'm', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps'].includes(id) || 
+        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'p', 'f', 'x', 'h', 'm', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps', 'phi'].includes(id) || 
                id.startsWith('out') || id.startsWith('signal');
       };
 
@@ -284,6 +339,11 @@ export class DAEAssembler {
       case 'controlled_voltage':
         branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
         if (blockType === 'memristor') states.push('w');
+        break;
+      case 'three_phase_source':
+        branches.push({ name: 'phase_a', ports: [{ id: 'a', sign: -1 }] });
+        branches.push({ name: 'phase_b', ports: [{ id: 'b', sign: -1 }] });
+        branches.push({ name: 'phase_c', ports: [{ id: 'c', sign: -1 }] });
         break;
       case 'v_sensor':
       case 'i_sensor':
@@ -308,11 +368,19 @@ export class DAEAssembler {
       case 'gas_pressure_source':
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
         break;
+      case 'gas_pressure_sensor':
+        branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: 1 }] });
+        break;
+      case 'gas_flow_sensor':
+        branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+        break;
       case 'gas_rotational_conv':
+        // Positive torque is defined from gas port a toward h when Pa > Ph.
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
       case 'gas_translational_conv':
+        // Positive force is defined from gas port a toward h when Pa > Ph.
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
@@ -334,8 +402,12 @@ export class DAEAssembler {
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
       case 'mag_flux_sensor':
+        branches.push({ name: 'flux', ports: [{ id: 'n', sign: -1 }, { id: 's', sign: 1 }] });
+        branches.push({ name: 'signal_phi', ports: [{ id: 'phi', sign: 1 }] });
+        break;
       case 'mag_mmf_sensor':
         branches.push({ name: 'flux', ports: [{ id: 'n', sign: -1 }, { id: 's', sign: 1 }] });
+        branches.push({ name: 'signal_f', ports: [{ id: 'f', sign: 1 }] });
         break;
       case 'luenberger_observer':
         states.push('xhat');
@@ -346,9 +418,43 @@ export class DAEAssembler {
       case 'pmsm_foc':
         states.push('integ_d', 'integ_q');
         break;
-      case 'dist_constraint':
-      case 'weld_joint':
       case 'rigid_transform':
+        branches.push({ name: 'fx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fy', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'tx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'ty', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'tz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        break;
+      case 'transform_sensor':
+        branches.push({ name: 'signal_x', ports: [{ id: 'x', sign: 1 }] });
+        branches.push({ name: 'signal_y', ports: [{ id: 'y', sign: 1 }] });
+        branches.push({ name: 'signal_z', ports: [{ id: 'z', sign: 1 }] });
+        branches.push({ name: 'signal_rx', ports: [{ id: 'rx', sign: 1 }] });
+        branches.push({ name: 'signal_ry', ports: [{ id: 'ry', sign: 1 }] });
+        branches.push({ name: 'signal_rz', ports: [{ id: 'rz', sign: 1 }] });
+        break;
+      case 'dist_constraint':
+        // lambda is an internal scalar multiplier (no Kirchhoff port); fx/fy/fz
+        // carry the reaction force into the Frame equilibrium at B and F.
+        branches.push({ name: 'lambda', ports: [] });
+        branches.push({ name: 'fx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fy', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        if (ports.includes('d')) branches.push({ name: 'signal_d', ports: [{ id: 'd', sign: 1 }] });
+        if (ports.includes('f_reac')) branches.push({ name: 'signal_f', ports: [{ id: 'f_reac', sign: 1 }] });
+        break;
+      case 'angle_constraint':
+        // lambda is an internal scalar multiplier (no Kirchhoff port); tx/ty/tz
+        // carry the reaction torque into the Frame equilibrium at B and F.
+        branches.push({ name: 'lambda', ports: [] });
+        branches.push({ name: 'tx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'ty', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'tz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        if (ports.includes('ang')) branches.push({ name: 'signal_ang', ports: [{ id: 'ang', sign: 1 }] });
+        if (ports.includes('t_reac')) branches.push({ name: 'signal_t', ports: [{ id: 't_reac', sign: 1 }] });
+        break;
+      case 'weld_joint':
         branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
         break;
       case 'spherical_joint':
@@ -369,11 +475,20 @@ export class DAEAssembler {
         break;
       case 'grav_field':
       case 'spring_damper_force':
-        branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+      case 'external_force': {
+        // Six wrench components applied on F (+1); the reaction acts on B (-1)
+        // only when B is wired, otherwise it is absorbed by the world.
+        const wrenchPorts = connectedPortKeys.has(`${blockId}_b`)
+          ? [{ id: 'f', sign: 1 }, { id: 'b', sign: -1 }]
+          : [{ id: 'f', sign: 1 }];
+        for (const name of FRAME_WRENCH_BRANCHES) {
+          branches.push({ name, ports: wrenchPorts });
+        }
+        for (const out of FRAME_FORCE_MEASUREMENTS[blockType]) {
+          if (ports.includes(out)) branches.push({ name: `signal_${out}`, ports: [{ id: out, sign: 1 }] });
+        }
         break;
-      case 'external_force':
-        branches.push({ name: 'force', ports: [{ id: 'f', sign: -1 }, { id: 'b', sign: 1 }] });
-        break;
+      }
       case 'heat_flow_sensor':
       case 'heat_sensor':
         branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
@@ -383,6 +498,11 @@ export class DAEAssembler {
         case 'gyrator':
           branches.push({ name: 'current1', ports: [{ id: 'p1', sign: -1 }, { id: 'n1', sign: 1 }] });
           branches.push({ name: 'current2', ports: [{ id: 'p2', sign: -1 }, { id: 'n2', sign: 1 }] });
+          break;
+        case 'cccs':
+        case 'ccvs':
+          branches.push({ name: 'current_out', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'current_ctrl', ports: [{ id: 'cp', sign: -1 }, { id: 'cn', sign: 1 }] });
           break;
         case 'opamp':
           branches.push({ name: 'current_out', ports: [{ id: 'out', sign: 1 }] });
@@ -402,6 +522,12 @@ export class DAEAssembler {
           states.push('theta', 'omega');
           break;
         case 'ac_motor':
+          branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }] });
+          branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }] });
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
+          states.push('theta', 'omega', 'psi_r_alpha', 'psi_r_beta');
+          break;
         case 'bldc_motor':
         case 'pmsm':
           branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });
@@ -424,18 +550,33 @@ export class DAEAssembler {
           break;
         case 'rot_motion_sensor':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          branches.push({ name: 'signal_w', ports: [{ id: 'w', sign: 1 }] });
+          branches.push({ name: 'signal_a', ports: [{ id: 'a', sign: 1 }] });
           states.push('theta');
+          break;
+        case 'wheel_axle':
+          branches.push({ name: 'torque', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'force', ports: [{ id: 'p', sign: -1 }] });
           break;
         case 'rot_damper':
         case 'rot_friction':
-        case 'rot_hard_stop':
         case 'torque_sensor':
         case 'torque_source':
+        case 'ang_vel_source':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
           break;
+        case 'rot_hard_stop':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          states.push('theta');
+          break;
         case 'gear_box':
-          branches.push({ name: 'torque1', ports: [{ id: 'r1', sign: -1 }, { id: 'c1', sign: 1 }] });
-          branches.push({ name: 'torque2', ports: [{ id: 'r2', sign: -1 }, { id: 'c2', sign: 1 }] });
+          if (ports.includes('r1') || ports.includes('c1')) {
+            branches.push({ name: 'torque1', ports: [{ id: 'r1', sign: -1 }, { id: 'c1', sign: 1 }] });
+            branches.push({ name: 'torque2', ports: [{ id: 'r2', sign: -1 }, { id: 'c2', sign: 1 }] });
+          } else {
+            branches.push({ name: 'torque1', ports: [{ id: 's1', sign: -1 }] });
+            branches.push({ name: 'torque2', ports: [{ id: 's2', sign: -1 }] });
+          }
           break;
         case 'mass':
           branches.push({ name: 'force', ports: [{ id: 'p', sign: -1 }] });
@@ -444,8 +585,37 @@ export class DAEAssembler {
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
           states.push('x');
           break;
+        case 'belt_properties':
+          // Property link block: no DAE branches or states. Its density/youngs
+          // are injected into belt consumer params (see injectBeltMaterial) and
+          // broadcast via ctx.parameters by its equation factory.
+          break;
+        case 'belt_end':
+          branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'e', sign: 1 }] });
+          if (ports.includes('f')) {
+            branches.push({ name: 'signal_f', ports: [{ id: 'f', sign: 1 }] });
+          }
+          states.push('x');
+          break;
+        case 'belt_spool':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          branches.push({ name: 'force', ports: [{ id: 'a', sign: -1 }] });
+          if (ports.includes('t')) {
+            branches.push({ name: 'signal_t', ports: [{ id: 't', sign: 1 }] });
+          }
+          break;
+        case 'pulley':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          branches.push({ name: 'force_a', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'force_b', ports: [{ id: 'b', sign: -1 }] });
+          if (ports.includes('t')) {
+            branches.push({ name: 'signal_t', ports: [{ id: 't', sign: 1 }] });
+          }
+          break;
         case 'trans_motion_sensor':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          branches.push({ name: 'signal_v', ports: [{ id: 'v', sign: 1 }] });
+          branches.push({ name: 'signal_p', ports: [{ id: 'p', sign: 1 }] });
           states.push('x');
           break;
         case 'force_sensor':
@@ -470,11 +640,17 @@ export class DAEAssembler {
           break;
 
         case 'thermal_mass':
-        case 'heat_src':
         case 'temp_src':
+          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          break;
+        case 'heat_src':
         case 'ctrl_heat_src':
         case 'ctrl_temp_src':
-          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          if (ports.includes('b')) {
+            branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          } else {
+            branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }] });
+          }
           break;
         case 'magnetron':
         case 'upper_heater':
@@ -500,9 +676,33 @@ export class DAEAssembler {
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           break;
         case 'pwm_3ph_2level':
+          branches.push({ name: 'dc_link', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_a', ports: [{ id: 'a', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_b', ports: [{ id: 'b', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_c', ports: [{ id: 'c', sign: -1 }, { id: 'n', sign: 1 }] });
+          break;
+        case 'pwm_3ph_3level':
+        case 'pwm_vienna':
+          for (const name of ['ga', 'gb', 'gc', 'ma', 'mb', 'mc']) {
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          break;
+        case 'thyristor_6pulse':
+          for (const name of ['g1', 'g2', 'g3', 'g4', 'g5', 'g6']) {
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          break;
+        case 'thyristor_12pulse':
+          // Keep the equation ordering and the visible port ordering in sync:
+          // six independent delta gate branches followed by six wye branches.
+          for (let gate = 1; gate <= 6; gate++) {
+            const name = `delta_g${gate}`;
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
+          for (let gate = 1; gate <= 6; gate++) {
+            const name = `wye_g${gate}`;
+            branches.push({ name, ports: [{ id: name, sign: 1 }] });
+          }
           break;
         case 'ma_pipe':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
@@ -601,7 +801,7 @@ export class DAEAssembler {
         const domain = nodePortDomains.get(key);
         if (domain === 'physical' && isPhysicalOutputPort(portId)) {
           // Check if this branch is already added
-          if (!branches.some(b => b.name === `signal_${portId}`)) {
+          if (!branches.some(b => b.name === `signal_${portId}` || b.ports.some(port => port.id === portId))) {
             branches.push({ name: `signal_${portId}`, ports: [{ id: portId, sign: 1 }] });
           }
         }
@@ -610,11 +810,51 @@ export class DAEAssembler {
       return { branches, states };
     };
 
+    // Belt/Cable material sources: collect belt_properties blocks so their
+    // density/youngs can be injected into belt consumer params below.
+    // A consumer wired (via the P property-link port) to a properties block
+    // inherits that block; otherwise the single model-wide block applies.
+    const BELT_CONSUMER_TYPES = new Set(['belt_end', 'belt_spool', 'pulley']);
+    const unwrapNodeParam = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+    const toFiniteNumber = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+    const beltMaterialSources: { nodeId: string; root: string; density: number; youngs: number }[] = [];
+    nodes.forEach(node => {
+      const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+      if (type !== 'belt_properties') return;
+      const p = (node.data as any)?.params || {};
+      const density = toFiniteNumber(unwrapNodeParam(p.density)) ?? 1.1;
+      const youngs = toFiniteNumber(unwrapNodeParam(p.youngs)) ?? 1e9;
+      beltMaterialSources.push({
+        nodeId: node.id,
+        root: uf.find(`${node.id}_p`),
+        density: Math.max(0, density),
+        youngs: youngs > 0 ? youngs : 1e9,
+      });
+    });
+    const warnedAmbiguousBeltProps = new Set<string>();
+    const injectBeltMaterial = (nodeId: string, blockType: string, ports: string[], params: Record<string, any>, nodeData?: any) => {
+      if (!BELT_CONSUMER_TYPES.has(blockType) || beltMaterialSources.length === 0) return;
+      // Strictly check the dedicated property port 'p'
+      const pRoot = uf.find(`${nodeId}_p`);
+      const matchedSource = beltMaterialSources.find(s => s.root === pRoot);
+      if (!matchedSource) {
+        // Unwired to any belt_properties: strictly do NOT inject fallback
+        return;
+      }
+      params.belt_density = matchedSource.density;
+      params.belt_youngs = matchedSource.youngs;
+      params.belt_properties_source = matchedSource.nodeId;
+      if (nodeData && typeof nodeData === 'object' && nodeData.params) {
+        nodeData.params.belt_density = matchedSource.density;
+        nodeData.params.belt_youngs = matchedSource.youngs;
+        nodeData.params.belt_properties_source = matchedSource.nodeId;
+      }
+    };
+
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       const ports = nodePorts.get(node.id) || [];
       const spec = getComponentSpec(node.id, type, ports);
-      
       const branchIndices: number[] = [];
       const stateIndices: number[] = [];
       
@@ -655,6 +895,9 @@ export class DAEAssembler {
         });
       }
 
+      // Inject belt/cable material (density, youngs) from belt_properties blocks
+      injectBeltMaterial(node.id, type, ports, params, node.data);
+
       // Look up equation factory
       const equationFactory = blockEquations[type];
       const equationCount = spec.branches.length + spec.states.length;
@@ -671,9 +914,26 @@ export class DAEAssembler {
           const key = `${node.id}_${portId}`;
           const domain = nodePortDomains.get(key);
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
-            return undefined as any;
+            if (type === 'nmos' && portId === 'g' && !warnedUnconnectedNmosGates.has(node.id)) {
+              warnedUnconnectedNmosGates.add(node.id);
+              console.warn(`NMOS gate input is unconnected on block "${node.id}"; using 0 V.`);
+            }
+            return 0;
+          }
+          if ((domain === 'frame' || domain === 'multibodyframe') && !connectedPortKeys.has(key)) {
+            return [0, 0, 0, 0, 0, 0];
           }
           const varIdx = portToVarIndex.get(key)!;
+          if (domain === 'frame' || domain === 'multibodyframe') {
+            return [
+              x[varIdx + 0] ?? 0,
+              x[varIdx + 1] ?? 0,
+              x[varIdx + 2] ?? 0,
+              x[varIdx + 3] ?? 0,
+              x[varIdx + 4] ?? 0,
+              x[varIdx + 5] ?? 0
+            ];
+          }
           return x[varIdx];
         });
         
@@ -681,9 +941,16 @@ export class DAEAssembler {
           const key = `${node.id}_${portId}`;
           const domain = nodePortDomains.get(key);
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
-            return undefined as any;
+            return 0;
+          }
+          const isFramePort = domain === 'frame' || domain === 'multibodyframe';
+          if (isFramePort && !connectedPortKeys.has(key)) {
+            return [0, 0, 0, 0, 0, 0];
           }
           const varIdx = portToVarIndex.get(key)!;
+          if (isFramePort) {
+            return [0, 1, 2, 3, 4, 5].map(k => dx[varIdx + k] ?? 0);
+          }
           return dx[varIdx];
         });
 
@@ -731,13 +998,15 @@ export class DAEAssembler {
     const referenceNodeIds = new Set<string>();
     const referenceNodeTargets = new Map<string, number>();
 
-    // Scan for reference components (e.g. ground, rot_ref, hydraulic_reference_il, etc.)
+    // Scan for reference components (e.g. world_frame, ground, rot_ref, hydraulic_reference_il, etc.)
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-      if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
+      if (['world_frame', 'ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
         const ports = nodePorts.get(node.id) || [];
         let targetVal = 0;
-        if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
+        if (type === 'gas_ref') {
+          targetVal = 101325;
+        } else if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
           const params = (node.data as any)?.params || {};
           const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
           const pRefUnit = (params?.referencePressure?.unit || 'Pa');
@@ -775,7 +1044,8 @@ export class DAEAssembler {
         const portsInRoot = rootToPorts.get(root) || [];
         if (portsInRoot.length === 1) {
           const domain = nodePortDomains.get(key);
-          if (['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) ||
+          const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
+          if ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain) ||
               domain === 'fluid' || domain === 'gas' || domain === 'thermal') {
             referenceNodeIds.add(root);
           }
@@ -783,15 +1053,94 @@ export class DAEAssembler {
       });
     });
 
+    // Multibody constraint topology diagnostics: reject redundant/over-constrained
+    // dist_constraint / angle_constraint wiring deterministically, before any
+    // solver iteration runs (and before it can ever reach a degenerate residual
+    // evaluation on a structurally invalid model).
+    {
+      const prescribedFrameRoots = new Set<string>();
+      physicalNodes.forEach(pn => {
+        if ((pn.domain === 'frame' || pn.domain === 'multibodyframe') && referenceNodeIds.has(pn.id)) {
+          prescribedFrameRoots.add(pn.id);
+        }
+      });
+
+      // A rigid_transform fully determines its follower (F) pose given its
+      // base (B) pose, so prescription propagates through transform chains.
+      const rigidTransformLinks: { bRoot: string; fRoot: string }[] = [];
+      nodes.forEach(node => {
+        const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+        if (type !== 'rigid_transform') return;
+        const ports = nodePorts.get(node.id) || [];
+        if (!ports.includes('b') || !ports.includes('f')) return;
+        rigidTransformLinks.push({ bRoot: uf.find(`${node.id}_b`), fRoot: uf.find(`${node.id}_f`) });
+      });
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const link of rigidTransformLinks) {
+          if (prescribedFrameRoots.has(link.bRoot) && !prescribedFrameRoots.has(link.fRoot)) {
+            prescribedFrameRoots.add(link.fRoot);
+            grew = true;
+          }
+        }
+      }
+
+      const constraintTopologies: ConstraintTopology[] = [];
+      nodes.forEach(node => {
+        const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+        if (type !== 'dist_constraint' && type !== 'angle_constraint') return;
+        const ports = nodePorts.get(node.id) || [];
+        if (!ports.includes('b') || !ports.includes('f')) return;
+        const baseRoot = uf.find(`${node.id}_b`);
+        const followerRoot = uf.find(`${node.id}_f`);
+        constraintTopologies.push({ blockId: node.id, type, baseRoot, followerRoot });
+
+        // Both ports wired to the literal same frame stay coincident at
+        // EVERY possible position, so a nonzero target is impossible to
+        // satisfy no matter how the solver iterates — a genuine, purely
+        // structural fact, safe (and necessary) to catch once here rather
+        // than relying on a runtime direction that can never become defined.
+        if (baseRoot === followerRoot) {
+          const p = (node.data as any)?.params || {};
+          const unwrap = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+          const targetKey = type === 'dist_constraint' ? 'dist' : 'angle';
+          const rawTarget = p[targetKey];
+          const target = rawTarget !== undefined ? Number(unwrap(rawTarget)) : 0;
+          if (target !== 0) {
+            const noun = type === 'dist_constraint' ? 'distance direction' : 'relative rotation axis';
+            const unit = type === 'dist_constraint' ? '' : ' deg';
+            throw new MultibodyConstraintDiagnosticError(
+              'UNDEFINED_DIRECTION',
+              node.id,
+              ['b', 'f'],
+              `Block "${node.id}" (${type}): B and F are wired to the same frame, so its ${noun} ` +
+              `is undefined at every position, while a nonzero target (${target}${unit}) is set. ` +
+              `Wire B and F to distinct frames, or set ${targetKey} = 0.`
+            );
+          }
+        }
+      });
+
+      validateMultibodyConstraintTopology(constraintTopologies, prescribedFrameRoots);
+    }
+
     // KCL excluded node set remains empty so that physical signal nodes are mapped to branch variables for propagation
     const kclExcludedNodeIds = new Set<string>();
 
     // For each physical node that is NOT a reference node and NOT KCL-excluded,
     // construct its Kirchhoff through-variable sign maps
+    const kirchhoffFrameNodes = new Map<string, { throughIndices: number[]; signs: number[] }[]>();
+
     physicalNodes.forEach(pn => {
       if (referenceNodeIds.has(pn.id) || kclExcludedNodeIds.has(pn.id)) {
         return;
       }
+      const isFrame = (pn.domain === 'frame' || pn.domain === 'multibodyframe');
+      const frameCoords: { throughIndices: number[]; signs: number[] }[] = Array.from({ length: 6 }, () => ({
+        throughIndices: [],
+        signs: []
+      }));
       
       const throughIndices: number[] = [];
       const signs: number[] = [];
@@ -809,18 +1158,53 @@ export class DAEAssembler {
             const portKey = `${node.id}_${bp.id}`;
             const root = uf.find(portKey);
             if (root === pn.id) {
-              throughIndices.push(globalBranchVarIndex);
-              signs.push(bp.sign);
+              if (isFrame) {
+                let coord = -1;
+                const bName = b.name.toLowerCase();
+                if (bName === 'fx' || bName === 'force') coord = 0;
+                else if (bName === 'fy') coord = 1;
+                else if (bName === 'fz') coord = 2;
+                else if (bName === 'tx' || bName === 'torque') coord = 3;
+                else if (bName === 'ty') coord = 4;
+                else if (bName === 'tz') coord = 5;
+                if (coord >= 0) {
+                  frameCoords[coord].throughIndices.push(globalBranchVarIndex);
+                  frameCoords[coord].signs.push(bp.sign);
+                }
+              } else {
+                throughIndices.push(globalBranchVarIndex);
+                signs.push(bp.sign);
+              }
             }
           });
         });
       });
       
-      kirchhoffNodes.push({
-        nodeId: pn.id,
-        throughIndices,
-        signs
+      if (isFrame) {
+        kirchhoffFrameNodes.set(pn.id, frameCoords);
+      } else {
+        kirchhoffNodes.push({
+          nodeId: pn.id,
+          throughIndices,
+          signs
+        });
+      }
+    });
+
+    // Frame nodes with no kinematic definition (only loads/sensors attached) would
+    // leave the pose undetermined and the applied wrench unbalanced; hold them at origin.
+    const floatingFrameNodeIds = new Set<string>();
+    physicalNodes.forEach(pn => {
+      if (pn.domain !== 'frame' && pn.domain !== 'multibodyframe') return;
+      if (referenceNodeIds.has(pn.id)) return;
+      const portsOnNode = rootToPorts.get(pn.id) || [];
+      const allNonKinematic = portsOnNode.every(pKey => {
+        const nodeId = pKey.slice(0, pKey.lastIndexOf('_'));
+        const n = nodes.find(item => item.id === nodeId);
+        const t = (n?.data as any)?.type || n?.type || (n?.data as any)?.blockId || '';
+        return FRAME_NON_KINEMATIC_TYPES.has(t);
       });
+      if (allNonKinematic) floatingFrameNodeIds.add(pn.id);
     });
 
     // 6. Build Scope mapping — map each scope port to its connected source variable index (or unconnected fallback)
@@ -830,7 +1214,15 @@ export class DAEAssembler {
       if (type === 'scope') {
         const declaredPorts: any[] = (node.data as any)?.ports || [];
         const numSignalsParam = (node.data as any)?.params?.numSignals?.value;
-        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || (declaredPorts.length > 0 ? declaredPorts.length : 1)));
+        const maxConnectedPortIdx = edges.reduce((max, e) => {
+          if (e.target === node.id || e.source === node.id) {
+            const h = (e.target === node.id ? e.targetHandle : e.sourceHandle) || '';
+            const m = h.match(/in[_-]?(\d+)/i);
+            if (m) return Math.max(max, parseInt(m[1], 10));
+          }
+          return max;
+        }, 1);
+        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || Math.max(declaredPorts.length, maxConnectedPortIdx)));
         
         // Exact canonical ports strictly bounded by numSignals
         const canonicalPorts = Array.from({ length: numSignals }, (_, i) => `in${i + 1}`);
@@ -843,13 +1235,15 @@ export class DAEAssembler {
               if (tPort.startsWith(e.target + '-')) {
                 tPort = tPort.slice(e.target.length + 1);
               }
-              return tPort === pId || (pId === 'in1' && (tPort === 'p' || tPort === 'in' || tPort === 'in1' || !tPort));
+              const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return norm(tPort) === norm(pId) || (norm(pId) === 'in1' && (norm(tPort) === 'p' || norm(tPort) === 'in' || !tPort));
             } else if (e.source === node.id) {
               let sPort = (e.sourceHandle || 'in1').replace(/_[st]$/, '');
               if (sPort.startsWith(e.source + '-')) {
                 sPort = sPort.slice(e.source.length + 1);
               }
-              return sPort === pId || (pId === 'in1' && (sPort === 'p' || sPort === 'in' || sPort === 'in1' || !sPort));
+              const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return norm(sPort) === norm(pId) || (norm(pId) === 'in1' && (norm(sPort) === 'p' || norm(sPort) === 'in' || !sPort));
             }
             return false;
           });
@@ -878,7 +1272,7 @@ export class DAEAssembler {
             if (matchingBranchIdx === -1 && sourceBranchIndices.length > 0) {
               if (sourceType === 'force_source' || sourceType === 'force_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'force' || b.name.includes('force'));
-              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor') {
+              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor' || sourceType === 'ang_vel_source') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'torque' || b.name.includes('torque'));
               } else if (sourceType === 'current_source' || sourceType === 'controlled_current' || sourceType === 'current_sensor' || sourceType === 'ideal_current_sensor') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'current' || b.name.includes('current'));
@@ -886,6 +1280,20 @@ export class DAEAssembler {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('heat') || b.name.includes('signal_t'));
               } else if (sourceType === 'mass_flow_src' || sourceType === 'ctrl_mass_flow') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('mass_flow'));
+              } else if (sourceType === 'mag_flux_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_phi' || b.name.includes('phi'));
+              } else if (sourceType === 'mag_mmf_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name.includes('f'));
+              } else if (sourceType === 'belt_end') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name === 'force');
+              } else if (sourceType === 'belt_spool' || sourceType === 'pulley') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t' || b.name === 'torque');
+              } else if (sourceType === 'dist_constraint') {
+                if (srcPort === 'd') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_d');
+                else if (srcPort === 'f_reac' || srcPort === 'f') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f');
+              } else if (sourceType === 'angle_constraint') {
+                if (srcPort === 'ang' || srcPort === 'angle') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_ang');
+                else if (srcPort === 't_reac' || srcPort === 't') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t');
               }
             }
 
@@ -949,8 +1357,13 @@ export class DAEAssembler {
         const acrossVarIdx = pn.acrossVarIndex;
         
         if (referenceNodeIds.has(pn.id)) {
-          // Reference node potential/pressure/temperature
-          if (referenceNodeTargets.has(pn.id)) {
+          // Reference node potential/pressure/temperature/frame
+          if (pn.domain === 'frame' || pn.domain === 'multibodyframe') {
+            const target = referenceNodeTargets.get(pn.id) || 0;
+            for (let k = 0; k < 6; k++) {
+              res[acrossVarIdx + k] = x[acrossVarIdx + k] - target;
+            }
+          } else if (referenceNodeTargets.has(pn.id)) {
             res[acrossVarIdx] = x[acrossVarIdx] - referenceNodeTargets.get(pn.id)!;
           } else if (pn.domain === 'fluid' || pn.domain === 'gas' || pn.domain === 'isothermal_liquid') {
             res[acrossVarIdx] = x[acrossVarIdx] - 101325;
@@ -971,6 +1384,26 @@ export class DAEAssembler {
             res[acrossVarIdx] = x[acrossVarIdx] - sum;
           } else {
             res[acrossVarIdx] = x[acrossVarIdx];
+          }
+        } else if (pn.domain === 'frame' || pn.domain === 'multibodyframe') {
+          const frameCoords = kirchhoffFrameNodes.get(pn.id);
+          if (floatingFrameNodeIds.has(pn.id)) {
+            for (let k = 0; k < 6; k++) {
+              res[acrossVarIdx + k] = x[acrossVarIdx + k];
+            }
+            return;
+          }
+          for (let k = 0; k < 6; k++) {
+            const fc = frameCoords ? frameCoords[k] : undefined;
+            if (fc && fc.throughIndices.length > 0) {
+              let sum = 0;
+              for (let i = 0; i < fc.throughIndices.length; i++) {
+                sum += fc.signs[i] * x[fc.throughIndices[i]];
+              }
+              res[acrossVarIdx + k] = sum;
+            } else {
+              res[acrossVarIdx + k] = x[acrossVarIdx + k];
+            }
           }
         } else {
           // Kirchhoff Conservation node: Sum of through variables = 0

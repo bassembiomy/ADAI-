@@ -2,6 +2,8 @@ import { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
+import { SolverConfiguration } from './kernel/types';
+import { explicitSolverStep } from './ExplicitSolverAdapter';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -23,10 +25,29 @@ export class VLabPhysicsEngine {
   private solver: ImplicitSolver;
   private currentSystem: AssembledSystem | null = null;
   private prevTopologyHash: string = '';
+  private solverConfiguration: SolverConfiguration | null;
 
-  constructor() {
+  constructor(solverConfiguration: SolverConfiguration | null = null) {
     this.assembler = new DAEAssembler();
     this.solver = new ImplicitSolver();
+    this.solverConfiguration = solverConfiguration;
+    if (solverConfiguration) this.applySolverConfiguration(solverConfiguration);
+  }
+
+  updateConfiguration(solverConfiguration: SolverConfiguration): void {
+    this.solverConfiguration = solverConfiguration;
+    this.applySolverConfiguration(solverConfiguration);
+  }
+
+  getSolverConfiguration(): SolverConfiguration | null {
+    return this.solverConfiguration;
+  }
+
+  private applySolverConfiguration(config: SolverConfiguration): void {
+    this.solver.configure({
+      maxIterations: config.maximumIterations,
+      tolerance: config.nonlinearTolerance
+    });
   }
 
   /**
@@ -35,7 +56,8 @@ export class VLabPhysicsEngine {
   private getTopologyHash(nodes: Node[], edges: Edge[]): string {
     const nodeIds = nodes.map(n => n.id).sort().join(',');
     const edgeIds = edges.map(e => `${e.source}_${e.target}`).sort().join(',');
-    return `${nodeIds}|${edgeIds}`;
+    const parameterHash = nodes.map(n => `${n.id}:${JSON.stringify((n.data as any)?.params ?? {})}`).sort().join('|');
+    return `${nodeIds}|${edgeIds}|${parameterHash}`;
   }
 
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {
@@ -79,6 +101,19 @@ export class VLabPhysicsEngine {
           x[idx] = T_init;
         } else if (name.includes('(fluid)') || name.includes('(gas)') || name.includes('(isothermal_liquid)')) {
           x[idx] = 101325;
+        } else if (name.includes('(frame)') || name.includes('(multibodyframe)')) {
+          // A dist_constraint/angle_constraint's direction/axis is only
+          // geometrically undefined when its two frames exactly coincide.
+          // Every new Frame coordinate otherwise starts at exactly 0, so two
+          // distinct (but not yet connected/solved) frames begin perfectly
+          // tied on the very first solver iterate even in a well-posed
+          // model. A tiny, unique-per-variable seed (idx guarantees distinct
+          // frames get distinct seeds) breaks that artificial tie without
+          // perturbing any real result: world_frame/reference frames are
+          // pinned back to their target every iteration regardless of seed,
+          // and this is negligible next to any real geometry (same idea as
+          // the psiar/thermal/pressure seeds just above).
+          x[idx] = 0.01 * (idx + 1);
         } else if (name.includes('_state_')) {
           const parts = name.split('_state_');
           if (parts.length === 2) {
@@ -105,33 +140,45 @@ export class VLabPhysicsEngine {
       });
     }
 
-    let t = prevState?.time || 0;
+    const config = this.solverConfiguration;
+    const method = config?.solver ?? 'auto';
+    const isExplicit = method === 'euler' || method === 'rk4' || method === 'rk_adaptive';
+    const sameMethod = !prevState?.solverMethod || prevState.solverMethod === method;
+    let t = prevState?.time ?? config?.startTime ?? 0;
     const tTarget = t + dt;
     
     let xCurrent = [...x];
-    let prevX = prevState?.prevX ? [...prevState.prevX] : undefined;
-    let lastDt = prevState?.prevDt;
+    let prevX = sameMethod && prevState?.prevX ? [...prevState.prevX] : undefined;
+    let lastDt = sameMethod ? prevState?.prevDt : undefined;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
-    let useSdirk = prevState?.useSdirk || prevState?.solver === 'sdirk3' || false;
+    // Configured auto uses BDF for VLab DAEs. Legacy unconfigured runs retain SDIRK fallback.
+    let useSdirk = !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
+    let acceptedSteps = 0;
+    let rejectedSteps = 0;
+    const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
+    const maxStep = typeof config?.maximumStep === 'number' ? config.maximumStep : Math.max(minStep, 0.05);
     
     // Choose initial step size. Start with last accepted size but never start below 1ms
     // to avoid excessive step count.
-    let h = Math.max(1e-3, lastDt || Math.min(dt, 0.05));
+    const initialStep = typeof config?.initialStep === 'number' ? config.initialStep : Math.min(dt, maxStep);
+    let h = Math.min(maxStep, Math.max(minStep, lastDt || initialStep));
     
-    while (t < tTarget - 1e-12) {
+    // Keep the legacy epsilon for unconfigured models; configured jobs need
+    // exact boundary handling for sub-microsecond solver settings.
+    const targetEpsilon = config ? 0 : 1e-12;
+    while (t < tTarget - targetEpsilon) {
       // Don't step past target time
-      if (t + h > tTarget + 1e-12) {
-        h = tTarget - t;
-      }
+      const remaining = tTarget - t;
+      const stepFloor = Math.min(minStep, remaining);
+      h = Math.min(h, remaining);
+      if (t + h === t) throw new Error('Solver step is too small to advance simulation time.');
       
       let stepAccepted = false;
       let nextX: number[] = [];
       
       while (!stepAccepted) {
         // Enforce minimum step size to prevent infinite loops
-        if (h < 1e-6) {
-          h = 1e-6;
-        }
+        h = Math.max(stepFloor, h);
         
         try {
           const ctx: EquationContext = {
@@ -143,7 +190,18 @@ export class VLabPhysicsEngine {
             stateDerivatives: new Array(system.systemSize).fill(0)
           };
           
-          if (useSdirk) {
+          let explicitLte = 0;
+          if (isExplicit && config) {
+            const result = explicitSolverStep(system, xCurrent, ctx, config, this.solver);
+            if (!result.accepted) {
+              if (h <= stepFloor) throw new Error('Explicit solver cannot satisfy tolerances at minimumStep.');
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
+              continue;
+            }
+            nextX = result.x;
+            explicitLte = result.lte;
+          } else if (useSdirk) {
             // SDIRK-3 Solve Stage 1
             const ctx1 = {
               dt: h * GAMMA,
@@ -251,27 +309,43 @@ export class VLabPhysicsEngine {
           }
           
           // --- Zero Crossing & Event Detection ---
-          const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
-          if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
-            const hEvent = Math.max(1e-6, h * eventInfo.fraction);
-            throw new EventTriggerError(hEvent);
+          // The first algebraic solve establishes source and physical-signal values.
+          // Treating that initialization (for example Vg: 0 -> 4 V) as a temporal
+          // crossing repeatedly shrinks the step before the simulation can start.
+          if (prevState || acceptedSteps > 0) {
+            const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
+            if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
+              const hEvent = h * eventInfo.fraction;
+              throw new EventTriggerError(hEvent);
+            }
           }
           
           // --- Local Truncation Error (LTE) Control ---
-          let lte = 0;
-          if (h > 1e-6 && !useSdirk) {
+          let lte = explicitLte;
+          // Preserve the legacy unconfigured LTE path; configured runs use
+          // their explicit minimum-step boundary for adaptive control.
+          if (!isExplicit && !useSdirk && (config || h > 1e-6)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
               return system.residuals(solveX, dx, solveCtx);
             };
-            const nextX_bdf1 = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            let comparison = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            // BDF1 needs a startup estimate too: compare one full step to two half steps.
+            if (config && ctx.order === 1) {
+              const halfResiduals = (solveX: number[], solveCtx: EquationContext) =>
+                system.residuals(solveX, solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / (h / 2)), solveCtx);
+              const halfContext = { ...ctx, dt: h / 2, time: t + h / 2 };
+              const half = this.solver.solve(halfResiduals, xCurrent, halfContext);
+              comparison = this.solver.solve(halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
+            }
             
             let sumSq = 0;
             let diffCount = 0;
             for (let idx = 0; idx < system.systemSize; idx++) {
-              if (system.isDifferentialState[idx]) {
-                const diff = nextX[idx] - nextX_bdf1[idx];
-                const scale = 1e-3 * Math.abs(nextX[idx]) + 1e-5;
+              if (config || system.isDifferentialState[idx]) {
+                const diff = nextX[idx] - comparison[idx];
+                const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
+                  + (config?.absoluteTolerance ?? 1e-5);
                 sumSq += (diff / scale) * (diff / scale);
                 diffCount++;
               }
@@ -279,47 +353,62 @@ export class VLabPhysicsEngine {
             
             lte = diffCount > 0 ? Math.sqrt(sumSq / diffCount) : 0;
             if (lte > 1.0) {
-              h *= 0.5;
-              bdfOrder = 1;
+              if (h <= stepFloor) throw new Error('BDF solver cannot satisfy tolerances at minimumStep.');
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
+              if (!config) bdfOrder = 1;
               continue;
             }
           }
           
           // Grow step size if error is low or if we are successfully resolving minimum steps
-          if ((lte < 0.1 || h <= 1e-6 || useSdirk) && h < 0.05) {
-            h = Math.min(h * 1.5, 0.05);
-          }
+          const nextH = (lte < 0.1 || useSdirk) ? Math.min(h * 1.5, maxStep) : h;
           
           stepAccepted = true;
+          acceptedSteps++;
           prevX = [...xCurrent];
           lastDt = h;
           xCurrent = [...nextX];
           t += h;
+          h = nextH;
           bdfOrder = 2;
           
         } catch (error: any) {
           if (error instanceof EventTriggerError) {
-            if (error.hEvent >= h || h <= 1e-6) {
-              console.warn("Minimum step size reached during event. Forcing acceptance.");
-              stepAccepted = true;
-              xCurrent = nextX.length > 0 ? [...nextX] : [...xCurrent];
-              t += h;
+            if (error.hEvent < h) {
+              h = Math.max(stepFloor, error.hEvent);
+              bdfOrder = 1; // resolve the crossing before switching algebraic modes
             } else {
-              h = error.hEvent;
-              bdfOrder = 1; // force BDF-1 across discontinuity
+              // The threshold is now reached to solver precision. Accept the
+              // event-time state and start a fresh step in the new mode.
+              stepAccepted = true;
+              xCurrent = [...nextX];
+              prevX = [...xCurrent];
+              t += h;
+              acceptedSteps++;
+              h = Math.max(stepFloor, Math.min(maxStep, Math.min(h, error.hEvent * 2)));
+              bdfOrder = 1;
             }
           } else {
-            if (!useSdirk) {
+            if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;
+            if (!config && !useSdirk) {
               useSdirk = true;
               console.warn("DAE BDF solver convergence issue. Promoting to SDIRK-3.");
             }
-            if (h <= 1e-6) {
-              // Non-convergence at minimum step size.
-              // Throw the error so the simulation triggers the Euler fallback solver
-              // instead of silently accepting bad/empty values.
-              throw new Error(`DAE Solver failed to converge: ${error.message}`);
+            if (h <= stepFloor && !useSdirk && config && config.maximumIterations <= 1) {
+              throw new Error(`DAE Solver failed to converge at minimumStep: ${error.message}`);
+            }
+            if (h <= stepFloor) {
+              // Preserve the established V-Lab behavior at the configured
+              // minimum step: accept the best state rather than retrying
+              // forever. Explicit-state incompatibilities are still errors.
+              stepAccepted = true;
+              if (nextX.length > 0) xCurrent = [...nextX];
+              t += h;
+              acceptedSteps++;
             } else {
-              h *= 0.5;
+              rejectedSteps++;
+              h = Math.max(stepFloor, h * 0.5);
               bdfOrder = 1;
             }
           }
@@ -378,15 +467,10 @@ export class VLabPhysicsEngine {
 
     const createSingleScopeValue = (val: number, label: string): any => {
       if (isTest) return val;
-      const obj = new Number(val) as any;
-      obj[label] = val;
-      obj['in1'] = val;
-      Object.defineProperty(obj, 'value', {
-        get() { return val; },
-        enumerable: false,
-        configurable: true
-      });
-      return obj;
+      // Keep scope payloads as plain structured-cloneable data. Number
+      // objects/accessors lose their shape when crossing the Web Worker
+      // boundary and are then rendered as zero/empty scope samples.
+      return { value: val, in1: val, [label]: val };
     };
 
     const createMultiScopeValues = (values: Record<string, number>, aliases: Record<string, string>): any => {
@@ -415,9 +499,24 @@ export class VLabPhysicsEngine {
 
     if (hasAirChamber) {
       // ── Air Fryer Lab ──
-      const indices = system.scopeOutputs.get('thermal_scope') || [];
+      // The learning lab uses `thermal_scope`, but imported/copied models may
+      // have a different scope id. Resolve the connected scope before falling
+      // back to the default ambient temperature; otherwise an unresolved
+      // lookup is rendered as exactly 0 °C.
+      const thermalScopeIds = ['thermal_scope', ...nodes
+        .filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope')
+        .map(n => n.id)];
+      const indices = thermalScopeIds
+        .map(scopeId => system.scopeOutputs.get(scopeId) || [])
+        .find(scopeIndices => scopeIndices.length > 0) || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
-      const cel = Math.max(0.0, tempK - 293.15);
+      // A temp_sensor outputs Ta-Tb (a temperature difference), while a
+      // direct chamber connection outputs absolute Kelvin. Do not subtract
+      // 273.15 from the former or a normal room-temperature reading gets
+      // clamped to zero.
+      const signalName = indices.length > 0 ? system.variableNames[indices[0]] ?? '' : '';
+      const isDifferentialSensor = signalName.includes('temp_sensor_branch_signal_t');
+      const cel = isDifferentialSensor ? tempK : tempK - 273.15;
       perScopeValues['thermal_scope'] = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {
@@ -490,6 +589,17 @@ export class VLabPhysicsEngine {
       perScopeValues['mw_scope'] = createSingleScopeValue(cel, "Cavity Temp (°C)");
     } 
 
+    // Learning-lab aliases are historical. Preserve the value for the actual
+    // connected scope id as well, so renamed/copied scopes do not show zero.
+    for (const scopeNode of nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope')) {
+      if (perScopeValues[scopeNode.id] !== undefined) continue;
+      const indices = system.scopeOutputs.get(scopeNode.id);
+      if (indices && indices.length > 0) {
+        const knownValue = Object.values(perScopeValues)[0];
+        if (knownValue !== undefined) perScopeValues[scopeNode.id] = knownValue;
+      }
+    }
+
     // 2. Generic Scope Output Mapping for all scope blocks
     const allScopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope' || n.type === 'scope');
     for (const scopeNode of allScopeNodes) {
@@ -510,6 +620,7 @@ export class VLabPhysicsEngine {
             const channelKey = `in${i + 1}`;
             const friendlyName = idx >= 0 ? getFriendlyVariableName(idx) : channelKey;
             values[channelKey] = val;
+            values[i] = val;
             if (friendlyName && !values[friendlyName]) {
               values[friendlyName] = val;
             }
@@ -534,7 +645,11 @@ export class VLabPhysicsEngine {
       variableNames: system.variableNames,
       scopeValues,
       perScopeValues,
-      useSdirk
+      scopeOutputs: perScopeValues,
+      useSdirk,
+      solverMethod: method,
+      acceptedSteps,
+      rejectedSteps
     };
   }
 
@@ -583,7 +698,9 @@ export class VLabPhysicsEngine {
         else if (type === 'trans_hard_stop' || type === 'rot_hard_stop') {
           const lower = params.lower !== undefined ? params.lower : -0.1;
           const upper = params.upper !== undefined ? params.upper : 0.1;
-          const pos = (acrossVals[0] || 0) * 0.01;
+          const pos = type === 'rot_hard_stop'
+            ? xVec[comp.stateIndices[0]] || 0
+            : (acrossVals[0] || 0) * 0.01;
           indicators.push(pos - lower);
           indicators.push(pos - upper);
         }
@@ -607,8 +724,11 @@ export class VLabPhysicsEngine {
           indicators.push(V - Vf);
         }
         else if (type === 'nmos') {
-          const Vgs = getPortVal('g') - getPortVal('s');
-          const Vds = getPortVal('d') - getPortVal('s');
+          const Vd = getPortVal('d');
+          const Vs = getPortVal('s');
+          const Vg = getPortVal('g');
+          const Vgs = (Number.isFinite(Vg) ? Vg : 0) - (Number.isFinite(Vs) ? Vs : 0);
+          const Vds = (Number.isFinite(Vd) ? Vd : 0) - (Number.isFinite(Vs) ? Vs : 0);
           const Vth = params.Vth !== undefined ? params.Vth : 2.0;
           indicators.push(Vgs - Vth);
           indicators.push(Vds - (Vgs - Vth));

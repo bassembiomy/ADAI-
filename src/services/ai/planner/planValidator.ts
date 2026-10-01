@@ -2,6 +2,11 @@ import { PlanEnvelope, PlanEnvelopeSchema } from './planSchemas';
 import { CapabilityRegistry } from '../contracts/capabilityRegistry';
 import { DependencyGraph } from './dependencyGraph';
 import { Diagnostic } from '../contracts/diagnostics';
+import {
+  validateEngineeringModelPlan as validateBasic,
+  EngineeringModelPlanSchema
+} from '../contracts/engineeringModel';
+
 
 export interface PlanValidationContext {
   existingEntityIds: Set<string>;
@@ -109,4 +114,124 @@ export class PlanValidator {
       diagnostics
     };
   }
+
+  public static validateEngineeringModelPlan(
+    rawPlan: unknown,
+    catalog?: {
+      findById(id: string): {
+        id: string;
+        domain: string;
+        ports?: readonly { id: string; domain?: string }[];
+        parameters?: Readonly<Record<string, { value: number | string; unit?: string }>>;
+      } | undefined;
+    },
+    options?: {
+      expectedRevision?: number;
+      allowedBridgePairs?: Array<{ fromDomain: any; toDomain: any }>;
+    }
+  ): { isValid: boolean; diagnostics: Diagnostic[] } {
+    // First run structural and topological base validation
+    const baseResult = validateBasic(rawPlan, options?.allowedBridgePairs);
+    const diagnostics: Diagnostic[] = [...baseResult.diagnostics];
+
+
+    const parseResult = EngineeringModelPlanSchema.safeParse(rawPlan);
+    if (!parseResult.success) {
+      return {
+        isValid: false,
+        diagnostics
+      };
+    }
+
+    const plan = parseResult.data;
+
+    // Check revision if expectedRevision is provided
+    if (options?.expectedRevision !== undefined && plan.baseRevision !== options.expectedRevision) {
+      diagnostics.push({
+        category: 'SCHEMA',
+        code: 'STALE_BASE_REVISION',
+        severity: 'ERROR',
+        message: `Plan base revision ${plan.baseRevision} does not match expected project revision ${options.expectedRevision}.`,
+        expected: options.expectedRevision,
+        actual: plan.baseRevision
+      });
+    }
+
+    // Catalog-level validation
+    if (catalog) {
+      const blockDefMap = new Map<string, any>();
+
+      for (const block of plan.blocks) {
+        const def = catalog.findById(block.blockDefinitionId);
+        if (!def) {
+          diagnostics.push({
+            category: 'TOPOLOGY',
+            code: 'UNKNOWN_BLOCK_DEFINITION',
+            severity: 'ERROR',
+            message: `Block definition '${block.blockDefinitionId}' was not found in catalog for block '${block.id}'.`,
+            entityId: block.id
+          });
+          continue;
+        }
+
+        blockDefMap.set(block.id, def);
+
+        // Parameter checks
+        if (def.parameters && Object.keys(def.parameters).length > 0) {
+          for (const param of block.parameters) {
+            if (!(param.parameterName in def.parameters)) {
+              diagnostics.push({
+                category: 'PARAMETER',
+                code: 'INVALID_PARAMETER_NAME',
+                severity: 'ERROR',
+                message: `Parameter '${param.parameterName}' is not valid for block definition '${block.blockDefinitionId}'.`,
+                entityId: block.id,
+                fieldPath: `parameters.${param.parameterName}`
+              });
+            }
+          }
+        }
+      }
+
+      // Connection port checks
+      for (const conn of plan.connections) {
+        const fromDef = blockDefMap.get(conn.fromBlockId);
+        const toDef = blockDefMap.get(conn.toBlockId);
+
+        if (fromDef && Array.isArray(fromDef.ports) && fromDef.ports.length > 0) {
+          const hasPort = fromDef.ports.some((p: any) => p.id === conn.fromPortId);
+          if (!hasPort) {
+            diagnostics.push({
+              category: 'TOPOLOGY',
+              code: 'UNKNOWN_PORT',
+              severity: 'ERROR',
+              message: `Port '${conn.fromPortId}' not found on source block '${conn.fromBlockId}' (${fromDef.id}).`,
+              entityId: conn.id,
+              portId: conn.fromPortId
+            });
+          }
+        }
+
+        if (toDef && Array.isArray(toDef.ports) && toDef.ports.length > 0) {
+          const hasPort = toDef.ports.some((p: any) => p.id === conn.toPortId);
+          if (!hasPort) {
+            diagnostics.push({
+              category: 'TOPOLOGY',
+              code: 'UNKNOWN_PORT',
+              severity: 'ERROR',
+              message: `Port '${conn.toPortId}' not found on target block '${conn.toBlockId}' (${toDef.id}).`,
+              entityId: conn.id,
+              portId: conn.toPortId
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      isValid: diagnostics.length === 0,
+      diagnostics
+    };
+  }
 }
+

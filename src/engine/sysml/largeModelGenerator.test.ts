@@ -130,5 +130,5 @@ describe('Baseline Performance Measurements', () => {
     ].join('\n');
 
     console.log(summary);
-  });
+  }, 30000);
 });

@@ -65,6 +65,7 @@ export const BLOCK_DIMENSIONS: Record<string, BlockDimensions> = {
   microwave_inverter: { width: 70, height: 50 },
   pwm_3ph_2level: { width: 80, height: 60 },
   pwm_3ph_3level: { width: 80, height: 60 },
+  pwm_vienna: { width: 80, height: 120 },
   microwave_cavity: { width: 80, height: 60 },
   lms_adaptive_filter: { width: 80, height: 60 },
   im_foc_ctrl: { width: 80, height: 80 },

@@ -1,0 +1,358 @@
+import { parseMultiplicity, type BlockDefinition, type PartUsage, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
+import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
+
+type SysmlMutationPlan = SysmlMutationCommand | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string };
+
+function normalizeProperty(property: Record<string, unknown>): PropertyDefinition {
+  const multiplicityValue = property.multiplicity;
+  const multiplicity = typeof multiplicityValue === 'string'
+    ? parseMultiplicity(multiplicityValue || '1')
+    : multiplicityValue && typeof multiplicityValue === 'object'
+      ? multiplicityValue as PropertyDefinition['multiplicity']
+      : { lower: 1, upper: 1, ordered: false, unique: true };
+  return {
+    ...(property as unknown as PropertyDefinition),
+    id: String(property.id),
+    name: String(property.name ?? ''),
+    kind: (['value', 'part', 'reference', 'flow'].includes(String(property.kind)) ? property.kind : 'value') as PropertyDefinition['kind'],
+    typeId: String(property.typeId ?? property.type ?? ''),
+    multiplicity: {
+      ...multiplicity,
+      ordered: Boolean((property.ordered as boolean | undefined) ?? multiplicity.ordered),
+      unique: Boolean((property.unique as boolean | undefined) ?? multiplicity.unique),
+    },
+  };
+}
+
+function usageForProperty(ownerId: string, property: PropertyDefinition): PartUsage {
+  return {
+    id: `part-property:${ownerId}:${property.id}`,
+    propertyId: property.id,
+    kind: 'part',
+    name: property.name,
+    ownerId,
+    typeId: property.typeId,
+    aggregation: property.kind === 'reference' ? 'reference' : 'composite',
+    multiplicity: property.multiplicity,
+  };
+}
+
+function createUniquePropertyId(repository: SysmlRepository, ownerId: string, usageId: string, requested?: string): string {
+  const nestedIds = Object.values(repository.definitions).flatMap(definition => definition.kind === 'block'
+    ? [...definition.properties.map(property => property.id), ...definition.ports.map(port => port.id)]
+    : []);
+  const topLevelIds = [
+    ...Object.keys(repository.packages), ...Object.keys(repository.diagrams), ...Object.keys(repository.definitions),
+    ...Object.keys(repository.usages), ...Object.keys(repository.connectors), ...Object.keys(repository.relationships),
+    ...Object.keys(repository.requirements), ...Object.keys(repository.verificationCases), ...Object.keys(repository.evidence),
+    ...Object.keys(repository.baselines), ...Object.keys(repository.artifacts), ...Object.keys(repository.actors),
+    ...Object.keys(repository.subjects), ...Object.keys(repository.useCases), ...Object.keys(repository.extensionPoints),
+    ...Object.keys(repository.diagramReferences),
+  ];
+  const used = new Set([...nestedIds, ...topLevelIds]);
+  const base = requested || `property:${ownerId}:${usageId}`;
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) candidate = `${base}:${suffix++}`;
+  return candidate;
+}
+
+export function buildCreatePartUsageCommand(
+  repository: SysmlRepository,
+  usage: PartUsage,
+  presentation?: { x?: number; y?: number; width?: number; height?: number },
+  diagramId?: string,
+): SysmlMutationPlan {
+  const propertyId = createUniquePropertyId(repository, usage.ownerId, usage.id, usage.propertyId);
+  const partUsage: PartUsage = { ...usage, propertyId };
+  const commands: SysmlMutationCommand[] = [diagramId
+    ? { type: 'createAndPresent', element: partUsage, diagramId, presentation: presentation ?? {} }
+    : { type: 'createElement', element: partUsage, presentation }];
+  const owner = repository.definitions[usage.ownerId];
+  if (owner?.kind === 'block') {
+    commands.push({
+      type: 'updateElement',
+      elementId: owner.id,
+      patch: {
+        properties: [...owner.properties, {
+          id: propertyId,
+          name: usage.name,
+          kind: usage.aggregation === 'reference' ? 'reference' : 'part',
+          typeId: usage.typeId,
+          multiplicity: usage.multiplicity,
+        }],
+      },
+    });
+  }
+  return { type: 'batch', commands };
+}
+
+export function buildBlockPropertyUpdateCommand(
+  repository: SysmlRepository,
+  elementId: string,
+  patch: Record<string, unknown>,
+): SysmlMutationPlan {
+  const definition = repository.definitions[elementId];
+  const hasSatisfactionPatch = Array.isArray(patch.satisfiedReqIds);
+  if (!definition || definition.kind !== 'block' || (!Array.isArray(patch.properties) && !hasSatisfactionPatch)) {
+    return { type: 'updateElement', elementId, patch };
+  }
+  const semanticPatch = { ...patch };
+  delete semanticPatch.satisfiedReqIds;
+  const properties = Array.isArray(patch.properties)
+    ? patch.properties.map(property => normalizeProperty(property as Record<string, unknown>))
+    : undefined;
+  if (properties) semanticPatch.properties = properties;
+  const commands: SysmlMutationCommand[] = [];
+  if (Object.keys(semanticPatch).length > 0) commands.push({ type: 'updateElement', elementId, patch: semanticPatch });
+
+  if (properties) {
+    const desired = new Map(properties.filter(property => property.kind === 'part' || property.kind === 'reference').map(property => [property.id, usageForProperty(elementId, property)]));
+    const retainedUsageIds = new Set<string>();
+    for (const [usageId, usage] of Object.entries(repository.usages)) {
+      if (usage.kind !== 'part' || usage.ownerId !== elementId) continue;
+      const [propertyId, next] = [...desired.entries()].find(([id, candidate]) => id === usage.propertyId || (!usage.propertyId && candidate.id === usageId)) ?? [];
+      if (!next || propertyId === undefined) commands.push({ type: 'deleteElements', elementIds: [usageId] });
+      else {
+        desired.delete(propertyId);
+        retainedUsageIds.add(usageId);
+        const updatedUsage = { ...next, id: usageId };
+        if (JSON.stringify(usage) !== JSON.stringify(updatedUsage)) commands.push({ type: 'updateElement', elementId: usageId, patch: updatedUsage as unknown as Record<string, unknown> });
+      }
+    }
+    for (const usage of desired.values()) {
+      if (!retainedUsageIds.has(usage.id)) commands.push({ type: 'createElement', element: usage });
+    }
+  }
+
+  if (hasSatisfactionPatch) {
+    const desiredRequirementIds = new Set((patch.satisfiedReqIds as unknown[]).filter((id): id is string => typeof id === 'string' && Boolean(id)));
+    const existingSatisfactions = Object.values(repository.relationships).filter(
+      relationship => relationship.kind === 'satisfy' && relationship.sourceId === elementId,
+    );
+    const unmatchedExisting = [...existingSatisfactions];
+    for (const relationship of existingSatisfactions) {
+      if (desiredRequirementIds.has(relationship.targetId)) {
+        desiredRequirementIds.delete(relationship.targetId);
+        unmatchedExisting.splice(unmatchedExisting.indexOf(relationship), 1);
+      }
+    }
+    for (const requirementId of desiredRequirementIds) {
+      const reusable = unmatchedExisting.shift();
+      if (reusable) {
+        commands.push({ type: 'updateElement', elementId: reusable.id, patch: { targetId: requirementId } });
+        continue;
+      }
+      const baseId = `satisfy-${elementId}-${requirementId}`;
+      let relationshipId = baseId;
+      let suffix = 2;
+      while (repository.relationships[relationshipId] || repository.definitions[relationshipId] || repository.requirements[relationshipId]) {
+        relationshipId = `${baseId}-${suffix++}`;
+      }
+      const relationship: SysmlRelationship = {
+        id: relationshipId, kind: 'satisfy', sourceId: elementId, targetId: requirementId,
+      };
+      commands.push({ type: 'createElement', element: relationship });
+    }
+    for (const relationship of unmatchedExisting) {
+      commands.push({ type: 'deleteElements', elementIds: [relationship.id] });
+    }
+  }
+  if (commands.length === 1) return commands[0];
+  return { type: 'batch', commands };
+}
+
+export function buildPartUsageUpdateCommand(
+  repository: SysmlRepository,
+  elementId: string,
+  patch: Record<string, unknown>,
+): SysmlMutationPlan {
+  const usage = repository.usages[elementId];
+  if (!usage || usage.kind !== 'part') return { type: 'updateElement', elementId, patch };
+  const canonicalPatch: Record<string, unknown> = { ...patch };
+  if (typeof patch.multiplicity === 'string') canonicalPatch.multiplicity = parseMultiplicity(patch.multiplicity || '1');
+  const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = [
+    { type: 'updateElement', elementId, patch: canonicalPatch },
+  ];
+  const owner = repository.definitions[usage.ownerId];
+  if (owner?.kind === 'block') {
+    const propertyId = usage.propertyId ?? elementId;
+    const property = owner.properties.find(item => item.id === propertyId);
+    if (property) {
+      const nextProperties = owner.properties.map(item => item.id !== propertyId ? item : {
+        ...item,
+        ...(typeof patch.name === 'string' ? { name: patch.name } : {}),
+        ...(typeof patch.typeId === 'string' ? { typeId: patch.typeId } : {}),
+        ...(typeof patch.aggregation === 'string' ? { kind: patch.aggregation === 'reference' ? 'reference' : 'part' as const } : {}),
+        ...(typeof canonicalPatch.multiplicity === 'object' ? { multiplicity: canonicalPatch.multiplicity as PropertyDefinition['multiplicity'] } : {}),
+      });
+      commands.push({ type: 'updateElement', elementId: owner.id, patch: { properties: nextProperties } });
+    }
+  }
+  return { type: 'batch', commands };
+}
+
+export function buildCreatePartDefinitionCommand(input: {
+  partId: string;
+  definitionId: string;
+  definitionName: string;
+  ownerId?: string;
+  repository?: SysmlRepository;
+}): SysmlEditorCommand {
+  const ownerId = input.ownerId || 'model';
+  const definition: BlockDefinition = {
+    id: input.definitionId,
+    name: input.definitionName,
+    kind: 'block',
+    namespace: ownerId === 'model' ? ['model'] : [ownerId],
+    ownerId,
+    isAbstract: false,
+    isLeaf: false,
+    properties: [],
+    ports: [],
+    operations: [],
+    constraints: [],
+  };
+  const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = [
+      { type: 'createElement', element: definition },
+    ];
+  const part = input.repository?.usages[input.partId];
+  const owner = part?.kind === 'part' ? input.repository?.definitions[part.ownerId] : undefined;
+  let propertyId = part?.kind === 'part' ? part.propertyId : undefined;
+  if (part?.kind === 'part' && input.repository) {
+    const existingProperty = owner?.kind === 'block'
+      ? owner.properties.find(property => property.id === part.propertyId)
+      : undefined;
+    propertyId = existingProperty?.id ?? createUniquePropertyId(input.repository, part.ownerId, part.id, propertyId);
+    commands.push({ type: 'updateElement', elementId: part.id, patch: { typeId: definition.id, propertyId } });
+  }
+  if (part?.kind === 'part' && owner?.kind === 'block' && input.repository) {
+    const existing = owner.properties.find(property => property.id === part.propertyId);
+    const newProperty: PropertyDefinition = existing
+      ? { ...existing, typeId: definition.id }
+      : {
+        id: propertyId!,
+        name: part.name,
+        kind: part.aggregation === 'reference' ? 'reference' : 'part',
+        typeId: definition.id,
+        multiplicity: part.multiplicity,
+      };
+    if (existing || newProperty) commands.push({
+      type: 'updateElement',
+      elementId: owner.id,
+      patch: { properties: [...owner.properties.filter(property => property.id !== newProperty.id), newProperty] },
+    });
+  }
+  return {
+    type: 'batch',
+    commands,
+  };
+}
+
+export type RelationshipUpdateOutcome =
+  | { ok: true; command: { type: 'updateElement'; elementId: string; patch: Record<string, unknown> } }
+  | { ok: false; diagnostic: { code: string; message: string } };
+
+export function buildRelationshipUpdateCommand(
+  repository: SysmlRepository,
+  relationshipId: string,
+  patch: Record<string, unknown>,
+): RelationshipUpdateOutcome {
+  const existing = repository.relationships?.[relationshipId];
+  if (!existing) {
+    return {
+      ok: false,
+      diagnostic: {
+        code: 'RELATIONSHIP_NOT_FOUND',
+        message: `Relationship '${relationshipId}' does not exist in repository.`,
+      },
+    };
+  }
+
+  const normalizedPatch: Record<string, unknown> = {};
+
+  if (typeof patch.name === 'string') {
+    normalizedPatch.name = patch.name;
+  }
+  if (typeof patch.label === 'string' && patch.name === undefined) {
+    normalizedPatch.name = patch.label;
+  }
+  if (typeof patch.kind === 'string') {
+    normalizedPatch.kind = patch.kind === 'aggregation' ? 'sharedAggregation' : patch.kind === 'derive' ? 'deriveReqt' : patch.kind;
+  }
+  if (typeof patch.type === 'string' && patch.kind === undefined) {
+    normalizedPatch.kind = patch.type === 'aggregation' ? 'sharedAggregation' : patch.type === 'derive' ? 'deriveReqt' : patch.type;
+  }
+  if ('sourceRole' in patch) {
+    normalizedPatch.sourceRole = typeof patch.sourceRole === 'string' && patch.sourceRole.trim() !== '' ? patch.sourceRole.trim() : undefined;
+  }
+  if ('targetRole' in patch) {
+    normalizedPatch.targetRole = typeof patch.targetRole === 'string' && patch.targetRole.trim() !== '' ? patch.targetRole.trim() : undefined;
+  }
+  if (typeof patch.sourceNavigable === 'boolean') {
+    normalizedPatch.sourceNavigable = patch.sourceNavigable;
+  }
+  if (typeof patch.targetNavigable === 'boolean') {
+    normalizedPatch.targetNavigable = patch.targetNavigable;
+  }
+  if (typeof patch.sourceAggregation === 'string') {
+    normalizedPatch.sourceAggregation = patch.sourceAggregation;
+  }
+  if (typeof patch.targetAggregation === 'string') {
+    normalizedPatch.targetAggregation = patch.targetAggregation;
+  }
+
+  if ('sourceMultiplicity' in patch) {
+    if (patch.sourceMultiplicity === undefined || patch.sourceMultiplicity === null || patch.sourceMultiplicity === '') {
+      normalizedPatch.sourceMultiplicity = undefined;
+    } else if (typeof patch.sourceMultiplicity === 'string') {
+      try {
+        normalizedPatch.sourceMultiplicity = parseMultiplicity(patch.sourceMultiplicity);
+      } catch (err) {
+        return {
+          ok: false,
+          diagnostic: {
+            code: 'INVALID_MULTIPLICITY',
+            message: `Invalid source multiplicity: ${(err as Error).message}`,
+          },
+        };
+      }
+    } else if (typeof patch.sourceMultiplicity === 'object') {
+      normalizedPatch.sourceMultiplicity = patch.sourceMultiplicity;
+    }
+  }
+
+  if ('targetMultiplicity' in patch) {
+    if (patch.targetMultiplicity === undefined || patch.targetMultiplicity === null || patch.targetMultiplicity === '') {
+      normalizedPatch.targetMultiplicity = undefined;
+    } else if (typeof patch.targetMultiplicity === 'string') {
+      try {
+        normalizedPatch.targetMultiplicity = parseMultiplicity(patch.targetMultiplicity);
+      } catch (err) {
+        return {
+          ok: false,
+          diagnostic: {
+            code: 'INVALID_MULTIPLICITY',
+            message: `Invalid target multiplicity: ${(err as Error).message}`,
+          },
+        };
+      }
+    } else if (typeof patch.targetMultiplicity === 'object') {
+      normalizedPatch.targetMultiplicity = patch.targetMultiplicity;
+    }
+  }
+
+  // Preserve immutable sourceId and targetId unchanged
+  delete normalizedPatch.sourceId;
+  delete normalizedPatch.targetId;
+
+  return {
+    ok: true,
+    command: {
+      type: 'updateElement',
+      elementId: relationshipId,
+      patch: normalizedPatch,
+    },
+  };
+}
+

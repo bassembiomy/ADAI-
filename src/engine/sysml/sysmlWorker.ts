@@ -6,8 +6,10 @@ import {
   type NormalizedSysmlStore,
 } from './normalizedStore';
 import type { SysmlRepository } from './model';
-import { validateSysmlRepository, type SysmlValidationReport } from './validation';
+import { validateSysmlRepository, type SysmlDiagnostic, type SysmlValidationReport } from './validation';
+import type { SemanticEndpointContext, ExternalSemanticEndpoint } from './semanticEndpointIndex';
 import { analyzeMutation, type MutationImpact } from './mutations';
+import { classifyDeletionTarget } from './policy';
 import { serializeRepository } from './persistence';
 import type {
   WorkerRequest,
@@ -53,8 +55,64 @@ function ensureStore(payload: WorkerStoreSnapshot | SysmlRepository | Normalized
   return fromRepository(payload as SysmlRepository);
 }
 
+/**
+ * Task 4 cross-domain endpoint context: when State context is available on
+ * the worker request via the typed `endpointContext` field (with the legacy
+ * `context` alias still accepted), validation resolves external State
+ * endpoints by stable semantic ID through the shared endpoint index.
+ * Without context, missing State endpoints are still diagnosed as before.
+ * Endpoint records are never invented from family labels here.
+ *
+ * Finding 1 review fix: plain-object externalEndpoints (postMessage/JSON
+ * round-trips) are coerced to Map instead of silently dropping to
+ * context-blind. Absent or empty context still yields undefined.
+ */
+function coerceExternalEndpoints(
+  external: SemanticEndpointContext['externalEndpoints'] | Record<string, ExternalSemanticEndpoint> | undefined,
+): Map<string, ExternalSemanticEndpoint> | undefined {
+  if (external instanceof Map) return external.size > 0 ? external : undefined;
+  if (external && typeof external === 'object') {
+    const entries = Object.entries(external).filter(
+      (entry): entry is [string, ExternalSemanticEndpoint] =>
+        typeof entry[1]?.id === 'string',
+    );
+    return entries.length > 0 ? new Map(entries) : undefined;
+  }
+  return undefined;
+}
+
+function requestEndpointContext(request: WorkerRequest): SemanticEndpointContext | undefined {
+  const holder = request as unknown as {
+    endpointContext?: SemanticEndpointContext | { externalEndpoints?: Record<string, ExternalSemanticEndpoint> };
+    context?: SemanticEndpointContext | { externalEndpoints?: Record<string, ExternalSemanticEndpoint> };
+  };
+  const explicit = holder.endpointContext ?? holder.context;
+  const coerced = coerceExternalEndpoints(explicit?.externalEndpoints as SemanticEndpointContext['externalEndpoints'] | Record<string, ExternalSemanticEndpoint> | undefined);
+  return coerced ? { externalEndpoints: coerced } : undefined;
+}
+
 export function cancelRequest(requestId: string): void {
   cancelledRequestIds.add(requestId);
+}
+
+export interface CompactWorkerDiagnostic {
+  code: string;
+  severity: SysmlDiagnostic['severity'];
+  elementId?: string;
+}
+
+/** Compact (code-only + severity) projection of diagnostics — no element payloads, no repository. */
+export function toCompactDiagnostics(diagnostics: readonly SysmlDiagnostic[]): CompactWorkerDiagnostic[] {
+  return diagnostics.map(diagnostic => ({
+    code: diagnostic.code,
+    severity: diagnostic.severity,
+    ...(diagnostic.elementId === undefined ? {} : { elementId: diagnostic.elementId }),
+  }));
+}
+
+/** Sorted unique diagnostic codes for a validation report. */
+export function toDiagnosticCodes(diagnostics: readonly Pick<SysmlDiagnostic, 'code'>[]): string[] {
+  return [...new Set(diagnostics.map(diagnostic => diagnostic.code))].sort();
 }
 
 export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
@@ -95,13 +153,13 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
     };
   }
 
-  if ('schemaVersion' in payload && payload.schemaVersion !== 2) {
+  if ('schemaVersion' in payload && payload.schemaVersion !== 2 && payload.schemaVersion !== 3) {
     return {
       requestId,
       revision,
       taskType,
       success: false,
-      error: `Unsupported schemaVersion: ${(payload as any).schemaVersion} (expected 2)`,
+      error: `Unsupported schemaVersion: ${(payload as any).schemaVersion} (expected 2 or 3)`,
     };
   }
 
@@ -125,13 +183,17 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
           cancelledRequestIds.delete(requestId);
           return { requestId, revision, taskType, success: false, error: 'Cancelled', cancelled: true };
         }
-        const result: SysmlValidationReport = validateSysmlRepository(repo);
+        const result: SysmlValidationReport = validateSysmlRepository(repo, requestEndpointContext(request));
         return {
           requestId,
           revision,
           taskType,
           success: true,
-          result,
+          result: {
+            ...result,
+            diagnosticCodes: toDiagnosticCodes(result.diagnostics),
+            compactDiagnostics: toCompactDiagnostics(result.diagnostics),
+          },
           durationMs: performance.now() - startTime,
         };
       }
@@ -151,12 +213,18 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
           relationshipIds: view.relationships.map(r => r.id),
           totalElements: view.blocks.length + view.parts.length + view.connectors.length + view.relationships.length,
         };
+        // Compact diagnostic codes for the projected revision (IDs only —
+        // the repository itself is never embedded in the response).
+        const projectedDiagnostics = validateSysmlRepository(
+          toRepository(store),
+          requestEndpointContext(request),
+        ).diagnostics;
         return {
           requestId,
           revision,
           taskType,
           success: true,
-          result: { view, delta },
+          result: { view, delta, diagnosticCodes: toDiagnosticCodes(projectedDiagnostics) },
           durationMs: performance.now() - startTime,
         };
       }
@@ -171,6 +239,14 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
           kind: 'deleteElements',
           elementIds: request.targetElementIds,
         });
+        const targetIds = [...new Set(request.targetElementIds)].sort();
+        const targets = targetIds.map(id => {
+          const decision = classifyDeletionTarget(repo, id);
+          return { id, targetKind: decision.targetKind, cascadeIds: decision.cascadeIds, unresolvedUsageIds: decision.unresolvedUsageIds };
+        });
+        const targetDiagnosticCodes = toDiagnosticCodes(
+          targetIds.flatMap(id => classifyDeletionTarget(repo, id).diagnostics.map(entry => ({ code: entry.split(':')[0].trim() }))),
+        );
         const delta: CompactImpactDelta = {
           requestedElementIds: impact.requestedElementIds,
           deletedElementIds: impact.deletedElementIds,
@@ -187,7 +263,7 @@ export function handleWorkerMessage(request: WorkerRequest): WorkerResponse {
           revision,
           taskType,
           success: true,
-          result: delta,
+          result: { ...delta, targets, diagnosticCodes: targetDiagnosticCodes },
           durationMs: performance.now() - startTime,
         };
       }

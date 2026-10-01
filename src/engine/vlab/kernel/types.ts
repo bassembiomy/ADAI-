@@ -193,12 +193,83 @@ export interface SolverConfiguration {
   enableLogging: boolean;
 }
 
+export interface SolverConfigurationValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+const solverTypes: SolverType[] = ['auto', 'euler', 'rk4', 'rk_adaptive', 'bdf', 'dae_implicit'];
+
+/**
+ * Guards the solver boundary against malformed persisted or external configuration.
+ * Callers retain invalid values for correction; they are never handed to a solver.
+ */
+export function validateSolverConfiguration(config: unknown): SolverConfigurationValidationResult {
+  if (!config || typeof config !== 'object') {
+    return { valid: false, errors: ['solver configuration must be an object'] };
+  }
+
+  const candidate = config as Partial<SolverConfiguration>;
+  const errors: string[] = [];
+  const finiteNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+  const positiveNumberOrAuto = (value: unknown) => value === 'auto' || (typeof value === 'number' && Number.isFinite(value) && value > 0);
+
+  if (typeof candidate.id !== 'string' || candidate.id.length === 0) errors.push('id must be a non-empty string');
+  if (!solverTypes.includes(candidate.solver as SolverType)) errors.push('solver must be a supported solver type');
+  if (!finiteNumber(candidate.startTime)) errors.push('startTime must be a finite number');
+  if (!finiteNumber(candidate.stopTime)) errors.push('stopTime must be a finite number');
+  const startTime = candidate.startTime;
+  const stopTime = candidate.stopTime;
+  if (typeof startTime === 'number' && Number.isFinite(startTime) && typeof stopTime === 'number' && Number.isFinite(stopTime) && stopTime < startTime) {
+    errors.push('stopTime must be greater than or equal to startTime');
+  }
+
+  for (const field of ['initialStep', 'minimumStep', 'maximumStep'] as const) {
+    if (!positiveNumberOrAuto(candidate[field])) errors.push(`${field} must be a finite positive number or auto`);
+  }
+  if (typeof candidate.minimumStep === 'number' && typeof candidate.maximumStep === 'number' && candidate.minimumStep > candidate.maximumStep) {
+    errors.push('minimumStep must not exceed maximumStep');
+  }
+
+  for (const field of ['relativeTolerance', 'absoluteTolerance', 'nonlinearTolerance'] as const) {
+    if (!finiteNumber(candidate[field]) || candidate[field]! <= 0) errors.push(`${field} must be a finite positive number`);
+  }
+  if (!Number.isSafeInteger(candidate.maximumIterations) || candidate.maximumIterations! <= 0) {
+    errors.push('maximumIterations must be a positive safe integer');
+  }
+  for (const field of ['enableDiagnostics', 'enableLogging'] as const) {
+    if (typeof candidate[field] !== 'boolean') errors.push(`${field} must be a boolean`);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 export interface SimulationJob {
   id: string;
   networkId: string;
   system: PhysicalSystemIR;
   compiledSystem: CompiledPhysicalSystem;
   solverConfiguration: SolverConfiguration;
+}
+
+export interface SimulationRuntimeStepResult {
+  time: number;
+  dt: number;
+  accepted: boolean;
+  complete: boolean;
+  lte: number;
+  iterations: number;
+  residual: number;
+}
+
+/** A mutable, boundary-stepped simulation job owned by SolverManager. */
+export interface SimulationRuntimeJob {
+  readonly id: string;
+  getConfiguration(): SolverConfiguration;
+  updateConfiguration(config: SolverConfiguration): SolverConfigurationValidationResult;
+  step(): SimulationRuntimeStepResult;
+  getResult(): SimulationResult;
+  runToCompletion(): SimulationResult;
 }
 
 export interface InitialCondition {

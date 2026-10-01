@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ModelBaseline, RequirementDefinition, SysmlRelationship, VerificationEvidence } from '../../engine/sysml/model';
+import type { ImpactSeverity } from '../../engine/sysml/mutations';
 
 export interface RequirementGovernancePanelProps {
   requirement: RequirementDefinition;
@@ -7,7 +8,13 @@ export interface RequirementGovernancePanelProps {
   baselines: Record<string, ModelBaseline>;
   suspectLinks?: SysmlRelationship[];
   evidenceHistory?: VerificationEvidence[];
+  deletionSeverity?: ImpactSeverity;
+  unresolvedUsageIds?: string[];
+  invalidatedEvidenceIds?: string[];
+  blockedBaselineIds?: string[];
   onCreateBaseline?: (name: string) => void;
+  onCloneBaseline?: (baselineId: string) => void;
+  onAuthorizeBaseline?: (baselineId: string) => void;
   onClearSuspect?: (relationshipId: string) => void;
   onSyncFromMaster?: () => void;
 }
@@ -18,7 +25,13 @@ export function RequirementGovernancePanel({
   baselines,
   suspectLinks = [],
   evidenceHistory = [],
+  deletionSeverity,
+  unresolvedUsageIds = [],
+  invalidatedEvidenceIds = [],
+  blockedBaselineIds = [],
   onCreateBaseline,
+  onCloneBaseline,
+  onAuthorizeBaseline,
   onClearSuspect,
   onSyncFromMaster,
 }: RequirementGovernancePanelProps) {
@@ -165,6 +178,68 @@ export function RequirementGovernancePanel({
             >
               Sync from Master
             </button>
+          )}
+        </fieldset>
+      )}
+
+      {/* Deletion Impact & Recovery Section */}
+      {(deletionSeverity || unresolvedUsageIds.length > 0 || invalidatedEvidenceIds.length > 0 || blockedBaselineIds.length > 0) && (
+        <fieldset className="rounded border border-gray-700 p-2 space-y-2" aria-label="Deletion impact and recovery">
+          <legend className="px-1 font-semibold text-gray-300">Deletion Impact & Recovery</legend>
+          {deletionSeverity && (
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Impact severity:</span>
+              <span className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase border ${
+                deletionSeverity === 'blocked'
+                  ? 'bg-red-950 text-red-400 border-red-700'
+                  : deletionSeverity === 'review'
+                    ? 'bg-amber-950 text-amber-400 border-amber-700'
+                    : 'bg-emerald-950 text-emerald-400 border-emerald-700'
+              }`}>
+                {deletionSeverity}
+              </span>
+            </div>
+          )}
+          {unresolvedUsageIds.length > 0 && (
+            <div className="text-[11px] text-gray-400">
+              Typed usages kept unresolved (explicit resolution required):
+              <span className="font-mono text-gray-200"> {unresolvedUsageIds.join(', ')}</span>
+            </div>
+          )}
+          {invalidatedEvidenceIds.length > 0 && (
+            <div className="text-[11px] text-gray-400">
+              Evidence invalidated by deletion:
+              <span className="font-mono text-gray-200"> {invalidatedEvidenceIds.join(', ')}</span>
+            </div>
+          )}
+          {blockedBaselineIds.length > 0 && (
+            <div className="rounded border border-red-800/60 bg-red-950/20 p-2 space-y-1.5">
+              <p className="text-[11px] text-red-300">
+                Protected baseline{blockedBaselineIds.length > 1 ? 's' : ''} {blockedBaselineIds.join(', ')} forbid{blockedBaselineIds.length > 1 ? '' : 's'} this deletion. Clone into a working copy or authorize explicitly.
+              </p>
+              <div className="flex gap-2">
+                {onCloneBaseline && blockedBaselineIds.map(id => (
+                  <button
+                    key={`clone-${id}`}
+                    type="button"
+                    onClick={() => onCloneBaseline(id)}
+                    className="rounded border border-gray-600 px-2 py-0.5 text-[11px] text-gray-300 hover:bg-gray-800"
+                  >
+                    Clone {id}
+                  </button>
+                ))}
+                {onAuthorizeBaseline && blockedBaselineIds.map(id => (
+                  <button
+                    key={`auth-${id}`}
+                    type="button"
+                    onClick={() => onAuthorizeBaseline(id)}
+                    className="rounded border border-red-700 bg-red-950/40 px-2 py-0.5 text-[11px] font-semibold text-red-300 hover:bg-red-900/50"
+                  >
+                    Authorize {id}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </fieldset>
       )}

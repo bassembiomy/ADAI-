@@ -14,10 +14,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Implements a linear resistor following Ohm\'s law. Connect to model energy dissipation in electrical networks.'
   },
   diode: {
-    equations: ['I = Is*(exp(V/n*Vt) - 1)', 'simplified: V = I*Ron when V > Vf'],
-    latex: ['I = I_s \\left(e^{V/nV_T} - 1\\right)'],
+    equations: ['Forward: V = Vf + I*Ron', 'Reverse: V = I*Roff'],
+    latex: ['V = V_f + I R_{on} \\; (V > V_f)', 'V = I R_{off} \\; (V \\le V_f)'],
     across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Shockley diode model with smooth tanh transition. Parameters: Ron (forward resistance), Roff (reverse), Vf (forward drop).'
+    description: 'Piecewise-linear diode. Forward: V = Vf + I*Ron. Reverse: V = I*Roff.'
   },
   nmos: {
     equations: ['Id = kn/2*(Vgs-Vth)² (sat)', 'Id = kn*(Vov*Vds - Vds²/2) (lin)'],
@@ -98,10 +98,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
   },
   steam_nozzle: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*(P - P_atm))'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho (P - P_{atm})}'],
+    equations: ['mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho \\max(P_p-P_n,0)}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models steam discharging to atmosphere through a throttled nozzle outlet.'
+    description: 'Models steam flow from upstream pressure Pp to downstream pressure Pn through a throttled two-port nozzle.'
   },
   pressure_sensor: {
     equations: ['S = P'],
@@ -182,10 +182,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges the Electrical and Translational domains. Models voice coils or solenoids where force is proportional to current.'
   },
   thermal_resistor: {
-    equations: ['Q = (Th - Tc) / Rth'],
-    latex: ['Q = \\frac{\Delta T}{R_{th}}'],
-    across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Bridges Electrical and Thermal domains by modeling heat generation from power dissipation ($P = I^2 R$).'
+    equations: ['V = I * R', 'Q = I^2 * R'],
+    latex: ['V = I \\cdot R', 'Q = I^2 R'],
+    across: 'Voltage (V), Temperature (K)', through: 'Current (A), Heat Flow (W)',
+    description: 'Bridges Electrical and Thermal domains by modeling heat generation from electrical resistance ($P = I^2 R$).'
   },
   v_sensor: {
     equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
@@ -206,8 +206,8 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An ideal constant voltage source. Maintains a fixed potential regardless of the load current.'
   },
   ac_voltage: {
-    equations: ['Vp - Vn = Vpk * sin(2*pi*f*t)'],
-    latex: ['v = V_{pk} \sin(\omega t)'],
+    equations: ['Vp - Vn = Vpk * sin(2*pi*f*t + phase) + I * R_int'],
+    latex: ['v = V_{pk} \sin(\omega t + \phi) + i R_{int}'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'An ideal sinusoidal voltage source. Used for modeling mains power or signal generators.'
   },
@@ -278,13 +278,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Voltage-Controlled Current Source. A dependent source where output current is proportional to an input voltage.'
   },
   cccs: {
-    equations: ['I_out = gain * I_in'],
+    equations: ['I_out = gain * I_in', 'Vcp - Vcn = 0'],
     latex: ['i_{out} = \beta \cdot i_{in}'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'Current-Controlled Current Source. A dependent source where output current is proportional to an input current.'
   },
   ccvs: {
-    equations: ['Vp - Vn = gain * I_in'],
+    equations: ['Vp - Vn = gain * I_in', 'Vcp - Vcn = 0'],
     latex: ['v_{out} = r \cdot i_{in}'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'Current-Controlled Voltage Source. A dependent source where output voltage is proportional to an input current.'
@@ -403,11 +403,17 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a pump or compressor that maintains a constant pressure difference between ports.'
   },
-  gas_properties: {
-    equations: ['P = rho * R * T'],
-    latex: ['P = \rho R T'],
-    across: 'None', through: 'None',
-    description: 'Defines the working fluid properties (R, Cp, etc.) for the connected gas network.'
+  gas_pressure_sensor: {
+    equations: ['mass_flow = 0', 'out = P(p)'],
+    latex: ['\dot{m} = 0', 'y = P'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas pressure without drawing mass flow.'
+  },
+  gas_flow_sensor: {
+    equations: ['P(p) = P(n)', 'out = mdot'],
+    latex: ['P_p = P_n', 'y = \dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas mass flow through an ideal zero-pressure-loss pass-through.'
   },
   mag_ref: {
     equations: ['mmf = 0'],
@@ -428,10 +434,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A magnetic reluctance whose value is modulated by an external physical signal (PS).'
   },
   permanent_magnet: {
-    equations: ['mmf = Hc * L'],
-    latex: ['\\mathcal{F} = H_c L'],
+    equations: ['mmf = Hc * Lm - phi * Rm'],
+    latex: ['\\mathcal{F} = H_c L_m - \\phi R_m'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'Models a hard magnetic material providing constant magneto-motive force (MMF).'
+    description: 'Models a permanent magnet material providing MMF with coercive force Hc, length Lm, and internal reluctance Rm.'
   },
   em_converter: {
     equations: ['V = N * dphi/dt', 'mmf = N * I'],
@@ -440,10 +446,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Magnetic domains. Models a coil with N turns.'
   },
   reluctance_force: {
-    equations: ['F = -0.5 * phi^2 * dR/dx'],
-    latex: ['f = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
+    equations: ['F = 0.5 * phi^2 * K', 'R = R0 + K * x'],
+    latex: ['f = \\frac{1}{2} \\phi^2 K', '\\mathcal{R} = \\mathcal{R}_0 + K x'],
     across: 'A-t, m/s', through: 'Wb, N',
-    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays. Force is directed to minimize reluctance.'
+    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays with initial reluctance R0 and reluctance gradient K.'
   },
   mag_flux_sensor: {
     equations: ['phi_out = phi'],
@@ -501,15 +507,21 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   torque_source: {
     equations: ['T_r - T_c = T_src'],
-    latex: ['\tau = T_{src}'],
+    latex: ['\\tau = T_{src}'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'An ideal torque generator for rotational networks.'
   },
-  gear_box: {
-    equations: ['omega2 = ratio * omega1', 'tau1 = ratio * tau2'],
-    latex: ['\omega_2 = N \omega_1', '\tau_1 = N \tau_2'],
+  ang_vel_source: {
+    equations: ['omega_r - omega_c = omega'],
+    latex: ['\\omega_r - \\omega_c = \\omega'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
-    description: 'Models a mechanical transmission that scales velocity and torque based on the gear ratio.'
+    description: 'An ideal angular velocity generator for rotational networks.'
+  },
+  gear_box: {
+    equations: ['omega1 = ratio * omega2', 'tau2 = ratio * tau1'],
+    latex: ['\\omega_1 = N \\omega_2', '\\tau_2 = N \\tau_1'],
+    across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
+    description: 'Models a mechanical transmission that scales velocity and torque between shafts s1 and s2 based on the gear ratio.'
   },
   lever: {
     equations: ['v_b = -(L2/L1) * v_a', 'f_a = (L2/L1) * f_b'],
@@ -599,7 +611,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['dm/dt = f(V, P, T)', 'dQ/dt = f(T, P)'],
     latex: ['\dot{m}, \dot{Q} = f(V, P, T)'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a fixed-volume moist air chamber. Tracks mass, energy, and vapor content over time.'
+    description: 'Models a fixed-volume moist air chamber. Tracks temperature in Kelvin with configurable ambient_temp (°C), heat_capacity (J/K), wall/food thermal mass, k_loss (W/K), and max_temp (°C).'
   },
   ma_pipe: {
     equations: ['Delta P = f(L, m)', 'Delta T = f(h, Q)'],
@@ -1064,61 +1076,84 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   pwm_3ph_2level: {
     equations: [
-      'Va = Vn + (Vp - Vn) * Vabc[0]',
-      'Vb = Vn + (Vp - Vn) * Vabc[1]',
-      'Vc = Vn + (Vp - Vn) * Vabc[2]'
+      'Va = Vn + Vdc * ma',
+      'Vb = Vn + Vdc * mb',
+      'Vc = Vn + Vdc * mc',
+      'Idc + ma*Ia + mb*Ib + mc*Ic = 0'
     ],
-    latex: ['V_a = V_n + (V_p - V_n) \\cdot m_a'],
-    across: 'Voltage (V)', through: 'Duty Cycle',
-    description: '3-Phase Inverter Bridge using Averaged Model. Converts DC input power to AC potentials based on modulation indices (Vabc).'
+    latex: ['V_x = V_n + V_{dc} \\cdot m_x', 'I_{dc} + \\sum m_x I_x = 0'],
+    across: 'Voltage (V)', through: 'Current (A)',
+    description: '3-Phase Inverter Bridge. In averaged mode (default), generates continuous phase voltages Vx = Vn + Vdc * mx with zero PWM ripple. In switching mode, compares modulation references against a triangular carrier at f_sw to produce two voltage levels and ripple.'
   },
   pwm_3ph_3level: {
-    equations: ['g = 1 if Vabc > C1 else 0 if Vabc < C2 else 0.5'],
-    latex: ['g \\in \\{-1, 0, 1\\}'],
-    across: 'None', through: 'None',
-    description: 'Generates gate signals for three-level inverters (e.g., NPC). Uses two vertically offset carriers to create three output voltage levels.'
+    equations: [
+      'ma,mb,mc = 0.8*vabc*sin(2π*f_out*t + [0,-120,+120]°)',
+      'g_x = +1 if m_x + Δ_neut >= C_upper',
+      'g_x = -1 if m_x + Δ_neut <= C_lower',
+      'g_x = 0 otherwise'
+    ],
+    latex: ['g_x \\in \\{-1, 0, 1\\}', '\\Delta_{neut} = clamp(k_{neut} v_{neut}/max(|v_{dc}|,1))'],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Three-level PWM generator with explicit ga/gb/gc and ma/mb/mc outputs. Uses two triangular carriers at f_sw and a bounded vneut-based neutral-point correction; vabc=0 remains zero modulation.'
   },
   pwm_vienna: {
-    equations: ['g = f(Vabc, Iabc, Vdc, Neutral)'],
-    latex: ['g = \\text{Logic}(V, I, V_{dc})'],
-    across: 'None', through: 'None',
-    description: 'Specialized PWM generator for Vienna Rectifiers. Ensures sinusoidal input currents and neutral-point balance.'
+    equations: [
+      'I^* = max(0, kp_v * (vdc_ref - vdc))',
+      'Δ_neut = clamp(k_neut * v_neut / max(|vdc|, 1), -0.2, 0.2)',
+      'm_x = clamp(2*v_x/max(|vdc|, 1) + 0.05 * e_ix + Δ_neut, -1, 1)',
+      'g_x = 1 if C_tri(f_sw, t) < (1 - |m_x|) else 0'
+    ],
+    latex: [
+      'g_x \\in \\{0, 1\\}',
+      'd_x = 1 - |m_x|',
+      '\\Delta_{neut} = \\text{clamp}(k_{neut} v_{neut} / \\max(|v_{dc}|, 1), -0.2, 0.2)'
+    ],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Three-phase Vienna Rectifier PWM generator with explicit ga/gb/gc switching gates and ma/mb/mc modulation indices. Uses carrier-based PWM at f_sw, DC voltage regulation, and neutral-point midpoint balancing.'
   },
   thyristor_6pulse: {
-    equations: ['Trigger if theta > alpha + phase_offset'],
-    latex: ['G = \\delta(t - t_{\\alpha})'],
-    across: 'None', through: 'None',
-    description: 'Generates firing pulses for a 6-pulse thyristor bridge (Graetz circuit). Controlled by the firing angle alpha.'
+    equations: ['g_k = 1 if wrap(theta - (alpha + 60k)) < pulse_width else 0', 'k = 0..5'],
+    latex: ['g_k = \\mathbf{1}_{[0, w_p)}(\\mathrm{wrap}(\\theta - (\\alpha + 60k)))'],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port and the reference angle theta (deg) from the theta port (time-based ramp at freq when floating); each pulse has a defined width (pulse_width_deg) and fires 60° apart.'
   },
   thyristor_12pulse: {
-    equations: ['G_delta = Trigger(alpha)', 'G_wye = Trigger(alpha + 30)'],
-    latex: ['G_{12} = \\{G_{\\Delta}, G_{Y}\\}'],
-    across: 'None', through: 'None',
-    description: 'Generates coordinated firing pulses for a 12-pulse converter, consisting of delta and wye connected bridges with a 30-degree phase shift.'
+    equations: [
+      'theta(t) = theta_0 + 2*pi*freq*t',
+      'delta_g[k] = pulse(theta - (alpha + 60*k), pulse_width)',
+      'wye_g[k] = pulse(theta - (alpha + 30 + 60*k), pulse_width), k = 0..5'
+    ],
+    latex: [
+      '\\theta(t) = \\theta_0 + 2\\pi f t',
+      'G_{\\Delta,k} = \\operatorname{pulse}(\\theta - (\\alpha + 60k))',
+      'G_{Y,k} = \\operatorname{pulse}(\\theta - (\\alpha + 30 + 60k))'
+    ],
+    across: 'Physical Inputs', through: 'Physical Gate Outputs',
+    description: 'Generates twelve independent, finite-width thyristor firing pulses: six delta gates and six wye gates. The wye bridge is shifted by 30 degrees and successive gates in each bridge are separated by 60 degrees.'
   },
   belt_properties: {
-    equations: ['E = youngs', 'rho = density'],
+    equations: ['rho = density', 'E = youngs', 'publish(belt_density, belt_youngs)'],
     latex: ['E, \rho = \\text{const}'],
-    across: 'None', through: 'None',
-    description: 'Defines the material and physical properties for a connected belt or cable network, such as elasticity and linear mass density.'
+    across: 'None', through: 'Belt Properties',
+    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
   },
   belt_end: {
-    equations: ['F = k * x', 'v = dx/dt'],
+    equations: ['F = k * x', 'dx/dt = v_r - v_e', 'k = E*A/L (material) or stiffness'],
     latex: ['F = k \Delta x'],
-    across: 'Velocity (m/s)', through: 'Force (N)',
-    description: 'Models the termination point of a belt or cable, typically connected to a translational reference or load.'
+    across: 'Translational Velocity (m/s)', through: 'Force (N)',
+    description: 'Compliant termination of a belt/cable. Axial stiffness comes from the linked belt_properties material (k = youngs*area/length) and falls back to the fixed stiffness param when no material is available.'
   },
   belt_spool: {
-    equations: ['v = omega * R', 'T = F * R'],
+    equations: ['v = omega * R', 'T + F*R = J*dw/dt', 'J = inertia + 2*pi*rho*R^3'],
     latex: ['v = \omega R', '\\tau = F R'],
-    across: 'Velocity, Ang. Vel', through: 'Force, Torque',
-    description: 'Converts between rotational and translational motion using a spool or winch mechanism. The coupling is defined by the spool radius.'
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
+    description: 'Converts between rotational and translational motion using a spool or winch mechanism. Torque balance includes spool inertia plus wrapped-belt inertia from the linked belt_properties density (one circumference: m = rho*2*pi*R).'
   },
   pulley: {
-    equations: ['vA = omega * R', 'vB = -omega * R', 'T = (FA - FB) * R'],
+    equations: ['vA = omega * R', 'vB = -omega * R', 'T + (FA - FB)*R = J*dw/dt'],
     latex: ['v = \pm \omega R', '\\tau = (F_A - F_B) R'],
-    across: 'Velocity, Ang. Vel', through: 'Force, Torque',
-    description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel.'
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
+    description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel; inertia adds the wrapped-belt term from the linked belt_properties density.'
   },
   world_frame: {
     equations: ['R = Identity', 'P = [0 0 0]'],
@@ -1138,35 +1173,41 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Frame', through: 'None',
     description: 'Applies a fixed translation and rotation between two frames. Models rigid connections between multibody parts.'
   },
+  transform_sensor: {
+    equations: ['P = P_f - P_b', 'R = R_f - R_b'],
+    latex: ['\Delta \mathbf{P} = \mathbf{P}_f - \mathbf{P}_b', '\Delta \mathbf{\theta} = \mathbf{\theta}_f - \mathbf{\theta}_b'],
+    across: 'Frame', through: 'None',
+    description: 'Measures relative 3D position and Euler angle orientation between follower and base frames.'
+  },
   dist_constraint: {
-    equations: ['dist(b, f) = L_set', 'Force = lambda * Grad(dist)'],
-    latex: ['\|\mathbf{P}_f - \mathbf{P}_b\| = L'],
+    equations: ['|Pf - Pb| = L_set', 'Ff = lambda * (Pf - Pb) / |Pf - Pb|', 'Fb = -Ff'],
+    latex: ['\\|\\mathbf{P}_f - \\mathbf{P}_b\\| = L', '\\mathbf{F}_f = \\lambda \\dfrac{\\mathbf{P}_f - \\mathbf{P}_b}{\\|\\mathbf{P}_f - \\mathbf{P}_b\\|}', '\\mathbf{F}_b = -\\mathbf{F}_f'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Maintains a constant distance between two frames. Implements a kinematic constraint using Lagrange multipliers.'
+    description: 'Maintains a constant 3D distance between frames B and F using a Lagrange multiplier. The reaction force acts along the line between them, equal and opposite at each end; outputs are the measured distance and the reaction force magnitude.'
   },
   angle_constraint: {
-    equations: ['angle(b, f) = Theta_set'],
-    latex: ['\\theta_{bf} = \Theta_{const}'],
+    equations: ['angle(transpose(Rb) * Rf) = Theta_set', 'Tf = lambda * axis(Rrel)', 'Tb = -Tf'],
+    latex: ['\\mathrm{angle}(\\mathbf{R}_b^\\mathsf{T} \\mathbf{R}_f) = \\Theta_{set}', '\\mathbf{T}_f = \\lambda \\, \\mathrm{axis}(\\mathbf{R}_{rel})', '\\mathbf{T}_b = -\\mathbf{T}_f'],
     across: 'Frame', through: 'Torque (N-m)',
-    description: 'Maintains a fixed angular relationship between two frames.'
+    description: 'Maintains a fixed relative 3D orientation between frames B and F using a Lagrange multiplier. The reaction torque acts along the relative rotation axis, equal and opposite at each end; outputs are the measured angle and the reaction torque magnitude.'
   },
   grav_field: {
-    equations: ['F = m * g'],
-    latex: ['\mathbf{F}_g = m \mathbf{g}'],
+    equations: ['F = m * g * dir / |dir|', '|F| = m * g'],
+    latex: ['\\mathbf{F}_g = m \\, g \\, \\hat{\\mathbf{d}}'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Applies a uniform gravitational force to all mass-bearing components in the multibody system.'
+    description: 'Applies the weight F = m·g along the (normalized) direction vector to follower frame F, with the reaction on B when connected. Output |F| reports the force magnitude.'
   },
   spring_damper_force: {
-    equations: ['F = k*(x - x0) + b*v'],
-    latex: ['F = k \Delta x + b \dot{x}'],
+    equations: ['F = k*(x - x0) + b*(v1 - v2)', 'x = |P_f - P_b|', 'v = d/dt(x)'],
+    latex: ['F = k (x - x_0) + b (v_1 - v_2)'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Models a linear spring and damper acting between two frames. Opposes displacement and relative velocity.'
+    description: 'Linear spring and damper acting along the line between frames B and F. Positive F is tension. Outputs separation x, relative velocity v and force F.'
   },
   external_force: {
-    equations: ['F_total = F_ext + T_ext'],
-    latex: ['\mathbf{F}_{ext} = \mathbf{f}(t)'],
+    equations: ['F = force_scale * [Fx Fy Fz]', 'T = torque_scale * [Tx Ty Tz]'],
+    latex: ['\\mathbf{F} = s_F \\mathbf{f}(t)', '\\mathbf{T} = s_T \\boldsymbol{\\tau}(t)'],
     across: 'Frame', through: 'Force, Torque',
-    description: 'Allows for the application of time-varying forces and torques from external physical signals (PS).'
+    description: 'Applies force and torque vectors from physical-signal inputs (Fx..Tz), scaled by force_scale and torque_scale, to frame F. Outputs |F| and |T|.'
   },
   revolute_joint: {
     equations: ['theta = angle(b, f)', 'Tau = J*alpha + b*omega'],
@@ -1271,10 +1312,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A heat flow source driven by an external physical signal (PS).'
   },
   ctrl_temp_src: {
-    equations: ['T = S_input'],
-    latex: ['T = f(S_{ctrl})'],
+    equations: ['Ta - Tb = S_input'],
+    latex: ['T_a - T_b = S_{ctrl}'],
     across: 'T', through: 'Q',
-    description: 'A temperature source driven by an external physical signal (PS).'
+    description: 'A temperature source maintaining difference Ta - Tb driven by an external physical signal (PS).'
   },
   solver_config: {
     equations: ['f(x) = 0'],

@@ -7,6 +7,7 @@ import type {
   SysmlRepository,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { resolveInheritance as resolveInheritancePolicy, policyDiagnosticsToSysml } from './policy';
 
 export interface ResolvedBlockFeatures {
   properties: PropertyDefinition[];
@@ -22,6 +23,33 @@ export interface ResolvedBlockFeatures {
 
 export interface BddRelationshipView extends SysmlRelationship {
   notation: 'solid-line' | 'filled-diamond' | 'hollow-diamond' | 'hollow-triangle' | 'dashed-arrow';
+}
+
+export type BddRelationKind = 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation';
+
+export type BddEdgeNotation = BddRelationshipView['notation'];
+
+/**
+ * Stable BDD-only edge notation lookup (OMG SysML 1.6, BDD relations only).
+ * IBD connector symbols live in ibd.ts (connectorNotationFor) and are
+ * intentionally disjoint; see VirtualizedDiagram diagramEdgeNotation for the
+ * per-diagram-kind dispatcher.
+ */
+export const BDD_NOTATION_BY_KIND: Record<BddRelationKind, BddEdgeNotation> = {
+  association: 'solid-line',
+  composition: 'filled-diamond',
+  sharedAggregation: 'hollow-diamond',
+  generalization: 'hollow-triangle',
+  dependency: 'dashed-arrow',
+  allocation: 'dashed-arrow',
+};
+
+export function bddNotationForKind(kind: SysmlRelationship['kind']): BddEdgeNotation {
+  if (kind === 'composition') return 'filled-diamond';
+  if (kind === 'sharedAggregation') return 'hollow-diamond';
+  if (kind === 'generalization') return 'hollow-triangle';
+  if (kind === 'dependency' || kind === 'allocation') return 'dashed-arrow';
+  return 'solid-line';
 }
 
 export interface BddView {
@@ -111,6 +139,14 @@ export function resolveInheritedFeatures(repo: SysmlRepository, blockId: string)
     visited.add(current.id);
   };
   merge(block);
+  // Central policy is the source of truth for inheritance decisions. Merge its
+  // typed diagnostics so BDD projections never diverge (OMG SysML 1.6, no v2 claim).
+  for (const policyDiagnostic of policyDiagnosticsForBlock(repo, blockId)) {
+    if (!diagnostics.some(d => diagnosticKey(d) === diagnosticKey(policyDiagnostic))) {
+      diagnostics.push(policyDiagnostic);
+    }
+  }
+  diagnostics.sort(compareDiagnostics);
   return {
     properties,
     ports,
@@ -169,7 +205,9 @@ export function validateBlockDefinition(repo: SysmlRepository, blockId: string):
       }
     }
   }
-  return diagnostics;
+  // resolveInheritedFeatures already merges central policy diagnostics; dedup
+  // the explicit checks above against the policy source of truth.
+  return dedupDiagnostics(diagnostics);
 }
 
 export function validateAssociationEnds(repo: SysmlRepository, relationshipId: string): SysmlDiagnostic[] {
@@ -272,11 +310,35 @@ function asBlock(definition: SysmlDefinition | undefined): BlockDefinition | und
 }
 
 function notationFor(kind: SysmlRelationship['kind']): BddRelationshipView['notation'] {
-  if (kind === 'composition') return 'filled-diamond';
-  if (kind === 'sharedAggregation') return 'hollow-diamond';
-  if (kind === 'generalization') return 'hollow-triangle';
-  if (kind === 'dependency' || kind === 'allocation') return 'dashed-arrow';
-  return 'solid-line';
+  return bddNotationForKind(kind);
+}
+
+function policyDiagnosticsForBlock(repo: SysmlRepository, blockId: string): SysmlDiagnostic[] {
+  const resolution = resolveInheritancePolicy(repo, blockId);
+  return policyDiagnosticsToSysml(blockId, resolution.diagnostics);
+}
+
+function diagnosticKey(diagnostic: SysmlDiagnostic): string {
+  return `${diagnostic.code}:${diagnostic.elementId ?? ''}:${diagnostic.propertyPath ?? ''}:${diagnostic.message}`;
+}
+
+function compareDiagnostics(a: SysmlDiagnostic, b: SysmlDiagnostic): number {
+  return a.code.localeCompare(b.code)
+    || (a.elementId ?? '').localeCompare(b.elementId ?? '')
+    || (a.propertyPath ?? '').localeCompare(b.propertyPath ?? '')
+    || a.message.localeCompare(b.message);
+}
+
+function dedupDiagnostics(diagnostics: SysmlDiagnostic[]): SysmlDiagnostic[] {
+  const seen = new Set<string>();
+  const unique = diagnostics.filter(d => {
+    const key = diagnosticKey(d);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  unique.sort(compareDiagnostics);
+  return unique;
 }
 
 function diagnostic(code: string, elementId: string, propertyPath: string | undefined, message: string): SysmlDiagnostic {

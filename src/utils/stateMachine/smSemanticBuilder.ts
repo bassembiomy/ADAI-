@@ -666,7 +666,7 @@ export const buildSemanticModel = (
     junctions[junction.id] = {
       id: junction.id,
       layerId: layerIdByJunctionId.get(junction.id)!,
-      kind: junction.type ?? 'junction',
+      kind: junction.type === 'history' || junction.type === 'deep-history' ? junction.type : 'junction',
       outgoingTransitionIds: [...(transitionsBySource[junction.id] ?? [])],
     };
   }
@@ -706,6 +706,7 @@ export const buildSemanticModel = (
       name: variable.name,
       cName: cIdentifier,
       type: variable.type,
+      overflowPolicy: variable.overflowPolicy ?? 'saturate',
       initialValue: parseInitialValue(
         variable.type,
         variable.initialValue,

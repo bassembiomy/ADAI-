@@ -182,3 +182,172 @@ export function pruneStateHierarchy(
 ): PruneResult {
   return pruneMultipleStatesHierarchy([targetStateId], model, navigation);
 }
+
+export interface StateMachineExplorerSnapshot {
+  states: StateData[];
+  layers: Layer[];
+  junctions: JunctionData[];
+  transitions: TransitionData[];
+  diagrams?: import('../../types/sm_types').StateMachineDiagramData[];
+  revision?: number;
+}
+
+export interface StateMoveImpact {
+  valid: boolean;
+  preserved: string[];
+  crossRegion: string[];
+  invalid: string[];
+  reason?: string;
+}
+
+export function analyzeStateMove(
+  snapshot: StateMachineExplorerSnapshot,
+  elementIds: string[],
+  targetRegionId: string
+): StateMoveImpact {
+  const targetLayer = snapshot.layers.find(l => l.id === targetRegionId);
+  if (!targetLayer) {
+    return {
+      valid: false,
+      preserved: [],
+      crossRegion: [],
+      invalid: [],
+      reason: `Target region '${targetRegionId}' does not exist`,
+    };
+  }
+
+  const movedIds = new Set(elementIds);
+
+  // Check for circular containment: cannot move a state into its own descendant layer
+  for (const elementId of elementIds) {
+    const isState = snapshot.states.some(s => s.id === elementId);
+    if (isState) {
+      const descendants = countDescendants(elementId, snapshot.states, snapshot.layers);
+      if (descendants.descendantLayerIds.includes(targetRegionId)) {
+        return {
+          valid: false,
+          preserved: [],
+          crossRegion: [],
+          invalid: [],
+          reason: `Cannot move state '${elementId}' into its own descendant region '${targetRegionId}'`,
+        };
+      }
+    }
+  }
+
+  const preserved: string[] = [];
+  const crossRegion: string[] = [];
+  const invalid: string[] = [];
+
+  // Analyze connected transitions
+  for (const transition of snapshot.transitions) {
+    const sourceMoving = movedIds.has(transition.sourceId);
+    const targetMoving = movedIds.has(transition.targetId);
+
+    if (!sourceMoving && !targetMoving) {
+      continue;
+    }
+
+    if (sourceMoving && targetMoving) {
+      // Both endpoints move together into targetRegionId
+      preserved.push(transition.id);
+    } else {
+      // One endpoint moves, the other stays
+      const stationaryId = sourceMoving ? transition.targetId : transition.sourceId;
+      // Is stationary endpoint already in targetRegionId?
+      const inTarget =
+        targetLayer.stateIds.includes(stationaryId) ||
+        targetLayer.junctionIds.includes(stationaryId);
+
+      if (inTarget) {
+        preserved.push(transition.id);
+      } else {
+        // Crosses region boundary
+        invalid.push(transition.id);
+      }
+    }
+  }
+
+  return {
+    valid: true,
+    preserved,
+    crossRegion,
+    invalid,
+  };
+}
+
+export function moveStateMachineElements(
+  snapshot: StateMachineExplorerSnapshot,
+  elementIds: string[],
+  targetRegionId: string,
+  invalidTransitionsToPrune?: string[]
+): StateMachineExplorerSnapshot {
+  const targetLayer = snapshot.layers.find(l => l.id === targetRegionId);
+  if (!targetLayer) {
+    throw new Error(`Target region '${targetRegionId}' not found`);
+  }
+
+  const movedIds = new Set(elementIds);
+  const pruneTransitions = new Set(invalidTransitionsToPrune ?? []);
+
+  // Update states
+  const nextStates = snapshot.states.map(s => {
+    if (movedIds.has(s.id)) {
+      return {
+        ...s,
+        parentId: targetRegionId,
+        regionId: targetRegionId,
+      };
+    }
+    return s;
+  });
+
+  // Update junctions
+  const nextJunctions = snapshot.junctions.map(j => {
+    if (movedIds.has(j.id)) {
+      return {
+        ...j,
+        parentId: targetRegionId,
+      };
+    }
+    return j;
+  });
+
+  // Filter transitions
+  const nextTransitions = snapshot.transitions.filter(t => !pruneTransitions.has(t.id));
+
+  // Update layers
+  const nextLayers = snapshot.layers.map(layer => {
+    const isTarget = layer.id === targetRegionId;
+    let stateIds = layer.stateIds.filter(id => !movedIds.has(id));
+    let junctionIds = layer.junctionIds.filter(id => !movedIds.has(id));
+    let transitionIds = layer.transitionIds.filter(id => !pruneTransitions.has(id));
+
+    if (isTarget) {
+      for (const id of elementIds) {
+        if (snapshot.states.some(s => s.id === id) && !stateIds.includes(id)) {
+          stateIds.push(id);
+        }
+        if (snapshot.junctions.some(j => j.id === id) && !junctionIds.includes(id)) {
+          junctionIds.push(id);
+        }
+      }
+    }
+
+    return {
+      ...layer,
+      stateIds,
+      junctionIds,
+      transitionIds,
+    };
+  });
+
+  return {
+    ...snapshot,
+    states: nextStates,
+    layers: nextLayers,
+    junctions: nextJunctions,
+    transitions: nextTransitions,
+    revision: (snapshot.revision ?? 1) + 1,
+  };
+}

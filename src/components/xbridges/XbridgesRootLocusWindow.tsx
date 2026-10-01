@@ -3,6 +3,7 @@ import React from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Activity, Info, Settings2, SlidersHorizontal, HelpCircle } from 'lucide-react';
 import { findRoots, polyToString } from '../../engine/xbridges/BlockDefinitions';
+import { XbridgesAnalysisClient, computeRootLocus, type RootLocusResult } from '../../services/xbridgesAnalysisWorker';
 
 interface RootLocusWindowProps {
   block: any;
@@ -64,82 +65,39 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
     }
   };
 
-  // Open Loop Poles & Zeros
-  const olPoles = React.useMemo(() => findRoots(denominator), [denominator]);
-  const olZeros = React.useMemo(() => findRoots(numerator), [numerator]);
+  const analysisClientRef = React.useRef<XbridgesAnalysisClient | null>(null);
+  const [locusResult, setLocusResult] = React.useState<RootLocusResult>(() =>
+    computeRootLocus({ numerator, denominator, maxGain, numPoints: 120 })
+  );
 
-  // Gain sweep for Locus paths (120 points spaced quadratically)
-  const gains = React.useMemo(() => {
-    const arr: number[] = [];
-    for (let i = 0; i <= 120; i++) {
-      arr.push(maxGain * Math.pow(i / 120, 2));
+  React.useEffect(() => {
+    if (!analysisClientRef.current) {
+      analysisClientRef.current = new XbridgesAnalysisClient();
     }
-    return arr;
-  }, [maxGain]);
-
-  // Compute Locus trajectories
-  const { trajectories, allPolesMap } = React.useMemo<{
-    trajectories: { re: number; im: number; gain: number }[][];
-    allPolesMap: { re: number; im: number; gain: number }[];
-  }>(() => {
-    const dCoeffs = [...denominator];
-    const nCoeffs = [...numerator];
-    const maxLength = Math.max(dCoeffs.length, nCoeffs.length);
-    while (dCoeffs.length < maxLength) dCoeffs.unshift(0);
-    while (nCoeffs.length < maxLength) nCoeffs.unshift(0);
-    
-    const degree = dCoeffs.length - 1;
-    const trajs: { re: number; im: number; gain: number }[][] = Array.from({ length: degree }, () => []);
-    
-    const polePoints: { re: number; im: number; gain: number }[] = [];
-    
-    let prevRoots = findRoots(denominator).map(r => ({ ...r, gain: 0 }));
-    prevRoots.forEach((r, idx) => {
-      trajs[idx].push(r);
-      polePoints.push(r);
+    analysisClientRef.current.computeRootLocusAsync({
+      numerator,
+      denominator,
+      maxGain,
+      numPoints: 120,
+    }).then(res => {
+      setLocusResult(res);
+    }).catch(() => {
+      // Ignore superseded or cancelled calculations
     });
-    
-    for (let step = 1; step < gains.length; step++) {
-      const K = gains[step];
-      const closedLoopCoeffs = dCoeffs.map((dVal, idx) => dVal + K * nCoeffs[idx]);
-      const currentRoots = findRoots(closedLoopCoeffs);
-      
-      const matchedIndices = new Set<number>();
-      const nextPrevRoots: { re: number; im: number; gain: number }[] = [];
-      
-      for (let i = 0; i < prevRoots.length; i++) {
-        const prev = prevRoots[i];
-        let bestDist = Infinity;
-        let bestIdx = -1;
-        
-        for (let j = 0; j < currentRoots.length; j++) {
-          if (matchedIndices.has(j)) continue;
-          const curr = currentRoots[j];
-          const dist = Math.pow(curr.re - prev.re, 2) + Math.pow(curr.im - prev.im, 2);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestIdx = j;
-          }
-        }
-        
-        if (bestIdx !== -1) {
-          matchedIndices.add(bestIdx);
-          const matchedRoot = { ...currentRoots[bestIdx], gain: K };
-          trajs[i].push(matchedRoot);
-          nextPrevRoots.push(matchedRoot);
-          polePoints.push(matchedRoot);
-        } else {
-          const fallback = { ...prev, gain: K };
-          trajs[i].push(fallback);
-          nextPrevRoots.push(fallback);
-          polePoints.push(fallback);
-        }
-      }
-      prevRoots = nextPrevRoots;
-    }
-    
-    return { trajectories: trajs, allPolesMap: polePoints };
-  }, [denominator, numerator, gains]);
+
+    return () => {
+      analysisClientRef.current?.cancel();
+    };
+  }, [numerator, denominator, maxGain]);
+
+  React.useEffect(() => {
+    return () => {
+      analysisClientRef.current?.dispose();
+      analysisClientRef.current = null;
+    };
+  }, []);
+
+  const { olPoles, olZeros, gains, trajectories, allPolesMap } = locusResult;
 
   // Current Closed Loop Poles
   const clPoles = React.useMemo(() => {
@@ -542,7 +500,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
               <div className="p-4 rounded-xl border border-white/5 bg-slate-900/40 relative overflow-hidden flex flex-col items-center">
                 <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-1.5">System Stability</span>
                 {stability === 'Stable' && (
-                  <div className="px-4 py-1.5 bg-emerald-500/10 text-emerald-450 border border-emerald-500/20 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse">
+                  <div className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     Asymptotically Stable
                   </div>
@@ -573,7 +531,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
                 
                 {/* Numerator */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-450 uppercase">Numerator Coefficients</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Numerator Coefficients</label>
                   <input 
                     type="text" 
                     value={numInput}
@@ -588,7 +546,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
 
                 {/* Denominator */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-450 uppercase">Denominator Coefficients</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Denominator Coefficients</label>
                   <input 
                     type="text" 
                     value={denInput}
@@ -631,7 +589,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
 
                 {/* Max Gain limit */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-455 uppercase">Max Gain Sweep</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Max Gain Sweep</label>
                   <input 
                     type="number" 
                     value={maxGainInput}
@@ -649,7 +607,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
 
                 {/* Simulation Type selector */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-455 uppercase">Time Response Simulation</label>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Time Response Simulation</label>
                   <select
                     value={simulationType}
                     onChange={(e) => onUpdate && onUpdate({ ...block.params, simulationType: e.target.value })}
@@ -678,7 +636,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
                       <div key={idx} className="p-2 rounded-lg bg-white/5 border border-white/5 flex flex-col gap-0.5">
                         <div className="flex justify-between font-bold text-slate-300">
                           <span>Pole {idx + 1}:</span>
-                          <span className="text-emerald-450">{p.re.toFixed(3)}{cleanIm}</span>
+                          <span className="text-emerald-400">{p.re.toFixed(3)}{cleanIm}</span>
                         </div>
                         <div className="flex justify-between text-slate-500 text-[9px]">
                           <span>Frequency:</span>
@@ -739,7 +697,7 @@ export const XbridgesRootLocusWindow: React.FC<RootLocusWindowProps> = ({ block,
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-500">Pole:</span>
-                      <span className="font-bold text-emerald-450">
+                      <span className="font-bold text-emerald-400">
                         {hoveredInfo.re.toFixed(3)}
                         {Math.abs(hoveredInfo.im) > 1e-4 ? `${hoveredInfo.im > 0 ? '+' : '-'}${Math.abs(hoveredInfo.im).toFixed(3)}j` : ''}
                       </span>
