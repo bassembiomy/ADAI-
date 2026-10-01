@@ -28,7 +28,11 @@ export type SupportedRelationshipMetaclass =
   | 'Copy'
   | 'Connector'
   | 'BindingConnector'
-  | 'ItemFlow';
+  | 'ItemFlow'
+  | 'Transition'
+  | 'ActivityEdge'
+  | 'ControlFlow'
+  | 'ObjectFlow';
 
 export const RELATIONSHIP_ALIASES: Record<string, SupportedRelationshipMetaclass> = {
   association: 'Association',
@@ -52,6 +56,10 @@ export const RELATIONSHIP_ALIASES: Record<string, SupportedRelationshipMetaclass
   bindingconnector: 'BindingConnector',
   binding: 'BindingConnector',
   itemflow: 'ItemFlow',
+  transition: 'Transition',
+  activityedge: 'ActivityEdge',
+  controlflow: 'ControlFlow',
+  objectflow: 'ObjectFlow',
 };
 
 export function normalizeRelationshipKind(kind: string): SupportedRelationshipMetaclass | null {
@@ -148,6 +156,22 @@ const RELATIONSHIP_RULES: Record<SupportedRelationshipMetaclass, RelationshipRul
   ItemFlow: {
     allowedSources: FEATURE_KINDS.concat(CLASSIFIER_KINDS),
     allowedTargets: FEATURE_KINDS.concat(CLASSIFIER_KINDS),
+  },
+  Transition: {
+    allowedSources: 'ANY',
+    allowedTargets: 'ANY',
+  },
+  ActivityEdge: {
+    allowedSources: 'ANY',
+    allowedTargets: 'ANY',
+  },
+  ControlFlow: {
+    allowedSources: 'ANY',
+    allowedTargets: 'ANY',
+  },
+  ObjectFlow: {
+    allowedSources: 'ANY',
+    allowedTargets: 'ANY',
   },
 };
 

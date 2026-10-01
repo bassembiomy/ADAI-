@@ -1,4 +1,4 @@
-import type { SysmlRepositoryV4, SemanticElement, SemanticRelationship, Diagram } from '../../engine/sysml/domain';
+import type { SysmlRepositoryV4, SemanticElement, SemanticRelationship, Diagram, ItemFlow } from '../../engine/sysml/domain';
 import type { SysmlCommand } from '../../engine/sysml/commands/types';
 
 export interface InspectorField {
@@ -33,26 +33,41 @@ export interface InspectorSelection {
   repository: SysmlRepositoryV4;
   elementId?: string;
   relationshipId?: string;
+  itemFlowId?: string;
   presentationId?: string;
   diagramId?: string;
 }
 
 export function getInspectorSchema(selection: InspectorSelection): InspectorSchema | null {
-  const { repository, elementId, relationshipId } = selection;
+  const { repository, elementId, relationshipId, itemFlowId } = selection;
 
-  // 1. Relationship selection
+  // 1. Item flow selection
+  if (itemFlowId && repository.itemFlows?.[itemFlowId]) {
+    return buildItemFlowSchema(repository.itemFlows[itemFlowId], repository);
+  }
+  if (elementId && repository.itemFlows?.[elementId]) {
+    return buildItemFlowSchema(repository.itemFlows[elementId], repository);
+  }
+  if (relationshipId && repository.itemFlows?.[relationshipId]) {
+    return buildItemFlowSchema(repository.itemFlows[relationshipId], repository);
+  }
+
+  // 2. Relationship selection
   if (relationshipId && repository.relationships[relationshipId]) {
     const rel = repository.relationships[relationshipId];
     return buildRelationshipSchema(rel, repository);
   }
 
-  // 2. Element or Diagram selection
+  // 3. Element or Diagram selection
   if (elementId) {
     if (repository.elements[elementId]) {
       return buildElementSchema(repository.elements[elementId], repository);
     }
     if (repository.diagrams[elementId]) {
       return buildDiagramSchema(repository.diagrams[elementId], repository);
+    }
+    if (repository.relationships[elementId]) {
+      return buildRelationshipSchema(repository.relationships[elementId], repository);
     }
   }
 
@@ -316,6 +331,68 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     }),
   });
 
+  // Behavioral: Transition guard and trigger
+  if (relationship.metaclass === 'Transition') {
+    const trans = relationship as any;
+    fields.push({
+      key: 'guard',
+      label: 'Guard',
+      value: trans.guard || '',
+      valueType: 'string',
+      mode: 'editable',
+      toCommand: (val) => ({
+        type: 'UpdateRelationship',
+        relationshipId: relationship.id,
+        patch: { guard: String(val) } as any,
+      }),
+    });
+    fields.push({
+      key: 'trigger',
+      label: 'Trigger',
+      value: trans.trigger || '',
+      valueType: 'string',
+      mode: 'editable',
+      toCommand: (val) => ({
+        type: 'UpdateRelationship',
+        relationshipId: relationship.id,
+        patch: { trigger: String(val) } as any,
+      }),
+    });
+  }
+
+  // Connector ends
+  if (relationship.sourceEnd) {
+    const end = relationship.sourceEnd as any;
+    fields.push({
+      key: 'sourceEndRoleId',
+      label: 'Source End Role',
+      value: end.roleId || '',
+      valueType: 'string',
+      mode: 'editable',
+      toCommand: (val) => ({
+        type: 'UpdateRelationship',
+        relationshipId: relationship.id,
+        patch: { sourceEnd: { ...end, roleId: String(val) } },
+      }),
+    });
+  }
+
+  if (relationship.targetEnd) {
+    const end = relationship.targetEnd as any;
+    fields.push({
+      key: 'targetEndRoleId',
+      label: 'Target End Role',
+      value: end.roleId || '',
+      valueType: 'string',
+      mode: 'editable',
+      toCommand: (val) => ({
+        type: 'UpdateRelationship',
+        relationshipId: relationship.id,
+        patch: { targetEnd: { ...end, roleId: String(val) } },
+      }),
+    });
+  }
+
   // Delete Action
   actions.push({
     id: 'delete',
@@ -331,6 +408,80 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     id: relationship.id,
     title: `${relationship.metaclass}: ${relationship.name || relationship.id}`,
     metaclass: relationship.metaclass,
+    fields,
+    actions,
+  };
+}
+
+function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): InspectorSchema {
+  const fields: InspectorField[] = [];
+  const actions: InspectorAction[] = [];
+
+  fields.push({
+    key: 'id',
+    label: 'ID',
+    value: flow.id,
+    valueType: 'string',
+    mode: 'readOnly',
+    readOnlyReason: 'ItemFlow identity is immutable.',
+  });
+
+  fields.push({
+    key: 'metaclass',
+    label: 'Metaclass',
+    value: 'ItemFlow',
+    valueType: 'string',
+    mode: 'readOnly',
+    readOnlyReason: 'ItemFlow metaclass is immutable.',
+  });
+
+  fields.push({
+    key: 'name',
+    label: 'Name',
+    value: flow.name || '',
+    valueType: 'string',
+    mode: 'readOnly',
+  });
+
+  fields.push({
+    key: 'sourceId',
+    label: 'Source ID',
+    value: flow.sourceId,
+    valueType: 'string',
+    mode: 'readOnly',
+    readOnlyReason: 'ItemFlow source follows realized connector.',
+  });
+
+  fields.push({
+    key: 'targetId',
+    label: 'Target ID',
+    value: flow.targetId,
+    valueType: 'string',
+    mode: 'readOnly',
+    readOnlyReason: 'ItemFlow target follows realized connector.',
+  });
+
+  fields.push({
+    key: 'realizingRelationshipId',
+    label: 'Realizing Connector',
+    value: flow.realizingRelationshipId,
+    valueType: 'string',
+    mode: 'readOnly',
+    readOnlyReason: 'Connector realization link is immutable.',
+  });
+
+  fields.push({
+    key: 'conveyedClassifierIds',
+    label: 'Conveyed Classifiers',
+    value: (flow.conveyedClassifierIds || []).join(', '),
+    valueType: 'string',
+    mode: 'readOnly',
+  });
+
+  return {
+    id: flow.id,
+    title: `ItemFlow: ${flow.name || flow.id}`,
+    metaclass: 'ItemFlow',
     fields,
     actions,
   };

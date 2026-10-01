@@ -25,31 +25,31 @@
   - [x] Step 6: Add end-to-end parity assertions
   - [x] Step 7: Run verification
   - [x] Step 8: Commit Task 3 changes
-- [ ] Task 4: Repository-Complete Model Explorer Projection and Selection Alignment
-  - [ ] Step 1: Write a complete projection contract test
-  - [ ] Step 2: Run projection tests and capture missing collections
-  - [ ] Step 3: Add focused projector functions
-  - [ ] Step 4: Unify selection synchronization
-  - [ ] Step 5: Add navigation tests for relationship endpoints
-  - [ ] Step 6: Run verification
-  - [ ] Step 7: Commit Task 4 changes
-- [ ] Task 5: Typed, Schema-Driven Property Panel With Real Commands
-  - [ ] Step 1: Write schema completeness tests
-  - [ ] Step 2: Write atomic update tests
-  - [ ] Step 3: Run tests and verify failure
-  - [ ] Step 4: Define metaclass field/action schemas
-  - [ ] Step 5: Implement debounced/coalesced canonical updates
-  - [ ] Step 6: Replace conditional `App.tsx` SysML editor branches
-  - [ ] Step 7: Verify field round trips
-  - [ ] Step 8: Commit Task 5 changes
-- [ ] Task 6: First-Class Relationships, Connections, and Behavioral Elements
-  - [ ] Step 1: Write failing relationship round-trip tests
-  - [ ] Step 2: Run relationship tests and verify failure
-  - [ ] Step 3: Add explicit endpoint and item-flow command payloads
-  - [ ] Step 4: Route relationship wizards and canvas connectors through the same commands
-  - [ ] Step 5: Project behavioral relationships and enable inspector editing
-  - [ ] Step 6: Run cross-diagram verification
-  - [ ] Step 7: Commit Task 6 changes
+- [x] Task 4: Repository-Complete Model Explorer Projection and Selection Alignment
+  - [x] Step 1: Write a complete projection contract test
+  - [x] Step 2: Run projection tests and capture missing collections
+  - [x] Step 3: Add focused projector functions
+  - [x] Step 4: Unify selection synchronization
+  - [x] Step 5: Add navigation tests for relationship endpoints
+  - [x] Step 6: Run verification
+  - [x] Step 7: Commit Task 4 changes
+- [x] Task 5: Typed, Schema-Driven Property Panel With Real Commands
+  - [x] Step 1: Write schema completeness tests
+  - [x] Step 2: Write atomic update tests
+  - [x] Step 3: Run tests and verify failure
+  - [x] Step 4: Define metaclass field/action schemas
+  - [x] Step 5: Implement debounced/coalesced canonical updates
+  - [x] Step 6: Replace conditional `App.tsx` SysML editor branches
+  - [x] Step 7: Verify field round trips
+  - [x] Step 8: Commit Task 5 changes
+- [x] Task 6: First-Class Relationships, Connections, and Behavioral Elements
+  - [x] Step 1: Write failing relationship round-trip tests
+  - [x] Step 2: Run relationship tests and verify failure
+  - [x] Step 3: Add explicit endpoint and item-flow command payloads
+  - [x] Step 4: Route relationship wizards and canvas connectors through the same commands
+  - [x] Step 5: Project behavioral relationships and enable inspector editing
+  - [x] Step 6: Run cross-diagram verification
+  - [x] Step 7: Commit Task 6 changes
 - [ ] Task 7: Retire Parallel Writable UI State and Migrate Persistence
   - [ ] Step 1: Strengthen the single-writable-model guard before deleting code
   - [ ] Step 2: Run release gates and verify failure

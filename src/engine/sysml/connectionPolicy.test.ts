@@ -268,4 +268,40 @@ describe('central SysML connection policy', () => {
       expect(evalResult.allowed).toBe(true);
     });
   });
+
+  describe('State Machine Transition Policy', () => {
+    const s1 = endpoint('state', 's1', 'Idle');
+    const s2 = endpoint('state', 's2', 'Active');
+
+    it('allows transition between states on statemachine diagram', () => {
+      const res = evaluateSysmlConnection({
+        relationshipKind: 'transition',
+        source: s1,
+        target: s2,
+        diagram: 'statemachine',
+      });
+      expect(res.allowed).toBe(true);
+    });
+
+    it('allows self-transition on state on statemachine diagram', () => {
+      const res = evaluateSysmlConnection({
+        relationshipKind: 'transition',
+        source: s1,
+        target: s1,
+        diagram: 'statemachine',
+      });
+      expect(res.allowed).toBe(true);
+    });
+
+    it('rejects transition on bdd diagram', () => {
+      const res = evaluateSysmlConnection({
+        relationshipKind: 'transition',
+        source: s1,
+        target: s2,
+        diagram: 'bdd',
+      });
+      expect(res.allowed).toBe(false);
+      expect(res.diagnostics[0].code).toBe('INVALID_RELATIONSHIP_DIAGRAM');
+    });
+  });
 });

@@ -10,7 +10,7 @@ export type { PackageQueryService, PackageMemberReference } from '../services/pa
 
 import type { SemanticElement } from './base';
 import type { Diagram, DiagramPresentation } from './presentations';
-import type { SemanticRelationship } from './relationships';
+import type { SemanticRelationship, ItemFlow } from './relationships';
 
 export interface RepositoryIndexesV4 {
   byOwner: Record<string, string[]>;
@@ -29,6 +29,7 @@ export interface SysmlRepositoryV4 {
   relationships: Record<string, SemanticRelationship>;
   diagrams: Record<string, Diagram>;
   presentations: Record<string, DiagramPresentation>;
+  itemFlows?: Record<string, ItemFlow>;
   indexes: RepositoryIndexesV4;
   metadata?: Record<string, unknown>;
 }
@@ -50,6 +51,7 @@ export function createEmptyRepositoryV4(): SysmlRepositoryV4 {
     relationships: {},
     diagrams: {},
     presentations: {},
+    itemFlows: {},
     indexes: {
       byOwner: {},
       byType: { Model: ['pkg-root'] },
@@ -66,7 +68,8 @@ export function validateNoGlobalIdCollision(repo: SysmlRepositoryV4, id: string)
     repo.elements[id] !== undefined ||
     repo.relationships[id] !== undefined ||
     repo.diagrams[id] !== undefined ||
-    repo.presentations[id] !== undefined
+    repo.presentations[id] !== undefined ||
+    (repo.itemFlows && repo.itemFlows[id] !== undefined)
   ) {
     throw new Error(`Global ID collision detected for ID: "${id}"`);
   }
@@ -136,3 +139,12 @@ export function addDiagramPresentationV4(repo: SysmlRepositoryV4, presentation: 
   }
   repo.indexes.byDiagram[presentation.diagramId].push(presentation.id);
 }
+
+export function addItemFlowV4(repo: SysmlRepositoryV4, itemFlow: ItemFlow): void {
+  validateNoGlobalIdCollision(repo, itemFlow.id);
+  if (!repo.itemFlows) {
+    repo.itemFlows = {};
+  }
+  repo.itemFlows[itemFlow.id] = itemFlow;
+}
+

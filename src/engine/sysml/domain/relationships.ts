@@ -25,7 +25,12 @@ export type RelationshipMetaclass =
   | 'BindingConnector'
   // Flows
   | 'ItemFlow'
-  | 'InformationFlow';
+  | 'InformationFlow'
+  // Behavioral Relationships
+  | 'Transition'
+  | 'ActivityEdge'
+  | 'ControlFlow'
+  | 'ObjectFlow';
 
 export interface AssociationEnd {
   id: string;
@@ -46,6 +51,7 @@ export interface SemanticRelationship {
   id: string;
   name?: string;
   metaclass: RelationshipMetaclass;
+  ownerId?: string | null;
   sourceId: string;
   targetId: string;
   sourceEnd?: AssociationEnd | ConnectorEnd;

@@ -3,6 +3,7 @@ import type {
   SemanticRelationship,
   SysmlRepositoryV4,
   DiagramPresentation,
+  ItemFlow,
 } from '../domain';
 
 export type CommandCallerSource = 'ui' | 'ai' | 'import' | 'migration' | 'script';
@@ -52,6 +53,7 @@ export interface DeleteElementCommand {
 export interface CreateRelationshipCommand {
   type: 'CreateRelationship';
   relationship: SemanticRelationship;
+  itemFlow?: ItemFlow;
 }
 
 export interface UpdateRelationshipCommand {

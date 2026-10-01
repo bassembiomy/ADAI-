@@ -61,6 +61,7 @@ function validDiagram(kind: string, diagram: ConnectionPolicyInput['diagram']): 
   if (['binding', 'assembly', 'delegation'].includes(kind)) return diagram === 'ibd';
   if (REQUIREMENT_KINDS.has(kind)) return diagram === 'requirements' || diagram === 'rtm' || diagram === 'statemachine';
   if (USE_CASE_KINDS.has(kind)) return diagram === 'useCase';
+  if (kind === 'transition') return diagram === 'statemachine';
   return false;
 }
 
@@ -70,7 +71,7 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
   const { source, target } = normalized;
   if (!validDiagram(kind, input.diagram)) return reject(normalized, 'INVALID_RELATIONSHIP_DIAGRAM', `This relationship is not valid on the ${input.diagram} diagram.`, 'Choose a relationship supported by the current diagram.');
   if (!source.id || !target.id) return reject(normalized, 'MISSING_RELATIONSHIP_ENDPOINT', 'Both relationship endpoints must be resolved model elements.', 'Choose existing endpoints before creating the relationship.');
-  if (source.id === target.id) return reject(normalized, 'SELF_RELATIONSHIP', 'An endpoint cannot connect to itself.', 'Choose two distinct endpoints.');
+  if (source.id === target.id && kind !== 'transition') return reject(normalized, 'SELF_RELATIONSHIP', 'An endpoint cannot connect to itself.', 'Choose two distinct endpoints.');
 
   if (kind === 'association') {
     if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Association requires declared classifier endpoint families.', 'Declare a supported stereotype family before using an association.');
@@ -177,6 +178,9 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     if (!valid) {
       return reject(normalized, 'INVALID_USE_CASE_TRACE_ENDPOINTS', 'Trace requires a Use Case and a Requirement.', 'Connect a Use Case and a Requirement.');
     }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'transition') {
     return { allowed: true, diagnostics: [] };
   }
   return reject(normalized, 'UNSUPPORTED_RELATIONSHIP_KIND', `Relationship kind ${kind} is not supported by the SysML 1.6 profile.`, 'Choose a supported SysML relationship.');
