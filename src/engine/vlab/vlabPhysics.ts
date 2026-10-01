@@ -607,6 +607,7 @@ export class VLabPhysicsEngine {
             const channelKey = `in${i + 1}`;
             const friendlyName = idx >= 0 ? getFriendlyVariableName(idx) : channelKey;
             values[channelKey] = val;
+            values[i] = val;
             if (friendlyName && !values[friendlyName]) {
               values[friendlyName] = val;
             }
@@ -631,6 +632,7 @@ export class VLabPhysicsEngine {
       variableNames: system.variableNames,
       scopeValues,
       perScopeValues,
+      scopeOutputs: perScopeValues,
       useSdirk,
       solverMethod: method,
       acceptedSteps,

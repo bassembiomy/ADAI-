@@ -1,6 +1,13 @@
 import { EquationContext } from './types';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
+  parseVector3,
+  eulerToRotationMatrix,
+  transformPoint,
+  computeFrameDistance,
+  computeRelativeAngle
+} from './vlabFrameKinematics';
+import {
   evaluateDOEModel,
   evaluateLegacyDOEEquation,
   evaluateDOEModelDetailed,
@@ -8,7 +15,7 @@ import {
 } from '../doe/modelEvaluator';
 
 export interface BlockEquationArgs {
-  across: number[];        // values of across variables at the ports
+  across: any[];        // values of across variables at the ports (scalars or 6-DOF frame arrays)
   dAcross: number[];       // derivatives of across variables
   branch: number[];        // values of branch through-variables
   dBranch: number[];       // derivatives of branch through-variables
@@ -1825,10 +1832,84 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── MULTIBODY JOINTS & CONSTRAINTS ─────────────────────────────────────────
   world_frame: () => [],
   ref_frame: () => [],
-  rigid_transform: ({ across }) => [across[0] - across[1]],
-  dist_constraint: ({ across, params }) => {
-    const dist = params.dist || 1.0;
-    return [(across[0] - across[1]) - dist];
+  rigid_transform: ({ across, branch, params }) => {
+    const B = Array.isArray(across[0]) ? across[0] : [across[0] || 0, 0, 0, 0, 0, 0];
+    const F = Array.isArray(across[1]) ? across[1] : [across[1] || 0, 0, 0, 0, 0, 0];
+
+    const offset = parseVector3(params?.offset, [0, 0, 0]);
+    const rotDeg = parseVector3(params?.rotation, [0, 0, 0]);
+    const rotRad = [rotDeg[0] * Math.PI / 180, rotDeg[1] * Math.PI / 180, rotDeg[2] * Math.PI / 180];
+
+    const R_b = eulerToRotationMatrix(B[3], B[4], B[5]);
+    const P_rel = transformPoint(R_b, offset);
+    const P_exp = [B[0] + P_rel[0], B[1] + P_rel[1], B[2] + P_rel[2]];
+    const R_exp = [B[3] + rotRad[0], B[4] + rotRad[1], B[5] + rotRad[2]];
+
+    return [
+      F[0] - P_exp[0],
+      F[1] - P_exp[1],
+      F[2] - P_exp[2],
+      F[3] - R_exp[0],
+      F[4] - R_exp[1],
+      F[5] - R_exp[2],
+    ];
+  },
+  transform_sensor: ({ across, branch }) => {
+    const B = Array.isArray(across[0]) ? across[0] : [across[0] || 0, 0, 0, 0, 0, 0];
+    const F = Array.isArray(across[1]) ? across[1] : [across[1] || 0, 0, 0, 0, 0, 0];
+
+    const dx = F[0] - B[0];
+    const dy = F[1] - B[1];
+    const dz = F[2] - B[2];
+    const drx = (F[3] - B[3]) * 180 / Math.PI;
+    const dry = (F[4] - B[4]) * 180 / Math.PI;
+    const drz = (F[5] - B[5]) * 180 / Math.PI;
+
+    return [
+      (branch[0] || 0) - dx,
+      (branch[1] || 0) - dy,
+      (branch[2] || 0) - dz,
+      (branch[3] || 0) - drx,
+      (branch[4] || 0) - dry,
+      (branch[5] || 0) - drz,
+    ];
+  },
+  dist_constraint: ({ across, branch, params }) => {
+    const B = Array.isArray(across[0]) ? across[0] : [across[0] || 0, 0, 0, 0, 0, 0];
+    const F = Array.isArray(across[1]) ? across[1] : [across[1] || 0, 0, 0, 0, 0, 0];
+
+    const targetDist = params?.dist !== undefined ? Number(params.dist) : 1.0;
+    const d = computeFrameDistance([B[0], B[1], B[2]], [F[0], F[1], F[2]]);
+
+    const res = [
+      d - targetDist,
+    ];
+    if (branch.length > 1) {
+      res.push((branch[1] || 0) - d);
+    }
+    if (branch.length > 2) {
+      res.push((branch[2] || 0) - Math.abs(branch[0] || 0));
+    }
+    return res;
+  },
+  angle_constraint: ({ across, branch, params }) => {
+    const B = Array.isArray(across[0]) ? across[0] : [across[0] || 0, 0, 0, 0, 0, 0];
+    const F = Array.isArray(across[1]) ? across[1] : [across[1] || 0, 0, 0, 0, 0, 0];
+
+    const angleDeg = params?.angle !== undefined ? Number(params.angle) : 0.0;
+    const targetAngleRad = angleDeg * Math.PI / 180;
+    const relAngleRad = computeRelativeAngle([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
+
+    const res = [
+      relAngleRad - targetAngleRad,
+    ];
+    if (branch.length > 1) {
+      res.push((branch[1] || 0) - (relAngleRad * 180 / Math.PI));
+    }
+    if (branch.length > 2) {
+      res.push((branch[2] || 0) - Math.abs(branch[0] || 0));
+    }
+    return res;
   },
   spherical_joint: ({ across, branch, params }) => {
     const b = params.damping || 0.05;
@@ -2700,12 +2781,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       res.push(branch[3] - branch[0]);
     }
     return res;
-  },
-
-  angle_constraint: ({ across, branch, params }) => {
-    const limit = params.limit || Math.PI;
-    const theta = across[0];
-    return [branch[0] - (theta > limit ? (theta - limit) * 1e4 : (theta < -limit ? (theta + limit) * 1e4 : 0))];
   },
 
   // ── GAS AND MOIST AIR DOMAINS ──────────────────────────────────────────────

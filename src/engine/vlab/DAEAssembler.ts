@@ -397,9 +397,33 @@ export class DAEAssembler {
       case 'pmsm_foc':
         states.push('integ_d', 'integ_q');
         break;
-      case 'dist_constraint':
-      case 'weld_joint':
       case 'rigid_transform':
+        branches.push({ name: 'fx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fy', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'tx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'ty', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'tz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        break;
+      case 'transform_sensor':
+        branches.push({ name: 'signal_x', ports: [{ id: 'x', sign: 1 }] });
+        branches.push({ name: 'signal_y', ports: [{ id: 'y', sign: 1 }] });
+        branches.push({ name: 'signal_z', ports: [{ id: 'z', sign: 1 }] });
+        branches.push({ name: 'signal_rx', ports: [{ id: 'rx', sign: 1 }] });
+        branches.push({ name: 'signal_ry', ports: [{ id: 'ry', sign: 1 }] });
+        branches.push({ name: 'signal_rz', ports: [{ id: 'rz', sign: 1 }] });
+        break;
+      case 'dist_constraint':
+        branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        if (ports.includes('d')) branches.push({ name: 'signal_d', ports: [{ id: 'd', sign: 1 }] });
+        if (ports.includes('f_reac')) branches.push({ name: 'signal_f', ports: [{ id: 'f_reac', sign: 1 }] });
+        break;
+      case 'angle_constraint':
+        branches.push({ name: 'torque', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        if (ports.includes('ang')) branches.push({ name: 'signal_ang', ports: [{ id: 'ang', sign: 1 }] });
+        if (ports.includes('t_reac')) branches.push({ name: 'signal_t', ports: [{ id: 't_reac', sign: 1 }] });
+        break;
+      case 'weld_joint':
         branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
         break;
       case 'spherical_joint':
@@ -856,7 +880,20 @@ export class DAEAssembler {
             }
             return 0;
           }
+          if ((domain === 'frame' || domain === 'multibodyframe') && !connectedPortKeys.has(key)) {
+            return [0, 0, 0, 0, 0, 0];
+          }
           const varIdx = portToVarIndex.get(key)!;
+          if (domain === 'frame' || domain === 'multibodyframe') {
+            return [
+              x[varIdx + 0] ?? 0,
+              x[varIdx + 1] ?? 0,
+              x[varIdx + 2] ?? 0,
+              x[varIdx + 3] ?? 0,
+              x[varIdx + 4] ?? 0,
+              x[varIdx + 5] ?? 0
+            ];
+          }
           return x[varIdx];
         });
         
@@ -974,10 +1011,17 @@ export class DAEAssembler {
 
     // For each physical node that is NOT a reference node and NOT KCL-excluded,
     // construct its Kirchhoff through-variable sign maps
+    const kirchhoffFrameNodes = new Map<string, { throughIndices: number[]; signs: number[] }[]>();
+
     physicalNodes.forEach(pn => {
       if (referenceNodeIds.has(pn.id) || kclExcludedNodeIds.has(pn.id)) {
         return;
       }
+      const isFrame = (pn.domain === 'frame' || pn.domain === 'multibodyframe');
+      const frameCoords: { throughIndices: number[]; signs: number[] }[] = Array.from({ length: 6 }, () => ({
+        throughIndices: [],
+        signs: []
+      }));
       
       const throughIndices: number[] = [];
       const signs: number[] = [];
@@ -995,18 +1039,37 @@ export class DAEAssembler {
             const portKey = `${node.id}_${bp.id}`;
             const root = uf.find(portKey);
             if (root === pn.id) {
-              throughIndices.push(globalBranchVarIndex);
-              signs.push(bp.sign);
+              if (isFrame) {
+                let coord = -1;
+                const bName = b.name.toLowerCase();
+                if (bName === 'fx' || bName === 'force') coord = 0;
+                else if (bName === 'fy') coord = 1;
+                else if (bName === 'fz') coord = 2;
+                else if (bName === 'tx' || bName === 'torque') coord = 3;
+                else if (bName === 'ty') coord = 4;
+                else if (bName === 'tz') coord = 5;
+                if (coord >= 0) {
+                  frameCoords[coord].throughIndices.push(globalBranchVarIndex);
+                  frameCoords[coord].signs.push(bp.sign);
+                }
+              } else {
+                throughIndices.push(globalBranchVarIndex);
+                signs.push(bp.sign);
+              }
             }
           });
         });
       });
       
-      kirchhoffNodes.push({
-        nodeId: pn.id,
-        throughIndices,
-        signs
-      });
+      if (isFrame) {
+        kirchhoffFrameNodes.set(pn.id, frameCoords);
+      } else {
+        kirchhoffNodes.push({
+          nodeId: pn.id,
+          throughIndices,
+          signs
+        });
+      }
     });
 
     // 6. Build Scope mapping — map each scope port to its connected source variable index (or unconnected fallback)
@@ -1016,7 +1079,15 @@ export class DAEAssembler {
       if (type === 'scope') {
         const declaredPorts: any[] = (node.data as any)?.ports || [];
         const numSignalsParam = (node.data as any)?.params?.numSignals?.value;
-        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || (declaredPorts.length > 0 ? declaredPorts.length : 1)));
+        const maxConnectedPortIdx = edges.reduce((max, e) => {
+          if (e.target === node.id || e.source === node.id) {
+            const h = (e.target === node.id ? e.targetHandle : e.sourceHandle) || '';
+            const m = h.match(/in[_-]?(\d+)/i);
+            if (m) return Math.max(max, parseInt(m[1], 10));
+          }
+          return max;
+        }, 1);
+        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || Math.max(declaredPorts.length, maxConnectedPortIdx)));
         
         // Exact canonical ports strictly bounded by numSignals
         const canonicalPorts = Array.from({ length: numSignals }, (_, i) => `in${i + 1}`);
@@ -1029,13 +1100,15 @@ export class DAEAssembler {
               if (tPort.startsWith(e.target + '-')) {
                 tPort = tPort.slice(e.target.length + 1);
               }
-              return tPort === pId || (pId === 'in1' && (tPort === 'p' || tPort === 'in' || tPort === 'in1' || !tPort));
+              const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return norm(tPort) === norm(pId) || (norm(pId) === 'in1' && (norm(tPort) === 'p' || norm(tPort) === 'in' || !tPort));
             } else if (e.source === node.id) {
               let sPort = (e.sourceHandle || 'in1').replace(/_[st]$/, '');
               if (sPort.startsWith(e.source + '-')) {
                 sPort = sPort.slice(e.source.length + 1);
               }
-              return sPort === pId || (pId === 'in1' && (sPort === 'p' || sPort === 'in' || sPort === 'in1' || !sPort));
+              const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return norm(sPort) === norm(pId) || (norm(pId) === 'in1' && (norm(sPort) === 'p' || norm(sPort) === 'in' || !sPort));
             }
             return false;
           });
@@ -1080,6 +1153,12 @@ export class DAEAssembler {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name === 'force');
               } else if (sourceType === 'belt_spool' || sourceType === 'pulley') {
                 matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t' || b.name === 'torque');
+              } else if (sourceType === 'dist_constraint') {
+                if (srcPort === 'd') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_d');
+                else if (srcPort === 'f_reac' || srcPort === 'f') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f');
+              } else if (sourceType === 'angle_constraint') {
+                if (srcPort === 'ang' || srcPort === 'angle') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_ang');
+                else if (srcPort === 't_reac' || srcPort === 't') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t');
               }
             }
 
@@ -1170,6 +1249,20 @@ export class DAEAssembler {
             res[acrossVarIdx] = x[acrossVarIdx] - sum;
           } else {
             res[acrossVarIdx] = x[acrossVarIdx];
+          }
+        } else if (pn.domain === 'frame' || pn.domain === 'multibodyframe') {
+          const frameCoords = kirchhoffFrameNodes.get(pn.id);
+          for (let k = 0; k < 6; k++) {
+            const fc = frameCoords ? frameCoords[k] : undefined;
+            if (fc && fc.throughIndices.length > 0) {
+              let sum = 0;
+              for (let i = 0; i < fc.throughIndices.length; i++) {
+                sum += fc.signs[i] * x[fc.throughIndices[i]];
+              }
+              res[acrossVarIdx + k] = sum;
+            } else {
+              res[acrossVarIdx + k] = x[acrossVarIdx + k];
+            }
           }
         } else {
           // Kirchhoff Conservation node: Sum of through variables = 0

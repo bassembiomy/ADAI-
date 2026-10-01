@@ -109,4 +109,49 @@ describe('DAEAssembler Frame System Allocation & World Pinning', () => {
   });
 });
 
+import { VLabPhysicsEngine } from './vlabPhysics';
+
+describe('Multibody Component Equations and Scope Connectivity', () => {
+  it('correctly models rigid_transform offset and rotation into transform_sensor scope', () => {
+    const engine = new VLabPhysicsEngine();
+    const nodes: Node[] = [
+      { id: 'w', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      {
+        id: 't1',
+        type: 'default',
+        position: { x: 100, y: 0 },
+        data: {
+          type: 'rigid_transform',
+          params: { offset: { value: '[1 2 3]' }, rotation: { value: '[0 0 90]' } }
+        }
+      } as any,
+      { id: 's1', type: 'default', position: { x: 200, y: 0 }, data: { type: 'transform_sensor' } } as any,
+      { id: 'scope1', type: 'default', position: { x: 300, y: 0 }, data: { type: 'scope' } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'w', target: 't1', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 't1', target: 's1', sourceHandle: 'f', targetHandle: 'f' },
+      { id: 'e3', source: 'w', target: 's1', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e4', source: 's1', target: 'scope1', sourceHandle: 'x', targetHandle: 'in_1' },
+      { id: 'e5', source: 's1', target: 'scope1', sourceHandle: 'y', targetHandle: 'in_2' },
+      { id: 'e6', source: 's1', target: 'scope1', sourceHandle: 'z', targetHandle: 'in_3' },
+      { id: 'e7', source: 's1', target: 'scope1', sourceHandle: 'rz', targetHandle: 'in_4' },
+    ];
+
+    let state: any = null;
+    state = engine.simulateStep(nodes, edges, state, 0.01);
+    expect(state).toBeDefined();
+
+    // Verify Scope mapped channel values
+    const scopeData = state.scopeOutputs['scope1'];
+    expect(scopeData).toBeDefined();
+    // [X, Y, Z, Rz]
+    expect(scopeData[0]).toBeCloseTo(1, 2);
+    expect(scopeData[1]).toBeCloseTo(2, 2);
+    expect(scopeData[2]).toBeCloseTo(3, 2);
+    expect(scopeData[3]).toBeCloseTo(90, 1);
+  });
+});
+
+
 
