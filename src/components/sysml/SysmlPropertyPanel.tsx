@@ -29,7 +29,10 @@ export const SysmlPropertyPanel: React.FC<SysmlPropertyPanelProps> = ({
   }
 
   return (
-    <div className={`sysml-property-panel flex flex-col h-full bg-[var(--surface-panel)] border-l border-[var(--border-default)] p-3 overflow-y-auto text-xs ${className}`}>
+    <div
+      aria-label="SysML Property Inspector"
+      className={`sysml-property-panel flex flex-col h-full bg-[var(--surface-panel)] border-l border-[var(--border-default)] p-3 overflow-y-auto text-xs ${className}`}
+    >
       <div className="panel-header mb-4 pb-2 border-b border-[var(--border-default)]">
         <h3 className="font-semibold text-sm text-[var(--text-primary)]">{schema.title}</h3>
         <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">{schema.metaclass}</span>
@@ -155,6 +158,8 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
       ) : (
         <input
           id={`field-${field.key}`}
+          name={field.key}
+          aria-label={field.key === 'name' ? 'Element Name' : field.label}
           type="text"
           value={String(localVal ?? '')}
           onChange={(e) => setLocalVal(e.target.value)}

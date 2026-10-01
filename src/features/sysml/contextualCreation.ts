@@ -2,7 +2,7 @@ import type { MetaclassKind, SemanticElement } from '../../engine/sysml/domain/b
 import type { SysmlRepositoryV4 } from '../../engine/sysml/domain';
 import type { CanonicalPortKind } from '../../services/sysmlOwnedFeatureCommands';
 import type { TypeSelectionRequest } from '../../components/sysml/typeSelectionTypes';
-import type { SysmlEditorCommand } from '../../services/sysmlCommandGateway';
+import type { SysmlEditorCommand, SysmlElement } from '../../services/sysmlCommandGateway';
 import {
   resolveInteractionContext,
   type InteractionSource,
@@ -22,6 +22,10 @@ export type ContextualCreationIntent =
   | { metaclass: PropertyMetaclass; typeId?: string; name?: string }
   | {
       metaclass:
+        | 'Block'
+        | 'InterfaceBlock'
+        | 'Package'
+        | 'ValueType'
         | 'Operation'
         | 'Constraint'
         | 'Parameter'
@@ -230,23 +234,133 @@ export function buildOwnedElementPlan(
     };
   }
 
-  // General element kinds: Operation, Constraint, Parameter, Requirement, etc.
+  // Operations and Constraints on a Block
+  if (intent.metaclass === 'Operation') {
+    const ownerBlock = repository.definitions?.[ownerId] ?? repository.elements?.[ownerId];
+    const existingOps = (ownerBlock as any)?.operations || [];
+    const opName = intent.name ?? `operation_${existingOps.length + 1}`;
+    return {
+      kind: 'command',
+      command: {
+        type: 'updateElement',
+        elementId: ownerId,
+        patch: { operations: [...existingOps, opName] },
+      },
+    };
+  }
+
+  if (intent.metaclass === 'Constraint') {
+    const ownerBlock = repository.definitions?.[ownerId] ?? repository.elements?.[ownerId];
+    const existingConstraints = (ownerBlock as any)?.constraints || [];
+    const constraintName = intent.name ?? `constraint_${existingConstraints.length + 1}`;
+    return {
+      kind: 'command',
+      command: {
+        type: 'updateElement',
+        elementId: ownerId,
+        patch: { constraints: [...existingConstraints, constraintName] },
+      },
+    };
+  }
+
+  // Canonical packageable definitions
+  let element: SysmlElement;
+  const uid = Math.random().toString(36).slice(2, 8);
+
+  switch (intent.metaclass) {
+    case 'Block':
+    case 'InterfaceBlock': {
+      element = {
+        id: `blk_${Date.now()}_${uid}`,
+        name: intent.name ?? (intent.metaclass === 'InterfaceBlock' ? 'InterfaceBlock' : 'Block'),
+        kind: 'block',
+        isAbstract: false,
+        isLeaf: false,
+        properties: [],
+        ports: [],
+        operations: [],
+        constraints: [],
+        ownerId,
+        namespace: [],
+      };
+      break;
+    }
+    case 'Package': {
+      element = {
+        id: `pkg_${Date.now()}_${uid}`,
+        name: intent.name ?? 'Package',
+        kind: 'package',
+        ownerId,
+        namespace: [],
+      };
+      break;
+    }
+    case 'Requirement': {
+      element = {
+        id: `req_${Date.now()}_${uid}`,
+        requirementId: `REQ-${Date.now().toString().slice(-4)}`,
+        name: intent.name ?? 'Requirement',
+        text: '',
+        status: 'draft',
+        version: '1.0',
+        kind: 'requirement',
+        ownerId,
+        namespace: [],
+      };
+      break;
+    }
+    case 'ValueType': {
+      element = {
+        id: `vt_${Date.now()}_${uid}`,
+        name: intent.name ?? 'ValueType',
+        kind: 'valueType',
+        ownerId,
+        namespace: [],
+      };
+      break;
+    }
+    case 'TestCase': {
+      element = {
+        id: `vc_${Date.now()}_${uid}`,
+        name: intent.name ?? 'TestCase',
+        kind: 'verificationCase',
+        method: 'automated',
+        verifiesRequirementIds: [],
+        ownerId,
+        namespace: [],
+      };
+      break;
+    }
+    case 'UseCase': {
+      element = {
+        id: `uc_${Date.now()}_${uid}`,
+        name: intent.name ?? 'UseCase',
+        kind: 'useCase',
+        subjectId: '',
+        extensionPointIds: [],
+        behaviorArtifactIds: [],
+        ownerId,
+        namespace: [],
+      };
+      break;
+    }
+    default: {
+      element = {
+        id: `${intent.metaclass.toLowerCase()}_${Date.now()}_${uid}`,
+        name: intent.name ?? intent.metaclass,
+        kind: intent.metaclass.toLowerCase() as any,
+        ownerId,
+        namespace: [],
+      } as any;
+      break;
+    }
+  }
+
   return {
     kind: 'command',
     command: {
       type: 'createElement',
-      element: {
-        id: `${intent.metaclass.toLowerCase()}-${Math.random().toString(36).slice(2, 9)}`,
-        name: intent.name ?? intent.metaclass,
-        kind:
-          intent.metaclass === 'TestCase'
-            ? 'testCase'
-            : intent.metaclass === 'UseCase'
-            ? 'useCase'
-            : intent.metaclass.toLowerCase(),
-        ownerId,
-        namespace: [],
-      } as any,
+      element,
       ...(diagramId ? { diagramId } : {}),
     },
   };

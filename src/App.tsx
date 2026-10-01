@@ -117,6 +117,8 @@ import {
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { SysmlPropertyPanel } from './components/sysml/SysmlPropertyPanel';
+import { sysmlCommandToEditorCommand } from './components/sysml/sysmlCommandAdapter';
+import { migrateV3ToV4 } from './engine/sysml/persistence/migrateV3ToV4';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
 import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
@@ -8711,6 +8713,10 @@ const ADIA = () => {
 
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
+  const inspectorRepoV4 = useMemo(
+    () => migrateV3ToV4(canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations),
+    [canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations]
+  );
   const currentLayer = useMemo(() => layers.find(l => l.id === currentLayerId) || layers[0], [layers, currentLayerId]);
   const currentStates = useMemo(() => states.filter(s => s.parentId === currentLayerId), [states, currentLayerId]) as StateData[];
   const currentJunctions = useMemo(() => junctions.filter(j => layers.find(l => l.junctionIds.includes(j.id))?.id === currentLayerId), [junctions, layers, currentLayerId]);
@@ -19252,36 +19258,54 @@ const ADIA = () => {
                     Delete Junction
                   </Button>
                 </>
-              ) : selectedPackage && diagramMode === 'package' ? (
-                <>
-                  <div className="text-xs uppercase tracking-wide text-[#888]">Semantic Package</div>
-                  <div>
-                    <Label htmlFor="sysml-package-name">Package Name</Label>
-                    <Input id="sysml-package-name" value={selectedPackage.name} className="mt-1"
-                      onChange={(e) => {
-                        const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: selectedPackage.id,
-                          patch: { name: e.target.value }, coalesceKey: `package-name-${selectedPackage.id}` });
-                        if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
-                      }} />
-                  </div>
-                  <div className="text-xs text-[#888]">ID: {selectedPackage.id}</div>
-                  <div className="text-xs text-[#888]">Owner: {canonicalSysmlRepository.packages[selectedPackage.id]?.ownerId || 'Model'}</div>
-                  <div className="text-xs uppercase tracking-wide text-[#888]">Diagram Presentation</div>
-                  <div className="text-xs text-[#888]">Position: {Math.round(selectedPackage.x)}, {Math.round(selectedPackage.y)}</div>
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
-                    Remove from Diagram
-                  </Button>
-                  <Button size="sm" variant="outline" className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
-                    onClick={() => deleteSemanticPackage(selectedPackage.id)}>
-                    Delete from Model…
-                  </Button>
-                </>
+              ) : selectedPackage ? (
+                <div className="space-y-4">
+                  <SysmlPropertyPanel
+                    selection={{
+                      repository: inspectorRepoV4,
+                      elementId: selectedPackage.id,
+                    }}
+                    onExecuteCommand={(cmd) => {
+                      const editorCmd = sysmlCommandToEditorCommand(cmd);
+                      if (editorCmd) {
+                        const result = handleExecuteSysmlCommand(editorCmd);
+                        if (!result.committed) {
+                          result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                        }
+                      }
+                    }}
+                  />
+                  {diagramMode === 'package' && (
+                    <div className="pt-2 border-t border-[#333] space-y-2">
+                      <div className="text-xs uppercase tracking-wide text-[#888]">Diagram Presentation</div>
+                      <div className="text-xs text-[#888]">Position: {Math.round(selectedPackage.x)}, {Math.round(selectedPackage.y)}</div>
+                      <Button size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
+                        Remove from Diagram
+                      </Button>
+                      <Button size="sm" variant="outline" className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
+                        onClick={() => deleteSemanticPackage(selectedPackage.id)}>
+                        Delete from Model…
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ) : selectedBlock ? (
                 <>
-                  <div>
-                    <Label>Block Name</Label>
-                    <Input value={selectedBlock.name} onChange={(e) => updateBlock(selectedBlock.id, { name: e.target.value })} className="mt-1" />
-                  </div>
+                  <SysmlPropertyPanel
+                    selection={{
+                      repository: inspectorRepoV4,
+                      elementId: selectedBlock.id,
+                    }}
+                    onExecuteCommand={(cmd) => {
+                      const editorCmd = sysmlCommandToEditorCommand(cmd);
+                      if (editorCmd) {
+                        const result = handleExecuteSysmlCommand(editorCmd);
+                        if (!result.committed) {
+                          result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                        }
+                      }
+                    }}
+                  />
                   <div>
                     <Label>Stereotype</Label>
                     {selectedBlock.stereotype === 'requirement' ? (

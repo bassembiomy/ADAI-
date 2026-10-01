@@ -17,7 +17,29 @@ export function migrateV3ToV4(
   const v4 = createEmptyRepositoryV4();
   v4.revision = v3.revision;
 
-  // 1. Migrate Definitions (Blocks, ValueTypes, Interfaces)
+  // 1. Migrate Packages
+  for (const [id, pkg] of Object.entries(v3.packages || {})) {
+    if (id === 'pkg-root' || id === 'model') {
+      if (v4.elements['pkg-root'] && pkg.name) {
+        v4.elements['pkg-root'].name = pkg.name;
+      }
+      continue;
+    }
+    v4.elements[id] = {
+      id: pkg.id,
+      name: pkg.name,
+      metaclass: 'Package',
+      namespace: pkg.namespace || [],
+      ownerId: pkg.ownerId || 'pkg-root',
+    };
+    const parentId = pkg.ownerId || 'pkg-root';
+    if (!v4.indexes.byOwner[parentId]) v4.indexes.byOwner[parentId] = [];
+    if (!v4.indexes.byOwner[parentId].includes(id)) {
+      v4.indexes.byOwner[parentId].push(id);
+    }
+  }
+
+  // 1.1 Migrate Definitions (Blocks, ValueTypes, Interfaces)
   for (const [id, def] of Object.entries(v3.definitions || {})) {
     if (def.kind === 'block') {
       const block: Block = {

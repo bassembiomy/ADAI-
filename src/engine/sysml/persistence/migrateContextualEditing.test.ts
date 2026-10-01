@@ -94,4 +94,35 @@ describe('migrateContextualEditingPayload', () => {
     const result = migrateContextualEditingPayload(v4Payload);
     expect(result.migrated).toBe(false);
   });
+
+  it('automatically migrates legacy v2/v3 payload inside loadCanonicalSysmlProject without manual migration call', () => {
+    const legacyPayload = {
+      format: 'ADIA-SysML',
+      schemaVersion: 2,
+      projectName: 'Direct Load Project',
+      sysmlRepository: {
+        schemaVersion: 2,
+        profileId: 'OMG-SysML-1.6-ADIA',
+        definitions: {
+          b1: {
+            id: 'b1',
+            kind: 'block',
+            name: 'Battery',
+            namespace: ['Model'],
+            ownerId: 'non-existent-owner',
+            properties: [],
+            operations: [],
+            ports: [],
+          },
+        },
+      },
+    };
+
+    const loaded = loadCanonicalSysmlProject(legacyPayload as Record<string, unknown>);
+    expect(loaded.valid).toBe(true);
+    expect(loaded.repository.packages.model).toBeDefined();
+    expect(loaded.repository.definitions.b1.ownerId).toBe('model');
+    expect(loaded.diagnostics.some(d => d.message.includes('DANGLING_OWNER_REPAIRED') || d.elementId === 'b1')).toBe(true);
+  });
 });
+

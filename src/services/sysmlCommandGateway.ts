@@ -58,6 +58,10 @@ import type { BlockData, ConnectorData, PackageData, PartData, RelationshipData,
 
 import { resolveType } from '../engine/sysml/services/typeResolution';
 import {
+  migrateContextualEditingPayload,
+  type PersistedSysmlPayload,
+} from '../engine/sysml/persistence/migrateContextualEditing';
+import {
   normalizeDiagramPresentations,
   stableDiagramPresentationId,
   type DiagramElementPresentation,
@@ -3024,6 +3028,7 @@ export function buildCanonicalSysmlProjectPayload(
 ): Record<string, unknown> {
   const serializedRepo = serializeRepository(state.repository);
   return {
+    schemaVersion: 4,
     ...metadata,
     sysmlRepository: serializedRepo,
     sysmlCoordinates: state.coordinates,
@@ -3047,16 +3052,26 @@ export function loadCanonicalSysmlProject(
   quarantinedRelationshipIds: string[];
   quarantinedConnectorIds: string[];
 } {
-  const coordinates = (payload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
+  const migration = migrateContextualEditingPayload(payload as PersistedSysmlPayload, context);
+  const activePayload = (migration.migrated ? migration.payload : payload) as Record<string, unknown>;
+  const migrationDiagnostics: SysmlDiagnostic[] = (migration.diagnostics || []).map((d) => ({
+    code: 'CONTEXTUAL_EDITING_MIGRATION',
+    severity: d.severity,
+    message: d.message,
+    source: 'SysML',
+    elementId: d.elementId,
+  }));
+
+  const coordinates = (activePayload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
   const diagramPresentations = normalizeDiagramPresentations(
-    (payload.diagramPresentations as Record<string, DiagramPresentationInput>) ?? {},
+    (activePayload.diagramPresentations as Record<string, DiagramPresentationInput>) ?? {},
     coordinates,
   );
-  const rawRepo = payload.sysmlRepository;
+  const rawRepo = activePayload.sysmlRepository;
 
   if (!rawRepo) {
     // Fallback: migrate legacy payload
-    const loadRes = loadRepository(payload, context);
+    const loadRes = loadRepository(activePayload, context);
     const store = fromRepository(loadRes.repository, coordinates, diagramPresentations);
     const view = getCachedLegacyView(store);
     return {
@@ -3066,7 +3081,7 @@ export function loadCanonicalSysmlProject(
       coordinates,
       diagramPresentations,
       valid: loadRes.valid,
-      diagnostics: loadRes.diagnostics,
+      diagnostics: [...migrationDiagnostics, ...loadRes.diagnostics],
       interchangeReport: loadRes.interchangeReport,
       quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
       quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
@@ -3084,7 +3099,7 @@ export function loadCanonicalSysmlProject(
     coordinates,
     diagramPresentations,
     valid: loadRes.valid,
-    diagnostics: loadRes.diagnostics,
+    diagnostics: [...migrationDiagnostics, ...loadRes.diagnostics],
     interchangeReport: loadRes.interchangeReport,
     quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
     quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,

@@ -51,6 +51,7 @@ export interface ContextualMigrationResult {
  */
 export function migrateContextualEditingPayload(
   rawInput: PersistedSysmlPayload,
+  context?: any,
 ): ContextualMigrationResult {
   const diagnostics: ContextualMigrationResult['diagnostics'] = [];
   let migrated = false;
@@ -65,7 +66,19 @@ export function migrateContextualEditingPayload(
   if (rawInput.sysmlRepository) {
     if (typeof rawInput.sysmlRepository === 'string') {
       try {
-        const loaded = loadRepository(rawInput.sysmlRepository);
+        const loaded = loadRepository(rawInput.sysmlRepository, context);
+        if (!loaded.valid) {
+          return {
+            migrated: false,
+            payload: rawInput,
+            diagnostics: (loaded.diagnostics || []).map(d => ({
+              code: d.code,
+              message: d.message,
+              severity: d.severity,
+              elementId: d.elementId,
+            })),
+          };
+        }
         repo = loaded.repository;
       } catch (err: any) {
         diagnostics.push({
@@ -77,12 +90,36 @@ export function migrateContextualEditingPayload(
         migrated = true;
       }
     } else {
-      const loaded = loadRepository(rawInput.sysmlRepository);
+      const loaded = loadRepository(rawInput.sysmlRepository, context);
+      if (!loaded.valid) {
+        return {
+          migrated: false,
+          payload: rawInput,
+          diagnostics: (loaded.diagnostics || []).map(d => ({
+            code: d.code,
+            message: d.message,
+            severity: d.severity,
+            elementId: d.elementId,
+          })),
+        };
+      }
       repo = loaded.repository;
     }
   } else {
     // Legacy flat payload migration
-    const loaded = loadRepository(rawInput);
+    const loaded = loadRepository(rawInput, context);
+    if (!loaded.valid) {
+      return {
+        migrated: false,
+        payload: rawInput,
+        diagnostics: (loaded.diagnostics || []).map(d => ({
+          code: d.code,
+          message: d.message,
+          severity: d.severity,
+          elementId: d.elementId,
+        })),
+      };
+    }
     repo = loaded.repository;
     migrated = true;
   }

@@ -269,13 +269,130 @@ export function handleUpdateRelationship(
     };
   }
 
-  const updated = { ...current, ...cmd.patch, id: current.id, metaclass: current.metaclass };
+  const patch = cmd.patch;
+
+  // Validate endpoints if changed
+  if (patch.sourceId !== undefined && patch.sourceId !== current.sourceId) {
+    if (!state.elements[patch.sourceId]) {
+      return {
+        success: false,
+        code: 'ENDPOINT_NOT_FOUND',
+        message: `Source element "${patch.sourceId}" does not exist.`,
+        nextState: state,
+      };
+    }
+  }
+
+  if (patch.targetId !== undefined && patch.targetId !== current.targetId) {
+    if (!state.elements[patch.targetId]) {
+      return {
+        success: false,
+        code: 'ENDPOINT_NOT_FOUND',
+        message: `Target element "${patch.targetId}" does not exist.`,
+        nextState: state,
+      };
+    }
+  }
+
+  if (patch.ownerId !== undefined && patch.ownerId !== current.ownerId && patch.ownerId !== null) {
+    if (!state.elements[patch.ownerId]) {
+      return {
+        success: false,
+        code: 'OWNER_ELEMENT_NOT_FOUND',
+        message: `Owner element "${patch.ownerId}" does not exist.`,
+        nextState: state,
+      };
+    }
+  }
+
+  const updated: SemanticRelationship = { ...current, ...patch, id: current.id, metaclass: current.metaclass };
+
+  // If connector ends exist, keep their roleIds aligned with new source/target
+  if (updated.sourceEnd && 'roleId' in updated.sourceEnd && patch.sourceId && patch.sourceId !== current.sourceId) {
+    updated.sourceEnd = { ...updated.sourceEnd, roleId: patch.sourceId };
+  }
+  if (updated.targetEnd && 'roleId' in updated.targetEnd && patch.targetId && patch.targetId !== current.targetId) {
+    updated.targetEnd = { ...updated.targetEnd, roleId: patch.targetId };
+  }
+  if ((updated as any).connectorEnds && (updated as any).connectorEnds.length >= 2) {
+    const nextEnds = [...(updated as any).connectorEnds];
+    if (patch.sourceId && patch.sourceId !== current.sourceId) {
+      nextEnds[0] = { ...nextEnds[0], roleId: patch.sourceId };
+    }
+    if (patch.targetId && patch.targetId !== current.targetId) {
+      nextEnds[1] = { ...nextEnds[1], roleId: patch.targetId };
+    }
+    (updated as any).connectorEnds = nextEnds;
+  }
+
   const relationships = { ...state.relationships, [cmd.relationshipId]: updated };
+
+  // Also keep any realized item flows consistent with new source/target
+  let nextItemFlows = state.itemFlows;
+  if (state.itemFlows) {
+    let flowsChanged = false;
+    const copyFlows = { ...state.itemFlows };
+    for (const [flowId, flow] of Object.entries(copyFlows)) {
+      if (flow.realizingRelationshipId === cmd.relationshipId) {
+        let changed = false;
+        const nextFlow = { ...flow };
+        if (patch.sourceId && patch.sourceId !== current.sourceId) {
+          nextFlow.sourceId = patch.sourceId;
+          changed = true;
+        }
+        if (patch.targetId && patch.targetId !== current.targetId) {
+          nextFlow.targetId = patch.targetId;
+          changed = true;
+        }
+        if (changed) {
+          copyFlows[flowId] = nextFlow;
+          flowsChanged = true;
+        }
+      }
+    }
+    if (flowsChanged) {
+      nextItemFlows = copyFlows;
+    }
+  }
+
+  // Update indexes
+  const bySource = { ...state.indexes.bySourceEndpoint };
+  if (patch.sourceId && patch.sourceId !== current.sourceId) {
+    if (bySource[current.sourceId]) {
+      bySource[current.sourceId] = bySource[current.sourceId].filter((id) => id !== cmd.relationshipId);
+    }
+    bySource[patch.sourceId] = [...(bySource[patch.sourceId] || []), cmd.relationshipId];
+  }
+
+  const byTarget = { ...state.indexes.byTargetEndpoint };
+  if (patch.targetId && patch.targetId !== current.targetId) {
+    if (byTarget[current.targetId]) {
+      byTarget[current.targetId] = byTarget[current.targetId].filter((id) => id !== cmd.relationshipId);
+    }
+    byTarget[patch.targetId] = [...(byTarget[patch.targetId] || []), cmd.relationshipId];
+  }
+
+  const byOwner = { ...state.indexes.byOwner };
+  if (patch.ownerId !== undefined && patch.ownerId !== current.ownerId) {
+    if (current.ownerId && byOwner[current.ownerId]) {
+      byOwner[current.ownerId] = byOwner[current.ownerId].filter((id) => id !== cmd.relationshipId);
+    }
+    if (patch.ownerId) {
+      byOwner[patch.ownerId] = [...(byOwner[patch.ownerId] || []), cmd.relationshipId];
+    }
+  }
 
   const nextState: SysmlRepositoryV4 = {
     ...state,
     revision: state.revision + 1,
     relationships,
+    itemFlows: nextItemFlows,
+    indexes: {
+      ...state.indexes,
+      bySourceEndpoint: bySource,
+      byTargetEndpoint: byTarget,
+      byOwner,
+    },
   };
 
   return { success: true, nextState, affectedIds: [cmd.relationshipId] };

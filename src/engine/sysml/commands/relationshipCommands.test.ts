@@ -110,4 +110,44 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
     expect(deleteRes.nextState.relationships[relId]).toBeUndefined();
     expect(deleteRes.nextState.itemFlows?.[ifId]).toBeUndefined();
   });
+
+  it('handleUpdateRelationship rejects non-existent endpoints and updates indexes', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.elements['system'] = { id: 'system', name: 'System', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' } as Block;
+    repository.elements['out1'] = { id: 'out1', name: 'out1', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
+    repository.elements['out2'] = { id: 'out2', name: 'out2', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
+    repository.elements['in1'] = { id: 'in1', name: 'in1', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
+
+    const created = createConnectorTransaction(repository, {
+      ownerId: 'system',
+      sourceEnd: { roleId: 'out1' },
+      targetEnd: { roleId: 'in1' },
+    });
+    expect(created.success).toBe(true);
+    const relId = created.relationshipId;
+
+    // Reject non-existent endpoint
+    const rejectRes = handleUpdateRelationship(created.state, {
+      type: 'UpdateRelationship',
+      relationshipId: relId,
+      patch: { sourceId: 'nonexistent-port' },
+    });
+    expect(rejectRes.success).toBe(false);
+    expect(rejectRes.code).toBe('ENDPOINT_NOT_FOUND');
+
+    // Accept valid endpoint and update indexes
+    const updateRes = handleUpdateRelationship(created.state, {
+      type: 'UpdateRelationship',
+      relationshipId: relId,
+      patch: { sourceId: 'out2' },
+    });
+    expect(updateRes.success).toBe(true);
+    expect(updateRes.nextState.relationships[relId].sourceId).toBe('out2');
+
+    // Index verification
+    expect(updateRes.nextState.indexes.bySourceEndpoint['out1'] || []).not.toContain(relId);
+    expect(updateRes.nextState.indexes.bySourceEndpoint['out2']).toContain(relId);
+    expect(updateRes.nextState.indexes.byTargetEndpoint['in1']).toContain(relId);
+  });
 });
+
