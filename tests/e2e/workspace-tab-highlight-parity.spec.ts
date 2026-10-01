@@ -109,4 +109,70 @@ test.describe('workspace tab highlight parity', () => {
     await expect(tabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
     await expect(page.getByText(/^States:/)).toBeVisible();
   });
+
+  test('canvas double-click opens a uniquely owned exact diagram and reuses its tab', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const destination = tabs.locator('[data-diagram-id="canvas-owned-ibd"]');
+    await tabs.locator('[data-diagram-id="adia-default-bdd"]').click();
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      execute({
+        type: 'createAndPresent', diagramId: 'adia-default-bdd',
+        element: {
+          id: 'canvas-owner', name: 'Canvas Owner', kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        },
+        presentation: { x: 180, y: 150, width: 180, height: 120 },
+      });
+      execute({
+        type: 'createDiagram', diagram: {
+          id: 'canvas-owned-ibd', name: 'Canvas Owned IBD', kind: 'diagram', diagramKind: 'ibd',
+          namespace: [], ownerId: 'canvas-owner', contextElementId: 'canvas-owner',
+        },
+      });
+    });
+    const symbol = page.locator('#adia-diagram-canvas g[data-semantic-id="canvas-owner"]');
+    await expect(symbol).toBeVisible();
+    await expect(destination).toHaveCount(0);
+
+    await symbol.click();
+    await expect(destination).toHaveCount(0);
+    await expect(tabs.locator('[data-diagram-id="adia-default-bdd"]')).toHaveAttribute('aria-selected', 'true');
+
+    await symbol.dblclick();
+    await expect(destination).toHaveAttribute('aria-selected', 'true');
+    await expect(destination).toHaveCount(1);
+    await expect(tabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('canvas-owned-ibd');
+
+    await tabs.locator('[data-diagram-id="adia-default-bdd"]').click();
+    await expect(symbol).toBeVisible();
+    await symbol.dblclick();
+    await expect(destination).toHaveAttribute('aria-selected', 'true');
+    await expect(destination).toHaveCount(1);
+  });
+
+  test('canvas double-click without a navigable diagram leaves the active canvas in place', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const bdd = tabs.locator('[data-diagram-id="adia-default-bdd"]');
+    await bdd.click();
+    await page.evaluate(() => {
+      (window as any).__sysmlExecuteCommand({
+        type: 'createAndPresent', diagramId: 'adia-default-bdd',
+        element: {
+          id: 'canvas-leaf', name: 'Canvas Leaf', kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        },
+        presentation: { x: 200, y: 150, width: 180, height: 120 },
+      });
+    });
+    const symbol = page.locator('#adia-diagram-canvas g[data-semantic-id="canvas-leaf"]');
+    await expect(symbol).toBeVisible();
+    const before = await tabs.locator('[role="tab"]').count();
+    await symbol.dblclick();
+    await expect(bdd).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.locator('[role="tab"]')).toHaveCount(before);
+    await expect(symbol).toBeVisible();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('adia-default-bdd');
+  });
 });

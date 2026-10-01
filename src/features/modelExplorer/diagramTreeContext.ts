@@ -51,6 +51,38 @@ function sysmlHasSemanticId(repository: SysmlRepository, semanticId: string): bo
   );
 }
 
+/** Returns an exact, unambiguous diagram ID for a canvas symbol, if one exists. */
+export function resolveCanvasSymbolDiagramTarget(
+  semanticId: string,
+  repository: SysmlRepository,
+  stateMachine?: StateMachineExplorerSnapshot,
+): string | null {
+  const isSysmlSymbol = semanticId === 'model' || sysmlHasSemanticId(repository, semanticId);
+  const isState = stateMachine?.states.some(state => state.id === semanticId) ?? false;
+  if (!isSysmlSymbol && !isState) return null;
+
+  const explicitReferences = isSysmlSymbol
+    ? Object.values(repository.diagramReferences ?? {}).filter(reference => reference.sourceElementId === semanticId)
+    : [];
+  if (explicitReferences.length > 0) {
+    const ids = new Set(explicitReferences.map(reference => reference.diagramId));
+    const [onlyId] = ids;
+    return ids.size === 1 && repository.diagrams[onlyId] ? onlyId : null;
+  }
+
+  const owned = isSysmlSymbol
+    ? Object.values(repository.diagrams).filter(diagram => diagram.ownerId === semanticId).map(diagram => diagram.id)
+    : [];
+  if (isState && stateMachine) {
+    const regions = new Set(stateMachine.layers.filter(layer => layer.parentStateId === semanticId).map(layer => layer.id));
+    owned.push(...(stateMachine.diagrams ?? [])
+      .filter(diagram => diagram.ownerId === semanticId || regions.has(diagram.contextRegionId))
+      .map(diagram => diagram.id));
+  }
+  const ids = new Set(owned);
+  return ids.size === 1 ? [...ids][0] : null;
+}
+
 /**
  * Builds `semanticId -> diagram tree node` for every element a diagram
  * presents. Later entries win deterministically because the tree shows one

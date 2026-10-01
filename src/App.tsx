@@ -199,6 +199,7 @@ import {
   type DiagramWorkspaceTab,
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
+import { resolveCanvasSymbolDiagramTarget } from './features/modelExplorer/diagramTreeContext';
 import type { StateMachineDiagramData } from './types/sm_types';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 
@@ -6400,6 +6401,33 @@ const ADIA = () => {
     return true;
   }, [seededStateMachineDiagrams, canonicalSysmlRepository, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
 
+  const openCanvasSymbolDiagram = useCallback((semanticId: string): boolean => {
+    const diagramId = resolveCanvasSymbolDiagramTarget(semanticId, canonicalSysmlRepository, {
+      states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams,
+    });
+    if (!diagramId) return false;
+    const diagram = canonicalSysmlRepository.diagrams[diagramId];
+    if (diagram?.diagramKind === 'ibd') {
+      const contextId = diagram.contextElementId ?? diagram.ownerId;
+      const contextBlock = contextId ? canonicalSysmlRepository.definitions[contextId] : undefined;
+      if (contextBlock?.kind === 'block') {
+        setCurrentLayerId(contextBlock.id);
+        setLayerStack(['root']);
+        setLayerPath(['Root', contextBlock.name]);
+      }
+    } else if (diagram) {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath(['Root']);
+    } else {
+      const stateMachineDiagram = seededStateMachineDiagrams.find(candidate => candidate.id === diagramId);
+      if (stateMachineDiagram) {
+        setCurrentLayerId(stateMachineDiagram.contextRegionId);
+      }
+    }
+    return openExactDiagramById(diagramId, { pushOrigin: diagram?.diagramKind === 'ibd' && diagramMode !== 'ibd' });
+  }, [canonicalSysmlRepository, states, layers, transitions, junctions, seededStateMachineDiagrams, openExactDiagramById, diagramMode]);
+
   const setDiagramMode = useCallback((mode: DiagramMode) => {
     setSelectedIds([]);
     setPackageRelationshipTool(null);
@@ -12269,12 +12297,14 @@ const ADIA = () => {
       return;
     }
 
+    if (openCanvasSymbolDiagram(stateId)) return;
+
     if (diagramMode === 'requirements') {
       enterRequirement(stateId);
     } else {
       enterLayer(stateId);
     }
-  }, [enterLayer, diagramMode, states]);
+  }, [enterLayer, diagramMode, states, openCanvasSymbolDiagram]);
 
   const handleTransitionClick = useCallback((e: MouseEvent<SVGPathElement>, transitionId: string) => {
     e.stopPropagation();
@@ -15873,6 +15903,10 @@ const ADIA = () => {
           data-presentation-kind="package"
           transform={`translate(${pkg.x}, ${pkg.y})`}
           onMouseDown={(event) => handleBlockMouseDown(event, pkg.id)}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            openCanvasSymbolDiagram(pkg.id);
+          }}
           style={{ cursor: 'move' }}
         >
           {isSelected && (
@@ -15904,7 +15938,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown, handleResizeMouseDown]);
+  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown, handleResizeMouseDown, openCanvasSymbolDiagram]);
 
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
@@ -16034,12 +16068,11 @@ const ADIA = () => {
           }}
           onDoubleClick={(e: MouseEvent<SVGGElement>) => {
             e.stopPropagation();
-            console.log('[DEBUG_DBLCLICK] Block onDoubleClick fired for block:', block.id, block.name, 'diagramMode:', diagramMode);
+            if (openCanvasSymbolDiagram(block.id)) return;
             const decision = resolveBlockDoubleClickAction(diagramMode, block);
-            console.log('[DEBUG_DBLCLICK] Decision:', decision);
             if (decision.action === 'enterRequirement') {
               enterRequirement(decision.targetId!);
-            } else if (decision.action === 'enterBlock') {
+            } else if (decision.action === 'enterBlock' && diagramMode === 'ibd') {
               enterBlock(decision.targetId!);
             }
           }}
@@ -16256,7 +16289,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
@@ -16553,6 +16586,10 @@ const ADIA = () => {
           data-semantic-id={part.id}
           transform={`translate(${part.x}, ${part.y})`}
           onMouseDown={(e) => handlePartMouseDown(e, part.id)}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            openCanvasSymbolDiagram(part.id);
+          }}
           style={{ cursor: isCreatingConnector ? 'default' : 'move' }}
         >
           {isSelected && (
@@ -16627,7 +16664,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId, sysmlDiagramPresentations]);
+  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId, sysmlDiagramPresentations, openCanvasSymbolDiagram]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode

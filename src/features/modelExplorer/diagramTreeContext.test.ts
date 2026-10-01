@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { buildDiagramVisualParentIndex, resolveDiagramSemanticOwner } from './diagramTreeContext';
+import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveDiagramSemanticOwner } from './diagramTreeContext';
 
 function diagramNode(id: string, domain: 'sysml' | 'stateMachine'): ModelTreeNode {
   return {
@@ -136,5 +136,51 @@ describe('buildDiagramVisualParentIndex', () => {
     });
 
     expect(index.get('block-1')).toBe('sysml:element:req-diagram-1');
+  });
+});
+
+describe('resolveCanvasSymbolDiagramTarget', () => {
+  it('prefers an explicit diagram reference over a uniquely owned diagram', () => {
+    const repository = repositoryWithDiagrams();
+    repository.diagrams['owned-ibd'] = {
+      id: 'owned-ibd', name: 'Engine IBD', namespace: [], ownerId: 'block-1', kind: 'diagram', diagramKind: 'ibd',
+    };
+    repository.diagramReferences['engine-reference'] = {
+      id: 'engine-reference', sourceElementId: 'block-1', diagramId: 'bdd-1',
+      diagramKind: 'bdd', role: 'elaborates',
+    };
+
+    expect(resolveCanvasSymbolDiagramTarget('block-1', repository)).toBe('bdd-1');
+  });
+
+  it('opens only a unique owned diagram and rejects ambiguous candidates', () => {
+    const repository = repositoryWithDiagrams();
+    expect(resolveCanvasSymbolDiagramTarget('block-1', repository)).toBe('parametric-1');
+    repository.diagrams['another-owned'] = {
+      id: 'another-owned', name: 'Engine IBD', namespace: [], ownerId: 'block-1', kind: 'diagram', diagramKind: 'ibd',
+    };
+    expect(resolveCanvasSymbolDiagramTarget('block-1', repository)).toBeNull();
+  });
+
+  it('does not navigate unknown symbols, stale references, or conflicting explicit references', () => {
+    const repository = repositoryWithDiagrams();
+    expect(resolveCanvasSymbolDiagramTarget('missing-block', repository)).toBeNull();
+    repository.diagramReferences['stale'] = {
+      id: 'stale', sourceElementId: 'block-1', diagramId: 'missing-diagram', diagramKind: 'bdd', role: 'elaborates',
+    };
+    expect(resolveCanvasSymbolDiagramTarget('block-1', repository)).toBeNull();
+    repository.diagramReferences['second'] = {
+      id: 'second', sourceElementId: 'block-1', diagramId: 'bdd-1', diagramKind: 'bdd', role: 'elaborates',
+    };
+    expect(resolveCanvasSymbolDiagramTarget('block-1', repository)).toBeNull();
+  });
+
+  it('resolves a state through its uniquely owned nested region diagram', () => {
+    const stateMachine = stateMachineWithNestedDiagram();
+    stateMachine.layers[1].parentStateId = 'state-1';
+    stateMachine.states.push({ id: 'state-1' } as StateMachineExplorerSnapshot['states'][number]);
+    expect(resolveCanvasSymbolDiagramTarget('state-1', createEmptyRepository(), stateMachine)).toBe('nested-sm-1');
+    stateMachine.diagrams!.push({ id: 'second-sm', name: 'Other', ownerId: 'region-1', contextRegionId: 'region-1' });
+    expect(resolveCanvasSymbolDiagramTarget('state-1', createEmptyRepository(), stateMachine)).toBeNull();
   });
 });
