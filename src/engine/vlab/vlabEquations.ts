@@ -4,8 +4,8 @@ import {
   parseVector3,
   eulerToRotationMatrix,
   transformPoint,
-  computeFrameDistance,
-  computeRelativeAngle
+  normalizeVector3,
+  computeRelativeAngleAxis
 } from './vlabFrameKinematics';
 import {
   evaluateDOEModel,
@@ -1893,41 +1893,78 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       (branch[5] || 0) - drz,
     ];
   },
-  dist_constraint: ({ across, branch, params }) => {
-    const B = Array.isArray(across[0]) ? across[0] : [across[0] || 0, 0, 0, 0, 0, 0];
-    const F = Array.isArray(across[1]) ? across[1] : [across[1] || 0, 0, 0, 0, 0, 0];
+  // Branch layout: [lambda, fx, fy, fz, signal_d?, signal_f?]. lambda is an
+  // internal scalar multiplier (no Kirchhoff port); fx/fy/fz carry the
+  // reaction force applied on F (and, with opposite sign, on B) along the
+  // B->F direction, so the per-coordinate Frame equilibrium equations
+  // determine lambda from the attached load, exactly like a Lagrange
+  // multiplier for |P_f - P_b| = L.
+  dist_constraint: ({ across, branch, params, ports, nodeId }) => {
+    const bIdx = ports.indexOf('b');
+    const fIdx = ports.indexOf('f');
+    const B = asFrame(across[bIdx]);
+    const F = asFrame(across[fIdx]);
 
     const targetDist = params?.dist !== undefined ? Number(params.dist) : 1.0;
-    const d = computeFrameDistance([B[0], B[1], B[2]], [F[0], F[1], F[2]]);
+    const direction = normalizeVector3([F[0] - B[0], F[1] - B[1], F[2] - B[2]]);
+    const lambda = branch[0] || 0;
 
-    const res = [
-      d - targetDist,
-    ];
-    if (branch.length > 1) {
-      res.push((branch[1] || 0) - d);
+    const res: number[] = [];
+    if (!direction.defined && targetDist === 0) {
+      // No direction exists to carry a reaction, and the constraint is
+      // trivially satisfied at zero separation: pin the multiplier to zero
+      // instead of leaving the distance equation (0 = 0) singular.
+      res.push(lambda);
+    } else if (!direction.defined) {
+      throw new Error(
+        `Block "${nodeId}": distance direction is undefined (B and F frames coincide) ` +
+        `while a nonzero distance target (${targetDist}) is set. Separate the frames or set dist = 0.`
+      );
+    } else {
+      res.push(direction.magnitude - targetDist);
     }
-    if (branch.length > 2) {
-      res.push((branch[2] || 0) - Math.abs(branch[0] || 0));
-    }
+    res.push((branch[1] || 0) - lambda * direction.unit[0]);
+    res.push((branch[2] || 0) - lambda * direction.unit[1]);
+    res.push((branch[3] || 0) - lambda * direction.unit[2]);
+
+    let next = 4;
+    if (ports.includes('d')) res.push((branch[next++] || 0) - direction.magnitude);
+    if (ports.includes('f_reac')) res.push((branch[next++] || 0) - Math.abs(lambda));
     return res;
   },
-  angle_constraint: ({ across, branch, params }) => {
-    const B = Array.isArray(across[0]) ? across[0] : [across[0] || 0, 0, 0, 0, 0, 0];
-    const F = Array.isArray(across[1]) ? across[1] : [across[1] || 0, 0, 0, 0, 0, 0];
+  // Branch layout: [lambda, tx, ty, tz, signal_ang?, signal_t?], mirroring
+  // dist_constraint but along the relative rotation axis of Rrel = Rb^T*Rf.
+  angle_constraint: ({ across, branch, params, ports, nodeId }) => {
+    const bIdx = ports.indexOf('b');
+    const fIdx = ports.indexOf('f');
+    const B = asFrame(across[bIdx]);
+    const F = asFrame(across[fIdx]);
 
     const angleDeg = params?.angle !== undefined ? Number(params.angle) : 0.0;
     const targetAngleRad = angleDeg * Math.PI / 180;
-    const relAngleRad = computeRelativeAngle([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
+    const relative = computeRelativeAngleAxis([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
+    const lambda = branch[0] || 0;
 
-    const res = [
-      relAngleRad - targetAngleRad,
-    ];
-    if (branch.length > 1) {
-      res.push((branch[1] || 0) - (relAngleRad * 180 / Math.PI));
+    const res: number[] = [];
+    if (!relative.axisDefined && targetAngleRad === 0) {
+      // No axis exists to carry a reaction torque, and the constraint is
+      // trivially satisfied at zero relative rotation: pin lambda to zero.
+      res.push(lambda);
+    } else if (!relative.axisDefined) {
+      throw new Error(
+        `Block "${nodeId}": relative rotation axis is undefined (B and F frames share the same orientation) ` +
+        `while a nonzero angle target (${angleDeg} deg) is set. Introduce a relative rotation or set angle = 0.`
+      );
+    } else {
+      res.push(relative.angle - targetAngleRad);
     }
-    if (branch.length > 2) {
-      res.push((branch[2] || 0) - Math.abs(branch[0] || 0));
-    }
+    res.push((branch[1] || 0) - lambda * relative.axis[0]);
+    res.push((branch[2] || 0) - lambda * relative.axis[1]);
+    res.push((branch[3] || 0) - lambda * relative.axis[2]);
+
+    let next = 4;
+    if (ports.includes('ang')) res.push((branch[next++] || 0) - relative.angle * 180 / Math.PI);
+    if (ports.includes('t_reac')) res.push((branch[next++] || 0) - Math.abs(lambda));
     return res;
   },
   spherical_joint: ({ across, branch, params }) => {
