@@ -7,15 +7,15 @@
   - [x] Step 4: Replace explorer-only owner calculations with the shared resolver (`src/components/modelExplorer/AppModelExplorer.tsx`)
   - [x] Step 5: Run focused and architecture tests (`src/features/sysml/interactionContext.test.ts`, `src/components/modelExplorer/AppModelExplorer.test.tsx`, `src/engine/sysml/architectureGuards.test.ts`)
   - [x] Step 6: Commit Task 1 changes
-- [ ] Task 2: Complete Package Diagram Creation and Exact Navigation
-  - [ ] Step 1: Add failing tests for the complete package-diagram lifecycle
-  - [ ] Step 2: Run focused tests and verify missing behavior
-  - [ ] Step 3: Centralize package-diagram eligibility and command construction
-  - [ ] Step 4: Make creation one repository transaction and open by returned ID
-  - [ ] Step 5: Implement deterministic navigation target selection
-  - [ ] Step 6: Add Playwright coverage
-  - [ ] Step 7: Run package/navigation verification
-  - [ ] Step 8: Commit Task 2 changes
+- [x] Task 2: Complete Package Diagram Creation and Exact Navigation
+  - [x] Step 1: Add failing tests for the complete package-diagram lifecycle
+  - [x] Step 2: Run focused tests and verify missing behavior
+  - [x] Step 3: Centralize package-diagram eligibility and command construction
+  - [x] Step 4: Make creation one repository transaction and open by returned ID
+  - [x] Step 5: Implement deterministic navigation target selection
+  - [x] Step 6: Add Playwright coverage
+  - [x] Step 7: Run package/navigation verification
+  - [x] Step 8: Commit Task 2 changes
 - [ ] Task 3: Context-Aware Creation Without Redundant Parent Prompts
   - [ ] Step 1: Write command-parity and no-parent-dialog tests
   - [ ] Step 2: Run tests and verify failure

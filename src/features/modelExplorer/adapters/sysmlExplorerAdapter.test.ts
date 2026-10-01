@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSysmlExplorerAdapter } from './sysmlExplorerAdapter';
+import { createSysmlExplorerAdapter, diagramKindsFor } from './sysmlExplorerAdapter';
 import type { ModelExplorerCommand } from '../modelExplorerTypes';
 import { createSysmlGatewayState, executeSysmlCommand, projectLegacyDiagram, type SysmlGatewayState } from '../../../services/sysmlCommandGateway';
 import { createEmptyRepository, type BlockDefinition, type InterfaceDefinition, type PartUsage, type RequirementDefinition, type SysmlRelationship } from '../../../engine/sysml/model';
 import { buildCreateOwnedPortCommand, type CanonicalPortKind } from '../../../services/sysmlOwnedFeatureCommands';
 import { createModelExplorerCommandBus } from '../modelExplorerCommandBus';
+import { createInitialNavigationState, openExactDiagram } from '../../../services/sysmlDiagramNavigation';
 
 function createTestHarness(initialState?: SysmlGatewayState) {
   let state = initialState ?? createSysmlGatewayState();
@@ -959,5 +960,35 @@ describe('sysmlExplorerAdapter', () => {
     });
     expect(proxyResult.committed).toBe(false);
     expect(proxyResult.diagnostics.some(d => d.code === 'TYPE_NOT_FOUND')).toBe(true);
+  });
+
+  it('offers Package Diagram only on Model and Package owners', () => {
+    const repository = {
+      ...createEmptyRepository(),
+      packages: {
+        'pkg-1': { id: 'pkg-1', name: 'Powertrain', kind: 'package', ownerId: 'model', namespace: [] },
+      },
+      definitions: {
+        'block-1': { id: 'block-1', name: 'Motor', kind: 'block', ownerId: 'pkg-1', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] },
+      },
+    };
+    expect(diagramKindsFor(repository, 'model')).toContain('package');
+    expect(diagramKindsFor(repository, 'pkg-1')).toContain('package');
+    expect(diagramKindsFor(repository, 'block-1')).not.toContain('package');
+  });
+
+  it('creates and opens the exact repository diagram', () => {
+    const harness = createTestHarness();
+    harness.executeCommand({
+      type: 'createElement',
+      element: { id: 'pkg-1', name: 'Architecture', kind: 'package', ownerId: 'model', namespace: [] },
+    });
+    const adapter = createSysmlExplorerAdapter(harness);
+    const initial = createInitialNavigationState();
+    const result = adapter.execute({ type: 'createDiagram', ownerId: 'pkg-1', diagramKind: 'package', name: 'Interfaces' });
+    expect(result.committed).toBe(true);
+    expect(harness.state.repository.diagrams[result.selectedIds![0]]).toMatchObject({ ownerId: 'pkg-1', diagramKind: 'package' });
+    expect(openExactDiagram(initial, result.selectedIds![0], harness.state.repository).activeDiagramId)
+      .toBe(result.selectedIds![0]);
   });
 });

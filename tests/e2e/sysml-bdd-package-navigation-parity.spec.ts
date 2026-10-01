@@ -864,4 +864,57 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe(diagramIdB);
   });
 
+  test('creates a package diagram from a package and restores exact navigation', async ({ page }) => {
+    // 1. Create a Package
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      execute({
+        type: 'createElement',
+        element: {
+          id: 'pkg-powertrain',
+          name: 'Powertrain',
+          kind: 'package',
+          namespace: [],
+          ownerId: 'model',
+        },
+      });
+    });
+
+    // 2. Create a Package Diagram under Powertrain
+    const result = await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      return execute({
+        type: 'createDiagram',
+        diagram: {
+          id: 'pkg-diag-powertrain',
+          name: 'Powertrain Package Diagram',
+          kind: 'diagram',
+          diagramKind: 'package',
+          ownerId: 'pkg-powertrain',
+          namespace: ['Powertrain'],
+        },
+      });
+    });
+    expect(result.committed).toBe(true);
+
+    // 3. Open the diagram and verify activeDiagramId
+    await page.evaluate((id) => {
+      (window as any).__adiaTestHooks?.openExactDiagram?.(id);
+    }, 'pkg-diag-powertrain');
+
+    const activeId = await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.());
+    expect(activeId).toBe('pkg-diag-powertrain');
+
+    // 4. Save and reload project
+    const savedPath = await saveProject(page, 'pkg-diag-test.adia');
+    await reloadAndReopenProject(page, savedPath);
+
+    // 5. Open the restored diagram and verify
+    await page.evaluate((id) => {
+      (window as any).__adiaTestHooks?.openExactDiagram?.(id);
+    }, 'pkg-diag-powertrain');
+
+    const restoredId = await page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.());
+    expect(restoredId).toBe('pkg-diag-powertrain');
+  });
 });

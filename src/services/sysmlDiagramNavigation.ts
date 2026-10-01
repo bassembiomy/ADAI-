@@ -33,18 +33,21 @@ export function createInitialNavigationState(initial?: Partial<DiagramNavigation
 
 export function openExactDiagram(
   state: DiagramNavigationState,
-  repo: Pick<SysmlRepository, 'diagrams' | 'definitions'>,
-  diagramId: string,
+  arg2: Pick<SysmlRepository, 'diagrams' | 'definitions'> | string,
+  arg3: string | Pick<SysmlRepository, 'diagrams' | 'definitions'>,
   diagramKind?: string,
   options?: { preserveReturnStack?: boolean },
 ): DiagramNavigationState {
-  const existingDiagram = repo.diagrams[diagramId];
+  const repo = typeof arg2 === 'string'
+    ? (arg3 as Pick<SysmlRepository, 'diagrams' | 'definitions'>)
+    : arg2;
+  const diagramId = typeof arg2 === 'string'
+    ? arg2
+    : (arg3 as string);
+
+  const existingDiagram = repo?.diagrams ? repo.diagrams[diagramId] : undefined;
   // Kind resolves from the real diagram record, an explicit caller override,
-  // or the current state — never by echoing the requested ID. The previous
-  // pseudo-ID inference (treating an unknown 'bdd'/'package'/… ID as its own
-  // kind) fabricated kinds for dangling targets. Behavior-compatible: the
-  // live caller (App.tsx diagram double-click) only passes real diagram IDs,
-  // which resolve via existingDiagram exactly as before.
+  // or the current state — never by echoing the requested ID.
   const resolvedKind = existingDiagram?.diagramKind ?? diagramKind ?? state.diagramKind;
 
   return {

@@ -23,7 +23,10 @@ import {
   getElementKindLabel,
   getRelationshipKindLabel,
   getDiagramKindLabel,
+  allowedDiagramKinds,
+  diagramKindsFor,
 } from '../modelExplorerCapabilities';
+export { allowedDiagramKinds, diagramKindsFor };
 import {
   buildCreateOwnedPortCommand,
   buildCreateOwnedPropertyCommand,

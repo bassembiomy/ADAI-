@@ -265,6 +265,26 @@ export function resolveSemanticElement(
       ownerId: def.ownerId ?? null,
     } as SemanticElement;
   }
+  if (repository.packages && repository.packages[id]) {
+    const pkg = repository.packages[id];
+    return {
+      id: pkg.id,
+      name: pkg.name,
+      metaclass: 'Package',
+      namespace: pkg.namespace ?? [],
+      ownerId: pkg.ownerId ?? null,
+    } as SemanticElement;
+  }
+  if (repository.requirements && repository.requirements[id]) {
+    const req = repository.requirements[id];
+    return {
+      id: req.id,
+      name: req.name,
+      metaclass: 'Requirement',
+      namespace: req.namespace ?? [],
+      ownerId: req.ownerId ?? null,
+    } as SemanticElement;
+  }
   if (repository.definitions && (id === 'model' || id === 'root')) {
     return {
       id: 'pkg-root',

@@ -7629,8 +7629,9 @@ const ADIA = () => {
         diagram,
       });
       if (result.committed) {
-        setActivePackageDiagramId(newDiagramId);
-        openExactDiagramById(newDiagramId);
+        const createdId = result.selectedIds?.[0] ?? newDiagramId;
+        setActivePackageDiagramId(createdId);
+        openExactDiagramById(createdId);
       } else {
         result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       }
@@ -20824,8 +20825,9 @@ const ADIA = () => {
                       diagram,
                     });
                     if (result.committed) {
-                      setActivePackageDiagramId(newId);
-                      openExactDiagramById(newId);
+                      const createdId = result.selectedIds?.[0] ?? newId;
+                      setActivePackageDiagramId(createdId);
+                      openExactDiagramById(createdId);
                       setPackageDiagramChooser(null);
                     } else {
                       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));

@@ -1,6 +1,7 @@
-import type { MetaclassKind } from '../../engine/sysml/domain/base';
+import type { MetaclassKind, SemanticElement } from '../../engine/sysml/domain/base';
+import type { DiagramKind } from '../../engine/sysml/domain/presentations';
 import { getSupportedElementKinds } from '../../engine/sysml/capabilities/catalog';
-import { OWNERSHIP_MATRIX } from '../../engine/sysml/capabilities/ownershipPolicy';
+import { OWNERSHIP_MATRIX, resolveSemanticElement } from '../../engine/sysml/capabilities/ownershipPolicy';
 
 function metaclassToExplorerKinds(metaclass: MetaclassKind): string[] {
   switch (metaclass) {
@@ -56,6 +57,20 @@ export const SYSML_DIAGRAM_KINDS: Record<string, readonly string[]> = {
   package: ['bdd', 'requirements', 'rtm', 'package'],
   block: ['ibd', 'bdd', 'stateMachine'],
 };
+
+export function allowedDiagramKinds(owner: SemanticElement): DiagramKind[] {
+  if (owner.metaclass === 'Model' || owner.metaclass === 'Package') {
+    return ['bdd', 'requirements', 'rtm', 'package'];
+  }
+  if (owner.metaclass === 'Block') return ['ibd', 'bdd', 'stateMachine'];
+  return [];
+}
+
+export function diagramKindsFor(repository: any, ownerId: string): DiagramKind[] {
+  const owner = resolveSemanticElement(repository, ownerId);
+  if (!owner) return [];
+  return allowedDiagramKinds(owner);
+}
 
 const BASE_ELEMENT_KIND_LABELS: Record<string, string> = {
   model: 'Model',
