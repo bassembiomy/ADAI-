@@ -1540,7 +1540,7 @@ export function executeSysmlCommand(
         : rawKind === 'flowPort' || rawKind === 'flow'
         ? 'flowPort'
         : rawKind;
-    return executeSysmlMutation(
+    return executeSysmlCommand(
       state,
       {
         type: 'createOwnedFeature',
@@ -1554,6 +1554,7 @@ export function executeSysmlCommand(
         diagramId: command.diagramId,
         presentation: command.presentation,
       },
+      command.diagramId,
       endpointContext
     );
   }

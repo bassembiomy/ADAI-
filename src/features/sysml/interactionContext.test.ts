@@ -20,8 +20,6 @@ describe('resolveInteractionContext', () => {
         metaclass: 'Block',
         namespace: [],
         ownerId: 'pkg-1',
-        isAbstract: false,
-        isLeaf: false,
       },
       'block-b': {
         id: 'block-b',
@@ -29,8 +27,6 @@ describe('resolveInteractionContext', () => {
         metaclass: 'Block',
         namespace: [],
         ownerId: 'pkg-1',
-        isAbstract: false,
-        isLeaf: false,
       },
       'block-c': {
         id: 'block-c',
@@ -38,8 +34,6 @@ describe('resolveInteractionContext', () => {
         metaclass: 'Block',
         namespace: [],
         ownerId: 'pkg-1',
-        isAbstract: false,
-        isLeaf: false,
       },
     },
     diagrams: {

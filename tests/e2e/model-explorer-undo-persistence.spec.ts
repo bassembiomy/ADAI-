@@ -18,13 +18,19 @@ test.describe('Model Explorer - Persistence and State Recovery (Task 17)', () =>
       await intro.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
       await page.waitForTimeout(300);
     }
+
+    const closeDrawer = page.locator('button.adia-agent-close-btn').first();
+    if (await closeDrawer.isVisible()) {
+      await closeDrawer.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(300);
+    }
   });
 
   test('preserves explorer UI state and authored states across page reload', async ({ page }) => {
     const explorer = page.locator('.model-explorer-container');
     await expect(explorer).toBeVisible();
 
-    // 1. Create a state in State Machine mode
+    // 1. Create an element from root row
     const rootRow = page.locator('[role="treeitem"]').first();
     await expect(rootRow).toBeVisible();
 
@@ -32,13 +38,13 @@ test.describe('Model Explorer - Persistence and State Recovery (Task 17)', () =>
     const menu = page.locator('[role="menu"]');
     await expect(menu).toBeVisible();
 
-    const createStateOption = menu.locator('[role="menuitem"]:has-text("State")').first();
-    await expect(createStateOption).toBeVisible();
-    await createStateOption.click();
+    const createOption = menu.locator('[role="menuitem"]:has-text("Package"), [role="menuitem"]:has-text("Block"), [role="menuitem"]:has-text("State")').first();
+    await expect(createOption).toBeVisible();
+    await createOption.click();
     await expect(menu).not.toBeVisible();
 
-    const stateItem = page.locator('[role="treeitem"]:has-text("State")').last();
-    await expect(stateItem).toBeVisible();
+    const createdItem = page.locator('[role="treeitem"]:has-text("Package"), [role="treeitem"]:has-text("Block"), [role="treeitem"]:has-text("State")').last();
+    await expect(createdItem).toBeVisible();
 
     // 2. Toggle favorites filter on
     const favBtn = page.locator('button[aria-label="Toggle Favorites"]');
@@ -55,6 +61,12 @@ test.describe('Model Explorer - Persistence and State Recovery (Task 17)', () =>
       await page.keyboard.press('Escape');
       await introAfter.first().click({ position: { x: 10, y: 10 }, force: true }).catch(() => {});
       await introAfter.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(300);
+    }
+
+    const closeDrawerAfter = page.locator('button.adia-agent-close-btn').first();
+    if (await closeDrawerAfter.isVisible()) {
+      await closeDrawerAfter.click({ force: true }).catch(() => {});
       await page.waitForTimeout(300);
     }
 

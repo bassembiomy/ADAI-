@@ -148,6 +148,7 @@ export function buildOwnedElementPlan(
       return {
         kind: 'typeSelection',
         request: {
+          ownerId,
           featureKind: (intent.portKind === 'proxyPort' ? 'proxyPort' : intent.portKind) as any,
           candidates,
           action: {
@@ -185,6 +186,7 @@ export function buildOwnedElementPlan(
       return {
         kind: 'typeSelection',
         request: {
+          ownerId,
           featureKind: (intent.metaclass === 'PartProperty'
             ? 'part'
             : intent.metaclass === 'ReferenceProperty'

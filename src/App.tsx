@@ -6493,11 +6493,9 @@ const ADIA = () => {
           setSysmlStore(nextState.store);
         }
       },
-      onStateChange: (result) => {
-        projectCanonicalAppView(result.repository, result.coordinates, result.diagramPresentations);
-      },
+      onStateChange: () => {},
     });
-  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+  }, [canonicalSysmlRepository, sysmlStore]);
 
   const externalEndpointContext = useMemo<SemanticEndpointContext>(() => {
     const map = new Map<string, ExternalSemanticEndpoint>();
@@ -7610,7 +7608,7 @@ const ADIA = () => {
         diagram,
       });
       if (result.committed) {
-        const createdId = result.selectedIds?.[0] ?? newDiagramId;
+        const createdId = newDiagramId;
         setActivePackageDiagramId(createdId);
         openExactDiagramById(createdId);
       } else {
@@ -20798,7 +20796,7 @@ const ADIA = () => {
                       diagram,
                     });
                     if (result.committed) {
-                      const createdId = result.selectedIds?.[0] ?? newId;
+                      const createdId = newId;
                       setActivePackageDiagramId(createdId);
                       openExactDiagramById(createdId);
                       setPackageDiagramChooser(null);

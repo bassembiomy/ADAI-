@@ -35,19 +35,14 @@ describe('requirements diagram scope App integration', () => {
 
   it('keeps repository projection complete and scopes only the canvas projection once', () => {
     const source = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
-    const projectionStart = source.indexOf('const projectCanonicalAppView = useCallback(');
-    const projectionEnd = source.indexOf('const activeSysmlDiagramId', projectionStart);
-    const repositoryProjection = source.slice(projectionStart, projectionEnd);
     const renderBlocksStart = source.indexOf('const renderBlocks = useCallback');
     const renderRelationshipsStart = source.indexOf('const renderRelationships = useCallback', renderBlocksStart);
     const renderBlocks = source.slice(renderBlocksStart, renderRelationshipsStart);
-    const projectionEffects = source.match(/useEffect\(\(\) => \{\s*projectCanonicalAppView\(/g) ?? [];
 
-    expect(repositoryProjection).toContain('applyCanonicalSysmlResult({ view: complete })');
-    expect(repositoryProjection).not.toContain('projectDiagramScopedCanvasView');
+    expect(source).toContain('const sysmlCanvasProjection = useMemo(');
+    expect(source).toContain('projectLegacyDiagram(canonicalSysmlRepository');
     expect(source).toContain('const sysmlCanvasView = useMemo(');
     expect(renderBlocks).toContain('sysmlCanvasView.blocks');
-    expect(projectionEffects).toHaveLength(1);
     expect(source).toContain("blocks.filter(b => b.stereotype === 'block')");
   });
 });

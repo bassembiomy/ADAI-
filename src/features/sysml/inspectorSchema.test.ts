@@ -59,11 +59,11 @@ describe('inspectorSchema', () => {
   it.each(supportedInspectorFixtures)('$metaclass exposes no fake editable controls', ({ selection }) => {
     const schema = getInspectorSchema(selection);
     expect(schema).toBeDefined();
-    for (const field of schema.fields) {
+    for (const field of schema!.fields) {
       if (field.mode === 'editable') expect(field.toCommand).toBeTypeOf('function');
       if (field.mode === 'readOnly') expect(field.readOnlyReason).toBeTruthy();
     }
-    for (const action of schema.actions.filter(action => action.enabled)) {
+    for (const action of schema!.actions.filter(action => action.enabled)) {
       expect(action.toCommand).toBeTypeOf('function');
     }
   });

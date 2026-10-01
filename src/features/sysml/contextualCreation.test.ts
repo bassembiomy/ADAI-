@@ -20,8 +20,6 @@ describe('planContextualCreation', () => {
         metaclass: 'Block',
         namespace: [],
         ownerId: 'pkg-1',
-        isAbstract: false,
-        isLeaf: false,
       },
       'control-if': {
         id: 'control-if',
@@ -29,8 +27,6 @@ describe('planContextualCreation', () => {
         metaclass: 'InterfaceBlock',
         namespace: [],
         ownerId: 'pkg-1',
-        isAbstract: false,
-        isLeaf: false,
       },
     },
     diagrams: {},

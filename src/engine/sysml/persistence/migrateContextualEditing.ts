@@ -1,13 +1,13 @@
-import type {
-  SysmlRepository,
-  ModelDiagramDefinition,
-  PackageDefinition,
-  BlockDefinition,
-  RequirementDefinition,
-  SysmlRelationship,
+import {
+  type SysmlRepository,
+  type ModelDiagramDefinition,
+  type PackageDefinition,
+  type BlockDefinition,
+  type RequirementDefinition,
+  type SysmlRelationship,
+  createEmptyRepository,
 } from '../model';
 import {
-  createEmptyRepository,
   type PresentationCoordinates,
   type DiagramPresentationInput,
 } from '../presentationState';

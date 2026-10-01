@@ -58,11 +58,11 @@
   - [x] Step 5: Prove save/load/undo identity
   - [x] Step 6: Run full repository and persistence verification
   - [x] Step 7: Commit Task 7 changes
-- [ ] Task 8: End-to-End Release Certification and Documentation
-  - [ ] Step 1: Add a single user-journey certification test
-  - [ ] Step 2: Add negative and accessibility scenarios
-  - [ ] Step 3: Run the focused certification matrix
-  - [ ] Step 4: Run static and release gates
-  - [ ] Step 5: Update conformance evidence and architecture documentation
-  - [ ] Step 6: Verify the final diff contains no placeholders or UI-only controls
-  - [ ] Step 7: Commit Task 8 changes
+- [x] Task 8: End-to-End Release Certification and Documentation
+  - [x] Step 1: Add a single user-journey certification test
+  - [x] Step 2: Add negative and accessibility scenarios
+  - [x] Step 3: Run the focused certification matrix
+  - [x] Step 4: Run static and release gates
+  - [x] Step 5: Update conformance evidence and architecture documentation
+  - [x] Step 6: Verify the final diff contains no placeholders or UI-only controls
+  - [x] Step 7: Commit Task 8 changes

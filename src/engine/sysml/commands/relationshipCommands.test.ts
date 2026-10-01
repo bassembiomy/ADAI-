@@ -18,10 +18,10 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
   it('creates connector ends and item flow atomically', () => {
     const repository = createEmptyRepositoryV4();
     repository.elements['system'] = { id: 'system', name: 'System', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' } as Block;
-    repository.elements['sensor'] = { id: 'sensor', name: 'sensor', metaclass: 'PartProperty', namespace: [], ownerId: 'system' } as PartProperty;
-    repository.elements['controller'] = { id: 'controller', name: 'controller', metaclass: 'PartProperty', namespace: [], ownerId: 'system' } as PartProperty;
-    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'sensor' } as Port;
-    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'controller' } as Port;
+    repository.elements['sensor'] = { id: 'sensor', name: 'sensor', metaclass: 'PartProperty', namespace: [], ownerId: 'system' } as unknown as PartProperty;
+    repository.elements['controller'] = { id: 'controller', name: 'controller', metaclass: 'PartProperty', namespace: [], ownerId: 'system' } as unknown as PartProperty;
+    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'sensor' } as unknown as Port;
+    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'controller' } as unknown as Port;
     repository.elements['signal'] = { id: 'signal', name: 'Signal', metaclass: 'Signal', namespace: [], ownerId: 'pkg-root' } as Signal;
 
     const result = createConnectorTransaction(repository, {
@@ -33,7 +33,7 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
 
     expect(result.success).toBe(true);
     expect(result.state.relationships[result.relationshipId]).toBeDefined();
-    expect(result.state.itemFlows[result.itemFlowId!].realizingRelationshipId).toBe(result.relationshipId);
+    expect(result.state.itemFlows![result.itemFlowId!].realizingRelationshipId).toBe(result.relationshipId);
   });
 
   it('rejects connector transaction when endpoint role does not exist', () => {
@@ -53,8 +53,8 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
   it('rejects connector transaction when nested path element does not exist', () => {
     const repository = createEmptyRepositoryV4();
     repository.elements['system'] = { id: 'system', name: 'System', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' } as Block;
-    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'system' } as Port;
-    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'system' } as Port;
+    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
+    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
 
     const result = createConnectorTransaction(repository, {
       ownerId: 'system',
@@ -68,8 +68,8 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
 
   it('rejects connector transaction when owner element does not exist', () => {
     const repository = createEmptyRepositoryV4();
-    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'pkg-root' } as Port;
-    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'pkg-root' } as Port;
+    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'pkg-root' } as unknown as Port;
+    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'pkg-root' } as unknown as Port;
 
     const result = createConnectorTransaction(repository, {
       ownerId: 'missing-owner',
@@ -84,8 +84,8 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
   it('deleting a relationship removes its realized item flow from the repository', () => {
     const repository = createEmptyRepositoryV4();
     repository.elements['system'] = { id: 'system', name: 'System', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' } as Block;
-    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'system' } as Port;
-    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'system' } as Port;
+    repository.elements['out'] = { id: 'out', name: 'out', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
+    repository.elements['in'] = { id: 'in', name: 'in', metaclass: 'Port', namespace: [], ownerId: 'system' } as unknown as Port;
     repository.elements['signal'] = { id: 'signal', name: 'Signal', metaclass: 'Signal', namespace: [], ownerId: 'pkg-root' } as Signal;
 
     const created = createConnectorTransaction(repository, {
@@ -99,7 +99,7 @@ describe('relationshipCommands: First-Class Relationships & Connections', () => 
     const relId = created.relationshipId;
     const ifId = created.itemFlowId!;
     expect(created.state.relationships[relId]).toBeDefined();
-    expect(created.state.itemFlows[ifId]).toBeDefined();
+    expect(created.state.itemFlows![ifId]).toBeDefined();
 
     const deleteRes = handleDeleteRelationship(created.state, {
       type: 'DeleteRelationship',
