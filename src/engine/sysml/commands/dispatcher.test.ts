@@ -156,4 +156,28 @@ describe('SysML Command and Transaction Boundary (Dispatcher)', () => {
     expect(redone).toBe(true);
     expect(mgr.getState().elements['blk-sensor']).toBeDefined();
   });
+
+  it('updates a connector nested end and preserves the opposite end', () => {
+    let repository = createEmptyRepositoryV4();
+    repository.elements['b1'] = { id: 'b1', name: 'B1', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
+    repository.elements['b2'] = { id: 'b2', name: 'B2', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
+    repository.relationships['connector-1'] = {
+      id: 'connector-1',
+      metaclass: 'Connector',
+      sourceId: 'b1',
+      targetId: 'b2',
+      sourceEnd: { id: 'end-a', roleId: 'b1' },
+      targetEnd: { id: 'end-b', roleId: 'b2' },
+    };
+
+    const result = dispatchSysmlCommand(repository, {
+      type: 'UpdateRelationship',
+      relationshipId: 'connector-1',
+      patch: { sourceEnd: { id: 'end-a', roleId: 'port-a', nestedPath: ['part-a', 'port-a'] } },
+    }, { source: 'ui' });
+
+    expect(result.success).toBe(true);
+    expect(result.state.relationships['connector-1'].targetEnd).toEqual(repository.relationships['connector-1'].targetEnd);
+  });
 });
+
