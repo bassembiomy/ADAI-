@@ -4,6 +4,8 @@ import {
   computeRelativeAngleAxis,
 } from './vlabFrameKinematics';
 import { blockEquations, BlockEquationArgs } from './vlabEquations';
+import { DAEAssembler } from './DAEAssembler';
+import { Node, Edge } from '@xyflow/react';
 
 const PI = Math.PI;
 
@@ -127,5 +129,37 @@ describe('angle_constraint equation: lambda mapped onto a 3D reaction torque', (
       ports: ['b', 'f'],
       nodeId: 'a1',
     }))).toThrow(/a1.*rotation axis.*undefined/i);
+  });
+});
+
+describe('DAEAssembler branch layout for constraint reactions', () => {
+  it('allocates an internal lambda plus fx/fy/fz/signal_d/signal_f for dist_constraint', () => {
+    const assembler = new DAEAssembler();
+    const nodes: Node[] = [
+      { id: 'd1', type: 'default', position: { x: 0, y: 0 }, data: { type: 'dist_constraint' } } as any,
+    ];
+    const system = assembler.assemble(nodes, []);
+    const names = [
+      'd1_branch_lambda', 'd1_branch_fx', 'd1_branch_fy', 'd1_branch_fz',
+      'd1_branch_signal_d', 'd1_branch_signal_f',
+    ];
+    for (const name of names) {
+      expect(system.variableNames).toContain(name);
+    }
+  });
+
+  it('allocates an internal lambda plus tx/ty/tz/signal_ang/signal_t for angle_constraint', () => {
+    const assembler = new DAEAssembler();
+    const nodes: Node[] = [
+      { id: 'a1', type: 'default', position: { x: 0, y: 0 }, data: { type: 'angle_constraint' } } as any,
+    ];
+    const system = assembler.assemble(nodes, []);
+    const names = [
+      'a1_branch_lambda', 'a1_branch_tx', 'a1_branch_ty', 'a1_branch_tz',
+      'a1_branch_signal_ang', 'a1_branch_signal_t',
+    ];
+    for (const name of names) {
+      expect(system.variableNames).toContain(name);
+    }
   });
 });

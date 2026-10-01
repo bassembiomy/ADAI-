@@ -430,12 +430,22 @@ export class DAEAssembler {
         branches.push({ name: 'signal_rz', ports: [{ id: 'rz', sign: 1 }] });
         break;
       case 'dist_constraint':
-        branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        // lambda is an internal scalar multiplier (no Kirchhoff port); fx/fy/fz
+        // carry the reaction force into the Frame equilibrium at B and F.
+        branches.push({ name: 'lambda', ports: [] });
+        branches.push({ name: 'fx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fy', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'fz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
         if (ports.includes('d')) branches.push({ name: 'signal_d', ports: [{ id: 'd', sign: 1 }] });
         if (ports.includes('f_reac')) branches.push({ name: 'signal_f', ports: [{ id: 'f_reac', sign: 1 }] });
         break;
       case 'angle_constraint':
-        branches.push({ name: 'torque', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        // lambda is an internal scalar multiplier (no Kirchhoff port); tx/ty/tz
+        // carry the reaction torque into the Frame equilibrium at B and F.
+        branches.push({ name: 'lambda', ports: [] });
+        branches.push({ name: 'tx', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'ty', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'tz', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
         if (ports.includes('ang')) branches.push({ name: 'signal_ang', ports: [{ id: 'ang', sign: 1 }] });
         if (ports.includes('t_reac')) branches.push({ name: 'signal_t', ports: [{ id: 't_reac', sign: 1 }] });
         break;
