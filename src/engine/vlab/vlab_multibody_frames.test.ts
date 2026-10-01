@@ -42,3 +42,40 @@ describe('VLab Multibody Frame Domains & Block Contracts', () => {
     expect(transformSensor?.ports.find(p => p.id === 'rx')?.domain).toBe('Physical');
   });
 });
+
+import {
+  parseVector3,
+  eulerToRotationMatrix,
+  transformPoint,
+  computeFrameDistance,
+  computeRelativeAngle
+} from './vlabFrameKinematics';
+
+describe('VLab Frame Kinematics Math', () => {
+  it('parses various vector3 representations', () => {
+    expect(parseVector3('[1 2 3]')).toEqual([1, 2, 3]);
+    expect(parseVector3('[1, 2, 3]')).toEqual([1, 2, 3]);
+    expect(parseVector3('1 2 3')).toEqual([1, 2, 3]);
+    expect(parseVector3([4, 5, 6])).toEqual([4, 5, 6]);
+    expect(parseVector3(undefined, [0, 0, 0])).toEqual([0, 0, 0]);
+  });
+
+  it('computes 3D Euclidean frame distance', () => {
+    expect(computeFrameDistance([0, 0, 0], [3, 4, 0])).toBeCloseTo(5.0);
+    expect(computeFrameDistance([1, 1, 1], [1, 1, 1])).toBeCloseTo(0.0);
+  });
+
+  it('transforms vector with rotation matrix correctly (90 deg around Z)', () => {
+    const Rz90 = eulerToRotationMatrix(0, 0, Math.PI / 2);
+    const p = transformPoint(Rz90, [1, 0, 0]);
+    expect(p[0]).toBeCloseTo(0, 5);
+    expect(p[1]).toBeCloseTo(1, 5);
+    expect(p[2]).toBeCloseTo(0, 5);
+  });
+
+  it('computes relative angle between orientations', () => {
+    const ang = computeRelativeAngle([0, 0, 0], [0, 0, Math.PI / 2]);
+    expect(ang).toBeCloseTo(Math.PI / 2);
+  });
+});
+
