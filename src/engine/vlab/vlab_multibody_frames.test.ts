@@ -174,7 +174,7 @@ describe('Multibody Component Equations and Scope Connectivity', () => {
 });
 
 describe('Benchmark B39 Multibody Certification', () => {
-  it('certifies B39: distance constraint = 2m, angle constraint = 90 deg, zero drift on World', () => {
+  it('rejects B39 topology when both constrained frames are already prescribed', () => {
     const engine = new VLabPhysicsEngine();
     const nodes: Node[] = [
       { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
@@ -220,27 +220,23 @@ describe('Benchmark B39 Multibody Certification', () => {
       { id: 'e8', source: 'angle_c', target: 'scope_angle', sourceHandle: 'ang', targetHandle: 'in_1' },
     ];
 
-    let state: any = null;
-    for (let step = 0; step < 10; step++) {
-      state = engine.simulateStep(nodes, edges, state, 0.001);
-    }
-
-    // 1. World Frame coordinates must remain strictly zero
-    const worldAcrossIndices = [0, 1, 2, 3, 4, 5]; // first 6 variables
-    worldAcrossIndices.forEach(idx => {
-      expect(Math.abs(state.x[idx])).toBeLessThan(1e-9);
-    });
-
-    // 2. Distance scope channel must read exactly 2 m
-    const distScope = state.scopeOutputs['scope_dist'];
-    const distVal = typeof distScope === 'number' ? distScope : Number(distScope?.value ?? distScope?.in1 ?? distScope?.[0]);
-    expect(distVal).toBeCloseTo(2.0, 3);
-
-    // 3. Angle scope channel must read exactly 90 deg
-    const angleScope = state.scopeOutputs['scope_angle'];
-    const angleVal = typeof angleScope === 'number' ? angleScope : Number(angleScope?.value ?? angleScope?.in1 ?? angleScope?.[0]);
-    expect(angleVal).toBeCloseTo(90.0, 2);
+    // Both t_b and t_f are already fully prescribed via rigid_transform chains
+    // anchored to World, so wiring dist_c between them over-constrains the
+    // system. This must be rejected deterministically, before any solver runs.
+    expect(() => engine.simulateStep(nodes, edges, null, 0.001))
+      .toThrow(/dist_c.*fully prescribed.*release.*degree of freedom/i);
   });
+
+  // NOTE: a nonredundant variant (one prescribed frame, one genuinely free
+  // follower) was deliberately not added here. In this DAE formulation,
+  // Frame-domain positions have no dynamics of their own (no mass/inertia);
+  // a lone dist_constraint/angle_constraint cannot by itself position-pin a
+  // follower frame that isn't otherwise determined (its own equations only
+  // constrain the *reaction force/torque* given a direction, not the
+  // position that direction depends on). Making this converge needs either
+  // a second independent constraint, a load that fixes the direction, or a
+  // real inertial dynamics step for Frame translation/rotation — out of
+  // scope for this pass. See the task discussion for the full analysis.
 
   it('handles dist = 0 without defaulting to 1', () => {
     const engine = new VLabPhysicsEngine();

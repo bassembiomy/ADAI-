@@ -7,6 +7,7 @@ import {
   normalizeVector3,
   computeRelativeAngleAxis
 } from './vlabFrameKinematics';
+import { MultibodyConstraintDiagnosticError } from './vlabConstraintDiagnostics';
 import {
   evaluateDOEModel,
   evaluateLegacyDOEEquation,
@@ -1916,7 +1917,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       // instead of leaving the distance equation (0 = 0) singular.
       res.push(lambda);
     } else if (!direction.defined) {
-      throw new Error(
+      throw new MultibodyConstraintDiagnosticError(
+        'UNDEFINED_DIRECTION',
+        nodeId,
+        [ports[bIdx] ?? 'b', ports[fIdx] ?? 'f'],
         `Block "${nodeId}": distance direction is undefined (B and F frames coincide) ` +
         `while a nonzero distance target (${targetDist}) is set. Separate the frames or set dist = 0.`
       );
@@ -1951,7 +1955,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       // trivially satisfied at zero relative rotation: pin lambda to zero.
       res.push(lambda);
     } else if (!relative.axisDefined) {
-      throw new Error(
+      throw new MultibodyConstraintDiagnosticError(
+        'UNDEFINED_DIRECTION',
+        nodeId,
+        [ports[bIdx] ?? 'b', ports[fIdx] ?? 'f'],
         `Block "${nodeId}": relative rotation axis is undefined (B and F frames share the same orientation) ` +
         `while a nonzero angle target (${angleDeg} deg) is set. Introduce a relative rotation or set angle = 0.`
       );

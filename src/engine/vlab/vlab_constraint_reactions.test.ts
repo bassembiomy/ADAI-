@@ -6,6 +6,11 @@ import {
 import { blockEquations, BlockEquationArgs } from './vlabEquations';
 import { DAEAssembler } from './DAEAssembler';
 import { Node, Edge } from '@xyflow/react';
+import {
+  validateMultibodyConstraintTopology,
+  MultibodyConstraintDiagnosticError,
+  ConstraintTopology,
+} from './vlabConstraintDiagnostics';
 
 const PI = Math.PI;
 
@@ -160,6 +165,80 @@ describe('DAEAssembler branch layout for constraint reactions', () => {
     ];
     for (const name of names) {
       expect(system.variableNames).toContain(name);
+    }
+  });
+});
+
+describe('validateMultibodyConstraintTopology', () => {
+  it('throws FULLY_PRESCRIBED when a constraint links two already-prescribed frames', () => {
+    const constraints: ConstraintTopology[] = [
+      { blockId: 'dist_c', type: 'dist_constraint', baseRoot: 'frame-a', followerRoot: 'frame-b' },
+    ];
+    const prescribed = new Set(['frame-a', 'frame-b']);
+    try {
+      validateMultibodyConstraintTopology(constraints, prescribed);
+      expect.fail('expected a MultibodyConstraintDiagnosticError to be thrown');
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MultibodyConstraintDiagnosticError);
+      expect(e.code).toBe('FULLY_PRESCRIBED');
+      expect(e.blockId).toBe('dist_c');
+    }
+  });
+
+  it('does not reject a constraint whose base and follower are the same already-prescribed root', () => {
+    const constraints: ConstraintTopology[] = [
+      { blockId: 'dist_c', type: 'dist_constraint', baseRoot: 'world', followerRoot: 'world' },
+    ];
+    expect(() => validateMultibodyConstraintTopology(constraints, new Set(['world']))).not.toThrow();
+  });
+
+  it('throws DUPLICATE_CONSTRAINT for two constraints spanning the same frame pair, naming both blocks', () => {
+    const constraints: ConstraintTopology[] = [
+      { blockId: 'dist_a', type: 'dist_constraint', baseRoot: 'frame-a', followerRoot: 'frame-b' },
+      { blockId: 'dist_b', type: 'dist_constraint', baseRoot: 'frame-b', followerRoot: 'frame-a' },
+    ];
+    try {
+      validateMultibodyConstraintTopology(constraints, new Set());
+      expect.fail('expected a MultibodyConstraintDiagnosticError to be thrown');
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MultibodyConstraintDiagnosticError);
+      expect(e.code).toBe('DUPLICATE_CONSTRAINT');
+      expect(e.message).toContain('dist_a');
+      expect(e.message).toContain('dist_b');
+    }
+  });
+});
+
+describe('UNDEFINED_DIRECTION diagnostics raised by the equation factories', () => {
+  it('flags dist_constraint with a nonzero target and coincident frames', () => {
+    try {
+      blockEquations.dist_constraint(baseArgs({
+        across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
+        branch: [1, 0, 0, 0],
+        params: { dist: 5 },
+        ports: ['b', 'f'],
+        nodeId: 'd1',
+      }));
+      expect.fail('expected a MultibodyConstraintDiagnosticError to be thrown');
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MultibodyConstraintDiagnosticError);
+      expect(e.code).toBe('UNDEFINED_DIRECTION');
+    }
+  });
+
+  it('flags angle_constraint with a nonzero target and coincident orientations', () => {
+    try {
+      blockEquations.angle_constraint(baseArgs({
+        across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
+        branch: [1, 0, 0, 0],
+        params: { angle: 90 },
+        ports: ['b', 'f'],
+        nodeId: 'a1',
+      }));
+      expect.fail('expected a MultibodyConstraintDiagnosticError to be thrown');
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MultibodyConstraintDiagnosticError);
+      expect(e.code).toBe('UNDEFINED_DIRECTION');
     }
   });
 });

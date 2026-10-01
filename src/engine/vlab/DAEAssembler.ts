@@ -3,6 +3,10 @@ import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations } from './vlabEquations';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
+import {
+  ConstraintTopology,
+  validateMultibodyConstraintTopology,
+} from './vlabConstraintDiagnostics';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
   'ps_lookup_2d', 'bldc_commutation', 'bldc_current_ctrl', 'bldc_pwm_ctrl',
@@ -971,6 +975,20 @@ export class DAEAssembler {
             nodeId: node.id
           });
         } catch (e) {
+          // Note: MultibodyConstraintDiagnosticError (UNDEFINED_DIRECTION) can
+          // legitimately be thrown here transiently — every Newton iteration
+          // evaluates this closure at the solver's current iterate, and the
+          // very first iterate of any simulation starts with every frame
+          // variable at exactly 0, which is momentarily degenerate for any
+          // dist_constraint/angle_constraint with a nonzero target even in a
+          // perfectly well-posed model. Letting it escape here would abort
+          // the *entire* residual vector (all components, not just this one)
+          // for every such model, so it is caught and zeroed like any other
+          // transient numerical error during iteration. The structural
+          // diagnostics that must never be swallowed (FULLY_PRESCRIBED,
+          // DUPLICATE_CONSTRAINT) are raised once, synchronously, by
+          // validateMultibodyConstraintTopology() in assemble() itself and
+          // never reach this per-iteration catch.
           console.error(`Error calculating residual for ${node.id} (${type}):`, e);
           return new Array(equationCount).fill(0);
         }
@@ -1047,6 +1065,56 @@ export class DAEAssembler {
         }
       });
     });
+
+    // Multibody constraint topology diagnostics: reject redundant/over-constrained
+    // dist_constraint / angle_constraint wiring deterministically, before any
+    // solver iteration runs (and before it can ever reach a degenerate residual
+    // evaluation on a structurally invalid model).
+    {
+      const prescribedFrameRoots = new Set<string>();
+      physicalNodes.forEach(pn => {
+        if ((pn.domain === 'frame' || pn.domain === 'multibodyframe') && referenceNodeIds.has(pn.id)) {
+          prescribedFrameRoots.add(pn.id);
+        }
+      });
+
+      // A rigid_transform fully determines its follower (F) pose given its
+      // base (B) pose, so prescription propagates through transform chains.
+      const rigidTransformLinks: { bRoot: string; fRoot: string }[] = [];
+      nodes.forEach(node => {
+        const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+        if (type !== 'rigid_transform') return;
+        const ports = nodePorts.get(node.id) || [];
+        if (!ports.includes('b') || !ports.includes('f')) return;
+        rigidTransformLinks.push({ bRoot: uf.find(`${node.id}_b`), fRoot: uf.find(`${node.id}_f`) });
+      });
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const link of rigidTransformLinks) {
+          if (prescribedFrameRoots.has(link.bRoot) && !prescribedFrameRoots.has(link.fRoot)) {
+            prescribedFrameRoots.add(link.fRoot);
+            grew = true;
+          }
+        }
+      }
+
+      const constraintTopologies: ConstraintTopology[] = [];
+      nodes.forEach(node => {
+        const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+        if (type !== 'dist_constraint' && type !== 'angle_constraint') return;
+        const ports = nodePorts.get(node.id) || [];
+        if (!ports.includes('b') || !ports.includes('f')) return;
+        constraintTopologies.push({
+          blockId: node.id,
+          type,
+          baseRoot: uf.find(`${node.id}_b`),
+          followerRoot: uf.find(`${node.id}_f`),
+        });
+      });
+
+      validateMultibodyConstraintTopology(constraintTopologies, prescribedFrameRoots);
+    }
 
     // KCL excluded node set remains empty so that physical signal nodes are mapped to branch variables for propagation
     const kclExcludedNodeIds = new Set<string>();
