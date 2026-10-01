@@ -232,4 +232,43 @@ test.describe('workspace tab highlight parity', () => {
     await expect(tabs.locator('[data-workspace-type="statemachine"]')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText(/^States:/)).toBeVisible();
   });
+
+  test('Root breadcrumb deselects a nested State Machine diagram until its tab is reopened', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const stateMachineFile = tabs.locator('[data-workspace-type="statemachine"]');
+    await stateMachineFile.click();
+    await page.getByRole('button', { name: 'Expand All' }).click();
+    await page.locator('.model-tree-row[data-node-id="sm:region:root"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'State', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand All' }).click();
+    const state = page.locator('.model-tree-row[data-kind="state"]').last();
+    await expect(state).toBeVisible();
+    await state.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Region', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand All' }).click();
+    const region = page.locator('.model-tree-row[data-kind="region"]:not([data-semantic-id="root"])').first();
+    await expect(region).toBeVisible();
+    const regionId = await region.getAttribute('data-semantic-id');
+    expect(regionId).not.toBe('root');
+    await region.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'State Machine Diagram', exact: true }).click();
+
+    const nestedId = await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramWorkspace?.()?.activeTab?.diagramId);
+    expect(nestedId).toBeTruthy();
+    expect(await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramWorkspace?.()?.activeTab?.contextRegionId)).toBe(regionId);
+    const nestedTab = tabs.locator(`[data-diagram-id="${nestedId}"]`);
+    await nestedTab.click();
+    await expect(nestedTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('button:has-text("Root")').first()).toBeVisible();
+    await stateMachineFile.getByTitle('Close Tab').click();
+    await expect(stateMachineFile).toHaveCount(0);
+    await page.locator('button:has-text("Root")').first().click();
+
+    await expect(nestedTab).toHaveAttribute('aria-selected', 'false');
+    await expect(stateMachineFile).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+    await nestedTab.click();
+    await expect(nestedTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('button:has-text("Root")').first()).toBeVisible();
+  });
 });

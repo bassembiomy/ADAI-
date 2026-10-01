@@ -6744,7 +6744,8 @@ const ADIA = () => {
    */
   const isDiagramWorkspaceTabRendered = useCallback((tab: DiagramWorkspaceTab): boolean => {
     if (tab.kind === 'stateMachineDiagram') {
-      return diagramMode === 'statemachine';
+      const diagram = seededStateMachineDiagrams.find(candidate => candidate.id === tab.diagramId);
+      return diagramMode === 'statemachine' && diagram?.contextRegionId === currentLayerId;
     }
     if (tab.kind !== 'sysmlDiagram') return false;
     const diagramKind = canonicalSysmlRepository.diagrams[tab.diagramId]?.diagramKind;
@@ -6753,7 +6754,7 @@ const ADIA = () => {
       ? activeSysmlDiagramId
       : null;
     return renderedDiagramId === null || renderedDiagramId === tab.diagramId;
-  }, [activeSysmlDiagramId, canonicalSysmlRepository, diagramMode]);
+  }, [activeSysmlDiagramId, canonicalSysmlRepository, diagramMode, seededStateMachineDiagrams, currentLayerId]);
 
   /**
    * The one active tab of the unified strip: an explicitly opened diagram view
@@ -9879,12 +9880,32 @@ const ADIA = () => {
     setDiagramMode('ibd');
   }, [selectedIds, blocks, diagramMode, currentLayerId, canonicalSysmlRepository, activeSysmlDiagramIdState, enterBlock, setDiagramMode]);
 
+  const syncStateMachineWorkspaceToLayer = useCallback((layerId: string) => {
+    const matchingTab = diagramWorkspace.tabs.find(tab =>
+      tab.kind === 'stateMachineDiagram' && tab.contextRegionId === layerId
+      && seededStateMachineDiagrams.some(diagram => diagram.id === tab.diagramId && diagram.contextRegionId === layerId)
+    );
+    if (matchingTab) {
+      setDiagramWorkspace(previous => ({ ...previous, activeTab: matchingTab }));
+      return;
+    }
+    const stateMachineFile = ensureDefaultStateMachineWorkspaceFile(workspaceFiles, (): WorkspaceFile => ({
+      id: 'default_sm', name: 'Main State Machine', type: 'statemachine', data: getActiveStateData('statemachine'),
+    }));
+    if (stateMachineFile.files !== workspaceFiles) setWorkspaceFiles(stateMachineFile.files);
+    setOpenTabIds(previous => previous.includes(stateMachineFile.file.id) ? previous : [...previous, stateMachineFile.file.id]);
+    setActiveFileId(stateMachineFile.file.id);
+    setDiagramWorkspace(previous => ({ ...previous, activeTab: null }));
+  }, [diagramWorkspace.tabs, seededStateMachineDiagrams, workspaceFiles, getActiveStateData]);
+
   const exitLayer = useCallback(() => {
     if (layerStack.length === 0) return;
     const parentLayerId = layerStack[layerStack.length - 1];
     setLayerStack(prev => prev.slice(0, -1));
     setLayerPath(prev => prev.slice(0, -1));
     setCurrentLayerId(parentLayerId);
+
+    if (diagramMode === 'statemachine') syncStateMachineWorkspaceToLayer(parentLayerId);
 
     if (diagramMode === 'ibd') {
       const nav = navigateBack(
@@ -9907,7 +9928,7 @@ const ADIA = () => {
 
     setSelectedIds([]);
     addError('info', 'Returned to parent layer');
-  }, [layerStack, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode]);
+  }, [layerStack, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode, syncStateMachineWorkspaceToLayer]);
 
   const goToLayer = useCallback((index: number) => {
     if (index >= layerPath.length - 1) return;
@@ -9915,6 +9936,8 @@ const ADIA = () => {
     setLayerStack(prev => prev.slice(0, index));
     setLayerPath(prev => prev.slice(0, index + 1));
     setCurrentLayerId(targetLayerId);
+
+    if (diagramMode === 'statemachine') syncStateMachineWorkspaceToLayer(targetLayerId);
 
     if (diagramMode === 'ibd') {
       if (targetLayerId === 'root' || index === 0) {
@@ -9941,7 +9964,7 @@ const ADIA = () => {
 
     setSelectedIds([]);
     addError('info', `Navigated to layer: ${layerPath[index]}`);
-  }, [layerStack, layerPath, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode]);
+  }, [layerStack, layerPath, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode, syncStateMachineWorkspaceToLayer]);
 
   // STATE MACHINE EDITOR
   const createState = useCallback((x: number, y: number, parentId?: string) => {
