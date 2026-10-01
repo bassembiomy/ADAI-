@@ -199,7 +199,7 @@ import {
   type DiagramWorkspaceTab,
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
-import { resolveCanvasSymbolDiagramTarget } from './features/modelExplorer/diagramTreeContext';
+import { resolveCanvasSymbolDiagramTarget, resolveExactDiagramCanvasContext } from './features/modelExplorer/diagramTreeContext';
 import type { StateMachineDiagramData } from './types/sm_types';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 
@@ -6342,6 +6342,14 @@ const ADIA = () => {
   // switching, and tabs. Rejected/unknown IDs return false and mutate
   // nothing: no tab is synthesized for a failed command.
   const openExactDiagramById = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean; workspaceAlreadyUpdated?: boolean }) => {
+    const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    const context = resolveExactDiagramCanvasContext(diagramId, currentRepo, {
+      states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams,
+    });
+    if (!context) return false;
+    setCurrentLayerId(context.layerId);
+    setLayerStack(context.layerStack);
+    setLayerPath(context.layerPath);
     const smDiagram = seededStateMachineDiagrams.find(diagram => diagram.id === diagramId);
     if (smDiagram) {
       const smTab: DiagramWorkspaceTab = { kind: 'stateMachineDiagram', diagramId, contextRegionId: smDiagram.contextRegionId };
@@ -6357,7 +6365,6 @@ const ADIA = () => {
       setDiagramModeState('statemachine');
       return true;
     }
-    const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
     const diagram = currentRepo.diagrams[diagramId];
     if (!diagram) return false;
     const currentActiveId = activeSysmlDiagramIdState || activeSysmlDiagramId;
@@ -6399,7 +6406,7 @@ const ADIA = () => {
       setDiagramModeState(nav.diagramKind as DiagramMode);
     }
     return true;
-  }, [seededStateMachineDiagrams, canonicalSysmlRepository, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
+  }, [seededStateMachineDiagrams, canonicalSysmlRepository, states, layers, transitions, junctions, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
 
   const openCanvasSymbolDiagram = useCallback((semanticId: string): boolean => {
     const diagramId = resolveCanvasSymbolDiagramTarget(semanticId, canonicalSysmlRepository, {
@@ -6407,24 +6414,6 @@ const ADIA = () => {
     });
     if (!diagramId) return false;
     const diagram = canonicalSysmlRepository.diagrams[diagramId];
-    if (diagram?.diagramKind === 'ibd') {
-      const contextId = diagram.contextElementId ?? diagram.ownerId;
-      const contextBlock = contextId ? canonicalSysmlRepository.definitions[contextId] : undefined;
-      if (contextBlock?.kind === 'block') {
-        setCurrentLayerId(contextBlock.id);
-        setLayerStack(['root']);
-        setLayerPath(['Root', contextBlock.name]);
-      }
-    } else if (diagram) {
-      setCurrentLayerId('root');
-      setLayerStack([]);
-      setLayerPath(['Root']);
-    } else {
-      const stateMachineDiagram = seededStateMachineDiagrams.find(candidate => candidate.id === diagramId);
-      if (stateMachineDiagram) {
-        setCurrentLayerId(stateMachineDiagram.contextRegionId);
-      }
-    }
     return openExactDiagramById(diagramId, { pushOrigin: diagram?.diagramKind === 'ibd' && diagramMode !== 'ibd' });
   }, [canonicalSysmlRepository, states, layers, transitions, junctions, seededStateMachineDiagrams, openExactDiagramById, diagramMode]);
 
@@ -7132,27 +7121,23 @@ const ADIA = () => {
 
   // Close tab function
   const closeTab = useCallback((fileId: string) => {
-    setOpenTabIds(prev => {
-      const next = prev.filter(id => id !== fileId);
+    const visibleIds = moduleWorkspaceFiles.map(file => file.id);
+    const index = visibleIds.indexOf(fileId);
+    if (index < 0) return;
+    setOpenTabIds(previous => previous.filter(id => id !== fileId));
+    if (activeWorkspaceTab.key !== moduleWorkspaceTabKey(fileId)) return;
 
-      if (activeFileId === fileId) {
-        if (next.length > 0) {
-          const index = prev.indexOf(fileId);
-          const nextActiveId = next[Math.min(index, next.length - 1)];
-          setTimeout(() => {
-            switchActiveFile(nextActiveId);
-          }, 0);
-        } else {
-          const fallbackId = 'default_sm';
-          setTimeout(() => {
-            setOpenTabIds([fallbackId]);
-            switchActiveFile(fallbackId);
-          }, 0);
-        }
-      }
-      return next;
-    });
-  }, [activeFileId, switchActiveFile]);
+    const remainingIds = visibleIds.filter(id => id !== fileId);
+    if (remainingIds.length > 0) {
+      activateWorkspaceTarget({ kind: 'file', fileId: remainingIds[Math.min(index, remainingIds.length - 1)] });
+      return;
+    }
+    const stateMachineFile = ensureDefaultStateMachineWorkspaceFile(workspaceFiles, (): WorkspaceFile => ({
+      id: 'default_sm', name: 'Main State Machine', type: 'statemachine', data: getActiveStateData('statemachine'),
+    })).file;
+    setOpenTabIds(previous => previous.includes(stateMachineFile.id) ? previous : [...previous, stateMachineFile.id]);
+    activateWorkspaceTarget({ kind: 'file', fileId: stateMachineFile.id }, { fallbackFile: stateMachineFile });
+  }, [moduleWorkspaceFiles, activeWorkspaceTab.key, activateWorkspaceTarget, workspaceFiles, getActiveStateData]);
 
   // Open file in tab function
   const openFileInTab = useCallback((fileId: string) => {
@@ -17048,27 +17033,8 @@ const ADIA = () => {
         // rejected without mutation.
         openExactDiagramById(id);
       } else if (targetDiagram.diagramKind === 'ibd') {
-        const ibdContextId = targetDiagram.contextElementId ?? targetDiagram.ownerId;
-        const ibdContextBlock = ibdContextId
-          ? canonicalSysmlRepository.definitions[ibdContextId]
-          : undefined;
-        if (ibdContextBlock?.kind === 'block') {
-          setCurrentLayerId(ibdContextBlock.id);
-          setLayerStack(['root']);
-          setLayerPath(['Root', ibdContextBlock.name]);
-          // IBD navigation stays Block-contextual with a
-          // return stack to its origin diagram.
-          openExactDiagramById(id, diagramMode !== 'ibd' ? { pushOrigin: true } : undefined);
-        } else {
-          setCurrentLayerId('root');
-          setLayerStack([]);
-          setLayerPath(['Root']);
-          openExactDiagramById(id);
-        }
+        openExactDiagramById(id, diagramMode !== 'ibd' ? { pushOrigin: true } : undefined);
       } else {
-        setCurrentLayerId('root');
-        setLayerStack([]);
-        setLayerPath(['Root']);
         openExactDiagramById(id);
       }
     } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {

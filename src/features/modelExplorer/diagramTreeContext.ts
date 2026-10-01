@@ -83,6 +83,51 @@ export function resolveCanvasSymbolDiagramTarget(
   return ids.size === 1 ? [...ids][0] : null;
 }
 
+export interface ExactDiagramCanvasContext {
+  layerId: string;
+  layerStack: string[];
+  layerPath: string[];
+}
+
+/** Resolves the canvas and breadcrumb state of an exact diagram before it opens. */
+export function resolveExactDiagramCanvasContext(
+  diagramId: string,
+  repository: SysmlRepository,
+  stateMachine?: StateMachineExplorerSnapshot,
+): ExactDiagramCanvasContext | null {
+  const stateMachineDiagram = stateMachine?.diagrams?.find(diagram => diagram.id === diagramId);
+  if (stateMachineDiagram && stateMachine) {
+    const contextRegionId = stateMachineDiagram.contextRegionId;
+    const layerStack: string[] = [];
+    const names: string[] = [];
+    const visited = new Set<string>();
+    let regionId = contextRegionId;
+    while (regionId !== 'root') {
+      if (visited.has(regionId)) return null;
+      visited.add(regionId);
+      const layer = stateMachine.layers.find(candidate => candidate.id === regionId);
+      const state = stateMachine.states.find(candidate => candidate.id === layer?.parentStateId);
+      if (!layer || !state) return null;
+      const parentRegionId = state.parentId ?? 'root';
+      if (!stateMachine.layers.some(candidate => candidate.id === parentRegionId)) return null;
+      layerStack.unshift(parentRegionId);
+      names.unshift(state.name);
+      regionId = parentRegionId;
+    }
+    if (!stateMachine.layers.some(layer => layer.id === contextRegionId)) return null;
+    return { layerId: contextRegionId, layerStack, layerPath: ['Root', ...names] };
+  }
+
+  const diagram = repository.diagrams[diagramId];
+  if (!diagram) return null;
+  if (diagram.diagramKind !== 'ibd') return { layerId: 'root', layerStack: [], layerPath: ['Root'] };
+  const contextId = diagram.contextElementId ?? diagram.ownerId;
+  const block = contextId ? repository.definitions[contextId] : undefined;
+  return block?.kind === 'block'
+    ? { layerId: block.id, layerStack: ['root'], layerPath: ['Root', block.name] }
+    : null;
+}
+
 /**
  * Builds `semanticId -> diagram tree node` for every element a diagram
  * presents. Later entries win deterministically because the tree shows one

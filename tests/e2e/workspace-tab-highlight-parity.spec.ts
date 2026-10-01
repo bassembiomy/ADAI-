@@ -175,4 +175,61 @@ test.describe('workspace tab highlight parity', () => {
     await expect(symbol).toBeVisible();
     await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getActiveDiagramId?.())).toBe('adia-default-bdd');
   });
+
+  test('IBD tab activation and close restore the destination block context', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const bdd = tabs.locator('[data-diagram-id="adia-default-bdd"]');
+    const ibdA = tabs.locator('[data-diagram-id="context-ibd-a"]');
+    const ibdB = tabs.locator('[data-diagram-id="context-ibd-b"]');
+    await bdd.click();
+    await page.evaluate(() => {
+      const execute = (window as any).__sysmlExecuteCommand;
+      for (const [id, name, x] of [['context-a', 'Context A', 150], ['context-b', 'Context B', 420]] as const) {
+        execute({
+          type: 'createAndPresent', diagramId: 'adia-default-bdd',
+          element: { id, name, kind: 'block', namespace: [], ownerId: 'model', isAbstract: false, isLeaf: false,
+            properties: [], ports: [], operations: [], constraints: [] },
+          presentation: { x, y: 160, width: 180, height: 120 },
+        });
+        execute({
+          type: 'createDiagram', diagram: { id: `context-ibd-${id.slice(-1)}`, name: `${name} IBD`, kind: 'diagram',
+            diagramKind: 'ibd', namespace: [], ownerId: id, contextElementId: id },
+        });
+      }
+    });
+
+    await page.locator('#adia-diagram-canvas g[data-semantic-id="context-a"]').dblclick();
+    await expect(ibdA).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: /Context A/ })).toBeVisible();
+    await bdd.click();
+    await page.locator('#adia-diagram-canvas g[data-semantic-id="context-b"]').dblclick();
+    await expect(ibdB).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: /Context B/ })).toBeVisible();
+
+    await ibdA.click();
+    await expect(ibdA).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: /Context A/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Context B/ })).toHaveCount(0);
+    await ibdA.getByTitle('Close Tab').click();
+    await expect(ibdB).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: /Context B/ })).toBeVisible();
+    await expect(tabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+  });
+
+  test('closing a module file underneath an exact diagram preserves the rendered tab', async ({ page }) => {
+    const tabs = page.getByTestId('diagram-workspace-tabs');
+    const stateMachine = tabs.locator('[data-workspace-type="statemachine"]');
+    const bdd = tabs.locator('[data-diagram-id="adia-default-bdd"]');
+    await bdd.click();
+    await expect(page.getByText(/^Blocks:/)).toBeVisible();
+    await stateMachine.getByTitle('Close Tab').click();
+
+    await expect(stateMachine).toHaveCount(0);
+    await expect(bdd).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+    await expect(page.getByText(/^Blocks:/)).toBeVisible();
+    await bdd.getByTitle('Close Tab').click();
+    await expect(tabs.locator('[data-workspace-type="statemachine"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText(/^States:/)).toBeVisible();
+  });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveDiagramSemanticOwner } from './diagramTreeContext';
+import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
 
 function diagramNode(id: string, domain: 'sysml' | 'stateMachine'): ModelTreeNode {
   return {
@@ -182,5 +182,37 @@ describe('resolveCanvasSymbolDiagramTarget', () => {
     expect(resolveCanvasSymbolDiagramTarget('state-1', createEmptyRepository(), stateMachine)).toBe('nested-sm-1');
     stateMachine.diagrams!.push({ id: 'second-sm', name: 'Other', ownerId: 'region-1', contextRegionId: 'region-1' });
     expect(resolveCanvasSymbolDiagramTarget('state-1', createEmptyRepository(), stateMachine)).toBeNull();
+  });
+});
+
+describe('resolveExactDiagramCanvasContext', () => {
+  it('restores an IBD context from its exact diagram rather than the prior canvas', () => {
+    const repository = repositoryWithDiagrams();
+    repository.diagrams['engine-ibd'] = {
+      id: 'engine-ibd', name: 'Engine IBD', namespace: [], ownerId: 'block-1', kind: 'diagram', diagramKind: 'ibd',
+      contextElementId: 'block-1',
+    };
+    expect(resolveExactDiagramCanvasContext('engine-ibd', repository)).toEqual({
+      layerId: 'block-1', layerStack: ['root'], layerPath: ['Root', 'Engine'],
+    });
+    expect(resolveExactDiagramCanvasContext('bdd-1', repository)).toEqual({
+      layerId: 'root', layerStack: [], layerPath: ['Root'],
+    });
+  });
+
+  it('restores nested State Machine breadcrumbs from the destination region', () => {
+    const snapshot = stateMachineWithNestedDiagram();
+    snapshot.states.push({ id: 'outer', name: 'Outer', parentId: 'root' } as StateMachineExplorerSnapshot['states'][number]);
+    snapshot.states.push({ id: 'inner', name: 'Inner', parentId: 'region-1' } as StateMachineExplorerSnapshot['states'][number]);
+    snapshot.layers[1].parentStateId = 'outer';
+    snapshot.layers.push({ id: 'region-2', name: 'Inner Region', parentStateId: 'inner', stateIds: [], transitionIds: [], junctionIds: [] });
+    snapshot.diagrams!.push({ id: 'deep-sm', name: 'Deep SM', ownerId: 'region-2', contextRegionId: 'region-2' });
+
+    expect(resolveExactDiagramCanvasContext('deep-sm', createEmptyRepository(), snapshot)).toEqual({
+      layerId: 'region-2', layerStack: ['root', 'region-1'], layerPath: ['Root', 'Outer', 'Inner'],
+    });
+    expect(resolveExactDiagramCanvasContext('missing', createEmptyRepository(), snapshot)).toBeNull();
+    snapshot.diagrams!.push({ id: 'stale-sm', name: 'Stale SM', ownerId: 'absent', contextRegionId: 'absent' });
+    expect(resolveExactDiagramCanvasContext('stale-sm', createEmptyRepository(), snapshot)).toBeNull();
   });
 });
