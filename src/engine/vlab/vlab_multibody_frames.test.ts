@@ -150,8 +150,124 @@ describe('Multibody Component Equations and Scope Connectivity', () => {
     expect(scopeData[1]).toBeCloseTo(2, 2);
     expect(scopeData[2]).toBeCloseTo(3, 2);
     expect(scopeData[3]).toBeCloseTo(90, 1);
+
+    // Verify mutating offset and rotation changes measurements dynamically
+    const mutatedNodes = nodes.map(n => {
+      if (n.id === 't1') {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            params: { offset: { value: '[5 10 15]' }, rotation: { value: '[45 0 0]' } }
+          }
+        };
+      }
+      return n;
+    });
+
+    state = engine.simulateStep(mutatedNodes as any, edges, state, 0.01);
+    const mutatedScope = state.scopeOutputs['scope1'];
+    expect(mutatedScope[0]).toBeCloseTo(5, 2);
+    expect(mutatedScope[1]).toBeCloseTo(10, 2);
+    expect(mutatedScope[2]).toBeCloseTo(15, 2);
   });
 });
+
+describe('Benchmark B39 Multibody Certification', () => {
+  it('certifies B39: distance constraint = 2m, angle constraint = 90 deg, zero drift on World', () => {
+    const engine = new VLabPhysicsEngine();
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      {
+        id: 't_b',
+        type: 'default',
+        position: { x: 100, y: 0 },
+        data: { type: 'rigid_transform', params: { offset: { value: '[0 0 0]' }, rotation: { value: '[0 0 0]' } } }
+      } as any,
+      {
+        id: 't_f',
+        type: 'default',
+        position: { x: 100, y: 100 },
+        data: { type: 'rigid_transform', params: { offset: { value: '[2 0 0]' }, rotation: { value: '[0 0 90]' } } }
+      } as any,
+      {
+        id: 'dist_c',
+        type: 'default',
+        position: { x: 250, y: 0 },
+        data: { type: 'dist_constraint', params: { dist: { value: 2 } } }
+      } as any,
+      {
+        id: 'angle_c',
+        type: 'default',
+        position: { x: 250, y: 100 },
+        data: { type: 'angle_constraint', params: { angle: { value: 90 } } }
+      } as any,
+      { id: 'scope_dist', type: 'default', position: { x: 400, y: 0 }, data: { type: 'scope' } } as any,
+      { id: 'scope_angle', type: 'default', position: { x: 400, y: 100 }, data: { type: 'scope' } } as any,
+    ];
+
+    const edges: Edge[] = [
+      { id: 'e1', source: 'world', target: 't_b', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 'world', target: 't_f', sourceHandle: 'w', targetHandle: 'b' },
+      // Connect distance constraint between t_b and t_f
+      { id: 'e3', source: 't_b', target: 'dist_c', sourceHandle: 'f', targetHandle: 'b' },
+      { id: 'e4', source: 't_f', target: 'dist_c', sourceHandle: 'f', targetHandle: 'f' },
+      // Connect angle constraint between t_b and t_f
+      { id: 'e5', source: 't_b', target: 'angle_c', sourceHandle: 'f', targetHandle: 'b' },
+      { id: 'e6', source: 't_f', target: 'angle_c', sourceHandle: 'f', targetHandle: 'f' },
+      // Connect scopes
+      { id: 'e7', source: 'dist_c', target: 'scope_dist', sourceHandle: 'd', targetHandle: 'in_1' },
+      { id: 'e8', source: 'angle_c', target: 'scope_angle', sourceHandle: 'ang', targetHandle: 'in_1' },
+    ];
+
+    let state: any = null;
+    for (let step = 0; step < 10; step++) {
+      state = engine.simulateStep(nodes, edges, state, 0.001);
+    }
+
+    // 1. World Frame coordinates must remain strictly zero
+    const worldAcrossIndices = [0, 1, 2, 3, 4, 5]; // first 6 variables
+    worldAcrossIndices.forEach(idx => {
+      expect(Math.abs(state.x[idx])).toBeLessThan(1e-9);
+    });
+
+    // 2. Distance scope channel must read exactly 2 m
+    const distScope = state.scopeOutputs['scope_dist'];
+    const distVal = typeof distScope === 'number' ? distScope : Number(distScope?.value ?? distScope?.in1 ?? distScope?.[0]);
+    expect(distVal).toBeCloseTo(2.0, 3);
+
+    // 3. Angle scope channel must read exactly 90 deg
+    const angleScope = state.scopeOutputs['scope_angle'];
+    const angleVal = typeof angleScope === 'number' ? angleScope : Number(angleScope?.value ?? angleScope?.in1 ?? angleScope?.[0]);
+    expect(angleVal).toBeCloseTo(90.0, 2);
+  });
+
+  it('handles dist = 0 without defaulting to 1', () => {
+    const engine = new VLabPhysicsEngine();
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      {
+        id: 'dist_c',
+        type: 'default',
+        position: { x: 200, y: 0 },
+        data: { type: 'dist_constraint', params: { dist: { value: 0 } } }
+      } as any,
+      { id: 'scope', type: 'default', position: { x: 350, y: 0 }, data: { type: 'scope' } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'world', target: 'dist_c', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 'world', target: 'dist_c', sourceHandle: 'w', targetHandle: 'f' },
+      { id: 'e3', source: 'dist_c', target: 'scope', sourceHandle: 'd', targetHandle: 'in_1' },
+    ];
+
+    const state = engine.simulateStep(nodes, edges, null, 0.001);
+    const scopeVal = typeof state.scopeOutputs['scope'] === 'number'
+      ? state.scopeOutputs['scope']
+      : Number(state.scopeOutputs['scope']?.value ?? state.scopeOutputs['scope']?.in1 ?? state.scopeOutputs['scope']?.[0]);
+    expect(scopeVal).toBeCloseTo(0.0, 5);
+  });
+});
+
 
 
 

@@ -1192,22 +1192,22 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Maintains a fixed angular relationship between two frames.'
   },
   grav_field: {
-    equations: ['F = m * g'],
-    latex: ['\mathbf{F}_g = m \mathbf{g}'],
+    equations: ['F = m * g * dir / |dir|', '|F| = m * g'],
+    latex: ['\\mathbf{F}_g = m \\, g \\, \\hat{\\mathbf{d}}'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Applies a uniform gravitational force to all mass-bearing components in the multibody system.'
+    description: 'Applies the weight F = m·g along the (normalized) direction vector to follower frame F, with the reaction on B when connected. Output |F| reports the force magnitude.'
   },
   spring_damper_force: {
-    equations: ['F = k*(x - x0) + b*v'],
-    latex: ['F = k \Delta x + b \dot{x}'],
+    equations: ['F = k*(x - x0) + b*(v1 - v2)', 'x = |P_f - P_b|', 'v = d/dt(x)'],
+    latex: ['F = k (x - x_0) + b (v_1 - v_2)'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Models a linear spring and damper acting between two frames. Opposes displacement and relative velocity.'
+    description: 'Linear spring and damper acting along the line between frames B and F. Positive F is tension. Outputs separation x, relative velocity v and force F.'
   },
   external_force: {
-    equations: ['F_total = F_ext + T_ext'],
-    latex: ['\mathbf{F}_{ext} = \mathbf{f}(t)'],
+    equations: ['F = force_scale * [Fx Fy Fz]', 'T = torque_scale * [Tx Ty Tz]'],
+    latex: ['\\mathbf{F} = s_F \\mathbf{f}(t)', '\\mathbf{T} = s_T \\boldsymbol{\\tau}(t)'],
     across: 'Frame', through: 'Force, Torque',
-    description: 'Allows for the application of time-varying forces and torques from external physical signals (PS).'
+    description: 'Applies force and torque vectors from physical-signal inputs (Fx..Tz), scaled by force_scale and torque_scale, to frame F. Outputs |F| and |T|.'
   },
   revolute_joint: {
     equations: ['theta = angle(b, f)', 'Tau = J*alpha + b*omega'],

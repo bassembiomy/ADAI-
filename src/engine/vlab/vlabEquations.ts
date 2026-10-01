@@ -16,7 +16,7 @@ import {
 
 export interface BlockEquationArgs {
   across: any[];        // values of across variables at the ports (scalars or 6-DOF frame arrays)
-  dAcross: number[];       // derivatives of across variables
+  dAcross: any[];          // derivatives of across variables (scalars or 6-DOF frame arrays)
   branch: number[];        // values of branch through-variables
   dBranch: number[];       // derivatives of branch through-variables
   state: number[];         // values of internal states
@@ -29,7 +29,26 @@ export interface BlockEquationArgs {
 
 export type BlockEquationFactory = (args: BlockEquationArgs) => number[];
 
-const trapezoidalBackEmf = (angle: number): number => {
+// Accepts 0 as a valid value; only missing/non-numeric params fall back.
+const numericParam = (value: any, fallback: number): number => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const asFrame = (v: any): number[] =>
+  Array.isArray(v) ? v : [Number(v) || 0, 0, 0, 0, 0, 0];
+
+const wrenchResiduals = (branch: number[], force: number[], torque: number[]): number[] => [
+  (branch[0] || 0) - force[0],
+  (branch[1] || 0) - force[1],
+  (branch[2] || 0) - force[2],
+  (branch[3] || 0) - torque[0],
+  (branch[4] || 0) - torque[1],
+  (branch[5] || 0) - torque[2],
+];
+
+const trapezoidalBackEmf =(angle: number): number => {
   const twoPi = 2 * Math.PI;
   const normalized = ((angle % twoPi) + twoPi) % twoPi;
 
@@ -1934,16 +1953,59 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       branch[0] + R * branch[1]
     ];
   },
-  grav_field: ({ branch, params }) => [
-    branch[0] - (params.g || 9.81)
-  ],
-  spring_damper_force: ({ across, branch, params }) => {
-    const k = params.k || 1000;
-    return [branch[0] - k * (across[0] - across[1])];
+  // Force elements: branch[0..5] is the wrench [Fx Fy Fz Tx Ty Tz] applied on
+  // frame F (the reaction acts on B); trailing branches are measurement signals.
+  grav_field: ({ branch, params, ports }) => {
+    const g = numericParam(params?.g, 9.81);
+    const m = numericParam(params?.mass, 1);
+    const dir = parseVector3(params?.direction, [0, 0, -1]);
+    const dirNorm = Math.hypot(dir[0], dir[1], dir[2]);
+    const unit = dirNorm > 0 ? dir.map(c => c / dirNorm) : [0, 0, 0];
+    const F = unit.map(c => m * g * c);
+    const res = wrenchResiduals(branch, F, [0, 0, 0]);
+    if (ports.includes('fm')) res.push((branch[6] || 0) - Math.hypot(F[0], F[1], F[2]));
+    return res;
   },
-  external_force: ({ branch, params }) => [
-    branch[0] - (params.force_scale || 1) * 10
-  ],
+  spring_damper_force: ({ across, dAcross, branch, params, ports }) => {
+    const k = numericParam(params?.k, 1000);
+    const b = numericParam(params?.b, 10);
+    const x0 = numericParam(params?.x0, 0);
+    const bIdx = ports.indexOf('b');
+    const fIdx = ports.indexOf('f');
+    const B = asFrame(across[bIdx]);
+    const Fr = asFrame(across[fIdx]);
+    const vB = asFrame(dAcross[bIdx]);
+    const vF = asFrame(dAcross[fIdx]);
+
+    const d = [Fr[0] - B[0], Fr[1] - B[1], Fr[2] - B[2]];
+    const dv = [vF[0] - vB[0], vF[1] - vB[1], vF[2] - vB[2]];
+    const L = Math.hypot(d[0], d[1], d[2]);
+    const n = L > 1e-12 ? d.map(c => c / L) : [0, 0, 0];
+    const vRel = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
+    // F = k(x - x0) + b(v1 - v2): positive in tension, pulls F back toward B.
+    const Fmag = k * (L - x0) + b * vRel;
+    const res = wrenchResiduals(branch, n.map(c => -Fmag * c), [0, 0, 0]);
+    let next = 6;
+    if (ports.includes('x')) res.push((branch[next++] || 0) - L);
+    if (ports.includes('v')) res.push((branch[next++] || 0) - vRel);
+    if (ports.includes('fm')) res.push((branch[next++] || 0) - Fmag);
+    return res;
+  },
+  external_force: ({ across, branch, params, ports }) => {
+    const forceScale = numericParam(params?.force_scale, 1);
+    const torqueScale = numericParam(params?.torque_scale, 1);
+    const input = (id: string) => {
+      const idx = ports.indexOf(id);
+      return idx >= 0 ? Number(across[idx]) || 0 : 0;
+    };
+    const F = ['in_fx', 'in_fy', 'in_fz'].map(id => forceScale * input(id));
+    const T = ['in_tx', 'in_ty', 'in_tz'].map(id => torqueScale * input(id));
+    const res = wrenchResiduals(branch, F, T);
+    let next = 6;
+    if (ports.includes('fm')) res.push((branch[next++] || 0) - Math.hypot(F[0], F[1], F[2]));
+    if (ports.includes('tm')) res.push((branch[next++] || 0) - Math.hypot(T[0], T[1], T[2]));
+    return res;
+  },
   revolute_joint: ({ across, branch, params }) => {
     const b = params.damping || 0.1;
     return [branch[0] - b * (across[0] - across[1])];

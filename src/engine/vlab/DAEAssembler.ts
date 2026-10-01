@@ -19,6 +19,22 @@ const SIGNAL_CONTROL_BLOCKS = new Set([
   'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport', 'nmos'
 ]);
 
+const FRAME_WRENCH_BRANCHES = ['fx', 'fy', 'fz', 'tx', 'ty', 'tz'];
+
+// Physical-signal measurement outputs of the multibody force elements, in equation order.
+const FRAME_FORCE_MEASUREMENTS: Record<string, string[]> = {
+  grav_field: ['fm'],
+  spring_damper_force: ['x', 'v', 'fm'],
+  external_force: ['fm', 'tm'],
+};
+
+// Blocks that load or observe a frame without constraining its pose. A frame
+// node touched only by these has no kinematic definition and is held at origin.
+const FRAME_NON_KINEMATIC_TYPES = new Set([
+  'grav_field', 'spring_damper_force', 'external_force', 'transform_sensor',
+  'scope', 'vlab_probe', 'conn_label',
+]);
+
 class UnionFind {
   parent: Record<string, string> = {};
 
@@ -444,11 +460,20 @@ export class DAEAssembler {
         break;
       case 'grav_field':
       case 'spring_damper_force':
-        branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+      case 'external_force': {
+        // Six wrench components applied on F (+1); the reaction acts on B (-1)
+        // only when B is wired, otherwise it is absorbed by the world.
+        const wrenchPorts = connectedPortKeys.has(`${blockId}_b`)
+          ? [{ id: 'f', sign: 1 }, { id: 'b', sign: -1 }]
+          : [{ id: 'f', sign: 1 }];
+        for (const name of FRAME_WRENCH_BRANCHES) {
+          branches.push({ name, ports: wrenchPorts });
+        }
+        for (const out of FRAME_FORCE_MEASUREMENTS[blockType]) {
+          if (ports.includes(out)) branches.push({ name: `signal_${out}`, ports: [{ id: out, sign: 1 }] });
+        }
         break;
-      case 'external_force':
-        branches.push({ name: 'force', ports: [{ id: 'f', sign: -1 }, { id: 'b', sign: 1 }] });
-        break;
+      }
       case 'heat_flow_sensor':
       case 'heat_sensor':
         branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
@@ -903,7 +928,14 @@ export class DAEAssembler {
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
             return 0;
           }
+          const isFramePort = domain === 'frame' || domain === 'multibodyframe';
+          if (isFramePort && !connectedPortKeys.has(key)) {
+            return [0, 0, 0, 0, 0, 0];
+          }
           const varIdx = portToVarIndex.get(key)!;
+          if (isFramePort) {
+            return [0, 1, 2, 3, 4, 5].map(k => dx[varIdx + k] ?? 0);
+          }
           return dx[varIdx];
         });
 
@@ -1070,6 +1102,22 @@ export class DAEAssembler {
           signs
         });
       }
+    });
+
+    // Frame nodes with no kinematic definition (only loads/sensors attached) would
+    // leave the pose undetermined and the applied wrench unbalanced; hold them at origin.
+    const floatingFrameNodeIds = new Set<string>();
+    physicalNodes.forEach(pn => {
+      if (pn.domain !== 'frame' && pn.domain !== 'multibodyframe') return;
+      if (referenceNodeIds.has(pn.id)) return;
+      const portsOnNode = rootToPorts.get(pn.id) || [];
+      const allNonKinematic = portsOnNode.every(pKey => {
+        const nodeId = pKey.slice(0, pKey.lastIndexOf('_'));
+        const n = nodes.find(item => item.id === nodeId);
+        const t = (n?.data as any)?.type || n?.type || (n?.data as any)?.blockId || '';
+        return FRAME_NON_KINEMATIC_TYPES.has(t);
+      });
+      if (allNonKinematic) floatingFrameNodeIds.add(pn.id);
     });
 
     // 6. Build Scope mapping — map each scope port to its connected source variable index (or unconnected fallback)
@@ -1252,6 +1300,12 @@ export class DAEAssembler {
           }
         } else if (pn.domain === 'frame' || pn.domain === 'multibodyframe') {
           const frameCoords = kirchhoffFrameNodes.get(pn.id);
+          if (floatingFrameNodeIds.has(pn.id)) {
+            for (let k = 0; k < 6; k++) {
+              res[acrossVarIdx + k] = x[acrossVarIdx + k];
+            }
+            return;
+          }
           for (let k = 0; k < 6; k++) {
             const fc = frameCoords ? frameCoords[k] : undefined;
             if (fc && fc.throughIndices.length > 0) {

@@ -6711,18 +6711,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 9.81,
             "unit": "m/s2",
             "label": "Gravity"
+          },
+          "mass": {
+            "value": 1,
+            "unit": "kg",
+            "label": "Mass"
+          },
+          "direction": {
+            "value": "[0 0 -1]",
+            "unit": "1",
+            "label": "Direction"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "|F|",
+            "domain": "Physical"
           }
         ],
         "equation": "Gravitational Field governing physical equation",
@@ -6744,18 +6762,43 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10,
             "unit": "N-s/m",
             "label": "Damping"
+          },
+          "x0": {
+            "value": 0,
+            "unit": "m",
+            "label": "Natural Length"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "x",
+            "domain": "Physical"
+          },
+          {
+            "id": "v",
+            "pos": "right",
+            "label": "v",
+            "domain": "Physical"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "F",
+            "domain": "Physical"
           }
         ],
         "equation": "Spring and Damper Force governing physical equation",
@@ -6781,14 +6824,64 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "f",
+            "id": "in_fx",
             "pos": "left",
-            "label": "F"
+            "label": "Fx",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_fy",
+            "pos": "left",
+            "label": "Fy",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_fz",
+            "pos": "left",
+            "label": "Fz",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_tx",
+            "pos": "left",
+            "label": "Tx",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_ty",
+            "pos": "left",
+            "label": "Ty",
+            "domain": "Physical"
+          },
+          {
+            "id": "in_tz",
+            "pos": "left",
+            "label": "Tz",
+            "domain": "Physical"
           },
           {
             "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
             "pos": "right",
-            "label": "B"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "|F|",
+            "domain": "Physical"
+          },
+          {
+            "id": "tm",
+            "pos": "right",
+            "label": "|T|",
+            "domain": "Physical"
           }
         ],
         "equation": "External Force and Torque governing physical equation",
