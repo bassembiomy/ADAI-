@@ -225,7 +225,10 @@ export class DAEAssembler {
         domain = nodePortDomains.get(ports[0]) || 'physical';
       }
       
-      const acrossIndex = varCount++;
+      const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
+      const stride = isFrameDomain ? 6 : 1;
+      const acrossIndex = varCount;
+      varCount += stride;
       nodeAcrossIndex.set(root, acrossIndex);
       
       physicalNodes.push({
@@ -234,8 +237,16 @@ export class DAEAssembler {
         acrossVarIndex: acrossIndex
       });
       
-      variableNames.push(`Across_${root}_(${domain})`);
-      isDifferentialState.push(false);
+      if (isFrameDomain) {
+        const frameSuffixes = ['Px', 'Py', 'Pz', 'Rx', 'Ry', 'Rz'];
+        frameSuffixes.forEach(s => {
+          variableNames.push(`Across_${root}_${s}_(${domain})`);
+          isDifferentialState.push(false);
+        });
+      } else {
+        variableNames.push(`Across_${root}_(${domain})`);
+        isDifferentialState.push(false);
+      }
     });
 
     // Map each port key to its across variable index
@@ -903,10 +914,10 @@ export class DAEAssembler {
     const referenceNodeIds = new Set<string>();
     const referenceNodeTargets = new Map<string, number>();
 
-    // Scan for reference components (e.g. ground, rot_ref, hydraulic_reference_il, etc.)
+    // Scan for reference components (e.g. world_frame, ground, rot_ref, hydraulic_reference_il, etc.)
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-      if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
+      if (['world_frame', 'ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
         const ports = nodePorts.get(node.id) || [];
         let targetVal = 0;
         if (type === 'gas_ref') {
@@ -949,7 +960,8 @@ export class DAEAssembler {
         const portsInRoot = rootToPorts.get(root) || [];
         if (portsInRoot.length === 1) {
           const domain = nodePortDomains.get(key);
-          if (['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) ||
+          const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
+          if ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain) ||
               domain === 'fluid' || domain === 'gas' || domain === 'thermal') {
             referenceNodeIds.add(root);
           }
@@ -1131,8 +1143,13 @@ export class DAEAssembler {
         const acrossVarIdx = pn.acrossVarIndex;
         
         if (referenceNodeIds.has(pn.id)) {
-          // Reference node potential/pressure/temperature
-          if (referenceNodeTargets.has(pn.id)) {
+          // Reference node potential/pressure/temperature/frame
+          if (pn.domain === 'frame' || pn.domain === 'multibodyframe') {
+            const target = referenceNodeTargets.get(pn.id) || 0;
+            for (let k = 0; k < 6; k++) {
+              res[acrossVarIdx + k] = x[acrossVarIdx + k] - target;
+            }
+          } else if (referenceNodeTargets.has(pn.id)) {
             res[acrossVarIdx] = x[acrossVarIdx] - referenceNodeTargets.get(pn.id)!;
           } else if (pn.domain === 'fluid' || pn.domain === 'gas' || pn.domain === 'isothermal_liquid') {
             res[acrossVarIdx] = x[acrossVarIdx] - 101325;

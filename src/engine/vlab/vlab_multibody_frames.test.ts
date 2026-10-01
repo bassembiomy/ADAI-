@@ -79,3 +79,34 @@ describe('VLab Frame Kinematics Math', () => {
   });
 });
 
+import { DAEAssembler } from './DAEAssembler';
+import { Node, Edge } from '@xyflow/react';
+
+describe('DAEAssembler Frame System Allocation & World Pinning', () => {
+  it('allocates 6 variables per Frame root and pins world_frame to 0', () => {
+    const assembler = new DAEAssembler();
+    const nodes: Node[] = [
+      { id: 'w1', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+    ];
+    const edges: Edge[] = [];
+
+    const system = assembler.assemble(nodes, edges);
+    // At least 6 across variables for world frame: Px, Py, Pz, Rx, Ry, Rz
+    expect(system.variableNames.some(name => name.includes('Across_') && name.includes('_Px'))).toBe(true);
+    expect(system.variableNames.some(name => name.includes('Across_') && name.includes('_Rz'))).toBe(true);
+
+    // Residual of world frame must pin x to 0
+    const ctx: any = { dt: 0.01, time: 0, parameters: {}, prevStates: new Array(system.systemSize).fill(0) };
+    const testX = new Array(system.systemSize).fill(5); // Non-zero test vector
+    const res = system.residuals(testX, ctx);
+
+    // For world frame variables, residual should be testX[idx] - 0 = 5
+    system.variableNames.forEach((name, idx) => {
+      if (name.includes('Across_') && (name.includes('frame') || name.includes('multibody'))) {
+        expect(res[idx]).toBe(5);
+      }
+    });
+  });
+});
+
+
