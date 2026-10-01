@@ -5,6 +5,7 @@ import { blockEquations } from './vlabEquations';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
   ConstraintTopology,
+  MultibodyConstraintDiagnosticError,
   validateMultibodyConstraintTopology,
 } from './vlabConstraintDiagnostics';
 
@@ -975,20 +976,6 @@ export class DAEAssembler {
             nodeId: node.id
           });
         } catch (e) {
-          // Note: MultibodyConstraintDiagnosticError (UNDEFINED_DIRECTION) can
-          // legitimately be thrown here transiently — every Newton iteration
-          // evaluates this closure at the solver's current iterate, and the
-          // very first iterate of any simulation starts with every frame
-          // variable at exactly 0, which is momentarily degenerate for any
-          // dist_constraint/angle_constraint with a nonzero target even in a
-          // perfectly well-posed model. Letting it escape here would abort
-          // the *entire* residual vector (all components, not just this one)
-          // for every such model, so it is caught and zeroed like any other
-          // transient numerical error during iteration. The structural
-          // diagnostics that must never be swallowed (FULLY_PRESCRIBED,
-          // DUPLICATE_CONSTRAINT) are raised once, synchronously, by
-          // validateMultibodyConstraintTopology() in assemble() itself and
-          // never reach this per-iteration catch.
           console.error(`Error calculating residual for ${node.id} (${type}):`, e);
           return new Array(equationCount).fill(0);
         }
@@ -1105,12 +1092,34 @@ export class DAEAssembler {
         if (type !== 'dist_constraint' && type !== 'angle_constraint') return;
         const ports = nodePorts.get(node.id) || [];
         if (!ports.includes('b') || !ports.includes('f')) return;
-        constraintTopologies.push({
-          blockId: node.id,
-          type,
-          baseRoot: uf.find(`${node.id}_b`),
-          followerRoot: uf.find(`${node.id}_f`),
-        });
+        const baseRoot = uf.find(`${node.id}_b`);
+        const followerRoot = uf.find(`${node.id}_f`);
+        constraintTopologies.push({ blockId: node.id, type, baseRoot, followerRoot });
+
+        // Both ports wired to the literal same frame stay coincident at
+        // EVERY possible position, so a nonzero target is impossible to
+        // satisfy no matter how the solver iterates — a genuine, purely
+        // structural fact, safe (and necessary) to catch once here rather
+        // than relying on a runtime direction that can never become defined.
+        if (baseRoot === followerRoot) {
+          const p = (node.data as any)?.params || {};
+          const unwrap = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+          const targetKey = type === 'dist_constraint' ? 'dist' : 'angle';
+          const rawTarget = p[targetKey];
+          const target = rawTarget !== undefined ? Number(unwrap(rawTarget)) : 0;
+          if (target !== 0) {
+            const noun = type === 'dist_constraint' ? 'distance direction' : 'relative rotation axis';
+            const unit = type === 'dist_constraint' ? '' : ' deg';
+            throw new MultibodyConstraintDiagnosticError(
+              'UNDEFINED_DIRECTION',
+              node.id,
+              ['b', 'f'],
+              `Block "${node.id}" (${type}): B and F are wired to the same frame, so its ${noun} ` +
+              `is undefined at every position, while a nonzero target (${target}${unit}) is set. ` +
+              `Wire B and F to distinct frames, or set ${targetKey} = 0.`
+            );
+          }
+        }
       });
 
       validateMultibodyConstraintTopology(constraintTopologies, prescribedFrameRoots);

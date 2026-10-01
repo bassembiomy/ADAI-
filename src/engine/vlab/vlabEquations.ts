@@ -7,7 +7,6 @@ import {
   normalizeVector3,
   computeRelativeAngleAxis
 } from './vlabFrameKinematics';
-import { MultibodyConstraintDiagnosticError } from './vlabConstraintDiagnostics';
 import {
   evaluateDOEModel,
   evaluateLegacyDOEEquation,
@@ -1900,7 +1899,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // B->F direction, so the per-coordinate Frame equilibrium equations
   // determine lambda from the attached load, exactly like a Lagrange
   // multiplier for |P_f - P_b| = L.
-  dist_constraint: ({ across, branch, params, ports, nodeId }) => {
+  dist_constraint: ({ across, branch, params, ports }) => {
     const bIdx = ports.indexOf('b');
     const fIdx = ports.indexOf('f');
     const B = asFrame(across[bIdx]);
@@ -1910,35 +1909,35 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const direction = normalizeVector3([F[0] - B[0], F[1] - B[1], F[2] - B[2]]);
     const lambda = branch[0] || 0;
 
-    const res: number[] = [];
-    if (!direction.defined && targetDist === 0) {
-      // No direction exists to carry a reaction, and the constraint is
-      // trivially satisfied at zero separation: pin the multiplier to zero
-      // instead of leaving the distance equation (0 = 0) singular.
-      res.push(lambda);
-    } else if (!direction.defined) {
-      throw new MultibodyConstraintDiagnosticError(
-        'UNDEFINED_DIRECTION',
-        nodeId,
-        [ports[bIdx] ?? 'b', ports[fIdx] ?? 'f'],
-        `Block "${nodeId}": distance direction is undefined (B and F frames coincide) ` +
-        `while a nonzero distance target (${targetDist}) is set. Separate the frames or set dist = 0.`
-      );
-    } else {
-      res.push(direction.magnitude - targetDist);
-    }
-    res.push((branch[1] || 0) - lambda * direction.unit[0]);
-    res.push((branch[2] || 0) - lambda * direction.unit[1]);
-    res.push((branch[3] || 0) - lambda * direction.unit[2]);
+    // When B and F exactly coincide there is no direction to carry a
+    // reaction. Falling back to a fixed, deterministic axis (rather than
+    // branching to a different equation, or throwing) keeps this equation
+    // continuous through the degenerate point: every Newton iterate of every
+    // simulation starts all-new frame variables at exactly 0, so any model
+    // with a nonzero target is transiently exactly here on its very first
+    // residual evaluation, even when well-posed. The fallback gives Newton a
+    // concrete, finite gradient to follow — pushing the frames apart along
+    // this axis — and the moment they separate, the real direction (now
+    // well-defined) takes over on the next evaluation. (The one case this
+    // genuinely cannot resolve — both ports wired to the literal same frame
+    // with a nonzero target, which stays coincident at every possible
+    // position — is rejected statically in DAEAssembler before solving.)
+    const n = direction.defined ? direction.unit : [0, 0, 1];
+    const actualDist = direction.defined ? direction.magnitude : 0;
+
+    const res = [actualDist - targetDist];
+    res.push((branch[1] || 0) - lambda * n[0]);
+    res.push((branch[2] || 0) - lambda * n[1]);
+    res.push((branch[3] || 0) - lambda * n[2]);
 
     let next = 4;
-    if (ports.includes('d')) res.push((branch[next++] || 0) - direction.magnitude);
+    if (ports.includes('d')) res.push((branch[next++] || 0) - actualDist);
     if (ports.includes('f_reac')) res.push((branch[next++] || 0) - Math.abs(lambda));
     return res;
   },
   // Branch layout: [lambda, tx, ty, tz, signal_ang?, signal_t?], mirroring
   // dist_constraint but along the relative rotation axis of Rrel = Rb^T*Rf.
-  angle_constraint: ({ across, branch, params, ports, nodeId }) => {
+  angle_constraint: ({ across, branch, params, ports }) => {
     const bIdx = ports.indexOf('b');
     const fIdx = ports.indexOf('f');
     const B = asFrame(across[bIdx]);
@@ -1949,28 +1948,18 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const relative = computeRelativeAngleAxis([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
     const lambda = branch[0] || 0;
 
-    const res: number[] = [];
-    if (!relative.axisDefined && targetAngleRad === 0) {
-      // No axis exists to carry a reaction torque, and the constraint is
-      // trivially satisfied at zero relative rotation: pin lambda to zero.
-      res.push(lambda);
-    } else if (!relative.axisDefined) {
-      throw new MultibodyConstraintDiagnosticError(
-        'UNDEFINED_DIRECTION',
-        nodeId,
-        [ports[bIdx] ?? 'b', ports[fIdx] ?? 'f'],
-        `Block "${nodeId}": relative rotation axis is undefined (B and F frames share the same orientation) ` +
-        `while a nonzero angle target (${angleDeg} deg) is set. Introduce a relative rotation or set angle = 0.`
-      );
-    } else {
-      res.push(relative.angle - targetAngleRad);
-    }
-    res.push((branch[1] || 0) - lambda * relative.axis[0]);
-    res.push((branch[2] || 0) - lambda * relative.axis[1]);
-    res.push((branch[3] || 0) - lambda * relative.axis[2]);
+    // See dist_constraint for why this uses a fixed fallback axis rather
+    // than branching/throwing when the two orientations exactly coincide.
+    const axis = relative.axisDefined ? relative.axis : [0, 0, 1];
+    const actualAngle = relative.axisDefined ? relative.angle : 0;
+
+    const res = [actualAngle - targetAngleRad];
+    res.push((branch[1] || 0) - lambda * axis[0]);
+    res.push((branch[2] || 0) - lambda * axis[1]);
+    res.push((branch[3] || 0) - lambda * axis[2]);
 
     let next = 4;
-    if (ports.includes('ang')) res.push((branch[next++] || 0) - relative.angle * 180 / Math.PI);
+    if (ports.includes('ang')) res.push((branch[next++] || 0) - actualAngle * 180 / Math.PI);
     if (ports.includes('t_reac')) res.push((branch[next++] || 0) - Math.abs(lambda));
     return res;
   },

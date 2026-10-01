@@ -98,7 +98,7 @@ describe('DAEAssembler Frame System Allocation & World Pinning', () => {
     // Residual of world frame must pin x to 0
     const ctx: any = { dt: 0.01, time: 0, parameters: {}, prevStates: new Array(system.systemSize).fill(0) };
     const testX = new Array(system.systemSize).fill(5); // Non-zero test vector
-    const res = system.residuals(testX, ctx);
+    const res = system.residuals(testX, new Array(system.systemSize).fill(0), ctx);
 
     // For world frame variables, residual should be testX[idx] - 0 = 5
     system.variableNames.forEach((name, idx) => {
@@ -226,17 +226,6 @@ describe('Benchmark B39 Multibody Certification', () => {
     expect(() => engine.simulateStep(nodes, edges, null, 0.001))
       .toThrow(/dist_c.*fully prescribed.*release.*degree of freedom/i);
   });
-
-  // NOTE: a nonredundant variant (one prescribed frame, one genuinely free
-  // follower) was deliberately not added here. In this DAE formulation,
-  // Frame-domain positions have no dynamics of their own (no mass/inertia);
-  // a lone dist_constraint/angle_constraint cannot by itself position-pin a
-  // follower frame that isn't otherwise determined (its own equations only
-  // constrain the *reaction force/torque* given a direction, not the
-  // position that direction depends on). Making this converge needs either
-  // a second independent constraint, a load that fixes the direction, or a
-  // real inertial dynamics step for Frame translation/rotation — out of
-  // scope for this pass. See the task discussion for the full analysis.
 
   it('handles dist = 0 without defaulting to 1', () => {
     const engine = new VLabPhysicsEngine();

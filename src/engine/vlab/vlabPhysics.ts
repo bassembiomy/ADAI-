@@ -101,6 +101,19 @@ export class VLabPhysicsEngine {
           x[idx] = T_init;
         } else if (name.includes('(fluid)') || name.includes('(gas)') || name.includes('(isothermal_liquid)')) {
           x[idx] = 101325;
+        } else if (name.includes('(frame)') || name.includes('(multibodyframe)')) {
+          // A dist_constraint/angle_constraint's direction/axis is only
+          // geometrically undefined when its two frames exactly coincide.
+          // Every new Frame coordinate otherwise starts at exactly 0, so two
+          // distinct (but not yet connected/solved) frames begin perfectly
+          // tied on the very first solver iterate even in a well-posed
+          // model. A tiny, unique-per-variable seed (idx guarantees distinct
+          // frames get distinct seeds) breaks that artificial tie without
+          // perturbing any real result: world_frame/reference frames are
+          // pinned back to their target every iteration regardless of seed,
+          // and this is negligible next to any real geometry (same idea as
+          // the psiar/thermal/pressure seeds just above).
+          x[idx] = 0.01 * (idx + 1);
         } else if (name.includes('_state_')) {
           const parts = name.split('_state_');
           if (parts.length === 2) {

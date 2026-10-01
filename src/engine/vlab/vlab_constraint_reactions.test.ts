@@ -5,6 +5,7 @@ import {
 } from './vlabFrameKinematics';
 import { blockEquations, BlockEquationArgs } from './vlabEquations';
 import { DAEAssembler } from './DAEAssembler';
+import { ImplicitSolver } from './ImplicitSolver';
 import { Node, Edge } from '@xyflow/react';
 import {
   validateMultibodyConstraintTopology,
@@ -75,28 +76,37 @@ describe('dist_constraint equation: lambda mapped onto a 3D reaction force', () 
     for (const r of res) expect(r).toBeCloseTo(0, 10);
   });
 
-  it('drives lambda to zero when B and F coincide at a zero target', () => {
+  it('is satisfied at zero target when B and F coincide (fallback axis, lambda=0)', () => {
+    // No direction exists at exact coincidence; the equation falls back to a
+    // fixed axis [0,0,1] rather than branching or throwing, so the "distance"
+    // row is trivially satisfied (0 - 0 = 0) and, with nothing else loading
+    // this frame, lambda converges to 0 via the branch rows below.
     const res = blockEquations.dist_constraint(baseArgs({
       across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
-      branch: [7, 0, 0, 0],
+      branch: [0, 0, 0, 0],
       params: { dist: 0 },
       ports: ['b', 'f'],
       nodeId: 'd1',
     }));
-    expect(res[0]).toBeCloseTo(7, 10);
-    expect(res[1]).toBeCloseTo(0, 10);
-    expect(res[2]).toBeCloseTo(0, 10);
-    expect(res[3]).toBeCloseTo(0, 10);
+    for (const r of res) expect(r).toBeCloseTo(0, 10);
   });
 
-  it('throws a diagnostic error for a nonzero target with an undefined direction', () => {
-    expect(() => blockEquations.dist_constraint(baseArgs({
+  it('stays finite and continuous at a nonzero target with coincident frames', () => {
+    // No throw: a transient Newton iterate lands exactly here on the very
+    // first residual evaluation of any simulation (every new frame variable
+    // starts at 0), even for an otherwise well-posed model. The fallback
+    // axis [0,0,1] gives Newton a concrete, finite gradient to follow instead
+    // of aborting the whole residual vector.
+    const res = blockEquations.dist_constraint(baseArgs({
       across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
       branch: [1, 0, 0, 0],
       params: { dist: 5 },
       ports: ['b', 'f'],
       nodeId: 'd1',
-    }))).toThrow(/d1.*distance direction.*undefined/i);
+    }));
+    expect(res.every(Number.isFinite)).toBe(true);
+    expect(res[0]).toBeCloseTo(-5, 10); // actualDist(0) - target(5)
+    expect(res[3]).toBeCloseTo(-1, 10); // fz(0) - lambda(1)*axis.z(1)
   });
 });
 
@@ -112,28 +122,28 @@ describe('angle_constraint equation: lambda mapped onto a 3D reaction torque', (
     for (const r of res) expect(Math.abs(r)).toBeLessThan(1e-10);
   });
 
-  it('drives lambda to zero when orientations coincide at a zero target', () => {
+  it('is satisfied at zero target when orientations coincide (fallback axis, lambda=0)', () => {
     const res = blockEquations.angle_constraint(baseArgs({
       across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
-      branch: [9, 0, 0, 0],
+      branch: [0, 0, 0, 0],
       params: { angle: 0 },
       ports: ['b', 'f'],
       nodeId: 'a1',
     }));
-    expect(res[0]).toBeCloseTo(9, 10);
-    expect(res[1]).toBeCloseTo(0, 10);
-    expect(res[2]).toBeCloseTo(0, 10);
-    expect(res[3]).toBeCloseTo(0, 10);
+    for (const r of res) expect(r).toBeCloseTo(0, 10);
   });
 
-  it('throws a diagnostic error for a nonzero target with an undefined axis', () => {
-    expect(() => blockEquations.angle_constraint(baseArgs({
+  it('stays finite and continuous at a nonzero target with coincident orientations', () => {
+    const res = blockEquations.angle_constraint(baseArgs({
       across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
       branch: [1, 0, 0, 0],
       params: { angle: 90 },
       ports: ['b', 'f'],
       nodeId: 'a1',
-    }))).toThrow(/a1.*rotation axis.*undefined/i);
+    }));
+    expect(res.every(Number.isFinite)).toBe(true);
+    expect(res[0]).toBeCloseTo(-Math.PI / 2, 10); // actualAngle(0) - target(90deg)
+    expect(res[3]).toBeCloseTo(-1, 10); // tz(0) - lambda(1)*axis.z(1)
   });
 });
 
@@ -209,36 +219,172 @@ describe('validateMultibodyConstraintTopology', () => {
   });
 });
 
-describe('UNDEFINED_DIRECTION diagnostics raised by the equation factories', () => {
-  it('flags dist_constraint with a nonzero target and coincident frames', () => {
+describe('UNDEFINED_DIRECTION: static same-root check in DAEAssembler', () => {
+  // A transient numeric coincidence during Newton iteration is handled by
+  // the continuous fallback axis in the equations themselves (see above) —
+  // it is never a structural error. But both ports wired to the LITERAL SAME
+  // frame stay coincident at every possible position, so a nonzero target is
+  // impossible to satisfy no matter what the solver does. That is a static,
+  // purely topological fact, checked once in assemble() before any solving.
+  it('rejects a dist_constraint whose b and f both connect to the same frame with dist != 0', () => {
+    const assembler = new DAEAssembler();
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      { id: 'd1', type: 'default', position: { x: 100, y: 0 }, data: { type: 'dist_constraint', params: { dist: { value: 5 } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'world', target: 'd1', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 'world', target: 'd1', sourceHandle: 'w', targetHandle: 'f' },
+    ];
     try {
-      blockEquations.dist_constraint(baseArgs({
-        across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
-        branch: [1, 0, 0, 0],
-        params: { dist: 5 },
-        ports: ['b', 'f'],
-        nodeId: 'd1',
-      }));
+      assembler.assemble(nodes, edges);
       expect.fail('expected a MultibodyConstraintDiagnosticError to be thrown');
     } catch (e: any) {
       expect(e).toBeInstanceOf(MultibodyConstraintDiagnosticError);
       expect(e.code).toBe('UNDEFINED_DIRECTION');
+      expect(e.message).toContain('d1');
     }
   });
 
-  it('flags angle_constraint with a nonzero target and coincident orientations', () => {
-    try {
-      blockEquations.angle_constraint(baseArgs({
-        across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
-        branch: [1, 0, 0, 0],
-        params: { angle: 90 },
-        ports: ['b', 'f'],
-        nodeId: 'a1',
-      }));
-      expect.fail('expected a MultibodyConstraintDiagnosticError to be thrown');
-    } catch (e: any) {
-      expect(e).toBeInstanceOf(MultibodyConstraintDiagnosticError);
-      expect(e.code).toBe('UNDEFINED_DIRECTION');
+  it('allows the same wiring when dist = 0 (trivially satisfied)', () => {
+    const assembler = new DAEAssembler();
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      { id: 'd1', type: 'default', position: { x: 100, y: 0 }, data: { type: 'dist_constraint', params: { dist: { value: 0 } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'world', target: 'd1', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 'world', target: 'd1', sourceHandle: 'w', targetHandle: 'f' },
+    ];
+    expect(() => assembler.assemble(nodes, edges)).not.toThrow();
+  });
+});
+
+// ── Task 5: end-to-end reaction certification ──────────────────────────────
+//
+// These solve the assembled DAE directly via ImplicitSolver (the same Newton
+// solve vlabPhysics.VLabPhysicsEngine uses internally), rather than through
+// VLabPhysicsEngine.simulateStep(). That adaptive wrapper's own step-size/
+// method-escalation heuristics are drastically — and, empirically, pathologically
+// — slow for these purely-algebraic Frame-domain models (observed ~140s per
+// single 0.001s timestep on an already-well-posed model that solves correctly
+// in <100ms here), a pre-existing performance issue in that layer unrelated
+// to this plan's scope (the DAE equations, branch wiring and diagnostics).
+//
+// A lone dist_constraint/angle_constraint cannot position/orientation-pin a
+// genuinely free follower frame by itself (its own equation is 1 scalar row
+// for 3 unknowns) — doing so needs either a load that fixes the missing
+// direction (the "known-load" cases) or enough independent constraints to
+// remove the null space entirely (the "trilateration" zero-reaction cases).
+describe('Constraint reaction certification (direct DAE solve)', () => {
+  const solveOnce = (nodes: Node[], edges: Edge[]) => {
+    const assembler = new DAEAssembler();
+    const system = assembler.assemble(nodes, edges);
+    const n = system.systemSize;
+    // A tiny unique-per-variable seed breaks the all-new-variables-start-at-0
+    // tie between distinct frames (see vlabPhysics.ts) without perturbing any
+    // real result.
+    const x0 = new Array(n).fill(0).map((_, idx) => 0.01 * (idx + 1));
+    const ctx: any = { dt: 0.001, time: 0, parameters: {}, prevStates: x0 };
+    const solver = new ImplicitSolver();
+    solver.configure({ tolerance: 1e-7 });
+    const x = solver.solve(
+      (xi, c) => system.residuals(
+        xi,
+        xi.map((v, i) => system.isDifferentialState[i] ? (v - c.prevStates[i]) / c.dt : 0),
+        c
+      ),
+      x0,
+      ctx
+    );
+    const read = (name: string) => x[system.variableNames.indexOf(name)];
+    return { x, variableNames: system.variableNames, read };
+  };
+
+  it('zero reaction: trilateration pins a free frame with 3 independent dist_constraints', () => {
+    // A1=[5,0,0], A2=[0,5,0], A3=[0,0,5] (each independently anchored to
+    // world), target point P=[1,1,1] — |P-Ai| is identical for all three by
+    // construction, so the geometry is already self-consistent and every
+    // dist_c should settle with zero reaction. No single dist_constraint has
+    // both endpoints prescribed (only each Ai is), so none is rejected; the
+    // 3 independent equations together remove the translational null space
+        // that a lone constraint would leave.
+    const d = Math.sqrt((1 - 5) ** 2 + 1 + 1);
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      { id: 't1', type: 'default', position: { x: 50, y: 0 }, data: { type: 'rigid_transform', params: { offset: { value: '[5 0 0]' } } } } as any,
+      { id: 't2', type: 'default', position: { x: 50, y: 50 }, data: { type: 'rigid_transform', params: { offset: { value: '[0 5 0]' } } } } as any,
+      { id: 't3', type: 'default', position: { x: 50, y: 100 }, data: { type: 'rigid_transform', params: { offset: { value: '[0 0 5]' } } } } as any,
+      { id: 'd1', type: 'default', position: { x: 150, y: 0 }, data: { type: 'dist_constraint', params: { dist: { value: d } } } } as any,
+      { id: 'd2', type: 'default', position: { x: 150, y: 50 }, data: { type: 'dist_constraint', params: { dist: { value: d } } } } as any,
+      { id: 'd3', type: 'default', position: { x: 150, y: 100 }, data: { type: 'dist_constraint', params: { dist: { value: d } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e0', source: 'world', target: 't1', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e1', source: 'world', target: 't2', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 'world', target: 't3', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e3', source: 't1', target: 'd1', sourceHandle: 'f', targetHandle: 'b' },
+      { id: 'e4', source: 't2', target: 'd2', sourceHandle: 'f', targetHandle: 'b' },
+      { id: 'e5', source: 't3', target: 'd3', sourceHandle: 'f', targetHandle: 'b' },
+      { id: 'e6', source: 'd1', target: 'd2', sourceHandle: 'f', targetHandle: 'f' },
+      { id: 'e7', source: 'd2', target: 'd3', sourceHandle: 'f', targetHandle: 'f' },
+    ];
+
+    const { read } = solveOnce(nodes, edges);
+    for (const id of ['d1', 'd2', 'd3']) {
+      expect(read(`${id}_branch_signal_d`)).toBeCloseTo(d, 6);
+      expect(Math.abs(read(`${id}_branch_signal_f`))).toBeLessThan(1e-6);
     }
+  });
+
+  it('known load: dist_constraint reaction magnitude equals an applied external_force', () => {
+    // t_f is anchored to world at offset [0,3,4] (|offset|=5, matching the
+    // target). dist_c's other end is free, loaded only by an external_force
+    // of [0,6,8] (magnitude 10) — this fixes the otherwise-undefined
+    // direction (lambda*n must balance the applied load) and the resulting
+    // reaction magnitude must equal the applied load's magnitude.
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      { id: 't_f', type: 'default', position: { x: 100, y: 0 }, data: { type: 'rigid_transform', params: { offset: { value: '[0 3 4]' } } } } as any,
+      { id: 'dist_c', type: 'default', position: { x: 200, y: 0 }, data: { type: 'dist_constraint', params: { dist: { value: 5 } } } } as any,
+      { id: 'cy', type: 'default', position: { x: 0, y: 50 }, data: { type: 'ps_constant', params: { value: { value: 6 } } } } as any,
+      { id: 'cz', type: 'default', position: { x: 0, y: 100 }, data: { type: 'ps_constant', params: { value: { value: 8 } } } } as any,
+      { id: 'ext', type: 'default', position: { x: 100, y: 100 }, data: { type: 'external_force', params: { force_scale: { value: 1 } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'world', target: 't_f', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 't_f', target: 'dist_c', sourceHandle: 'f', targetHandle: 'f' },
+      { id: 'e3', source: 'cy', target: 'ext', sourceHandle: 'y', targetHandle: 'in_fy' },
+      { id: 'e4', source: 'cz', target: 'ext', sourceHandle: 'y', targetHandle: 'in_fz' },
+      { id: 'e5', source: 'ext', target: 'dist_c', sourceHandle: 'f', targetHandle: 'b' },
+    ];
+
+    const { read } = solveOnce(nodes, edges);
+    expect(read('dist_c_branch_signal_d')).toBeCloseTo(5, 6);
+    expect(read('dist_c_branch_signal_f')).toBeCloseTo(10, 5); // |[0,6,8]| = 10
+  });
+
+  it('known load: angle_constraint reaction magnitude equals an applied external torque', () => {
+    // t_f is anchored to world with rotation [0,0,30] (deg), matching the
+    // angle_c target of 30deg relative to the (identity) world/free-frame
+    // orientation. The free side is loaded only by a torque of magnitude 7
+    // about Z via external_force's torque inputs, fixing the axis.
+    const nodes: Node[] = [
+      { id: 'world', type: 'default', position: { x: 0, y: 0 }, data: { type: 'world_frame' } } as any,
+      { id: 't_f', type: 'default', position: { x: 100, y: 0 }, data: { type: 'rigid_transform', params: { rotation: { value: '[0 0 30]' } } } } as any,
+      { id: 'angle_c', type: 'default', position: { x: 200, y: 0 }, data: { type: 'angle_constraint', params: { angle: { value: 30 } } } } as any,
+      { id: 'ctz', type: 'default', position: { x: 0, y: 100 }, data: { type: 'ps_constant', params: { value: { value: 7 } } } } as any,
+      { id: 'ext', type: 'default', position: { x: 100, y: 100 }, data: { type: 'external_force', params: { torque_scale: { value: 1 } } } } as any,
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'world', target: 't_f', sourceHandle: 'w', targetHandle: 'b' },
+      { id: 'e2', source: 't_f', target: 'angle_c', sourceHandle: 'f', targetHandle: 'f' },
+      { id: 'e3', source: 'ctz', target: 'ext', sourceHandle: 'y', targetHandle: 'in_tz' },
+      { id: 'e4', source: 'ext', target: 'angle_c', sourceHandle: 'f', targetHandle: 'b' },
+    ];
+
+    const { read } = solveOnce(nodes, edges);
+    expect(read('angle_c_branch_signal_ang')).toBeCloseTo(30, 4);
+    expect(read('angle_c_branch_signal_t')).toBeCloseTo(7, 5);
   });
 });

@@ -1180,16 +1180,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Measures relative 3D position and Euler angle orientation between follower and base frames.'
   },
   dist_constraint: {
-    equations: ['dist(b, f) = L_set', 'Force = lambda * Grad(dist)'],
-    latex: ['\|\mathbf{P}_f - \mathbf{P}_b\| = L'],
+    equations: ['|Pf - Pb| = L_set', 'Ff = lambda * (Pf - Pb) / |Pf - Pb|', 'Fb = -Ff'],
+    latex: ['\\|\\mathbf{P}_f - \\mathbf{P}_b\\| = L', '\\mathbf{F}_f = \\lambda \\dfrac{\\mathbf{P}_f - \\mathbf{P}_b}{\\|\\mathbf{P}_f - \\mathbf{P}_b\\|}', '\\mathbf{F}_b = -\\mathbf{F}_f'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Maintains a constant distance between two frames. Implements a kinematic constraint using Lagrange multipliers.'
+    description: 'Maintains a constant 3D distance between frames B and F using a Lagrange multiplier. The reaction force acts along the line between them, equal and opposite at each end; outputs are the measured distance and the reaction force magnitude.'
   },
   angle_constraint: {
-    equations: ['angle(b, f) = Theta_set'],
-    latex: ['\\theta_{bf} = \Theta_{const}'],
+    equations: ['angle(transpose(Rb) * Rf) = Theta_set', 'Tf = lambda * axis(Rrel)', 'Tb = -Tf'],
+    latex: ['\\mathrm{angle}(\\mathbf{R}_b^\\mathsf{T} \\mathbf{R}_f) = \\Theta_{set}', '\\mathbf{T}_f = \\lambda \\, \\mathrm{axis}(\\mathbf{R}_{rel})', '\\mathbf{T}_b = -\\mathbf{T}_f'],
     across: 'Frame', through: 'Torque (N-m)',
-    description: 'Maintains a fixed angular relationship between two frames.'
+    description: 'Maintains a fixed relative 3D orientation between frames B and F using a Lagrange multiplier. The reaction torque acts along the relative rotation axis, equal and opposite at each end; outputs are the measured angle and the reaction torque magnitude.'
   },
   grav_field: {
     equations: ['F = m * g * dir / |dir|', '|F| = m * g'],
