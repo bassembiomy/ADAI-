@@ -6496,7 +6496,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Frame"
           }
         ],
         "equation": "World Frame governing physical equation",
@@ -6513,7 +6514,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Frame"
           }
         ],
         "equation": "Reference Frame governing physical equation",
@@ -6541,16 +6543,78 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
           }
         ],
         "equation": "Rigid Transform governing physical equation",
         "description": "Physical component model for Rigid Transform."
+      },
+      {
+        "id": "transform_sensor",
+        "name": "Transform Sensor",
+        "color": "#4b5563",
+        "icon": "rigid_trans",
+        "category": "Frames & Transforms",
+        "params": {},
+        "ports": [
+          {
+            "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
+            "pos": "left",
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "X",
+            "domain": "Physical"
+          },
+          {
+            "id": "y",
+            "pos": "right",
+            "label": "Y",
+            "domain": "Physical"
+          },
+          {
+            "id": "z",
+            "pos": "right",
+            "label": "Z",
+            "domain": "Physical"
+          },
+          {
+            "id": "rx",
+            "pos": "right",
+            "label": "Rx",
+            "domain": "Physical"
+          },
+          {
+            "id": "ry",
+            "pos": "right",
+            "label": "Ry",
+            "domain": "Physical"
+          },
+          {
+            "id": "rz",
+            "pos": "right",
+            "label": "Rz",
+            "domain": "Physical"
+          }
+        ],
+        "equation": "Transform Sensor governing physical equation",
+        "description": "Physical component model for Transform Sensor."
       },
       {
         "id": "dist_constraint",
@@ -6569,12 +6633,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "d",
+            "pos": "right",
+            "label": "d",
+            "domain": "Physical"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "F",
+            "domain": "Physical"
           }
         ],
         "equation": "Distance Constraint governing physical equation",
@@ -6597,12 +6675,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "ang",
+            "pos": "right",
+            "label": "θ",
+            "domain": "Physical"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "T",
+            "domain": "Physical"
           }
         ],
         "equation": "Angle Constraint governing physical equation",

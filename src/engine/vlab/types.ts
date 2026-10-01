@@ -9,6 +9,8 @@ export const PHYSICAL_DOMAINS = [
   'isothermal_liquid',
   'physical',
   'multibody',
+  'frame',
+  'multibodyframe',
 ] as const;
 
 export type PhysicalDomain = (typeof PHYSICAL_DOMAINS)[number];

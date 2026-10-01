@@ -934,6 +934,7 @@ export const areDomainsCompatible = (d1?: string, d2?: string): boolean => {
   const a = d1.toLowerCase();
   const b = d2.toLowerCase();
   if (a === b) return true;
+  if ((a === 'frame' || a === 'multibodyframe') && (b === 'frame' || b === 'multibodyframe')) return true;
   if (a === 'mechanical' && (b === 'translational' || b === 'rotational')) return true;
   if (b === 'mechanical' && (a === 'translational' || a === 'rotational')) return true;
   return false;

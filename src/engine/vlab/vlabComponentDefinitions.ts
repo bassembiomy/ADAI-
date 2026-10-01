@@ -1173,6 +1173,12 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Frame', through: 'None',
     description: 'Applies a fixed translation and rotation between two frames. Models rigid connections between multibody parts.'
   },
+  transform_sensor: {
+    equations: ['P = P_f - P_b', 'R = R_f - R_b'],
+    latex: ['\Delta \mathbf{P} = \mathbf{P}_f - \mathbf{P}_b', '\Delta \mathbf{\theta} = \mathbf{\theta}_f - \mathbf{\theta}_b'],
+    across: 'Frame', through: 'None',
+    description: 'Measures relative 3D position and Euler angle orientation between follower and base frames.'
+  },
   dist_constraint: {
     equations: ['dist(b, f) = L_set', 'Force = lambda * Grad(dist)'],
     latex: ['\|\mathbf{P}_f - \mathbf{P}_b\| = L'],
