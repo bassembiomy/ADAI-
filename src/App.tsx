@@ -163,7 +163,7 @@ import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerforman
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
-import { projectDiagramScopedCanvasView, useSysmlProjectionState } from './services/sysmlProjectionState';
+import { projectDiagramScopedCanvasView } from './services/sysmlProjectionState';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortKindActions } from './components/sysml/PortKindActions';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
@@ -6279,7 +6279,6 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const { packages, blocks, relationships, parts, connectors, applyCanonicalSysmlResult } = useSysmlProjectionState();
   const pendingPresentationUpdatesRef = useRef<Map<string, PresentationCoordinates>>(new Map());
   const presentationDraftsRef = useRef<Record<string, PresentationCoordinates>>({});
   const [presentationDrafts, setPresentationDrafts] = useState<Record<string, PresentationCoordinates>>({});
@@ -6304,14 +6303,11 @@ const ADIA = () => {
     () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
     [sysmlStore],
   );
-  const projectCanonicalAppView = useCallback((
-    repository: typeof canonicalSysmlRepository,
-    coordinates: Record<string, PresentationCoordinates>,
-    diagramPresentations: typeof sysmlDiagramPresentations,
-  ) => {
-    const complete = projectLegacyDiagram(repository, coordinates, diagramPresentations);
-    applyCanonicalSysmlResult({ view: complete });
-  }, [applyCanonicalSysmlResult]);
+  const sysmlCanvasProjection = useMemo(
+    () => projectLegacyDiagram(canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations),
+    [canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations],
+  );
+  const { packages, blocks, relationships, parts, connectors } = sysmlCanvasProjection;
   const selectedPackageDiagram = activePackageDiagramId ? canonicalSysmlRepository.diagrams[activePackageDiagramId] : undefined;
   const fallbackPackageDiagramId = Object.values(canonicalSysmlRepository.diagrams)
     .find(diagram => diagram.diagramKind === 'package')?.id;
@@ -6529,17 +6525,9 @@ const ADIA = () => {
       sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
       setCanonicalSysmlRepository(result.repository);
       setSysmlStore(fromRepository(result.repository, result.coordinates, result.diagramPresentations));
-      // Keep the application-wide projection complete. A command may return a
-      // diagram-scoped view for the active canvas, but that view must never
-      // replace the repository-wide model used by other viewpoints.
-      projectCanonicalAppView(
-        result.repository,
-        result.coordinates,
-        result.diagramPresentations,
-      );
     }
     return result;
-  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView, externalEndpointContext]);
+  }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext]);
 
   const applyCanonicalProjectLoad = useCallback((loaded: ReturnType<typeof loadCanonicalSysmlProject>) => {
     if (!loaded.valid) throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
@@ -6552,17 +6540,8 @@ const ADIA = () => {
     sysmlGatewayStateRef.current.store = store;
     setCanonicalSysmlRepository(repository);
     setSysmlStore(store);
-    projectCanonicalAppView(repository, loaded.coordinates, loaded.diagramPresentations);
     return repository;
-  }, [projectCanonicalAppView]);
-
-  useEffect(() => {
-    projectCanonicalAppView(
-      canonicalSysmlRepository,
-      Object.fromEntries(sysmlStore.coordinates.entries()),
-      Object.fromEntries(sysmlStore.diagramPresentations.entries()),
-    );
-  }, [canonicalSysmlRepository, sysmlStore, projectCanonicalAppView]);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

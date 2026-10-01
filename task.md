@@ -50,14 +50,14 @@
   - [x] Step 5: Project behavioral relationships and enable inspector editing
   - [x] Step 6: Run cross-diagram verification
   - [x] Step 7: Commit Task 6 changes
-- [ ] Task 7: Retire Parallel Writable UI State and Migrate Persistence
-  - [ ] Step 1: Strengthen the single-writable-model guard before deleting code
-  - [ ] Step 2: Run release gates and verify failure
-  - [ ] Step 3: Convert legacy arrays to memoized projections
-  - [ ] Step 4: Add a versioned migration
-  - [ ] Step 5: Prove save/load/undo identity
-  - [ ] Step 6: Run full repository and persistence verification
-  - [ ] Step 7: Commit Task 7 changes
+- [x] Task 7: Retire Parallel Writable UI State and Migrate Persistence
+  - [x] Step 1: Strengthen the single-writable-model guard before deleting code
+  - [x] Step 2: Run release gates and verify failure
+  - [x] Step 3: Convert legacy arrays to memoized projections
+  - [x] Step 4: Add a versioned migration
+  - [x] Step 5: Prove save/load/undo identity
+  - [x] Step 6: Run full repository and persistence verification
+  - [x] Step 7: Commit Task 7 changes
 - [ ] Task 8: End-to-End Release Certification and Documentation
   - [ ] Step 1: Add a single user-journey certification test
   - [ ] Step 2: Add negative and accessibility scenarios

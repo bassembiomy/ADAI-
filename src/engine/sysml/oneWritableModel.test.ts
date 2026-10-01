@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   createEmptyRepositoryV4,
   type Block,
   type SysmlRepositoryV4,
 } from './domain';
 import { createTransactionManager, type TransactionManager } from './commands/dispatcher';
+import { COMPATIBILITY_ALLOWLIST } from '../../../scripts/verify_sysml_architecture';
 
 describe('One Writable Semantic Repository Across Integrations (Task 14)', () => {
   it('ensures UI, AI, reports, and scripts observe the exact same revision and IDs', () => {
@@ -58,4 +60,19 @@ describe('One Writable Semantic Repository Across Integrations (Task 14)', () =>
     expect(element.name).toBe('ElectricPowertrainSubsystem');
     expect(element.isAbstract).toBe(true);
   });
+
+  it('rejects direct SysML array setters and legacy merge mutations in UI code', () => {
+    const source = readFileSync('src/App.tsx', 'utf8');
+    for (const forbidden of ['setBlocks(', 'setParts(', 'setConnectors(', 'setRelationships(']) {
+      expect(source).not.toContain(forbidden);
+    }
+    expect(source).not.toContain('mergeLegacyDiagramIntoRepository(');
+  });
+
+  it('eliminates parallel writable LegacySysmlView state from App.tsx', () => {
+    const appSource = readFileSync('src/App.tsx', 'utf8');
+    expect(appSource).not.toContain('useSysmlProjectionState(');
+    expect(appSource).not.toContain('applyCanonicalSysmlResult(');
+  });
 });
+
