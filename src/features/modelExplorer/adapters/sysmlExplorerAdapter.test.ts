@@ -38,6 +38,42 @@ function createTestHarness(initialState?: SysmlGatewayState) {
 }
 
 describe('sysmlExplorerAdapter', () => {
+  it('projects names, friendly kinds, and resolved types without visible ID fallbacks', () => {
+    const harness = createTestHarness();
+    const repo = harness.state.repository;
+    repo.packages['pkg-empty'] = { id: 'pkg-empty', name: ' ', kind: 'package', ownerId: 'model', namespace: [] };
+    repo.definitions['block-a'] = {
+      id: 'block-a', name: ' Source Block ', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [
+        { id: 'property-a', name: '', kind: 'part', typeId: 'missing-type', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+      ], ports: [
+        { id: 'port-a', name: '', kind: 'proxy', typeId: 'type-a', direction: 'in', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+        { id: 'port-b', name: '  Named Port  ', kind: 'standard', typeId: 'missing-type', direction: 'out', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+      ], operations: [], constraints: [],
+    };
+    repo.definitions['type-a'] = { id: 'type-a', name: 'Signal Type', kind: 'interface', namespace: [], ownerId: 'model', features: [] };
+    repo.usages['part-a'] = { id: 'part-a', name: '', kind: 'part', ownerId: 'block-a', typeId: 'type-a', aggregation: 'composite', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } };
+    repo.requirements['req-a'] = { id: 'req-a', name: '', kind: 'requirement', namespace: [], ownerId: 'model', requirementId: 'REQ-1', text: '', status: 'draft', version: '1' };
+    repo.verificationCases['case-a'] = { id: 'case-a', name: '', kind: 'verificationCase', namespace: [], ownerId: 'model' } as any;
+    repo.diagrams['diagram-a'] = { id: 'diagram-a', name: '', kind: 'diagram', diagramKind: 'bdd', namespace: [], ownerId: 'model' };
+
+    const nodes = createSysmlExplorerAdapter(harness).project('containment').nodes;
+    expect(nodes['sysml:element:pkg-empty'].label).toBe('Package');
+    expect(nodes['sysml:element:block-a'].label).toBe('Source Block');
+    expect(nodes['sysml:element:part-a']).toMatchObject({ label: 'Part', secondaryLabel: ': Signal Type' });
+    expect(nodes['sysml:element:port-a']).toMatchObject({ label: 'Proxy', secondaryLabel: ': Signal Type · in' });
+    expect(nodes['sysml:element:port-b']).toMatchObject({ label: 'Named Port', secondaryLabel: ': Type · out' });
+    expect(nodes['sysml:element:property-a']).toMatchObject({ label: 'Part', secondaryLabel: ': Type' });
+    expect(nodes['sysml:element:req-a']).toMatchObject({ label: 'Requirement', secondaryLabel: '[REQ-1]' });
+    expect(nodes['sysml:element:case-a'].label).toBe('Verification Case');
+    expect(nodes['sysml:element:diagram-a'].label).toBe('Diagram');
+    for (const id of ['pkg-empty', 'block-a', 'part-a', 'port-a', 'port-b', 'property-a', 'req-a', 'case-a', 'diagram-a', 'missing-type']) {
+      for (const node of Object.values(nodes)) {
+        expect(`${node.label} ${node.secondaryLabel ?? ''}`).not.toContain(id);
+      }
+    }
+  });
+
   it.each([
     ['PartProperty', ['owner', 'block-type']],
     ['ReferenceProperty', ['owner', 'block-type']],

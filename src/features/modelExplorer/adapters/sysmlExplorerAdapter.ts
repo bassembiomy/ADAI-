@@ -33,6 +33,7 @@ import {
   type CanonicalPortKind,
 } from '../../../services/sysmlOwnedFeatureCommands';
 import type { TypeSelectionPayload } from '../../../components/sysml/typeSelectionTypes';
+import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../sysml/sysmlDisplayLabel';
 
 function explorerKindToMetaclass(kind: string): MetaclassKind {
   switch (kind) {
@@ -375,7 +376,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         semanticId: 'model',
         domain: 'sysml',
         kind: 'model',
-        label: repo.packages.model?.name ?? 'Model',
+        label: repo.packages.model?.name?.trim() || 'Model',
         parentNodeId: null,
         childNodeIds: [],
         hasChildren: false,
@@ -402,7 +403,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           semanticId: pkg.id,
           domain: 'sysml',
           kind: 'package',
-          label: pkg.name,
+          label: sysmlObjectLabel(pkg, 'Package'),
           parentNodeId: parentId,
           childNodeIds: [],
           hasChildren: false,
@@ -420,7 +421,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           semanticId: def.id,
           domain: 'sysml',
           kind: def.kind,
-          label: def.name,
+          label: sysmlObjectLabel(def, 'Definition'),
           parentNodeId: parentId,
           childNodeIds: [],
           hasChildren: false,
@@ -448,8 +449,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 semanticId: part.id,
                 domain: 'sysml',
                 kind: 'part',
-                label: part.name,
-                secondaryLabel: part.typeId ? `: ${repo.definitions[part.typeId]?.name ?? part.typeId}` : undefined,
+                label: sysmlObjectLabel(part, 'Part'),
+                secondaryLabel: part.typeId ? `: ${resolveSysmlReferenceLabel(repo, part.typeId, 'Type')}` : undefined,
                 parentNodeId: partsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
@@ -472,8 +473,6 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               hasChildren: true,
             });
             for (const port of ports) {
-              const portNameIsUuid = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(port.name) || port.name === port.id;
-              const portOrdinal = ports.findIndex(candidate => candidate.id === port.id) + 1;
               registerNode({
                 nodeId: `sysml:element:${port.id}`,
                 semanticId: port.id,
@@ -485,8 +484,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                     : port.kind === 'flow'
                       ? 'flowPort'
                       : 'port',
-                label: portNameIsUuid ? `Port ${portOrdinal}` : port.name,
-                secondaryLabel: `${port.typeId ? `: ${repo.definitions[port.typeId]?.name ?? port.typeId}` : ''}${port.direction ? ` · ${port.direction}` : ''}${portNameIsUuid ? ` · ID ${port.id}` : ''}` || undefined,
+                label: sysmlObjectLabel(port, 'Port'),
+                secondaryLabel: `${port.typeId ? `: ${resolveSysmlReferenceLabel(repo, port.typeId, 'Type')}` : ''}${port.direction ? ` · ${port.direction}` : ''}` || undefined,
                 parentNodeId: portsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
@@ -514,8 +513,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 semanticId: prop.id,
                 domain: 'sysml',
                 kind: 'valueProperty',
-                label: prop.name,
-                secondaryLabel: prop.typeId ? `: ${prop.typeId}` : undefined,
+                label: sysmlObjectLabel(prop, 'Property'),
+                secondaryLabel: prop.typeId ? `: ${resolveSysmlReferenceLabel(repo, prop.typeId, 'Type')}` : undefined,
                 parentNodeId: propsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
@@ -535,7 +534,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           semanticId: req.id,
           domain: 'sysml',
           kind: 'requirement',
-          label: req.name,
+          label: sysmlObjectLabel(req, 'Requirement'),
           secondaryLabel: req.requirementId ? `[${req.requirementId}]` : undefined,
           parentNodeId: parentId,
           childNodeIds: [],
@@ -552,7 +551,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           semanticId: vc.id,
           domain: 'sysml',
           kind: 'testCase',
-          label: vc.name,
+          label: sysmlObjectLabel(vc, 'VerificationCase'),
           parentNodeId: parentId,
           childNodeIds: [],
           hasChildren: false,
@@ -568,7 +567,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           semanticId: useCase.id,
           domain: 'sysml',
           kind: 'useCase',
-          label: useCase.name,
+          label: sysmlObjectLabel(useCase, 'UseCase'),
           parentNodeId: parentId,
           childNodeIds: [],
           hasChildren: false,
@@ -584,7 +583,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           semanticId: diag.id,
           domain: 'sysml',
           kind: 'diagram',
-          label: diag.name,
+          label: sysmlObjectLabel(diag, 'Diagram'),
           secondaryLabel: `[${diag.diagramKind.toUpperCase()}]`,
           parentNodeId: parentId,
           childNodeIds: [],

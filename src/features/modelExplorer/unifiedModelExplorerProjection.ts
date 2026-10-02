@@ -11,17 +11,18 @@ import type { DiagramPresentationInput } from '../../engine/sysml/presentationSt
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 import { buildDiagramVisualParentIndex } from './diagramTreeContext';
 import { getElementKindLabel } from './modelExplorerCapabilities';
+import { friendlySysmlKind, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../sysml/sysmlDisplayLabel';
 import type {
   ModelPillar,
   ModelTreeNode,
   ModelTreeProjection,
 } from './modelExplorerTypes';
 
-export function projectOwnedFeature(feature: SemanticElement, ownerId: string): ModelTreeNode {
+export function projectOwnedFeature(feature: SemanticElement, ownerId: string, repository: SysmlRepository): ModelTreeNode {
   const feat = feature as any;
   let secondaryLabel: string | undefined;
   if (feat.typeId) {
-    secondaryLabel = `: ${feat.typeId}`;
+    secondaryLabel = `: ${resolveSysmlReferenceLabel(repository, feat.typeId, 'Type')}`;
     if (feat.direction) {
       secondaryLabel += ` · ${feat.direction}`;
     }
@@ -33,7 +34,7 @@ export function projectOwnedFeature(feature: SemanticElement, ownerId: string): 
     semanticId: feature.id,
     domain: 'sysml',
     kind: feature.metaclass ?? 'feature',
-    label: feature.name || feature.id,
+    label: sysmlObjectLabel(feature, 'Feature'),
     secondaryLabel,
     parentNodeId: `sysml:element:${ownerId}`,
     ownerSemanticId: ownerId,
@@ -42,16 +43,16 @@ export function projectOwnedFeature(feature: SemanticElement, ownerId: string): 
   };
 }
 
-export function projectRelationship(relationship: SemanticRelationship): ModelTreeNode {
+export function projectRelationship(relationship: SemanticRelationship, repository: SysmlRepository): ModelTreeNode {
   const rel = relationship as any;
   const ownerId = rel.ownerId ?? 'model';
-  const secondaryLabel = `${relationship.sourceId} -> ${relationship.targetId}`;
+  const secondaryLabel = `${resolveSysmlReferenceLabel(repository, relationship.sourceId)} -> ${resolveSysmlReferenceLabel(repository, relationship.targetId)}`;
   return {
     nodeId: `sysml:element:${relationship.id}`,
     semanticId: relationship.id,
     domain: 'sysml',
     kind: relationship.metaclass ?? 'relationship',
-    label: relationship.name || relationship.id,
+    label: sysmlObjectLabel(relationship, 'Relationship'),
     secondaryLabel,
     parentNodeId: ownerId && ownerId !== 'model' ? `sysml:element:${ownerId}` : 'project:pillar:structural',
     ownerSemanticId: ownerId,
@@ -60,15 +61,16 @@ export function projectRelationship(relationship: SemanticRelationship): ModelTr
   };
 }
 
-export function projectConnectorEnd(end: ConnectorEnd, connectorId: string): ModelTreeNode {
+export function projectConnectorEnd(end: ConnectorEnd, connectorId: string, repository: SysmlRepository): ModelTreeNode {
+  const roleLabel = resolveSysmlReferenceLabel(repository, end.roleId);
   return {
     nodeId: `sysml:element:${end.id}`,
     semanticId: end.id,
     targetSemanticId: end.roleId,
     domain: 'sysml',
     kind: 'connectorEnd',
-    label: end.roleId || end.id,
-    secondaryLabel: `: ${end.roleId}`,
+    label: roleLabel,
+    secondaryLabel: `: ${roleLabel}`,
     parentNodeId: `sysml:element:${connectorId}`,
     ownerSemanticId: connectorId,
     childNodeIds: [],
@@ -76,16 +78,16 @@ export function projectConnectorEnd(end: ConnectorEnd, connectorId: string): Mod
   };
 }
 
-export function projectItemFlow(flow: ItemFlow): ModelTreeNode {
-  const secondaryLabel = `${flow.sourceId} -> ${flow.targetId}${
-    flow.conveyedClassifierIds?.length ? ` : ${flow.conveyedClassifierIds.join(', ')}` : ''
+export function projectItemFlow(flow: ItemFlow, repository: SysmlRepository): ModelTreeNode {
+  const secondaryLabel = `${resolveSysmlReferenceLabel(repository, flow.sourceId)} -> ${resolveSysmlReferenceLabel(repository, flow.targetId)}${
+    flow.conveyedClassifierIds?.length ? ` : ${flow.conveyedClassifierIds.map(id => resolveSysmlReferenceLabel(repository, id, 'Type')).join(', ')}` : ''
   }`;
   return {
     nodeId: `sysml:element:${flow.id}`,
     semanticId: flow.id,
     domain: 'sysml',
     kind: 'ItemFlow',
-    label: flow.name || flow.id,
+    label: sysmlObjectLabel(flow, 'ItemFlow'),
     secondaryLabel,
     parentNodeId: `sysml:element:${flow.realizingRelationshipId}`,
     ownerSemanticId: flow.realizingRelationshipId,
@@ -97,14 +99,13 @@ export function projectItemFlow(flow: ItemFlow): ModelTreeNode {
 export function projectBehaviorElement(element: BehaviorElement): ModelTreeNode {
   const el = element as any;
   const ownerId = el.ownerId ?? 'model';
-  const secondaryLabel = el.metaclass ? `[${el.metaclass}]` : undefined;
   return {
     nodeId: `sysml:element:${element.id}`,
     semanticId: element.id,
     domain: 'sysml',
     kind: element.metaclass ?? 'behavior',
-    label: element.name || element.id,
-    secondaryLabel,
+    label: sysmlObjectLabel(element, 'Behavior'),
+    secondaryLabel: el.metaclass ? `[${friendlySysmlKind(el.metaclass)}]` : undefined,
     parentNodeId: ownerId && ownerId !== 'model' ? `sysml:element:${ownerId}` : 'project:pillar:behavior',
     ownerSemanticId: ownerId,
     childNodeIds: [],
@@ -214,7 +215,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     domain: 'project',
     kind: 'model',
     virtualKind: 'model',
-    label: input.sysml.packages.model?.name ?? 'Model',
+    label: input.sysml.packages.model?.name?.trim() || 'Model',
     parentNodeId: null,
     ownerSemanticId: null,
     childNodeIds: [],
@@ -250,39 +251,23 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     ...Object.values(input.sysml.requirements),
     ...Object.values(input.sysml.verificationCases),
   ];
-  const portUsageOrdinal = new Map<string, number>();
-  for (const usage of Object.values(input.sysml.usages).filter(item => item.kind === 'port')) {
-    const count = portUsageOrdinal.get(usage.ownerId) ?? 0;
-    portUsageOrdinal.set(usage.ownerId, count + 1);
-    portUsageOrdinal.set(usage.id, count + 1);
-  }
   for (const item of sysmlEntries) {
     const pillar = pillarForSysmlKind(item.kind);
     const ownerId = item.kind === 'requirement'
       ? requirementParents.get(item.id) ?? item.ownerId
       : item.ownerId;
     const resolvedPort = item.kind === 'port' ? resolvePortUsage(input.sysml, item.id) : undefined;
-    const isUuid = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{8,}$/i.test(value);
-    const hasOpaqueName = item.name === item.id || isUuid(item.name);
-    const readableLabel = item.kind === 'port'
-      ? (hasOpaqueName
-          ? resolvedPort?.definition.name && !isUuid(resolvedPort.definition.name)
-            ? resolvedPort.definition.name
-            : `Port ${portUsageOrdinal.get(item.id) ?? 1}`
-          : item.name)
-      : item.name;
     register(nodes, {
       nodeId: sysmlNodeId(item.id),
       semanticId: item.id,
       domain: 'sysml',
       kind: item.kind,
-      label: readableLabel,
+      label: sysmlObjectLabel(item, 'Element'),
       secondaryLabel: item.kind === 'port'
         ? (() => {
-            if (!resolvedPort) return hasOpaqueName ? `(${item.id}) · [unresolved port definition]` : '[unresolved port definition]';
-            const typeName = input.sysml.definitions[resolvedPort.definition.typeId]?.name ?? resolvedPort.definition.typeId;
-            const idSuffix = hasOpaqueName && isUuid(item.id) ? ` · ID ${item.id}` : '';
-            return `: ${typeName} · ${resolvedPort.effectiveDirection}${idSuffix}`;
+            if (!resolvedPort) return '[unresolved port definition]';
+            const typeName = resolveSysmlReferenceLabel(input.sysml, resolvedPort.definition.typeId, 'Type');
+            return `: ${typeName} · ${resolvedPort.effectiveDirection}`;
           })()
         : undefined,
       parentNodeId: ownerNodeId(ownerId, pillar),
@@ -305,9 +290,9 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
         metaclass: portKind as any,
         namespace: [],
         ownerId: block.id,
-        typeId: port.typeId ? input.sysml.definitions[port.typeId]?.name ?? port.typeId : undefined,
+        typeId: port.typeId,
         direction: port.direction,
-      } as any, block.id));
+      } as any, block.id, input.sysml));
     }
     for (const prop of block.properties ?? []) {
       const nodeId = sysmlNodeId(prop.id);
@@ -320,7 +305,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
         namespace: [],
         ownerId: block.id,
         typeId: prop.typeId,
-      } as any, block.id));
+      } as any, block.id, input.sysml));
     }
     for (const op of block.operations ?? []) {
       const opId = typeof op === 'string' ? op : (op as any).id;
@@ -333,7 +318,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
         metaclass: 'Operation' as any,
         namespace: [],
         ownerId: block.id,
-      } as any, block.id));
+      } as any, block.id, input.sysml));
     }
   }
 
@@ -352,7 +337,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       ].includes(el.metaclass) || el.metaclass.endsWith('Flow');
 
       if (isFeature) {
-        register(nodes, projectOwnedFeature(el, el.ownerId || 'model'));
+        register(nodes, projectOwnedFeature(el, el.ownerId || 'model', input.sysml));
       } else if (isBehavior) {
         register(nodes, projectBehaviorElement(el));
       } else {
@@ -362,7 +347,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
           semanticId: el.id,
           domain: 'sysml',
           kind: el.metaclass,
-          label: el.name || el.id,
+          label: sysmlObjectLabel(el),
           parentNodeId: ownerNodeId(el.ownerId ?? undefined, pillar),
           ownerSemanticId: el.ownerId || 'model',
           childNodeIds: [],
@@ -374,24 +359,24 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
 
   // Relationships
   for (const rel of Object.values(input.sysml.relationships ?? {})) {
-    const relNode = projectRelationship(rel as any);
+    const relNode = projectRelationship(rel as any, input.sysml);
     if (!nodes[relNode.nodeId]) {
       register(nodes, relNode);
     }
     const relAny = rel as any;
     if (relAny.sourceEnd && relAny.sourceEnd.id) {
-      const endNode = projectConnectorEnd(relAny.sourceEnd, rel.id);
+      const endNode = projectConnectorEnd(relAny.sourceEnd, rel.id, input.sysml);
       if (!nodes[endNode.nodeId]) register(nodes, endNode);
     }
     if (relAny.targetEnd && relAny.targetEnd.id) {
-      const endNode = projectConnectorEnd(relAny.targetEnd, rel.id);
+      const endNode = projectConnectorEnd(relAny.targetEnd, rel.id, input.sysml);
       if (!nodes[endNode.nodeId]) register(nodes, endNode);
     }
   }
 
   // Item flows
   for (const flow of Object.values((input.sysml as any).itemFlows ?? {})) {
-    const flowNode = projectItemFlow(flow as any);
+    const flowNode = projectItemFlow(flow as any, input.sysml);
     if (!nodes[flowNode.nodeId]) {
       register(nodes, flowNode);
     }
@@ -405,7 +390,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       semanticId: diagram.id,
       domain: 'sysml',
       kind: 'diagram',
-      label: diagram.name,
+      label: sysmlObjectLabel(diagram, 'Diagram'),
       secondaryLabel: `[${diagram.diagramKind.toUpperCase()}]`,
       diagramId: diagram.id,
       parentNodeId: ownerNodeId(diagram.ownerId, pillar),

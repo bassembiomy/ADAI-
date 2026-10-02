@@ -108,7 +108,7 @@ describe('buildUnifiedModelProjection', () => {
     });
 
     expect(projection.nodes['sysml:element:port']).toMatchObject({
-      label: 'command',
+      label: 'port',
       secondaryLabel: ': CommandSignal · in',
     });
   });
@@ -326,7 +326,7 @@ describe('buildUnifiedModelProjection', () => {
     expect(projection.nodes['sysml:element:block-1'].childNodeIds).toContain('sysml:element:bdd-1');
   });
 
-  it('does not expose a UUID as the port name when the port definition name is missing', () => {
+  it('preserves an explicit UUID-like port name without adding an ID suffix', () => {
     const repository = createEmptyRepository();
     const uuid = 'e6871056-81d2-429a-9597-48ce068bcdef';
     repository.definitions.block = {
@@ -345,9 +345,63 @@ describe('buildUnifiedModelProjection', () => {
     });
 
     expect(projection.nodes[`sysml:element:${uuid}`]).toMatchObject({
-      label: 'Port 1',
-      secondaryLabel: `: CommandSignal · in · ID ${uuid}`,
+      label: uuid,
+      secondaryLabel: ': CommandSignal · in',
     });
+  });
+
+  it('projects unnamed objects and resolved references without ID fallbacks', () => {
+    const repository = createEmptyRepository();
+    repository.definitions['block-a'] = {
+      id: 'block-a', name: ' Source Block ', namespace: [], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [
+        { id: 'property-a', name: '', kind: 'part', typeId: 'block-b', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+      ], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions['block-b'] = {
+      id: 'block-b', name: 'Target Block', namespace: [], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions['block-unnamed'] = {
+      id: 'block-unnamed', name: '  ', namespace: [], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.relationships['26bce7fc-f3ae-4030-95a3-917a620a36a4'] = {
+      id: '26bce7fc-f3ae-4030-95a3-917a620a36a4', kind: 'association', name: '',
+      sourceId: 'block-a', targetId: 'block-b',
+    } as any;
+    const projection = buildUnifiedModelProjection({ sysml: repository, stateMachine: emptyStateMachine(), externalModels: [], revision: 1 });
+
+    expect(projection.nodes['sysml:element:block-unnamed'].label).toBe('Block');
+    expect(projection.nodes['sysml:element:block-a'].label).toBe('Source Block');
+    expect(projection.nodes['sysml:element:property-a']).toMatchObject({ label: 'Part Property', secondaryLabel: ': Target Block' });
+    expect(projection.nodes['sysml:element:26bce7fc-f3ae-4030-95a3-917a620a36a4']).toMatchObject({
+      label: 'Association', secondaryLabel: 'Source Block -> Target Block',
+    });
+  });
+
+  it('resolves connector ends and item flows, using Element and Type for missing references', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.source = {
+      id: 'source', name: 'Source Block', namespace: [], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.definitions.conveyed = { id: 'conveyed', name: 'Signal', namespace: [], ownerId: 'model', kind: 'interface', features: [] };
+    repository.relationships.connector = {
+      id: 'connector', name: '', metaclass: 'Connector', sourceId: 'source', targetId: 'missing-target',
+      sourceEnd: { id: 'end-a', roleId: 'source' }, targetEnd: { id: 'end-b', roleId: 'missing-role' },
+    } as any;
+    (repository as any).itemFlows = {
+      flow: { id: 'flow', name: '', realizingRelationshipId: 'connector', conveyedClassifierIds: ['conveyed', 'missing-type'], sourceId: 'source', targetId: 'missing-target' },
+    };
+    repository.usages['port-usage'] = { id: 'port-usage', name: '', kind: 'port', ownerId: 'source', definitionId: 'missing-port' };
+    const projection = buildUnifiedModelProjection({ sysml: repository, stateMachine: emptyStateMachine(), externalModels: [], revision: 1 });
+
+    expect(projection.nodes['sysml:element:connector']).toMatchObject({ label: 'Connector', secondaryLabel: 'Source Block -> Element' });
+    expect(projection.nodes['sysml:element:end-a']).toMatchObject({ label: 'Source Block', secondaryLabel: ': Source Block' });
+    expect(projection.nodes['sysml:element:end-b']).toMatchObject({ label: 'Element', secondaryLabel: ': Element' });
+    expect(projection.nodes['sysml:element:flow']).toMatchObject({ label: 'Item Flow', secondaryLabel: 'Source Block -> Element : Signal, Type' });
+    expect(projection.nodes['sysml:element:port-usage']).toMatchObject({ label: 'Port', secondaryLabel: '[unresolved port definition]' });
   });
 
   it('projects structural, behavioral, requirement, and relationship elements', () => {
