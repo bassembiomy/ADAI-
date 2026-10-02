@@ -356,6 +356,7 @@ describe('buildUnifiedModelProjection', () => {
       id: 'block-a', name: ' Source Block ', namespace: [], ownerId: 'model', kind: 'block',
       isAbstract: false, isLeaf: false, properties: [
         { id: 'property-a', name: '', kind: 'part', typeId: 'block-b', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+        { id: 'property-missing', name: '', kind: 'part', typeId: 'missing-type', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
       ], ports: [], operations: [], constraints: [],
     };
     repository.definitions['block-b'] = {
@@ -375,6 +376,10 @@ describe('buildUnifiedModelProjection', () => {
     expect(projection.nodes['sysml:element:block-unnamed'].label).toBe('Block');
     expect(projection.nodes['sysml:element:block-a'].label).toBe('Source Block');
     expect(projection.nodes['sysml:element:property-a']).toMatchObject({ label: 'Part Property', secondaryLabel: ': Target Block' });
+    expect(projection.nodes['sysml:element:property-a'].badges).toBeUndefined();
+    expect(projection.nodes['sysml:element:property-missing']).toMatchObject({
+      label: 'Part Property', secondaryLabel: ': Type', badges: [{ kind: 'warning', label: 'Unresolved type' }],
+    });
     expect(projection.nodes['sysml:element:26bce7fc-f3ae-4030-95a3-917a620a36a4']).toMatchObject({
       label: 'Association', secondaryLabel: 'Source Block -> Target Block',
     });
@@ -397,10 +402,18 @@ describe('buildUnifiedModelProjection', () => {
     repository.usages['port-usage'] = { id: 'port-usage', name: '', kind: 'port', ownerId: 'source', definitionId: 'missing-port' };
     const projection = buildUnifiedModelProjection({ sysml: repository, stateMachine: emptyStateMachine(), externalModels: [], revision: 1 });
 
-    expect(projection.nodes['sysml:element:connector']).toMatchObject({ label: 'Connector', secondaryLabel: 'Source Block -> Element' });
+    expect(projection.nodes['sysml:element:connector']).toMatchObject({
+      label: 'Connector', secondaryLabel: 'Source Block -> Element', badges: [{ kind: 'warning', label: 'Unresolved endpoint' }],
+    });
     expect(projection.nodes['sysml:element:end-a']).toMatchObject({ label: 'Source Block', secondaryLabel: ': Source Block' });
-    expect(projection.nodes['sysml:element:end-b']).toMatchObject({ label: 'Element', secondaryLabel: ': Element' });
-    expect(projection.nodes['sysml:element:flow']).toMatchObject({ label: 'Item Flow', secondaryLabel: 'Source Block -> Element : Signal, Type' });
+    expect(projection.nodes['sysml:element:end-a'].badges).toBeUndefined();
+    expect(projection.nodes['sysml:element:end-b']).toMatchObject({
+      label: 'Element', secondaryLabel: ': Element', badges: [{ kind: 'warning', label: 'Unresolved role' }],
+    });
+    expect(projection.nodes['sysml:element:flow']).toMatchObject({
+      label: 'Item Flow', secondaryLabel: 'Source Block -> Element : Signal, Type',
+      badges: [{ kind: 'warning', label: 'Unresolved endpoint' }, { kind: 'warning', label: 'Unresolved conveyed type' }],
+    });
     expect(projection.nodes['sysml:element:port-usage']).toMatchObject({ label: 'Port', secondaryLabel: '[unresolved port definition]' });
   });
 

@@ -33,7 +33,7 @@ import {
   type CanonicalPortKind,
 } from '../../../services/sysmlOwnedFeatureCommands';
 import type { TypeSelectionPayload } from '../../../components/sysml/typeSelectionTypes';
-import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../sysml/sysmlDisplayLabel';
+import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../sysml/sysmlDisplayLabel';
 
 function explorerKindToMetaclass(kind: string): MetaclassKind {
   switch (kind) {
@@ -451,6 +451,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 kind: 'part',
                 label: sysmlObjectLabel(part, 'Part'),
                 secondaryLabel: part.typeId ? `: ${resolveSysmlReferenceLabel(repo, part.typeId, 'Type')}` : undefined,
+                badges: part.typeId && !hasSysmlReference(repo, part.typeId)
+                  ? [{ kind: 'warning', label: 'Unresolved type' }] : undefined,
                 parentNodeId: partsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
@@ -486,6 +488,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                       : 'port',
                 label: sysmlObjectLabel(port, 'Port'),
                 secondaryLabel: `${port.typeId ? `: ${resolveSysmlReferenceLabel(repo, port.typeId, 'Type')}` : ''}${port.direction ? ` · ${port.direction}` : ''}` || undefined,
+                badges: port.typeId && !hasSysmlReference(repo, port.typeId)
+                  ? [{ kind: 'warning', label: 'Unresolved type' }] : undefined,
                 parentNodeId: portsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
@@ -515,6 +519,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
                 kind: 'valueProperty',
                 label: sysmlObjectLabel(prop, 'Property'),
                 secondaryLabel: prop.typeId ? `: ${resolveSysmlReferenceLabel(repo, prop.typeId, 'Type')}` : undefined,
+                badges: prop.typeId && !hasSysmlReference(repo, prop.typeId)
+                  ? [{ kind: 'warning', label: 'Unresolved type' }] : undefined,
                 parentNodeId: propsGroupId,
                 childNodeIds: [],
                 hasChildren: false,
@@ -585,6 +591,26 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           kind: 'diagram',
           label: sysmlObjectLabel(diag, 'Diagram'),
           secondaryLabel: `[${diag.diagramKind.toUpperCase()}]`,
+          parentNodeId: parentId,
+          childNodeIds: [],
+          hasChildren: false,
+        });
+      }
+
+      // 8. Relationships retain semantic identity and follow an existing structural owner.
+      for (const relationship of Object.values(repo.relationships ?? {})) {
+        const ownerId = (relationship as { ownerId?: string }).ownerId;
+        const parentId = ownerId && nodes[`sysml:element:${ownerId}`]
+          ? `sysml:element:${ownerId}` : modelNodeId;
+        registerNode({
+          nodeId: `sysml:element:${relationship.id}`,
+          semanticId: relationship.id,
+          domain: 'sysml',
+          kind: relationship.kind,
+          label: sysmlObjectLabel(relationship, 'Relationship'),
+          secondaryLabel: `${resolveSysmlReferenceLabel(repo, relationship.sourceId)} -> ${resolveSysmlReferenceLabel(repo, relationship.targetId)}`,
+          badges: !hasSysmlReference(repo, relationship.sourceId) || !hasSysmlReference(repo, relationship.targetId)
+            ? [{ kind: 'warning', label: 'Unresolved endpoint' }] : undefined,
           parentNodeId: parentId,
           childNodeIds: [],
           hasChildren: false,

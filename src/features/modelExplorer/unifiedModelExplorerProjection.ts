@@ -11,7 +11,7 @@ import type { DiagramPresentationInput } from '../../engine/sysml/presentationSt
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 import { buildDiagramVisualParentIndex } from './diagramTreeContext';
 import { getElementKindLabel } from './modelExplorerCapabilities';
-import { friendlySysmlKind, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../sysml/sysmlDisplayLabel';
+import { friendlySysmlKind, hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../sysml/sysmlDisplayLabel';
 import type {
   ModelPillar,
   ModelTreeNode,
@@ -36,6 +36,8 @@ export function projectOwnedFeature(feature: SemanticElement, ownerId: string, r
     kind: feature.metaclass ?? 'feature',
     label: sysmlObjectLabel(feature, 'Feature'),
     secondaryLabel,
+    badges: feat.typeId && !hasSysmlReference(repository, feat.typeId)
+      ? [{ kind: 'warning', label: 'Unresolved type' }] : undefined,
     parentNodeId: `sysml:element:${ownerId}`,
     ownerSemanticId: ownerId,
     childNodeIds: [],
@@ -54,6 +56,8 @@ export function projectRelationship(relationship: SemanticRelationship, reposito
     kind: relationship.metaclass ?? 'relationship',
     label: sysmlObjectLabel(relationship, 'Relationship'),
     secondaryLabel,
+    badges: !hasSysmlReference(repository, relationship.sourceId) || !hasSysmlReference(repository, relationship.targetId)
+      ? [{ kind: 'warning', label: 'Unresolved endpoint' }] : undefined,
     parentNodeId: ownerId && ownerId !== 'model' ? `sysml:element:${ownerId}` : 'project:pillar:structural',
     ownerSemanticId: ownerId,
     childNodeIds: [],
@@ -71,6 +75,8 @@ export function projectConnectorEnd(end: ConnectorEnd, connectorId: string, repo
     kind: 'connectorEnd',
     label: roleLabel,
     secondaryLabel: `: ${roleLabel}`,
+    badges: !hasSysmlReference(repository, end.roleId)
+      ? [{ kind: 'warning', label: 'Unresolved role' }] : undefined,
     parentNodeId: `sysml:element:${connectorId}`,
     ownerSemanticId: connectorId,
     childNodeIds: [],
@@ -82,6 +88,13 @@ export function projectItemFlow(flow: ItemFlow, repository: SysmlRepository): Mo
   const secondaryLabel = `${resolveSysmlReferenceLabel(repository, flow.sourceId)} -> ${resolveSysmlReferenceLabel(repository, flow.targetId)}${
     flow.conveyedClassifierIds?.length ? ` : ${flow.conveyedClassifierIds.map(id => resolveSysmlReferenceLabel(repository, id, 'Type')).join(', ')}` : ''
   }`;
+  const badges: NonNullable<ModelTreeNode['badges']> = [];
+  if (!hasSysmlReference(repository, flow.sourceId) || !hasSysmlReference(repository, flow.targetId)) {
+    badges.push({ kind: 'warning', label: 'Unresolved endpoint' });
+  }
+  if (flow.conveyedClassifierIds?.some(id => !hasSysmlReference(repository, id))) {
+    badges.push({ kind: 'warning', label: 'Unresolved conveyed type' });
+  }
   return {
     nodeId: `sysml:element:${flow.id}`,
     semanticId: flow.id,
@@ -89,6 +102,7 @@ export function projectItemFlow(flow: ItemFlow, repository: SysmlRepository): Mo
     kind: 'ItemFlow',
     label: sysmlObjectLabel(flow, 'ItemFlow'),
     secondaryLabel,
+    badges: badges.length ? badges : undefined,
     parentNodeId: `sysml:element:${flow.realizingRelationshipId}`,
     ownerSemanticId: flow.realizingRelationshipId,
     childNodeIds: [],
@@ -270,6 +284,8 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
             return `: ${typeName} · ${resolvedPort.effectiveDirection}`;
           })()
         : undefined,
+      badges: item.kind === 'port' && resolvedPort && !hasSysmlReference(input.sysml, resolvedPort.definition.typeId)
+        ? [{ kind: 'warning', label: 'Unresolved type' }] : undefined,
       parentNodeId: ownerNodeId(ownerId, pillar),
       ownerSemanticId: ownerId || 'model',
       childNodeIds: [],

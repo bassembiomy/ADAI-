@@ -38,6 +38,40 @@ function createTestHarness(initialState?: SysmlGatewayState) {
 }
 
 describe('sysmlExplorerAdapter', () => {
+  it('projects named and unnamed relationships with resolved endpoints and structural ownership', () => {
+    const harness = createTestHarness();
+    const repo = harness.state.repository;
+    for (const [id, name] of [['source-block', 'Source Block'], ['target-block', 'Target Block']]) {
+      repo.definitions[id] = {
+        id, name, kind: 'block', namespace: [], ownerId: 'model', isAbstract: false, isLeaf: false,
+        properties: [], ports: [], operations: [], constraints: [],
+      };
+    }
+    repo.relationships['rel-owned'] = {
+      id: 'rel-owned', name: '', kind: 'association', sourceId: 'source-block', targetId: 'target-block', ownerId: 'source-block',
+    } as any;
+    repo.relationships['rel-root'] = {
+      id: 'rel-root', name: '  Supply Link  ', kind: 'dependency', sourceId: 'source-block', targetId: 'missing-target',
+    };
+
+    const nodes = createSysmlExplorerAdapter(harness).project('containment').nodes;
+    expect(nodes['sysml:element:rel-owned']).toMatchObject({
+      nodeId: 'sysml:element:rel-owned', semanticId: 'rel-owned', domain: 'sysml', kind: 'association',
+      label: 'Association', secondaryLabel: 'Source Block -> Target Block',
+      parentNodeId: 'sysml:element:source-block',
+    });
+    expect(nodes['sysml:element:rel-owned'].badges).toBeUndefined();
+    expect(nodes['sysml:element:source-block'].childNodeIds).toContain('sysml:element:rel-owned');
+    expect(nodes['sysml:element:rel-root']).toMatchObject({
+      nodeId: 'sysml:element:rel-root', semanticId: 'rel-root', domain: 'sysml', kind: 'dependency',
+      label: 'Supply Link', secondaryLabel: 'Source Block -> Element', parentNodeId: 'sysml:element:model',
+      badges: [{ kind: 'warning', label: 'Unresolved endpoint' }],
+    });
+    expect(nodes['sysml:element:model'].childNodeIds).toContain('sysml:element:rel-root');
+    expect(`${nodes['sysml:element:rel-root'].label} ${nodes['sysml:element:rel-root'].secondaryLabel}`)
+      .not.toContain('missing-target');
+  });
+
   it('projects names, friendly kinds, and resolved types without visible ID fallbacks', () => {
     const harness = createTestHarness();
     const repo = harness.state.repository;
@@ -62,8 +96,13 @@ describe('sysmlExplorerAdapter', () => {
     expect(nodes['sysml:element:block-a'].label).toBe('Source Block');
     expect(nodes['sysml:element:part-a']).toMatchObject({ label: 'Part', secondaryLabel: ': Signal Type' });
     expect(nodes['sysml:element:port-a']).toMatchObject({ label: 'Proxy', secondaryLabel: ': Signal Type · in' });
-    expect(nodes['sysml:element:port-b']).toMatchObject({ label: 'Named Port', secondaryLabel: ': Type · out' });
-    expect(nodes['sysml:element:property-a']).toMatchObject({ label: 'Part', secondaryLabel: ': Type' });
+    expect(nodes['sysml:element:port-a'].badges).toBeUndefined();
+    expect(nodes['sysml:element:port-b']).toMatchObject({
+      label: 'Named Port', secondaryLabel: ': Type · out', badges: [{ kind: 'warning', label: 'Unresolved type' }],
+    });
+    expect(nodes['sysml:element:property-a']).toMatchObject({
+      label: 'Part', secondaryLabel: ': Type', badges: [{ kind: 'warning', label: 'Unresolved type' }],
+    });
     expect(nodes['sysml:element:req-a']).toMatchObject({ label: 'Requirement', secondaryLabel: '[REQ-1]' });
     expect(nodes['sysml:element:case-a'].label).toBe('Verification Case');
     expect(nodes['sysml:element:diagram-a'].label).toBe('Diagram');

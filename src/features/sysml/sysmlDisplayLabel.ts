@@ -23,10 +23,20 @@ export function resolveSysmlReferenceLabel(
 ): string {
   if (!id) return friendlySysmlKind(fallbackKind);
   const itemFlow = repository?.itemFlows?.[id];
-  const value = repository?.elements?.[id]
+  const value = findSysmlReference(repository, id);
+  const effectiveFallback = fallbackKind ?? (itemFlow && value === itemFlow ? 'ItemFlow' : 'Element');
+  return value ? sysmlObjectLabel(value, effectiveFallback) : friendlySysmlKind(effectiveFallback);
+}
+
+export function hasSysmlReference(repository: any, id: string | null | undefined): boolean {
+  return Boolean(id && findSysmlReference(repository, id));
+}
+
+function findSysmlReference(repository: any, id: string): any {
+  return repository?.elements?.[id]
     ?? repository?.relationships?.[id]
     ?? repository?.diagrams?.[id]
-    ?? itemFlow
+    ?? repository?.itemFlows?.[id]
     ?? repository?.packages?.[id]
     ?? repository?.definitions?.[id]
     ?? repository?.usages?.[id]
@@ -38,6 +48,4 @@ export function resolveSysmlReferenceLabel(
     ?? repository?.subjects?.[id]
     ?? repository?.useCases?.[id]
     ?? repository?.extensionPoints?.[id];
-  const effectiveFallback = fallbackKind ?? (itemFlow && value === itemFlow ? 'ItemFlow' : 'Element');
-  return value ? sysmlObjectLabel(value, effectiveFallback) : friendlySysmlKind(effectiveFallback);
 }
