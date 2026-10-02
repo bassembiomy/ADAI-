@@ -38,6 +38,13 @@ function createSmHarness(initialSnapshot?: Partial<StateMachineExplorerSnapshot>
 }
 
 describe('stateMachineExplorerAdapter', () => {
+  it('labels an unnamed region without its internal ID', () => {
+    const id = '65cb033e-421d-41e0-b789-87931d991010';
+    const harness = createSmHarness({ layers: [{ id, name: ' ', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }] });
+    const adapter = createStateMachineExplorerAdapter(harness);
+    const tree = adapter.project('containment');
+    expect(tree.nodes[`sm:region:${id}`].label).toBe('Region');
+  });
   it('projects regions, vertices, and transitions under their semantic owners', () => {
     const rootLayer: Layer = {
       id: 'root',

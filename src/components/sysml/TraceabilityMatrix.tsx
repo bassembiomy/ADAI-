@@ -9,6 +9,7 @@ import {
   type RtmChangeKind,
 } from '../../engine/sysml/rtm';
 import { VirtualizedTraceabilityGrid } from './VirtualizedTraceabilityGrid';
+import { resolveSysmlReferenceLabel } from '../../features/sysml/sysmlDisplayLabel';
 
 export interface TraceabilityMatrixProps {
   repository: SysmlRepository;
@@ -37,6 +38,8 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
   const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
   const baselines = Object.values(repository.baselines || {});
+  const labelRepository = useMemo(() => ({ ...repository, elements: Object.fromEntries(externalElements.map(element => [element.id, element])) }), [repository, externalElements]);
+  const referenceLabel = (id: string, fallbackKind?: string) => resolveSysmlReferenceLabel(labelRepository, id, fallbackKind);
   const complete = useMemo(() => buildTraceabilityMatrix(repository, {
     compareBaselineId: compareBaselineId || undefined,
     changeType: (changeType as any) || undefined,
@@ -121,6 +124,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
         {renderVirtualGrid ? (
           <VirtualizedTraceabilityGrid
             rows={matrix.rows}
+            resolveLabel={referenceLabel}
             onNavigate={onNavigate}
             containerHeight={500}
             rowHeight={42}
@@ -306,7 +310,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                               className="inline-flex items-center gap-1 rounded border border-amber-800/60 bg-amber-950/40 px-1.5 py-0.5 text-amber-200 hover:border-amber-500 text-[11px]"
                             >
                               <span className="text-[10px] text-amber-400 font-mono">«refine»</span>
-                              <span className="truncate max-w-[100px]">{rf.name}</span>
+                              <span className="truncate max-w-[100px]">{referenceLabel(rf.id)}</span>
                             </button>
                           ))}
                         </div>
@@ -324,7 +328,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                               className="inline-flex items-center gap-1 rounded border border-teal-800/60 bg-teal-950/40 px-1.5 py-0.5 text-teal-200 hover:border-teal-500 text-[11px]"
                             >
                               <span className="text-[10px] text-teal-400 font-mono">«trace»</span>
-                              <span className="truncate max-w-[100px]">{tr.name}</span>
+                              <span className="truncate max-w-[100px]">{referenceLabel(tr.id)}</span>
                             </button>
                           ))}
                         </div>
@@ -364,7 +368,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             className="inline-flex items-center gap-1 rounded border border-emerald-800/60 bg-emerald-950/40 px-1.5 py-0.5 text-emerald-300 hover:border-emerald-500 text-[11px]"
                           >
                             <span className="text-[10px] text-emerald-400 font-mono">«{cb.kind}»</span>
-                            <span>{cb.name}</span>
+                            <span>{referenceLabel(cb.id, cb.type)}</span>
                           </button>
                         ))}
                       </div>
@@ -378,7 +382,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             className="inline-flex items-center gap-1 rounded border border-emerald-800/60 bg-emerald-950/40 px-1.5 py-0.5 text-emerald-300 hover:border-emerald-500 text-[11px]"
                           >
                             <span className="text-[10px] text-emerald-400 font-mono">«{cb.kind}»</span>
-                            <span>{cb.name}</span>
+                            <span>{referenceLabel(cb.id, cb.type)}</span>
                           </button>
                         ))}
                       </div>
@@ -398,7 +402,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             className="inline-flex items-center gap-1 rounded border border-cyan-800/60 bg-cyan-950/40 px-1.5 py-0.5 text-cyan-300 hover:border-cyan-500 text-[11px]"
                           >
                             <span className="text-[10px] text-cyan-400 font-mono">«verify»</span>
-                            <span>{v.name}</span>
+                            <span>{referenceLabel(v.id, 'Verification Case')}</span>
                           </button>
                         ))}
                       </div>
@@ -429,5 +433,5 @@ function ElementLinks({ ids, repository, onNavigate, empty }: { ids: string[]; r
 }
 
 function elementName(repository: SysmlRepository, id: string): string {
-  return repository.definitions[id]?.name ?? repository.usages[id]?.name ?? repository.verificationCases[id]?.name ?? repository.artifacts[id]?.name ?? repository.connectors[id]?.id ?? repository.evidence[id]?.id ?? id;
+  return resolveSysmlReferenceLabel(repository, id, repository.evidence[id] ? 'Evidence' : undefined);
 }

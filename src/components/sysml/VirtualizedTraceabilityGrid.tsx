@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { RtmRow, RtmStatus, RtmChangeKind } from '../../engine/sysml/rtm';
+import { sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 
 export interface VirtualWindowParams {
   totalRows: number;
@@ -60,6 +61,7 @@ export interface VirtualGridColumn {
 
 export interface VirtualizedTraceabilityGridProps {
   rows: RtmRow[];
+  resolveLabel?: (id: string, fallbackKind?: string) => string;
   containerHeight?: number;
   rowHeight?: number;
   scrollTop?: number;
@@ -69,6 +71,7 @@ export interface VirtualizedTraceabilityGridProps {
 
 export function VirtualizedTraceabilityGrid({
   rows,
+  resolveLabel,
   containerHeight = 400,
   rowHeight = 40,
   scrollTop: controlledScrollTop,
@@ -403,10 +406,10 @@ export function VirtualizedTraceabilityGrid({
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(rf.id); }}
                               className="inline-flex items-center gap-0.5 rounded border border-amber-900/50 bg-amber-950/40 px-1 text-amber-300 text-[10px] truncate hover:border-amber-500"
-                              title={`Refined By: ${rf.name}`}
+                              title={`Refined By: ${resolveLabel?.(rf.id) ?? sysmlObjectLabel(rf)}`}
                             >
                               <span className="font-mono text-[9px] text-amber-400">«refine»</span>
-                              <span>{rf.name}</span>
+                              <span>{resolveLabel?.(rf.id) ?? sysmlObjectLabel(rf)}</span>
                             </button>
                           ))}
                         </div>
@@ -422,10 +425,10 @@ export function VirtualizedTraceabilityGrid({
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(tr.id); }}
                               className="inline-flex items-center gap-0.5 rounded border border-teal-900/50 bg-teal-950/40 px-1 text-teal-300 text-[10px] truncate hover:border-teal-500"
-                              title={`Traced: ${tr.name}`}
+                              title={`Traced: ${resolveLabel?.(tr.id) ?? sysmlObjectLabel(tr)}`}
                             >
                               <span className="font-mono text-[9px] text-teal-400">«trace»</span>
-                              <span>{tr.name}</span>
+                              <span>{resolveLabel?.(tr.id) ?? sysmlObjectLabel(tr)}</span>
                             </button>
                           ))}
                         </div>
@@ -498,7 +501,7 @@ export function VirtualizedTraceabilityGrid({
                             className="inline-flex items-center gap-0.5 rounded border border-emerald-900/50 bg-emerald-950/40 px-1 text-emerald-300 text-[10px] truncate hover:border-emerald-500"
                           >
                             <span className="text-[9px] text-emerald-400 font-mono">«{cb.kind}»</span>
-                            <span>{cb.name}</span>
+                            <span>{resolveLabel?.(cb.id, cb.type) ?? sysmlObjectLabel({ name: cb.name }, cb.type)}</span>
                           </button>
                         ))}
                       </div>
@@ -512,7 +515,7 @@ export function VirtualizedTraceabilityGrid({
                             className="inline-flex items-center gap-0.5 rounded border border-emerald-900/50 bg-emerald-950/40 px-1 text-emerald-300 text-[10px] truncate hover:border-emerald-500"
                           >
                             <span className="text-[9px] text-emerald-400 font-mono">«{cb.kind}»</span>
-                            <span>{cb.name}</span>
+                            <span>{resolveLabel?.(cb.id, cb.type) ?? sysmlObjectLabel({ name: cb.name }, cb.type)}</span>
                           </button>
                         ))}
                       </div>
@@ -565,7 +568,7 @@ export function VirtualizedTraceabilityGrid({
                           className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
                         >
                           <span className="text-[9px] text-cyan-400 font-mono">«verify»</span>
-                          <span>{v.name}</span>
+                          <span>{resolveLabel?.(v.id, 'Verification Case') ?? sysmlObjectLabel(v, 'Verification Case')}</span>
                         </button>
                       ))
                     ) : row.verificationCases.length > 0 ? (
@@ -576,7 +579,7 @@ export function VirtualizedTraceabilityGrid({
                           onClick={e => { e.stopPropagation(); onNavigate?.(vc); }}
                           className="px-1 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[10px] text-neutral-300 hover:border-orange-500"
                         >
-                          {vc}
+                          {resolveLabel?.(vc, 'Verification Case') ?? 'Verification Case'}
                         </button>
                       ))
                     ) : (

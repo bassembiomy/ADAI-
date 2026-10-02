@@ -14,6 +14,13 @@ const relation = (type: RelationshipData['type'] = 'composition'): RelationshipD
 const model = (stereotype = 'block', relationships: RelationshipData[] = []) => ({ blocks: [block('whole'), block('part', stereotype)], parts: [], relationships });
 
 describe('SysML connection UI admission', () => {
+  it('does not use an unresolved endpoint ID as a name or diagnostic text', () => {
+    const id = '65cb033e-421d-41e0-b789-87931d991010';
+    const endpoint = resolveUiConnectionEndpoint(model(), id);
+    expect(endpoint.name).toBe('Element');
+    const rejection = rejectUiRelationship(model(), { ...relation(), targetId: id }, 'bdd')!;
+    expect(rejection.diagnostic.message).not.toContain(id);
+  });
   it('selects Association directly when a BDD property targets its declared Block type', () => {
     const owner = block('owner');
     owner.properties = [{ id: 'motor-property', name: 'motor', kind: 'part', type: 'Motor', typeId: 'motor', multiplicity: '1' }];

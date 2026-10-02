@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Multiplicity, SysmlRelationship } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
+import { sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import {
   evaluateSysmlConnection,
   type ConnectionEndpoint,
@@ -116,14 +117,16 @@ export function RelationshipEndEditor({
 }: RelationshipEndEditorProps) {
   const resolvedSource: ConnectionEndpoint = sourceEndpoint ?? {
     id: relationship.sourceId,
-    name: relationship.sourceId,
+    name: '',
     family: sourceIsRequirement ? 'requirement' : 'unknown',
   };
   const resolvedTarget: ConnectionEndpoint = targetEndpoint ?? {
     id: relationship.targetId,
-    name: relationship.targetId,
+    name: '',
     family: targetIsRequirement ? 'requirement' : 'unknown',
   };
+  const sourceLabel = sysmlObjectLabel(resolvedSource, resolvedSource.family);
+  const targetLabel = sysmlObjectLabel(resolvedTarget, resolvedTarget.family);
   const allowedRelationshipKinds = filterRelationshipKinds(resolvedSource, resolvedTarget, diagram);
 
   const update = (patch: Partial<SysmlRelationship>) => {
@@ -164,19 +167,19 @@ export function RelationshipEndEditor({
   if (generalizationInfo?.targetIsLeaf) {
     derivedGuidance.push({
       code: 'LEAF_SPECIALIZATION',
-      message: `Target ${relationship.targetId} is a leaf block and cannot be specialized`,
+      message: `Target ${targetLabel} is a leaf block and cannot be specialized`,
     });
   }
   if (generalizationInfo?.cycleDetected) {
     derivedGuidance.push({
       code: 'INHERITANCE_CYCLE',
-      message: `Inheritance cycle detected involving ${relationship.sourceId}`,
+      message: `Inheritance cycle detected involving ${sourceLabel}`,
     });
   }
   if (generalizationInfo?.targetIsAbstract) {
     derivedGuidance.push({
       code: 'ABSTRACT_INSTANTIATION',
-      message: `Target ${relationship.targetId} is abstract and cannot be directly instantiated; specialize it with a concrete subtype`,
+      message: `Target ${targetLabel} is abstract and cannot be directly instantiated; specialize it with a concrete subtype`,
     });
   }
   const generalizationChain = generalizationInfo?.parentChain ?? [];
@@ -247,7 +250,7 @@ export function RelationshipEndEditor({
       {/* Source End */}
       <fieldset className="rounded border border-gray-700 p-2 space-y-2">
         <legend className="px-1 font-semibold text-gray-300">
-          Source End ({relationship.sourceId}) {isContainment && <span className="text-orange-400">· Container (parent)</span>}
+          Source End ({sourceLabel}) {isContainment && <span className="text-orange-400">· Container (parent)</span>}
         </legend>
         <div className="grid grid-cols-2 gap-2">
           <label>
@@ -298,7 +301,7 @@ export function RelationshipEndEditor({
       {/* Target End */}
       <fieldset className="rounded border border-gray-700 p-2 space-y-2">
         <legend className="px-1 font-semibold text-gray-300">
-          Target End ({relationship.targetId}) {isContainment && <span className="text-orange-400">· Nested (child)</span>}
+          Target End ({targetLabel}) {isContainment && <span className="text-orange-400">· Nested (child)</span>}
         </legend>
         <div className="grid grid-cols-2 gap-2">
           <label>

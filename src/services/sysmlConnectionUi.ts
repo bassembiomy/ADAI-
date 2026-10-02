@@ -32,7 +32,7 @@ export function resolveUiConnectionEndpoint(
   }
   const part = model.parts.find(item => item.id === id);
   if (part) return classifyLegacyEndpoint({ ...part, stereotype: 'part' });
-  return { id: '', name: id, family: 'unknown' };
+  return { id: '', name: 'Element', family: 'unknown' };
 }
 
 export function rejectUiRelationship(model: UiModel, candidate: RelationshipData, diagram: Diagram): UiConnectionRejection | undefined {

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import type { ModelBaseline, RequirementDefinition, SysmlRelationship, VerificationEvidence } from '../../engine/sysml/model';
+import type { ModelBaseline, RequirementDefinition, SysmlRelationship, SysmlRepository, VerificationEvidence } from '../../engine/sysml/model';
+import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import type { ImpactSeverity } from '../../engine/sysml/mutations';
 
 export interface RequirementGovernancePanelProps {
+  repository?: SysmlRepository;
   requirement: RequirementDefinition;
   masterRequirement?: RequirementDefinition;
   baselines: Record<string, ModelBaseline>;
@@ -20,6 +22,7 @@ export interface RequirementGovernancePanelProps {
 }
 
 export function RequirementGovernancePanel({
+  repository,
   requirement,
   masterRequirement,
   baselines,
@@ -40,6 +43,11 @@ export function RequirementGovernancePanel({
 
   const baselineList = Object.values(baselines);
   const currentBaseline = requirement.baselineId ? baselines[requirement.baselineId] : undefined;
+  const referenceRepository = {
+    ...repository,
+    requirements: { ...repository?.requirements, [requirement.id]: requirement, ...(masterRequirement ? { [masterRequirement.id]: masterRequirement } : {}) },
+  };
+  const baselineLabel = (id: string) => sysmlObjectLabel(baselines[id], 'Baseline');
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +80,7 @@ export function RequirementGovernancePanel({
         <div className="flex items-center justify-between">
           <div>
             <span className="text-gray-400">Current Baseline: </span>
-            <span className="font-mono text-gray-200">{currentBaseline ? currentBaseline.name : 'Working Draft (Unfrozen)'}</span>
+            <span className="font-mono text-gray-200">{currentBaseline ? sysmlObjectLabel(currentBaseline, 'Baseline') : 'Working Draft (Unfrozen)'}</span>
           </div>
           <button
             type="button"
@@ -122,8 +130,8 @@ export function RequirementGovernancePanel({
             {suspectLinks.map(link => (
               <div key={link.id} className="flex items-center justify-between rounded bg-[#1e1e1e] p-1.5 border border-gray-800">
                 <div>
-                  <span className="font-mono text-gray-300">«{link.kind}»</span>
-                  <span className="text-gray-400 text-[10px]"> {link.sourceId} ➔ {link.targetId}</span>
+                  <span className="font-mono text-gray-300">{sysmlObjectLabel(link, 'Relationship')}</span>
+                  <span className="text-gray-400 text-[10px]"> {resolveSysmlReferenceLabel(referenceRepository, link.sourceId)} -&gt; {resolveSysmlReferenceLabel(referenceRepository, link.targetId)}</span>
                 </div>
                 {onClearSuspect && (
                   <button
@@ -145,7 +153,7 @@ export function RequirementGovernancePanel({
         <fieldset className="rounded border border-gray-700 p-2 space-y-2">
           <legend className="px-1 font-semibold text-gray-300">Copy Synchronization</legend>
           <div className="text-[11px] text-gray-400">
-            Copied from master requirement: <span className="font-mono text-gray-200">{requirement.copiedFromId}</span>
+            Copied from master requirement: <span className="font-mono text-gray-200">{resolveSysmlReferenceLabel(referenceRepository, requirement.copiedFromId, 'Requirement')}</span>
           </div>
 
           {masterRequirement && (
@@ -203,19 +211,19 @@ export function RequirementGovernancePanel({
           {unresolvedUsageIds.length > 0 && (
             <div className="text-[11px] text-gray-400">
               Typed usages kept unresolved (explicit resolution required):
-              <span className="font-mono text-gray-200"> {unresolvedUsageIds.join(', ')}</span>
+              <span className="font-mono text-gray-200"> {unresolvedUsageIds.map(id => resolveSysmlReferenceLabel(referenceRepository, id, 'Usage')).join(', ')}</span>
             </div>
           )}
           {invalidatedEvidenceIds.length > 0 && (
             <div className="text-[11px] text-gray-400">
               Evidence invalidated by deletion:
-              <span className="font-mono text-gray-200"> {invalidatedEvidenceIds.join(', ')}</span>
+              <span className="font-mono text-gray-200"> {invalidatedEvidenceIds.map(() => 'Evidence').join(', ')}</span>
             </div>
           )}
           {blockedBaselineIds.length > 0 && (
             <div className="rounded border border-red-800/60 bg-red-950/20 p-2 space-y-1.5">
               <p className="text-[11px] text-red-300">
-                Protected baseline{blockedBaselineIds.length > 1 ? 's' : ''} {blockedBaselineIds.join(', ')} forbid{blockedBaselineIds.length > 1 ? '' : 's'} this deletion. Clone into a working copy or authorize explicitly.
+                Protected baseline{blockedBaselineIds.length > 1 ? 's' : ''} {blockedBaselineIds.map(baselineLabel).join(', ')} forbid{blockedBaselineIds.length > 1 ? '' : 's'} this deletion. Clone into a working copy or authorize explicitly.
               </p>
               <div className="flex gap-2">
                 {onCloneBaseline && blockedBaselineIds.map(id => (
@@ -225,7 +233,7 @@ export function RequirementGovernancePanel({
                     onClick={() => onCloneBaseline(id)}
                     className="rounded border border-gray-600 px-2 py-0.5 text-[11px] text-gray-300 hover:bg-gray-800"
                   >
-                    Clone {id}
+                    Clone {baselineLabel(id)}
                   </button>
                 ))}
                 {onAuthorizeBaseline && blockedBaselineIds.map(id => (
@@ -235,7 +243,7 @@ export function RequirementGovernancePanel({
                     onClick={() => onAuthorizeBaseline(id)}
                     className="rounded border border-red-700 bg-red-950/40 px-2 py-0.5 text-[11px] font-semibold text-red-300 hover:bg-red-900/50"
                   >
-                    Authorize {id}
+                    Authorize {baselineLabel(id)}
                   </button>
                 ))}
               </div>

@@ -19,6 +19,22 @@ function findElementByAriaLabel(node: React.ReactNode, label: string): React.Rea
 }
 
 describe('RelationshipEndEditor', () => {
+  it('uses endpoint labels in derived inheritance warnings', () => {
+    const sourceId = '65cb033e-421d-41e0-b789-87931d991010';
+    const targetId = '65cb033e-421d-41e0-b789-87931d991011';
+    const html = renderToStaticMarkup(<RelationshipEndEditor
+      relationship={{ id: 'relationship', kind: 'generalization', sourceId, targetId }}
+      sourceEndpoint={{ id: sourceId, name: ' Controller ', family: 'block' }}
+      targetEndpoint={{ id: targetId, name: ' ', family: 'block' }}
+      generalizationInfo={{ targetIsLeaf: true, targetIsAbstract: true, cycleDetected: true }}
+      onChange={vi.fn()}
+    />);
+    expect(html).toContain('Target Block is a leaf block');
+    expect(html).toContain('Inheritance cycle detected involving Controller');
+    expect(html).toContain('Target Block is abstract');
+    expect(html).not.toContain(sourceId);
+    expect(html).not.toContain(targetId);
+  });
   const relationship: SysmlRelationship = {
     id: 'rel1',
     kind: 'composition',

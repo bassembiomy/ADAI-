@@ -1,5 +1,6 @@
 import type { BlockData, PartData } from '../../types/sysml_types';
 import type { SysmlEntity, SysmlUsage } from './model';
+import { sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 
 export type SysmlEndpointFamily =
   | 'block' | 'interfaceBlock' | 'interface' | 'valueType' | 'enumeration'
@@ -39,7 +40,7 @@ const REQUIREMENT_KINDS = new Set(['requirementContainment', 'deriveReqt', 'copy
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
 function endpointName(endpoint: ConnectionEndpoint): string {
-  return endpoint.name || endpoint.id;
+  return sysmlObjectLabel(endpoint, endpoint.family);
 }
 
 function familyLabel(endpoint: ConnectionEndpoint): string {
@@ -77,10 +78,10 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Association requires declared classifier endpoint families.', 'Declare a supported stereotype family before using an association.');
     if (!ASSOCIATION_FAMILY.has(source.family) || !ASSOCIATION_FAMILY.has(target.family)) return reject(normalized, 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS', 'Association requires compatible classifier endpoints.', 'Choose two Block, Interface, ValueType, or Enumeration classifiers.');
     if (source.family === 'property' && source.typeId && source.typeId !== target.id) {
-      return reject(normalized, 'INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT', `Property ${source.name} is typed by ${source.typeId}, but association targets ${target.name}.`, 'Connect to the classifier that types this property.');
+      return reject(normalized, 'INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT', `Property ${endpointName(source)} is typed by a different type than ${endpointName(target)}.`, 'Connect to the classifier that types this property.');
     }
     if (target.family === 'property' && target.typeId && target.typeId !== source.id) {
-      return reject(normalized, 'INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT', `Property ${target.name} is typed by ${target.typeId}, but association targets ${source.name}.`, 'Connect to the classifier that types this property.');
+      return reject(normalized, 'INCOMPATIBLE_PROPERTY_TYPE_ENDPOINT', `Property ${endpointName(target)} is typed by a different type than ${endpointName(source)}.`, 'Connect to the classifier that types this property.');
     }
     return { allowed: true, diagnostics: [] };
   }
@@ -210,11 +211,11 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
 export function classifyLegacyEndpoint(endpoint: unknown): ConnectionEndpoint {
   const value = endpoint as Partial<BlockData & PartData> & { kind?: string; stereotype?: string; ownerId?: string };
   const family = fromLegacyKind(value.stereotype || value.kind);
-  return { id: String(value.id || ''), name: String(value.name || value.id || ''), family, ownerId: value.ownerId };
+  return { id: String(value.id || ''), name: sysmlObjectLabel(value, family), family, ownerId: value.ownerId };
 }
 
 export function classifyCanonicalEndpoint(endpoint: unknown): ConnectionEndpoint {
   const value = endpoint as Partial<SysmlEntity | SysmlUsage> & { kind?: string; stereotype?: string; ownerId?: string; metaclass?: string; name?: string };
   const family = fromLegacyKind(value.stereotype || value.metaclass || value.kind);
-  return { id: String(value.id || ''), name: String(value.name || value.id || ''), family, ownerId: value.ownerId };
+  return { id: String(value.id || ''), name: sysmlObjectLabel(value, family), family, ownerId: value.ownerId };
 }

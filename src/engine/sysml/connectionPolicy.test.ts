@@ -12,6 +12,13 @@ import { loadRepository, serializeRepository } from './persistence';
 const endpoint = (family: SysmlEndpointFamily, id: string = family, name: string = family): ConnectionEndpoint => ({ id, name, family });
 
 describe('central SysML connection policy', () => {
+  it('keeps mismatched property type IDs out of user-facing diagnostics', () => {
+    const typeId = '65cb033e-421d-41e0-b789-87931d991010';
+    const result = evaluateSysmlConnection({ relationshipKind: 'association', diagram: 'bdd', source: { id: 'property', name: ' ', family: 'property', typeId }, target: { id: 'block', name: 'Controller', family: 'block' } });
+    expect(result.allowed).toBe(false);
+    expect(result.diagnostics[0].message).not.toContain(typeId);
+    expect(result.diagnostics[0].message).toContain('a different type');
+  });
   it.each([
     ['association', 'block', 'valueType', true],
     ['composition', 'block', 'valueType', false],

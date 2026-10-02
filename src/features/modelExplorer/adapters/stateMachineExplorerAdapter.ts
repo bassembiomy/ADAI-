@@ -9,6 +9,7 @@ import type {
   ExplorerDiagnostic,
 } from '../modelExplorerTypes';
 import { hashImpact } from '../modelExplorerTypes';
+import { sysmlObjectLabel } from '../../sysml/sysmlDisplayLabel';
 import {
   getElementKindLabel,
   getRelationshipKindLabel,
@@ -185,7 +186,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
           semanticId: layer.id,
           domain: 'stateMachine',
           kind: 'region',
-          label: layer.name || (layer.id === 'root' ? 'Root Region' : `Region ${layer.id}`),
+          label: sysmlObjectLabel(layer, layer.id === 'root' ? 'Root Region' : 'Region'),
           parentNodeId,
           childNodeIds: [],
           hasChildren: false,

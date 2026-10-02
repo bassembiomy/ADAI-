@@ -125,6 +125,7 @@ import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './comp
 import { computeBlockDisplayBounds } from './components/sysml/blockLayout';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
+import { resolveSysmlReferenceLabel, sysmlObjectLabel } from './features/sysml/sysmlDisplayLabel';
 import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
 import { StateMachineCanvasContextMenu } from './components/statemachine/StateMachineCanvasContextMenu';
 import { validateAssociationEnds } from './engine/sysml/bdd';
@@ -854,65 +855,70 @@ const LegacyTraceabilityMatrix = ({
   }
 
   const exportExcel = () => {
+    const referenceLabel = (id: string, fallbackKind = 'Element') => {
+      const block = blocks.find(b => b.id === id);
+      if (block) return sysmlObjectLabel(block, block.stereotype || 'Block');
+      const part = parts.find(p => p.id === id);
+      return sysmlObjectLabel(part, part ? 'Part' : fallbackKind);
+    };
     const data = orderedReqs.map(({ req: r, level }) => {
       const outgoing = relationships.filter(rel => rel.sourceId === r.id).map(rel => {
-        const target = blocks.find(b => b.id === rel.targetId);
-        return `[${rel.type}] ${target?.name || rel.targetId}`;
+        return `[${rel.type}] ${referenceLabel(rel.targetId)}`;
       }).join('; ');
 
       const containedBy = relationships
         .filter(rel => rel.type === 'requirementContainment' && rel.targetId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .map(rel => referenceLabel(rel.sourceId, 'Requirement'))
         .join('; ');
 
       const contains = relationships
         .filter(rel => rel.type === 'requirementContainment' && rel.sourceId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .map(rel => referenceLabel(rel.targetId, 'Requirement'))
         .join('; ');
 
       const derivedFrom = relationships
         .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.sourceId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .map(rel => referenceLabel(rel.targetId, 'Requirement'))
         .join('; ');
 
       const derivedReqs = relationships
         .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.targetId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .map(rel => referenceLabel(rel.sourceId, 'Requirement'))
         .join('; ');
 
       const copiedFrom = relationships
         .filter(rel => rel.type === 'copy' && rel.sourceId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.targetId)?.name || rel.targetId)
+        .map(rel => referenceLabel(rel.targetId, 'Requirement'))
         .join('; ');
 
       const copies = relationships
         .filter(rel => rel.type === 'copy' && rel.targetId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .map(rel => referenceLabel(rel.sourceId, 'Requirement'))
         .join('; ');
 
       const satisfiedByRel = relationships
         .filter(rel => rel.type === 'satisfy' && rel.targetId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId);
+        .map(rel => referenceLabel(rel.sourceId));
 
-      const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
-      const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
+      const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => sysmlObjectLabel(b, b.stereotype || 'Block'));
+      const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => sysmlObjectLabel(p, 'Part'));
       const satisfiedBy = [...new Set([...satisfiedByRel, ...satisfiedByBlocks, ...satisfiedByParts])].join('; ');
 
       const verifiedBy = relationships
         .filter(rel => rel.type === 'verify' && rel.targetId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .map(rel => referenceLabel(rel.sourceId, 'Verification Case'))
         .join('; ');
 
       const refinedBy = relationships
         .filter(rel => rel.type === 'refine' && rel.targetId === r.id)
-        .map(rel => blocks.find(b => b.id === rel.sourceId)?.name || rel.sourceId)
+        .map(rel => referenceLabel(rel.sourceId))
         .join('; ');
 
       const traced = relationships
         .filter(rel => (rel.type === 'trace' || (rel.type as string) === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
         .map(rel => {
           const otherId = rel.sourceId === r.id ? rel.targetId : rel.sourceId;
-          return blocks.find(b => b.id === otherId)?.name || otherId;
+          return referenceLabel(otherId);
         })
         .join('; ');
 
@@ -9217,7 +9223,7 @@ const ADIA = () => {
         const allParallel = layerStates.length > 0 && layerStates.every(s => s.isParallel);
 
         if (totalAutostarts === 0) {
-          const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
+          const layerName = sysmlObjectLabel(layer, layer.id === 'root' ? 'Root' : 'Region');
           newErrors.push({
             id: uuidv4(),
             type: 'error',
@@ -9229,7 +9235,7 @@ const ADIA = () => {
           });
         } else if (totalAutostarts > 1 && !allParallel) {
           [...autostartStates, ...autostartJunctions].forEach(s => {
-            const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
+            const layerName = sysmlObjectLabel(layer, layer.id === 'root' ? 'Root' : 'Region');
             newErrors.push({
               id: uuidv4(),
               type: 'error',
@@ -13684,8 +13690,8 @@ const ADIA = () => {
                 ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.targetPartId)?.typeId))
                 : ctxBlock;
 
-              const sPortName = sBlock?.ports?.find((p: any) => p.id === c.sourcePortId)?.name || c.sourcePortId || '';
-              const tPortName = tBlock?.ports?.find((p: any) => p.id === c.targetPortId)?.name || c.targetPortId || '';
+              const sPortName = c.sourcePortId ? sysmlObjectLabel(sBlock?.ports?.find((p: any) => p.id === c.sourcePortId), 'Port') : '';
+              const tPortName = c.targetPortId ? sysmlObjectLabel(tBlock?.ports?.find((p: any) => p.id === c.targetPortId), 'Port') : '';
 
               const sDesc = sPart + (sPortName ? `.${sPortName}` : '');
               const tDesc = tPart + (tPortName ? `.${tPortName}` : '');
@@ -16423,15 +16429,18 @@ const ADIA = () => {
         ? validateRequirementContainment(canonicalSysmlRepository, rel.id)
         : [];
       const containmentErrorText = containmentDiagnostics.map(d => d.message).join('; ');
+      const sourceLabel = sysmlObjectLabel(source, source.stereotype || 'Element');
+      const targetLabel = sysmlObjectLabel(target, target.stereotype || 'Element');
+      const relationshipLabel = sysmlObjectLabel({ name: rel.label, kind: rel.type }, 'Relationship');
       const ariaLabel = isReqContainment
-        ? `Requirement containment: ${source.name || source.reqId || source.id} contains ${target.name || target.reqId || target.id}${containmentErrorText ? ` - Error: ${containmentErrorText}` : ''}`
+        ? `Requirement containment: ${sourceLabel} contains ${targetLabel}${containmentErrorText ? ` - Error: ${containmentErrorText}` : ''}`
         : undefined;
       const { sp, tp, labelPos, angle } = route;
 
       const sourceProperty = 'properties' in source
         ? (source.properties as any[])?.find((p: any) => p.id === (bddPresentation?.propertyId || rel.sourceId))
         : undefined;
-      const propertyRole = sourceProperty?.name || '';
+      const propertyRole = sysmlObjectLabel({ name: sourceProperty?.name }, 'Property');
       const propertyMult = sourceProperty?.multiplicity ? ` [${sourceProperty.multiplicity}]` : '';
       const propertyLabel = `${propertyRole}${propertyMult}`.trim();
 
@@ -16449,8 +16458,8 @@ const ADIA = () => {
           aria-label={ariaLabel}
         >
           <title>{bddPresentation?.kind === 'propertyAssociation'
-            ? `Property ${sourceProperty?.name || rel.sourceId} of ${source.name || source.id} -> ${target.name || target.id}`
-            : `${rel.type}: ${source.name || source.id} -> ${target.name || target.id}`}</title>
+            ? `${propertyRole} of ${sourceLabel} -> ${targetLabel}`
+            : `${relationshipLabel}: ${sourceLabel} -> ${targetLabel}`}</title>
 
           {/* Broad click target */}
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
@@ -16514,7 +16523,7 @@ const ADIA = () => {
           )}
 
           {/* Stereotype / Label Badge with background - deferred during drag/pan */}
-          {!isInteracting && (isTrace || rel.type === 'allocation' || rel.type === 'requirementContainment' || rel.label) && (
+          {!isInteracting && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
               <rect
                 x={-42}
@@ -16536,7 +16545,7 @@ const ADIA = () => {
               >
                 {rel.type === 'requirementContainment'
                   ? (containmentDiagnostics.length > 0 ? '«contains» [!]' : '«contains»')
-                  : (rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`)}{isSuspect ? ' [!]' : ''}
+                  : relationshipLabel}{isSuspect ? ' [!]' : ''}
               </text>
             </g>
           )}
@@ -19607,6 +19616,7 @@ const ADIA = () => {
 
                         return (
                           <RequirementGovernancePanel
+                            repository={canonicalSysmlRepository}
                             requirement={reqDef}
                             masterRequirement={masterReq}
                             baselines={canonicalSysmlRepository.baselines}
@@ -19622,18 +19632,18 @@ const ADIA = () => {
                               addError('info', `Created baseline: ${name}`);
                             }}
                             onCloneBaseline={(baselineId) => {
-                              const res = cloneProtectedBaselineAsWorkingCopy(canonicalSysmlRepository, baselineId, `Working copy of ${baselineId}`);
+                              const res = cloneProtectedBaselineAsWorkingCopy(canonicalSysmlRepository, baselineId, `Working copy of ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}`);
                               setCanonicalSysmlRepository(res.repository);
-                              addError('info', `Cloned protected baseline ${baselineId} into unprotected working copy ${res.baseline.id}`);
+                              addError('info', `Cloned protected baseline ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')} into unprotected working copy ${sysmlObjectLabel(res.baseline, 'Baseline')}`);
                             }}
                             onAuthorizeBaseline={(baselineId) => {
                               setAuthorizedBaselineIds(prev => prev.includes(baselineId) ? prev : [...prev, baselineId]);
-                              addError('info', `Recorded explicit deletion authorization for protected baseline ${baselineId}`);
+                              addError('info', `Recorded explicit deletion authorization for protected baseline ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}`);
                             }}
                             onClearSuspect={(relId) => {
                               const updated = clearSuspectLink(canonicalSysmlRepository, relId);
                               setCanonicalSysmlRepository(updated);
-                              addError('info', `Cleared suspect flag on link: ${relId}`);
+                              addError('info', `Cleared suspect flag on link: ${resolveSysmlReferenceLabel(canonicalSysmlRepository, relId, 'Relationship')}`);
                             }}
                             onSyncFromMaster={() => {
                               const res = synchronizeRequirementCopy(canonicalSysmlRepository, selectedBlock.id);
@@ -19992,7 +20002,7 @@ const ADIA = () => {
                                 <option value="full">Full</option>
                                 </select>
                                 <select
-                                  aria-label={`Direction for ${port.name || port.id}`}
+                                  aria-label={`Direction for ${sysmlObjectLabel(port, 'Port')}`}
                                   value={port.direction || 'inout'}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -20819,8 +20829,7 @@ const ADIA = () => {
                       }}
                       className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
                     >
-                      <span className="font-semibold text-xs text-orange-300">{diag?.name || id}</span>
-                      <span className="text-[10px] text-[#888]">ID: {id}</span>
+                      <span className="font-semibold text-xs text-orange-300">{sysmlObjectLabel(diag, 'Package Diagram')}</span>
                     </Button>
                   );
                 })}

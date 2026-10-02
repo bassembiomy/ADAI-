@@ -1,4 +1,5 @@
 import React from 'react';
+import { sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import type { ConnectionEndpoint, ConnectionPolicyDiagnostic } from '../../engine/sysml/connectionPolicy';
 // Task 6 review fix: error/warning text resolves from the centralized
 // semantic palette via CSS vars. The text labels ("Relationship:", "Rule
@@ -14,7 +15,7 @@ export interface SysmlConnectionErrorDetailsProps {
 }
 
 function endpointLabel(endpoint: ConnectionEndpoint): string {
-  return `${endpoint.name || endpoint.id} (${endpoint.family})`;
+  return `${sysmlObjectLabel(endpoint, endpoint.family)} (${endpoint.family})`;
 }
 
 /** Detailed, reusable policy-error content used by the application error modal. */

@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 import React from 'react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyRepository } from '../../engine/sysml/model';
 import { nextRtmFocusIndex, TraceabilityMatrix } from './TraceabilityMatrix';
 
@@ -13,6 +15,40 @@ function repository() {
 }
 
 describe('professional traceability matrix workspace', () => {
+  afterEach(cleanup);
+  it.each([false, true])('labels unnamed and unresolved endpoints in matrix view (virtual=%s)', virtual => {
+    const repo = repository();
+    repo.definitions.b.name = ' ';
+    const missingId = '65cb033e-421d-41e0-b789-87931d991012';
+    const verificationId = '65cb033e-421d-41e0-b789-87931d991013';
+    repo.relationships.refine = { id: 'refine', kind: 'refine', sourceId: missingId, targetId: 'r' };
+    repo.verificationCases[verificationId] = { id: verificationId, name: ' ', kind: 'verificationCase', namespace: [], method: 'test', verifiesRequirementIds: ['r'] };
+    const { container } = render(<TraceabilityMatrix repository={repo} />);
+    if (virtual) fireEvent.click(screen.getByRole('button', { name: 'Virtualized Grid' }));
+    expect(screen.getByText('Block')).toBeTruthy();
+    expect(screen.getByText('Verification Case')).toBeTruthy();
+    if (!virtual) expect(screen.getByText('Element')).toBeTruthy();
+    for (const id of [missingId, verificationId]) expect(container.textContent).not.toContain(id);
+  });
+  it('uses metaclasses for unnamed linked elements and preserves navigation IDs', () => {
+    const repo = repository();
+    const connectorId = '65cb033e-421d-41e0-b789-87931d991010';
+    const evidenceId = '65cb033e-421d-41e0-b789-87931d991011';
+    repo.connectors[connectorId] = { id: connectorId, kind: 'assembly', ownerId: 'b', sourcePortId: 'p1', targetPortId: 'p2' };
+    repo.relationships.trace = { id: 'trace', kind: 'trace', sourceId: connectorId, targetId: 'r' };
+    repo.evidence[evidenceId] = { id: evidenceId, requirementId: 'r', verificationCaseId: 'test', revision: 0, result: 'passed', executedAt: '' };
+    const onNavigate = vi.fn();
+    const { container } = render(<TraceabilityMatrix repository={repo} onNavigate={onNavigate} />);
+    expect(screen.getByText('Controller')).toBeTruthy();
+    expect(screen.getAllByText('Assembly').length).toBeGreaterThan(0);
+    expect(screen.getByText('Evidence')).toBeTruthy();
+    for (const id of [connectorId, evidenceId]) {
+      expect(screen.queryByText(id)).toBeNull();
+      expect(container.textContent?.includes(id)).toBe(false);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Assembly' }));
+    expect(onNavigate).toHaveBeenCalledWith(connectorId);
+  });
   it('renders accessible status text, metrics, filters, source cells, and export control', () => {
     const html = renderToStaticMarkup(<TraceabilityMatrix repository={repository()} />);
     expect(html).toContain('traceability-grid');
