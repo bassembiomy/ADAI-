@@ -23,4 +23,33 @@ describe('SysML display labels', () => {
     expect(resolveSysmlReferenceLabel(repository, '358925d2-8fba-438e-b11a-523a63c85da5')).toBe('Block');
     expect(resolveSysmlReferenceLabel(repository, 'missing-uuid', 'Element')).toBe('Element');
   });
+
+  it('labels unnamed V4 item flows by their repository collection', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.itemFlows = {
+      'flow-internal-id': {
+        id: 'flow-internal-id',
+        realizingRelationshipId: 'rel-1',
+        conveyedClassifierIds: [],
+        sourceId: 'source-1',
+        targetId: 'target-1',
+      },
+    };
+
+    expect(resolveSysmlReferenceLabel(repository, 'flow-internal-id')).toBe('Item Flow');
+  });
+
+  it('resolves assigned names from legacy repository maps', () => {
+    const repository = Object.assign(createEmptyRepositoryV4(), {
+      actors: { actorId: { id: 'actorId', name: 'External User' } },
+      subjects: { subjectId: { id: 'subjectId', name: 'Payment Subject' } },
+      useCases: { useCaseId: { id: 'useCaseId', name: 'Submit Order' } },
+      extensionPoints: { extensionPointId: { id: 'extensionPointId', name: 'Validate Details' } },
+    });
+
+    expect(resolveSysmlReferenceLabel(repository, 'actorId')).toBe('External User');
+    expect(resolveSysmlReferenceLabel(repository, 'subjectId')).toBe('Payment Subject');
+    expect(resolveSysmlReferenceLabel(repository, 'useCaseId')).toBe('Submit Order');
+    expect(resolveSysmlReferenceLabel(repository, 'extensionPointId')).toBe('Validate Details');
+  });
 });
