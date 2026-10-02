@@ -84,7 +84,7 @@ export function sysmlObjectLabel(
   fallbackKind = 'Element',
 ): string {
   const name = value?.name?.trim();
-  if (name && name !== value?.id) return name;
+  if (name) return name;
   return friendlySysmlKind(value?.metaclass ?? value?.kind, fallbackKind);
 }
 
