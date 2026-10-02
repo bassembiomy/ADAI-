@@ -87,6 +87,8 @@ interface PropertyFieldRowProps {
 
 const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) => {
   const [localVal, setLocalVal] = useState<unknown>(field.value);
+  const fieldLabelId = `field-${field.key}-label`;
+  const warningId = field.referenceWarning ? `field-${field.key}-warning` : undefined;
 
   useEffect(() => {
     setLocalVal(field.value);
@@ -113,9 +115,15 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex justify-between items-center">
-        <label htmlFor={`field-${field.key}`} className="text-[11px] font-medium text-[var(--text-secondary)]">
-          {field.label}
-        </label>
+        {field.mode === 'readOnly' ? (
+          <span id={fieldLabelId} className="text-[11px] font-medium text-[var(--text-secondary)]">
+            {field.label}
+          </span>
+        ) : (
+          <label htmlFor={`field-${field.key}`} className="text-[11px] font-medium text-[var(--text-secondary)]">
+            {field.label}
+          </label>
+        )}
         {field.mode === 'readOnly' && (
           <span className="text-[10px] text-[var(--text-muted)] italic" title={field.readOnlyReason}>
             Read-only
@@ -126,6 +134,10 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
       {field.mode === 'readOnly' ? (
         <div
           id={`field-${field.key}`}
+          role="textbox"
+          aria-readonly="true"
+          aria-labelledby={fieldLabelId}
+          aria-describedby={warningId}
           className="px-2 py-1 bg-[var(--surface-canvas)] rounded border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs select-text cursor-default"
           title={field.readOnlyReason}
         >
@@ -135,6 +147,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
         <select
           id={`field-${field.key}`}
           aria-label={field.label}
+          aria-describedby={warningId}
           value={String(localVal ?? '')}
           onChange={(e) => {
             setLocalVal(e.target.value);
@@ -174,6 +187,11 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
           onKeyDown={handleKeyDown}
           className="px-2 py-1 bg-[var(--surface-canvas)] rounded border border-[var(--border-default)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[var(--brand-primary)]"
         />
+      )}
+      {field.referenceWarning && (
+        <p id={warningId} role="status" className="text-[10px] text-[var(--text-muted)]">
+          {field.referenceWarning}
+        </p>
       )}
     </div>
   );

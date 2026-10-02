@@ -9,6 +9,7 @@ export interface InspectorField {
   valueType: 'string' | 'number' | 'boolean' | 'select' | 'multiSelect' | 'expression';
   mode: 'editable' | 'readOnly';
   readOnlyReason?: string;
+  referenceWarning?: string;
   options?: Array<{ label: string; value: string }>;
   validate?: (value: unknown) => { valid: boolean; message?: string };
   toCommand?: (value: unknown) => SysmlCommand;
@@ -48,14 +49,20 @@ function referenceOptions(repository: SysmlRepositoryV4) {
   ].map(value => ({ label: sysmlObjectLabel(value), value: value.id }));
 }
 
-function optionsForReferences(repository: SysmlRepositoryV4, ids: string[], fallbackKind: string) {
+function referenceFieldMetadata(repository: SysmlRepositoryV4, ids: string[], fallbackKind: string, allowEmpty = false) {
   const options = referenceOptions(repository);
+  if (allowEmpty) options.unshift({ label: 'None', value: '' });
+  let hasMissingReference = false;
   for (const id of ids) {
     if (id && !options.some(option => option.value === id)) {
       options.push({ label: resolveSysmlReferenceLabel(repository, id, fallbackKind), value: id });
+      hasMissingReference = true;
     }
   }
-  return options;
+  return {
+    options,
+    referenceWarning: hasMissingReference ? 'Referenced element is unavailable' : undefined,
+  };
 }
 
 function inspectorTitle(value: { name?: string; metaclass?: string; kind?: string }, kindName: string): string {
@@ -137,7 +144,7 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
       value: element.ownerId,
       valueType: 'select',
       mode: 'editable',
-      options: optionsForReferences(repository, [element.ownerId], 'Element'),
+      ...referenceFieldMetadata(repository, [element.ownerId], 'Element'),
       toCommand: (val) => ({
         type: 'MoveElement',
         elementId: element.id,
@@ -163,7 +170,7 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
       value: el.typeId,
       valueType: 'select',
       mode: 'editable',
-      options: optionsForReferences(repository, [el.typeId], 'Type'),
+      ...referenceFieldMetadata(repository, [el.typeId], 'Type'),
       toCommand: (val) => ({
         type: 'UpdateElement',
         elementId: element.id,
@@ -318,7 +325,7 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     value: relationship.sourceId,
     valueType: 'select',
     mode: 'editable',
-    options: optionsForReferences(repository, [relationship.sourceId], 'Element'),
+    ...referenceFieldMetadata(repository, [relationship.sourceId], 'Element'),
     toCommand: (val) => ({
       type: 'UpdateRelationship',
       relationshipId: relationship.id,
@@ -333,7 +340,7 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     value: relationship.targetId,
     valueType: 'select',
     mode: 'editable',
-    options: optionsForReferences(repository, [relationship.targetId], 'Element'),
+    ...referenceFieldMetadata(repository, [relationship.targetId], 'Element'),
     toCommand: (val) => ({
       type: 'UpdateRelationship',
       relationshipId: relationship.id,
@@ -371,15 +378,15 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
   }
 
   // Connector ends
-  if (relationship.sourceEnd) {
-    const end = relationship.sourceEnd as any;
+  if (relationship.sourceEnd && 'roleId' in relationship.sourceEnd) {
+    const end = relationship.sourceEnd;
     fields.push({
       key: 'sourceEndRoleId',
       label: 'Source End Role',
       value: end.roleId || '',
       valueType: 'select',
       mode: 'editable',
-      options: optionsForReferences(repository, [end.roleId], 'Role'),
+      ...referenceFieldMetadata(repository, [end.roleId], 'Role', true),
       toCommand: (val) => ({
         type: 'UpdateRelationship',
         relationshipId: relationship.id,
@@ -388,15 +395,15 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     });
   }
 
-  if (relationship.targetEnd) {
-    const end = relationship.targetEnd as any;
+  if (relationship.targetEnd && 'roleId' in relationship.targetEnd) {
+    const end = relationship.targetEnd;
     fields.push({
       key: 'targetEndRoleId',
       label: 'Target End Role',
       value: end.roleId || '',
       valueType: 'select',
       mode: 'editable',
-      options: optionsForReferences(repository, [end.roleId], 'Role'),
+      ...referenceFieldMetadata(repository, [end.roleId], 'Role', true),
       toCommand: (val) => ({
         type: 'UpdateRelationship',
         relationshipId: relationship.id,
@@ -453,7 +460,7 @@ function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): Ins
     valueType: 'select',
     mode: 'readOnly',
     readOnlyReason: 'ItemFlow source follows realized connector.',
-    options: optionsForReferences(repository, [flow.sourceId], 'Element'),
+    ...referenceFieldMetadata(repository, [flow.sourceId], 'Element'),
   });
 
   fields.push({
@@ -463,7 +470,7 @@ function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): Ins
     valueType: 'select',
     mode: 'readOnly',
     readOnlyReason: 'ItemFlow target follows realized connector.',
-    options: optionsForReferences(repository, [flow.targetId], 'Element'),
+    ...referenceFieldMetadata(repository, [flow.targetId], 'Element'),
   });
 
   fields.push({
@@ -473,7 +480,7 @@ function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): Ins
     valueType: 'select',
     mode: 'readOnly',
     readOnlyReason: 'Connector realization link is immutable.',
-    options: optionsForReferences(repository, [flow.realizingRelationshipId], 'Connector'),
+    ...referenceFieldMetadata(repository, [flow.realizingRelationshipId], 'Connector'),
   });
 
   fields.push({
@@ -483,7 +490,7 @@ function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): Ins
     valueType: 'multiSelect',
     mode: 'readOnly',
     readOnlyReason: 'Conveyed classifiers follow the item flow.',
-    options: optionsForReferences(repository, flow.conveyedClassifierIds || [], 'Classifier'),
+    ...referenceFieldMetadata(repository, flow.conveyedClassifierIds || [], 'Classifier'),
   });
 
   return {

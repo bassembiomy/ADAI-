@@ -145,4 +145,47 @@ describe('inspectorSchema', () => {
     }
     expect(flow.fields.find(field => field.key === 'realizingRelationshipId')?.options).toContainEqual({ label: 'Connector', value: 'connector-1' });
   });
+
+  it('marks missing references with a non-identifying warning', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.relationships['association-1'] = {
+      id: 'association-1', name: '', metaclass: 'Association', sourceId: 'missing-source-id', targetId: 'pkg-root',
+    };
+    repository.itemFlows!['flow-1'] = {
+      id: 'flow-1', name: '', sourceId: 'pkg-root', targetId: 'pkg-root',
+      realizingRelationshipId: 'association-1', conveyedClassifierIds: ['missing-classifier-id'],
+    };
+
+    const relationship = getInspectorSchema({ repository, relationshipId: 'association-1' })!;
+    const source = relationship.fields.find(field => field.key === 'sourceId')!;
+    expect(source.value).toBe('missing-source-id');
+    expect(source.options).toContainEqual({ label: 'Element', value: 'missing-source-id' });
+    expect(source.referenceWarning).toBe('Referenced element is unavailable');
+    expect(relationship.fields.find(field => field.key === 'targetId')?.referenceWarning).toBeUndefined();
+
+    const flow = getInspectorSchema({ repository, itemFlowId: 'flow-1' })!;
+    expect(flow.fields.find(field => field.key === 'conveyedClassifierIds')?.referenceWarning).toBe('Referenced element is unavailable');
+  });
+
+  it('does not invent association-end roles and keeps an empty connector role neutral', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.relationships['association-1'] = {
+      id: 'association-1', metaclass: 'Association', sourceId: 'pkg-root', targetId: 'pkg-root',
+      sourceEnd: { id: 'source-end', aggregation: 'none', isNavigable: false },
+      targetEnd: { id: 'target-end', aggregation: 'none', isNavigable: false },
+    };
+    repository.relationships['connector-1'] = {
+      id: 'connector-1', metaclass: 'Connector', sourceId: 'pkg-root', targetId: 'pkg-root',
+      sourceEnd: { id: 'connector-end', roleId: '' },
+    };
+
+    const association = getInspectorSchema({ repository, relationshipId: 'association-1' })!;
+    expect(association.fields.map(field => field.key)).not.toContain('sourceEndRoleId');
+    expect(association.fields.map(field => field.key)).not.toContain('targetEndRoleId');
+
+    const connector = getInspectorSchema({ repository, relationshipId: 'connector-1' })!;
+    expect(connector.fields.find(field => field.key === 'sourceEndRoleId')).toMatchObject({
+      value: '', options: expect.arrayContaining([{ label: 'None', value: '' }]),
+    });
+  });
 });
