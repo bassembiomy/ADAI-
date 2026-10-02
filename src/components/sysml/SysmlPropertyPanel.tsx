@@ -104,6 +104,12 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
     }
   };
 
+  const readOnlyValue = field.valueType === 'multiSelect' && Array.isArray(field.value)
+    ? field.value.map(value => field.options?.find(option => option.value === value)?.label ?? '').join(', ')
+    : field.valueType === 'select'
+      ? field.options?.find(option => option.value === field.value)?.label ?? ''
+      : String(field.value ?? '');
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex justify-between items-center">
@@ -123,11 +129,12 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
           className="px-2 py-1 bg-[var(--surface-canvas)] rounded border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs select-text cursor-default"
           title={field.readOnlyReason}
         >
-          {String(field.value ?? '')}
+          {readOnlyValue}
         </div>
       ) : field.valueType === 'select' && field.options ? (
         <select
           id={`field-${field.key}`}
+          aria-label={field.label}
           value={String(localVal ?? '')}
           onChange={(e) => {
             setLocalVal(e.target.value);

@@ -67,4 +67,82 @@ describe('inspectorSchema', () => {
       expect(action.toCommand).toBeTypeOf('function');
     }
   });
+
+  it('uses names and metaclasses in titles without exposing identity fields', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.elements['block-1'] = { id: 'block-1', name: 'Block1', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
+    repository.elements['unnamed-block'] = { id: 'unnamed-block', name: '  ', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
+    repository.relationships['anonymous-association'] = {
+      id: 'anonymous-association', name: '', metaclass: 'Association', sourceId: 'block-1', targetId: 'pkg-root',
+    };
+    repository.relationships['named-association'] = {
+      id: 'named-association', name: ' connects ', metaclass: 'Association', sourceId: 'block-1', targetId: 'pkg-root',
+    };
+    repository.itemFlows!['flow-1'] = {
+      id: 'flow-1', name: '', sourceId: 'block-1', targetId: 'pkg-root',
+      realizingRelationshipId: 'named-association', conveyedClassifierIds: ['block-1'],
+    };
+    repository.diagrams['diagram-1'] = {
+      id: 'diagram-1', name: '', metaclass: 'Diagram', diagramKind: 'bdd', namespace: [], ownerId: 'pkg-root', presentationIds: [],
+    };
+
+    const selections = [
+      { elementId: 'block-1', title: 'Block: Block1' },
+      { elementId: 'unnamed-block', title: 'Block' },
+      { relationshipId: 'anonymous-association', title: 'Association' },
+      { relationshipId: 'named-association', title: 'Association: connects' },
+      { itemFlowId: 'flow-1', title: 'Item Flow' },
+      { elementId: 'diagram-1', title: 'Diagram' },
+    ];
+    for (const { title, ...selection } of selections) {
+      const schema = getInspectorSchema({ repository, ...selection })!;
+      expect(schema.title).toBe(title);
+      expect(schema.fields.map(field => field.key)).not.toContain('id');
+      expect(schema.fields.map(field => field.label)).not.toContain('ID');
+      expect(schema.fields.some(field => field.key === 'name')).toBe(true);
+    }
+  });
+
+  it('provides named reference options while retaining ID command values', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.elements['block-1'] = { id: 'block-1', name: 'Block1', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
+    repository.elements['block-2'] = { id: 'block-2', name: 'Block2', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };
+    repository.elements['part-1'] = { id: 'part-1', name: 'Part1', metaclass: 'PartProperty', namespace: [], ownerId: 'block-1', typeId: 'block-1' } as any;
+    repository.relationships['connector-1'] = {
+      id: 'connector-1', name: '', metaclass: 'Connector', sourceId: 'block-1', targetId: 'block-2',
+      sourceEnd: { id: 'end-1', roleId: 'block-1' }, targetEnd: { id: 'end-2', roleId: 'block-2' },
+    };
+    repository.itemFlows!['flow-1'] = {
+      id: 'flow-1', name: '', sourceId: 'block-1', targetId: 'block-2',
+      realizingRelationshipId: 'connector-1', conveyedClassifierIds: ['block-1', 'block-2'],
+    };
+
+    const part = getInspectorSchema({ repository, elementId: 'part-1' })!;
+    for (const key of ['ownerId', 'typeId']) {
+      const field = part.fields.find(candidate => candidate.key === key)!;
+      expect(field).toMatchObject({ valueType: 'select', options: expect.arrayContaining([{ label: 'Block1', value: 'block-1' }]) });
+      expect(field.label).not.toContain('ID');
+    }
+    expect(part.fields.find(field => field.key === 'ownerId')?.toCommand?.('block-2')).toMatchObject({
+      type: 'MoveElement', newOwnerId: 'block-2',
+    });
+
+    const connector = getInspectorSchema({ repository, relationshipId: 'connector-1' })!;
+    for (const [key, label] of [['sourceId', 'Source'], ['targetId', 'Target'], ['sourceEndRoleId', 'Source End Role'], ['targetEndRoleId', 'Target End Role']]) {
+      const field = connector.fields.find(candidate => candidate.key === key)!;
+      expect(field).toMatchObject({ label, valueType: 'select' });
+      expect(field.options).toContainEqual({ label: 'Block1', value: 'block-1' });
+    }
+    expect(connector.fields.find(field => field.key === 'sourceId')?.toCommand?.('block-2')).toMatchObject({
+      type: 'UpdateRelationship', relationshipId: 'connector-1', patch: { sourceId: 'block-2' },
+    });
+
+    const flow = getInspectorSchema({ repository, itemFlowId: 'flow-1' })!;
+    for (const key of ['sourceId', 'targetId', 'realizingRelationshipId', 'conveyedClassifierIds']) {
+      const field = flow.fields.find(candidate => candidate.key === key)!;
+      expect(field.options).toContainEqual({ label: 'Block1', value: 'block-1' });
+      expect(field.label).not.toContain('ID');
+    }
+    expect(flow.fields.find(field => field.key === 'realizingRelationshipId')?.options).toContainEqual({ label: 'Connector', value: 'connector-1' });
+  });
 });

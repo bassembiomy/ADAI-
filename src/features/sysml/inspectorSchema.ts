@@ -1,5 +1,6 @@
 import type { SysmlRepositoryV4, SemanticElement, SemanticRelationship, Diagram, ItemFlow } from '../../engine/sysml/domain';
 import type { SysmlCommand } from '../../engine/sysml/commands/types';
+import { friendlySysmlKind, resolveSysmlReferenceLabel, sysmlObjectLabel } from './sysmlDisplayLabel';
 
 export interface InspectorField {
   key: string;
@@ -36,6 +37,31 @@ export interface InspectorSelection {
   itemFlowId?: string;
   presentationId?: string;
   diagramId?: string;
+}
+
+function referenceOptions(repository: SysmlRepositoryV4) {
+  return [
+    ...Object.values(repository.elements),
+    ...Object.values(repository.relationships),
+    ...Object.values(repository.diagrams),
+    ...Object.values(repository.itemFlows ?? {}),
+  ].map(value => ({ label: sysmlObjectLabel(value), value: value.id }));
+}
+
+function optionsForReferences(repository: SysmlRepositoryV4, ids: string[], fallbackKind: string) {
+  const options = referenceOptions(repository);
+  for (const id of ids) {
+    if (id && !options.some(option => option.value === id)) {
+      options.push({ label: resolveSysmlReferenceLabel(repository, id, fallbackKind), value: id });
+    }
+  }
+  return options;
+}
+
+function inspectorTitle(value: { name?: string; metaclass?: string; kind?: string }, kindName: string): string {
+  const label = sysmlObjectLabel(value, kindName);
+  const kind = friendlySysmlKind(value.metaclass ?? value.kind, kindName);
+  return label === kind ? kind : `${kind}: ${label}`;
 }
 
 export function getInspectorSchema(selection: InspectorSelection): InspectorSchema | null {
@@ -79,16 +105,6 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
   const fields: InspectorField[] = [];
   const actions: InspectorAction[] = [];
 
-  // Identity (Read-only)
-  fields.push({
-    key: 'id',
-    label: 'ID',
-    value: element.id,
-    valueType: 'string',
-    mode: 'readOnly',
-    readOnlyReason: 'Canonical identity is immutable.',
-  });
-
   // Metaclass (Read-only)
   fields.push({
     key: 'metaclass',
@@ -117,10 +133,11 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
   if (element.ownerId) {
     fields.push({
       key: 'ownerId',
-      label: 'Owner ID',
+      label: 'Owner',
       value: element.ownerId,
-      valueType: 'string',
+      valueType: 'select',
       mode: 'editable',
+      options: optionsForReferences(repository, [element.ownerId], 'Element'),
       toCommand: (val) => ({
         type: 'MoveElement',
         elementId: element.id,
@@ -130,7 +147,7 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
   } else {
     fields.push({
       key: 'ownerId',
-      label: 'Owner ID',
+      label: 'Owner',
       value: 'None (Root)',
       valueType: 'string',
       mode: 'readOnly',
@@ -144,8 +161,9 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
       key: 'typeId',
       label: 'Type',
       value: el.typeId,
-      valueType: 'string',
+      valueType: 'select',
       mode: 'editable',
+      options: optionsForReferences(repository, [el.typeId], 'Type'),
       toCommand: (val) => ({
         type: 'UpdateElement',
         elementId: element.id,
@@ -258,7 +276,7 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
 
   return {
     id: element.id,
-    title: `${element.metaclass}: ${element.name}`,
+    title: inspectorTitle(element, 'Element'),
     metaclass: element.metaclass,
     fields,
     actions,
@@ -268,16 +286,6 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
 function buildRelationshipSchema(relationship: SemanticRelationship, repository: SysmlRepositoryV4): InspectorSchema {
   const fields: InspectorField[] = [];
   const actions: InspectorAction[] = [];
-
-  // Identity (Read-only)
-  fields.push({
-    key: 'id',
-    label: 'ID',
-    value: relationship.id,
-    valueType: 'string',
-    mode: 'readOnly',
-    readOnlyReason: 'Canonical relationship identity is immutable.',
-  });
 
   // Metaclass (Read-only)
   fields.push({
@@ -306,10 +314,11 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
   // Source (Editable)
   fields.push({
     key: 'sourceId',
-    label: 'Source ID',
+    label: 'Source',
     value: relationship.sourceId,
-    valueType: 'string',
+    valueType: 'select',
     mode: 'editable',
+    options: optionsForReferences(repository, [relationship.sourceId], 'Element'),
     toCommand: (val) => ({
       type: 'UpdateRelationship',
       relationshipId: relationship.id,
@@ -320,10 +329,11 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
   // Target (Editable)
   fields.push({
     key: 'targetId',
-    label: 'Target ID',
+    label: 'Target',
     value: relationship.targetId,
-    valueType: 'string',
+    valueType: 'select',
     mode: 'editable',
+    options: optionsForReferences(repository, [relationship.targetId], 'Element'),
     toCommand: (val) => ({
       type: 'UpdateRelationship',
       relationshipId: relationship.id,
@@ -367,8 +377,9 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
       key: 'sourceEndRoleId',
       label: 'Source End Role',
       value: end.roleId || '',
-      valueType: 'string',
+      valueType: 'select',
       mode: 'editable',
+      options: optionsForReferences(repository, [end.roleId], 'Role'),
       toCommand: (val) => ({
         type: 'UpdateRelationship',
         relationshipId: relationship.id,
@@ -383,8 +394,9 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
       key: 'targetEndRoleId',
       label: 'Target End Role',
       value: end.roleId || '',
-      valueType: 'string',
+      valueType: 'select',
       mode: 'editable',
+      options: optionsForReferences(repository, [end.roleId], 'Role'),
       toCommand: (val) => ({
         type: 'UpdateRelationship',
         relationshipId: relationship.id,
@@ -406,7 +418,7 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
 
   return {
     id: relationship.id,
-    title: `${relationship.metaclass}: ${relationship.name || relationship.id}`,
+    title: inspectorTitle(relationship, 'Relationship'),
     metaclass: relationship.metaclass,
     fields,
     actions,
@@ -416,15 +428,6 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
 function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): InspectorSchema {
   const fields: InspectorField[] = [];
   const actions: InspectorAction[] = [];
-
-  fields.push({
-    key: 'id',
-    label: 'ID',
-    value: flow.id,
-    valueType: 'string',
-    mode: 'readOnly',
-    readOnlyReason: 'ItemFlow identity is immutable.',
-  });
 
   fields.push({
     key: 'metaclass',
@@ -445,42 +448,47 @@ function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): Ins
 
   fields.push({
     key: 'sourceId',
-    label: 'Source ID',
+    label: 'Source',
     value: flow.sourceId,
-    valueType: 'string',
+    valueType: 'select',
     mode: 'readOnly',
     readOnlyReason: 'ItemFlow source follows realized connector.',
+    options: optionsForReferences(repository, [flow.sourceId], 'Element'),
   });
 
   fields.push({
     key: 'targetId',
-    label: 'Target ID',
+    label: 'Target',
     value: flow.targetId,
-    valueType: 'string',
+    valueType: 'select',
     mode: 'readOnly',
     readOnlyReason: 'ItemFlow target follows realized connector.',
+    options: optionsForReferences(repository, [flow.targetId], 'Element'),
   });
 
   fields.push({
     key: 'realizingRelationshipId',
     label: 'Realizing Connector',
     value: flow.realizingRelationshipId,
-    valueType: 'string',
+    valueType: 'select',
     mode: 'readOnly',
     readOnlyReason: 'Connector realization link is immutable.',
+    options: optionsForReferences(repository, [flow.realizingRelationshipId], 'Connector'),
   });
 
   fields.push({
     key: 'conveyedClassifierIds',
     label: 'Conveyed Classifiers',
-    value: (flow.conveyedClassifierIds || []).join(', '),
-    valueType: 'string',
+    value: flow.conveyedClassifierIds || [],
+    valueType: 'multiSelect',
     mode: 'readOnly',
+    readOnlyReason: 'Conveyed classifiers follow the item flow.',
+    options: optionsForReferences(repository, flow.conveyedClassifierIds || [], 'Classifier'),
   });
 
   return {
     id: flow.id,
-    title: `ItemFlow: ${flow.name || flow.id}`,
+    title: inspectorTitle(flow, 'ItemFlow'),
     metaclass: 'ItemFlow',
     fields,
     actions,
@@ -490,15 +498,6 @@ function buildItemFlowSchema(flow: ItemFlow, repository: SysmlRepositoryV4): Ins
 function buildDiagramSchema(diagram: Diagram, repository: SysmlRepositoryV4): InspectorSchema {
   const fields: InspectorField[] = [];
   const actions: InspectorAction[] = [];
-
-  fields.push({
-    key: 'id',
-    label: 'ID',
-    value: diagram.id,
-    valueType: 'string',
-    mode: 'readOnly',
-    readOnlyReason: 'Diagram identity is immutable.',
-  });
 
   fields.push({
     key: 'diagramKind',
@@ -534,7 +533,7 @@ function buildDiagramSchema(diagram: Diagram, repository: SysmlRepositoryV4): In
 
   return {
     id: diagram.id,
-    title: `Diagram: ${diagram.name}`,
+    title: inspectorTitle(diagram, 'Diagram'),
     metaclass: 'Diagram',
     fields,
     actions,
