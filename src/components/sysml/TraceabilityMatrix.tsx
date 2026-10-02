@@ -9,7 +9,7 @@ import {
   type RtmChangeKind,
 } from '../../engine/sysml/rtm';
 import { VirtualizedTraceabilityGrid } from './VirtualizedTraceabilityGrid';
-import { resolveSysmlReferenceLabel } from '../../features/sysml/sysmlDisplayLabel';
+import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 
 export interface TraceabilityMatrixProps {
   repository: SysmlRepository;
@@ -61,7 +61,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
   const owners = [...new Set(complete.rows.map(row => row.requirement.owner).filter((value): value is string => Boolean(value)))].sort();
 
   const exportCsv = () => {
-    const csv = exportRtmCsv(matrix);
+    const csv = exportRtmCsv(matrix, repository, externalElements);
     if (onExport) return onExport(csv);
     if (typeof document === 'undefined') return;
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -109,7 +109,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
           </select>
           <select aria-label="Compare with baseline" value={compareBaselineId} onChange={event => setCompareBaselineId(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">No baseline comparison</option>
-            {baselines.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {baselines.map(b => <option key={b.id} value={b.id}>{sysmlObjectLabel(b, 'Baseline')}</option>)}
           </select>
           <select aria-label="Filter by change type" value={changeType} onChange={event => setChangeType(event.target.value as any)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All change types</option>
@@ -149,7 +149,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
                   }}
                 >
-                  <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{row.requirement.name}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
+                  <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
                   <td className="p-2">
                     <div className="flex flex-col gap-1 max-w-xs">
                       {/* Containment Parents (Contained By) */}
@@ -165,7 +165,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-blue-400 font-mono">«containment»</span>
                               <span className="font-mono text-orange-300">{p.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{p.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: p.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -181,7 +181,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-blue-400 font-mono">«{p.kind === 'requirementContainment' ? 'containment' : p.kind}»</span>
                               <span className="font-mono text-orange-300">{p.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{p.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: p.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -200,7 +200,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-purple-400 font-mono">«containment»</span>
                               <span className="font-mono text-orange-300">{c.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{c.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: c.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -216,7 +216,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-purple-400 font-mono">«{c.kind === 'requirementContainment' ? 'containment' : c.kind}»</span>
                               <span className="font-mono text-orange-300">{c.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{c.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: c.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -235,7 +235,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-cyan-400 font-mono">«deriveReqt»</span>
                               <span className="font-mono text-orange-300">{d.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{d.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: d.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -254,7 +254,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-cyan-400 font-mono">«deriveReqt»</span>
                               <span className="font-mono text-orange-300">{d.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{d.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: d.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -273,7 +273,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-pink-400 font-mono">«copy»</span>
                               <span className="font-mono text-orange-300">{cp.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{cp.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: cp.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
@@ -292,7 +292,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                             >
                               <span className="text-[10px] text-pink-400 font-mono">«copy»</span>
                               <span className="font-mono text-orange-300">{cp.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{cp.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: cp.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>

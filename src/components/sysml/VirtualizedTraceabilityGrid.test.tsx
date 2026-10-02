@@ -56,6 +56,24 @@ function mockRows(count: number): RtmRow[] {
 }
 
 describe('VirtualizedTraceabilityGrid component', () => {
+  it('labels trace-only block links without rendering their internal IDs', () => {
+    const id = '65cb033e-421d-41e0-b789-87931d991010';
+    const row = mockRows(1)[0];
+    row.blocks = [id];
+    row.refinedBy = [{ id, name: ' Controller ', kind: 'refine', type: 'block' }];
+    const html = renderToStaticMarkup(<VirtualizedTraceabilityGrid rows={[row]} resolveLabel={ref => ref === id ? 'Controller' : 'Element'} />);
+    expect(html).toContain('Controller');
+    expect(html).not.toContain(`>${id}<`);
+  });
+  it('uses requirement metaclasses in unnamed row cells and relation tooltips', () => {
+    const row = mockRows(1)[0];
+    row.requirement.name = ' ';
+    row.parents = [{ id: 'parent', requirementId: 'REQ-9', name: ' ', kind: 'deriveReqt' }];
+    const html = renderToStaticMarkup(<VirtualizedTraceabilityGrid rows={[row]} />);
+    expect(html).toContain('>Requirement</span>');
+    expect(html).toContain('Parent: [REQ-9] Requirement');
+    expect(html).not.toContain('Parent: [REQ-9]  ');
+  });
   it('computes correct virtual window based on scrollTop, containerHeight, and rowHeight', () => {
     const window = computeVirtualWindow({
       totalRows: 100,

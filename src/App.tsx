@@ -10226,7 +10226,7 @@ const ADIA = () => {
     const deletedStateCount = resolvedIds.length;
     if (deletedStateCount === 1) {
       const stateObj = states.find(s => s.id === resolvedIds[0]);
-      addError('info', `Deleted state: ${stateObj?.name || resolvedIds[0]}`);
+      addError('info', `Deleted state: ${sysmlObjectLabel(stateObj, 'State')}`);
     } else if (deletedStateCount > 1) {
       addError('info', `Deleted ${deletedStateCount} states`);
     } else {
@@ -12564,8 +12564,15 @@ const ADIA = () => {
     html += `<div class="consistency-summary"><strong>Canonical revision:</strong> ${escapeHtml(String(traceabilitySnapshot.repositoryRevision))} &bull; <strong>Model hash:</strong> ${escapeHtml(traceabilitySnapshot.modelHash)} &bull; <strong>Coverage:</strong> ${traceabilityMetrics.coveragePercent.toFixed(1)}% &bull; <strong>Verification:</strong> ${traceabilityMetrics.verificationPercent.toFixed(1)}%</div>`;
     html += `<table><tr><th>Requirement</th><th>Status</th><th>Change</th><th>Owner / Risk</th><th>Covering Elements</th><th>Verification / Evidence</th><th>Unresolved</th></tr>`;
     for (const row of traceabilityMatrix.rows) {
-      const links = [...row.coveringBlocks.map(item => item.name), ...row.blocks, ...row.parts].join('; ');
-      html += `<tr><td>${escapeHtml(row.requirement.requirementId)} · ${escapeHtml(row.requirement.name)}</td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.changeKind ?? 'unchanged')}</td><td>${escapeHtml(`${row.requirement.owner ?? 'Unassigned'} / ${row.requirement.risk ?? 'unspecified'}`)}</td><td>${escapeHtml(links || 'None')}</td><td>${escapeHtml(`${row.verificationCases.length} cases / ${row.evidence.length} evidence`)}</td><td>${escapeHtml(row.unresolvedEndpointIds.join('; ') || 'None')}</td></tr>`;
+      const links = [
+        ...row.coveringBlocks.map(item => sysmlObjectLabel({ name: item.name }, item.type || 'Element')),
+        ...row.blocks.map(id => resolveSysmlReferenceLabel(canonicalSysmlRepository, id, 'Block')),
+        ...row.parts.map(id => resolveSysmlReferenceLabel(canonicalSysmlRepository, id, 'Part')),
+      ].join('; ');
+      const unresolved = row.unresolvedEndpointIds.length > 0
+        ? row.unresolvedEndpointIds.map(() => 'Referenced element is unavailable').join('; ')
+        : 'None';
+      html += `<tr><td>${escapeHtml(row.requirement.requirementId)} · ${escapeHtml(sysmlObjectLabel(row.requirement, 'Requirement'))}</td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.changeKind ?? 'unchanged')}</td><td>${escapeHtml(`${row.requirement.owner ?? 'Unassigned'} / ${row.requirement.risk ?? 'unspecified'}`)}</td><td>${escapeHtml(links || 'None')}</td><td>${escapeHtml(`${row.verificationCases.length} cases / ${row.evidence.length} evidence`)}</td><td>${escapeHtml(unresolved)}</td></tr>`;
     }
     html += `</table>`;
     if (traceabilitySnapshot.diagnostics.length > 0) {
@@ -14473,6 +14480,8 @@ const ADIA = () => {
               } catch (e) {}
             }
 
+            const displayStateName = (state) => state?.name?.trim() || "State";
+
             function applySemanticFrame(frame) {
               const nextActiveStates = {};
               frame.activeStateIds.forEach(stateId => {
@@ -14497,7 +14506,7 @@ const ADIA = () => {
                   const transitionId = action.slice("transition:".length);
                   const transition = semanticRuntime.ir.transitions[transitionId];
                   if (!transition) {
-                    logEvent("Transition", transitionId);
+                    logEvent("Transition", "Transition");
                     return;
                   }
                   const sourceState = PROJECT_DATA.states.find(
@@ -14508,13 +14517,9 @@ const ADIA = () => {
                   );
                   logEvent(
                     "Transition",
-                    (sourceState ? sourceState.name : transition.sourceStateId)
+                    displayStateName(sourceState)
                       + " → "
-                      + (
-                        destinationState
-                          ? destinationState.name
-                          : transition.destinationStateId
-                      )
+                      + displayStateName(destinationState)
                   );
                 });
             }
@@ -14541,12 +14546,12 @@ const ADIA = () => {
               db.textContent = "";
 
               PROJECT_DATA.model.layers.forEach(layer => {
-                const layerName = layer.name || (layer.id === "root" ? "Root Region" : "Region");
+                const layerName = layer.name?.trim() || (layer.id === "root" ? "Root Region" : "Region");
                 const activeStateIds = Object.entries(activeStates)
                   .filter(([key]) => key === layer.id || key.startsWith(layer.id + "_"))
                   .map(([, stateId]) => stateId);
                 const stateName = activeStateIds
-                  .map(stateId => PROJECT_DATA.states.find(s => s.id === stateId)?.name || stateId)
+                  .map(stateId => displayStateName(PROJECT_DATA.states.find(s => s.id === stateId)))
                   .join(", ") || "—";
                 const cell = document.createElement("div");
                 cell.style.background = "#1a1a20";
@@ -17604,9 +17609,9 @@ const ADIA = () => {
               {diagramWorkspace.tabs.map(tab => {
                 const diagramId = 'diagramId' in tab ? tab.diagramId : tab.mode;
                 const name = tab.kind === 'stateMachineDiagram'
-                  ? (seededStateMachineDiagrams.find(diagram => diagram.id === diagramId)?.name ?? diagramId)
+                  ? sysmlObjectLabel(seededStateMachineDiagrams.find(diagram => diagram.id === diagramId), 'Diagram')
                   : tab.kind === 'sysmlDiagram'
-                  ? (canonicalSysmlRepository.diagrams[diagramId]?.name ?? diagramId)
+                  ? sysmlObjectLabel(canonicalSysmlRepository.diagrams[diagramId], 'Diagram')
                   : tab.mode;
                 const isActive = activeWorkspaceTab.key === diagramWorkspaceTabKey(tab);
                 return (
@@ -17707,7 +17712,8 @@ const ADIA = () => {
                       : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
                     return {
                       diagramId: contextId,
-                      name: canonicalSysmlRepository.diagrams[contextId]?.name ?? contextId,
+                      name: sysmlObjectLabel(canonicalSysmlRepository.diagrams[contextId]
+                        ?? seededStateMachineDiagrams.find(diagram => diagram.id === contextId), 'Diagram'),
                       kind: diagramMode,
                       domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
                       presentedSemanticIds: presented,

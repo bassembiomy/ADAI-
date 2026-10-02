@@ -9,6 +9,19 @@ import type { ModelBaseline, RequirementDefinition, SysmlRelationship, Verificat
 
 describe('RequirementGovernancePanel', () => {
   afterEach(cleanup);
+  it('warns when suspect or copied references are unavailable without showing their IDs', () => {
+    const missingSource = '65cb033e-421d-41e0-b789-87931d991010';
+    const missingMaster = '65cb033e-421d-41e0-b789-87931d991011';
+    const { container } = render(<RequirementGovernancePanel
+      repository={createEmptyRepository()}
+      requirement={{ ...req, copiedFromId: missingMaster }}
+      baselines={baselines}
+      suspectLinks={[{ id: 'suspect', kind: 'trace', sourceId: missingSource, targetId: req.id, suspect: true }]}
+    />);
+    expect(screen.getAllByText('Referenced element is unavailable')).toHaveLength(2);
+    expect(container.textContent).not.toContain(missingSource);
+    expect(container.textContent).not.toContain(missingMaster);
+  });
   const req: RequirementDefinition = {
     id: 'req1',
     requirementId: 'REQ-101',

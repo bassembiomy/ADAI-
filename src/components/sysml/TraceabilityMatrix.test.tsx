@@ -16,6 +16,17 @@ function repository() {
 
 describe('professional traceability matrix workspace', () => {
   afterEach(cleanup);
+  it.each([false, true])('labels unnamed requirements and related requirements (virtual=%s)', virtual => {
+    const repo = repository();
+    repo.requirements.r.name = ' ';
+    repo.requirements.parent = { ...repo.requirements.r, id: 'parent', requirementId: 'REQ-9', name: ' ' };
+    repo.relationships.parent = { id: 'parent-rel', kind: 'requirementContainment', sourceId: 'parent', targetId: 'r' };
+    const { container } = render(<TraceabilityMatrix repository={repo} />);
+    if (virtual) fireEvent.click(screen.getByRole('button', { name: 'Virtualized Grid' }));
+    expect(screen.getAllByText('Requirement').length).toBeGreaterThan(1);
+    if (virtual) expect(container.querySelector('[title="Contained By: [REQ-9] Requirement"]')).toBeTruthy();
+    else expect(container.innerHTML).toContain('>Requirement</span>');
+  });
   it.each([false, true])('labels unnamed and unresolved endpoints in matrix view (virtual=%s)', virtual => {
     const repo = repository();
     repo.definitions.b.name = ' ';

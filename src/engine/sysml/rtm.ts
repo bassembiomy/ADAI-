@@ -2,6 +2,7 @@ import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from '
 import { deriveEvidenceStatus } from './evidence';
 import { hash, stableStringify } from './requirements';
 import { buildTraceabilityIndex, type TraceabilityExternalElement, type TraceabilityIndex } from './traceabilityIndex';
+import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel, friendlySysmlKind } from '../../features/sysml/sysmlDisplayLabel';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
 export type RtmChangeKind = 'unchanged' | 'added' | 'modified' | 'suspect';
@@ -154,7 +155,7 @@ export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetr
   return { total, covered, verified, failed, stale, suspect, uncovered, orphan, unresolved, unsupported, coveragePercent, verificationPercent };
 }
 
-export function exportRtmCsv(matrix: TraceabilityMatrix): string {
+export function exportRtmCsv(matrix: TraceabilityMatrix, repository?: SysmlRepository, externalElements: TraceabilityExternalElement[] = []): string {
   const csv = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`;
   const hasChange = Boolean(matrix.filters.compareBaselineId || matrix.rows.some(r => r.changeKind !== undefined));
   const headers = [
@@ -168,29 +169,51 @@ export function exportRtmCsv(matrix: TraceabilityMatrix): string {
     'Blocks', 'Parts', 'Ports', 'Connectors', 'Behaviors', 'Simulations', 'Verification Cases',
     'Evidence', 'Artifacts', 'Relationships', 'Unresolved Endpoints',
   ];
-  const rows = matrix.rows.map(row => [
-    row.requirement.requirementId, row.requirement.name, row.requirement.text, row.status,
+  const rows = matrix.rows.map(row => {
+    const references = [
+      ...row.parents, ...row.children, ...row.coveringBlocks, ...row.containmentParents,
+      ...row.containmentChildren, ...row.derivedFrom, ...row.derivedRequirements,
+      ...row.copiedFrom, ...row.copiedRequirements, ...row.satisfiedBy,
+      ...row.verifiedBy, ...row.refinedBy, ...row.tracedElements,
+    ];
+    const labelFor = (id: string, fallbackKind: string) => {
+      const external = externalElements.find(element => element.id === id);
+      if (external) return sysmlObjectLabel(external, fallbackKind);
+      if (repository && hasSysmlReference(repository, id)) return resolveSysmlReferenceLabel(repository, id, fallbackKind);
+      const reference = references.find(item => item.id === id);
+      if (reference?.name?.trim() && reference.name !== id) return sysmlObjectLabel(reference, fallbackKind);
+      if (fallbackKind === 'Referenced element is unavailable') return fallbackKind;
+      return friendlySysmlKind(fallbackKind);
+    };
+    const requirementRef = (item: RtmRequirementRef) => `${item.requirementId} ${sysmlObjectLabel({ name: item.name }, 'Requirement')}`;
+    return [
+    row.requirement.requirementId, sysmlObjectLabel(row.requirement, 'Requirement'), row.requirement.text, row.status,
     ...(hasChange ? [row.changeKind ?? 'unchanged'] : []),
-    row.requirement.owner ?? '', row.requirement.risk ?? '', row.requirement.version, row.requirement.baselineId ?? '',
-    row.parents.map(p => `[${p.kind}] ${p.requirementId} ${p.name}`).join(';'),
-    row.children.map(c => `[${c.kind}] ${c.requirementId} ${c.name}`).join(';'),
-    row.coveringBlocks.map(b => `[${b.kind}] ${b.name}`).join(';'),
-    row.containmentParents.map(p => `${p.requirementId} ${p.name}`).join(';'),
-    row.containmentChildren.map(c => `${c.requirementId} ${c.name}`).join(';'),
-    row.derivedFrom.map(d => `${d.requirementId} ${d.name}`).join(';'),
-    row.derivedRequirements.map(d => `${d.requirementId} ${d.name}`).join(';'),
-    row.copiedFrom.map(c => `${c.requirementId} ${c.name}`).join(';'),
-    row.copiedRequirements.map(c => `${c.requirementId} ${c.name}`).join(';'),
-    row.satisfiedBy.map(s => s.name).join(';'),
-    row.verifiedBy.map(v => v.name).join(';'),
-    row.refinedBy.map(r => r.name).join(';'),
-    row.tracedElements.map(t => t.name).join(';'),
+    row.requirement.owner ?? '', row.requirement.risk ?? '', row.requirement.version,
+    row.requirement.baselineId ? sysmlObjectLabel(repository?.baselines[row.requirement.baselineId], 'Baseline') : '',
+    row.parents.map(p => `[${p.kind}] ${requirementRef(p)}`).join(';'),
+    row.children.map(c => `[${c.kind}] ${requirementRef(c)}`).join(';'),
+    row.coveringBlocks.map(b => `[${b.kind}] ${labelFor(b.id, b.type || 'Element')}`).join(';'),
+    row.containmentParents.map(requirementRef).join(';'),
+    row.containmentChildren.map(requirementRef).join(';'),
+    row.derivedFrom.map(requirementRef).join(';'),
+    row.derivedRequirements.map(requirementRef).join(';'),
+    row.copiedFrom.map(requirementRef).join(';'),
+    row.copiedRequirements.map(requirementRef).join(';'),
+    row.satisfiedBy.map(s => labelFor(s.id, s.type || 'Element')).join(';'),
+    row.verifiedBy.map(v => labelFor(v.id, v.type || 'Verification Case')).join(';'),
+    row.refinedBy.map(r => labelFor(r.id, r.type === 'unknown' ? 'Referenced element is unavailable' : r.type || 'Element')).join(';'),
+    row.tracedElements.map(t => labelFor(t.id, t.type === 'unknown' ? 'Referenced element is unavailable' : t.type || 'Element')).join(';'),
     row.satisfactionStatus,
     row.verificationStatus,
-    row.blocks.join(';'), row.parts.join(';'), row.ports.join(';'), row.connectors.join(';'),
-    row.behaviors.join(';'), row.simulations.join(';'), row.verificationCases.join(';'), row.evidence.join(';'),
-    row.artifacts.join(';'), row.relationshipIds.join(';'), row.unresolvedEndpointIds.join(';'),
-  ]);
+    row.blocks.map(id => labelFor(id, 'Block')).join(';'), row.parts.map(id => labelFor(id, 'Part')).join(';'),
+    row.ports.map(id => labelFor(id, 'Port')).join(';'), row.connectors.map(id => labelFor(id, 'Connector')).join(';'),
+    row.behaviors.map(id => labelFor(id, 'Behavior')).join(';'), row.simulations.map(id => labelFor(id, 'Simulation')).join(';'),
+    row.verificationCases.map(id => labelFor(id, 'Verification Case')).join(';'), row.evidence.map(id => labelFor(id, 'Evidence')).join(';'),
+    row.artifacts.map(id => labelFor(id, 'Artifact')).join(';'), row.relationshipIds.map(id => labelFor(id, 'Relationship')).join(';'),
+    row.unresolvedEndpointIds.map(() => 'Referenced element is unavailable').join(';'),
+    ];
+  });
   return [headers.join(','), ...rows.map(columns => columns.map(csv).join(','))].join('\r\n');
 }
 
@@ -442,7 +465,7 @@ function resolveRef(repo: SysmlRepository, id: string, index?: TraceabilityIndex
   if (art) return { id, name: art.name, kind: art.kind, type: art.kind };
   const external = index?.elementsById.get(id) as TraceabilityExternalElement | undefined;
   if (external) return { id, name: external.name, kind: external.kind, type: external.kind };
-  return { id, name: id, kind: 'unknown', type: 'unknown' };
+  return { id, name: 'Referenced element is unavailable', kind: 'unknown', type: 'unknown' };
 }
 
 function dedupeRefs<T extends { id: string }>(items: T[]): T[] {

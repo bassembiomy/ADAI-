@@ -35,6 +35,38 @@ const model = (): SysmlRepository => {
 };
 
 describe('canonical requirements traceability matrix', () => {
+  it('exports trace and refine-only references as labels while retaining internal row IDs', () => {
+    const ids = Array.from({ length: 5 }, (_, i) => `65cb033e-421d-41e0-b789-87931d99101${i}`);
+    const repo = createEmptyRepository();
+    repo.requirements.r = { ...requirement('r'), name: ' ', baselineId: ids[0] };
+    repo.baselines[ids[0]] = { id: ids[0], name: ' Release ', revision: 1, createdAt: '', protected: true };
+    repo.definitions[ids[1]] = { id: ids[1], name: ' Controller ', namespace: [], kind: 'block', isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
+    repo.relationships[ids[2]] = { id: ids[2], kind: 'trace', sourceId: ids[1], targetId: 'r' };
+    repo.relationships[ids[3]] = { id: ids[3], kind: 'refine', sourceId: ids[4], targetId: 'r' };
+    const matrix = buildTraceabilityMatrix(repo);
+    expect(matrix.rows[0].blocks).toContain(ids[1]);
+    expect(matrix.rows[0].refinedBy[0].id).toBe(ids[4]);
+    expect(matrix.rows[0].refinedBy[0].name).toBe('Referenced element is unavailable');
+    const csv = exportRtmCsv(matrix, repo);
+    expect(csv).toContain('Controller');
+    expect(csv).toContain('Release');
+    expect(csv).toContain('Referenced element is unavailable');
+    expect(csv).toContain('Requirement');
+    for (const id of ids) expect(csv).not.toContain(id);
+  });
+  it('exports friendly labels for unresolved typed lists without a repository argument', () => {
+    const id = '65cb033e-421d-41e0-b789-87931d991010';
+    const matrix = buildTraceabilityMatrix(createEmptyRepository());
+    matrix.rows = [{ ...buildTraceabilityMatrix(model()).rows[0],
+      blocks: [id], parts: [id], ports: [id], connectors: [id], behaviors: [id], simulations: [id],
+      verificationCases: [id], evidence: [id], artifacts: [id], relationshipIds: [id], unresolvedEndpointIds: [id],
+    }];
+    const csv = exportRtmCsv(matrix);
+    expect(csv).toContain('Block');
+    expect(csv).toContain('Part');
+    expect(csv).toContain('Referenced element is unavailable');
+    expect(csv).not.toContain(id);
+  });
   it('builds many-to-many cells across model, behavior, simulation, test, evidence, and artifacts', () => {
     const row = buildTraceabilityMatrix(model()).rows.find(item => item.requirement.id === 'r1')!;
     expect(row.status).toBe('verified');

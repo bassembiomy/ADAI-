@@ -15,7 +15,8 @@ import { computeBlockDisplayBounds } from './blockLayout';
 
 // Exercise the actual legacy render callback without booting unrelated editors,
 // workers and persistence in the monolithic App. All geometry/label code is real.
-const sourceFile = ts.createSourceFile('App.tsx', readFileSync('src/App.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const appSourceText = readFileSync('src/App.tsx', 'utf8');
+const sourceFile = ts.createSourceFile('App.tsx', appSourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function evaluateNode(predicate: (node: ts.Node) => boolean, scope: Record<string, unknown>) {
   let found: ts.Node | undefined;
   function visit(node: ts.Node) {
@@ -24,7 +25,7 @@ function evaluateNode(predicate: (node: ts.Node) => boolean, scope: Record<strin
   }
   visit(sourceFile);
   if (!found) throw new Error('App render expression not found');
-  const expression = ts.isVariableDeclaration(found)
+  const expression = ts.isPropertyAssignment(found) ? found.initializer : ts.isVariableDeclaration(found)
     ? ts.isCallExpression(found.initializer!) && found.initializer.expression.getText(sourceFile) === 'useCallback'
       ? found.initializer.arguments[0] : found.initializer!
     : found;
@@ -60,6 +61,69 @@ function renderRelationship(type = 'association', property = false, label = '') 
 
 describe('legacy App SysML labels', () => {
   afterEach(cleanup);
+  it.each(['stateMachineDiagram', 'sysmlDiagram'])('labels unnamed diagram tabs without IDs (%s)', kind => {
+    const id = uuid(4);
+    const label = evaluateNode(node => ts.isVariableDeclaration(node)
+      && node.name.getText(sourceFile) === 'name'
+      && node.initializer?.getText(sourceFile).includes('seededStateMachineDiagrams.find') === true,
+    { tab: { kind, diagramId: id }, diagramId: id, seededStateMachineDiagrams: [{ id, name: ' ' }],
+      canonicalSysmlRepository: { diagrams: { [id]: { id, name: ' ' } } }, sysmlObjectLabel });
+    expect(label).toBe('Diagram');
+  });
+  it('labels unresolved explorer diagram context without its ID', () => {
+    const id = uuid(4);
+    const name = evaluateNode(node => ts.isPropertyAssignment(node)
+      && node.name.getText(sourceFile) === 'name'
+      && node.initializer.getText(sourceFile).includes('canonicalSysmlRepository.diagrams[contextId]'),
+    { contextId: id, canonicalSysmlRepository: { diagrams: {} }, seededStateMachineDiagrams: [], sysmlObjectLabel });
+    expect(name).toBe('Diagram');
+  });
+  it('preserves the assigned state-machine context name', () => {
+    const id = uuid(4);
+    const name = evaluateNode(node => ts.isPropertyAssignment(node)
+      && node.name.getText(sourceFile) === 'name'
+      && node.initializer.getText(sourceFile).includes('canonicalSysmlRepository.diagrams[contextId]'),
+    { contextId: id, canonicalSysmlRepository: { diagrams: {} },
+      seededStateMachineDiagrams: [{ id, name: ' Operations ' }], sysmlObjectLabel });
+    expect(name).toBe('Operations');
+  });
+  it('does not put a deleted state ID in a notification', () => {
+    const value = evaluateNode(node => ts.isTemplateExpression(node) && node.head.text === 'Deleted state: ',
+      { stateObj: undefined, resolvedIds: [uuid(4)], sysmlObjectLabel });
+    expect(value).toBe('Deleted state: State');
+  });
+  it('keeps internal references out of the exported traceability report row', () => {
+    const row = {
+      requirement: { id: uuid(0), requirementId: 'REQ-1', name: ' ' },
+      status: 'unresolved', changeKind: 'unchanged', coveringBlocks: [],
+      blocks: [uuid(1)], parts: [], verificationCases: [], evidence: [], unresolvedEndpointIds: [uuid(2)],
+    };
+    const repository = createEmptyRepository();
+    const links = evaluateNode(node => ts.isVariableDeclaration(node)
+      && node.name.getText(sourceFile) === 'links'
+      && node.initializer?.getText(sourceFile).includes('row.coveringBlocks') === true,
+    { row, canonicalSysmlRepository: repository, resolveSysmlReferenceLabel, sysmlObjectLabel });
+    const unresolved = evaluateNode(node => ts.isVariableDeclaration(node)
+      && node.name.getText(sourceFile) === 'unresolved'
+      && node.initializer?.getText(sourceFile).includes('row.unresolvedEndpointIds') === true,
+    { row });
+    const html = evaluateNode(node => ts.isTemplateExpression(node)
+      && node.getText(sourceFile).includes('escapeHtml(unresolved)'),
+    { row, links, unresolved, escapeHtml: String, sysmlObjectLabel });
+    expect(html).toContain('REQ-1 · Requirement');
+    expect(html).toContain('Block');
+    expect(html).toContain('Referenced element is unavailable');
+    for (const n of [0, 1, 2]) expect(html).not.toContain(uuid(n));
+  });
+  it('uses State for unnamed and unresolved states in the exported dashboard script', () => {
+    const helper = appSourceText.match(/const displayStateName = (\(state\) => [^;]+);/)?.[1];
+    expect(helper).toBeDefined();
+    if (!helper) return;
+    const displayStateName = new Function(`return ${helper}`)() as (state?: { name?: string }) => string;
+    expect(displayStateName({ name: ' Ready ' })).toBe('Ready');
+    expect(displayStateName({ name: ' ' })).toBe('State');
+    expect(displayStateName(undefined)).toBe('State');
+  });
   it('uses a region label in validation messages for unnamed layers', () => {
     const label = evaluateNode(node => ts.isVariableDeclaration(node)
       && node.name.getText(sourceFile) === 'layerName'

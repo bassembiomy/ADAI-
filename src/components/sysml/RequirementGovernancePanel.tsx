@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { ModelBaseline, RequirementDefinition, SysmlRelationship, SysmlRepository, VerificationEvidence } from '../../engine/sysml/model';
-import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
+import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import type { ImpactSeverity } from '../../engine/sysml/mutations';
 
 export interface RequirementGovernancePanelProps {
@@ -127,23 +127,27 @@ export function RequirementGovernancePanel({
             Upstream/downstream artifacts changed since last verification. Review impact and re-validate.
           </p>
           <div className="space-y-1.5">
-            {suspectLinks.map(link => (
-              <div key={link.id} className="flex items-center justify-between rounded bg-[#1e1e1e] p-1.5 border border-gray-800">
-                <div>
-                  <span className="font-mono text-gray-300">{sysmlObjectLabel(link, 'Relationship')}</span>
-                  <span className="text-gray-400 text-[10px]"> {resolveSysmlReferenceLabel(referenceRepository, link.sourceId)} -&gt; {resolveSysmlReferenceLabel(referenceRepository, link.targetId)}</span>
+            {suspectLinks.map(link => {
+              const unavailable = !hasSysmlReference(referenceRepository, link.sourceId) || !hasSysmlReference(referenceRepository, link.targetId);
+              return (
+                <div key={link.id} className="flex items-center justify-between rounded bg-[#1e1e1e] p-1.5 border border-gray-800">
+                  <div>
+                    <span className="font-mono text-gray-300">{sysmlObjectLabel(link, 'Relationship')}</span>
+                    <span className="text-gray-400 text-[10px]"> {resolveSysmlReferenceLabel(referenceRepository, link.sourceId)} -&gt; {resolveSysmlReferenceLabel(referenceRepository, link.targetId)}</span>
+                    {unavailable && <span className="block text-amber-300 text-[10px]">Referenced element is unavailable</span>}
+                  </div>
+                  {onClearSuspect && (
+                    <button
+                      type="button"
+                      onClick={() => onClearSuspect(link.id)}
+                      className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/50"
+                    >
+                      Mark Validated
+                    </button>
+                  )}
                 </div>
-                {onClearSuspect && (
-                  <button
-                    type="button"
-                    onClick={() => onClearSuspect(link.id)}
-                    className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/50"
-                  >
-                    Mark Validated
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </fieldset>
       )}
@@ -155,6 +159,9 @@ export function RequirementGovernancePanel({
           <div className="text-[11px] text-gray-400">
             Copied from master requirement: <span className="font-mono text-gray-200">{resolveSysmlReferenceLabel(referenceRepository, requirement.copiedFromId, 'Requirement')}</span>
           </div>
+          {!hasSysmlReference(referenceRepository, requirement.copiedFromId) && (
+            <div className="text-amber-300 text-[10px]">Referenced element is unavailable</div>
+          )}
 
           {masterRequirement && (
             <div className="rounded bg-[#141414] p-2 space-y-1 border border-gray-800 text-[11px]">
