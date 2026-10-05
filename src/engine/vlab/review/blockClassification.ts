@@ -140,11 +140,24 @@ export const ORPHAN_DEFINITION_KEYS: Record<string, string> = {
  *  - a library key string: legacy synonym of that library parameter (backward compatibility)
  *  - '@injected': value injected at assembly time (not user-editable), not a library parameter
  * Anything else an equation reads that the library does not expose is reported as `params-hidden`.
+ * (WP-08: equations read ONLY canonical library keys; legacy synonyms such as torque/force/resistance are mapped to
+ * the canonical key at model load by vlabModelMigration.ts, so no synonym is listed here any more.)
  */
 export const PARAM_ALIASES: Record<string, Record<string, string>> = {
-  torque_source: { torque: 'T' },
-  force_source: { force: 'F' },
   belt_end: { belt_density: '@injected', belt_youngs: '@injected', density: '@injected', youngs: '@injected' },
   belt_spool: { belt_density: '@injected', belt_youngs: '@injected', density: '@injected', youngs: '@injected' },
   pulley: { belt_density: '@injected', belt_youngs: '@injected', density: '@injected', youngs: '@injected' },
+};
+
+/**
+ * Library parameters that are real and consumed, but outside the block's equation factory: initial-state seeding
+ * (vlabPhysics.ts), reference-node targets (DAEAssembler.ts) and UI-only settings (VLabWorkspace.tsx). The params-dead
+ * check skips them. params.test.ts proves each name is really referenced by the named repo-relative source file.
+ */
+export const ENGINE_CONSUMED_PARAMS: Record<string, { file: string; params: string[] }[]> = {
+  neural_neuron_learning: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['initW1', 'initW2', 'initBias'] }],
+  hydraulic_reference_il: [
+    { file: 'src/engine/vlab/DAEAssembler.ts', params: ['referencePressure', 'pressureType', 'atmosphericPressure', 'elevationCorrection', 'referenceElevation'] },
+    { file: 'src/components/vlab/VLabWorkspace.tsx', params: ['initializationPriority'] },
+  ],
 };

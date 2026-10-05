@@ -16,10 +16,14 @@
  *    deliberately accept open frame nodes (free rotation DOFs).
  *    Blocks that are already singular with every port tied cannot be judged per port (ILL_POSED_CONSERVING_BLOCKS);
  *    no conserving port is claimed required for them.
+ *  3. (WP-08) checks every numeric parameter: it must be a finite number (or `{value, unit}` / numeric text) inside the
+ *     physical bounds stored next to the parameter in vlabLibrary.ts (R > 0, damping >= 0, ratio != 0, ...). The
+ *     diagnostics use codes 'invalid-parameter' / 'parameter-out-of-range' and carry `param` and `raw`.
  * An unconnected required port would otherwise be a silent 0 / an unsolvable or hanging solve.
  */
 import type { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
+import { validateBlockParams } from './vlabParams';
 import { DERIVED_REQUIRED_SIGNAL_INPUTS, DERIVED_REQUIRED_CONSERVING_PORTS } from './vlabRequiredPorts';
 import {
   TRANSPARENT_BLOCKS, blockTypeOf, checkEdgeSet, libraryBlock, portIdFromHandle, resolvePort,
@@ -88,7 +92,15 @@ export function validateTopology(nodes: Node[], edges: Edge[]): TopologyReport {
 
   for (const n of ruleNodes) {
     const type = blockTypeOf(n);
-    if (!libraryBlock(type) || TRANSPARENT_BLOCKS.has(type)) continue;
+    if (!libraryBlock(type)) continue;
+    // numeric parameters: finite numbers inside their physical bounds (WP-08); also for transparent config blocks
+    for (const d of validateBlockParams(n.id, type, (n.data as any)?.params, (n.data as any)?.label)) {
+      diagnostics.push({
+        blockId: d.blockId, portId: '', expectedDomain: 'parameter', actualDomain: 'parameter',
+        code: d.code, reason: d.reason, param: d.param, raw: d.raw,
+      });
+    }
+    if (TRANSPARENT_BLOCKS.has(type)) continue;
     const req = requiredPortsOf(type);
     const check = (portId: string, why: string) => {
       if (connected.has(`${n.id}\u0000${portId}`)) return;

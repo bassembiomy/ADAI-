@@ -72,7 +72,9 @@ export interface ResolvedPort {
 
 export type ConnectionCode =
   | 'domain-mismatch' | 'output-to-output' | 'input-to-input' | 'input-already-driven'
-  | 'scope-needs-measurable-output' | 'unknown-port' | 'unknown-domain' | 'wildcard-not-allowed' | 'unconnected-required-port';
+  | 'scope-needs-measurable-output' | 'unknown-port' | 'unknown-domain' | 'wildcard-not-allowed' | 'unconnected-required-port'
+  // WP-08: numeric parameter that is not a finite number / violates its physical bound (vlabParams.ts)
+  | 'invalid-parameter' | 'parameter-out-of-range';
 
 export interface ConnectionDiagnostic {
   blockId: string;
@@ -84,6 +86,9 @@ export interface ConnectionDiagnostic {
   /** the opposite end of the rejected wire, when there is one */
   otherBlockId?: string;
   otherPortId?: string;
+  /** parameter diagnostics only (code 'invalid-parameter' | 'parameter-out-of-range') */
+  param?: string;
+  raw?: unknown;
 }
 
 export interface NormalizedConnection {

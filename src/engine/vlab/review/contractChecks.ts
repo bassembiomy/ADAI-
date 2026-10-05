@@ -12,7 +12,7 @@ import {
 } from './contractInventory';
 import {
   ANY_DOMAIN_BLOCKS, BLOCK_CLASSIFICATION, CONSERVING_DOMAINS, KNOWN_PORT_DOMAINS, ORPHAN_EQUATION_KEYS,
-  PARAM_ALIASES, UTILITY_REASONS,
+  ENGINE_CONSUMED_PARAMS, PARAM_ALIASES, UTILITY_REASONS,
 } from './blockClassification';
 
 export const CHECK_IDS = [
@@ -135,7 +135,8 @@ export function evaluateBlock(ctx: BlockContext): Record<CheckId, string[]> {
     if (hidden.length) res['params-hidden'].push(`equation reads params not exposed by the library: ${hidden.join(', ')}`);
     const aliasTargets = new Set(Object.entries(aliases).filter(([k]) => trace.params.has(k)).map(([, v]) => v));
     // utility blocks are non-simulating: their params are configuration consumed by the UI/engine, not by an equation
-    const dead = cls === 'utility' ? [] : libKeys.filter(k => !trace.params.has(k) && !aliasTargets.has(k));
+    const engineConsumed = new Set((ENGINE_CONSUMED_PARAMS[block.id] ?? []).flatMap(e => e.params));
+    const dead = cls === 'utility' ? [] : libKeys.filter(k => !trace.params.has(k) && !aliasTargets.has(k) && !engineConsumed.has(k));
     if (dead.length) res['params-dead'].push(`library params never read by the equation: ${dead.join(', ')}`);
   } else if (trace?.threw) {
     res['params-hidden'].push('equation threw while traced; param reads unknown');
@@ -220,7 +221,9 @@ export function equationWp(ctx: BlockContext): WpId {
 export function wpFor(ctx: BlockContext, check: CheckId): WpId | null {
   switch (check) {
     case 'port-domains': return portsWp(ctx);
-    case 'params-hidden': case 'params-dead': return 'WP-08';
+    // WP-08 fixed every alias/hidden/meaningless parameter; what remains is a physical parameter the published
+    // equation needs, owned by the block's domain WP.
+    case 'params-hidden': case 'params-dead': return equationWp(ctx);
     case 'dae-allocation': case 'scope-routing': return JOINTS.has(ctx.block.id) ? 'WP-19a' : 'WP-09';
     case 'equation-doc': return equationWp(ctx);
     default: return null; // unique-ids, classification, equation-factory must pass today; never expected to fail

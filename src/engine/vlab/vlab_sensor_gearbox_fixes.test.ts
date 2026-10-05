@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Edge, Node } from '@xyflow/react';
 import { VLabPhysicsEngine } from './vlabPhysics';
+import { normalizeLegacyVLabGraph } from '../../components/vlab/vlabModelMigration';
 
 type Model = { nodes: Node[]; edges: Edge[]; dt: number; steps: number };
 
@@ -63,7 +64,7 @@ describe('VLab MMF Sensor, Angular Velocity Source, and Gear Box Port Alignment'
     });
   });
 
-  describe('Issue 2: ang_vel_source reads params.omega with backward-compatible params.w', () => {
+  describe('Issue 2: ang_vel_source reads params.omega; a legacy params.w is migrated to omega when the model loads', () => {
     it('drives velocity according to params.omega', () => {
       const { readings } = run({
         dt: 0.01,
@@ -89,17 +90,17 @@ describe('VLab MMF Sensor, Angular Velocity Source, and Gear Box Port Alignment'
       expect(finalReading).toBeCloseTo(25, 2);
     });
 
-    it('falls back to params.w if params.omega is not provided', () => {
+    it('a saved model with params.w is migrated to params.omega on load and drives the same velocity', () => {
       const { readings } = run({
         dt: 0.01,
         steps: 3,
-        nodes: [
+        nodes: normalizeLegacyVLabGraph([
           node('src', 'ang_vel_source', { w: 35 }),
           node('sensor', 'rot_motion_sensor'),
           node('damper', 'rot_damper', { b: 1 }),
           node('ref', 'rot_ref'),
           node('scope', 'scope'),
-        ],
+        ] as any, []).nodes as Node[],
         edges: [
           edge('e1', 'src', 'r_s', 'sensor', 'r_t'),
           edge('e2', 'src', 'c_s', 'ref', 'r_t'),

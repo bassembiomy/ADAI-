@@ -1,4 +1,5 @@
 import { EquationContext } from './types';
+import { numericParam, stringParam, vectorParam, unwrapParam } from './vlabParams';
 import { universalJointParameters, universalJointKinematics, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -86,12 +87,11 @@ export function inputOrParam(
   return wired ? across[idx] : fallback;
 }
 
-// Accepts 0 as a valid value; only missing/non-numeric params fall back.
-const numericParam = (value: any, fallback: number): number => {
-  if (value === undefined || value === null || value === '') return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
+// Numeric parameters are read through numericParam (vlabParams.ts): a missing value takes the default, a user-supplied
+// 0 / negative / "1e-3" is honoured, and malformed text throws a structured VLabParamError (never a silent default).
+
+// Averaging time constant of ps_moving_avg's first-order approximation (s). The `window` parameter is not wired yet (WP-20).
+const MOVING_AVG_TAU = 0.1;
 
 const asFrame = (v: any): number[] =>
   Array.isArray(v) ? v : [Number(v) || 0, 0, 0, 0, 0, 0];
@@ -120,11 +120,6 @@ const trapezoidalBackEmf =(angle: number): number => {
 const numParam = (v: unknown, fallback: number): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
-};
-
-const positiveParam = (v: unknown, fallback: number): number => {
-  const n = numParam(v, fallback);
-  return n > 0 ? n : fallback;
 };
 
 const portIndex = (ports: string[], name: string, fallback: number): number => {
@@ -171,13 +166,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   resistor: ({ across, branch, params }) => {
     // Vp - Vn - I*R = 0
-    const R = params.R || params.resistance || 100;
+    const R = numericParam(params, 'R', 100);
     return [(across[0] - across[1]) - branch[0] * R];
   },
   
   variable_resistor: ({ across, branch, params, ports, connectedPorts }) => {
     // Vp - Vn - I*R_ctrl = 0 (R_ctrl is the control signal at port 'r'; 100 ohm when unwired)
-    const R_min = params.R_min !== undefined ? params.R_min : 0.1;
+    const R_min = numericParam(params, 'R_min', 0.1);
     const R_ctrl = Math.max(R_min, inputOrParam({ across, ports, connectedPorts }, 'r', 100, 2));
     return [(across[0] - across[1]) - branch[0] * R_ctrl];
   },
@@ -189,20 +184,20 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   capacitor: ({ across, dAcross, branch, params }) => {
     // I - C * d(Vp-Vn)/dt = 0
-    const C = params.C || params.capacitance || 1e-6;
+    const C = numericParam(params, 'C', 1e-6);
     return [branch[0] - C * (dAcross[0] - dAcross[1])];
   },
   
   inductor: ({ across, branch, dBranch, params }) => {
     // Vp - Vn - L * dI/dt = 0
-    const L = params.L || params.inductance || 1e-3;
+    const L = numericParam(params, 'L', 1e-3);
     return [(across[0] - across[1]) - L * dBranch[0]];
   },
   
   memristor: ({ across, branch, state, dState, params }) => {
     // V = M(w) * I
     // dw/dt = f(I) => dw/dt - I = 0 (simplified)
-    const M0 = params.M0 || 100;
+    const M0 = numericParam(params, 'M0', 100);
     const w = state[0];
     const M = M0 + 10 * w;
     return [
@@ -213,18 +208,18 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   switch: ({ across, branch, params, ports, connectedPorts }) => {
     // V = I * (ctrl > threshold ? Ron : Roff)
-    const Ron = params.Ron ?? 0.01;
-    const Roff = params.Roff ?? 1e6;
-    const threshold = params.threshold !== undefined ? params.threshold : 0.5;
+    const Ron = numericParam(params, 'Ron', 0.01);
+    const Roff = numericParam(params, 'Roff', 1e6);
+    const threshold = numericParam(params, 'threshold', 0.5);
     const ctrl = inputOrParam({ across, ports, connectedPorts }, 'v', 0, 2);
     const R = ctrl > threshold ? Ron : Roff;
     return [(across[0] - across[1]) - branch[0] * R];
   },
   
   diode: ({ across, branch, params }) => {
-    const Ron = params.Ron ?? 0.01;
-    const Roff = params.Roff ?? 1e6;
-    const Vf = params.Vf !== undefined ? params.Vf : 0.7;
+    const Ron = numericParam(params, 'Ron', 0.01);
+    const Roff = numericParam(params, 'Roff', 1e6);
+    const Vf = numericParam(params, 'Vf', 0.7);
     const V = across[0] - across[1];
     if (V > Vf) return [V - Vf - branch[0] * Ron];
     return [V - branch[0] * Roff];
@@ -240,9 +235,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Vd = portValue('d', 0);
     const Vs = portValue('s', 1);
     const Vg = portValue('g', 2);
-    const kn = params.kn || 0.5;
-    const Vth = params.Vth || 2.0;
-    const lambda = params.lambda || 0.01;
+    const kn = numericParam(params, 'kn', 0.5);
+    const Vth = numericParam(params, 'Vth', 2.0);
+    const lambda = numericParam(params, 'lambda', 0.01);
     
     const Vgs = Vg - Vs;
     const Vds = Vd - Vs;
@@ -266,10 +261,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   igbt: ({ across, branch, params }) => {
     // across[0] = Vc, across[1] = Ve, across[2] = Vg
-    const Vge_th = params.Vge_th || 5.5;
-    const Vce_sat = params.Vce_sat || 1.5;
-    const Rd = params.Rd || 0.05;
-    const Roff = params.Roff || 1e6;
+    const Vge_th = numericParam(params, 'Vge_th', 5.5);
+    const Vce_sat = numericParam(params, 'Vce_sat', 1.5);
+    const Rd = numericParam(params, 'Rd', 0.05);
+    const Roff = numericParam(params, 'Roff', 1e6);
     
     const Vge = across[2] - across[1];
     const Vce = across[0] - across[1];
@@ -284,7 +279,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   v_sensor: ({ across, branch, params }) => {
     // branch[0] is leakage current: I_leak - V/R_int = 0
     // branch[1] is output signal: signal_out - V = 0
-    const R_int = params.R_int || 1e8;
+    const R_int = numericParam(params, 'R_int', 1e8);
     const V = across[0] - across[1];
     return [
       branch[0] - V / R_int,
@@ -295,7 +290,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   i_sensor: ({ across, branch, params }) => {
     // branch[0] is current, causing tiny voltage drop: V_drop - I*R_int = 0
     // branch[1] is output signal: signal_out - I = 0
-    const R_int = params.R_int || 1e-6;
+    const R_int = numericParam(params, 'R_int', 1e-6);
     const V = across[0] - across[1];
     return [
       V - branch[0] * R_int,
@@ -305,22 +300,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   dc_voltage: ({ across, branch, params }) => {
     // Vp - Vn - V_const = 0
-    const V = params.V !== undefined ? params.V : (params.V_const !== undefined ? params.V_const : 12);
-    const R_int = params.R_int || 1e-3;
+    const V = numericParam(params, 'V', 12);
+    const R_int = numericParam(params, 'R_int', 1e-3);
     return [(across[0] - across[1]) - V - branch[0] * R_int];
   },
   
   ac_voltage: ({ across, branch, params, ctx }) => {
     // Vp - Vn - Vpk * sin(2*pi*f*t + phase) - I*R_int = 0
-    const parameterValue = (value: any, fallback: number) => {
-      const raw = value && typeof value === 'object' && 'value' in value ? value.value : value;
-      const numeric = Number(raw);
-      return Number.isFinite(numeric) ? numeric : fallback;
-    };
-    const Vpk = parameterValue(params.Vpk, 230);
-    const f = parameterValue(params.f, 50);
-    const phase = parameterValue(params.phase, Math.PI / 4);
-    const R_int = parameterValue(params.R_int, 1e-3);
+    const Vpk = numericParam(params, 'Vpk', 230);
+    const f = numericParam(params, 'f', 50);
+    const phase = numericParam(params, 'phase', Math.PI / 4);
+    const R_int = numericParam(params, 'R_int', 1e-3);
     const V_ac = Vpk * Math.sin(2 * Math.PI * f * ctx.time + phase);
     return [(across[0] - across[1]) - V_ac - branch[0] * R_int];
   },
@@ -328,20 +318,20 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   controlled_voltage: ({ across, branch, params, ports, connectedPorts }) => {
     // Vp - Vn - S = 0 (S is the signal at port 's'; 0 V when unwired)
     const S = inputOrParam({ across, ports, connectedPorts }, 's', 0, 2);
-    const R_int = params.R_int || 1e-3;
+    const R_int = numericParam(params, 'R_int', 1e-3);
     return [(across[0] - across[1]) - S - branch[0] * R_int];
   },
   
   dc_current: ({ branch, params }) => {
     // I - I_const = 0
-    const I = params.I !== undefined ? params.I : (params.I_const !== undefined ? params.I_const : 1);
+    const I = numericParam(params, 'I', 1);
     return [branch[0] - I];
   },
   
   transformer: ({ across, branch, params }) => {
     // V2 = N * V1 => across[2]-across[3] - N*(across[0]-across[1]) = 0
     // I1 = -N * I2 => branch[0] + N*branch[1] = 0
-    const N = params.N || 10;
+    const N = numericParam(params, 'N', 10);
     const V1 = across[0] - across[1];
     const V2 = across[2] - across[3];
     return [
@@ -353,7 +343,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   gyrator: ({ across, branch, params }) => {
     // I1 = g * V2 => branch[0] - g * V2 = 0
     // I2 = -g * V1 => branch[1] + g * V1 = 0
-    const g = params.g || 0.01;
+    const g = numericParam(params, 'g', 0.01);
     const V1 = across[0] - across[1];
     const V2 = across[2] - across[3];
     return [
@@ -364,7 +354,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   opamp: ({ across, branch, params }) => {
     // Vout = Gain * (V+ - V-) => clamped to +/- 15V
-    const Gain = params.Gain || 1e5;
+    const Gain = numericParam(params, 'Gain', 1e5);
     const Vplus = across[0];
     const Vminus = across[1];
     const Vout = across[2];
@@ -375,8 +365,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   three_phase_source: ({ across, branch, params, ctx }) => {
     // Va, Vb, Vc relative to ground
     // Shifting by pi/4 to avoid zero-sampling aliasing at dt=0.05s steps
-    const Vrms = params.Vrms !== undefined ? params.Vrms : 400;
-    const f = params.f !== undefined ? params.f : 50;
+    const Vrms = numericParam(params, 'Vrms', 400);
+    const f = numericParam(params, 'f', 50);
     const Vpk = Vrms * Math.sqrt(2 / 3);
     const w = 2 * Math.PI * f;
     const Va = Vpk * Math.sin(w * ctx.time + Math.PI / 4);
@@ -409,14 +399,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   vcvs: ({ across, branch, params }) => {
-    const gain = params.gain || 1;
+    const gain = numericParam(params, 'gain', 1);
     const Vin = across[2] - across[3];
     const Vout = across[0] - across[1];
     return [Vout - gain * Vin];
   },
 
   vccs: ({ across, branch, params }) => {
-    const gain = params.gain || 1;
+    const gain = numericParam(params, 'gain', 1);
     const Vin = across[2] - across[3];
     return [branch[0] - gain * Vin];
   },
@@ -425,13 +415,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
 
     // branch[0]: output current (p -> n), branch[1]: control current (cp -> cn)
-    const paramVal = (val: any, def: number) => {
-      const raw = val && typeof val === 'object' && 'value' in val ? val.value : val;
-      const num = Number(raw);
-      return Number.isFinite(num) ? num : def;
-    };
-    const gain = paramVal(params.gain, 1);
-    const Rin = paramVal(params.R_in ?? params.Rin, 0);
+    const gain = numericParam(params, 'gain', 1);
+    const Rin = numericParam(params, 'R_in', 0);
     const Vctrl = (across[2] ?? 0) - (across[3] ?? 0);
     return [
       branch[0] - gain * branch[1],
@@ -443,14 +428,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
 
     // branch[0]: output voltage source current (p -> n), branch[1]: control current (cp -> cn)
-    const paramVal = (val: any, def: number) => {
-      const raw = val && typeof val === 'object' && 'value' in val ? val.value : val;
-      const num = Number(raw);
-      return Number.isFinite(num) ? num : def;
-    };
-    const gain = paramVal(params.gain, 1);
-    const Rin = paramVal(params.R_in ?? params.Rin, 0);
-    const Rout = paramVal(params.R_out ?? params.Rout, 0);
+    const gain = numericParam(params, 'gain', 1);
+    const Rin = numericParam(params, 'R_in', 0);
+    const Rout = numericParam(params, 'R_out', 0);
     const Vout = (across[0] ?? 0) - (across[1] ?? 0);
     const Vctrl = (across[2] ?? 0) - (across[3] ?? 0);
     return [
@@ -464,15 +444,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   inertia: ({ across, dAcross, branch, params }) => {
     // Torque = J * d(omega)/dt
-    const J = params.J || 0.001;
-    const B = params.B || 0.001;
+    const J = numericParam(params, 'J', 0.001);
+    const B = numericParam(params, 'B', 0.001);
     return [branch[0] - J * dAcross[0] - B * across[0]];
   },
   
   rot_spring: ({ across, branch, state, dState, params }) => {
     // Torque = k * theta
     // d(theta)/dt = omega_r - omega_c
-    const k = params.k || params.spring_const || 10;
+    const k = numericParam(params, 'k', 10);
     const theta = state[0];
     const omega = across[0] - (across[1] || 0);
     return [
@@ -483,25 +463,25 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   rot_damper: ({ across, branch, params }) => {
     // Torque = b * (omega_r - omega_c)
-    const b = params.b || params.damping || 0.1;
+    const b = numericParam(params, 'b', 0.1);
     const omega = across[0] - (across[1] || 0);
     return [branch[0] - b * omega];
   },
   
   rot_friction: ({ across, branch, params }) => {
     // Static & kinetic friction
-    const Ts = params.Ts || 1.0;
-    const Tv = params.Tv || 0.1;
+    const Ts = numericParam(params, 'Ts', 1.0);
+    const Tv = numericParam(params, 'Tv', 0.1);
     const omega = across[0] - (across[1] || 0);
     const torque = Ts * Math.tanh(10 * omega) + Tv * omega;
     return [branch[0] - torque];
   },
   
   rot_hard_stop: ({ across, branch, state, dState, params }) => {
-    const lower = params.lower !== undefined ? Number(params.lower) : -1.57;
-    const upper = params.upper !== undefined ? Number(params.upper) : 1.57;
-    const k = params.k !== undefined ? Number(params.k) : 1000;
-    const c = params.c !== undefined ? Number(params.c) : 0.1;
+    const lower = numericParam(params, 'lower', -1.57);
+    const upper = numericParam(params, 'upper', 1.57);
+    const k = numericParam(params, 'k', 1000);
+    const c = numericParam(params, 'c', 0.1);
     const omega = across[0] - (across[1] || 0);
     const theta = state[0];
     let torque = 0;
@@ -512,7 +492,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   torque_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Torque = S (commanded via the `s` port when wired, else the T parameter)
-    const S = inputOrParam({ across, ports, connectedPorts }, 's', (params.torque !== undefined ? params.torque : (params.T !== undefined ? params.T : 5)), 2);
+    const S = inputOrParam({ across, ports, connectedPorts }, 's', numericParam(params, 'T', 5), 2);
     return [branch[0] - S];
   },
   
@@ -567,7 +547,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   gear_box: ({ across, branch, params, ports }) => {
     // w1 = ratio * w2  =>  w2 = w1 / ratio
     // T1 * w1 + T2 * w2 = 0  =>  ratio * T1 + T2 = 0
-    const ratio = Number(params.ratio ?? 2);
+    const ratio = numericParam(params, 'ratio', 2);
     let w1: number;
     let w2: number;
 
@@ -608,15 +588,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   mass: ({ across, dAcross, branch, params }) => {
     // Force = m * d(v)/dt
-    const m = params.m || params.mass || 1.0;
-    const b = params.b || 0.1;
+    const m = numericParam(params, 'm', 1.0);
+    const b = numericParam(params, 'b', 0.1);
     return [branch[0] - m * dAcross[0] - b * across[0]];
   },
   
   trans_spring: ({ across, branch, state, dState, params }) => {
     // Force = k * x
     // d(x)/dt = v_r - v_c
-    const k = params.k || params.spring_const || 100;
+    const k = numericParam(params, 'k', 100);
     const x = state[0];
     const v = across[0] - (across[1] || 0);
     return [
@@ -627,23 +607,23 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   trans_damper: ({ across, branch, params }) => {
     // Force = b * (v_r - v_c)
-    const b = params.b || params.damping || 1.0;
+    const b = numericParam(params, 'b', 1.0);
     const v = across[0] - (across[1] || 0);
     return [branch[0] - b * v];
   },
   
   trans_friction: ({ across, branch, params }) => {
-    const Fs = params.Fs || 10.0;
-    const Fv = params.Fv || 2.0;
+    const Fs = numericParam(params, 'Fs', 10.0);
+    const Fv = numericParam(params, 'Fv', 2.0);
     const v = across[0] - (across[1] || 0);
     const force = Fs * Math.tanh(5 * v) + Fv * v;
     return [branch[0] - force];
   },
   
   trans_hard_stop: ({ across, branch, params }) => {
-    const lower = params.lower || -0.1;
-    const upper = params.upper || 0.1;
-    const k = params.k || 10000;
+    const lower = numericParam(params, 'lower', -0.1);
+    const upper = numericParam(params, 'upper', 0.1);
+    const k = numericParam(params, 'k', 10000);
     const v = across[0] - (across[1] || 0);
     const x = (across[0] || 0) * 0.01;
     let force = 0;
@@ -654,15 +634,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   force_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Force = S (commanded via the `s` port when wired, else the F parameter)
-    const S = inputOrParam({ across, ports, connectedPorts }, 's', (params.force !== undefined ? params.force : (params.F !== undefined ? params.F : 10)), 2);
+    const S = inputOrParam({ across, ports, connectedPorts }, 's', numericParam(params, 'F', 10), 2);
     return [branch[0] - S];
   },
 
   lever: ({ across, branch, params }) => {
     // va = -(L2/L1)*vb => across[0] + L2/L1 * across[1] = 0
     // Fa = (L2/L1)*Fb => branch[0] - L2/L1 * branch[1] = 0
-    const L1 = params.L1 || 1.0;
-    const L2 = params.L2 || 1.0;
+    const L1 = numericParam(params, 'L1', 1.0);
+    const L2 = numericParam(params, 'L2', 1.0);
     const ratio = L2 / L1;
     return [
       across[0] + ratio * across[1],
@@ -675,26 +655,24 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   conductive_heat: ({ across, branch, params }) => {
     // Q = k * (Ta - Tb) or (k * A / L) * (Ta - Tb)
-    const rawK = params.k ?? params.conductivity ?? 1.0;
-    const k = (params.A !== undefined && params.L !== undefined && Number(params.L) !== 0)
-      ? (Number(rawK) * Number(params.A) / Number(params.L))
-      : Number(rawK);
+    // k is the thermal conductance in W/K (library unit); geometry (A, L) is not a parameter of this block.
+    const k = numericParam(params, 'k', 1.0);
     const dT = across[0] - across[1];
     return [branch[0] - k * dT];
   },
   
   convective_heat: ({ across, branch, params }) => {
     // Q = h * A * (Ta - Tb)
-    const h = params.h ?? 10.0;
-    const A = params.A ?? 0.1;
+    const h = numericParam(params, 'h', 10.0);
+    const A = numericParam(params, 'A', 0.1);
     const dT = across[0] - across[1];
     return [branch[0] - h * A * dT];
   },
   
   radiative_heat: ({ across, branch, params }) => {
     // Q = eps * sigma * A * (Ta^4 - Tb^4)
-    const eps = params.eps ?? 0.9;
-    const A = params.A ?? 0.1;
+    const eps = numericParam(params, 'eps', 0.9);
+    const A = numericParam(params, 'A', 0.1);
     const sigma = 5.67e-8; // Stefan-Boltzmann
     const Ta = across[0];
     const Tb = across[1];
@@ -704,8 +682,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   thermal_mass: ({ across, dAcross, branch, params }) => {
     // Q = C * dT/dt
-    const rawC = Number(params.C ?? params.heat_capacity ?? 100.0);
-    const C = Math.max(1e-6, isNaN(rawC) ? 100.0 : rawC);
+    const C = Math.max(1e-6, numericParam(params, 'C', 100.0));
     return [branch[0] - C * dAcross[0]];
   },
   
@@ -723,12 +700,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   heat_sensor: (args) => blockEquations.heat_flow_sensor(args),
   
   heat_src: ({ branch, params }) => {
-    const Q = params.Q ?? params.Q_const ?? 100;
+    const Q = numericParam(params, 'Q', 100);
     return [branch[0] - Q];
   },
   
   temp_src: ({ across, branch, params }) => {
-    const T = params.T ?? params.T_const ?? 293.15;
+    const T = numericParam(params, 'T', 293.15);
     return [across[0] - T];
   },
   
@@ -748,8 +725,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   rotational_electromechanical_converter: ({ across, branch, params }) => {
     // V = Ra*I + Ke*w => (Vp-Vn) - I*Ra - Ke*w = 0
     // T = -Kt*I (power-preserving convention: electrical in = mechanical out)
-    const K = params.K || params.motor_constant || 0.05;
-    const Ra = params.R || params.resistance || 2.0;
+    const K = numericParam(params, 'K', 0.05);
+    const Ra = numericParam(params, 'R', 2.0);
     const V = across[0] - across[1];
     const w = across[2] - (across[3] || 0);
     const I = branch[0];
@@ -763,8 +740,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   translational_electromechanical_converter: ({ across, branch, params }) => {
     // V = I*R + Bl*v
     // F = -Bl*I
-    const Bl = params.Bl || 1.0;
-    const R = params.R || 1.0;
+    const Bl = numericParam(params, 'Bl', 1.0);
+    const R = numericParam(params, 'R', 1.0);
     const V = across[0] - across[1];
     const v = across[2] - (across[3] || 0);
     const I = branch[0];
@@ -778,7 +755,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   thermal_resistor: ({ across, branch, params }) => {
     // V = I * R => (Vp-Vn) - I*R = 0
     // Q_heat = I^2 * R (flows OUT of the component into the thermal node)
-    const R = params.R ?? params.resistance ?? params.Rth ?? 10.0;
+    const R = numericParam(params, 'R', 10.0);
     const V = across[0] - across[1];
     const I = branch[0];
     const Q = branch[1];
@@ -791,8 +768,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   microwave_inverter: ({ across, branch, params, ports, connectedPorts }) => {
     // branch[0] is current_in, branch[1] is current_out
     const ctrl_val = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 1.0, 2);
-    const v_out_target = (params.v_out || 4000) * ctrl_val;
-    const v_in_nom = params.v_in || 230;
+    const v_out_target = (numericParam(params, 'v_out', 4000)) * ctrl_val;
+    const v_in_nom = numericParam(params, 'v_in', 230);
     const V_out = across[1];
     // Use the nominal input voltage for the ideal power-balance relation.
     // Dividing by the instantaneous AC voltage caused runaway input current
@@ -806,9 +783,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   magnetron: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
     const V = across[0] - across[1];
-    const P_rated = params.power_rating || 900;
-    const eff = (params.efficiency !== undefined ? params.efficiency : 65) / 100;
-    const V_nom = params.v_nominal !== undefined ? params.v_nominal : 4000;
+    const P_rated = numericParam(params, 'power_rating', 900);
+    const eff = (numericParam(params, 'efficiency', 65)) / 100;
+    const V_nom = numericParam(params, 'v_nominal', 4000);
     // Electrical power follows the documented P = P_rated * (V/V_nom)^2
     // characteristic, so at the nominal 4000 V the magnetron draws its
     // rated power and outputs P_rated * efficiency as heat (≈585 W for 900 W, 65%).
@@ -825,8 +802,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   upper_heater: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
     const V = across[0] - across[1];
-    const R = params.resistance || 35.0;
-    const eff = params.efficiency || 0.9;
+    const R = numericParam(params, 'resistance', 35.0);
+    const eff = numericParam(params, 'efficiency', 0.9);
     const I = V / R;
     const Q = I * I * R * eff;
     return [
@@ -837,7 +814,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   steam_generator: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
-    const P = params.power || 800;
+    const P = numericParam(params, 'power', 800);
     const V = across[0] - across[1];
     const I_target = P / 230;
     return [
@@ -849,27 +826,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   microwave_cavity: ({ across, branch, state, dState, params }) => {
     // branch[0] is heat_flow1, branch[1] is heat_flow2, branch[2] is heat_flow3, branch[3] is signal_t
     // state[0] is temp
-    const getVal = (p: any, fallback: number): number => {
-      if (p === undefined || p === null) return fallback;
-      if (typeof p === 'number') return p;
-      if (typeof p === 'object' && typeof p.value === 'number') return p.value;
-      const num = parseFloat(p);
-      return isNaN(num) ? fallback : num;
-    };
+    const getVal = (key: string, fallback: number): number => numericParam(params, key, fallback);
 
-    const vol = getVal(params.volume, 25);
-    const maxTempC = getVal(params.max_temp, 250);
+    const vol = getVal('volume', 25);
+    const maxTempC = getVal('max_temp', 250);
     const maxTempK = maxTempC > 350 ? maxTempC : maxTempC + 273.15;
-    const T_amb_C = getVal(params.ambient_temp, 25);
+    const T_amb_C = getVal('ambient_temp', 25);
     const T_amb = T_amb_C > 200 ? T_amb_C : T_amb_C + 273.15;
 
     // Thermal mass: air + cavity walls + optional food/water load.
     // Without a food load the cavity has very little thermal capacitance,
     // which is unphysical and causes the temperature to rise without limit.
-    const food_mass = getVal(params.food_mass, 0.5); // kg
-    const food_cp = getVal(params.food_cp, 4184);    // J/(kg*K), water approx.
-    const wall_mass = getVal(params.wall_mass, 2.0); // kg
-    const wall_cp = getVal(params.wall_cp, 460);     // J/(kg*K), steel approx.
+    const food_mass = getVal('food_mass', 0.5); // kg
+    const food_cp = getVal('food_cp', 4184);    // J/(kg*K), water approx.
+    const wall_mass = getVal('wall_mass', 2.0); // kg
+    const wall_cp = getVal('wall_cp', 460);     // J/(kg*K), steel approx.
     const C_air = vol * 0.0012 * 1005;
     const C = C_air + wall_mass * wall_cp + food_mass * food_cp;
 
@@ -878,8 +849,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const V_m3 = vol * 1e-3;
     const side = Math.pow(V_m3, 1 / 3);
     const A = 6 * side * side;
-    const h_conv = getVal(params.h_conv, 10); // W/(m^2*K) natural convection
-    const eps = getVal(params.eps, 0.85);     // emissivity
+    const h_conv = getVal('h_conv', 10); // W/(m^2*K) natural convection
+    const eps = getVal('eps', 0.85);     // emissivity
     const sigma = 5.67e-8;
     const U_A = h_conv * A;
 
@@ -909,33 +880,33 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── PHYSICAL SIGNAL BLOCKS ─────────────────────────────────────────────────
   constant: ({ branch, params }) => {
-    const val = params.value !== undefined ? (params.value?.value !== undefined ? params.value.value : params.value) : 1.0;
+    const val = numericParam(params, 'value', 1.0);
     return [branch[0] - val];
   },
 
   ps_constant: ({ branch, params }) => {
-    const val = params.value !== undefined ? (params.value?.value !== undefined ? params.value.value : params.value) : 1.0;
+    const val = numericParam(params, 'value', 1.0);
     return [branch[0] - val];
   },
-  
+
   ps_step: ({ branch, params, ctx }) => {
-    const step_time = params.time !== undefined ? params.time : (params.stepTime !== undefined ? params.stepTime : (params.step_time !== undefined ? params.step_time : 1.0));
-    const initial = params.initial !== undefined ? params.initial : 0.0;
-    const final = params.final !== undefined ? params.final : 1.0;
+    const step_time = numericParam(params, 'time', 1.0);
+    const initial = numericParam(params, 'initial', 0.0);
+    const final = numericParam(params, 'final', 1.0);
     const val = ctx.time >= step_time ? final : initial;
     return [branch[0] - val];
   },
   
   ps_sine: ({ branch, params, ctx }) => {
-    const A = params.A !== undefined ? params.A : (params.amplitude !== undefined ? params.amplitude : 1.0);
-    const f = params.f !== undefined ? params.f : (params.frequency !== undefined ? params.frequency : 1.0);
+    const A = numericParam(params, 'amp', 1.0);
+    const f = numericParam(params, 'freq', 1.0);
     const val = A * Math.sin(2 * Math.PI * f * ctx.time);
     return [branch[0] - val];
   },
   
   ps_ramp: ({ branch, params, ctx }) => {
-    const slope = params.slope || 1.0;
-    const start = params.start_time || 0.0;
+    const slope = numericParam(params, 'slope', 1.0);
+    const start = numericParam(params, 'start', 0.0);
     const val = ctx.time > start ? slope * (ctx.time - start) : 0.0;
     return [branch[0] - val];
   },
@@ -949,7 +920,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   ps_gain: ({ across, branch, params }) => {
-    const gain = params.gain !== undefined ? params.gain : 1.0;
+    const gain = numericParam(params, 'gain', 1.0);
     return [branch[0] - gain * (across[0] || 0)];
   },
   
@@ -967,29 +938,29 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   ps_saturation: ({ across, branch, params }) => {
-    const upper = params.upper || 1.0;
-    const lower = params.lower || -1.0;
+    const upper = numericParam(params, 'upper', 1.0);
+    const lower = numericParam(params, 'lower', -1.0);
     const val = Math.max(lower, Math.min(upper, across[0] || 0));
     return [branch[0] - val];
   },
   
   ps_dead_zone: ({ across, branch, params }) => {
-    const upper = params.upper || 0.5;
-    const lower = params.lower || -0.5;
+    const upper = numericParam(params, 'upper', 0.5);
+    const lower = numericParam(params, 'lower', -0.5);
     const u = across[0] || 0;
     const val = u > lower && u < upper ? 0.0 : u;
     return [branch[0] - val];
   },
   
   ps_switch: ({ across, branch, params }) => {
-    const threshold = params.threshold !== undefined ? params.threshold : 0.5;
+    const threshold = numericParam(params, 'threshold', 0.5);
     const ctrl = across[2] || 0;
     const val = ctrl > threshold ? (across[0] || 0) : (across[1] || 0);
     return [branch[0] - val];
   },
   
   ps_math: ({ across, branch, params }) => {
-    const func = params.function || 'sin';
+    const func = stringParam(params, 'func', 'sin');
     const u = across[0] || 0;
     let val = 0;
     switch (func) {
@@ -1006,8 +977,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   ps_lookup_1d: ({ across, branch, params }) => {
-    const table_x = params.table_x || [0, 1, 2];
-    const table_y = params.table_y || [0, 1, 4];
+    const table_x = vectorParam(params, 'table_x', [0, 1, 2]);
+    const table_y = vectorParam(params, 'table_y', [0, 1, 4]);
     const u = across[0] || 0;
     
     // Linear interpolation
@@ -1039,7 +1010,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   ps_transfer_fcn: ({ across, branch, state, dState, params }) => {
     // T * dy/dt + y = u
-    const T = params.T || params.time_constant || 1.0;
+    const T = numericParam(params, 'T', 1.0);
     return [
       branch[0] - state[0],
       T * dState[0] + state[0] - across[0]
@@ -1048,7 +1019,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   ps_lpf: ({ across, branch, state, params, ctx }) => {
     // Discrete LPF: y(k) = alpha*u + (1-alpha)*y(k-1)
-    const T = params.T || params.time_constant || 0.1;
+    // First-order low-pass H(s) = 1/(1 + T s) has its -3 dB corner at w_c = 1/T, so T = 1/(2*pi*f_cut).
+    const T = 1 / (2 * Math.PI * numericParam(params, 'f_cut', 100));
     const alpha = ctx.dt / (T + ctx.dt);
     const u = across[0] || 0;
     
@@ -1063,13 +1035,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_pi_ctrl: ({ across, branch, state, dState, params }) => {
-    const Kp = params.Kp !== undefined ? params.Kp : 1.0;
-    const Ki = params.Ki !== undefined ? params.Ki : 0.0;
+    const Kp = numericParam(params, 'Kp', 1.0);
+    const Ki = numericParam(params, 'Ki', 0.0);
     const error = across[0] || 0;
     const integral = state[0];
     
     // Saturation limit
-    const limit = params.limit || Infinity;
+    const limit = numericParam(params, 'limit', Infinity);
     const u_unsat = Kp * error + Ki * integral;
     const u = Math.max(-limit, Math.min(limit, u_unsat));
     
@@ -1086,17 +1058,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_pid_ctrl: ({ across, branch, state, dState, params, ctx }) => {
-    const Kp = params.Kp !== undefined ? params.Kp : 1.0;
-    const Ki = params.Ki !== undefined ? params.Ki : 0.0;
-    const Kd = params.Kd !== undefined ? params.Kd : 0.0;
-    const N = params.N || 100; // derivative filter coef
+    const Kp = numericParam(params, 'Kp', 1.0);
+    const Ki = numericParam(params, 'Ki', 0.0);
+    const Kd = numericParam(params, 'Kd', 0.0);
+    const N = numericParam(params, 'N', 100); // derivative filter coef
     const error = across[0] || 0;
     const integral = state[0];
     const filter = state[1];
     
     // Derivative filter dynamics: filter_dot = N * (error - filter)
     const deriv = N * (error - filter);
-    const limit = params.limit || params.saturation || Infinity;
+    const limit = numericParam(params, 'limit', Infinity);
     
     const u_unsat = Kp * error + Ki * integral + Kd * deriv;
     const u = Math.max(-limit, Math.min(limit, u_unsat));
@@ -1118,12 +1090,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   washing_basket: ({ across, dAcross, branch, params }) => {
     // across[0] is omega (angular velocity)
     // J_total = J_basket + (load_mass + unbalance) * radius^2
-    const J_basket = params.J_basket || 0.1;
-    const M_clothes = params.load_mass || 5.0;
-    const M_unbal = params.unbalance || 0.5;
-    const R = params.radius || 0.25;
+    const J_basket = numericParam(params, 'J_basket', 0.1);
+    const M_clothes = numericParam(params, 'load_mass', 5.0);
+    const M_unbal = numericParam(params, 'unbalance', 0.5);
+    const R = numericParam(params, 'radius', 0.25);
     const J_total = J_basket + (M_clothes + M_unbal) * R * R;
-    const B = params.damping || 0.02;
+    const B = numericParam(params, 'damping', 0.02);
     
     // Dynamic torque load and physical output vis signal
     return [
@@ -1134,9 +1106,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   washing_fluid: ({ across, branch, params }) => {
     // across[0] is omega
-    const Det = params.detergent || 1;
-    const Water = params.water_level || 10;
-    const viscosity = 0.05 + (Det * 0.02) + (Water * 0.005);
+    const Det = numericParam(params, 'detergent', 1);
+    const Water = numericParam(params, 'water_level', 10);
+    const drag = numericParam(params, 'drag_coeff', 0.05); // base viscous drag coefficient (N-m-s/rad)
+    const viscosity = drag + (Det * 0.02) + (Water * 0.005);
     const torque = viscosity * across[0] + 0.01 * Math.sign(across[0]) * across[0] * across[0];
     return [
       branch[0] - torque,
@@ -1151,12 +1124,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // across[2]: mechanical speed omega
     // state[0]: rotor angle theta
     // state[1]: mechanical speed omega (true state)
-    const Ra = params.Ra || params.resistance || 2.0;
-    const La = params.La || params.inductance || 0.01;
-    const Ke = params.Ke || 0.05;
-    const Kt = params.Kt || Ke;
-    const J = params.J || params.inertia || 0.01;
-    const B = params.B || params.damping || 0.001;
+    const Ra = numericParam(params, 'Ra', 2.0);
+    const La = numericParam(params, 'La', 0.01);
+    const Ke = numericParam(params, 'Ke', 0.05);
+    const Kt = numericParam(params, 'Kt', Ke);
+    const J = numericParam(params, 'J', 0.01);
+    const B = numericParam(params, 'B', 0.001);
     
     const V = across[0] - across[1];
     const Ia = branch[0];
@@ -1175,14 +1148,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // 3-phase induction motor stationary alpha-beta rotor-flux model
     // state[0]: theta, state[1]: omega
     // state[2]: rotor flux alpha, state[3]: rotor flux beta
-    const Rs = params.Rs || 0.1;
-    const Rr = params.Rr ?? 0.08;
-    const P = params.P || params.pole_pairs || 2;
-    const Lm = params.Lm ?? 0.05;
+    const Rs = numericParam(params, 'Rs', 0.1);
+    const Rr = numericParam(params, 'Rr', 0.08);
+    const P = numericParam(params, 'P', 2);
+    const Lm = numericParam(params, 'Lm', 0.05);
     const Lr = 0.06;
     const Tr = Lr / Math.max(Rr, 1e-9);
-    const J = params.J ?? params.inertia ?? 0.05;
-    const B = params.B ?? params.damping ?? 0.005;
+    const J = numericParam(params, 'J', 0.05);
+    const B = numericParam(params, 'B', 0.005);
     
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
@@ -1232,13 +1205,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   bldc_motor: ({ across, branch, dBranch, state, dState, params }) => {
     // state[0]: mechanical rotor angle theta, state[1]: mechanical speed omega
-    const Rs = params.Rs ?? 0.2;
-    const Ls = params.Ls ?? 0.002;
-    const Ke = params.Ke ?? 0.1;
-    const Kt = params.Kt ?? params.Ke ?? 0.1;
-    const P = params.P ?? 4;
-    const J = params.J ?? params.inertia ?? 0.02;
-    const B = params.B ?? params.damping ?? 0.002;
+    const Rs = numericParam(params, 'Rs', 0.2);
+    const Ls = numericParam(params, 'Ls', 0.002);
+    const Ke = numericParam(params, 'Ke', 0.1);
+    const Kt = numericParam(params, 'Kt', Ke);
+    const P = numericParam(params, 'P', 4);
+    const J = numericParam(params, 'J', 0.02);
+    const B = numericParam(params, 'B', 0.002);
     
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
@@ -1273,18 +1246,18 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   pmsm: ({ across, branch, dBranch, state, dState, params }) => {
     // state[0]: mechanical rotor angle theta, state[1]: mechanical speed omega
-    const Rs = params.Rs ?? 0.1;
-    const P = params.pole_pairs ?? 4;
-    const Ld = params.Ld ?? 0.005;
-    const Lq = params.Lq ?? 0.005;
-    const flux = params.flux ?? 0.1;
-    const J = params.J ?? params.inertia ?? 0.02;
-    const B = params.B ?? params.damping ?? 0.002;
-    
+    const Rs = numericParam(params, 'Rs', 0.1);
+    const P = numericParam(params, 'pole_pairs', 4);
+    const Ld = numericParam(params, 'Ld', 0.005);
+    const Lq = numericParam(params, 'Lq', 0.005);
+    const flux = numericParam(params, 'flux', 0.1);
+    const J = numericParam(params, 'J', 0.02);
+    const B = numericParam(params, 'B', 0.002);
+
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
     const Vc = across[2] - across[3];
-    
+
     const ia = branch[0];
     const ib = branch[1];
     const ic = branch[2];
@@ -1327,18 +1300,18 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── INVERTERS & CONTROL BLOCKS ─────────────────────────────────────────────
   pwm_3ph_2level: ({ across, branch, params, ctx }) => {
     const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
-    const f_out = (params.output_frequency_hz as number) ?? 50;
-    const refs = params.control_mode === 'sinusoidal_modulation'
+    const f_out = numericParam(params, 'output_frequency_hz', 50);
+    const refs = stringParam(params, 'control_mode', '') === 'sinusoidal_modulation'
       ? [0, -2 * Math.PI / 3, 2 * Math.PI / 3].map(offset => 0.5 + 0.4 * clamp(across[0]) * Math.sin(2 * Math.PI * ((ctx.time * f_out) % 1) + offset))
       : [clamp(across[1]), clamp(across[2]), clamp(across[3])];
 
-    const carrierPhase = (ctx.time * Math.max(1, (params.f_sw as number) ?? 5000)) % 1;
+    const carrierPhase = (ctx.time * Math.max(1, numericParam(params, 'f_sw', 5000))) % 1;
     const carrier = carrierPhase < 0.5 ? 2 * carrierPhase : 2 - 2 * carrierPhase;
-    const duties = params.model_mode === 'switching' ? refs.map(ref => ref >= carrier ? 1 : 0) : refs;
+    const duties = stringParam(params, 'model_mode', '') === 'switching' ? refs.map(ref => ref >= carrier ? 1 : 0) : refs;
 
     const [ma, mb, mc] = duties;
     const Vdc = across[4] - across[5];
-    const Rout = (params.output_resistance_ohm as number) ?? 0.001;
+    const Rout = numericParam(params, 'output_resistance_ohm', 0.001);
     const [Idc = 0, Ia = 0, Ib = 0, Ic = 0] = branch ?? [];
 
     return [
@@ -1372,7 +1345,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   im_foc_ctrl: ({ across, branch, params, ctx, ports, connectedPorts }) => {
     const wRefId = ports.find(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref')) ?? 'wr_ref';
-    const w_ref = inputOrParam({ across, ports, connectedPorts }, wRefId, params.target_rpm ? params.target_rpm : 1500);
+    const w_ref = inputOrParam({ across, ports, connectedPorts }, wRefId, numericParam(params, 'target_rpm', 1500));
     const w_rad = w_ref * (2 * Math.PI / 60);
     ctx.parameters['grid_freq'] = w_rad;
 
@@ -1396,23 +1369,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   ma_chamber: ({ across, branch, state, dState, params }) => {
     // across[0]: P_a (Fluid), across[1]: P_b (Fluid), across[2]: T_h (Thermal)
     // branch[0]: mass_flow at port a, branch[1]: heat_flow at port h
-    const getNumber = (value: unknown, fallback: number): number => {
-      const parsed = typeof value === 'number' ? value : Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
-    const V = getNumber(params.V, 0.005);
-    const T_amb = getNumber(params.ambient_temp, 25) + 273.15;
+    const V = numericParam(params, 'V', 0.005);
+    const T_amb = numericParam(params, 'ambient_temp', 25) + 273.15;
     const rho = 1.2, Cp = 1005;
     const airCapacity = rho * Cp * V;
-    const wallCapacity = getNumber(params.wall_mass, 2.0) * getNumber(params.wall_cp, 460);
-    const loadCapacity = getNumber(params.food_mass, 0.5) * getNumber(params.food_cp, 4184);
-    const C = Math.max(1e-6, getNumber(params.heat_capacity, airCapacity + wallCapacity + loadCapacity));
+    const wallCapacity = numericParam(params, 'wall_mass', 2.0) * numericParam(params, 'wall_cp', 460);
+    const loadCapacity = numericParam(params, 'food_mass', 0.5) * numericParam(params, 'food_cp', 4184);
+    const C = Math.max(1e-6, airCapacity + wallCapacity + loadCapacity);
     const temp = state[0] > 1.0 ? state[0] : T_amb;
-    
+
     // Physical heat loss to the ambient environment (convection/conduction through basket walls)
-    const k_loss = getNumber(params.k_loss, 8.5); // W/K, realistic overall heat loss coefficient
+    const k_loss = numericParam(params, 'k_loss', 8.5); // W/K, realistic overall heat loss coefficient
     const heat_loss = k_loss * (temp - T_amb);
-    const maxTempK = getNumber(params.max_temp, 220) + 273.15;
+    const maxTempK = numericParam(params, 'max_temp', 220) + 273.15;
     const cutoffWidth = 3.0;
     const cutoff = 0.5 * (1.0 + Math.tanh((maxTempK - temp) / cutoffWidth));
     const heat_input = branch[1] * cutoff;
@@ -1426,7 +1395,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   ma_pressure_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Pb - Pa - P_max * ctrl = 0 (ctrl = 1 when port 's' is unwired)
-    const P_max = params.P || 150;
+    const P_max = numericParam(params, 'P', 150);
     const ctrl = inputOrParam({ across, ports, connectedPorts }, 's', 1.0, 2);
     const Pa = across[0];
     const Pb = across[1];
@@ -1437,7 +1406,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const a = { across, ports, connectedPorts };
     const x = inputOrParam(a, 'x', 0, 0);
     const d = inputOrParam(a, 'd', 0, 1);
-    const lr = inputOrParam(a, 'lr', params.lr || 0.05, 2);
+    const lr = inputOrParam(a, 'lr', numericParam(params, 'lr', 0.05), 2);
     const w1 = state[0];
     const w2 = state[1];
     const x_prev = state[2];
@@ -1461,7 +1430,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const x1 = inputOrParam(a, 'x1', 0, 0);
     const x2 = inputOrParam(a, 'x2', 0, 1);
     const target = inputOrParam(a, 'target', 0, 2);
-    const lr = inputOrParam(a, 'lr', params.lr || 0.1, 3);
+    const lr = inputOrParam(a, 'lr', numericParam(params, 'lr', 0.1), 3);
 
     const w1 = state[0];
     const w2 = state[1];
@@ -1489,11 +1458,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const reward = across[1] !== undefined ? across[1] : 0;
     const reset = across[2] !== undefined ? !!across[2] : false;
 
-    const alpha = params.alpha !== undefined ? params.alpha : 0.1;
-    const gamma = params.gamma !== undefined ? params.gamma : 0.9;
-    const epsilon = params.epsilon !== undefined ? params.epsilon : 0.1;
-    const nS = Math.max(1, Math.round(Number(params.numStates) || 5));
-    const nA = Math.max(1, Math.round(Number(params.numActions) || 3));
+    const alpha = numericParam(params, 'alpha', 0.1);
+    const gamma = numericParam(params, 'gamma', 0.9);
+    const epsilon = numericParam(params, 'epsilon', 0.1);
+    const nS = Math.max(1, Math.round(numericParam(params, 'numStates', 5)));
+    const nA = Math.max(1, Math.round(numericParam(params, 'numActions', 3)));
 
     const actions: number[] = [];
     if (nA === 1) {
@@ -1572,8 +1541,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ac_motor_pid_control: ({ across, branch, state, dState, params, ctx, ports, connectedPorts }) => {
-    const w_ref = inputOrParam({ across, ports, connectedPorts }, 'w_ref', params.w_ref || 157, 0);
-    const tl = inputOrParam({ across, ports, connectedPorts }, 'tl', params.tl || 0, 1);
+    const w_ref = inputOrParam({ across, ports, connectedPorts }, 'w_ref', numericParam(params, 'w_ref', 157), 0);
+    const tl = inputOrParam({ across, ports, connectedPorts }, 'tl', numericParam(params, 'tl', 0), 1);
 
     const ias = state[0];
     const ibs = state[1];
@@ -1584,19 +1553,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const i_state = state[6];
     const d_state = state[7];
 
-    const Rs = params.Rs || 0.5;
-    const Ls = params.Ls || 0.1;
-    const Rr = params.Rr || 0.4;
-    const Lr = params.Lr || 0.1;
-    const Lm = params.Lm || 0.09;
-    const P = params.P || 2;
-    const J = params.J || 0.01;
-    const B = params.B || 0.001;
+    const Rs = numericParam(params, 'Rs', 0.5);
+    const Ls = numericParam(params, 'Ls', 0.1);
+    const Rr = numericParam(params, 'Rr', 0.4);
+    const Lr = numericParam(params, 'Lr', 0.1);
+    const Lm = numericParam(params, 'Lm', 0.09);
+    const P = numericParam(params, 'P', 2);
+    const J = numericParam(params, 'J', 0.01);
+    const B = numericParam(params, 'B', 0.001);
 
-    const Kp = params.Kp || 2.5;
-    const Ki = params.Ki || 1.2;
-    const Kd = params.Kd || 0.1;
-    const N = params.N || 100;
+    const Kp = numericParam(params, 'Kp', 2.5);
+    const Ki = numericParam(params, 'Ki', 1.2);
+    const Kd = numericParam(params, 'Kd', 0.1);
+    const N = numericParam(params, 'N', 100);
 
     const error = w_ref - omega;
 
@@ -1651,9 +1620,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   gas_ref: () => [],
   gas_cap: ({ branch }) => [branch[0]],
   gas_chamber: ({ across, dAcross, branch, dState, state, params }) => {
-    const V = params.V || 0.01;
+    const V = numericParam(params, 'V', 0.01);
     const R = 287;
-    const T = params.T || 293.15;
+    const T = numericParam(params, 'T', 293.15);
     const P = state[0];
     const dP = dState[0];
     const mdot_a = branch[0];
@@ -1665,35 +1634,35 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   gas_reservoir: ({ across, branch, params, ports, connectedPorts }) => {
-    const P_ctrl = inputOrParam({ across, ports, connectedPorts }, 's', params?.P ?? 101325, 1);
+    const P_ctrl = inputOrParam({ across, ports, connectedPorts }, 's', numericParam(params, 'P', 101325), 1);
     return [across[0] - P_ctrl];
   },
   gas_resistance: ({ across, branch, params }) => {
-    const k = params.k !== undefined ? params.k : 1e-5;
+    const k = numericParam(params, 'k', 1e-5);
     return [branch[0] - k * (across[0] - across[1])];
   },
   gas_restriction: ({ across, branch, params, ports, connectedPorts }) => {
-    const Cd = params.Cd || 0.62;
-    const A = inputOrParam({ across, ports, connectedPorts }, 'ar', params.area ?? 1e-4, 2);
-    const T = params.T || 293.15;
+    const Cd = numericParam(params, 'Cd', 0.62);
+    const A = inputOrParam({ across, ports, connectedPorts }, 'ar', numericParam(params, 'area', 1e-4), 2);
+    const T = numericParam(params, 'T', 293.15);
     const k = Cd * A / Math.sqrt(T);
     return [branch[0] - k * (across[0] - across[1])];
   },
   gas_pipe: ({ across, branch, params }) => {
-    const L = params.L || 1;
-    const D = params.D || 0.05;
-    const f = params.f || 0.02;
+    const L = numericParam(params, 'L', 1);
+    const D = numericParam(params, 'D', 0.05);
+    const f = numericParam(params, 'f', 0.02);
     const R_f = (f * L / D) * 10;
     return [(across[0] - across[1]) - R_f * branch[0]];
   },
   gas_fixed_res: ({ across, params }) => {
-    const P = params.P !== undefined ? params.P : 101325;
+    const P = numericParam(params, 'P', 101325);
     return [across[0] - P];
   },
   gas_rotational_conv: ({ across, branch, params }) => {
-    const D = params.D || 0.01;
+    const D = numericParam(params, 'D', 0.01);
     const R = 287;
-    const T = params.T || 293.15;
+    const T = numericParam(params, 'T', 293.15);
     const P_a = across[0];
     const P_h = across[1];
     const omega = across[2] - (across[3] || 0);
@@ -1706,9 +1675,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   gas_translational_conv: ({ across, branch, params }) => {
-    const A = params.A || 0.001;
+    const A = numericParam(params, 'A', 0.001);
     const R = 287;
-    const T = params.T || 293.15;
+    const T = numericParam(params, 'T', 293.15);
     const P_a = across[0];
     const P_h = across[1];
     const v = across[2] - (across[3] || 0);
@@ -1721,12 +1690,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   gas_flow_source: ({ across, branch, params, ports, connectedPorts }) => {
-    const mdot = inputOrParam({ across, ports, connectedPorts }, 'm', params.mdot ?? 0.1, 2);
+    const mdot = inputOrParam({ across, ports, connectedPorts }, 'm', numericParam(params, 'mdot', 0.1), 2);
     return [branch[0] - mdot];
   },
   gas_pressure_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Pb - Pa = P_source (commanded via the `p` port when wired, else the P parameter)
-    const P = inputOrParam({ across, ports, connectedPorts }, 'p', params.P ?? 200000, 2);
+    const P = inputOrParam({ across, ports, connectedPorts }, 'p', numericParam(params, 'P', 200000), 2);
     return [(across[1] - across[0]) - P];
   },
   gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
@@ -1735,11 +1704,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── MAGNETIC DOMAIN ────────────────────────────────────────────────────────
   mag_ref: () => [],
   reluctance: ({ across, branch, params }) => {
-    const R = params.R || 1e6;
+    const R = numericParam(params, 'R', 1e6);
     return [(across[0] - across[1]) - branch[0] * R];
   },
   fundamental_reluctance: ({ across, branch, params }) => {
-    const R = params.R || 1e6;
+    const R = numericParam(params, 'R', 1e6);
     return [(across[0] - across[1]) - branch[0] * R];
   },
   variable_reluctance: ({ across, branch, params, ports, connectedPorts }) => {
@@ -1748,7 +1717,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
     const ctrlVal = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 1e6, 2);
-    const Rmin = params.Rmin !== undefined ? Number(params.Rmin) : 1e5;
+    const Rmin = numericParam(params, 'Rmin', 1e5);
     const R_ctrl = Math.max(Rmin, Number(ctrlVal));
     return [(Vn - Vs) - branch[0] * R_ctrl];
   },
@@ -1757,15 +1726,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const sIdx = ports ? ports.indexOf('s') : 1;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
-    const Hc = Number(params.Hc ?? 1000);
-    const Lm = Number(params.Lm ?? params.L ?? 0.05);
-    const Rm = Number(params.Rm ?? 0);
+    const Hc = numericParam(params, 'Hc', 1000);
+    const Lm = numericParam(params, 'Lm', 0.05);
+    const Rm = numericParam(params, 'Rm', 0);
     const phi = branch[0] ?? 0;
     const mmf_pm = Hc * Lm - phi * Rm;
     return [(Vn - Vs) - mmf_pm];
   },
   em_converter: ({ across, dAcross, branch, dBranch, params }) => {
-    const N = params.N || 100;
+    const N = numericParam(params, 'N', 100);
     const V = across[0] - across[1];
     const mmf = across[2] - across[3];
     const I = branch[0];
@@ -1785,8 +1754,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const xr = (rIdx !== -1 && across[rIdx] !== undefined) ? across[rIdx] : (across[2] ?? 0);
     const xc = (cIdx !== -1 && across[cIdx] !== undefined) ? across[cIdx] : (across[3] ?? 0);
 
-    const R0 = Number(params.R0 ?? 1e6);
-    const K = Number(params.K ?? (params.k !== undefined ? R0 * Number(params.k) : 1e7));
+    const R0 = numericParam(params, 'R0', 1e6);
+    const K = numericParam(params, 'K', 1e7);
     const x = xr - xc;
     const R = R0 + K * Math.max(0, x);
     const dRdx = K;
@@ -1821,11 +1790,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   mag_mmf_source: ({ across, params }) => {
-    const MMF = params.MMF || 10;
+    const MMF = numericParam(params, 'MMF', 10);
     return [(across[0] - across[1]) - MMF];
   },
   mag_flux_source: ({ branch, params }) => {
-    const phi = params.phi || 0.001;
+    const phi = numericParam(params, 'phi', 0.001);
     return [branch[0] - phi];
   },
   mag_controlled_mmf: ({ across, params, ports, connectedPorts }) => {
@@ -1833,22 +1802,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const sIdx = ports ? ports.indexOf('s') : 1;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
-    const S = inputOrParam({ across, ports, connectedPorts }, ['src', 's_in'], params.MMF ?? 0, 2);
+    const S = inputOrParam({ across, ports, connectedPorts }, ['src', 's_in'], numericParam(params, 'MMF', 0), 2);
     return [(Vn - Vs) - S];
   },
 
   // ── ADVANCED CONTROL & OBSERVERS ───────────────────────────────────────────
   luenberger_observer: ({ across, branch, state, dState, params }) => {
     const A = -1;
-    let L = 10;
-    if (typeof params.L === 'number') {
-      L = Number.isFinite(params.L) ? params.L : 10;
-    } else if (typeof params.L === 'string') {
-      const parsed = parseFloat(params.L.replace(/[[\];]/g, ' ').trim());
-      if (Number.isFinite(parsed)) L = parsed;
-    } else if (Array.isArray(params.L) && typeof params.L[0] === 'number') {
-      L = params.L[0];
-    }
+    // Scalar observer gain: the first element of the gain list ("[10; 10]" -> 10).
+    const L = vectorParam(params, 'L', [10])[0];
     const u = across[0] || 0;
     const y = across[1] || 0;
     const xhat = state[0];
@@ -1859,10 +1821,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   im_flux_observer: ({ across, branch, state, dState, params }) => {
-    const Rs = params.Rs || 0.1;
-    const Lm = params.Lm || 0.05;
-    const Lr = params.Lr || 0.06;
-    const Rr = params.Rr || 0.08;
+    const Rs = numericParam(params, 'Rs', 0.1);
+    const Lm = numericParam(params, 'Lm', 0.05);
+    const Lr = numericParam(params, 'Lr', 0.06);
+    const Rr = numericParam(params, 'Rr', 0.08);
     const Tr = Lr / Rr;
     const is = across[0] || 0;
     const wr = across[1] || 0;
@@ -1878,8 +1840,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   pmsm_foc: ({ across, branch, state, dState, params }) => {
-    const Kp = params.Kp !== undefined ? (typeof params.Kp === 'object' && params.Kp !== null ? Number(params.Kp.value) : Number(params.Kp)) : 5.0;
-    const Ki = params.Ki !== undefined ? (typeof params.Ki === 'object' && params.Ki !== null ? Number(params.Ki.value) : Number(params.Ki)) : 100.0;
+    const Kp = numericParam(params, 'Kp', 5.0);
+    const Ki = numericParam(params, 'Ki', 100.0);
     const ref_speed = across[0] || 0;
     const iabc = across[1] || 0;
     const w = across[2] || 0;
@@ -1961,7 +1923,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const B = asFrame(across[bIdx]);
     const F = asFrame(across[fIdx]);
 
-    const targetDist = params?.dist !== undefined ? Number(params.dist) : 1.0;
+    const targetDist = numericParam(params, 'dist', 1.0);
     const direction = normalizeVector3([F[0] - B[0], F[1] - B[1], F[2] - B[2]]);
     const lambda = branch[0] || 0;
 
@@ -1999,7 +1961,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const B = asFrame(across[bIdx]);
     const F = asFrame(across[fIdx]);
 
-    const angleDeg = params?.angle !== undefined ? Number(params.angle) : 0.0;
+    const angleDeg = numericParam(params, 'angle', 0.0);
     const targetAngleRad = angleDeg * Math.PI / 180;
     const relative = computeRelativeAngleAxis([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
     const lambda = branch[0] || 0;
@@ -2054,14 +2016,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   weld_joint: ({ across }) => [across[0] - across[1]],
   common_gear: ({ across, branch, params }) => {
-    const ratio = params.ratio || 2;
+    const ratio = numericParam(params, 'ratio', 2);
     return [
       across[1] - ratio * across[0],
       branch[0] + ratio * branch[1]
     ];
   },
   rack_pinion: ({ across, branch, params }) => {
-    const R = params.radius || 0.1;
+    const R = numericParam(params, 'radius', 0.1);
     return [
       across[1] - R * across[0],
       branch[0] + R * branch[1]
@@ -2070,8 +2032,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // Force elements: branch[0..5] is the wrench [Fx Fy Fz Tx Ty Tz] applied on
   // frame F (the reaction acts on B); trailing branches are measurement signals.
   grav_field: ({ branch, params, ports }) => {
-    const g = numericParam(params?.g, 9.81);
-    const m = numericParam(params?.mass, 1);
+    const g = numericParam(params, 'g', 9.81);
+    const m = numericParam(params, 'mass', 1);
     const dir = parseVector3(params?.direction, [0, 0, -1]);
     const dirNorm = Math.hypot(dir[0], dir[1], dir[2]);
     const unit = dirNorm > 0 ? dir.map(c => c / dirNorm) : [0, 0, 0];
@@ -2081,9 +2043,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return res;
   },
   spring_damper_force: ({ across, dAcross, branch, params, ports }) => {
-    const k = numericParam(params?.k, 1000);
-    const b = numericParam(params?.b, 10);
-    const x0 = numericParam(params?.x0, 0);
+    const k = numericParam(params, 'k', 1000);
+    const b = numericParam(params, 'b', 10);
+    const x0 = numericParam(params, 'x0', 0);
     const bIdx = ports.indexOf('b');
     const fIdx = ports.indexOf('f');
     const B = asFrame(across[bIdx]);
@@ -2106,8 +2068,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return res;
   },
   external_force: ({ across, branch, params, ports }) => {
-    const forceScale = numericParam(params?.force_scale, 1);
-    const torqueScale = numericParam(params?.torque_scale, 1);
+    const forceScale = numericParam(params, 'force_scale', 1);
+    const torqueScale = numericParam(params, 'torque_scale', 1);
     const input = (id: string) => {
       const idx = ports.indexOf(id);
       return idx >= 0 ? Number(across[idx]) || 0 : 0;
@@ -2121,11 +2083,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return res;
   },
   revolute_joint: ({ across, branch, params }) => {
-    const b = params.damping || 0.1;
+    const b = numericParam(params, 'damping', 0.1);
     return [branch[0] - b * (across[0] - across[1])];
   },
   prismatic_joint: ({ across, branch, params }) => {
-    const b = params.damping || 1.0;
+    const b = numericParam(params, 'damping', 1.0);
     return [branch[0] - b * (across[0] - across[1])];
   },
 
@@ -2145,31 +2107,31 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   fluid_ref: () => [],
 
   fluid_resistance: ({ across, branch, params }) => {
-    const Rf = params.Rf || 1e5;
+    const Rf = numericParam(params, 'Rf', 1e5);
     return [(across[0] - across[1]) - branch[0] * Rf];
   },
 
   orifice: ({ across, branch, params }) => {
-    const Cd = params.Cd || 0.6;
-    const A = params.A || 1e-4;
-    const rho = params.rho || 1.2;
+    const Cd = numericParam(params, 'Cd', 0.6);
+    const A = numericParam(params, 'A', 1e-4);
+    const rho = numericParam(params, 'rho', 1.2);
     const dP = across[0] - across[1];
     const mdot = Cd * A * Math.sqrt(2 * rho * Math.abs(dP)) * Math.sign(dP);
     return [branch[0] - mdot];
   },
 
   fluid_capacitance: ({ across, dAcross, branch, params }) => {
-    const Cf = params.Cf || 1e-5;
+    const Cf = numericParam(params, 'Cf', 1e-5);
     return [branch[0] - Cf * dAcross[0]];
   },
 
   fluid_inertance: ({ across, branch, dBranch, params }) => {
-    const Li = params.Li || 100;
+    const Li = numericParam(params, 'Li', 100);
     return [(across[0] - across[1]) - Li * dBranch[0]];
   },
 
   pressure_source: ({ across, branch, params }) => {
-    const P = params.P || 101325;
+    const P = numericParam(params, 'P', 101325);
     return [across[0] - P];
   },
 
@@ -2179,21 +2141,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   mass_flow_source: ({ branch, params }) => {
-    const mdot = params.mdot || 0.01;
+    const mdot = numericParam(params, 'mdot', 0.01);
     return [branch[0] - mdot];
   },
 
   check_valve: ({ across, branch, params }) => {
-    const Rf = params.Rf || 1e3;
+    const Rf = numericParam(params, 'Rf', 1e3);
     const dP = across[0] - across[1];
     const g = 0.5 * (1 + Math.tanh(dP * 1000));
     return [branch[0] - g * dP / Rf];
   },
 
   relief_valve: ({ across, branch, params }) => {
-    const P_set = params.P_set || 5e5;
-    const Rf_open = params.Rf_open || 1e2;
-    const Rf_closed = params.Rf_closed || 1e10;
+    const P_set = numericParam(params, 'P_set', 5e5);
+    const Rf_open = numericParam(params, 'Rf_open', 1e2);
+    const Rf_closed = numericParam(params, 'Rf_closed', 1e10);
     const dP = across[0] - across[1];
     const open = 0.5 * (1 + Math.tanh((across[0] - P_set) * 1e-4));
     const R = Rf_open * open + Rf_closed * (1 - open);
@@ -2204,13 +2166,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const P = across[0];
     const T_sat = 100 + (P - 101325) / 3600;
     const h_fg = (2257 - 2.175 * Math.max(0, T_sat - 100)) * 1000;
-    const Q_in = inputOrParam({ across, ports, connectedPorts }, 'q_in', params.Q || 1000, 2);
+    const Q_in = inputOrParam({ across, ports, connectedPorts }, 'q_in', numericParam(params, 'Q', 1000), 2);
     const mdot_steam = Math.max(0, Q_in / h_fg);
     return [branch[0] - mdot_steam];
   },
 
   steam_accumulator: ({ across, dAcross, branch, params }) => {
-    const V = params.V || 0.5;
+    const V = numericParam(params, 'V', 0.5);
     const P = across[0];
     const rho_steam = 0.6 + (P - 101325) * 4e-6;
     const Cf = V * 1e-3 * rho_steam / 1e5;
@@ -2221,8 +2183,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   steam_nozzle: ({ across, branch, params }) => {
-    const Cd = params.Cd || 0.5;
-    const d = params.d || 0.5e-3;
+    const Cd = numericParam(params, 'Cd', 0.5);
+    const d = numericParam(params, 'd', 0.5e-3);
     const A = Math.PI * d * d / 4;
     const P_upstream = across[0];
     const P_downstream = across[1];
@@ -2250,19 +2212,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   reservoir_il: () => [],
 
   pump_il: ({ across, branch, params }) => {
-    const dp = Number(params?.pressure_rise?.value ?? params?.pressure_rise ?? 200000);
+    const dp = numericParam(params, 'pressure_rise', 200000);
     return [(across[1] - across[0]) - dp];
   },
 
   pipe_il: ({ across, branch, params }) => {
-    const R = Number(params?.R?.value ?? params?.R ?? 100000);
+    const R = numericParam(params, 'R', 100000);
     return [(across[0] - across[1]) - branch[0] * R];
   },
 
   restriction_il: ({ across, branch, params }) => {
-    const Cd = Number(params?.Cd?.value ?? params?.Cd ?? 0.6);
-    const A = Number(params?.area?.value ?? params?.area ?? 1e-4);
-    const rho = Number(params?.rho?.value ?? params?.rho ?? 1000);
+    const Cd = numericParam(params, 'Cd', 0.6);
+    const A = numericParam(params, 'area', 1e-4);
+    const rho = numericParam(params, 'rho', 1000);
     const dp = across[0] - across[1];
     const mdot = Cd * A * Math.sqrt(2 * rho * Math.max(1e-9, Math.abs(dp))) * Math.sign(dp);
     return [branch[0] - mdot];
@@ -2277,10 +2239,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   conn_label: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   doe_custom: ({ across, branch, params, nodeId, ctx }) => {
-    let deployment = params?.deploymentModel || params?.deployment;
-    if (typeof deployment === 'object' && deployment !== null && 'value' in deployment) {
-      deployment = deployment.value;
-    }
+    let deployment: any = unwrapParam(params?.deploymentModel);
     if (typeof deployment === 'string') {
       try {
         deployment = JSON.parse(deployment);
@@ -2301,7 +2260,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
         y = res.value;
       }
     } else {
-      const eq = params?.equation?.value || params?.equation || '';
+      const eq = stringParam(params, 'equation', '');
       if (eq) {
         const factorNames = across.map((_, i) => `X${i + 1}`);
         const res = evaluateLegacyDOEEquationDetailed(eq, factorNames, across);
@@ -2351,7 +2310,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_moving_avg: ({ across, branch, state, dState, params }) => {
-    const T = params.T || 0.1;
+    const T = MOVING_AVG_TAU;
     return [
       dState[0] - ((across[0] || 0) - state[0]) / T,
       branch[0] - state[0]
@@ -2381,7 +2340,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_smith_predictor: ({ across, branch, state, dState, params }) => {
-    const T = params.delay || 0.1;
+    const T = numericParam(params, 'tau', 0.1);
     return [
       dState[0] - ((across[0] || 0) - state[0]) / T,
       branch[0] - state[0]
@@ -2389,8 +2348,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_sine_3phase: ({ branch, params, ctx }) => {
-    const Vpk = params.Vpk || 325;
-    const f = params.f || 50;
+    const Vpk = numericParam(params, 'Vpk', 325);
+    const f = numericParam(params, 'f', 50);
     const w = 2 * Math.PI * f;
     return [
       branch[0] - Vpk * Math.sin(w * ctx.time),
@@ -2400,8 +2359,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_second_order_filter: ({ across, branch, state, dState, params }) => {
-    const wn = params.wn || 100;
-    const zeta = params.zeta || 0.707;
+    const wn = numericParam(params, 'wn', 100);
+    const zeta = numericParam(params, 'zeta', 0.707);
     const u = across[0] || 0;
     return [
       dState[0] - state[1],
@@ -2412,35 +2371,28 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   ps_state_feedback: ({ across, branch, params }) => {
     const x = across[0] || 0;
-    let K = 1.0;
-    if (typeof params.K === 'number') {
-      K = Number.isFinite(params.K) ? params.K : 1.0;
-    } else if (typeof params.K === 'string') {
-      const parsed = parseFloat(params.K.replace(/[[\]]/g, '').trim());
-      if (Number.isFinite(parsed)) K = parsed;
-    } else if (Array.isArray(params.K) && typeof params.K[0] === 'number') {
-      K = params.K[0];
-    }
+    // Scalar feedback gain: the first element of the gain list ("[1 2]" -> 1).
+    const K = vectorParam(params, 'K', [1.0])[0];
     return [branch[0] - (-K * x)];
   },
 
   ps_sliding_mode: ({ across, branch, params }) => {
     const s = across[0] || 0;
-    const eta = params.eta || 1.0;
-    const limit = params.boundary_layer || 0.05;
+    const eta = numericParam(params, 'k', 10);
+    const limit = numericParam(params, 'boundary_layer', 0.05);
     const sat = Math.max(-1.0, Math.min(1.0, s / limit));
     return [branch[0] - (-eta * sat)];
   },
 
   ps_stair_gen: ({ branch, params, ctx }) => {
-    const step_time = params.step_time || 1.0;
-    const step_val = params.step_val || 1.0;
+    // Each sample period raises the output by one unit; the library `steps` level list is not used yet (WP-20).
+    const step_time = numericParam(params, 'ts', 0.1);
     const steps = Math.floor(ctx.time / step_time);
-    return [branch[0] - (steps * step_val)];
+    return [branch[0] - steps];
   },
 
   ps_washout: ({ across, branch, state, dState, params }) => {
-    const T = params.T || 0.1;
+    const T = numericParam(params, 'T', 0.1);
     const u = across[0] || 0;
     const y = u - (state[0] || 0);
     return [
@@ -2585,9 +2537,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const amplitude = Math.max(0, Math.min(1, across[0] ?? 0.5));
     const vdc = Math.abs(across[1] ?? 0);
     const vneut = across[2] ?? 0;
-    const fOut = params.output_frequency_hz ?? 50;
-    const fSw = Math.max(1, params.f_sw ?? 2000);
-    const neutralGain = params.neutral_balance_gain ?? 0.1;
+    const fOut = numericParam(params, 'output_frequency_hz', 50);
+    const fSw = Math.max(1, numericParam(params, 'f_sw', 2000));
+    const neutralGain = numericParam(params, 'neutral_balance_gain', 0.1);
     const neutralCorrection = Math.max(-0.15, Math.min(0.15, neutralGain * vneut / Math.max(vdc, 1)));
     const phase = 2 * Math.PI * fOut * ctx.time;
     const refs = [
@@ -2623,10 +2575,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const vdc = Math.abs(across[6] ?? 0);
     const vneut = across[7] ?? 0;
 
-    const fSw = Math.max(1, params.f_sw ?? 10000);
-    const vdcRef = params.vdc_ref ?? 800;
-    const kpV = params.kp_v ?? 0.1;
-    const neutralGain = params.neutral_balance_gain ?? 0.1;
+    const fSw = Math.max(1, numericParam(params, 'f_sw', 10000));
+    const vdcRef = numericParam(params, 'vdc_ref', 800);
+    const kpV = numericParam(params, 'kp_v', 0.1);
+    const neutralGain = numericParam(params, 'neutral_balance_gain', 0.1);
 
     // 1. DC voltage regulation loop
     const vdcError = vdcRef - vdc;
@@ -2680,11 +2632,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     };
     const thetaIdx = findPort('theta', 0);
     const alphaIdx = findPort('alpha', 1);
-    const freqRaw = params?.freq;
-    const freq = (typeof freqRaw === 'number' && Number.isFinite(freqRaw) && freqRaw > 0) ? freqRaw : 50;
-    const pulseRaw = params?.pulse_width_deg;
-    const pulseWidth = (typeof pulseRaw === 'number' && Number.isFinite(pulseRaw))
-      ? Math.max(1, Math.min(60, pulseRaw)) : 20;
+    const freq = numericParam(params, 'freq', 50);
+    const pulseWidth = Math.max(1, Math.min(60, numericParam(params, 'pulse_width_deg', 20)));
     const alphaRaw = across[alphaIdx];
     const alpha = (alphaRaw === undefined || alphaRaw === null || !Number.isFinite(alphaRaw)) ? 30 : alphaRaw;
     const wrap360 = (deg: number) => ((deg % 360) + 360) % 360;
@@ -2715,12 +2664,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     };
     const theta = valueAtPort('theta', 0, 0);
     const alphaDeg = valueAtPort('alpha', 1, 30);
-    const frequencyValue = params.freq;
-    const frequency = typeof frequencyValue === 'number' ? frequencyValue : Number(frequencyValue);
-    const freq = Number.isFinite(frequency) ? Math.max(0, frequency) : 50;
-    const pulseWidthValue = params.pulse_width_deg;
-    const pulseWidth = typeof pulseWidthValue === 'number' ? pulseWidthValue : Number(pulseWidthValue);
-    const pulseWidthDeg = Number.isFinite(pulseWidth) ? Math.max(0, Math.min(60, pulseWidth)) : 5;
+    const freq = Math.max(0, numericParam(params, 'freq', 50));
+    const pulseWidthDeg = Math.max(0, Math.min(60, numericParam(params, 'pulse_width_deg', 5)));
 
     const twoPi = 2 * Math.PI;
     const normalizeAngle = (angle: number) => ((angle % twoPi) + twoPi) % twoPi;
@@ -2833,13 +2778,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── MECHANICAL & MULTIBODY ──────────────────────────────────────────────────
   ang_vel_source: ({ across, params, ports, connectedPorts }) => {
-    // omega commanded via the `s` port when wired, else the omega (or legacy w) parameter
-    const w = inputOrParam({ across, ports, connectedPorts }, 's', (params.omega !== undefined ? Number(params.omega) : (params.w !== undefined ? Number(params.w) : 50)), 2);
+    // omega commanded via the `s` port when wired, else the omega parameter (legacy key `w` is migrated on load)
+    const w = inputOrParam({ across, ports, connectedPorts }, 's', numericParam(params, 'omega', 50), 2);
     return [across[0] - (across[1] || 0) - w];
   },
 
   wheel_axle: ({ across, branch, params, ports = [] }) => {
-    const Rw = params.Rw !== undefined ? Number(params.Rw) : (params.radius !== undefined ? Number(params.radius) : 0.3);
+    const Rw = numericParam(params, 'Rw', 0.3);
     const rotationalPort = ports.indexOf('a');
     const translationalPort = ports.indexOf('p');
     const w = rotationalPort >= 0 ? across[rotationalPort] : across[0];
@@ -2875,13 +2820,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // and this factory mirrors them onto ctx.parameters (grid_freq precedent)
   // for live evaluation paths.
   belt_properties: ({ params, ctx, nodeId }) => {
-    const num = (v: unknown, fallback: number) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : fallback;
-    };
-    const density = Math.max(0, num(params?.density, 1.1));
-    const youngsRaw = num(params?.youngs, 1e9);
-    const youngs = youngsRaw > 0 ? youngsRaw : 1e9;
+    const density = numericParam(params, 'density', 1.1);
+    const youngs = numericParam(params, 'youngs', 1e9);
     if (ctx?.parameters) {
       ctx.parameters['belt_density'] = density;
       ctx.parameters['belt_youngs'] = youngs;
@@ -2895,11 +2835,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   belt_end: ({ across, branch, state, dState, params, ctx, ports = [] }) => {
     const mat = resolveBeltMaterial(params, ctx);
-    const len = positiveParam(params?.length, 1.0);
-    const area = positiveParam(params?.area, 1e-3);
+    const len = numericParam(params, 'length', 1.0);
+    const area = numericParam(params, 'area', 1e-3);
     // Axial stiffness from material (k = E*A/L); legacy fixed stiffness param
     // when no belt_properties material is available.
-    const k = mat ? (mat.youngs * area) / len : positiveParam(params?.stiffness, 1e6);
+    const k = mat ? (mat.youngs * area) / len : numericParam(params, 'stiffness', 1e6);
     const rIdx = portIndex(ports, 'r', 0);
     const eIdx = portIndex(ports, 'e', 1);
     const v = (across[rIdx] || 0) - (across[eIdx] || 0);
@@ -2916,14 +2856,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   belt_spool: ({ across, dAcross, branch, params, ctx, ports = [] }) => {
-    const R = positiveParam(params?.radius, 0.1);
+    const R = numericParam(params, 'radius', 0.1);
     const mat = resolveBeltMaterial(params, ctx);
     const rIdx = portIndex(ports, 'r', 0);
     const aIdx = portIndex(ports, 'a', 1);
     const w = across[rIdx] || 0;
     const v = across[aIdx] || 0;
     // Spool inertia + wrapped-belt inertia (one circumference: m = rho*2*pi*R).
-    const J = Math.max(0, numParam(params?.inertia, 0)) + (mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
+    const J = numericParam(params, 'inertia', 0) +(mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
     const dw = (dAcross[rIdx] || 0);
     const res = [
       v - w * R,
@@ -2937,7 +2877,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   pulley: ({ across, dAcross, branch, params, ctx, ports = [] }) => {
-    const R = positiveParam(params?.radius, 0.1);
+    const R = numericParam(params, 'radius', 0.1);
     const mat = resolveBeltMaterial(params, ctx);
     const rIdx = portIndex(ports, 'r', 0);
     const aIdx = portIndex(ports, 'a', 1);
@@ -2945,7 +2885,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const w = across[rIdx] || 0;
     const vA = across[aIdx] || 0;
     const vB = across[bIdx] || 0;
-    const J = Math.max(0, numParam(params?.inertia, 0.01)) + (mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
+    const J = numericParam(params, 'inertia', 0.01) +(mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
     const dw = (dAcross[rIdx] || 0);
     const res = [
       vA - w * R,
@@ -2963,7 +2903,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   gas_inf_resistance: ({ branch }) => [branch[0]],
 
   ma_pipe: ({ across, branch, params }) => {
-    const f = params.resistance || 1.0;
+    const f = numericParam(params, 'resistance', 1.0);
     const Pa = across[0];
     const Pb = across[1];
     return [Pb - Pa - f * branch[0]];
@@ -2977,8 +2917,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ma_rot_conv: ({ across, branch, params }) => {
-    const h0 = params.h0 || 5.0;
-    const k = params.k || 0.1;
+    const h0 = numericParam(params, 'h0', 5.0);
+    const k = numericParam(params, 'k', 0.1);
     const w = across[0];
     const Ta = across[1];
     const Tb = across[2];
@@ -2988,8 +2928,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ma_trans_conv: ({ across, branch, params }) => {
-    const h0 = params.h0 || 5.0;
-    const k = params.k || 0.1;
+    const h0 = numericParam(params, 'h0', 5.0);
+    const k = numericParam(params, 'k', 0.1);
     const v = across[0];
     const Ta = across[1];
     const Tb = across[2];
@@ -3028,12 +2968,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ma_moisture_source: ({ branch, params }) => {
-    const S = params.flow || 0.01;
+    const S = numericParam(params, 'rate', 0.01);
     return [branch[0] - S];
   },
 
   ma_flow_source: ({ branch, params }) => {
-    const S = params.flow || 0.01;
+    const S = numericParam(params, 'rate', 0.01);
     return [branch[0] - S];
   },
 

@@ -13,12 +13,31 @@ export interface VLabPort {
   unit?: string;
 }
 
+/**
+ * One block parameter. The optional bound fields are PHYSICAL validity limits (R > 0, damping >= 0, ratio != 0),
+ * checked by the engine before assembly (src/engine/vlab/vlabParams.ts). Absent = any finite number is legal
+ * (offsets, initial conditions, signed sources). Only numeric parameters carry bounds.
+ */
+export interface VLabParamSpec {
+  value: number | string;
+  unit: string;
+  label: string;
+  min?: number;
+  max?: number;
+  /** the `min` bound itself is not allowed (value > min) */
+  exclusiveMin?: boolean;
+  /** the `max` bound itself is not allowed (value < max) */
+  exclusiveMax?: boolean;
+  /** zero is not allowed (e.g. a gear or turns ratio); the sign stays free */
+  nonZero?: boolean;
+}
+
 export interface VLabBlock {
   id: string;
   name: string;
   color: string;
   icon: string;
-  params: Record<string, { value: number | string; unit: string; label: string }>;
+  params: Record<string, VLabParamSpec>;
   category?: string;
   ports: VLabPort[];
   equation?: string;
@@ -44,7 +63,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 100,
             "unit": "Ω",
-            "label": "Resistance"
+            "label": "Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -74,7 +95,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_min": {
             "value": 0,
             "unit": "Ω",
-            "label": "Min Resistance"
+            "label": "Min Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -135,7 +157,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "C": {
             "value": 0.000001,
             "unit": "F",
-            "label": "Capacitance"
+            "label": "Capacitance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -165,7 +189,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "L": {
             "value": 0.001,
             "unit": "H",
-            "label": "Inductance"
+            "label": "Inductance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -195,7 +221,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "M0": {
             "value": 100,
             "unit": "Ω",
-            "label": "Initial Memristance"
+            "label": "Initial Memristance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -225,7 +253,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "g": {
             "value": 0.01,
             "unit": "S",
-            "label": "Gyration Conductance"
+            "label": "Gyration Conductance",
+            "nonZero": true
           }
         },
         "ports": [
@@ -267,7 +296,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "N": {
             "value": 10,
             "unit": "1",
-            "label": "Turns Ratio"
+            "label": "Turns Ratio",
+            "nonZero": true
           }
         },
         "ports": [
@@ -309,7 +339,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Gain": {
             "value": 100000,
             "unit": "1",
-            "label": "Open-Loop Gain"
+            "label": "Open-Loop Gain",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -345,12 +377,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ron": {
             "value": 0.01,
             "unit": "Ω",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Roff": {
             "value": 1000000,
             "unit": "Ω",
-            "label": "Off Resistance"
+            "label": "Off Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "threshold": {
             "value": 0.5,
@@ -392,17 +428,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ron": {
             "value": 0.01,
             "unit": "Ω",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Roff": {
             "value": 1000000,
             "unit": "Ω",
-            "label": "Off Resistance"
+            "label": "Off Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Vf": {
             "value": 0.7,
             "unit": "V",
-            "label": "Forward Voltage"
+            "label": "Forward Voltage",
+            "min": 0
           }
         },
         "ports": [
@@ -432,7 +473,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "kn": {
             "value": 0.5,
             "unit": "A/V²",
-            "label": "Transconductance"
+            "label": "Transconductance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Vth": {
             "value": 2,
@@ -442,7 +485,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "lambda": {
             "value": 0.01,
             "unit": "1/V",
-            "label": "Channel Mod."
+            "label": "Channel Mod.",
+            "min": 0
           }
         },
         "ports": [
@@ -484,12 +528,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Vce_sat": {
             "value": 1.5,
             "unit": "V",
-            "label": "Saturation Vce"
+            "label": "Saturation Vce",
+            "min": 0
           },
           "Rd": {
             "value": 0.05,
             "unit": "Ω",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Roff": {
+            "value": 1000000,
+            "unit": "Ω",
+            "label": "Off Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -531,7 +585,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 1,
             "unit": "Ω",
-            "label": "Armature Res"
+            "label": "Armature Res",
+            "min": 0
           }
         },
         "ports": [
@@ -574,6 +629,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "N/A",
             "label": "Magnetic Flux"
+          },
+          "R": {
+            "value": 1,
+            "unit": "Ω",
+            "label": "Winding Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -615,22 +676,28 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "pole_pairs": {
             "value": 4,
             "unit": "",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
           },
           "Rs": {
             "value": 0.1,
             "unit": "Ω",
-            "label": "Stator Res"
+            "label": "Stator Res",
+            "min": 0
           },
           "Ld": {
             "value": 0.005,
             "unit": "H",
-            "label": "D-axis Inductance"
+            "label": "D-axis Inductance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Lq": {
             "value": 0.005,
             "unit": "H",
-            "label": "Q-axis Inductance"
+            "label": "Q-axis Inductance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "flux": {
             "value": 0.1,
@@ -640,12 +707,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "J": {
             "value": 0.02,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "B": {
             "value": 0.002,
             "unit": "N-m-s/rad",
-            "label": "Viscous Damping"
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -693,12 +763,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ra": {
             "value": 2,
             "unit": "Ω",
-            "label": "Armature Res"
+            "label": "Armature Res",
+            "min": 0
           },
           "La": {
             "value": 0.01,
             "unit": "H",
-            "label": "Armature Ind"
+            "label": "Armature Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Ke": {
             "value": 0.05,
@@ -713,12 +786,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "J": {
             "value": 0.001,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "B": {
             "value": 0.001,
             "unit": "N-m-s/rad",
-            "label": "Viscous Damping"
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -754,32 +830,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rs": {
             "value": 0.1,
             "unit": "Ω",
-            "label": "Stator Res"
+            "label": "Stator Res",
+            "min": 0
           },
           "Rr": {
             "value": 0.08,
             "unit": "Ω",
-            "label": "Rotor Res"
+            "label": "Rotor Res",
+            "min": 0
           },
           "Lm": {
             "value": 0.05,
             "unit": "H",
-            "label": "Mutual Ind"
+            "label": "Mutual Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "P": {
             "value": 2,
             "unit": "",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
           },
           "J": {
             "value": 0.05,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "B": {
             "value": 0.005,
             "unit": "N-m-s/rad",
-            "label": "Viscous Damping"
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -827,12 +911,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rs": {
             "value": 0.2,
             "unit": "Ω",
-            "label": "Phase Res"
+            "label": "Phase Res",
+            "min": 0
           },
           "Ls": {
             "value": 0.002,
             "unit": "H",
-            "label": "Phase Ind"
+            "label": "Phase Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Ke": {
             "value": 0.1,
@@ -847,17 +934,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 4,
             "unit": "",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
           },
           "J": {
             "value": 0.02,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "B": {
             "value": 0.002,
             "unit": "N-m-s/rad",
-            "label": "Viscous Damping"
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -905,12 +996,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 10,
             "unit": "Ω",
-            "label": "Electrical Resistance"
-          },
-          "Rth": {
-            "value": 10,
-            "unit": "K/W",
-            "label": "Thermal Resistance"
+            "label": "Electrical Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1006,7 +1094,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 100000000,
             "unit": "Ω",
-            "label": "Internal Res"
+            "label": "Internal Res",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1043,7 +1133,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 0.000001,
             "unit": "Ω",
-            "label": "Internal Res"
+            "label": "Internal Res",
+            "min": 0
           }
         },
         "ports": [
@@ -1085,7 +1176,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 0.001,
             "unit": "Ω",
-            "label": "Internal Res"
+            "label": "Internal Res",
+            "min": 0
           }
         },
         "ports": [
@@ -1120,7 +1212,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f": {
             "value": 50,
             "unit": "Hz",
-            "label": "Frequency"
+            "label": "Frequency",
+            "min": 0
           },
           "phase": {
             "value": 0.7853981633974483,
@@ -1130,7 +1223,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 0.001,
             "unit": "Ω",
-            "label": "Internal Resistance"
+            "label": "Internal Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -1160,12 +1254,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Vrms": {
             "value": 400,
             "unit": "V",
-            "label": "Line Voltage"
+            "label": "Line Voltage",
+            "min": 0
           },
           "f": {
             "value": 50,
             "unit": "Hz",
-            "label": "Frequency"
+            "label": "Frequency",
+            "min": 0
           }
         },
         "ports": [
@@ -1197,7 +1293,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#ef4444",
         "icon": "controlled_voltage",
         "category": "Sources",
-        "params": {},
+        "params": {
+          "R_int": {
+            "value": 0.001,
+            "unit": "Ω",
+            "label": "Internal Resistance",
+            "min": 0
+          }
+        },
         "ports": [
           {
             "id": "p",
@@ -1347,6 +1450,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "1",
             "label": "Current Gain"
+          },
+          "R_in": {
+            "value": 0,
+            "unit": "Ω",
+            "label": "Control Input Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -1389,6 +1498,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "Ω",
             "label": "Transresistance"
+          },
+          "R_in": {
+            "value": 0,
+            "unit": "Ω",
+            "label": "Control Input Resistance",
+            "min": 0
+          },
+          "R_out": {
+            "value": 0,
+            "unit": "Ω",
+            "label": "Output Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -1444,13 +1565,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#3b82f6",
         "icon": "busbar",
         "category": "Connections",
-        "params": {
-          "nodes": {
-            "value": 4,
-            "unit": "",
-            "label": "Terminals"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "1",
@@ -1631,7 +1746,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "V": {
             "value": 0.01,
             "unit": "m^3",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1661,7 +1785,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1692,7 +1818,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1,
             "unit": "kg/s/Pa",
-            "label": "Conductance"
+            "label": "Conductance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1746,7 +1874,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "area": {
             "value": 0.0001,
             "unit": "m^2",
-            "label": "Area"
+            "label": "Area",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Cd": {
+            "value": 0.62,
+            "unit": "1",
+            "label": "Discharge Coefficient",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1783,12 +1928,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "L": {
             "value": 1,
             "unit": "m",
-            "label": "Length"
+            "label": "Length",
+            "min": 0,
+            "exclusiveMin": true
           },
           "D": {
             "value": 0.05,
             "unit": "m",
-            "label": "Diameter"
+            "label": "Diameter",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "f": {
+            "value": 0.02,
+            "unit": "1",
+            "label": "Friction Factor",
+            "min": 0
           }
         },
         "ports": [
@@ -1818,7 +1973,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1842,7 +1999,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "D": {
             "value": 0.01,
             "unit": "m^3/rad",
-            "label": "Displacement"
+            "label": "Displacement",
+            "nonZero": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1884,7 +2049,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "A": {
             "value": 0.001,
             "unit": "m^2",
-            "label": "Piston Area"
+            "label": "Piston Area",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1992,7 +2166,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 200000,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2052,7 +2228,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 1000000,
             "unit": "A-t/Wb",
-            "label": "Reluctance"
+            "label": "Reluctance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2082,7 +2260,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 1000000,
             "unit": "A-t/Wb",
-            "label": "Reluctance"
+            "label": "Reluctance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2112,7 +2292,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rmin": {
             "value": 100000,
             "unit": "A-t/Wb",
-            "label": "Min Reluctance"
+            "label": "Min Reluctance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2149,17 +2331,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Hc": {
             "value": 1000,
             "unit": "A/m",
-            "label": "Coercivity"
+            "label": "Coercivity",
+            "min": 0
           },
           "Lm": {
             "value": 0.05,
             "unit": "m",
-            "label": "Magnet Length"
+            "label": "Magnet Length",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rm": {
             "value": 0,
             "unit": "A-t/Wb",
-            "label": "Internal Reluctance"
+            "label": "Internal Reluctance",
+            "min": 0
           }
         },
         "ports": [
@@ -2189,7 +2375,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "N": {
             "value": 100,
             "unit": "1",
-            "label": "Number of Turns"
+            "label": "Number of Turns",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2231,7 +2419,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R0": {
             "value": 1000000,
             "unit": "A-t/Wb",
-            "label": "Initial Reluctance"
+            "label": "Initial Reluctance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "K": {
             "value": 10000000,
@@ -2396,7 +2586,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#ec4899",
         "icon": "ctrl_mmf",
         "category": "Sources",
-        "params": {},
+        "params": {
+          "MMF": {
+            "value": 0,
+            "unit": "A-t",
+            "label": "MMF When Control Port Unwired"
+          }
+        },
         "ports": [
           {
             "id": "n",
@@ -2432,13 +2628,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "force_sensor",
         "category": "Sensors",
-        "params": {
-          "k": {
-            "value": 100000000,
-            "unit": "N/m",
-            "label": "Stiffness"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "a",
@@ -2469,13 +2659,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "rot_motion",
         "category": "Sensors",
-        "params": {
-          "b": {
-            "value": 0,
-            "unit": "N-m-s/rad",
-            "label": "Damping"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "r",
@@ -2513,13 +2697,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "torque_sensor",
         "category": "Sensors",
-        "params": {
-          "k": {
-            "value": 100000000,
-            "unit": "N-m/rad",
-            "label": "Stiffness"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "r",
@@ -2550,13 +2728,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "trans_motion",
         "category": "Sensors",
-        "params": {
-          "b": {
-            "value": 0,
-            "unit": "N-s/m",
-            "label": "Damping"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "r",
@@ -2709,7 +2881,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "ratio": {
             "value": 2,
             "unit": "1",
-            "label": "Gear Ratio"
+            "label": "Gear Ratio",
+            "nonZero": true
           }
         },
         "ports": [
@@ -2739,12 +2912,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "L1": {
             "value": 0.5,
             "unit": "m",
-            "label": "Length 1"
+            "label": "Length 1",
+            "min": 0,
+            "exclusiveMin": true
           },
           "L2": {
             "value": 0.5,
             "unit": "m",
-            "label": "Length 2"
+            "label": "Length 2",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2780,12 +2957,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rw": {
             "value": 0.3,
             "unit": "m",
-            "label": "Wheel Radius"
-          },
-          "Ra": {
-            "value": 0.05,
-            "unit": "m",
-            "label": "Axle Radius"
+            "label": "Wheel Radius",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2891,7 +3065,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "J": {
             "value": 0.01,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "B": {
+            "value": 0.001,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -2933,7 +3115,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 100,
             "unit": "N-m/rad",
-            "label": "Spring Rate"
+            "label": "Spring Rate",
+            "min": 0
           }
         },
         "ports": [
@@ -2963,7 +3146,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "b": {
             "value": 0.1,
             "unit": "N-m/rad/s",
-            "label": "Damping Coefficient"
+            "label": "Damping Coefficient",
+            "min": 0
           }
         },
         "ports": [
@@ -2993,7 +3177,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ts": {
             "value": 0.5,
             "unit": "N-m",
-            "label": "Static Friction"
+            "label": "Static Friction",
+            "min": 0
+          },
+          "Tv": {
+            "value": 0.1,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Friction Coefficient",
+            "min": 0
           }
         },
         "ports": [
@@ -3029,6 +3220,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": -1,
             "unit": "rad",
             "label": "Lower Limit"
+          },
+          "k": {
+            "value": 1000,
+            "unit": "N-m/rad",
+            "label": "Contact Stiffness",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "c": {
+            "value": 0.1,
+            "unit": "N-m-s/rad",
+            "label": "Contact Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -3058,7 +3262,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "m": {
             "value": 1,
             "unit": "kg",
-            "label": "Mass"
+            "label": "Mass",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "b": {
+            "value": 0.1,
+            "unit": "N-s/m",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -3100,7 +3312,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1000,
             "unit": "N/m",
-            "label": "Spring Rate"
+            "label": "Spring Rate",
+            "min": 0
           }
         },
         "ports": [
@@ -3130,7 +3343,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "b": {
             "value": 10,
             "unit": "N/m/s",
-            "label": "Damping Coefficient"
+            "label": "Damping Coefficient",
+            "min": 0
           }
         },
         "ports": [
@@ -3160,7 +3374,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Fs": {
             "value": 5,
             "unit": "N",
-            "label": "Static Friction"
+            "label": "Static Friction",
+            "min": 0
+          },
+          "Fv": {
+            "value": 2,
+            "unit": "N-s/m",
+            "label": "Viscous Friction Coefficient",
+            "min": 0
           }
         },
         "ports": [
@@ -3196,6 +3417,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": -0.1,
             "unit": "m",
             "label": "Lower Limit"
+          },
+          "k": {
+            "value": 10000,
+            "unit": "N/m",
+            "label": "Contact Stiffness",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -3248,7 +3476,55 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "V": {
             "value": 0.1,
             "unit": "m^3",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "ambient_temp": {
+            "value": 25,
+            "unit": "C",
+            "label": "Ambient Temperature",
+            "min": -273.15,
+            "exclusiveMin": true
+          },
+          "wall_mass": {
+            "value": 2,
+            "unit": "kg",
+            "label": "Wall Mass",
+            "min": 0
+          },
+          "wall_cp": {
+            "value": 460,
+            "unit": "J/(kg*K)",
+            "label": "Wall Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "food_mass": {
+            "value": 0.5,
+            "unit": "kg",
+            "label": "Load Mass",
+            "min": 0
+          },
+          "food_cp": {
+            "value": 4184,
+            "unit": "J/(kg*K)",
+            "label": "Load Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "k_loss": {
+            "value": 8.5,
+            "unit": "W/K",
+            "label": "Heat Loss Coefficient",
+            "min": 0
+          },
+          "max_temp": {
+            "value": 220,
+            "unit": "C",
+            "label": "Safety Cutout Temperature",
+            "min": -273.15,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -3285,6 +3561,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2,
             "unit": "m",
             "label": "Length"
+          },
+          "resistance": {
+            "value": 1,
+            "unit": "Pa/(kg/s)",
+            "label": "Flow Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -3372,6 +3654,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.001,
             "unit": "m^3/rad",
             "label": "Displacement"
+          },
+          "h0": {
+            "value": 5,
+            "unit": "W/K",
+            "label": "Stationary Heat Transfer",
+            "min": 0
+          },
+          "k": {
+            "value": 0.1,
+            "unit": "W/K/(rad/s)",
+            "label": "Speed-Dependent Heat Transfer",
+            "min": 0
           }
         },
         "ports": [
@@ -3421,6 +3715,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.01,
             "unit": "m^2",
             "label": "Area"
+          },
+          "h0": {
+            "value": 5,
+            "unit": "W/K",
+            "label": "Stationary Heat Transfer",
+            "min": 0
+          },
+          "k": {
+            "value": 0.1,
+            "unit": "W/K/(m/s)",
+            "label": "Speed-Dependent Heat Transfer",
+            "min": 0
           }
         },
         "ports": [
@@ -3720,12 +4026,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P_std": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Std Pressure"
+            "label": "Std Pressure",
+            "min": 0,
+            "exclusiveMin": true
           },
           "T_std": {
             "value": 293.15,
             "unit": "K",
-            "label": "Std Temperature"
+            "label": "Std Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [],
@@ -4033,7 +4343,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "T": {
             "value": 1,
             "unit": "s",
-            "label": "Time Constant"
+            "label": "Time Constant",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -4061,7 +4373,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#92400e",
         "icon": "ps_lookup_1d",
         "category": "Lookup Tables",
-        "params": {},
+        "params": {
+          "table_x": {
+            "value": "[0 1 2]",
+            "unit": "",
+            "label": "Breakpoints (x)"
+          },
+          "table_y": {
+            "value": "[0 1 4]",
+            "unit": "",
+            "label": "Table Values (y)"
+          }
+        },
         "ports": [
           {
             "id": "u",
@@ -4184,15 +4507,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "ps_dead",
         "category": "Nonlinear Operators",
         "params": {
-          "start": {
+          "upper": {
             "value": 0.5,
-            "unit": "",
-            "label": "Start"
+            "unit": "1",
+            "label": "Dead Zone Upper Bound"
           },
-          "end": {
+          "lower": {
             "value": -0.5,
-            "unit": "",
-            "label": "End"
+            "unit": "1",
+            "label": "Dead Zone Lower Bound"
           }
         },
         "ports": [
@@ -4750,7 +5073,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "limit": {
             "value": 1,
             "unit": "",
-            "label": "Saturation"
+            "label": "Saturation",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -4804,12 +5129,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "N": {
             "value": 100,
             "unit": "",
-            "label": "Filter Coeff"
+            "label": "Filter Coeff",
+            "min": 0,
+            "exclusiveMin": true
           },
           "limit": {
             "value": 240,
             "unit": "",
-            "label": "Saturation"
+            "label": "Saturation",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -4848,7 +5177,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f_cut": {
             "value": 100,
             "unit": "Hz",
-            "label": "Cutoff Freq"
+            "label": "Cutoff Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5024,7 +5355,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "tau": {
             "value": 0.1,
             "unit": "s",
-            "label": "Dead Time"
+            "label": "Dead Time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5060,12 +5393,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "sine_3ph",
         "category": "General Control",
         "params": {
-          "amp": {
-            "value": 1,
-            "unit": "pu",
-            "label": "Amplitude"
+          "Vpk": {
+            "value": 325,
+            "unit": "V",
+            "label": "Peak Phase Voltage"
           },
-          "freq": {
+          "f": {
             "value": 50,
             "unit": "Hz",
             "label": "Frequency"
@@ -5114,12 +5447,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "zeta": {
             "value": 0.707,
             "unit": "",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           },
           "wn": {
             "value": 100,
             "unit": "rad/s",
-            "label": "Nat Freq"
+            "label": "Nat Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5203,6 +5539,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10,
             "unit": "",
             "label": "Gain K"
+          },
+          "boundary_layer": {
+            "value": 0.05,
+            "unit": "1",
+            "label": "Boundary Layer Thickness",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5246,7 +5589,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "ts": {
             "value": 0.1,
             "unit": "s",
-            "label": "Sample"
+            "label": "Sample",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5271,7 +5616,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "T": {
             "value": 0.1,
             "unit": "s",
-            "label": "Time Const"
+            "label": "Time Const",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5965,6 +6312,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.05,
             "unit": "H",
             "label": "Mutual Ind"
+          },
+          "Lr": {
+            "value": 0.06,
+            "unit": "H",
+            "label": "Rotor Inductance"
+          },
+          "Rr": {
+            "value": 0.08,
+            "unit": "Ohm",
+            "label": "Rotor Resistance"
           }
         },
         "ports": [
@@ -6469,17 +6826,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "output_frequency_hz": {
             "value": 50,
             "unit": "Hz",
-            "label": "Output Frequency"
+            "label": "Output Frequency",
+            "min": 0
           },
           "f_sw": {
             "value": 5000,
             "unit": "Hz",
-            "label": "Switch Freq"
+            "label": "Switch Freq",
+            "min": 0,
+            "exclusiveMin": true
           },
           "output_resistance_ohm": {
             "value": 0.001,
             "unit": "ohm",
-            "label": "Output Resistance"
+            "label": "Output Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -6555,12 +6916,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f_sw": {
             "value": 2000,
             "unit": "Hz",
-            "label": "Switch Freq"
+            "label": "Switch Freq",
+            "min": 0,
+            "exclusiveMin": true
           },
           "output_frequency_hz": {
             "value": 50,
             "unit": "Hz",
-            "label": "Output Frequency"
+            "label": "Output Frequency",
+            "min": 0
           },
           "neutral_balance_gain": {
             "value": 0.1,
@@ -6646,12 +7010,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f_sw": {
             "value": 10000,
             "unit": "Hz",
-            "label": "Switch Freq"
+            "label": "Switch Freq",
+            "min": 0,
+            "exclusiveMin": true
           },
           "vdc_ref": {
             "value": 800,
             "unit": "V",
-            "label": "Vdc Ref"
+            "label": "Vdc Ref",
+            "min": 0
           },
           "kp_v": {
             "value": 0.1,
@@ -6777,12 +7144,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Freq"
+            "label": "Freq",
+            "min": 0
           },
           "pulse_width_deg": {
             "value": 20,
             "unit": "deg",
-            "label": "Pulse Width"
+            "label": "Pulse Width",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 60
           }
         },
         "ports": [
@@ -6856,12 +7227,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Freq"
+            "label": "Freq",
+            "min": 0
           },
           "pulse_width_deg": {
             "value": 5,
             "unit": "deg",
-            "label": "Pulse Width"
+            "label": "Pulse Width",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 60
           }
         },
         "ports": [
@@ -6977,12 +7352,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "density": {
             "value": 1.1,
             "unit": "kg/m",
-            "label": "Linear Dens"
+            "label": "Linear Dens",
+            "min": 0
           },
           "youngs": {
             "value": 1000000000,
             "unit": "Pa",
-            "label": "Young Mod"
+            "label": "Young Mod",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7006,17 +7384,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "stiffness": {
             "value": 1000000,
             "unit": "N/m",
-            "label": "Stiffness"
+            "label": "Stiffness",
+            "min": 0,
+            "exclusiveMin": true
           },
           "length": {
             "value": 1,
             "unit": "m",
-            "label": "Belt Length"
+            "label": "Belt Length",
+            "min": 0,
+            "exclusiveMin": true
           },
           "area": {
             "value": 0.001,
             "unit": "m2",
-            "label": "Section Area"
+            "label": "Section Area",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7059,12 +7443,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "radius": {
             "value": 0.1,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
           },
           "inertia": {
             "value": 0,
             "unit": "kg-m2",
-            "label": "Spool Inertia"
+            "label": "Spool Inertia",
+            "min": 0
           }
         },
         "ports": [
@@ -7107,12 +7494,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "radius": {
             "value": 0.1,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
           },
           "inertia": {
             "value": 0.01,
             "unit": "kg-m2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0
           }
         },
         "ports": [
@@ -7298,7 +7688,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "dist": {
             "value": 1,
             "unit": "m",
-            "label": "Distance"
+            "label": "Distance",
+            "min": 0
           }
         },
         "ports": [
@@ -7391,7 +7782,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "mass": {
             "value": 1,
             "unit": "kg",
-            "label": "Mass"
+            "label": "Mass",
+            "min": 0
           },
           "direction": {
             "value": "[0 0 -1]",
@@ -7433,12 +7825,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1000,
             "unit": "N/m",
-            "label": "Stiffness"
+            "label": "Stiffness",
+            "min": 0
           },
           "b": {
             "value": 10,
             "unit": "N-s/m",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           },
           "x0": {
             "value": 0,
@@ -7585,7 +7979,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "damping": {
             "value": 0.1,
             "unit": "N-m-s/rad",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -7615,7 +8010,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "damping": {
             "value": 1,
             "unit": "N-s/m",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -7735,7 +8131,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "damping": {
             "value": 0.05,
             "unit": "N*m*s/rad",
-            "label": "Damping on permitted axes"
+            "label": "Damping on permitted axes",
+            "min": 0
           }
         },
         "ports": [
@@ -7867,7 +8264,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "ratio": {
             "value": 2,
             "unit": "",
-            "label": "Ratio"
+            "label": "Ratio",
+            "nonZero": true
           }
         },
         "ports": [
@@ -7897,7 +8295,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "radius": {
             "value": 0.1,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -8115,7 +8515,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "lr": {
             "value": 0.05,
             "unit": "1",
-            "label": "Learning Rate"
+            "label": "Learning Rate",
+            "min": 0
           }
         },
         "ports": [
@@ -8182,7 +8583,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "lr": {
             "value": 0.1,
             "unit": "1",
-            "label": "Learning Rate"
+            "label": "Learning Rate",
+            "min": 0
           },
           "initW1": {
             "value": 0.5,
@@ -8278,27 +8680,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "alpha": {
             "value": 0.1,
             "unit": "1",
-            "label": "Alpha (Learning Rate)"
+            "label": "Alpha (Learning Rate)",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
           },
           "gamma": {
             "value": 0.9,
             "unit": "1",
-            "label": "Gamma (Discount Factor)"
+            "label": "Gamma (Discount Factor)",
+            "min": 0,
+            "max": 1
           },
           "epsilon": {
             "value": 0.1,
             "unit": "1",
-            "label": "Epsilon (Exploration Rate)"
+            "label": "Epsilon (Exploration Rate)",
+            "min": 0,
+            "max": 1
           },
           "numStates": {
             "value": 5,
             "unit": "1",
-            "label": "Number of States"
+            "label": "Number of States",
+            "min": 1
           },
           "numActions": {
             "value": 3,
             "unit": "1",
-            "label": "Number of Actions"
+            "label": "Number of Actions",
+            "min": 1
           }
         },
         "ports": [
@@ -8376,47 +8787,62 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rs": {
             "value": 0.5,
             "unit": "Ω",
-            "label": "Stator Res"
+            "label": "Stator Res",
+            "min": 0
           },
           "Ls": {
             "value": 0.1,
             "unit": "H",
-            "label": "Stator Ind"
+            "label": "Stator Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rr": {
             "value": 0.4,
             "unit": "Ω",
-            "label": "Rotor Res"
+            "label": "Rotor Res",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Lr": {
             "value": 0.1,
             "unit": "H",
-            "label": "Rotor Ind"
+            "label": "Rotor Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Lm": {
             "value": 0.09,
             "unit": "H",
-            "label": "Mutual Ind"
+            "label": "Mutual Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "P": {
             "value": 2,
             "unit": "1",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
           },
           "J": {
             "value": 0.01,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "B": {
             "value": 0.001,
             "unit": "N-m-s/rad",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           },
           "N": {
             "value": 100,
             "unit": "1",
-            "label": "Filter Coeff"
+            "label": "Filter Coeff",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -8474,7 +8900,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1,
             "unit": "W/K",
-            "label": "Conductance"
+            "label": "Conductance",
+            "min": 0
           }
         },
         "ports": [
@@ -8504,12 +8931,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "h": {
             "value": 10,
             "unit": "W/m^2/K",
-            "label": "Heat Coeff"
+            "label": "Heat Coeff",
+            "min": 0
           },
           "A": {
             "value": 1,
             "unit": "m^2",
-            "label": "Area"
+            "label": "Area",
+            "min": 0
           }
         },
         "ports": [
@@ -8539,12 +8968,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "eps": {
             "value": 0.9,
             "unit": "1",
-            "label": "Emissivity"
+            "label": "Emissivity",
+            "min": 0,
+            "max": 1
           },
           "A": {
             "value": 1,
             "unit": "m^2",
-            "label": "Area"
+            "label": "Area",
+            "min": 0
           }
         },
         "ports": [
@@ -8574,7 +9006,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "C": {
             "value": 1000,
             "unit": "J/K",
-            "label": "Thermal Capacity"
+            "label": "Thermal Capacity",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -8708,7 +9142,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "T": {
             "value": 293.15,
             "unit": "K",
-            "label": "Temperature"
+            "label": "Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -8799,22 +9235,34 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "J_basket": {
             "value": 0.1,
             "unit": "kg-m^2",
-            "label": "Basket Inertia"
+            "label": "Basket Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "load_mass": {
             "value": 5,
             "unit": "kg",
-            "label": "Clothes Mass"
+            "label": "Clothes Mass",
+            "min": 0
           },
           "unbalance": {
             "value": 0.5,
             "unit": "kg",
-            "label": "Unbalance Mass"
+            "label": "Unbalance Mass",
+            "min": 0
           },
           "radius": {
             "value": 0.25,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "damping": {
+            "value": 0.02,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -8845,17 +9293,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "water_level": {
             "value": 10,
             "unit": "L",
-            "label": "Water Level"
+            "label": "Water Level",
+            "min": 0
           },
           "detergent": {
             "value": 1,
             "unit": "%",
-            "label": "Detergent Conc"
+            "label": "Detergent Conc",
+            "min": 0
           },
           "drag_coeff": {
             "value": 0.05,
             "unit": "N-m-s/rad",
-            "label": "Slosh Drag"
+            "label": "Slosh Drag",
+            "min": 0
           }
         },
         "ports": [
@@ -8884,17 +9335,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "power_rating": {
             "value": 900,
             "unit": "W",
-            "label": "Nominal Power"
+            "label": "Nominal Power",
+            "min": 0
           },
           "efficiency": {
             "value": 65,
             "unit": "%",
-            "label": "Efficiency"
+            "label": "Efficiency",
+            "min": 0,
+            "max": 100
           },
-          "freq": {
-            "value": 2.45,
-            "unit": "GHz",
-            "label": "Frequency"
+          "v_nominal": {
+            "value": 4000,
+            "unit": "V",
+            "label": "Nominal Anode Voltage",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -8930,12 +9386,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "resistance": {
             "value": 40,
             "unit": "Ohm",
-            "label": "Resistance"
+            "label": "Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
-          "surface_area": {
-            "value": 0.05,
-            "unit": "m^2",
-            "label": "Surface Area"
+          "efficiency": {
+            "value": 0.9,
+            "unit": "1",
+            "label": "Heating Efficiency",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -8971,17 +9431,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "power": {
             "value": 800,
             "unit": "W",
-            "label": "Heating Power"
+            "label": "Heating Power",
+            "min": 0
           },
           "tank_vol": {
             "value": 0.5,
             "unit": "L",
-            "label": "Tank Volume"
+            "label": "Tank Volume",
+            "min": 0,
+            "exclusiveMin": true
           },
           "boil_temp": {
             "value": 100,
             "unit": "C",
-            "label": "Boiling Temp"
+            "label": "Boiling Temp",
+            "min": -273.15,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9017,17 +9482,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "v_in": {
             "value": 230,
             "unit": "V",
-            "label": "Input Voltage"
+            "label": "Input Voltage",
+            "min": 0,
+            "exclusiveMin": true
           },
           "v_out": {
             "value": 4000,
             "unit": "V",
             "label": "Output HV"
-          },
-          "switching_freq": {
-            "value": 30,
-            "unit": "kHz",
-            "label": "Switching Freq"
           }
         },
         "ports": [
@@ -9064,47 +9526,62 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "volume": {
             "value": 25,
             "unit": "L",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
           },
           "ambient_temp": {
             "value": 25,
             "unit": "C",
-            "label": "Ambient"
+            "label": "Ambient",
+            "min": -273.15,
+            "exclusiveMin": true
           },
           "max_temp": {
             "value": 250,
             "unit": "C",
-            "label": "Thermal Cutout Limit"
+            "label": "Thermal Cutout Limit",
+            "min": -273.15,
+            "exclusiveMin": true
           },
           "food_mass": {
             "value": 0.5,
             "unit": "kg",
-            "label": "Food/Water Mass"
+            "label": "Food/Water Mass",
+            "min": 0
           },
           "food_cp": {
             "value": 4184,
             "unit": "J/(kg*K)",
-            "label": "Food Specific Heat"
+            "label": "Food Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
           },
           "wall_mass": {
             "value": 2,
             "unit": "kg",
-            "label": "Wall Mass"
+            "label": "Wall Mass",
+            "min": 0
           },
           "wall_cp": {
             "value": 460,
             "unit": "J/(kg*K)",
-            "label": "Wall Specific Heat"
+            "label": "Wall Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
           },
           "h_conv": {
             "value": 10,
             "unit": "W/(m^2*K)",
-            "label": "Convection Coeff."
+            "label": "Convection Coeff.",
+            "min": 0
           },
           "eps": {
             "value": 0.85,
             "unit": "-",
-            "label": "Surface Emissivity"
+            "label": "Surface Emissivity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -9157,47 +9634,63 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "startTime": {
             "value": 0,
             "unit": "s",
-            "label": "Start Time"
+            "label": "Start Time",
+            "min": 0
           },
           "stopTime": {
             "value": 10,
             "unit": "s",
-            "label": "Stop Time"
+            "label": "Stop Time",
+            "min": 0,
+            "exclusiveMin": true
           },
           "initialStep": {
             "value": 0.001,
             "unit": "s",
-            "label": "Initial Step"
+            "label": "Initial Step",
+            "min": 0,
+            "exclusiveMin": true
           },
           "minimumStep": {
             "value": 0.000001,
             "unit": "s",
-            "label": "Minimum Step"
+            "label": "Minimum Step",
+            "min": 0,
+            "exclusiveMin": true
           },
           "maximumStep": {
             "value": 0.05,
             "unit": "s",
-            "label": "Maximum Step"
+            "label": "Maximum Step",
+            "min": 0,
+            "exclusiveMin": true
           },
           "relativeTolerance": {
             "value": 0.001,
             "unit": "",
-            "label": "Relative Tolerance"
+            "label": "Relative Tolerance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "absoluteTolerance": {
             "value": 0.000001,
             "unit": "",
-            "label": "Absolute Tolerance"
+            "label": "Absolute Tolerance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "nonlinearTolerance": {
             "value": 1e-8,
             "unit": "",
-            "label": "Nonlinear Tolerance"
+            "label": "Nonlinear Tolerance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "maximumIterations": {
             "value": 50,
             "unit": "",
-            "label": "Max Newton Iterations"
+            "label": "Max Newton Iterations",
+            "min": 1
           },
           "enableDiagnostics": {
             "value": "on",
@@ -9351,7 +9844,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "port_index": {
             "value": 1,
             "unit": "",
-            "label": "Port Index"
+            "label": "Port Index",
+            "min": 1
           },
           "data_type": {
             "value": "auto",
@@ -9386,7 +9880,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "port_index": {
             "value": 1,
             "unit": "",
-            "label": "Port Index"
+            "label": "Port Index",
+            "min": 1
           },
           "data_type": {
             "value": "auto",
@@ -9439,7 +9934,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rf": {
             "value": 100000,
             "unit": "Pa·s/kg",
-            "label": "Resistance"
+            "label": "Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -9469,17 +9965,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Cd": {
             "value": 0.6,
             "unit": "1",
-            "label": "Discharge Coeff."
+            "label": "Discharge Coeff.",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
           },
           "A": {
             "value": 0.0001,
             "unit": "m²",
-            "label": "Area"
+            "label": "Area",
+            "min": 0
           },
           "rho": {
             "value": 1.2,
             "unit": "kg/m³",
-            "label": "Density"
+            "label": "Density",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9509,7 +10011,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Cf": {
             "value": 0.00001,
             "unit": "kg/Pa",
-            "label": "Capacitance"
+            "label": "Capacitance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9533,7 +10037,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Li": {
             "value": 100,
             "unit": "Pa·s²/kg",
-            "label": "Inertance"
+            "label": "Inertance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9563,7 +10069,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9636,7 +10144,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rf": {
             "value": 1000,
             "unit": "Pa·s/kg",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9666,17 +10176,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P_set": {
             "value": 500000,
             "unit": "Pa",
-            "label": "Set Pressure"
+            "label": "Set Pressure",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rf_open": {
             "value": 100,
             "unit": "Pa·s/kg",
-            "label": "Open Res."
+            "label": "Open Res.",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rf_closed": {
             "value": 10000000000,
             "unit": "Pa·s/kg",
-            "label": "Closed Res."
+            "label": "Closed Res.",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9743,7 +10259,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "V": {
             "value": 0.5,
             "unit": "m³",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9773,12 +10291,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Cd": {
             "value": 0.5,
             "unit": "1",
-            "label": "Discharge Coeff."
+            "label": "Discharge Coeff.",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
           },
           "d": {
             "value": 0.0005,
             "unit": "m",
-            "label": "Diameter"
+            "label": "Diameter",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9875,6 +10398,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": "Y = f(X1, X2, ...)",
             "unit": "",
             "label": "Equation"
+          },
+          "deploymentModel": {
+            "value": "{}",
+            "unit": "",
+            "label": "Deployment Model (JSON)"
           }
         },
         "ports": [],
@@ -9893,12 +10421,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "hydraulic_reference_il",
         "category": "Utilities",
         "params": {
-          "referencePressure": { "value": 101325, "unit": "Pa", "label": "Reference Pressure" },
-          "pressureType": { "value": "absolute", "unit": "", "label": "Pressure Type" },
-          "atmosphericPressure": { "value": 101325, "unit": "Pa", "label": "Atmospheric Pressure" },
-          "elevationCorrection": { "value": "false", "unit": "", "label": "Enable Elevation Correction" },
-          "referenceElevation": { "value": 0, "unit": "m", "label": "Reference Elevation" },
-          "initializationPriority": { "value": "high", "unit": "", "label": "Initialization Priority" }
+          "referencePressure": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Reference Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "pressureType": {
+            "value": "absolute",
+            "unit": "",
+            "label": "Pressure Type"
+          },
+          "atmosphericPressure": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Atmospheric Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "elevationCorrection": {
+            "value": "false",
+            "unit": "",
+            "label": "Enable Elevation Correction"
+          },
+          "referenceElevation": {
+            "value": 0,
+            "unit": "m",
+            "label": "Reference Elevation"
+          },
+          "initializationPriority": {
+            "value": "high",
+            "unit": "",
+            "label": "Initialization Priority"
+          }
         },
         "ports": [
           { "id": "a", "pos": "top", "label": "A", "domain": "isothermal_liquid" }
@@ -9929,7 +10485,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "pipe_il",
         "category": "Elements",
         "params": {
-          "R": { "value": 100000, "unit": "Pa/(kg/s)", "label": "Hydraulic Resistance" }
+          "R": {
+            "value": 100000,
+            "unit": "Pa/(kg/s)",
+            "label": "Hydraulic Resistance",
+            "min": 0
+          }
         },
         "ports": [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
@@ -9945,9 +10506,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "restriction_il",
         "category": "Elements",
         "params": {
-          "Cd": { "value": 0.6, "unit": "1", "label": "Discharge Coefficient" },
-          "area": { "value": 0.0001, "unit": "m^2", "label": "Restriction Area" },
-          "rho": { "value": 1000, "unit": "kg/m^3", "label": "Fluid Density" }
+          "Cd": {
+            "value": 0.6,
+            "unit": "1",
+            "label": "Discharge Coefficient",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
+          },
+          "area": {
+            "value": 0.0001,
+            "unit": "m^2",
+            "label": "Restriction Area",
+            "min": 0
+          },
+          "rho": {
+            "value": 1000,
+            "unit": "kg/m^3",
+            "label": "Fluid Density",
+            "min": 0,
+            "exclusiveMin": true
+          }
         },
         "ports": [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },

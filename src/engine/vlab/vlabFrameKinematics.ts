@@ -1,15 +1,25 @@
-export function parseVector3(val: any, defaultVal: [number, number, number] = [0, 0, 0]): [number, number, number] {
-  if (Array.isArray(val) && val.length >= 3) {
-    return [Number(val[0]) || 0, Number(val[1]) || 0, Number(val[2]) || 0];
-  }
-  if (typeof val === 'string') {
-    const cleaned = val.replace(/[\[\]]/g, '').trim();
-    const parts = cleaned.split(/[\s,]+/).filter(Boolean).map(Number);
-    if (parts.length >= 3 && parts.every(Number.isFinite)) {
-      return [parts[0], parts[1], parts[2]];
+import { VLabParamError, parseNumeric, unwrapParam } from './vlabParams';
+/**
+ * Three-vector parameter given as an array or as text ("[1 2 3]", "1, 2, 3").
+ * Missing / blank -> defaultVal. Anything else that is not three finite numbers throws VLabParamError
+ * (it never silently becomes the default or a zero component).
+ */
+export function parseVector3(val: any, defaultVal: [number, number, number] = [0, 0, 0], param = 'vector'): [number, number, number] {
+  const v = unwrapParam(val);
+  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return [...defaultVal];
+  const items: unknown[] | null = Array.isArray(v)
+    ? v
+    : typeof v === 'string' ? v.replace(/[\[\]]/g, ' ').trim().split(/[\s,;]+/).filter(Boolean) : null;
+  if (items && items.length >= 3) {
+    const parsed = items.slice(0, 3).map(parseNumeric);
+    if (parsed.every(p => p.kind === 'ok')) {
+      return parsed.map(p => (p as { value: number }).value) as [number, number, number];
     }
   }
-  return [...defaultVal];
+  throw new VLabParamError([{
+    blockId: '', param, raw: v, code: 'invalid-parameter',
+    reason: `Parameter "${param}": ${JSON.stringify(v)} is not a list of three finite numbers.`,
+  }]);
 }
 
 export function eulerToRotationMatrix(rx: number, ry: number, rz: number): number[][] {

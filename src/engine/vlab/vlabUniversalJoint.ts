@@ -4,6 +4,7 @@ import {
   Vector3,
 } from './vlabFrameKinematics';
 import { MultibodyConstraintDiagnosticError } from './vlabConstraintDiagnostics';
+import { numericParam } from './vlabParams';
 
 const dot = (a: Vector3, b: Vector3) =>
   a.reduce((sum, v, i) => sum + v * b[i], 0);
@@ -64,7 +65,7 @@ export function universalJointParameters(
   if (Math.hypot(...perpendicular) < 1e-10)
     fail('axis1 and axis2 must not be parallel.');
   const axis2 = unit(perpendicular);
-  const damping = Number(params.damping ?? 0.05);
+  const damping = numericParam(params, 'damping', 0.05, nodeId);
   if (!Number.isFinite(damping) || damping < 0)
     fail('damping must be finite and nonnegative.');
   return { axis1, axis2, damping };

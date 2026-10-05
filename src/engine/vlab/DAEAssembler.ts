@@ -3,6 +3,7 @@ import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { universalJointParameters, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES } from './vlabEquations';
+import { numericParam, stringParam, VLabParamError } from './vlabParams';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
   ConstraintTopology,
@@ -835,8 +836,8 @@ export class DAEAssembler {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       if (type !== 'belt_properties') return;
       const p = (node.data as any)?.params || {};
-      const density = toFiniteNumber(unwrapNodeParam(p.density)) ?? 1.1;
-      const youngs = toFiniteNumber(unwrapNodeParam(p.youngs)) ?? 1e9;
+      const density = numericParam(p, 'density', 1.1, node.id);
+      const youngs = numericParam(p, 'youngs', 1e9, node.id);
       beltMaterialSources.push({
         nodeId: node.id,
         root: uf.find(`${node.id}_p`),
@@ -991,6 +992,12 @@ export class DAEAssembler {
             connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
           });
         } catch (e) {
+          // A malformed user parameter is never turned into a default or a silent zero residual.
+          if (e instanceof VLabParamError) {
+            throw new VLabParamError(e.diagnostics.map(d => d.blockId ? d : {
+              ...d, blockId: node.id, reason: d.reason.replace(/^Parameter "([^"]+)"/, `Parameter "$1" of block "${node.id}" (${type})`),
+            }));
+          }
           console.error(`Error calculating residual for ${node.id} (${type}):`, e);
           return new Array(equationCount).fill(0);
         }
@@ -1023,15 +1030,15 @@ export class DAEAssembler {
           targetVal = 101325;
         } else if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
           const params = (node.data as any)?.params || {};
-          const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
+          const pRef = numericParam(params, 'referencePressure', 101325, node.id);
           const pRefUnit = (params?.referencePressure?.unit || 'Pa');
-          const pType = String(params?.pressureType?.value ?? params?.pressureType ?? 'absolute');
-          const pAtm = Number(params?.atmosphericPressure?.value ?? params?.atmosphericPressure ?? 101325);
+          const pType = stringParam(params, 'pressureType', 'absolute');
+          const pAtm = numericParam(params, 'atmosphericPressure', 101325, node.id);
           const pAtmUnit = (params?.atmosphericPressure?.unit || 'Pa');
           const elevCorr = String(params?.elevationCorrection?.value ?? params?.elevationCorrection) === 'true';
-          const zRef = Number(params?.referenceElevation?.value ?? params?.referenceElevation ?? 0);
+          const zRef = numericParam(params, 'referenceElevation', 0, node.id);
           const zRefUnit = (params?.referenceElevation?.unit || 'm');
-          const zA = Number(params?.portElevation?.value ?? params?.portElevation ?? 0);
+          const zA = numericParam(params, 'portElevation', 0, node.id);
           const zAUnit = (params?.portElevation?.unit || 'm');
           const pAbs = computeAbsoluteReferencePressure(pRef, pRefUnit as any, pType as any, pAtm, pAtmUnit as any);
           targetVal = computeEffectivePortPressure(pAbs, elevCorr, zRef, zRefUnit as any, zA, zAUnit as any);

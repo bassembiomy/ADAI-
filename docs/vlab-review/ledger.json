@@ -180,10 +180,13 @@
         "WP-07"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 2,
       "acceptance": "npx vitest run src/engine/vlab/review/params.test.ts src/engine/vlab --reporter=dot",
-      "evidence": [],
+      "evidence": [
+        "|| numeric fallbacks 169 -> 0; vlabParams.ts canonical parser + bounds (min/max/exclusive/nonZero); 67 alias renames with load migration; 49 params exposed, 12 removed, 42 re-mapped to domain WPs",
+        "planner re-run: 3015 pass / 206 expected-fail / 1 known; test:vlab 20/20; rework: steam_generator tank_vol/boil_temp restored -> WP-17"
+      ],
       "findings": []
     },
     {
@@ -194,7 +197,7 @@
         "WP-08"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review/dae_structure.test.ts src/engine/vlab/review/scope_routing.test.ts --reporter=dot",
       "evidence": [],
@@ -892,6 +895,30 @@
       "layer": "integration",
       "summary": "Benchmarks 1-6 and 8-10 only assert finite state (they did before too). Add independent reference values.",
       "wp": "WP-30"
+    },
+    {
+      "id": "F-042",
+      "severity": "med",
+      "block": "ps_dead_zone",
+      "layer": "eq",
+      "summary": "Outside the band it outputs u unchanged. Simulink Dead Zone gives y = u - upper (u > upper) and y = u - lower (u < lower), so the output is continuous.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-043",
+      "severity": "med",
+      "block": "solver_config (kernel/PhysicalNetworkExtractor positiveNumber)",
+      "layer": "solver",
+      "summary": "Still falls back silently and accepts alias keys. Only the pre-solve bounds protect it.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-044",
+      "severity": "low",
+      "block": "thermal_resistor (air-fryer lab)",
+      "layer": "integration",
+      "summary": "The lab used the dead param Rth=35, so the heater ran on the default R (about 5.3 kW). Now R=35, about 1.5 kW (realistic). Behaviour change in the shipped lab.",
+      "wp": "WP-21"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

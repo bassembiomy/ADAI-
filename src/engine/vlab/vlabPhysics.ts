@@ -6,6 +6,7 @@ import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
 import { initializeUniversalJointFrames } from './vlabJointInitialization';
 import { assertValidTopology } from './vlabTopologyValidation';
+import { numericParam } from './vlabParams';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -169,14 +170,11 @@ export class VLabPhysicsEngine {
             if (node && node.data && (node.data as any).params) {
               const params = (node.data as any).params;
               if (stateName === 'w1' && params.initW1 !== undefined) {
-                const p = params.initW1;
-                x[idx] = Number(p && typeof p === 'object' && 'value' in p ? p.value : p);
+                x[idx] = numericParam(params, 'initW1', x[idx]);
               } else if (stateName === 'w2' && params.initW2 !== undefined) {
-                const p = params.initW2;
-                x[idx] = Number(p && typeof p === 'object' && 'value' in p ? p.value : p);
+                x[idx] = numericParam(params, 'initW2', x[idx]);
               } else if (stateName === 'bias' && params.initBias !== undefined) {
-                const p = params.initBias;
-                x[idx] = Number(p && typeof p === 'object' && 'value' in p ? p.value : p);
+                x[idx] = numericParam(params, 'initBias', x[idx]);
               } else if (stateName === 'psiar') {
                 x[idx] = 0.001; // initial flux to prevent singularity
               }
@@ -759,17 +757,17 @@ export class VLabPhysicsEngine {
         
         if (type === 'switch') {
           const ctrl = acrossVals[2] !== undefined ? acrossVals[2] : 0;
-          const threshold = params.threshold !== undefined ? params.threshold : 0.5;
+          const threshold = numericParam(params, 'threshold', 0.5);
           indicators.push(ctrl - threshold);
         } 
         else if (type === 'ps_switch') {
           const ctrl = acrossVals[1] !== undefined ? acrossVals[1] : 0;
-          const threshold = params.threshold !== undefined ? params.threshold : 0.5;
+          const threshold = numericParam(params, 'threshold', 0.5);
           indicators.push(ctrl - threshold);
         }
         else if (type === 'trans_hard_stop' || type === 'rot_hard_stop') {
-          const lower = params.lower !== undefined ? params.lower : -0.1;
-          const upper = params.upper !== undefined ? params.upper : 0.1;
+          const lower = numericParam(params, 'lower', type === 'rot_hard_stop' ? -1.57 : -0.1);
+          const upper = numericParam(params, 'upper', type === 'rot_hard_stop' ? 1.57 : 0.1);
           const pos = type === 'rot_hard_stop'
             ? xVec[comp.stateIndices[0]] || 0
             : (acrossVals[0] || 0) * 0.01;
@@ -777,22 +775,22 @@ export class VLabPhysicsEngine {
           indicators.push(pos - upper);
         }
         else if (type === 'ps_saturation') {
-          const lower = params.lower !== undefined ? params.lower : -10;
-          const upper = params.upper !== undefined ? params.upper : 10;
+          const lower = numericParam(params, 'lower', -10);
+          const upper = numericParam(params, 'upper', 10);
           const val = acrossVals[0] || 0;
           indicators.push(val - lower);
           indicators.push(val - upper);
         }
         else if (type === 'ps_dead_zone') {
-          const start = params.start !== undefined ? params.start : 0.5;
-          const end = params.end !== undefined ? params.end : -0.5;
+          const upper = numericParam(params, 'upper', 0.5);
+          const lower = numericParam(params, 'lower', -0.5);
           const val = acrossVals[0] || 0;
-          indicators.push(val - start);
-          indicators.push(val - end);
+          indicators.push(val - upper);
+          indicators.push(val - lower);
         }
         else if (type === 'diode') {
           const V = getPortVal('p') - getPortVal('n');
-          const Vf = params.Vf !== undefined ? params.Vf : 0.7;
+          const Vf = numericParam(params, 'Vf', 0.7);
           indicators.push(V - Vf);
         }
         else if (type === 'nmos') {
@@ -801,15 +799,15 @@ export class VLabPhysicsEngine {
           const Vg = getPortVal('g');
           const Vgs = (Number.isFinite(Vg) ? Vg : 0) - (Number.isFinite(Vs) ? Vs : 0);
           const Vds = (Number.isFinite(Vd) ? Vd : 0) - (Number.isFinite(Vs) ? Vs : 0);
-          const Vth = params.Vth !== undefined ? params.Vth : 2.0;
+          const Vth = numericParam(params, 'Vth', 2.0);
           indicators.push(Vgs - Vth);
           indicators.push(Vds - (Vgs - Vth));
         }
         else if (type === 'igbt') {
           const Vge = getPortVal('g') - getPortVal('e');
           const Vce = getPortVal('c') - getPortVal('e');
-          const Vge_th = params.Vge_th !== undefined ? params.Vge_th : 5.5;
-          const Vce_sat = params.Vce_sat !== undefined ? params.Vce_sat : 1.5;
+          const Vge_th = numericParam(params, 'Vge_th', 5.5);
+          const Vce_sat = numericParam(params, 'Vce_sat', 1.5);
           indicators.push(Vge - Vge_th);
           indicators.push(Vce - Vce_sat);
         }

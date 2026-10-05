@@ -1,5 +1,6 @@
 // src/engine/vlab/kernel/PhysicalNetworkExtractor.ts
 import { Node, Edge } from '@xyflow/react';
+import { numericParam } from '../vlabParams';
 import { PhysicalNetwork, PhysicalConnection, Diagnostic, PhysicalDomain, SolverConfiguration, SolverType } from './types';
 import { VLAB_LIBRARY } from '../../../utils/vlabLibrary';
 import { isSolverConfigurationNode } from './SolverConfigurationSelection';
@@ -206,8 +207,8 @@ export class PhysicalNetworkExtractor {
                 (e.source === r2.id && e.target === r1.id)
               );
               if (isDirectlyConnected) {
-                const p1 = Number((r1.data as any)?.params?.referencePressure?.value ?? (r1.data as any)?.params?.referencePressure ?? 101325);
-                const p2 = Number((r2.data as any)?.params?.referencePressure?.value ?? (r2.data as any)?.params?.referencePressure ?? 101325);
+                const p1 = numericParam((r1.data as any)?.params, 'referencePressure', 101325);
+                const p2 = numericParam((r2.data as any)?.params, 'referencePressure', 101325);
                 if (p1 !== p2) {
                   diagnostics.push({
                     id: 'VL-OVERCONSTRAINT-001',

@@ -26,15 +26,15 @@ describe('Thermal Blocks Standardization & Verification', () => {
     const thermalDomain = VLAB_LIBRARY.find(d => d.type === 'Thermal');
     const electricalDomain = VLAB_LIBRARY.find(d => d.type === 'Electrical');
 
-    it('defines Thermal Resistor with both R (Ω) and Rth (K/W) and correct port domains', () => {
+    it('defines Thermal Resistor with a single electrical resistance R (Ω) (no dead Rth) and correct port domains', () => {
       // thermal_resistor may be in Electrical or Thermal
       const thermalResistor = electricalDomain?.blocks.find(b => b.id === 'thermal_resistor')
         || thermalDomain?.blocks.find(b => b.id === 'thermal_resistor');
       expect(thermalResistor).toBeDefined();
       expect(thermalResistor!.params.R).toBeDefined();
       expect(thermalResistor!.params.R.unit).toBe('Ω');
-      expect(thermalResistor!.params.Rth).toBeDefined();
-      expect(thermalResistor!.params.Rth.unit).toBe('K/W');
+      // WP-08: Rth (K/W) was never read by the equation (the lab used it as an alias for R); R is the one canonical key
+      expect(thermalResistor!.params.Rth).toBeUndefined();
 
       const portA = thermalResistor!.ports.find(p => p.id === 'a');
       const portB = thermalResistor!.ports.find(p => p.id === 'b');
@@ -349,7 +349,7 @@ describe('Thermal Blocks Standardization & Verification', () => {
       const nodes: Node[] = [
         node('v_dc', 'dc_voltage', { V: 10 }),
         node('gnd', 'ground', {}),
-        node('r_th', 'thermal_resistor', { R: 10, Rth: 5 }),
+        node('r_th', 'thermal_resistor', { R: 10 }),
         node('q_sensor', 'heat_flow_sensor', {}),
         node('conv', 'convective_heat', { h: 10, A: 1 }),
         node('t_ref', 'thermal_ref', {}),

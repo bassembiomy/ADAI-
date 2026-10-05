@@ -20,7 +20,7 @@ const createAirFryerCalibrationFixture = () => {
   const lab = {
     nodes: [
       { id: 'ac_supply', blockId: 'ac_voltage', position: { x: 0, y: 0 }, label: '230V AC Supply', params: { Vpk: 230 * Math.SQRT2, f: 50 } },
-      { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 0, y: 0 }, label: 'Heating Element', params: { Rth: 35 } },
+      { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 0, y: 0 }, label: 'Heating Element', params: { R: 35 } },
       { id: 'air_chamber', blockId: 'ma_chamber', position: { x: 0, y: 0 }, label: 'Cooking Basket (Air)', params: { V: 0.005, ambient_temp: 100 } },
       { id: 'temp_sensor', blockId: 'temp_sensor', position: { x: 0, y: 0 }, label: 'Basket Temp Sensor' },
       { id: 'thermal_scope', blockId: 'scope', position: { x: 0, y: 0 }, label: 'Temp Monitor' },
@@ -102,7 +102,7 @@ describe('Air Fryer Simulation debug', () => {
       id: 'air_fryer_thermal',
       nodes: [
         { id: 'ac_supply', blockId: 'ac_voltage', position: { x: 50, y: 200 }, label: '230V AC Supply', params: { Vpk: 325, f: 50 } },
-        { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 250, y: 200 }, label: 'Heating Element', params: { Rth: 35 } },
+        { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 250, y: 200 }, label: 'Heating Element', params: { R: 35 } },
         { id: 'convection_link', blockId: 'convective_heat', position: { x: 450, y: 100 }, label: 'Convection Interface', params: { h: 80, A: 0.15 } },
         { id: 'air_chamber', blockId: 'ma_chamber', position: { x: 650, y: 200 }, label: 'Cooking Basket (Air)', params: { V: 0.005 } },
         { id: 'circulation_fan', blockId: 'ma_pressure_source', position: { x: 650, y: 400 }, label: 'Air Circulation Fan', params: { P: 150 } },

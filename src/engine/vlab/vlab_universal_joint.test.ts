@@ -215,7 +215,6 @@ describe('universal Frame joint', () => {
     { axis2: '[2 0 0]' },
     { axis1: '[NaN 0 1]' },
     { axis2: '[1 2]' },
-    { damping: -1 },
   ])('rejects invalid parameters before solving: %j', (params) => {
     expect(() =>
       new VLabPhysicsEngine().simulateStep(
@@ -225,6 +224,18 @@ describe('universal Frame joint', () => {
         0.01,
       ),
     ).toThrow(/INVALID_JOINT_PARAMETER/);
+  });
+  // WP-08: the physical bound damping >= 0 is checked by the pre-solve parameter validation (same diagnostic path as
+  // topology errors) before the joint is ever assembled.
+  it('rejects negative damping before solving with a parameter-out-of-range diagnostic', () => {
+    expect(() =>
+      new VLabPhysicsEngine().simulateStep(
+        [node('joint', 'universal_joint', { damping: -1 })],
+        [],
+        null,
+        0.01,
+      ),
+    ).toThrow(/Parameter "damping".*must be >= 0/);
   });
   it.each(
     [

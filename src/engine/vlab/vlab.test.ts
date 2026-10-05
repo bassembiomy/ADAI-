@@ -177,7 +177,7 @@ describe('VLab Physical DAE Engine Tests', () => {
     
     // ps_step (stepTime = 0.5s, final = 10) -> ps_saturation (upper = 5) -> scope
     const nodes: Node[] = [
-      { id: 'step', data: { type: 'ps_step', params: { stepTime: 0.5, initial: 0, final: 10 } } } as any,
+      { id: 'step', data: { type: 'ps_step', params: { time: 0.5, initial: 0, final: 10 } } } as any,
       { id: 'sat', data: { type: 'ps_saturation', params: { upper: 5.0, lower: -5.0 } } } as any,
       { id: 'scope', data: { type: 'scope' } } as any,
     ];
