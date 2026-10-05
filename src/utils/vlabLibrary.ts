@@ -1577,7 +1577,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "g",
             "pos": "bottom",
-            "label": "G"
+            "label": "G",
+            "domain": "Gas"
           }
         ],
         "equation": "P = 101325 Pa (1 atm)\nT = 293.15 K",
@@ -1618,12 +1619,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
         "equation": "dP/dt = (R*T/V) * Σ(mdot_in)",
@@ -1700,12 +1703,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = 0 (R_gas -> ∞)",
@@ -1769,12 +1774,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
         ],
         "equation": "ΔP = f * (L/D) * (ρv²/2)",
@@ -1797,7 +1804,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           }
         ],
         "equation": "P = P_fixed, T = T_ambient",
@@ -2772,22 +2780,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "t",
             "pos": "left",
-            "label": "T"
+            "label": "T",
+            "domain": "Physical"
           },
           {
             "id": "c",
             "pos": "left",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           },
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           }
         ],
         "equation": "Rotational Multibody Interface governing physical equation",
@@ -2804,22 +2816,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "f",
             "pos": "left",
-            "label": "F"
+            "label": "F",
+            "domain": "Physical"
           },
           {
             "id": "c",
             "pos": "left",
-            "label": "C"
+            "label": "C",
+            "domain": "Translational"
           },
           {
             "id": "v",
             "pos": "right",
-            "label": "V"
+            "label": "V",
+            "domain": "Physical"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           }
         ],
         "equation": "Translational Multibody Interface governing physical equation",
@@ -2884,12 +2900,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           }
         ],
         "equation": "τ = k * (θ - θ0)",
@@ -3173,7 +3191,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "g",
             "pos": "bottom",
-            "label": "G"
+            "label": "G",
+            "domain": "Fluid"
           }
         ],
         "equation": "Absolute Reference (MA) governing physical equation",
@@ -3232,12 +3251,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "h",
@@ -3248,7 +3269,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "wd",
             "pos": "bottom",
-            "label": "WD"
+            "label": "WD",
+            "domain": "Physical"
           }
         ],
         "equation": "ΔP = f(L, D, Re) * (ρv²/2)",
@@ -3271,22 +3293,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "w",
             "pos": "top",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical"
           },
           {
             "id": "d",
             "pos": "top",
-            "label": "D"
+            "label": "D",
+            "domain": "Physical"
           }
         ],
         "equation": "Moisture Separator (MA) governing physical equation",
@@ -3309,27 +3335,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Thermal"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           },
           {
             "id": "wd",
             "pos": "bottom",
-            "label": "WD"
+            "label": "WD",
+            "domain": "Physical"
           }
         ],
         "equation": "Rotational Mechanical Converter (MA) governing physical equation",
@@ -3352,7 +3383,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "h",
@@ -3375,7 +3407,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "wd",
             "pos": "bottom",
-            "label": "WD"
+            "label": "WD",
+            "domain": "Physical"
           }
         ],
         "equation": "Translational Mechanical Converter (MA) governing physical equation",
@@ -3392,17 +3425,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "m",
             "pos": "top",
-            "label": "M"
+            "label": "M",
+            "domain": "Physical"
           }
         ],
         "equation": "Flow Rate Sensor (MA) governing physical equation",
@@ -3419,22 +3455,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "F"
+            "label": "F",
+            "domain": "Physical"
           },
           {
             "id": "t",
             "pos": "right",
-            "label": "T"
+            "label": "T",
+            "domain": "Physical"
           },
           {
             "id": "p",
             "pos": "right",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical"
           },
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical"
           }
         ],
         "equation": "Measurement Selector (MA) governing physical equation",
@@ -3451,12 +3491,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical"
           }
         ],
         "equation": "Moisture & Trace Gas Sensor (MA) governing physical equation",
@@ -3473,12 +3515,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "p",
             "pos": "right",
-            "label": "Pa"
+            "label": "Pa",
+            "domain": "Physical"
           }
         ],
         "equation": "Pressure & Temperature Sensor (MA) governing physical equation",
@@ -3495,12 +3539,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "rho",
             "pos": "right",
-            "label": "ρ"
+            "label": "ρ",
+            "domain": "Physical"
           }
         ],
         "equation": "Thermodynamic Properties Sensor (MA) governing physical equation",
@@ -3523,7 +3569,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "s",
@@ -3552,12 +3599,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "s",
@@ -7197,12 +7246,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
           }
         ],
         "equation": "Revolute Joint governing physical equation",
@@ -7225,12 +7276,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
           }
         ],
         "equation": "Prismatic Joint governing physical equation",
@@ -7429,12 +7482,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
           }
         ],
         "equation": "Weld Joint governing physical equation",
@@ -7457,12 +7512,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Rotational"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Rotational"
           }
         ],
         "equation": "Common Gear Constraint governing physical equation",
@@ -7485,12 +7542,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Rotational"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Translational"
           }
         ],
         "equation": "v = r * ω\nτ = r * F",
@@ -7513,7 +7572,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Physical"
           }
         ],
         "equation": "Mechanism Configuration governing physical equation",
@@ -8753,7 +8813,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           }
         ],
         "description": "Defines the numerical solver parameters, integration tolerances, time-stepping, and diagnostics for the physical network.",
@@ -8818,12 +8879,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Physical"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "x"
+            "label": "x",
+            "domain": "Physical"
           }
         ],
         "equation": "Probe governing physical equation",
@@ -8846,7 +8909,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           }
         ],
         "equation": "Connection Label governing physical equation",
@@ -8896,7 +8960,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Physical"
           }
         ],
         "description": "An input port for a subsystem. Creates an input handle on the parent subsystem block.",
@@ -8929,7 +8994,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Physical"
           }
         ],
         "description": "An output port for a subsystem. Creates an output handle on the parent subsystem block.",
@@ -8951,7 +9017,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "bottom",
-            "label": "P"
+            "label": "P",
+            "domain": "Fluid"
           }
         ],
         "equation": "Fluid Ground (Atm) governing physical equation",
@@ -8974,12 +9041,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "Fluid Resistance governing physical equation",
@@ -9012,12 +9081,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "mdot = Cd * A * √(2*ρ*ΔP)",
@@ -9040,7 +9111,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           }
         ],
         "equation": "Fluid Capacitance governing physical equation",
@@ -9063,12 +9135,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "Fluid Inertance governing physical equation",
@@ -9091,7 +9165,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "P_out - P_in = P_param",
@@ -9108,7 +9183,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           },
           {
             "id": "ctrl",
@@ -9137,7 +9213,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "Mass Flow Source governing physical equation",
@@ -9160,12 +9237,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "Q = (ΔP > P_crack) ? Cd*A*√(2*ΔP/ρ) : 0",
@@ -9198,12 +9277,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "Q = (ΔP > P_set) ? Cd*A*√(2*(ΔP - P_set)/ρ) : 0",
@@ -9226,12 +9307,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Steam"
+            "label": "Steam",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "left",
-            "label": "Return"
+            "label": "Return",
+            "domain": "Fluid"
           },
           {
             "id": "q_in",
@@ -9260,12 +9343,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "pin",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "pout",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "Steam Accumulator governing physical equation",
@@ -9293,12 +9378,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
         "equation": "mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))",
@@ -9315,7 +9402,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "out",
@@ -9338,12 +9426,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           },
           {
             "id": "out",

@@ -146,10 +146,13 @@
         "WP-06a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "contract.test port-domain checks green for all blocks",
-      "evidence": [],
+      "evidence": [
+        "90 ports given domains; missing-domain ports now 0 catalog-wide; planner verified the diff is domain-only",
+        "review+all-blocks+multibody 2377 pass / 264 expected-fail; test:vlab 20/20"
+      ],
       "findings": []
     },
     {
@@ -160,7 +163,7 @@
         "WP-06b"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review/connections.test.ts src/components/vlab --reporter=dot",
       "evidence": [],
@@ -795,6 +798,46 @@
       "layer": "port",
       "summary": "VLabPort has no direction field. Signal in/out is not declared.",
       "wp": "WP-07"
+    },
+    {
+      "id": "F-031",
+      "severity": "high",
+      "block": "revolute_joint, prismatic_joint, weld_joint",
+      "layer": "eq",
+      "summary": "Ports are now Frame (6-vector across), but the legacy scalar equations compute across[0]-across[1], which is NaN on arrays. Interim: unusable with Frame blocks until WP-19a rewrites them.",
+      "wp": "WP-19a"
+    },
+    {
+      "id": "F-032",
+      "severity": "med",
+      "block": "mech_config",
+      "layer": "port",
+      "summary": "Simscape port C is a Frame, but it is classified utility and so Physical. The validator rejects Frame links. Decide the classification.",
+      "wp": "WP-19a"
+    },
+    {
+      "id": "F-033",
+      "severity": "med",
+      "block": "common_gear, rack_pinion",
+      "layer": "port",
+      "summary": "Rotational/Translational, not Frame. Decide versus Simscape Multibody.",
+      "wp": "WP-13b"
+    },
+    {
+      "id": "F-034",
+      "severity": "low",
+      "block": "Fluid / Steam group",
+      "layer": "port",
+      "summary": "There is no distinct steam/two-phase domain, so the whole group is Fluid. Steam and liquid can be wired together without an error.",
+      "wp": "WP-17"
+    },
+    {
+      "id": "F-035",
+      "severity": "med",
+      "block": "ma_pipe, ma_rot_conv, ma_trans_conv, ma_selector, ma_separator",
+      "layer": "eq",
+      "summary": "Explicit Physical ports allocate signal branches that the stub MA equations never drive.",
+      "wp": "WP-09"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",
@@ -810,6 +853,7 @@
     "unsafe_numeric_fallbacks": 169,
     "fully_certified": 45,
     "classification": "physical 110, signal 73, measurement 20, source 33, utility 12",
-    "dae_allocation_mismatch_blocks": 46
+    "dae_allocation_mismatch_blocks": 46,
+    "note": "after WP-06b: missing_domain_ports=0, expected failures 264"
   }
 }

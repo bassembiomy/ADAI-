@@ -26,10 +26,6 @@ const KNOWN_SOLVER_FAILURES: Record<string, { finding: string; wp: string; diagn
     finding: 'F-012', wp: 'WP-10..21 (moist-air/fluid domain)',
     diagnosis: 'a/b fluid ports float with no reference or flow path; branch variable diverges (2.5e12) -> singular Jacobian',
   },
-  mass_flow_source: {
-    finding: 'F-012', wp: 'WP-10..21 (fluid/steam domain)',
-    diagnosis: 'ideal mass-flow source into a dead-end port: KCL forces branch=0 while equation demands mdot (needs a sink/reservoir); fixture has none',
-  },
   dist_constraint: {
     finding: 'F-012', wp: 'WP-10..21 (multibody)',
     diagnosis: 'frame ports b/f are unconnected by the fixture (no multibody world/rigid body); constraint rows unbalanced',
@@ -39,6 +35,10 @@ const KNOWN_SOLVER_FAILURES: Record<string, { finding: string; wp: string; diagn
     diagnosis: 'scalar ODE dxhat=-xhat+u+L(y-xhat) collapses the step to 1e-6 and times out; equation ignores matrix A and the state/branch mapping needs review',
   },
 };
+
+// Physical-signal input value per DUT. Default 5.0. An absolute-pressure command must be consistent with the
+// atmospheric reference the assembler gives an unconnected Fluid port (101325 Pa); 5 Pa would fight that reference.
+const PS_INPUT_VALUE: Record<string, number> = { ctrl_pressure_source: 101325 };
 
 // Blocks that are themselves ideal voltage sources: their ports are loaded, never driven.
 const ELECTRICAL_SOURCE_DUTS = ['three_phase_source'];
@@ -317,7 +317,7 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
               id: srcId,
               type: 'default',
               position: { x: 50, y: 100 * idx },
-              data: { type: 'ps_constant', params: { value: 5.0 } }
+              data: { type: 'ps_constant', params: { value: PS_INPUT_VALUE[block.id] ?? 5.0 } }
             } as any);
             edges.push({ id: `e_ps_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'y_s', targetHandle: `${portId}_t` });
           } else {
