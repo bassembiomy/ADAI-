@@ -6,7 +6,9 @@ import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
 import { initializeUniversalJointFrames } from './vlabJointInitialization';
 import { assertValidTopology } from './vlabTopologyValidation';
-import { assertStructurallyWellPosed } from './vlabStructure';
+import { assertStructurallyWellPosed, DAEStructureError } from './vlabStructure';
+import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagnostics';
+import { readSolvedVariable } from './vlabScopeRead';
 import { numericParam } from './vlabParams';
 
 // SDIRK-3 Butcher tableau constants
@@ -462,6 +464,16 @@ export class VLabPhysicsEngine {
               h = Math.max(stepFloor, Math.min(maxStep, Math.min(h, error.hEvent * 2)));
               bdfOrder = 1;
             }
+          } else if (error instanceof BlockEquationError || error instanceof DAEStructureError) {
+            // A block equation that throws (or a structurally invalid model) is not a step-size problem: never retried.
+            throw error;
+          } else if (error instanceof NonFiniteResidualError) {
+            // Non-finite residual: reject the step and halve h; if it persists at the minimum step, surface the
+            // diagnostic (block / row / value) instead of iterating or accepting a state computed from zeros (F-045).
+            if (isAlgebraicSystem || h <= stepFloor) throw error;
+            rejectedSteps++;
+            h = Math.max(stepFloor, h * 0.5);
+            bdfOrder = 1;
           } else {
             if (isAlgebraicSystem) throw error;
             if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;
@@ -682,26 +694,31 @@ export class VLabPhysicsEngine {
 
       const indices = system.scopeOutputs.get(scopeNode.id);
       if (indices && indices.length > 0) {
+        // Every channel is read by the exact variable the assembler bound it to (scopeOutputs), as a scalar sample.
+        // An unwired channel (-1) has no sample at all: it is left out, never filled with 0. A vector / Frame /
+        // non-finite value throws ScopeReadError (vlabScopeRead.ts).
+        const sample = (idx: number, channel: number): number | undefined =>
+          idx < 0 ? undefined : readSolvedVariable(xCurrent, system.variableNames, idx, { scopeId: scopeNode.id, channel });
         if (indices.length === 1) {
-          const val = indices[0] >= 0 && indices[0] < xCurrent.length ? xCurrent[indices[0]] : 0;
-          const friendlyName = indices[0] >= 0 ? getFriendlyVariableName(indices[0]) : 'in1';
-          perScopeValues[scopeNode.id] = createSingleScopeValue(val, friendlyName);
+          const val = sample(indices[0], 1);
+          if (val !== undefined) perScopeValues[scopeNode.id] = createSingleScopeValue(val, getFriendlyVariableName(indices[0]));
         } else {
           const values: Record<string, number> = {};
           const aliases: Record<string, string> = {};
           indices.forEach((idx, i) => {
-            const val = idx >= 0 && idx < xCurrent.length ? xCurrent[idx] : 0;
+            const val = sample(idx, i + 1);
+            if (val === undefined) return;
             const channelKey = `in${i + 1}`;
-            const friendlyName = idx >= 0 ? getFriendlyVariableName(idx) : channelKey;
+            const friendlyName = getFriendlyVariableName(idx);
             values[channelKey] = val;
             values[i] = val;
-            if (friendlyName && !values[friendlyName]) {
+            if (friendlyName && values[friendlyName] === undefined) {
               values[friendlyName] = val;
             }
             if (i === 0) aliases['value'] = channelKey;
             if (i === 1) aliases['target'] = channelKey;
           });
-          perScopeValues[scopeNode.id] = createMultiScopeValues(values, aliases);
+          if (Object.keys(values).length > 0) perScopeValues[scopeNode.id] = createMultiScopeValues(values, aliases);
         }
       }
     }

@@ -215,10 +215,13 @@
         "WP-09a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review/scope_routing.test.ts src/components/vlab --reporter=dot",
-      "evidence": [],
+      "evidence": [
+        "silent-zero/NaN masks removed (NonFiniteResidualError, BlockEquationError, ScopeReadError); 197 signal-out ports have quantity+unit; scope reads by exact port id; .adia round-trip of scope channels passes",
+        "planner re-run: 4068 pass / 192 expected-fail / 1 known; test:vlab 20/20; planner fixed a WP-08 regression in src/utils/vlabLibrary.test.ts (23 exact param-spec asserts -> toMatchObject)"
+      ],
       "findings": []
     },
     {
@@ -229,7 +232,7 @@
         "WP-09b"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review/multibody_joints.test.ts src/engine/vlab/vlab_multibody_frames.test.ts src/engine/vlab/vlab_constraint_reactions.test.ts src/engine/vlab/vlab_spherical_joint.test.ts --reporter=dot",
       "evidence": [
@@ -950,7 +953,8 @@
       "block": "DAEAssembler.residual",
       "layer": "solver",
       "summary": "Per-eval catch returns zeros(equationCount) on exceptions, and compRes[i] || 0 turns NaN into 0. Silent-zero/NaN masking violates the mandate.",
-      "wp": "WP-09b"
+      "wp": "WP-09b",
+      "status": "resolved-WP-09b"
     },
     {
       "id": "F-046",
@@ -974,7 +978,8 @@
       "block": "whitebox SimulationHarness.ts:36",
       "layer": "port",
       "summary": "Still strips /_[st]$/ from probe handles.",
-      "wp": "WP-09b"
+      "wp": "WP-09b",
+      "status": "resolved-WP-09b"
     },
     {
       "id": "F-049",
@@ -982,6 +987,46 @@
       "block": "test infra",
       "layer": "integration",
       "summary": "labs_sim / vlab_comprehensive / airfryer time out at 5 s under full parallel load. Set per-file timeouts or speed them up.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-050",
+      "severity": "high",
+      "block": "vlabPhysics",
+      "layer": "solver",
+      "summary": "Non-convergence at minimumStep still silently accepts the stale xCurrent, so the result is wrong but looks valid.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-051",
+      "severity": "med",
+      "block": "SparseLinearSolver",
+      "layer": "solver",
+      "summary": "Singular pivots are regularized to 1e-12, and diag<1e-15 gives 0 silently.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-052",
+      "severity": "med",
+      "block": "ps_lpf",
+      "layer": "eq",
+      "summary": "prevY is found by ctx.states.indexOf(value), a value lookup, so the index is wrong when values coincide.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-053",
+      "severity": "low",
+      "block": "transform_sensor rx/ry/rz, angle_constraint.ang",
+      "layer": "eq",
+      "summary": "Outputs are in degrees, not SI rad.",
+      "wp": "WP-19a"
+    },
+    {
+      "id": "F-054",
+      "severity": "low",
+      "block": "kernel/PhysicalSystemCompiler",
+      "layer": "integration",
+      "summary": "Number(val)||0 masks a NaN param in the separate kernel pipeline.",
       "wp": "WP-31"
     }
   ],
@@ -1000,5 +1045,6 @@
     "classification": "physical 110, signal 73, measurement 20, source 33, utility 12",
     "dae_allocation_mismatch_blocks": 46,
     "note": "after WP-06b: missing_domain_ports=0, expected failures 264"
-  }
+  },
+  "standard_acceptance_extra": "Always include src/utils/vlabLibrary.test.ts src/utils/scopeUtils.test.ts (missed in WP-08)"
 }

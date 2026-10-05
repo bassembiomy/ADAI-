@@ -28,7 +28,8 @@ import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
-import { checkEdgeSet, validateConnection } from '../../engine/vlab/vlabConnectionRules';
+import { checkEdgeSet, portIdFromHandle, validateConnection } from '../../engine/vlab/vlabConnectionRules';
+import { scalarSample } from '../../engine/vlab/vlabScopeRead';
 import { TopologyValidationError, formatTopologyMessage, validateTopology } from '../../engine/vlab/vlabTopologyValidation';
 import { SolverConfiguration, validateSolverConfiguration } from '../../engine/vlab/kernel/types';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
@@ -559,7 +560,7 @@ const ScopeView = ({
             {keys.map((k, i) => {
               const info = signalInfos?.[i];
               const color = VLAB_SIGNAL_COLORS[i % VLAB_SIGNAL_COLORS.length];
-              const labelText = info?.connected ? `${info.blockLabel}.${info.portName} (${info.dataType})` : (info?.fullName || k);
+              const labelText = info?.connected ? (info.channelLabel || `${info.blockLabel}.${info.portName}`) : (info?.fullName || k);
               return (
                 <div key={k} className="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -936,6 +937,27 @@ const VLabScopeWindow = ({
   );
 };
 
+/**
+ * One recorded scope sample from the engine's per-scope value. Only channels the engine actually produced are kept
+ * (`in<k>`, `value`, friendly names): a missing channel is a gap, never a padded 0, and channels are never re-assigned
+ * by value position. A vector / Frame value throws (ScopeReadError); a non-finite sample is dropped, not zeroed.
+ */
+const buildScopePoint = (time: number, val: any): Record<string, number> | null => {
+  const t = parseFloat(time.toFixed(3));
+  if (typeof val === 'number') {
+    if (!Number.isFinite(val)) return null;
+    const num = parseFloat(val.toFixed(6));
+    return { time: t, value: num, in1: num };
+  }
+  const point: Record<string, number> = { time: t };
+  for (const [k, v] of Object.entries(val ?? {})) {
+    if (k === '__perScope') continue;
+    if (typeof v === 'number' && !Number.isFinite(v)) continue;
+    point[k] = parseFloat(scalarSample(v, { scopeId: 'scope', channel: 1, variable: k }).toFixed(6));
+  }
+  if (point.in1 === undefined && point.value !== undefined) point.in1 = point.value;
+  return Object.keys(point).length > 1 ? point : null;
+};
 export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   nodes: initialNodes,
   edges: initialEdges,
@@ -1799,35 +1821,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
             if (shouldSample) {
               setScopeData(prev => {
-                let newPoint: any;
-                if (typeof val === 'number') {
-                  if (!Number.isFinite(val)) return prev;
-                  const num = parseFloat(val.toFixed(6));
-                  newPoint = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
-                } else {
-                  const entries = Object.entries(val)
-                    .filter(([k]) => k !== '__perScope')
-                    .map(([k, v]) => {
-                      const numVal = parseFloat((v as number).toFixed(6));
-                      return [k, Number.isFinite(numVal) ? numVal : 0];
-                    });
-                  const obj = Object.fromEntries(entries);
-                  const values = Object.values(obj) as number[];
-                  newPoint = {
-                    time: parseFloat(nextT.toFixed(3)),
-                    ...obj,
-                    in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                    in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
-                    in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
-                    in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
-                    in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
-                    in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
-                    in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
-                    in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
-                  };
-                }
-                
-                const next = [...prev, newPoint];
+                const newPoint = buildScopePoint(nextT, val);
+                if (!newPoint) return prev;
+                                const next = [...prev, newPoint];
                 if (limitDataPoints) {
                   return next.slice(-bufferSize);
                 }
@@ -1840,34 +1836,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 setPerScopeData(prevMap => {
                   const nextMap = { ...prevMap };
                   for (const [scopeId, scopeVal] of Object.entries(perScope)) {
-                    let point: any;
-                    if (typeof scopeVal === 'number') {
-                      if (!Number.isFinite(scopeVal)) continue;
-                      const num = parseFloat(scopeVal.toFixed(6));
-                      point = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
-                    } else {
-                      const entries = Object.entries(scopeVal)
-                        .filter(([k]) => k !== '__perScope')
-                        .map(([k, v]) => {
-                          const numVal = parseFloat((v as number).toFixed(6));
-                          return [k, Number.isFinite(numVal) ? numVal : 0];
-                        });
-                      const obj = Object.fromEntries(entries);
-                      const values = Object.values(obj) as number[];
-                      point = {
-                        time: parseFloat(nextT.toFixed(3)),
-                        ...obj,
-                        in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                        in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
-                        in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
-                        in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
-                        in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
-                        in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
-                        in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
-                        in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
-                      };
-                    }
-                    const prev = nextMap[scopeId] || [];
+                    const point = buildScopePoint(nextT, scopeVal);
+                    if (!point) continue;                    const prev = nextMap[scopeId] || [];
                     const next = [...prev, point];
                     nextMap[scopeId] = limitDataPoints ? next.slice(-bufferSize) : next.slice(-20000);
                   }
@@ -2704,9 +2674,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           // Prune any incoming edges to channels exceeding new capacity
           setEdges(eds => eds.filter(e => {
             if (e.target !== n.id) return true;
-            let t = (e.targetHandle || '').replace(/_[st]$/, '');
-            if (t.startsWith(n.id + '-')) t = t.slice(n.id.length + 1);
-            const ch = parseInt(t.replace(/\D/g, '')) || 1;
+            // exact scope channel id (same portIdFromHandle path as the assembler), not a suffix strip + digit scrape
+            const portId = portIdFromHandle({ id: n.id, data: { type: 'scope' } }, e.targetHandle) ?? 'in1';
+            const ch = Number(portId.match(/^in(\d+)$/)?.[1] ?? 1);
             return ch <= num;
           }));
         }
@@ -4075,9 +4045,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     // Prune any incoming edges to channels exceeding new capacity
                     setEdges(eds => eds.filter(e => {
                       if (e.target !== scopeId) return true;
-                      let t = (e.targetHandle || '').replace(/_[st]$/, '');
-                      if (t.startsWith(scopeId + '-')) t = t.slice(scopeId.length + 1);
-                      const ch = parseInt(t.replace(/\D/g, '')) || 1;
+                      // exact scope channel id (same portIdFromHandle path as the assembler), not a suffix strip + digit scrape
+                      const portId = portIdFromHandle({ id: scopeId, data: { type: 'scope' } }, e.targetHandle) ?? 'in1';
+                      const ch = Number(portId.match(/^in(\d+)$/)?.[1] ?? 1);
                       return ch <= num;
                     }));
                   }

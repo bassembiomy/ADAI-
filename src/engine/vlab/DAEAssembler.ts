@@ -11,6 +11,8 @@ import {
   validateMultibodyConstraintTopology,
 } from './vlabConstraintDiagnostics';
 import { portIdFromHandle } from './vlabConnectionRules';
+import { BlockEquationError, NonFiniteResidualError, type ResidualDiagnostic } from './vlabResidualDiagnostics';
+import { ScopeReadError } from './vlabScopeRead';
 import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
@@ -1002,6 +1004,31 @@ export class DAEAssembler {
         const stateVals = watch(stateIndices.map(idx => x[idx]), 'state');
         const stateDervs = watch(stateIndices.map(idx => dx[idx]), 'dState');
 
+        // A non-finite input (a diverged Newton iterate) must never reach the equation: the many `across[i] || 0`
+        // optional-port reads inside the factories would silently turn NaN into 0 (F-045). Missing (undefined) ports
+        // are not flagged: those are the optional-port reads, which are legitimately 0.
+        if (!guard) {
+          const bad: ResidualDiagnostic[] = [];
+          const scan = (label: string, value: unknown) => {
+            const parts = Array.isArray(value) ? value : [value];
+            parts.forEach((v, k) => {
+              if (typeof v === 'number' && !Number.isFinite(v)) {
+                const name = Array.isArray(value) ? `${label}[${k}]` : label;
+                bad.push({
+                  kind: 'non-finite-input', blockId: node.id, blockType: type, rowIndex: -1, variable: name, value: v,
+                  reason: `Block "${node.id}" (${type}): input ${name} is ${v}`,
+                });
+              }
+            });
+          };
+          ports.forEach((portId, i) => { scan(`across.${portId}`, acrossVals[i]); scan(`dAcross.${portId}`, acrossDervs[i]); });
+          branchVals.forEach((v, i) => scan(`branch.${variableNames[branchIndices[i]] ?? i}`, v));
+          branchDervs.forEach((v, i) => scan(`dBranch.${variableNames[branchIndices[i]] ?? i}`, v));
+          stateVals.forEach((v, i) => scan(`state.${variableNames[stateIndices[i]] ?? i}`, v));
+          stateDervs.forEach((v, i) => scan(`dState.${variableNames[stateIndices[i]] ?? i}`, v));
+          if (bad.length) throw new NonFiniteResidualError(bad);
+        }
+
         try {
           return equationFactory({
             across: acrossVals,
@@ -1024,8 +1051,13 @@ export class DAEAssembler {
             }));
           }
           if (guard) throw e; // structural probe: the caller skips the check when the equation cannot be evaluated
-          console.error(`Error calculating residual for ${node.id} (${type}):`, e);
-          return new Array(equationCount).fill(0);
+          if (e instanceof NonFiniteResidualError || e instanceof BlockEquationError || e instanceof DAEStructureError) throw e;
+          // An equation that throws is never replaced by a zero residual (F-045): it is a non-recoverable diagnostic.
+          const message = e instanceof Error ? e.message : String(e);
+          throw new BlockEquationError([{
+            kind: 'equation-threw', blockId: node.id, blockType: type, rowIndex: -1, error: message,
+            reason: `Block "${node.id}" (${type}): equation threw: ${message}`,
+          }], e);
         }
       };
 
@@ -1337,7 +1369,6 @@ export class DAEAssembler {
         const canonicalPorts = Array.from({ length: numSignals }, (_, i) => `in${i + 1}`);
 
         const indices = canonicalPorts.map(pId => {
-          const targetKey = `${node.id}_${pId}`;
           const edge = edges.find(e => {
             if (e.target === node.id) {
               const tPort = resolveHandlePort(e.target, e.targetHandle || 'in1');
@@ -1366,45 +1397,30 @@ export class DAEAssembler {
             const sourceType = (sourceNode?.data as any)?.type || sourceNode?.type || (sourceNode?.data as any)?.blockId || '';
             const sourceSpec = getComponentSpec(otherNodeId, sourceType, sourcePorts);
             
-            let matchingBranchIdx = sourceSpec.branches.findIndex(b =>
-              b.name === `signal_${srcPort}` || b.name === srcPort
-            );
-            if (matchingBranchIdx === -1 && sourceBranchIndices.length > 0) {
-              if (sourceType === 'force_source' || sourceType === 'force_sensor') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'force' || b.name.includes('force'));
-              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor' || sourceType === 'ang_vel_source') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'torque' || b.name.includes('torque'));
-              } else if (sourceType === 'current_source' || sourceType === 'controlled_current' || sourceType === 'current_sensor' || sourceType === 'ideal_current_sensor') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'current' || b.name.includes('current'));
-              } else if (sourceType === 'heat_src' || sourceType === 'ctrl_heat_src' || sourceType === 'temp_sensor') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('heat') || b.name.includes('signal_t'));
-              } else if (sourceType === 'mass_flow_src' || sourceType === 'ctrl_mass_flow') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('mass_flow'));
-              } else if (sourceType === 'mag_flux_sensor') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_phi' || b.name.includes('phi'));
-              } else if (sourceType === 'mag_mmf_sensor') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name.includes('f'));
-              } else if (sourceType === 'belt_end') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f' || b.name === 'force');
-              } else if (sourceType === 'belt_spool' || sourceType === 'pulley') {
-                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t' || b.name === 'torque');
-              } else if (sourceType === 'dist_constraint') {
-                if (srcPort === 'd') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_d');
-                else if (srcPort === 'f_reac' || srcPort === 'f') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_f');
-              } else if (sourceType === 'angle_constraint') {
-                if (srcPort === 'ang' || srcPort === 'angle') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_ang');
-                else if (srcPort === 't_reac' || srcPort === 't') matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'signal_t');
-              }
+            // A Frame is a 6-vector, never a scalar channel: reject it before anything is bound (vlabScopeRead.ts).
+            const srcDomain = nodePortDomains.get(srcKey);
+            if (srcDomain === 'frame' || srcDomain === 'multibodyframe') {
+              throw new ScopeReadError({
+                code: 'frame', scopeId: node.id, channel: canonicalPorts.indexOf(pId) + 1, variable: srcKey,
+                reason: `scope "${node.id}" channel ${canonicalPorts.indexOf(pId) + 1} is wired to Frame port "${otherNodeId}.${srcPort}"; a Frame is not a scalar signal (use a Transform Sensor for its components)`,
+              });
             }
 
+            // The channel reads the signal branch of EXACTLY the wired port: the branch named for that port id, or the
+            // single-port signal branch attached to it. No block-type heuristics, no "first branch that looks right".
+            const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
+              b.name === `signal_${srcPort}` || b.name === srcPort
+              || (b.name.startsWith('signal_') && b.ports.length === 1 && b.ports[0].id === srcPort)
+            );
             if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
               return sourceBranchIndices[matchingBranchIdx];
             }
             
-            const varIdx = portToVarIndex.get(srcKey);
-            return varIdx !== undefined ? varIdx : (portToVarIndex.get(targetKey) ?? -1);
+            // wired to a conserving net: the net's across variable (the editor and the pre-solve check reject this for scopes)
+            return portToVarIndex.get(srcKey) ?? -1;
           } else {
-            return portToVarIndex.get(targetKey) ?? -1;
+            // unwired channel: no variable at all. It used to bind to the scope's own pinned-to-0 port node and read a silent 0.
+            return -1;
           }
         });
         scopeOutputs.set(node.id, indices);
@@ -1431,7 +1447,8 @@ export class DAEAssembler {
       if (arg3 === undefined) {
         // Called with (x, ctx)
         ctx = arg2 as EquationContext;
-        dx = x.map((val, idx) => (val - (ctx.prevStates[idx] || 0)) / ctx.dt);
+        // A non-finite previous state propagates (and is reported by the block that reads it), never reads as 0.
+        dx = x.map((val, idx) => (val - ctx.prevStates[idx]) / ctx.dt);
       } else {
         // Called with (x, dx, ctx)
         dx = arg2 as number[];
@@ -1455,13 +1472,24 @@ export class DAEAssembler {
         
         const compRes = comp.residual(x, dx, ctx);
         
+        // Row i of the block equation is the equation of its i-th allocated unknown (branches, then states). A
+        // non-finite row is a diagnostic naming block / row / unknown, never 0 (F-045).
+        const bad: ResidualDiagnostic[] = [];
         let resPtr = 0;
-        branchIndices.forEach(idx => {
-          res[idx] = compRes[resPtr++] || 0;
+        [...branchIndices, ...stateIndices].forEach(idx => {
+          const value = compRes[resPtr];
+          if (typeof value !== 'number' || !Number.isFinite(value)) {
+            bad.push({
+              kind: 'non-finite-residual', blockId: comp.blockId, blockType: comp.blockType, rowIndex: resPtr,
+              variable: variableNames[idx], value: value as number,
+              reason: `Block "${comp.blockId}" (${comp.blockType}): residual row ${resPtr} (${variableNames[idx]}) is ${value}`,
+            });
+          } else {
+            res[idx] = value;
+          }
+          resPtr++;
         });
-        stateIndices.forEach(idx => {
-          res[idx] = compRes[resPtr++] || 0;
-        });
+        if (bad.length) throw new NonFiniteResidualError(bad);
       });
       
       // Set equations for physical nodes (Kirchhoff Conservation or Reference Constraints)
@@ -1553,6 +1581,20 @@ export class DAEAssembler {
           }
         }
       });
+
+      // Node rows (Kirchhoff / reference constraints) can also be non-finite when an unknown diverged.
+      const badRows: ResidualDiagnostic[] = [];
+      for (let i = 0; i < res.length; i++) {
+        if (!Number.isFinite(res[i])) {
+          const owner = variableOwners[i] ?? { blockId: '', blockType: '' };
+          badRows.push({
+            kind: 'non-finite-residual', blockId: owner.blockId, blockType: owner.blockType, rowIndex: i,
+            variable: variableNames[i], value: res[i],
+            reason: `Row ${i} (${variableNames[i]}${owner.blockId ? `, owner "${owner.blockId}" (${owner.blockType})` : ''}) is ${res[i]}`,
+          });
+        }
+      }
+      if (badRows.length) throw new NonFiniteResidualError(badRows);
 
       return res;
     };

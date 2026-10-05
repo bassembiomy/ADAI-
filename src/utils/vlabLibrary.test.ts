@@ -41,23 +41,23 @@ describe('VLab Library Search & Scoring', () => {
     const pmsm = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'pmsm');
 
     expect(pmsm?.params.Kt).toBeUndefined();
-    expect(pmsm?.params.Ld).toEqual({ value: 0.005, unit: 'H', label: 'D-axis Inductance' });
-    expect(pmsm?.params.Lq).toEqual({ value: 0.005, unit: 'H', label: 'Q-axis Inductance' });
-    expect(pmsm?.params.flux).toEqual({ value: 0.1, unit: 'Wb', label: 'PM Flux' });
-    expect(pmsm?.params.J).toEqual({ value: 0.02, unit: 'kg-m^2', label: 'Inertia' });
-    expect(pmsm?.params.B).toEqual({ value: 0.002, unit: 'N-m-s/rad', label: 'Viscous Damping' });
+    expect(pmsm?.params.Ld).toMatchObject({ value: 0.005, unit: 'H', label: 'D-axis Inductance' });
+    expect(pmsm?.params.Lq).toMatchObject({ value: 0.005, unit: 'H', label: 'Q-axis Inductance' });
+    expect(pmsm?.params.flux).toMatchObject({ value: 0.1, unit: 'Wb', label: 'PM Flux' });
+    expect(pmsm?.params.J).toMatchObject({ value: 0.02, unit: 'kg-m^2', label: 'Inertia' });
+    expect(pmsm?.params.B).toMatchObject({ value: 0.002, unit: 'N-m-s/rad', label: 'Viscous Damping' });
   });
 
   it('exposes every DC Motor parameter used by the simulation equation', () => {
     const dcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'dc_motor');
 
     expect(dcMotor?.equation).toContain('T = Kt*I');
-    expect(dcMotor?.params.Kt).toEqual({
+    expect(dcMotor?.params.Kt).toMatchObject({
       value: 0.05,
       unit: 'N-m/A',
       label: 'Torque Const'
     });
-    expect(dcMotor?.params.B).toEqual({
+    expect(dcMotor?.params.B).toMatchObject({
       value: 0.001,
       unit: 'N-m-s/rad',
       label: 'Viscous Damping'
@@ -67,22 +67,22 @@ describe('VLab Library Search & Scoring', () => {
   it('exposes the BLDC Motor electrical and mechanical runtime parameters', () => {
     const bldcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'bldc_motor');
 
-    expect(bldcMotor?.params.Ls).toEqual({
+    expect(bldcMotor?.params.Ls).toMatchObject({
       value: 0.002,
       unit: 'H',
       label: 'Phase Ind'
     });
-    expect(bldcMotor?.params.Kt).toEqual({
+    expect(bldcMotor?.params.Kt).toMatchObject({
       value: 0.1,
       unit: 'N-m/A',
       label: 'Torque Const'
     });
-    expect(bldcMotor?.params.J).toEqual({
+    expect(bldcMotor?.params.J).toMatchObject({
       value: 0.02,
       unit: 'kg-m^2',
       label: 'Inertia'
     });
-    expect(bldcMotor?.params.B).toEqual({
+    expect(bldcMotor?.params.B).toMatchObject({
       value: 0.002,
       unit: 'N-m-s/rad',
       label: 'Viscous Damping'
@@ -92,12 +92,12 @@ describe('VLab Library Search & Scoring', () => {
   it('exposes the AC Motor mechanical parameters used by the simulation equation', () => {
     const acMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'ac_motor');
 
-    expect(acMotor?.params.J).toEqual({
+    expect(acMotor?.params.J).toMatchObject({
       value: 0.05,
       unit: 'kg-m^2',
       label: 'Inertia'
     });
-    expect(acMotor?.params.B).toEqual({
+    expect(acMotor?.params.B).toMatchObject({
       value: 0.005,
       unit: 'N-m-s/rad',
       label: 'Viscous Damping'
@@ -128,10 +128,10 @@ describe('VLab Library Search & Scoring', () => {
 
   it('exposes an explicit inverter control contract', () => {
     const inverter = VLAB_LIBRARY.flatMap(d => d.blocks).find(b => b.id === 'pwm_3ph_2level');
-    expect(inverter?.params.model_mode).toEqual({ value: 'averaged', unit: '', label: 'Model Mode' });
-    expect(inverter?.params.control_mode).toEqual({ value: 'three_phase_modulation', unit: '', label: 'Control Mode' });
-    expect(inverter?.params.output_frequency_hz).toEqual({ value: 50, unit: 'Hz', label: 'Output Frequency' });
-    expect(inverter?.params.output_resistance_ohm).toEqual({ value: 0.001, unit: 'ohm', label: 'Output Resistance' });
+    expect(inverter?.params.model_mode).toMatchObject({ value: 'averaged', unit: '', label: 'Model Mode' });
+    expect(inverter?.params.control_mode).toMatchObject({ value: 'three_phase_modulation', unit: '', label: 'Control Mode' });
+    expect(inverter?.params.output_frequency_hz).toMatchObject({ value: 50, unit: 'Hz', label: 'Output Frequency' });
+    expect(inverter?.params.output_resistance_ohm).toMatchObject({ value: 0.001, unit: 'ohm', label: 'Output Resistance' });
     expect(inverter?.ports.map(p => p.id)).toEqual(['vabc', 'ma', 'mb', 'mc', 'p', 'n', 'a', 'b', 'c']);
   });
 
@@ -139,8 +139,8 @@ describe('VLab Library Search & Scoring', () => {
     const block = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(item => item.id === 'pwm_3ph_3level');
     expect(block?.ports.map(port => port.id)).toEqual(['vabc', 'vdc', 'vneut', 'ga', 'gb', 'gc', 'ma', 'mb', 'mc']);
     expect(block?.ports.every(port => port.domain === 'Physical')).toBe(true);
-    expect(block?.params.output_frequency_hz).toEqual({ value: 50, unit: 'Hz', label: 'Output Frequency' });
-    expect(block?.params.neutral_balance_gain).toEqual({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
+    expect(block?.params.output_frequency_hz).toMatchObject({ value: 50, unit: 'Hz', label: 'Output Frequency' });
+    expect(block?.params.neutral_balance_gain).toMatchObject({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
   });
 
   it('exposes physical Vienna Rectifier PWM inputs and scalar outputs', () => {
@@ -151,10 +151,10 @@ describe('VLab Library Search & Scoring', () => {
       'ga', 'gb', 'gc', 'ma', 'mb', 'mc'
     ]);
     expect(block?.ports.every(port => port.domain === 'Physical')).toBe(true);
-    expect(block?.params.f_sw).toEqual({ value: 10000, unit: 'Hz', label: 'Switch Freq' });
-    expect(block?.params.vdc_ref).toEqual({ value: 800, unit: 'V', label: 'Vdc Ref' });
-    expect(block?.params.kp_v).toEqual({ value: 0.1, unit: 'A/V', label: 'Voltage Prop Gain' });
-    expect(block?.params.neutral_balance_gain).toEqual({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
+    expect(block?.params.f_sw).toMatchObject({ value: 10000, unit: 'Hz', label: 'Switch Freq' });
+    expect(block?.params.vdc_ref).toMatchObject({ value: 800, unit: 'V', label: 'Vdc Ref' });
+    expect(block?.params.kp_v).toMatchObject({ value: 0.1, unit: 'A/V', label: 'Voltage Prop Gain' });
+    expect(block?.params.neutral_balance_gain).toMatchObject({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
   });
 });
 

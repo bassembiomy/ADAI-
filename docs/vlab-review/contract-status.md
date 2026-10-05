@@ -14,7 +14,7 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | Blocks with no equation text | 0 |
 | Unsafe numeric `params.X ||` fallbacks in vlabEquations.ts | 0 |
 | Fully certified blocks (all checks pass, no expected failure) | 134 of 248 |
-| Expected failures (ratchet entries) | 164 across 114 blocks |
+| Expected failures (ratchet entries) | 167 across 114 blocks |
 
 ## Per check (blocks)
 | Check | Meaning | Pass | Fail | Expected failure |
@@ -28,12 +28,13 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | dae-allocation | DAE branches/states allocated == consumed; residual length == allocated unknowns | 248 | 0 | 0 |
 | scope-routing | every signal output port is reachable by a scope through the real routing path | 248 | 0 | 0 |
 | unsupported | block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a) | 227 | 21 | 21 |
+| finite-residual | every residual row is finite at the nominal evaluation point (a NaN is never masked as 0, F-045) | 245 | 3 | 3 |
 | equation-doc | library equation text is specific (not generic or missing) | 147 | 101 | 101 |
 
 ## Expected failures per owning WP
 | WP | Total | Breakdown by check |
 |---|---|---|
-| WP-19a | 4 | params-dead 1, equation-doc 3 |
+| WP-19a | 7 | params-dead 1, finite-residual 3, equation-doc 3 |
 | WP-10 | 1 | unsupported 1 |
 | WP-12 | 1 | equation-doc 1 |
 | WP-13 | 1 | equation-doc 1 |

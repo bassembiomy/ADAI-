@@ -226,9 +226,8 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
           normalizedPt[chKey] = Number(pt[chKey]);
         } else if (i === 0 && pt.value !== undefined && Number.isFinite(Number(pt.value))) {
           normalizedPt[chKey] = Number(pt.value);
-        } else {
-          normalizedPt[chKey] = 0;
         }
+        // no sample for this channel (unwired or not produced): leave the key out so the trace shows a gap, never a fabricated 0
       });
 
       // Also preserve all raw keys
@@ -300,7 +299,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
       const color = SIMULINK_SCOPE_COLORS[i % SIMULINK_SCOPE_COLORS.length];
       return {
         key,
-        name: info?.connected ? `${info.blockLabel}.${info.portName}` : `Channel ${i + 1}`,
+        name: info?.connected ? (info.channelLabel || `${info.blockLabel}.${info.portName}`) : `Channel ${i + 1}`,
         color,
         ...stats
       };
@@ -710,7 +709,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                             const info = signalInfos[chIndex];
                             const color = SIMULINK_SCOPE_COLORS[chIndex % SIMULINK_SCOPE_COLORS.length];
                             const isHidden = !!hiddenChannels[chKey];
-                            const label = info?.connected ? `${info.blockLabel}.${info.portName}` : (info?.fullName || chKey);
+                            const label = info?.connected ? (info.channelLabel || `${info.blockLabel}.${info.portName}`) : (info?.fullName || chKey);
 
                             return (
                               <button

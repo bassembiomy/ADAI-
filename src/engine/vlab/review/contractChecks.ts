@@ -18,7 +18,7 @@ import {
 
 export const CHECK_IDS = [
   'unique-ids', 'classification', 'port-domains', 'equation-factory', 'params-hidden', 'params-dead',
-  'dae-allocation', 'scope-routing', 'unsupported', 'equation-doc',
+  'dae-allocation', 'scope-routing', 'unsupported', 'finite-residual', 'equation-doc',
 ] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
 
@@ -32,6 +32,7 @@ export const CHECK_TITLES: Record<CheckId, string> = {
   'dae-allocation': 'DAE branches/states allocated == consumed; residual length == allocated unknowns',
   'scope-routing': 'every signal output port is reachable by a scope through the real routing path',
   'unsupported': 'block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a)',
+  'finite-residual': 'every residual row is finite at the nominal evaluation point (a NaN is never masked as 0, F-045)',
   'equation-doc': 'library equation text is specific (not generic or missing)',
 };
 
@@ -171,6 +172,11 @@ export function evaluateBlock(ctx: BlockContext): Record<CheckId, string[]> {
     }
   }
 
+  // 6b. finite residual (WP-09b)
+  if (!unsupported && assembly.assembled && assembly.nonFiniteRows.length) {
+    res['finite-residual'].push(`residual row(s)  are not finite at the nominal point`);
+  }
+
   // 7. scope routing of signal outputs
   if (cls !== 'utility' && !unsupported) {
     for (const portId of ctx.signalOutputPorts) {
@@ -237,6 +243,7 @@ export function wpFor(ctx: BlockContext, check: CheckId): WpId | null {
     // the unsupported table names the work package that owns the missing spec
     case 'unsupported': return (UNSUPPORTED_BLOCKS[ctx.block.id]?.wp as WpId | undefined) ?? null;
     case 'equation-doc': return equationWp(ctx);
+    case 'finite-residual': return equationWp(ctx);
     default: return null; // unique-ids, classification, equation-factory must pass today; never expected to fail
   }
 }

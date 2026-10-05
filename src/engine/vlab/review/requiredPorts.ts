@@ -17,6 +17,7 @@ import { DAEAssembler } from '../DAEAssembler';
 import { blockEquations, type BlockEquationArgs } from '../vlabEquations';
 import { assembleSingleBlock, libraryDefaults } from './contractInventory';
 import { DAEStructureError } from '../vlabStructure';
+import { NonFiniteResidualError } from '../vlabResidualDiagnostics';
 
 const CONSERVING = new Set(['electrical', 'thermal', 'translational', 'rotational', 'magnetic', 'fluid', 'gas', 'isothermal_liquid', 'frame', 'multibodyframe']);
 const FRAME = new Set(['frame', 'multibodyframe']);
@@ -139,6 +140,8 @@ export function requiredConservingPorts(b: VLabBlock): ConservingAnalysis {
     } catch (e) {
       // WP-09a: a block whose equation does not match its allocation (explicitly unsupported) has no Jacobian to judge
       if (e instanceof DAEStructureError) return null;
+      // WP-09b: a non-finite residual (block bug, F-045) has no Jacobian to judge either; it is reported by `finite-residual`
+      if (e instanceof NonFiniteResidualError) return null;
       throw e;
     }
     return J;

@@ -121,6 +121,8 @@ export interface SingleBlockAssembly {
   /** length of the array the equation factory returns for correctly sized args (-1 = threw / no factory) */
   residualLength: number;
   residualError?: string;
+  /** rows of the equation result that are not finite at the nominal (all-zero) evaluation point (WP-09b, F-045) */
+  nonFiniteRows: number[];
   systemSize: number;
   variableNames: string[];
   /** domain the assembler actually resolved for each library port (lower case), read from its Across variable names */
@@ -164,7 +166,7 @@ function resolvePortDomains(b: VLabBlock, names: string[]): Record<string, strin
  */
 export function assembleSingleBlock(b: VLabBlock): SingleBlockAssembly {
   const base: SingleBlockAssembly = {
-    assembled: false, allocatedBranches: 0, allocatedStates: 0, equationCount: 0, residualLength: -1, systemSize: 0, variableNames: [], portDomains: {},
+    assembled: false, allocatedBranches: 0, allocatedStates: 0, equationCount: 0, residualLength: -1, nonFiniteRows: [], systemSize: 0, variableNames: [], portDomains: {},
   };
   try {
     const sys = quiet(() => new DAEAssembler().assemble([dutNode(b)], []));
@@ -191,6 +193,7 @@ export function assembleSingleBlock(b: VLabBlock): SingleBlockAssembly {
           ctx, params: libraryDefaults(b), ports: portIds, nodeId: 'dut', connectedPorts: [],
         } as BlockEquationArgs));
         out.residualLength = Array.isArray(res) ? res.length : -1;
+        if (Array.isArray(res)) out.nonFiniteRows = res.flatMap((v, i) => (typeof v === 'number' && Number.isFinite(v) ? [] : [i]));
       } catch (e: any) {
         out.residualError = String(e?.message ?? e);
       }

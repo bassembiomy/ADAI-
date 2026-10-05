@@ -23,6 +23,12 @@ const KNOWN_SOLVER_FAILURES: Record<string, { finding: string; wp: string; diagn
     finding: 'F-012', wp: 'WP-10..21 (multibody)',
     diagnosis: 'frame ports b/f are unconnected by the fixture (no multibody world/rigid body); constraint rows unbalanced',
   },
+  // WP-09b (F-045): these joint equations subtract two 6-vector Frame values as scalars (`across[0] - across[1]`), which
+  // is NaN. The assembler used to turn that NaN into a 0 residual (`|| 0`), so the joint silently carried no torque/force.
+  // The NaN is now a diagnostic naming the block; the physics (frame-pose constraint + reaction wrench) belongs to WP-19a.
+  revolute_joint: { finding: 'F-045', wp: 'WP-19a', diagnosis: 'equation treats Frame ports as scalars: residual is NaN (was masked as 0)' },
+  prismatic_joint: { finding: 'F-045', wp: 'WP-19a', diagnosis: 'equation treats Frame ports as scalars: residual is NaN (was masked as 0)' },
+  weld_joint: { finding: 'F-045', wp: 'WP-19a', diagnosis: 'equation treats Frame ports as scalars: residual is NaN (was masked as 0)' },
   // WP-07: the fixture now wires every signal input by its declared direction (library `direction`). These blocks used to
   // pass only because the old name-vocabulary fixture put a Scope on an input port and left the real input unwired.
   im_flux_observer: {

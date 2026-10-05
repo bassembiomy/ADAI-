@@ -230,7 +230,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const portValue = (id: string, fallbackIndex: number) => {
       const index = ports?.indexOf(id) ?? -1;
       const value = index >= 0 ? across[index] : across[fallbackIndex];
-      return Number.isFinite(value) ? value : 0;
+      // a port the block does not have reads 0 (optional port); a NaN input never gets here (the assembler rejects it)
+      return value ?? 0;
     };
     const Vd = portValue('d', 0);
     const Vs = portValue('s', 1);
@@ -256,7 +257,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const smooth = 0.5 * (1 + Math.tanh(Vov * 5));
     const Id = Id_target * smooth;
     const residual = branch[0] - Id;
-    return [Number.isFinite(residual) ? residual : 0];
+    // A non-finite residual is reported by the assembler (block, row), never turned into 0 (F-045).
+    return [residual];
   },
   
   igbt: ({ across, branch, params }) => {
@@ -1301,7 +1303,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── INVERTERS & CONTROL BLOCKS ─────────────────────────────────────────────
   pwm_3ph_2level: ({ across, branch, params, ctx }) => {
-    const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+    const clamp = (value: number) => Math.min(1, Math.max(0, value ?? 0));
     const f_out = numericParam(params, 'output_frequency_hz', 50);
     const refs = stringParam(params, 'control_mode', '') === 'sinusoidal_modulation'
       ? [0, -2 * Math.PI / 3, 2 * Math.PI / 3].map(offset => 0.5 + 0.4 * clamp(across[0]) * Math.sin(2 * Math.PI * ((ctx.time * f_out) % 1) + offset))

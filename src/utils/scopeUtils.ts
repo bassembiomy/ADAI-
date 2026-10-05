@@ -1,3 +1,5 @@
+import { blockTypeOf, libraryBlock, portIdFromHandle } from '../engine/vlab/vlabConnectionRules';
+
 // src/utils/scopeUtils.ts
 
 export interface VLabSignalInfo {
@@ -7,6 +9,13 @@ export interface VLabSignalInfo {
   portName: string;
   blockLabel: string;
   fullName: string;
+  /** exact id of the source port the channel is wired to */
+  portId?: string;
+  /** measured quantity / SI unit of that port (library metadata, WP-09b) */
+  quantity?: string;
+  unit?: string;
+  /** `<block name>.<port label> - <quantity> [<unit>]` */
+  channelLabel: string;
 }
 
 export interface SignalStatistics {
@@ -40,6 +49,17 @@ export const SIMULINK_SCOPE_COLORS = [
 // Fallback compatibility export
 export const VLAB_SIGNAL_COLORS = SIMULINK_SCOPE_COLORS;
 
+/**
+ * Scope channel caption: `<block name>.<port label> - <quantity> [<unit>]` (user section 9). `unit` `*` marks a
+ * unit-polymorphic block (the channel has the unit of the signal wired to the block's input), `1` is dimensionless.
+ */
+export function formatChannelLabel(blockName: string, portLabel: string, quantity?: string, unit?: string): string {
+  const base = `${blockName}.${portLabel}`;
+  if (!quantity) return base;
+  const u = !unit ? '' : unit === '*' ? ' [unit of input]' : ` [${unit}]`;
+  return `${base} — ${quantity}${u}`;
+}
+
 export function getVLabSignalInfo(
   scopeNodeId: string,
   channelIndex: number,
@@ -48,16 +68,10 @@ export function getVLabSignalInfo(
   history: any[] = []
 ): VLabSignalInfo {
   const targetPortId = `in${channelIndex + 1}`;
-  const edge = edges?.find(
-    (e: any) => {
-      if (e.target !== scopeNodeId) return false;
-      let t = (e.targetHandle || '').replace(/_[st]$/, '');
-      if (t.startsWith(scopeNodeId + '-')) {
-        t = t.slice(scopeNodeId.length + 1);
-      }
-      return t === targetPortId || (channelIndex === 0 && (t === 'p' || t === 'in' || t === 'in1' || t === ''));
-    }
-  );
+  // The scope port behind an edge handle is resolved by its EXACT port id (the same portIdFromHandle path the
+  // assembler uses), never by stripping a `_s`/`_t` suffix.
+  const scopeNode = nodes?.find((n: any) => n.id === scopeNodeId) ?? { id: scopeNodeId, data: { type: 'scope' } };
+  const edge = edges?.find((e: any) => e.target === scopeNodeId && portIdFromHandle(scopeNode, e.targetHandle) === targetPortId);
 
   if (!edge) {
     return {
@@ -66,7 +80,8 @@ export function getVLabSignalInfo(
       dataType: 'auto',
       portName: targetPortId,
       blockLabel: 'Unconnected',
-      fullName: `Channel ${channelIndex + 1}: Unconnected (auto)`
+      fullName: `Channel ${channelIndex + 1}: Unconnected (auto)`,
+      channelLabel: `Channel ${channelIndex + 1}: Unconnected`,
     };
   }
 
@@ -75,12 +90,16 @@ export function getVLabSignalInfo(
     ? sourceNode.data?.label || sourceNode.data?.name || sourceNode.data?.type || edge.source
     : edge.source;
 
-  const sourcePortObj = sourceNode?.data?.outputs?.find(
-    (p: any) => p.id === edge.sourceHandle || p.name === edge.sourceHandle
-  );
-  const portName = sourcePortObj?.name || sourcePortObj?.label || edge.sourceHandle || 'out';
+  // The source port is the exact port the wire is attached to: instance metadata first, then the library definition.
+  const sourcePortId = sourceNode ? portIdFromHandle(sourceNode, edge.sourceHandle) : undefined;
+  const instancePort = Array.isArray(sourceNode?.data?.ports) ? sourceNode.data.ports.find((p: any) => p?.id === sourcePortId) : undefined;
+  const libPort = sourceNode ? libraryBlock(blockTypeOf(sourceNode))?.ports.find(p => p.id === sourcePortId) : undefined;
+  const legacyPort = sourceNode?.data?.outputs?.find((p: any) => p.id === edge.sourceHandle || p.name === edge.sourceHandle);
+  const portName: string = legacyPort?.name || legacyPort?.label || instancePort?.label || libPort?.label || sourcePortId || edge.sourceHandle || 'out';
+  const quantity: string | undefined = libPort?.quantity ?? instancePort?.quantity;
+  const unit: string | undefined = libPort?.quantity !== undefined ? libPort.unit : instancePort?.unit;
 
-  let baseType = sourcePortObj?.dataType || 'double';
+  let baseType = legacyPort?.dataType || 'double';
 
   // Check dimension info if history exists
   let dimensionsStr = '';
@@ -104,9 +123,14 @@ export function getVLabSignalInfo(
     dataType,
     portName,
     blockLabel: sourceBlockLabel,
-    fullName: `Channel ${channelIndex + 1}: ${sourceBlockLabel}.${portName} (${dataType})`
+    fullName: `Channel ${channelIndex + 1}: ${sourceBlockLabel}.${portName} (${dataType})`,
+    portId: sourcePortId,
+    quantity,
+    unit,
+    channelLabel: formatChannelLabel(sourceBlockLabel, portName, quantity, unit),
   };
 }
+
 
 export function calculateSignalStatistics(data: any[], signalKey: string): SignalStatistics {
   if (!data || data.length === 0) {
@@ -198,13 +222,14 @@ export function exportScopeToCSV(
   displayData: any[],
   signalInfos: VLabSignalInfo[]
 ): string {
-  const headers = ['Time (s)', ...signalInfos.map(s => `"${s.fullName.replace(/"/g, '""')}"`)].join(',');
+  const headers = ['Time (s)', ...signalInfos.map(s => `"${(s.channelLabel || s.fullName).replace(/"/g, '""')}"`)].join(',');
   const rows = displayData.map(pt => {
     const timeVal = (pt.time !== undefined ? pt.time : pt.t || 0).toFixed(3);
     const signalVals = signalInfos.map((_, i) => {
       const key = `in${i + 1}`;
-      const val = pt[key] !== undefined ? pt[key] : (i === 0 && pt.value !== undefined ? pt.value : 0);
-      return typeof val === 'number' ? val : (val ? 1 : 0);
+      const val = pt[key] !== undefined ? pt[key] : (i === 0 && pt.value !== undefined ? pt.value : undefined);
+      // A missing channel sample is an empty cell, never a fabricated 0.
+      return typeof val === 'number' ? val : (val === undefined || val === null ? '' : (val ? 1 : 0));
     });
     return [timeVal, ...signalVals].join(',');
   });
