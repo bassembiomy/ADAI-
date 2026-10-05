@@ -37,10 +37,13 @@
         "WP-01"
       ],
       "blocks": [],
-      "status": "todo",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npm run test:vlab:simscape",
-      "evidence": [],
+      "evidence": [
+        "harness 11 pass / 1 skip (golden); RC vs analytic NRMSE 0.0117%, final err 0.0027%",
+        "planner verified: MATLAB R2024b is a 577 MB partial install, no matlab.exe, no toolboxes"
+      ],
       "findings": []
     },
     {
@@ -617,6 +620,14 @@
       "severity": "low",
       "block": "217 blocks",
       "summary": "No per-block help: HELP_DATA has 25 topic entries. 23 blocks have no component definition."
+    },
+    {
+      "id": "F-021",
+      "severity": "high",
+      "block": "ALL",
+      "layer": "integration",
+      "summary": "No usable MATLAB/Simscape on this machine. Golden CSVs cannot be generated. build_rc_charging.m has never been executed (library paths and param names are unverified). The simscape column stays pending until goldens arrive.",
+      "wp": "USER"
     }
   ]
 }
