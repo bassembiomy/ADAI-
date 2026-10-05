@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
+import { generateScalabilityFixture } from '../../engine/sysml/largeModelGenerator';
+import { fromRepository } from '../../engine/sysml/normalizedStore';
 import { ensureDefaultSysmlDiagrams } from '../../services/sysmlDiagramWorkspace';
 import { buildUnifiedModelProjection, type UnifiedExplorerInput } from './unifiedModelExplorerProjection';
 import { ensureRootStateMachineDiagram } from './adapters/stateMachineExplorerAdapter';
@@ -627,6 +629,63 @@ describe('buildUnifiedModelProjection', () => {
       const pkgNode = lazyProjection.nodes[`sysml:element:pkg-${p}`];
       expect(pkgNode).toBeDefined();
       expect(pkgNode.hasChildren).toBe(true);
+    }
+  });
+
+  it('projects 50,000 entities in under 10ms with sysmlStore and expandedNodeIds', () => {
+    const fixture = generateScalabilityFixture({ semanticCount: 50_000, seed: 42, topology: 'distributed' });
+    const store = fromRepository(fixture.repository, fixture.coordinates, fixture.diagramPresentations);
+
+    const expanded = new Set([
+      'project:model',
+      'project:pillar:structural',
+      'project:pillar:behavior',
+      'project:pillar:parametric',
+      'project:pillar:requirements',
+    ]);
+
+    // Warm-up
+    buildUnifiedModelProjection({
+      sysml: fixture.repository,
+      sysmlStore: store,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: store.revision,
+      expandedNodeIds: expanded,
+    });
+
+    const t0 = performance.now();
+    const projection = buildUnifiedModelProjection({
+      sysml: fixture.repository,
+      sysmlStore: store,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: store.revision,
+      expandedNodeIds: expanded,
+    });
+    const duration = performance.now() - t0;
+
+    expect(duration).toBeLessThan(10);
+    expect(projection.roots).toEqual(['project:model']);
+    // With only top-level pillars expanded, number of nodes should be small (< 100)
+    expect(Object.keys(projection.nodes).length).toBeLessThan(100);
+
+    // Expand first package
+    const pkgNodeId = projection.nodes['project:pillar:structural'].childNodeIds.find(id => id.startsWith('sysml:element:pkg_'));
+    if (pkgNodeId) {
+      const nextExpanded = new Set([...expanded, pkgNodeId]);
+      const t1 = performance.now();
+      const nextProjection = buildUnifiedModelProjection({
+        sysml: fixture.repository,
+        sysmlStore: store,
+        stateMachine: emptyStateMachine(),
+        externalModels: [],
+        revision: store.revision,
+        expandedNodeIds: nextExpanded,
+      });
+      const expandDuration = performance.now() - t1;
+      expect(expandDuration).toBeLessThan(10);
+      expect(nextProjection.nodes[pkgNodeId].childNodeIds.length).toBeGreaterThan(0);
     }
   });
 });

@@ -17,6 +17,8 @@ import {
   loadPersistedExplorerUiState,
   persistExplorerUiState,
 } from '../../features/modelExplorer/modelExplorerMultiSelect';
+import { searchExplorer } from '../../features/modelExplorer/modelExplorerQuery';
+import type { NormalizedSysmlStore } from '../../engine/sysml/normalizedStore';
 import { VirtualTree } from './VirtualTree';
 import { ModelTreeRow } from './ModelTreeRow';
 import { ModelExplorerToolbar } from './ModelExplorerToolbar';
@@ -45,6 +47,7 @@ export interface ModelExplorerProps {
   height?: number;
   expandedNodeIds?: Set<string>;
   onExpandedNodeIdsChange?: (expanded: Set<string>) => void;
+  sysmlStore?: NormalizedSysmlStore;
 }
 
 /**
@@ -57,6 +60,7 @@ const DEFAULT_TREE_VIEWPORT_HEIGHT = 400;
 export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   nodesById,
   rootNodeIds,
+  sysmlStore,
   activeDiagramContext,
   onRevealInContainment,
   selectedNodeIds,
@@ -204,6 +208,15 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
 
   // Project visible tree rows according to active viewMode and filters
   const visibleRows = useMemo(() => {
+    if (searchQuery.trim() && sysmlStore) {
+      const searchResult = searchExplorer(sysmlStore, searchQuery, { limit: 200 });
+      return searchResult.nodes.map((node, index) => ({
+        node,
+        depth: 0,
+        index,
+      }));
+    }
+
     const isDiagramMode = viewMode === 'diagramContext';
     const contextProjection = isDiagramMode && activeDiagramContext
       ? projectDiagramContext({
@@ -228,6 +241,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     rootNodeIds,
     expandedNodeIds,
     searchQuery,
+    sysmlStore,
     viewMode,
     activeDiagramContext,
     showFavoritesOnly,

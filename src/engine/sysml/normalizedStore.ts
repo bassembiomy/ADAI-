@@ -54,6 +54,11 @@ export interface StoreIndexes {
   useCaseId: Map<string, Set<string>>;
   kind: Map<string, Set<string>>;
   byId: Map<string, { collection: SysmlEntityCollection; id: string }>;
+  searchTokens: Map<string, Set<string>>;
+}
+
+export function tokenizeForSearch(name: string): string[] {
+  return name.toLowerCase().split(/[^a-z0-9_]+/g).filter(t => t.length > 0);
 }
 
 export interface NormalizedSysmlStore {
@@ -96,6 +101,7 @@ function createEmptyIndexes(): StoreIndexes {
     useCaseId: new Map(),
     kind: new Map(),
     byId: new Map(),
+    searchTokens: new Map(),
   };
 }
 
@@ -225,6 +231,13 @@ function unindexEntity(store: NormalizedSysmlStore, id: string, entity: SysmlEnt
   if ('realizedByBlockId' in entity && typeof entity.realizedByBlockId === 'string') {
     removeFromIndex(indexes.typeId, entity.realizedByBlockId, id);
   }
+
+  // searchTokens
+  if ('name' in entity && typeof (entity as any).name === 'string') {
+    for (const token of tokenizeForSearch((entity as any).name)) {
+      removeFromIndex(indexes.searchTokens, token, id);
+    }
+  }
 }
 
 /**
@@ -238,6 +251,12 @@ function indexEntity(
 ): void {
   const indexes = store.indexes;
   indexes.byId.set(id, { collection, id });
+
+  if ('name' in entity && typeof (entity as any).name === 'string') {
+    for (const token of tokenizeForSearch((entity as any).name)) {
+      addToIndex(indexes.searchTokens, token, id);
+    }
+  }
 
   if ('kind' in entity && typeof entity.kind === 'string') {
     addToIndex(indexes.kind, entity.kind, id);

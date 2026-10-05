@@ -552,13 +552,14 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
   const projection = useMemo(() => {
     return buildUnifiedModelProjection({
       sysml: sysmlRepository,
+      sysmlStore,
       stateMachine: stateMachineSnapshot,
       externalModels,
-      revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision()),
+      revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision(), sysmlStore?.revision ?? 0),
       diagramPresentations,
       expandedNodeIds,
     });
-  }, [diagramPresentations, expandedNodeIds, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository]);
+  }, [diagramPresentations, expandedNodeIds, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository, sysmlStore]);
 
   const selectedNodeIds = useMemo(() => {
     const set = new Set<string>();
@@ -902,6 +903,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       <ModelExplorer
         nodesById={projection.nodes}
         rootNodeIds={projection.roots}
+        sysmlStore={sysmlStore}
         selectedNodeIds={selectedNodeIds}
         expandedNodeIds={expandedNodeIds}
         onExpandedNodeIdsChange={setExpandedNodeIds}

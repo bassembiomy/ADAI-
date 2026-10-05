@@ -1,4 +1,5 @@
 import type { SysmlRepository } from '../../engine/sysml/model';
+import type { NormalizedSysmlStore } from '../../engine/sysml/normalizedStore';
 import type { SemanticElement } from '../../engine/sysml/domain/base';
 import type {
   SemanticRelationship,
@@ -138,6 +139,7 @@ export interface ExternalModelDescriptor {
 
 export interface UnifiedExplorerInput {
   sysml: SysmlRepository;
+  sysmlStore?: NormalizedSysmlStore;
   stateMachine: StateMachineExplorerSnapshot;
   externalModels: ExternalModelDescriptor[];
   revision: number;
@@ -222,7 +224,344 @@ const requirementContainmentParents = (sysml: SysmlRepository) => {
   return parents;
 };
 
+function buildLazyStoreProjection(
+  input: UnifiedExplorerInput,
+  store: NormalizedSysmlStore,
+  expanded: ReadonlySet<string>,
+): ModelTreeProjection {
+  const nodes: Record<string, ModelTreeNode> = {};
+  const modelId = 'project:model';
+  register(nodes, {
+    nodeId: modelId,
+    semanticId: 'model',
+    domain: 'project',
+    kind: 'model',
+    virtualKind: 'model',
+    label: store.packages.get('model')?.name?.trim() || input.sysml.packages?.model?.name?.trim() || 'Model',
+    parentNodeId: null,
+    ownerSemanticId: null,
+    childNodeIds: [],
+    hasChildren: true,
+    readOnly: true,
+  });
+
+  for (const [pillar, label] of pillarOrder) {
+    register(nodes, {
+      nodeId: `project:pillar:${pillar}`,
+      semanticId: `project:pillar:${pillar}`,
+      domain: 'project',
+      kind: 'pillar',
+      virtualKind: pillar,
+      label,
+      parentNodeId: modelId,
+      ownerSemanticId: 'model',
+      childNodeIds: [],
+      hasChildren: true,
+      readOnly: true,
+    });
+  }
+
+  const sysmlNodeId = (id: string) => `sysml:element:${id}`;
+
+  const hasChildrenCheck = (id: string, entity?: any): boolean => {
+    if ((store.indexes.ownerId.get(id)?.size ?? 0) > 0) return true;
+    if (entity) {
+      if (entity.kind === 'block') {
+        if ((entity.properties?.length ?? 0) > 0 || (entity.ports?.length ?? 0) > 0 || (entity.operations?.length ?? 0) > 0) {
+          return true;
+        }
+      }
+      if (entity.kind === 'useCase' && (store.indexes.useCaseId?.get(id)?.size ?? 0) > 0) {
+        return true;
+      }
+      if (entity.kind === 'interaction') {
+        if ((entity.lifelines?.length ?? 0) > 0 || (entity.messages?.length ?? 0) > 0) return true;
+      }
+    }
+    return false;
+  };
+
+  const projectSysmlEntity = (id: string, entity: any, parentNodeId: string) => {
+    const kind = 'kind' in entity ? entity.kind : (entity.metaclass ?? 'element');
+    let secondaryLabel: string | undefined;
+    let badges: any = undefined;
+
+    if (kind === 'port') {
+      const resolvedPort = resolvePortUsage(input.sysml, id);
+      if (resolvedPort) {
+        const typeName = resolveSysmlReferenceLabel(input.sysml, resolvedPort.definition.typeId, 'Type');
+        secondaryLabel = `: ${typeName} · ${resolvedPort.effectiveDirection}`;
+        if (!hasSysmlReference(input.sysml, resolvedPort.definition.typeId)) {
+          badges = [{ kind: 'warning', label: 'Unresolved type' }];
+        }
+      } else {
+        secondaryLabel = '[unresolved port definition]';
+      }
+    }
+
+    register(nodes, {
+      nodeId: sysmlNodeId(id),
+      semanticId: id,
+      domain: 'sysml',
+      kind,
+      label: sysmlObjectLabel(entity, 'Element'),
+      secondaryLabel,
+      badges,
+      parentNodeId,
+      ownerSemanticId: entity.ownerId || 'model',
+      childNodeIds: [],
+      hasChildren: hasChildrenCheck(id, entity),
+    });
+  };
+
+  // 1. Check pillars in expanded
+  const topLevelChildren = store.indexes.ownerId.get('model');
+  if (topLevelChildren && topLevelChildren.size > 0) {
+    for (const id of topLevelChildren) {
+      const entity = store.entities.get(id);
+      if (!entity) continue;
+      const kind = 'kind' in entity ? entity.kind : (entity as any).metaclass ?? 'element';
+      const pillar = pillarForSysmlKind(kind);
+      const pillarNodeId = `project:pillar:${pillar}`;
+      if (expanded.has(pillarNodeId)) {
+        projectSysmlEntity(id, entity, pillarNodeId);
+      }
+    }
+  }
+
+  // Also packages with ownerId 'model' or no ownerId that are not model itself
+  for (const [pkgId, pkg] of store.packages.entries()) {
+    if (pkgId === 'model') continue;
+    if (!pkg.ownerId || pkg.ownerId === 'model') {
+      const pillarNodeId = 'project:pillar:structural';
+      if (expanded.has(pillarNodeId) && !nodes[sysmlNodeId(pkgId)]) {
+        projectSysmlEntity(pkgId, pkg, pillarNodeId);
+      }
+    }
+  }
+
+  // Also check top-level diagrams
+  for (const [dId, diag] of store.diagrams.entries()) {
+    if (!diag.ownerId || diag.ownerId === 'model') {
+      const pillar = pillarForDiagramKind(diag.diagramKind);
+      const pillarNodeId = `project:pillar:${pillar}`;
+      if (expanded.has(pillarNodeId)) {
+        register(nodes, {
+          nodeId: sysmlNodeId(dId),
+          semanticId: dId,
+          domain: 'sysml',
+          kind: 'diagram',
+          label: sysmlObjectLabel(diag, 'Diagram'),
+          secondaryLabel: `[${diag.diagramKind.toUpperCase()}]`,
+          diagramId: dId,
+          parentNodeId: pillarNodeId,
+          ownerSemanticId: 'model',
+          childNodeIds: [],
+          hasChildren: false,
+        });
+      }
+    }
+  }
+
+  // 2. Iterate expandedNodeIds
+  for (const expandedNodeId of expanded) {
+    if (expandedNodeId.startsWith('sysml:element:')) {
+      const semanticId = expandedNodeId.slice('sysml:element:'.length);
+      const childIds = store.indexes.ownerId.get(semanticId);
+      if (childIds) {
+        for (const childId of childIds) {
+          const child = store.entities.get(childId);
+          if (child && !nodes[sysmlNodeId(childId)]) {
+            projectSysmlEntity(childId, child, expandedNodeId);
+          }
+        }
+      }
+
+      // If semanticId is a block, project its owned features
+      const blockDef = store.definitions.get(semanticId);
+      if (blockDef && blockDef.kind === 'block') {
+        for (const port of blockDef.ports ?? []) {
+          const portNodeId = sysmlNodeId(port.id);
+          if (!nodes[portNodeId]) {
+            const portKind = port.kind === 'standard' ? 'port' : `${port.kind}Port`;
+            register(nodes, projectOwnedFeature({
+              id: port.id, name: port.name, metaclass: portKind as any,
+              namespace: [], ownerId: blockDef.id, typeId: port.typeId, direction: port.direction,
+            } as any, blockDef.id, input.sysml));
+          }
+        }
+        for (const prop of blockDef.properties ?? []) {
+          const propNodeId = sysmlNodeId(prop.id);
+          if (!nodes[propNodeId]) {
+            const featMeta = prop.kind === 'part' ? 'PartProperty' : prop.kind === 'reference' ? 'ReferenceProperty' : prop.kind === 'flow' ? 'FlowProperty' : 'ValueProperty';
+            register(nodes, projectOwnedFeature({
+              id: prop.id, name: prop.name, metaclass: featMeta as any,
+              namespace: [], ownerId: blockDef.id, typeId: prop.typeId,
+            } as any, blockDef.id, input.sysml));
+          }
+        }
+        for (const op of blockDef.operations ?? []) {
+          const opId = typeof op === 'string' ? op : (op as any).id;
+          const opName = typeof op === 'string' ? op : (op as any).name;
+          const opNodeId = sysmlNodeId(opId);
+          if (!nodes[opNodeId]) {
+            register(nodes, projectOwnedFeature({
+              id: opId, name: opName, metaclass: 'Operation' as any,
+              namespace: [], ownerId: blockDef.id,
+            } as any, blockDef.id, input.sysml));
+          }
+        }
+      }
+
+      // Extension points for use cases
+      if (store.extensionPoints.size > 0) {
+        for (const extPoint of store.extensionPoints.values()) {
+          if (extPoint.useCaseId === semanticId && !nodes[sysmlNodeId(extPoint.id)]) {
+            register(nodes, {
+              nodeId: sysmlNodeId(extPoint.id),
+              semanticId: extPoint.id,
+              domain: 'sysml',
+              kind: extPoint.kind,
+              label: sysmlObjectLabel(extPoint, 'Extension Point'),
+              secondaryLabel: extPoint.location ? `@ ${extPoint.location}` : undefined,
+              parentNodeId: expandedNodeId,
+              ownerSemanticId: semanticId,
+              childNodeIds: [],
+              hasChildren: false,
+            });
+          }
+        }
+      }
+
+      // Diagrams owned by semanticId
+      for (const [dId, diag] of store.diagrams.entries()) {
+        if (diag.ownerId === semanticId && !nodes[sysmlNodeId(dId)]) {
+          register(nodes, {
+            nodeId: sysmlNodeId(dId),
+            semanticId: dId,
+            domain: 'sysml',
+            kind: 'diagram',
+            label: sysmlObjectLabel(diag, 'Diagram'),
+            secondaryLabel: `[${diag.diagramKind.toUpperCase()}]`,
+            diagramId: dId,
+            parentNodeId: expandedNodeId,
+            ownerSemanticId: semanticId,
+            childNodeIds: [],
+            hasChildren: false,
+          });
+        }
+      }
+    }
+  }
+
+  // 3. State machine handling
+  const rootLayer = input.stateMachine.layers.find(layer => layer.id === 'root') ?? input.stateMachine.layers[0];
+  const behaviorId = 'project:pillar:behavior';
+  const machineId = 'sm:machine:main';
+  if (rootLayer) {
+    if (expanded.has(behaviorId)) {
+      register(nodes, {
+        nodeId: machineId,
+        semanticId: machineId,
+        domain: 'stateMachine',
+        kind: 'stateMachine',
+        label: 'State Machine',
+        parentNodeId: behaviorId,
+        ownerSemanticId: null,
+        childNodeIds: [],
+        hasChildren: true,
+      });
+    }
+
+    if (expanded.has(machineId)) {
+      const statesById = new Map(input.stateMachine.states.map(state => [state.id, state]));
+      const junctionsById = new Map((input.stateMachine.junctions ?? []).map(junction => [junction.id, junction]));
+      const projectLayer = (layerId: string, parentId: string) => {
+        const layer = input.stateMachine.layers.find(item => item.id === layerId);
+        if (!layer) return;
+        const regionId = `sm:region:${layer.id}`;
+        register(nodes, {
+          nodeId: regionId,
+          semanticId: layer.id,
+          domain: 'stateMachine',
+          kind: 'region',
+          label: layer.name || 'Root Region',
+          parentNodeId: parentId,
+          childNodeIds: [],
+          hasChildren: (layer.stateIds?.length ?? 0) > 0 || (layer.junctionIds?.length ?? 0) > 0,
+        });
+
+        if (expanded.has(regionId)) {
+          for (const junctionId of layer.junctionIds ?? []) {
+            const junction = junctionsById.get(junctionId);
+            if (!junction) continue;
+            register(nodes, {
+              nodeId: `sm:junction:${junction.id}`,
+              semanticId: junction.id,
+              domain: 'stateMachine',
+              kind: junction.type ?? 'junction',
+              label: junction.name || getElementKindLabel(junction.type ?? 'junction'),
+              parentNodeId: regionId,
+              ownerSemanticId: layer.id,
+              childNodeIds: [],
+              hasChildren: false,
+            });
+          }
+          for (const stateId of layer.stateIds ?? []) {
+            const state = statesById.get(stateId);
+            if (!state) continue;
+            const stateNodeId = `sm:state:${state.id}`;
+            const childLayers = input.stateMachine.layers.filter(child => child.parentStateId === state.id);
+            register(nodes, {
+              nodeId: stateNodeId,
+              semanticId: state.id,
+              domain: 'stateMachine',
+              kind: 'state',
+              label: state.name,
+              parentNodeId: regionId,
+              ownerSemanticId: layer.id,
+              childNodeIds: [],
+              hasChildren: childLayers.length > 0,
+            });
+            if (expanded.has(stateNodeId)) {
+              childLayers.forEach(child => projectLayer(child.id, stateNodeId));
+            }
+          }
+        }
+      };
+      projectLayer(rootLayer.id, machineId);
+    }
+  }
+
+  // 4. Diagram presentations & visual parents (if any)
+  if (input.diagramPresentations && Object.keys(input.diagramPresentations).length > 0) {
+    const visualParentBySemanticId = buildDiagramVisualParentIndex({
+      sysml: input.sysml,
+      stateMachine: input.stateMachine,
+      diagramPresentations: input.diagramPresentations,
+    });
+    applyDiagramVisualParents(nodes, visualParentBySemanticId);
+  }
+
+  // 5. Rebuild children without wiping hasChildren on collapsed nodes
+  for (const nodeId in nodes) {
+    nodes[nodeId].childNodeIds = [];
+  }
+  for (const nodeId in nodes) {
+    const node = nodes[nodeId];
+    if (node.parentNodeId && nodes[node.parentNodeId]) {
+      nodes[node.parentNodeId].childNodeIds.push(node.nodeId);
+      nodes[node.parentNodeId].hasChildren = true;
+    }
+  }
+
+  return { roots: [modelId], nodes, revision: input.revision };
+}
+
 export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelTreeProjection {
+  if (input.sysmlStore && input.expandedNodeIds) {
+    return buildLazyStoreProjection(input, input.sysmlStore, input.expandedNodeIds);
+  }
   const nodes: Record<string, ModelTreeNode> = {};
   const visualParentBySemanticId = buildDiagramVisualParentIndex({
     sysml: input.sysml,
