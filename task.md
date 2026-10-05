@@ -58,16 +58,16 @@
   - [x] Step 7.5: Update remediation report with raw artifact paths and SHA.
   - [x] Step 7.6: Mark completed items with evidence.
   - [x] Step 7.7: Commit Task 7 changes.
-- [ ] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
-  - [ ] Step 8.1: Write failing round-trip tests for chunked storage.
-  - [ ] Step 8.2: Run persistence tests; expect failure.
-  - [ ] Step 8.3: Implement manifest and fixed-size entity chunks.
-  - [ ] Step 8.4: Implement lazy hydration with LRU cache and dirty-chunk tracking.
-  - [ ] Step 8.5: Connect worker load/save to lazy store for >50k elements.
-  - [ ] Step 8.6: Run round-trip, project-file, SysML tests, and `tsc --noEmit`.
-  - [ ] Step 8.7: Run 250k element load/edit/save/reopen tests.
-  - [ ] Step 8.8: Run 1,000,000 element capacity soak.
-  - [ ] Step 8.9: Commit Task 8 changes.
+- [x] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
+  - [x] Step 8.1: Write failing round-trip tests for chunked storage.
+  - [x] Step 8.2: Run persistence tests; expect failure.
+  - [x] Step 8.3: Implement manifest and fixed-size entity chunks.
+  - [x] Step 8.4: Implement lazy hydration with LRU cache and dirty-chunk tracking.
+  - [x] Step 8.5: Connect worker load/save to lazy store for >50k elements.
+  - [x] Step 8.6: Run round-trip, project-file, SysML tests, and `tsc --noEmit`.
+  - [x] Step 8.7: Run 250k element load/edit/save/reopen tests.
+  - [x] Step 8.8: Run 1,000,000 element capacity soak.
+  - [x] Step 8.9: Commit Task 8 changes.
 - [ ] Task 9: Final regression, evidence, and support statement
   - [ ] Step 9.1: Run `npm run test:sysml:release`, `npm run test:project-files`, `npm run test:sysml:scalability`, `tsc --noEmit`.
   - [ ] Step 9.2: Verify clean `git diff --check`.

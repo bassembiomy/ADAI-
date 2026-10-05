@@ -1,5 +1,14 @@
 import { loadCanonicalSysmlProject } from '../../../services/sysmlCommandGateway';
 import { serializeSysmlProjectState } from '../persistence';
+import {
+  isChunkedProjectContainer,
+  decodeChunkedManifest,
+  readChunkFromContainer,
+  encodeChunkedProject,
+  type EntityChunk,
+  type DiagramChunk,
+} from '../persistence/chunkedProjectFormat';
+import { type SysmlRepository, createEmptyRepository } from '../model';
 
 export type ProgressPhase = 'read' | 'parse' | 'migrate' | 'normalize' | 'validate' | 'serialize';
 
@@ -30,6 +39,66 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
       try {
         if (cancelledIds.has(data.id)) return;
         self.postMessage({ id: data.id, type: 'progress', phase: 'read' });
+
+        if (isChunkedProjectContainer(data.buffer)) {
+          if (cancelledIds.has(data.id)) return;
+          self.postMessage({ id: data.id, type: 'progress', phase: 'parse' });
+          const manifest = decodeChunkedManifest(data.buffer);
+
+          if (cancelledIds.has(data.id)) return;
+          self.postMessage({ id: data.id, type: 'progress', phase: 'migrate' });
+
+          if (cancelledIds.has(data.id)) return;
+          self.postMessage({ id: data.id, type: 'progress', phase: 'normalize' });
+
+          const definitions: Record<string, any> = {};
+          for (const chunkMeta of manifest.entityChunkTable) {
+            if (cancelledIds.has(data.id)) return;
+            const chunk = readChunkFromContainer<EntityChunk>(data.buffer, chunkMeta);
+            Object.assign(definitions, chunk.entities);
+          }
+
+          const coordinates: Record<string, any> = {};
+          const diagramPresentations: Record<string, any> = {};
+          for (const diagId in manifest.diagramMembershipTable) {
+            const diagMeta = manifest.diagramMembershipTable[diagId];
+            const diagChunk = readChunkFromContainer<DiagramChunk>(data.buffer, diagMeta);
+            Object.assign(coordinates, diagChunk.coordinates);
+            Object.assign(diagramPresentations, diagChunk.presentations);
+          }
+
+          const repository: SysmlRepository = {
+            ...createEmptyRepository(),
+            definitions,
+          };
+
+          if (cancelledIds.has(data.id)) return;
+          self.postMessage({ id: data.id, type: 'progress', phase: 'validate' });
+
+          self.postMessage({
+            id: data.id,
+            type: 'loadSuccess',
+            result: {
+              repository,
+              coordinates,
+              diagramPresentations,
+              valid: true,
+              diagnostics: [],
+              upgradeReport: { upgraded: false },
+              interchangeReport: null,
+              rawPayload: {
+                projectName: manifest.projectName,
+                version: manifest.schemaVersion,
+                sysmlRepository: repository,
+                diagramPresentations,
+                coordinates,
+                stateMachine: manifest.stateMachine,
+                diagramWorkspace: manifest.diagramWorkspace,
+              },
+            },
+          });
+          return;
+        }
 
         const decoder = new TextDecoder('utf-8');
         const jsonText = decoder.decode(data.buffer);
@@ -92,6 +161,31 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
             diagramPresentations: savedSysml.diagramPresentations,
             sysmlCoordinates: savedSysml.sysmlCoordinates ?? payloadToSerialize.sysmlCoordinates,
           };
+        }
+
+        const defCount = Object.keys(payloadToSerialize?.sysmlRepository?.definitions ?? {}).length;
+        if (defCount > 50_000 || data.payload?.format === 'chunked') {
+          const buffer = encodeChunkedProject({
+            projectName: payloadToSerialize.projectName,
+            schemaVersion: payloadToSerialize.version ?? '1.0',
+            repository: payloadToSerialize.sysmlRepository,
+            coordinates: payloadToSerialize.sysmlCoordinates ?? payloadToSerialize.coordinates,
+            diagramPresentations: payloadToSerialize.diagramPresentations,
+            stateMachine: payloadToSerialize.stateMachine,
+            diagramWorkspace: payloadToSerialize.diagramWorkspace,
+            chunkSize: 1000,
+            metadata: payloadToSerialize.metadata,
+          });
+
+          (self as any).postMessage(
+            {
+              id: data.id,
+              type: 'serializeSuccess',
+              buffer,
+            },
+            [buffer],
+          );
+          return;
         }
 
         const jsonText = JSON.stringify(payloadToSerialize);

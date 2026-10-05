@@ -48,7 +48,16 @@ function readProjectFile(filePath, options = {}) {
   if (!stats.isFile()) throw new Error('Project path is not a regular file');
   if (stats.size === 0) throw new Error('Project file is empty (0 bytes)');
   if (stats.size > MAX_PROJECT_BYTES) throw new Error('Project file exceeds the 50 MB limit');
-  let raw = fsImpl.readFileSync(resolved, 'utf8');
+  const buffer = fsImpl.readFileSync(resolved);
+  if (Buffer.isBuffer(buffer) && buffer.length >= 32 && buffer.toString('utf8', 0, 13) === 'ADIA_CHUNK_V1') {
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const manifestOffset = view.getUint32(24, true);
+    const manifestLength = view.getUint32(28, true);
+    const manifestBytes = buffer.subarray(manifestOffset, manifestOffset + manifestLength);
+    const manifest = JSON.parse(manifestBytes.toString('utf8'));
+    return { filePath: resolved, data: manifest, isChunked: true, buffer };
+  }
+  let raw = typeof buffer === 'string' ? buffer : buffer.toString('utf8');
   if (raw.charCodeAt(0) === 0xFEFF) {
     raw = raw.slice(1);
   }
