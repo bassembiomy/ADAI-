@@ -50,6 +50,20 @@ export interface ComponentEquation {
   equationCount: number;
 }
 
+/** One scope input channel: the solver variable of every component of the wired signal. */
+export interface ScopeChannelBinding {
+  /** 1-based scope channel (in1 = 1) */
+  channel: number;
+  /** number of components of the wired signal (1 = scalar) */
+  width: number;
+  /** solver variable per component; -1 = unwired */
+  indices: number[];
+  /** channel names of a vector signal (`a b c`, `d q 0`), empty for a scalar */
+  channelNames: string[];
+  /** exact port id of the wired source, when wired */
+  sourcePortId?: string;
+}
+
 // The fully assembled system
 export interface AssembledSystem {
   // Total number of unknowns
@@ -62,12 +76,16 @@ export interface AssembledSystem {
   isPurelyAlgebraic?: boolean;
   // The global residual function
   residuals: (x: number[], dx: number[], ctx: EquationContext) => number[];
-  // Node-level Kirchhoff equations (through-variable sum = 0)
-  kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[] }[];
+  // Node-level Kirchhoff equations (through-variable sum = 0). A vector net (width-N signal, composite three-phase electrical
+  // port) has one entry per channel: `channel` is the 0-based channel (absent on scalar nets).
+  kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[]; channel?: number }[];
   // Component equations
   components: ComponentEquation[];
-  // Scope output mapping: scopeNodeId -> variable index
+  // Scope output mapping: scopeNodeId -> variable index per scope channel (-1 = unwired channel, or a vector channel: those are
+  // listed with all their components in `scopeChannels`, never reduced to their first component).
   scopeOutputs: Map<string, number[]>;
+  // Scope channels with their width (WP-09c): scopeNodeId -> one binding per scope channel in1, in2, ...
+  scopeChannels?: Map<string, ScopeChannelBinding[]>;
   // Which block owns each unknown and each residual row (diagnostics of the structural rank check)
   structure?: {
     variableOwners: { blockId: string; blockType: string }[];

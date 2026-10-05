@@ -37,14 +37,21 @@ const CONSERVING = ['electrical', 'thermal', 'translational', 'rotational', 'mag
 const canon = (d?: string) => { const x = (d ?? '').toLowerCase(); return x === 'multibodyframe' ? 'frame' : x; };
 const isSpecialBlock = (id: string) => TRANSPARENT_BLOCKS.has(id) || ANY_DOMAIN_BLOCKS.has(id) || MEASUREMENT_SINK_BLOCKS.has(id);
 
-type PortClass = string; // cons:<domain> | sig:out | sig:in | property | any | transparent
+// cons:<domain> | sig:out | sig:in | property | any | transparent, plus (WP-09c) a suffix ':wN' for a width-N signal port and
+// ':composite' for a composite three-phase electrical port
+type PortClass = string;
 const classOf = (block: VLabBlock, p: VLabPort): PortClass => {
   if (TRANSPARENT_BLOCKS.has(block.id)) return 'transparent';
   const d = canon(p.domain);
   if (d === 'any') return 'any';
-  if (d === 'physical') return p.direction === 'out' ? 'sig:out' : 'sig:in';
+  const suffix = p.composite ? ':composite' : (p.width ?? 1) > 1 ? `:w${p.width}` : '';
+  if (d === 'physical') return (p.direction === 'out' ? 'sig:out' : 'sig:in') + suffix;
   if (d === 'beltproperty') return 'property';
-  return `cons:${d}`;
+  return `cons:${d}${suffix}`;
+};
+const partsOf = (c: PortClass): { base: string; suffix: string } => {
+  const m = c.match(/^(.*?)(:w\d+|:composite)?$/)!;
+  return { base: m[1], suffix: m[2] ?? '' };
 };
 
 /** first ordinary port of each class found in the library (not on a special block) */
@@ -134,13 +141,17 @@ describe('connection rules: every class pair, both drag directions', () => {
   });
 
   const expectedCode = (a: PortClass, b: PortClass): string | 'ok' => {
-    if (a === 'transparent' || b === 'transparent' || a === 'any' || b === 'any') return 'ok';
-    if (a.startsWith('sig:') && b.startsWith('sig:')) {
-      if (a === 'sig:out' && b === 'sig:out') return 'output-to-output';
-      if (a === 'sig:in' && b === 'sig:in') return 'input-to-input';
-      return 'ok';
+    if (a === 'transparent' || b === 'transparent') return 'ok';
+    // WP-09c: the Simulink-PS converters carry one scalar: a vector / composite port behind them is a width error
+    if (a === 'any' || b === 'any') return (a === 'any' ? partsOf(b) : partsOf(a)).suffix ? 'width-mismatch' : 'ok';
+    const pa = partsOf(a); const pb = partsOf(b);
+    if (pa.base.startsWith('sig:') && pb.base.startsWith('sig:')) {
+      if (pa.base === 'sig:out' && pb.base === 'sig:out') return 'output-to-output';
+      if (pa.base === 'sig:in' && pb.base === 'sig:in') return 'input-to-input';
+      return pa.suffix === pb.suffix ? 'ok' : 'width-mismatch'; // WP-09c: widths must match exactly
     }
-    return a === b ? 'ok' : 'domain-mismatch';
+    if (pa.base !== pb.base) return 'domain-mismatch';
+    return pa.suffix === pb.suffix ? 'ok' : 'composite-mismatch'; // WP-09c: a composite port meets only a composite port
   };
 
   it('every domain x direction combination gives the documented answer, identically for A->B and B->A', () => {
@@ -196,23 +207,31 @@ describe('connection rules: every class pair, both drag directions', () => {
 
 // ──────────────────────────────────────────────────────────────────────────
 describe('connection rules: every block\'s ports once, against a compatible and an incompatible counterpart', () => {
-  const counterpartFor = (cls: PortClass, want: 'compatible' | 'incompatible', block: VLabBlock): { cls: PortClass; code: string } | null => {
+  const counterpartFor = (cls: PortClass, want: 'compatible' | 'incompatible' | 'width', block: VLabBlock): { cls: PortClass; code: string } | null => {
     if (cls === 'transparent' || cls === 'any') return null;
-    if (MEASUREMENT_SINK_BLOCKS.has(block.id) && cls === 'sig:in') {
-      // scope / probe input: only a signal output is compatible
+    const { base, suffix } = partsOf(cls);
+    if (MEASUREMENT_SINK_BLOCKS.has(block.id) && base === 'sig:in') {
+      // scope / probe input: only a signal output is compatible (of any width: one trace per channel)
+      if (want === 'width') return null;
       return want === 'compatible' ? { cls: 'sig:out', code: 'ok' } : { cls: 'cons:electrical', code: 'scope-needs-measurable-output' };
     }
-    if (cls === 'sig:out') return want === 'compatible' ? { cls: 'sig:in', code: 'ok' } : { cls: 'sig:out', code: 'output-to-output' };
-    if (cls === 'sig:in') return want === 'compatible' ? { cls: 'sig:out', code: 'ok' } : { cls: 'sig:in', code: 'input-to-input' };
-    if (cls === 'property') return want === 'compatible' ? { cls: 'property', code: 'ok' } : { cls: 'cons:electrical', code: 'domain-mismatch' };
-    return want === 'compatible' ? { cls, code: 'ok' } : { cls: cls === 'cons:electrical' ? 'cons:thermal' : 'cons:electrical', code: 'domain-mismatch' };
+    if (want === 'width') {
+      // WP-09c: the same wiring with a width (or composite-ness) that differs from this port's
+      if (base === 'sig:out' || base === 'sig:in') return { cls: (base === 'sig:out' ? 'sig:in' : 'sig:out') + (suffix ? '' : ':w3'), code: 'width-mismatch' };
+      if (base === 'cons:electrical') return { cls: suffix ? 'cons:electrical' : 'cons:electrical:composite', code: 'composite-mismatch' };
+      return null;
+    }
+    if (base === 'sig:out') return want === 'compatible' ? { cls: 'sig:in' + suffix, code: 'ok' } : { cls: 'sig:out' + suffix, code: 'output-to-output' };
+    if (base === 'sig:in') return want === 'compatible' ? { cls: 'sig:out' + suffix, code: 'ok' } : { cls: 'sig:in' + suffix, code: 'input-to-input' };
+    if (base === 'property') return want === 'compatible' ? { cls: 'property', code: 'ok' } : { cls: 'cons:electrical', code: 'domain-mismatch' };
+    return want === 'compatible' ? { cls, code: 'ok' } : { cls: base === 'cons:electrical' ? 'cons:thermal' : 'cons:electrical', code: 'domain-mismatch' };
   };
 
   it('compatible counterparts are accepted and incompatible ones rejected, with the same outcome in both drag directions', () => {
     const bad: string[] = []; let checked = 0;
     for (const b of libBlocks) for (const p of b.ports) {
       const cls = classOf(b, p);
-      for (const want of ['compatible', 'incompatible'] as const) {
+      for (const want of ['compatible', 'incompatible', 'width'] as const) {
         const cp = counterpartFor(cls, want, b);
         if (!cp) continue;
         const rep = REPS.get(cp.cls);

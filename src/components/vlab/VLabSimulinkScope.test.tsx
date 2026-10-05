@@ -59,6 +59,28 @@ describe('VLabSimulinkScope', () => {
     expect(html).toContain('Samples: 3 pts');
   });
 
+  it('draws one trace per component of a width-3 signal, labelled <block>.<port>[<channel>] (WP-09c)', () => {
+    const nodes = [
+      { id: 'sine', type: 'default', data: { type: 'ps_sine_3phase', label: 'Sine' } },
+      { id: 'park', type: 'default', data: { type: 'park_transform', label: 'Park' } },
+      { id: 'scope_1', type: 'default', data: { type: 'scope' } },
+    ];
+    const abc = [{ time: 0, 'in1[a]': 0, 'in1[b]': -86.6, 'in1[c]': 86.6 }, { time: 1, 'in1[a]': 100, 'in1[b]': 0, 'in1[c]': -100 }];
+    const html = renderToStaticMarkup(
+      <VLabSimulinkScope {...defaultProps} data={abc} params={{ ...defaultProps.params, numSignals: { value: 1 } }}
+        nodes={nodes} edges={[{ id: 'e', source: 'sine', sourceHandle: 'sine-abc', target: 'scope_1', targetHandle: 'scope_1-in1' }]} />,
+    );
+    for (const name of ['a', 'b', 'c']) expect(html).toContain(`Sine.abc[${name}]`);
+    expect(html).toContain('three-phase sine voltage');
+    expect(html).toContain('Channels: 1 (3 traces)');
+    // dq0: d, q, 0
+    const dq = renderToStaticMarkup(
+      <VLabSimulinkScope {...defaultProps} data={[{ time: 0, 'in1[d]': 1, 'in1[q]': 0, 'in1[0]': 0 }]} params={{ ...defaultProps.params, numSignals: { value: 1 } }}
+        nodes={nodes} edges={[{ id: 'e', source: 'park', sourceHandle: 'park-dq0', target: 'scope_1', targetHandle: 'scope_1-in1' }]} />,
+    );
+    for (const name of ['d', 'q', '0']) expect(dq).toContain(`Park.dq0[${name}]`);
+  });
+
   it('renders simulation speed multiplier button with current rate', () => {
     const html = renderToStaticMarkup(<VLabSimulinkScope {...defaultProps} simSpeed={3} onSpeedChange={vi.fn()} />);
     expect(html).toContain('3×');

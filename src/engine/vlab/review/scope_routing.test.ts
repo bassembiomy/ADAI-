@@ -71,10 +71,23 @@ function scopeFixture(block: VLabBlock, portIds: string[], opts: ScopeFixtureOpt
   return { nodes, edges };
 }
 
-const channelValue = (state: any, channels: number, k: number): number | undefined => {
+/** Sample of scope channel k+1. A width-N signal (WP-09c) is N traces `in<k>[<name>]`: its value is the array of the N samples. */
+const channelValue = (state: any, channels: number, k: number): number | number[] | undefined => {
   const v = state.perScopeValues?.['diag_scope'];
   if (v === undefined) return undefined;
-  return channels === 1 && typeof v === 'number' ? v : (typeof v === 'number' ? v : v[`in${k + 1}`]);
+  if (typeof v === 'number') return v;
+  if (v[`in${k + 1}`] !== undefined) return v[`in${k + 1}`];
+  const prefix = `in${k + 1}[`;
+  const traces = Object.keys(v).filter(key => key.startsWith(prefix));
+  return traces.length ? traces.map(key => v[key]) : undefined;
+};
+const finiteSample = (v: number | number[] | undefined): boolean =>
+  Array.isArray(v) ? v.length > 0 && v.every(x => typeof x === 'number' && Number.isFinite(x)) : typeof v === 'number' && Number.isFinite(v);
+const sampleClose = (actual: number | number[] | undefined, expected: number | number[], digits: number, label: string) => {
+  if (Array.isArray(expected)) {
+    expect(Array.isArray(actual) && actual.length === expected.length, label).toBe(true);
+    expected.forEach((e, i) => expect((actual as number[])[i], `${label}[${i}]`).toBeCloseTo(e, digits));
+  } else expect(actual as number, label).toBeCloseTo(expected, digits);
 };
 
 function simulate(nodes: Node[], edges: Edge[], steps = 2): any {
@@ -87,7 +100,13 @@ function simulate(nodes: Node[], edges: Edge[], steps = 2): any {
 
 const scopeBinding = (nodes: Node[], edges: Edge[]): string[] => {
   const sys = quiet(() => new DAEAssembler().assemble(nodes, edges));
-  return (sys.scopeOutputs.get('diag_scope') ?? []).map(i => (i >= 0 ? sys.variableNames[i] : '<unwired>'));
+  const channels = sys.scopeChannels?.get('diag_scope') ?? [];
+  // a vector channel is bound to all its components (joined), never to its first one only
+  return (sys.scopeOutputs.get('diag_scope') ?? []).map((i, k) => {
+    const b = channels[k];
+    if (b && b.width > 1) return b.indices.map(j => sys.variableNames[j]).join('|');
+    return i >= 0 ? sys.variableNames[i] : '<unwired>';
+  });
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -153,6 +172,12 @@ describe('every signal-out port reaches a scope through VLabPhysicsEngine.simula
       }
       expect(error, `${key}: ${(error as Error)?.message}`).toBeUndefined();
       const v = channelValue(state, 1, 0);
+      if ((port.width ?? 1) > 1) {
+        // WP-09c: a width-N output shows N traces on the scope, one finite sample each
+        expect(Array.isArray(v) && v.length === port.width, `${key} scope samples: ${JSON.stringify(v)}`).toBe(true);
+        expect(finiteSample(v), `${key} = ${JSON.stringify(v)}`).toBe(true);
+        return;
+      }
       expect(typeof v, `${key} scope sample`).toBe('number');
       expect(Number.isFinite(v as number), `${key} = ${v}`).toBe(true);
     });
@@ -181,7 +206,7 @@ describe('multi-output blocks: each output has its own channel, independent of o
         const f = scopeFixture(block, [p]);
         return { binding: scopeBinding(f.nodes, f.edges)[0], value: channelValue(simulate(f.nodes, f.edges), 1, 0)! };
       });
-      single.forEach((s, i) => expect(Number.isFinite(s.value), `${id}.${ports[i]}`).toBe(true));
+      single.forEach((s, i) => expect(finiteSample(s.value), `${id}.${ports[i]}`).toBe(true));
       // port k -> channel k; reversed ports + reversed edges + reversed channel assignment
       const variants: ScopeFixtureOptions[] = [
         {},
@@ -199,7 +224,7 @@ describe('multi-output blocks: each output has its own channel, independent of o
           const ch = channelOf(i);
           expect(binding[ch], `${id}.${p} -> channel ${ch + 1} binding (${JSON.stringify(opts)})`).toBe(single[i].binding);
           const v = channelValue(state, n, ch);
-          expect(v, `${id}.${p} -> channel ${ch + 1} value (${JSON.stringify(opts)})`).toBeCloseTo(single[i].value, 9);
+          sampleClose(v, single[i].value, 9, `${id}.${p} -> channel ${ch + 1} value (${JSON.stringify(opts)})`);
         });
         expect(new Set(binding).size, `${id}: outputs share a variable`).toBe(n);
       }

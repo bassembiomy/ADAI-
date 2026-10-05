@@ -17,6 +17,20 @@ export interface VLabPort {
   quantity?: string;
   /** SI unit of the signal (`rad/s`, `N*m`, `1` dimensionless, `*` = same as the wired input). */
   unit?: string;
+  /**
+   * Physical-signal vector width (WP-09c, default 1). A width-N signal port carries N channels (Simscape "physical signal
+   * vector"): the solver allocates N variables for the net, the equation receives an N-element array for the port, and
+   * a wire connects only ports of exactly the same width (no broadcast, no truncation). Scopes show N traces.
+   */
+  width?: number;
+  /** Names of the N channels of a vector / composite port (`a b c`, `d q 0`, `alpha beta 0`, `pos neg zero`). Scope traces are `<port>[<name>]`. */
+  channelNames?: string[];
+  /**
+   * Composite three-phase electrical port (Simscape "Electrical, three-phase"): an Electrical port that expands into the
+   * three scalar nodes a, b, c (KCL per phase). It connects only to another composite port; a Phase Splitter bridges to
+   * the scalar phases. Implies width 3, channelNames a b c.
+   */
+  composite?: 'three_phase';
 }
 
 /**
@@ -1603,6 +1617,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
             "label": "abc",
             "domain": "Electrical"
@@ -1626,8 +1641,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "Va = Vabc[0], Vb = Vabc[1], Vc = Vabc[2]",
-        "description": "Splits a multiplexed 3-phase bus into individual phase lines A, B, and C."
+        "equation": "V_a = V_abc[a], V_b = V_abc[b], V_c = V_abc[c]\nKCL per phase: I_abc,k = I_k",
+        "description": "Splits the composite three-phase port abc into its scalar phase ports a, b and c (Simscape Phase Splitter). The phases are independent: each phase k of abc is tied to scalar port k only."
       },
       {
         "id": "delta_ref",
@@ -1675,6 +1690,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "in",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
             "label": "abc",
             "domain": "Physical",
@@ -5575,6 +5592,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
             "label": "abc",
             "domain": "Physical",
@@ -5592,8 +5611,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "rad"
           }
         ],
-        "equation": "Sine Generator (3-Phase) governing physical equation",
-        "description": "Physical component model for Sine Generator (3-Phase)."
+        "equation": "a = Vpk*sin(wt)\nb = Vpk*sin(wt - 2*pi/3)\nc = Vpk*sin(wt + 2*pi/3)\nwt = 2*pi*f*t",
+        "description": "Balanced positive-sequence three-phase sine set on the width-3 output abc, plus the instantaneous angle wt."
       },
       {
         "id": "ps_second_order_filter",
@@ -6294,6 +6313,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
             "label": "abc",
             "domain": "Physical",
@@ -6301,6 +6322,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "ab0",
+            "width": 3,
+            "channelNames": ["alpha", "beta", "0"],
             "pos": "right",
             "label": "ab0",
             "domain": "Physical",
@@ -6309,8 +6332,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "I_alpha = I_a\nI_beta = (I_a + 2*I_b) / √3",
-        "description": "Converts 3-phase stationary coordinates (abc) to 2-phase stationary frame (αβ)."
+        "equation": "alpha = (2/3)*(a - b/2 - c/2)\nbeta = (b - c)/√3\nzero = (a + b + c)/3",
+        "description": "Clarke transform: abc (width 3) to alpha-beta-zero (width 3). Convention Peak Amp Preserved (above) or Power Preserved (sqrt(2/3) scaling, orthogonal)."
       },
       {
         "id": "inv_clarke_transform",
@@ -6328,6 +6351,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "ab0",
+            "width": 3,
+            "channelNames": ["alpha", "beta", "0"],
             "pos": "left",
             "label": "ab0",
             "domain": "Physical",
@@ -6335,6 +6360,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
             "label": "abc",
             "domain": "Physical",
@@ -6343,8 +6370,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "I_a = I_alpha\nI_b = -0.5*I_alpha + (√3/2)*I_beta\nI_c = -0.5*I_alpha - (√3/2)*I_beta",
-        "description": "Converts 2-phase stationary coordinates (αβ) back to 3-phase frame (abc)."
+        "equation": "a = alpha + zero\nb = -alpha/2 + (√3/2)*beta + zero\nc = -alpha/2 - (√3/2)*beta + zero",
+        "description": "Inverse Clarke transform: alpha-beta-zero (width 3) to abc (width 3), same convention as the forward block."
       },
       {
         "id": "park_transform",
@@ -6362,6 +6389,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
             "label": "abc",
             "domain": "Physical",
@@ -6376,6 +6405,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "dq0",
+            "width": 3,
+            "channelNames": ["d", "q", "0"],
             "pos": "right",
             "label": "dq0",
             "domain": "Physical",
@@ -6384,8 +6415,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "I_d = I_alpha*cos(θ) + I_beta*sin(θ)\nI_q = -I_alpha*sin(θ) + I_beta*cos(θ)",
-        "description": "Transforms stationary 2-phase frame (αβ) into rotating rotor reference frame (dq)."
+        "equation": "d = alpha*cos(θ) + beta*sin(θ)\nq = -alpha*sin(θ) + beta*cos(θ)\nzero = (a + b + c)/3\n(90 deg behind A: θ -> θ - π/2, i.e. d = alpha*sin(θ) - beta*cos(θ), q = alpha*cos(θ) + beta*sin(θ))",
+        "description": "Park transform: abc (width 3) and angle theta to the rotating dq0 frame (width 3), alpha-beta from the amplitude-invariant Clarke transform."
       },
       {
         "id": "inv_park_transform",
@@ -6403,6 +6434,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "dq0",
+            "width": 3,
+            "channelNames": ["d", "q", "0"],
             "pos": "left",
             "label": "dq0",
             "domain": "Physical",
@@ -6417,6 +6450,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
             "label": "abc",
             "domain": "Physical",
@@ -6425,8 +6460,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "I_alpha = I_d*cos(θ) - I_q*sin(θ)\nI_beta = I_d*sin(θ) + I_q*cos(θ)",
-        "description": "Transforms rotating reference frame (dq) back into stationary 2-phase frame (αβ)."
+        "equation": "alpha = d*cos(θ) - q*sin(θ)\nbeta = d*sin(θ) + q*cos(θ)\n(90 deg behind A: alpha = d*sin(θ) + q*cos(θ), beta = -d*cos(θ) + q*sin(θ))\na = alpha + zero, b = -alpha/2 + (√3/2)*beta + zero, c = -alpha/2 - (√3/2)*beta + zero",
+        "description": "Inverse Park transform: dq0 (width 3) and angle theta back to the stationary abc frame (width 3)."
       },
       {
         "id": "sym_comp_transform",
@@ -6438,12 +6473,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Base Freq"
+            "label": "Base Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
             "label": "abc",
             "domain": "Physical",
@@ -6451,6 +6490,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "seq",
+            "width": 3,
+            "channelNames": ["pos", "neg", "zero"],
             "pos": "right",
             "label": "+-0",
             "domain": "Physical",
@@ -6459,8 +6500,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Symmetrical-Components governing physical equation",
-        "description": "Physical component model for Symmetrical-Components."
+        "equation": "V1 = (A + a*B + a^2*C)/3\nV2 = (A + a^2*B + a*C)/3\nV0 = (A + B + C)/3\na = exp(j*2*pi/3), A = x - j*(dx/dt)/w, w = 2*pi*freq\nseq = [|V1|, |V2|, |V0|]",
+        "description": "Fortescue symmetrical components of the abc phasors at the base frequency: the width-3 output seq carries the peak magnitudes of the positive, negative and zero sequence."
       },
       {
         "id": "inv_sym_comp_transform",
@@ -6472,12 +6513,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Base Freq"
+            "label": "Base Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "seq",
+            "width": 3,
+            "channelNames": ["pos", "neg", "zero"],
             "pos": "left",
             "label": "+-0",
             "domain": "Physical",
@@ -6485,6 +6530,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
             "label": "abc",
             "domain": "Physical",
@@ -6493,8 +6540,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Inverse Symmetrical-Components governing physical equation",
-        "description": "Physical component model for Inverse Symmetrical-Components."
+        "equation": "a = (V1 + V2 + V0)*cos(wt)\nb = V1*cos(wt - 2*pi/3) + V2*cos(wt + 2*pi/3) + V0*cos(wt)\nc = V1*cos(wt + 2*pi/3) + V2*cos(wt - 2*pi/3) + V0*cos(wt)\nwt = 2*pi*freq*t",
+        "description": "Inverse Fortescue synthesis: positive, negative and zero sequence magnitudes (width 3) to the abc time signals at the base frequency, phase a as cos(wt) reference."
       },
       {
         "id": "im_flux_observer",

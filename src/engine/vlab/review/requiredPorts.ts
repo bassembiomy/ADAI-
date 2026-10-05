@@ -18,6 +18,7 @@ import { blockEquations, type BlockEquationArgs } from '../vlabEquations';
 import { assembleSingleBlock, libraryDefaults } from './contractInventory';
 import { DAEStructureError } from '../vlabStructure';
 import { NonFiniteResidualError } from '../vlabResidualDiagnostics';
+import { widthOf } from '../vlabVectorPorts';
 
 const CONSERVING = new Set(['electrical', 'thermal', 'translational', 'rotational', 'magnetic', 'fluid', 'gas', 'isothermal_liquid', 'frame', 'multibodyframe']);
 const FRAME = new Set(['frame', 'multibodyframe']);
@@ -44,9 +45,11 @@ export function requiredSignalInputs(b: VLabBlock): string[] {
     for (let seed = 1; seed <= 4 && !consumed; seed++) {
       const r = rng(seed * 7919);
       const mk = (n: number) => Array.from({ length: n }, () => 0.5 + r());
-      const baseAcross = ports.map(id => (FRAME.has(asm.portDomains[id] ?? '') ? mk(6) : 0.5 + r()));
+      const shapeOf = (id: string) => (FRAME.has(asm.portDomains[id] ?? '') ? 6 : widthOf(b.ports.find(p => p.id === id)));
+      const value = (id: string) => (shapeOf(id) > 1 ? mk(shapeOf(id)) : 0.5 + r());
+      const baseAcross = ports.map(id => value(id));
       const branch = mk(asm.allocatedBranches); const state = mk(asm.allocatedStates);
-      const dAcross = ports.map(id => (FRAME.has(asm.portDomains[id] ?? '') ? mk(6) : 0.5 + r()));
+      const dAcross = ports.map(id => value(id));
       const idx = ports.indexOf(inp.id);
       try {
         // everything except across[p] is held fixed between the two evaluations
@@ -115,7 +118,7 @@ export function requiredConservingPorts(b: VLabBlock): ConservingAnalysis {
   for (const p of conserving) {
     const rows: number[] = [];
     sys.variableNames.forEach((name, i) => {
-      if (name.startsWith(`Across_dut_${p.id}_(`) || new RegExp(`^Across_dut_${p.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(Px|Py|Pz|Rx|Ry|Rz)_\\(`).test(name)) rows.push(i);
+      if (name.startsWith(`Across_dut_${p.id}_(`) || new RegExp(`^Across_dut_${p.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(Px|Py|Pz|Rx|Ry|Rz|ch\\d+|ph[abc])_\\(`).test(name)) rows.push(i);
     });
     rowsOf.set(p.id, rows);
   }

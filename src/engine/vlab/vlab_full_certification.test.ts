@@ -6,6 +6,7 @@ import { blockEquations, type BlockEquationArgs } from './vlabEquations';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_VALIDATION_CONTRACTS } from './vlabValidationContracts';
 import { isValidVLabPortDomain } from './vlabPortDomains';
+import { widthOf } from './vlabVectorPorts';
 
 interface CatalogEntry {
   domain: string;
@@ -165,9 +166,12 @@ const numericParams = (block: VLabBlock): Record<string, number | string> =>
 
 // ranches is the number of branch unknowns the DAE assembler really allocates for the block (a joint with many signal
 // outputs allocates more than the historical 16-entry sample array).
-const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}, branches = 0): BlockEquationArgs => ({
-  across: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 1 + index * 0.25),
-  dAcross: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.1 + index * 0.01),
+// widths[i] > 1: port i is a vector / composite port (WP-09c) and its across value is an array of that width.
+const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}, branches = 0, widths: number[] = []): BlockEquationArgs => ({
+  across: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => (widths[index] ?? 1) > 1
+    ? Array.from({ length: widths[index] }, (_, k) => 1 + index * 0.25 + k * 0.1) : 1 + index * 0.25),
+  dAcross: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => (widths[index] ?? 1) > 1
+    ? Array.from({ length: widths[index] }, (_, k) => 0.1 + index * 0.01 + k * 0.01) : 0.1 + index * 0.01),
   branch: Array.from({ length: Math.max(16, ports.length + 4, branches) }, (_, index) => 0.5 + index * 0.05),
   dBranch: Array.from({ length: Math.max(16, ports.length + 4, branches) }, (_, index) => 0.2 + index * 0.02),
   state: Array.from({ length: 16 }, (_, index) => 0.25 + index * 0.01),
@@ -228,7 +232,7 @@ const collectEquationIssues = (): CertificationIssue[] => {
     })();
 
     cases.forEach((params, caseIndex) => {
-      const args = makeEquationArgs(block.ports.map((port) => port.id), params, allocated);
+      const args = makeEquationArgs(block.ports.map((port) => port.id), params, allocated, block.ports.map((port) => widthOf(port)));
       const before = cloneArgs(args);
       const immutableBefore = immutableInputs(args);
       try {

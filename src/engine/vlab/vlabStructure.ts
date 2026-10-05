@@ -6,6 +6,8 @@
  *     Nothing is padded with 0 or truncated any more; a mismatch is a `DAEStructureError`.
  *  2. A block that is listed in `UNSUPPORTED_BLOCKS` is rejected by vlabTopologyValidation (diagnostic code
  *     `unsupported-block`) naming the missing specification instead of silently simulating a placeholder.
+ *     Vector nets (WP-09c) are counted per channel: a width-N signal net has N across unknowns / rows and a width-N output
+ *     port N signal branches, a composite three-phase node 3 KCL rows, so these checks stay exact.
  *  3. Pre-solve structural rank: the sparsity pattern of the assembled Jacobian is detected at generic points and a
  *     maximum bipartite matching (equations <-> unknowns) is computed. A column with no entry is a free multiplier /
  *     branch variable; a deficient matching names the unmatched equations and unknowns together with their blocks.
@@ -79,11 +81,8 @@ export function unsupportedBlockReason(blockId: string, blockType: string, spec:
  * explicitly (never simulated as a placeholder) and each one is mapped to the work package that owns the missing spec.
  */
 export const UNSUPPORTED_BLOCKS: Record<string, UnsupportedBlockSpec> = {
-  // ── WP-10 (electrical) ──
-  phase_splitter: {
-    wp: 'WP-10',
-    missingSpec: 'composite three-phase port `abc` needs a 3-element (vector) electrical port; the scalar solver ties a, b and c to the one composite node (V_a = V_b = V_c = V_abc), which short-circuits the phases',
-  },
+  // (phase_splitter: implemented in WP-09c on the composite three-phase port; park / inv_park / sym_comp: implemented
+  // on width-3 vector ports in WP-09c)
   // (lever: implemented in WP-13b with the pivot reaction F_C = -(F_A + F_B) and v_A/v_B = -L1/L2 at a fixed pivot)
   // ── WP-17 (moist air, F-035: allocated outputs that were never driven) ──
   ma_pipe: {
@@ -150,18 +149,6 @@ export const UNSUPPORTED_BLOCKS: Record<string, UnsupportedBlockSpec> = {
   pmsm_ref_gen: {
     wp: 'WP-20',
     missingSpec: 'torque-to-idq map (MTPA / field weakening with the vdc limit) and the `tq_lim` output; the equation reads w_mech as tq_ref, returns id_ref = 0 and drives two of three outputs',
-  },
-  park_transform: {
-    wp: 'WP-20',
-    missingSpec: '3-wire abc input and dq0 output (alpha = (2a - b - c)/3, beta = (b - c)/sqrt(3) need all three phases); the equation reads b, c and theta at across[1..3] although the ports are abc, theta, dq0 (it reads theta as b and its own output as c)',
-  },
-  inv_park_transform: {
-    wp: 'WP-20',
-    missingSpec: '3-wire dq0 input and abc output; the equation reads q, zero and theta at across[1..3] although the ports are dq0, theta, abc (theta as q, its own output as zero, theta = 0) and returns three rows for one port',
-  },
-  sym_comp_transform: {
-    wp: 'WP-20',
-    missingSpec: 'all three phase channels and the 120-degree operator (V_1 = (V_a + a V_b + a^2 V_c)/3); the equation uses real 0.5 factors and returns three rows for one scalar `seq` port',
   },
 };
 

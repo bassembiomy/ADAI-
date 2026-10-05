@@ -1,5 +1,6 @@
 import { EquationContext } from './types';
-import { numericParam, stringParam, vectorParam, unwrapParam } from './vlabParams';
+import { numericParam, stringParam, vectorParam, unwrapParam, VLabParamError } from './vlabParams';
+import { scalarInput, vectorInput } from './vlabVectorPorts';
 import { interfaceResiduals, jointResiduals } from './vlabJointCore';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -34,11 +35,13 @@ export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
   'ps_integrator_gen', 'ps_moving_avg', 'ps_sr_flipflop', 'ps_sample_hold',
   'ps_smith_predictor', 'ps_second_order_filter', 'ps_washout',
   'quad_decoder', 'resolver_to_digital', 'belt_end',
+  // Fortescue phasors of the instantaneous signals use dx/dt (analytic signal)
+  'sym_comp_transform',
 ]);
 
 export interface BlockEquationArgs {
-  across: any[];        // values of across variables at the ports (scalars or 6-DOF frame arrays)
-  dAcross: any[];          // derivatives of across variables (scalars or 6-DOF frame arrays)
+  across: any[];        // values of across variables at the ports (scalars, 6-DOF frame arrays, or N-element arrays for width-N / composite ports: read them by port id with vectorInput)
+  dAcross: any[];          // derivatives of across variables (same shapes as `across`)
   branch: number[];        // values of branch through-variables
   dBranch: number[];       // derivatives of branch through-variables
   state: number[];         // values of internal states
@@ -87,6 +90,74 @@ export function inputOrParam(
   const wired = idx !== -1 && across[idx] !== undefined && (!connectedPorts || !ports || connectedPorts.includes(id));
   return wired ? across[idx] : fallback;
 }
+
+// ── Three-phase transforms (WP-09c): pure helpers shared by the vector blocks below ─────────────────────────────────────────
+const SQRT3 = Math.sqrt(3);
+
+/** Enumerated text parameter: missing -> fallback, a value outside `choices` is a VLabParamError, never a silent default. */
+const choiceParam = (params: Record<string, any> | undefined, key: string, choices: readonly string[], fallback: string): string => {
+  const s = stringParam(params, key, fallback).trim();
+  const hit = choices.find(c => c.toLowerCase() === s.toLowerCase());
+  if (!hit) {
+    throw new VLabParamError([{
+      blockId: '', param: key, raw: s, code: 'invalid-parameter',
+      reason: `Parameter "${key}": "${s}" is not one of: ${choices.join(', ')}.`,
+    }]);
+  }
+  return hit;
+};
+
+type ClarkeConvention = 'Peak Amp Preserved' | 'Power Preserved';
+const clarkeConvention = (params: Record<string, any> | undefined): ClarkeConvention =>
+  choiceParam(params, 'convention', ['Peak Amp Preserved', 'Power Preserved'], 'Peak Amp Preserved') as ClarkeConvention;
+
+/** Clarke abc -> alpha-beta-zero (Simscape "Clarke Transform"). */
+const clarkeForward = ([a, b, c]: [number, number, number], conv: ClarkeConvention): [number, number, number] => {
+  if (conv === 'Power Preserved') {
+    const k = Math.sqrt(2 / 3);
+    return [k * (a - b / 2 - c / 2), k * (SQRT3 / 2) * (b - c), (a + b + c) / SQRT3];
+  }
+  return [(2 / 3) * (a - b / 2 - c / 2), (b - c) / SQRT3, (a + b + c) / 3];
+};
+
+/** Inverse Clarke alpha-beta-zero -> abc. */
+const clarkeInverse = ([alpha, beta, zero]: [number, number, number], conv: ClarkeConvention): [number, number, number] => {
+  if (conv === 'Power Preserved') {
+    // the matrix is orthogonal: the inverse is its transpose
+    const k = Math.sqrt(2 / 3);
+    const z = zero / Math.SQRT2;
+    return [k * (alpha + z), k * (-alpha / 2 + (SQRT3 / 2) * beta + z), k * (-alpha / 2 - (SQRT3 / 2) * beta + z)];
+  }
+  return [alpha + zero, -alpha / 2 + (SQRT3 / 2) * beta + zero, -alpha / 2 - (SQRT3 / 2) * beta + zero];
+};
+
+type ParkAlignment = 'Aligned with A' | '90 deg behind A';
+const parkAlignment = (params: Record<string, any> | undefined): ParkAlignment =>
+  choiceParam(params, 'alignment', ['90 deg behind A', 'Aligned with A'], '90 deg behind A') as ParkAlignment;
+
+const parkRotate = (alpha: number, beta: number, theta: number, al: ParkAlignment): [number, number] => {
+  const c = Math.cos(theta); const s = Math.sin(theta);
+  return al === 'Aligned with A' ? [alpha * c + beta * s, -alpha * s + beta * c] : [alpha * s - beta * c, alpha * c + beta * s];
+};
+const parkRotateInverse = (d: number, q: number, theta: number, al: ParkAlignment): [number, number] => {
+  const c = Math.cos(theta); const s = Math.sin(theta);
+  // both rotations are orthogonal (det = 1): the inverse is the transpose
+  return al === 'Aligned with A' ? [d * c - q * s, d * s + q * c] : [d * s + q * c, -d * c + q * s];
+};
+
+/** Fortescue peak magnitudes [|V1|, |V2|, |V0|] of the analytic phasors A_k = x_k - j dx_k/dt / w. */
+const fortescueMagnitudes = (x: [number, number, number], dx: [number, number, number], w: number): [number, number, number] => {
+  const re = x; const im = dx.map(d => -d / w);
+  const ca = -0.5; const sa = SQRT3 / 2; // a = e^(j 2pi/3)
+  // a^2 = conj(a)
+  const mul = (zr: number, zi: number, k: 1 | 2): [number, number] => (k === 1 ? [zr * ca - zi * sa, zr * sa + zi * ca] : [zr * ca + zi * sa, -zr * sa + zi * ca]);
+  const [br1, bi1] = mul(re[1], im[1], 1); const [cr2, ci2] = mul(re[2], im[2], 2);
+  const [br2, bi2] = mul(re[1], im[1], 2); const [cr1, ci1] = mul(re[2], im[2], 1);
+  const v1 = [(re[0] + br1 + cr2) / 3, (im[0] + bi1 + ci2) / 3];
+  const v2 = [(re[0] + br2 + cr1) / 3, (im[0] + bi2 + ci1) / 3];
+  const v0 = [(re[0] + re[1] + re[2]) / 3, (im[0] + im[1] + im[2]) / 3];
+  return [Math.hypot(v1[0], v1[1]), Math.hypot(v2[0], v2[1]), Math.hypot(v0[0], v0[1])];
+};
 
 // Numeric parameters are read through numericParam (vlabParams.ts): a missing value takes the default, a user-supplied
 // 0 / negative / "1e-3" is honoured, and malformed text throws a structured VLabParamError (never a silent default).
@@ -393,13 +464,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return residuals;
   },
 
-  phase_splitter: ({ across }) => {
-    // composite Va, Vb, Vc splitter
-    // across[0] is composite, across[1,2,3] are A, B, C phases
+  phase_splitter: (args) => {
+    // Composite three-phase port abc <-> scalar phase ports a, b, c (WP-09c, Simscape "Phase Splitter"): the phase k node of
+    // the composite port IS the scalar port k, V_k(scalar) = V_abc[k] (an ideal wire per phase). The phase currents are the
+    // three through variables (branch k = current from abc,k into the block, out through scalar port k), so KCL holds
+    // per phase and the phases are NOT short-circuited together.
+    const abc = vectorInput(args, 'abc', 3);
     return [
-      across[1] - across[0],
-      across[2] - across[0],
-      across[3] - across[0]
+      scalarInput(args, 'a') - abc[0],
+      scalarInput(args, 'b') - abc[1],
+      scalarInput(args, 'c') - abc[2],
     ];
   },
 
@@ -1884,9 +1958,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       dState[1] - Ki * err_q
     ];
   },
-  clarke_transform: ({ across, branch }) => [
-    branch[0] - (across[0] || 0)
-  ],
+  clarke_transform: (args) => {
+    // Abc -> alpha-beta-zero (Simscape "Clarke Transform"; Clarke 1943, amplitude-invariant form):
+    //   alpha = (2/3)(a - b/2 - c/2),  beta = (b - c)/sqrt(3),  zero = (a + b + c)/3
+    // 'Power Preserved' scales by sqrt(3/2) (orthogonal matrix, P_abc = P_alpha-beta-0): sqrt(2/3)(a - b/2 - c/2), (b - c)/sqrt(2), (a+b+c)/sqrt(3).
+    const [a, b, c] = vectorInput(args, 'abc', 3);
+    const [alpha, beta, zero] = clarkeForward([a, b, c], clarkeConvention(args.params));
+    return [args.branch[0] - alpha, args.branch[1] - beta, args.branch[2] - zero];
+  },
 
   // ── MULTIBODY JOINTS & CONSTRAINTS ─────────────────────────────────────────
   world_frame: () => [],
@@ -2282,13 +2361,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return ports.includes('out') ? [branch[0] - y] : [];
   },
 
-  ps_demux_3: ({ across, branch }) => {
-    const u = across[0] || 0;
-    return [
-      branch[0] - u,
-      branch[1] - u,
-      branch[2] - u
-    ];
+  ps_demux_3: (args) => {
+    // Demux of a width-3 vector: y_k = u[k], by port id (WP-09c).
+    const u = vectorInput(args, 'in', 3);
+    return [args.branch[0] - u[0], args.branch[1] - u[1], args.branch[2] - u[2]];
   },
 
   // ── MATH & SIGNAL PROCESSING ────────────────────────────────────────────────
@@ -2344,16 +2420,18 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_sine_3phase: ({ branch, params, ctx }) => {
-    // Two scalar outputs: `abc` carries phase a of the 3-phase set, Vpk*sin(wt) (phases b and c, shifted -/+ 120 deg,
-    // need a vector port, WP-20), and `wt` the instantaneous phase angle wt = 2*pi*f*t of the sinusoid. The old rows
-    // were bound to the wrong ports (phase a on the input `m`, b on `abc`, c on `wt`) through the name vocabulary.
-    // The `m` / `ang` inputs are still not read (WP-20).
+    // Balanced positive-sequence set (Simscape "Sine Generator" convention, phase a reference):
+    //   a = Vpk sin(wt), b = Vpk sin(wt - 2pi/3), c = Vpk sin(wt + 2pi/3), and `wt` the instantaneous angle wt = 2*pi*f*t.
+    // `abc` is one width-3 vector output (branches 0..2), `wt` the scalar after it (branch 3). The `m` / `ang` inputs are
+    // not read yet (WP-20).
     const Vpk = numericParam(params, 'Vpk', 325);
     const f = numericParam(params, 'f', 50);
-    const w = 2 * Math.PI * f;
+    const wt = 2 * Math.PI * f * ctx.time;
     return [
-      branch[0] - Vpk * Math.sin(w * ctx.time),
-      branch[1] - w * ctx.time
+      branch[0] - Vpk * Math.sin(wt),
+      branch[1] - Vpk * Math.sin(wt - 2 * Math.PI / 3),
+      branch[2] - Vpk * Math.sin(wt + 2 * Math.PI / 3),
+      branch[3] - wt,
     ];
   },
 
@@ -2401,72 +2479,61 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── MATH TRANSFORMS ─────────────────────────────────────────────────────────
-  inv_clarke_transform: ({ across, branch }) => {
-    // The `abc` output is ONE scalar port: it carries phase a, I_a = I_alpha (library equation). Phases b and c
-    // (-0.5*alpha +/- sqrt(3)/2*beta) need a vector port the solver does not have yet (F-0xx, WP-20).
-    const alpha = across[0] || 0;
-    return [
-      branch[0] - alpha
-    ];
+  inv_clarke_transform: (args) => {
+    // Alpha-beta-zero -> abc (inverse of clarke_transform, same convention):
+    //   a = alpha + zero,  b = -alpha/2 + (sqrt(3)/2) beta + zero,  c = -alpha/2 - (sqrt(3)/2) beta + zero
+    const ab0 = vectorInput(args, 'ab0', 3);
+    const [a, b, c] = clarkeInverse(ab0 as [number, number, number], clarkeConvention(args.params));
+    return [args.branch[0] - a, args.branch[1] - b, args.branch[2] - c];
   },
 
-  park_transform: ({ across, branch }) => {
-    const a = across[0] || 0;
-    const b = across[1] || 0;
-    const c = across[2] || 0;
-    const theta = across[3] || 0;
-    const cos = Math.cos(theta);
-    const sin = Math.sin(theta);
-    const alpha = (2*a - b - c)/3;
-    const beta = (b - c)/Math.sqrt(3);
-    const zero = (a + b + c)/3;
-    return [
-      branch[0] - (alpha * cos + beta * sin),
-      branch[1] - (-alpha * sin + beta * cos),
-      branch[2] - zero
-    ];
+  park_transform: (args) => {
+    // abc -> dq0 (Simscape "abc to dq0"; Park 1929): the amplitude-invariant Clarke alpha-beta-zero rotated by theta.
+    //   'Aligned with A':   d =  alpha cos(th) + beta sin(th),  q = -alpha sin(th) + beta cos(th)
+    //   '90 deg behind A':  d =  alpha sin(th) - beta cos(th),  q =  alpha cos(th) + beta sin(th)   (th -> th - pi/2)
+    //   zero = (a + b + c)/3.  For a = Vpk sin(wt), b, c lagging/leading by 120 deg and th = wt, '90 deg behind A' gives d = Vpk, q = 0.
+    const abc = vectorInput(args, 'abc', 3) as [number, number, number];
+    const theta = scalarInput(args, 'theta');
+    const [alpha, beta, zero] = clarkeForward(abc, 'Peak Amp Preserved');
+    const [d, q] = parkRotate(alpha, beta, theta, parkAlignment(args.params));
+    return [args.branch[0] - d, args.branch[1] - q, args.branch[2] - zero];
   },
 
-  inv_park_transform: ({ across, branch }) => {
-    const d = across[0] || 0;
-    const q = across[1] || 0;
-    const zero = across[2] || 0;
-    const theta = across[3] || 0;
-    const cos = Math.cos(theta);
-    const sin = Math.sin(theta);
-    const alpha = d * cos - q * sin;
-    const beta = d * sin + q * cos;
-    return [
-      branch[0] - (alpha + zero),
-      branch[1] - (-0.5 * alpha + Math.sqrt(3)/2 * beta + zero),
-      branch[2] - (-0.5 * alpha - Math.sqrt(3)/2 * beta + zero)
-    ];
+  inv_park_transform: (args) => {
+    // dq0 -> abc (inverse of park_transform): rotate back by theta, then the inverse Clarke (peak convention).
+    const dq0 = vectorInput(args, 'dq0', 3);
+    const theta = scalarInput(args, 'theta');
+    const [alpha, beta] = parkRotateInverse(dq0[0], dq0[1], theta, parkAlignment(args.params));
+    const [a, b, c] = clarkeInverse([alpha, beta, dq0[2]], 'Peak Amp Preserved');
+    return [args.branch[0] - a, args.branch[1] - b, args.branch[2] - c];
   },
 
-  sym_comp_transform: ({ across, branch }) => {
-    const a = across[0] || 0;
-    const b = across[1] || 0;
-    const c = across[2] || 0;
-    const pos = (a - 0.5*b - 0.5*c)/3;
-    const neg = (a + 0.5*b + 0.5*c)/3;
-    const zero = (a + b + c)/3;
-    return [
-      branch[0] - pos,
-      branch[1] - neg,
-      branch[2] - zero
-    ];
+  sym_comp_transform: (args) => {
+    // abc -> +/-/0 sequence (Fortescue 1918). With the operator a = e^(j 2pi/3):
+    //   V1 = (A + a B + a^2 C)/3,  V2 = (A + a^2 B + a C)/3,  V0 = (A + B + C)/3
+    // of the PHASORS A, B, C at the base frequency. The phasor of the instantaneous signal x(t) = X cos(wt + phi) is the
+    // analytic signal A = x - j (dx/dt)/w (= X e^(j(wt+phi))), so with w = 2 pi f_base the output `seq` is the three real
+    // peak MAGNITUDES [|V1|, |V2|, |V0|]. A balanced positive set gives [Vpk, 0, 0]. dx/dt is the solver's dAcross.
+    const abc = vectorInput(args, 'abc', 3);
+    const dabc = vectorInput({ across: args.dAcross, ports: args.ports }, 'abc', 3);
+    const w = 2 * Math.PI * numericParam(args.params, 'freq', 50);
+    const seq = fortescueMagnitudes(abc as [number, number, number], dabc as [number, number, number], w);
+    return [args.branch[0] - seq[0], args.branch[1] - seq[1], args.branch[2] - seq[2]];
   },
 
-  inv_sym_comp_transform: ({ across, branch }) => {
-    // Fortescue: V_a = V_0 + V_1 + V_2. The `seq` input is ONE scalar port that carries the positive-sequence channel
-    // (V_0 = V_2 = 0, a balanced set), so the single `abc` output port carries phase a = V_1. The old row also read
-    // the block's own output port (across[1]) as the negative sequence, which made the residual unsolvable (F-026).
-    const pos = across[0] || 0;
-    return [
-      branch[0] - pos
-    ];
+  inv_sym_comp_transform: (args) => {
+    // +/-/0 sequence magnitudes -> abc (inverse Fortescue synthesis at the base frequency, phase reference cos(wt) on phase a):
+    //   a = (V1 + V2 + V0) cos(wt)
+    //   b = V1 cos(wt - 2pi/3) + V2 cos(wt + 2pi/3) + V0 cos(wt)
+    //   c = V1 cos(wt + 2pi/3) + V2 cos(wt - 2pi/3) + V0 cos(wt)
+    const [v1, v2, v0] = vectorInput(args, 'seq', 3);
+    const wt = 2 * Math.PI * numericParam(args.params, 'freq', 50) * args.ctx.time;
+    const sh = 2 * Math.PI / 3;
+    const a = (v1 + v2 + v0) * Math.cos(wt);
+    const b = v1 * Math.cos(wt - sh) + v2 * Math.cos(wt + sh) + v0 * Math.cos(wt);
+    const c = v1 * Math.cos(wt + sh) + v2 * Math.cos(wt - sh) + v0 * Math.cos(wt);
+    return [args.branch[0] - a, args.branch[1] - b, args.branch[2] - c];
   },
-
   quad_decoder: ({ across, branch, state, dState }) => {
     return [
       dState[0] - 0,

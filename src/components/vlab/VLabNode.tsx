@@ -3,6 +3,8 @@ import { Handle, Position, useUpdateNodeInternals, useStore } from '@xyflow/reac
 import { Activity } from 'lucide-react';
 import { SymbolRenderer } from './VLabSymbols';
 import { getBlockDimensions } from './blockDimensions';
+import { libraryBlock } from '../../engine/vlab/vlabConnectionRules';
+import { widthOf } from '../../engine/vlab/vlabVectorPorts';
 
 export const getRotatedPosition = (originalPos: Position, rotation: number): Position => {
   const normRot = ((rotation % 360) + 360) % 360;
@@ -69,13 +71,19 @@ export const NodeErrorBoundary = class extends React.Component<{ children: React
 };
 
 /** Handle tooltip: signal ports show their direction (library direction), the rest are conserving ports. */
-const portTitle = (port: any, blockDomain?: string): string => {
+const portTitle = (port: any, blockDomain?: string, blockType?: string): string => {
   if (port.domain === 'isothermal_liquid') return 'Isothermal Liquid conserving port';
   const domain = port.domain || blockDomain || 'Physical';
+  // width / composite metadata comes from the library (a saved instance copy may predate it), WP-09c
+  const meta = (blockType ? libraryBlock(blockType)?.ports.find(p => p.id === port.id) : undefined) ?? port;
+  const width = widthOf(meta);
+  const names = meta.composite ? ['a', 'b', 'c'] : (meta.channelNames ?? []);
+  const vector = width > 1 ? ` [${width}${names.length ? `: ${names.join(', ')}` : ''}]` : '';
   if (String(domain).toLowerCase() === 'physical') {
-    return port.direction ? `Physical signal ${port.direction === 'out' ? 'output' : 'input'}` : 'Physical signal port';
+    const base = port.direction ? `Physical signal ${port.direction === 'out' ? 'output' : 'input'}` : 'Physical signal port';
+    return width > 1 ? `${base} vector${vector}` : base;
   }
-  return `${domain} conserving port`;
+  return meta.composite ? `Three-phase composite ${domain} port${vector}` : `${domain} conserving port`;
 };
 
 export const VLabNode = ({ id, data, selected }: { id: string; data: any; selected: boolean }) => {
@@ -183,7 +191,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   type="source"
                   position={rotatedPos}
                   id={handleId}
-                  title={portTitle(port, data.domain)}
+                  title={portTitle(port, data.domain, data.type)}
                   className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
                   style={{ ['--pc' as any]: pc }}
                 />
@@ -191,7 +199,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   type="target"
                   position={rotatedPos}
                   id={handleId}
-                  title={portTitle(port, data.domain)}
+                  title={portTitle(port, data.domain, data.type)}
                   className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
                   style={{ ['--pc' as any]: pc }}
                 />

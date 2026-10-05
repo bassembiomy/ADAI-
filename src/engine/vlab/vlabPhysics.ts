@@ -10,6 +10,7 @@ import { assertValidTopology } from './vlabTopologyValidation';
 import { assertStructurallyWellPosed, DAEStructureError } from './vlabStructure';
 import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagnostics';
 import { readSolvedVariable } from './vlabScopeRead';
+import { scopeTraceKey } from './vlabVectorPorts';
 import { numericParam } from './vlabParams';
 
 // SDIRK-3 Butcher tableau constants
@@ -700,7 +701,24 @@ export class VLabPhysicsEngine {
       if (perScopeValues[scopeNode.id] !== undefined) continue;
 
       const indices = system.scopeOutputs.get(scopeNode.id);
-      if (indices && indices.length > 0) {
+      const bindings = system.scopeChannels?.get(scopeNode.id);
+      if (bindings && bindings.some(b => b.width > 1)) {
+        // WP-09c: a width-N signal on a scope channel shows N traces, `in<k>[<channel name>]` (a, b, c / d, q, 0 ...), each
+        // read from its own solver variable; nothing is reduced to component 0. Scalar channels keep their `in<k>` key.
+        const values: Record<string, number> = {};
+        for (const b of bindings) {
+          if (b.width === 1) {
+            if (b.indices[0] < 0) continue; // unwired channel: no sample
+            values[`in${b.channel}`] = readSolvedVariable(xCurrent, system.variableNames, b.indices[0], { scopeId: scopeNode.id, channel: b.channel });
+            continue;
+          }
+          b.indices.forEach((idx, k) => {
+            values[scopeTraceKey(`in${b.channel}`, b.channelNames[k] ?? String(k + 1))] =
+              readSolvedVariable(xCurrent, system.variableNames, idx, { scopeId: scopeNode.id, channel: b.channel });
+          });
+        }
+        if (Object.keys(values).length > 0) perScopeValues[scopeNode.id] = createMultiScopeValues(values, {});
+      } else if (indices && indices.length > 0) {
         // Every channel is read by the exact variable the assembler bound it to (scopeOutputs), as a scalar sample.
         // An unwired channel (-1) has no sample at all: it is left out, never filled with 0. A vector / Frame /
         // non-finite value throws ScopeReadError (vlabScopeRead.ts).

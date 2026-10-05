@@ -1,7 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { interfaceBranchSpecs, jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
-import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
+import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation, ScopeChannelBinding } from './types';
 import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches } from './vlabEquations';
 import { numericParam, stringParam, VLabParamError } from './vlabParams';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
@@ -10,7 +10,11 @@ import {
   MultibodyConstraintDiagnosticError,
   validateMultibodyConstraintTopology,
 } from './vlabConstraintDiagnostics';
-import { portIdFromHandle } from './vlabConnectionRules';
+import { ANY_DOMAIN_BLOCKS, TRANSPARENT_BLOCKS, portIdFromHandle } from './vlabConnectionRules';
+import {
+  PortWidthMismatchError, channelVariableSuffix, portShape, vectorBranchName,
+  type PortShape, type PortWidthDiagnostic,
+} from './vlabVectorPorts';
 import { BlockEquationError, NonFiniteResidualError, type ResidualDiagnostic } from './vlabResidualDiagnostics';
 import { ScopeReadError } from './vlabScopeRead';
 import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
@@ -85,6 +89,11 @@ export class DAEAssembler {
     const nodePortDirections = new Map<string, 'in' | 'out'>();
     // Ports that exist in the block's library definition (everything else is a dynamic instance port).
     const libraryPortKeys = new Set<string>();
+    // WP-09c: width / composite shape of every port that declares one (key = `<node>_<port>`; absent = scalar), and the
+    // ports whose net width is not checked because the block is width-agnostic (scope / probe sinks, Simulink-PS wildcards,
+    // transparent utility blocks).
+    const nodePortShapes = new Map<string, PortShape>();
+    const widthAgnosticKeys = new Set<string>();
 
     // Helper to get ports of a block type
     const getBlockPortsFromLib = (blockType: string) => {
@@ -103,7 +112,9 @@ export class DAEAssembler {
               id: p.id,
               domain: d.toLowerCase() as PhysicalDomain,
               pos: p.pos,
-              direction: p.direction
+              direction: p.direction,
+              // WP-09c: width / composite metadata (library is the source of truth)
+              shape: portShape(p, `Port "${p.id}" of block type "${blockType}"`),
             };
           });
         }
@@ -136,6 +147,7 @@ export class DAEAssembler {
         nodePortPositions.set(`${node.id}_${p.id}`, p.pos);
         libraryPortKeys.add(`${node.id}_${p.id}`);
         if (p.direction) nodePortDirections.set(`${node.id}_${p.id}`, p.direction);
+        if (p.shape.width > 1) nodePortShapes.set(`${node.id}_${p.id}`, p.shape);
       });
 
       // Get ports from node data
@@ -153,6 +165,11 @@ export class DAEAssembler {
             // DOE deployment ports declare `type: input|output` instead of `direction` (same rule as vlabConnectionRules).
             const direction = p.direction ?? (p.type === 'output' ? 'out' : p.type === 'input' ? 'in' : undefined);
             if (direction === 'in' || direction === 'out') nodePortDirections.set(`${node.id}_${p.id}`, direction);
+            // an instance port only declares a shape when the library does not know the port (library wins)
+            if (!libraryPortKeys.has(`${node.id}_${p.id}`)) {
+              const shape = portShape(p, `Port "${p.id}" of block "${node.id}"`);
+              if (shape.width > 1) nodePortShapes.set(`${node.id}_${p.id}`, shape);
+            }
           }
         });
       }
@@ -168,6 +185,9 @@ export class DAEAssembler {
       });
 
       nodePorts.set(node.id, Array.from(portsSet));
+      if (type === 'scope' || TRANSPARENT_BLOCKS.has(type) || ANY_DOMAIN_BLOCKS.has(type)) {
+        portsSet.forEach(pid => widthAgnosticKeys.add(`${node.id}_${pid}`));
+      }
     });
 
     // Populate default domains for ports that don't have them
@@ -239,12 +259,17 @@ export class DAEAssembler {
     });
 
     // 3. Allocate Across variables for each physical node
-    const physicalNodes: { id: string; domain: PhysicalDomain; acrossVarIndex: number }[] = [];
+    const physicalNodes: { id: string; domain: PhysicalDomain; acrossVarIndex: number; stride: number; composite: boolean }[] = [];
     const nodeAcrossIndex = new Map<string, number>(); // rootId -> index in x[]
     const variableNames: string[] = [];
     const isDifferentialState: boolean[] = [];
     let varCount = 0;
 
+    const widthDiagnostics: PortWidthDiagnostic[] = [];
+    const describePortKey = (pKey: string) => {
+      const nodeId = [...nodes].map(n => n.id).filter(id => pKey.startsWith(id + '_')).sort((a, b) => b.length - a.length)[0] ?? pKey;
+      return { blockId: nodeId, portId: pKey.slice(nodeId.length + 1) };
+    };
     rootToPorts.forEach((ports, root) => {
       let domain: PhysicalDomain = 'physical';
       for (const pKey of ports) {
@@ -259,7 +284,36 @@ export class DAEAssembler {
       }
       
       const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
-      const stride = isFrameDomain ? 6 : 1;
+      // WP-09c: every port of a net must have exactly the same width / composite-ness (width-agnostic sinks excepted)
+      let netWidth = 1; let netComposite = false;
+      {
+        const checked = ports.filter(k => !widthAgnosticKeys.has(k));
+        const first = checked[0];
+        if (first !== undefined) {
+          const firstShape = nodePortShapes.get(first);
+          netWidth = firstShape?.width ?? 1; netComposite = !!firstShape?.composite;
+          for (const k of checked.slice(1)) {
+            const sh = nodePortShapes.get(k);
+            const w = sh?.width ?? 1; const c = !!sh?.composite;
+            if (w !== netWidth || c !== netComposite) {
+              const a = describePortKey(first); const b = describePortKey(k);
+              const composite = c !== netComposite;
+              // the signal INPUT defines the expected width (same convention as the connection rules)
+              const kIsInput = nodePortDirections.get(k) === 'in';
+              const expectedWidth = kIsInput ? w : netWidth; const actualWidth = kIsInput ? netWidth : w;
+              widthDiagnostics.push({
+                code: composite ? 'composite-mismatch' : 'width-mismatch',
+                blockId: b.blockId, portId: b.portId, expectedWidth, actualWidth, otherBlockId: a.blockId, otherPortId: a.portId,
+                reason: composite
+                  ? `Port "${b.blockId}.${b.portId}" (${c ? 'composite three-phase' : 'scalar'}) shares a net with "${a.blockId}.${a.portId}" (${netComposite ? 'composite three-phase' : 'scalar'}); a composite port connects only to a composite port.`
+                  : `Port "${b.blockId}.${b.portId}" has width ${w} but shares a net with "${a.blockId}.${a.portId}" of width ${netWidth}; widths must match exactly (expected width ${netWidth}, got width ${w}).`,
+              });
+              break;
+            }
+          }
+        }
+      }
+      const stride = isFrameDomain ? 6 : netWidth;
       const acrossIndex = varCount;
       varCount += stride;
       nodeAcrossIndex.set(root, acrossIndex);
@@ -267,7 +321,9 @@ export class DAEAssembler {
       physicalNodes.push({
         id: root,
         domain,
-        acrossVarIndex: acrossIndex
+        acrossVarIndex: acrossIndex,
+        stride,
+        composite: netComposite,
       });
       
       if (isFrameDomain) {
@@ -276,11 +332,18 @@ export class DAEAssembler {
           variableNames.push(`Across_${root}_${s}_(${domain})`);
           isDifferentialState.push(false);
         });
+      } else if (stride > 1) {
+        for (let k = 0; k < stride; k++) {
+          variableNames.push(`Across_${root}_${channelVariableSuffix(k, netComposite)}_(${domain})`);
+          isDifferentialState.push(false);
+        }
       } else {
         variableNames.push(`Across_${root}_(${domain})`);
         isDifferentialState.push(false);
       }
     });
+
+    if (widthDiagnostics.length) throw new PortWidthMismatchError(widthDiagnostics);
 
     // Map each port key to its across variable index
     const portToVarIndex = new Map<string, number>();
@@ -335,6 +398,14 @@ export class DAEAssembler {
       case 'controlled_voltage':
         branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
         if (blockType === 'memristor') states.push('w');
+        break;
+      case 'phase_splitter':
+        // Composite three-phase port abc <-> scalar phase ports a, b, c (WP-09c). One through variable per phase: the
+        // current from the composite phase k INTO the block (sign -1 at abc, coord k) and out through the scalar port.
+        // The equation row of each is V_scalar,k - V_abc,k = 0 (an ideal wire), so KCL holds per phase.
+        branches.push({ name: 'current_a', ports: [{ id: 'abc', sign: -1, coord: 0 }, { id: 'a', sign: 1 }] });
+        branches.push({ name: 'current_b', ports: [{ id: 'abc', sign: -1, coord: 1 }, { id: 'b', sign: 1 }] });
+        branches.push({ name: 'current_c', ports: [{ id: 'abc', sign: -1, coord: 2 }, { id: 'c', sign: 1 }] });
         break;
       case 'three_phase_source':
         branches.push({ name: 'phase_a', ports: [{ id: 'a', sign: -1 }] });
@@ -827,8 +898,14 @@ export class DAEAssembler {
         const domain = nodePortDomains.get(key);
         if (domain === 'physical' && isPhysicalOutputPort(portId)) {
           // Check if this branch is already added
-          if (!branches.some(b => b.name === `signal_${portId}` || b.ports.some(port => port.id === portId))) {
-            branches.push({ name: `signal_${portId}`, ports: [{ id: portId, sign: 1 }] });
+          if (!branches.some(b => b.name === `signal_${portId}` || b.name.startsWith(`signal_${portId}[`) || b.ports.some(port => port.id === portId))) {
+            const width = nodePortShapes.get(key)?.width ?? 1;
+            if (width > 1) {
+              // WP-09c: a width-N signal output drives N channels: one signal branch (and residual row) per channel
+              for (let k = 0; k < width; k++) branches.push({ name: vectorBranchName(portId, k), ports: [{ id: portId, sign: 1, coord: k }] });
+            } else {
+              branches.push({ name: `signal_${portId}`, ports: [{ id: portId, sign: 1 }] });
+            }
           }
         }
       });
@@ -949,6 +1026,13 @@ export class DAEAssembler {
         const acrossVals = ports.map(portId => {
           const key = `${node.id}_${portId}`;
           const domain = nodePortDomains.get(key);
+          const width = nodePortShapes.get(key)?.width ?? 1;
+          if (width > 1) {
+            // vector port: an N-element array. An unwired signal vector reads N zeros (topology validation reports required ones).
+            if (domain === 'physical' && !connectedPortKeys.has(key)) return new Array(width).fill(0);
+            const base = portToVarIndex.get(key)!;
+            return Array.from({ length: width }, (_, k) => x[base + k]);
+          }
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
             if (type === 'nmos' && portId === 'g' && !warnedUnconnectedNmosGates.has(node.id)) {
               warnedUnconnectedNmosGates.add(node.id);
@@ -976,6 +1060,12 @@ export class DAEAssembler {
         const acrossDervs = ports.map(portId => {
           const key = `${node.id}_${portId}`;
           const domain = nodePortDomains.get(key);
+          const width = nodePortShapes.get(key)?.width ?? 1;
+          if (width > 1) {
+            if (domain === 'physical' && !connectedPortKeys.has(key)) return new Array(width).fill(0);
+            const base = portToVarIndex.get(key)!;
+            return Array.from({ length: width }, (_, k) => dx[base + k]);
+          }
           if (domain === 'physical' && !connectedPortKeys.has(key)) {
             return 0;
           }
@@ -1117,7 +1207,7 @@ export class DAEAssembler {
 
     // 5. Setup Kirchhoff Conservation nodes
     // Identify which variables represent through-variables and which nodes they affect
-    const kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[] }[] = [];
+    const kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[]; channel?: number }[] = [];
     const referenceNodeIds = new Set<string>();
     const referenceNodeTargets = new Map<string, number>();
 
@@ -1169,8 +1259,10 @@ export class DAEAssembler {
           const domain = nodePortDomains.get(key);
           const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
           // Signal ports are never references by name: an unconnected output called `b` / `c` is driven by its own branch.
-          if ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical') ||
-              domain === 'fluid' || domain === 'gas' || domain === 'thermal') {
+          // A vector / composite net is never a scalar reference (WP-09c).
+          // The phase ports a, b, c of a Phase Splitter are phase nodes, not case / reference terminals: an open phase stays open.
+          if (!nodePortShapes.has(key) && ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical' && nodeTypeOf(nodeById.get(node.id)!) !== 'phase_splitter') ||
+              domain === 'fluid' || domain === 'gas' || domain === 'thermal')) {
             referenceNodeIds.add(root);
           }
         }
@@ -1321,6 +1413,12 @@ export class DAEAssembler {
       
       const throughIndices: number[] = [];
       const signs: number[] = [];
+      // vector net (width-N signal, composite three-phase): one through list per channel (WP-09c)
+      const isVector = !isFrame && pn.stride > 1;
+      const vectorChannels: { throughIndices: number[]; signs: number[] }[] = Array.from({ length: isVector ? pn.stride : 0 }, () => ({
+        throughIndices: [],
+        signs: []
+      }));
       
       // Look for any component whose ports connect to this physical node
       nodes.forEach(node => {
@@ -1358,6 +1456,13 @@ export class DAEAssembler {
                   frameCoords[coord].throughIndices.push(globalBranchVarIndex);
                   frameCoords[coord].signs.push(bp.sign);
                 }
+              } else if (isVector) {
+                // a branch attached to a vector net names the channel it drives / loads (coord); one without is not part of it
+                const ch = bp.coord ?? -1;
+                if (ch >= 0 && ch < pn.stride) {
+                  vectorChannels[ch].throughIndices.push(globalBranchVarIndex);
+                  vectorChannels[ch].signs.push(bp.sign);
+                }
               } else {
                 throughIndices.push(globalBranchVarIndex);
                 signs.push(bp.sign);
@@ -1369,6 +1474,8 @@ export class DAEAssembler {
       
       if (isFrame) {
         kirchhoffFrameNodes.set(pn.id, frameCoords);
+      } else if (isVector) {
+        vectorChannels.forEach((vc, ch) => kirchhoffNodes.push({ nodeId: pn.id, throughIndices: vc.throughIndices, signs: vc.signs, channel: ch }));
       } else {
         kirchhoffNodes.push({
           nodeId: pn.id,
@@ -1396,6 +1503,7 @@ export class DAEAssembler {
 
     // 6. Build Scope mapping — map each scope port to its connected source variable index (or unconnected fallback)
     const scopeOutputs = new Map<string, number[]>();
+    const scopeChannels = new Map<string, ScopeChannelBinding[]>();
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       if (type === 'scope') {
@@ -1414,7 +1522,9 @@ export class DAEAssembler {
         // Exact canonical ports strictly bounded by numSignals
         const canonicalPorts = Array.from({ length: numSignals }, (_, i) => `in${i + 1}`);
 
+        const bindings: ScopeChannelBinding[] = [];
         const indices = canonicalPorts.map(pId => {
+          const channelNo = canonicalPorts.indexOf(pId) + 1;
           const edge = edges.find(e => {
             if (e.target === node.id) {
               const tPort = resolveHandlePort(e.target, e.targetHandle || 'in1');
@@ -1452,6 +1562,19 @@ export class DAEAssembler {
               });
             }
 
+            // WP-09c: a width-N signal binds ALL its components (one trace per channel), never only channel 0.
+            const srcShape = nodePortShapes.get(srcKey);
+            if (srcShape && srcShape.width > 1 && !srcShape.composite) {
+              const comps: number[] = [];
+              for (let k = 0; k < srcShape.width; k++) {
+                const bi = sourceSpec.branches.findIndex(b => b.name === vectorBranchName(srcPort, k));
+                const base = portToVarIndex.get(srcKey);
+                comps.push(bi !== -1 && sourceBranchIndices[bi] !== undefined ? sourceBranchIndices[bi] : (base !== undefined ? base + k : -1));
+              }
+              bindings.push({ channel: channelNo, width: srcShape.width, indices: comps, channelNames: srcShape.channelNames, sourcePortId: srcPort });
+              return -1; // vector channel: see scopeChannels (never reduced to its first component)
+            }
+
             // The channel reads the signal branch of EXACTLY the wired port: the branch named for that port id, or the
             // single-port signal branch attached to it. No block-type heuristics, no "first branch that looks right".
             const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
@@ -1459,17 +1582,22 @@ export class DAEAssembler {
               || (b.name.startsWith('signal_') && b.ports.length === 1 && b.ports[0].id === srcPort)
             );
             if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
+              bindings.push({ channel: channelNo, width: 1, indices: [sourceBranchIndices[matchingBranchIdx]], channelNames: [], sourcePortId: srcPort });
               return sourceBranchIndices[matchingBranchIdx];
             }
             
             // wired to a conserving net: the net's across variable (the editor and the pre-solve check reject this for scopes)
-            return portToVarIndex.get(srcKey) ?? -1;
+            const netIdx = portToVarIndex.get(srcKey) ?? -1;
+            bindings.push({ channel: channelNo, width: 1, indices: [netIdx], channelNames: [], sourcePortId: srcPort });
+            return netIdx;
           } else {
             // unwired channel: no variable at all. It used to bind to the scope's own pinned-to-0 port node and read a silent 0.
+            bindings.push({ channel: channelNo, width: 1, indices: [-1], channelNames: [] });
             return -1;
           }
         });
         scopeOutputs.set(node.id, indices);
+        scopeChannels.set(node.id, bindings);
       }
     });
 
@@ -1557,6 +1685,17 @@ export class DAEAssembler {
             res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
           } else {
             res[acrossVarIdx] = x[acrossVarIdx];
+          }
+        } else if (pn.stride > 1 && pn.domain !== 'frame' && pn.domain !== 'multibodyframe') {
+          // Vector net (WP-09c): one row per channel. A width-N signal net equals the sum of the signal branches that drive
+          // its channel k; a composite three-phase electrical node obeys KCL per phase (sum of through variables = 0).
+          for (let k = 0; k < pn.stride; k++) {
+            const kn = kirchhoffNodes.find(n => n.nodeId === pn.id && n.channel === k);
+            const sum = kn ? kn.throughIndices.reduce((acc, ti, i) => acc + kn.signs[i] * x[ti], 0) : 0;
+            const driven = !!kn && kn.throughIndices.length > 0;
+            res[acrossVarIdx + k] = pn.domain === 'physical'
+              ? (driven ? x[acrossVarIdx + k] - sum : x[acrossVarIdx + k])
+              : (driven ? sum : x[acrossVarIdx + k]); // an isolated phase node is held at the reference potential
           }
         } else if (pn.domain === 'physical') {
           // Physical signal node:
@@ -1655,7 +1794,7 @@ export class DAEAssembler {
     const variableOwners: { blockId: string; blockType: string }[] = new Array(varCount).fill({ blockId: '', blockType: '' });
     physicalNodes.forEach(pn => {
       const owner = keyOwner.get(pn.id) ?? { blockId: '', blockType: '' };
-      const stride = (pn.domain === 'frame' || pn.domain === 'multibodyframe') ? 6 : 1;
+      const stride = pn.stride;
       for (let k = 0; k < stride; k++) variableOwners[pn.acrossVarIndex + k] = owner;
     });
     componentsList.forEach(c => {
@@ -1675,7 +1814,8 @@ export class DAEAssembler {
       residuals,
       kirchhoffNodes,
       components: componentsList,
-      scopeOutputs
+      scopeOutputs,
+      scopeChannels
     };
   }
 

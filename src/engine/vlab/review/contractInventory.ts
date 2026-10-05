@@ -10,6 +10,7 @@ import type { Node } from '@xyflow/react';
 import { blockEquations, type BlockEquationArgs } from '../vlabEquations';
 import { DAEAssembler } from '../DAEAssembler';
 import type { VLabBlock } from '../../../utils/vlabLibrary';
+import { widthOf } from '../vlabVectorPorts';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const readSource = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
@@ -78,9 +79,14 @@ export interface Trace {
   threw: boolean;
 }
 
-const idxProxy = (rec: Set<number>) => new Proxy([] as any[], {
+/** `widths[i] > 1`: port i is a vector (WP-09c); the equation reads an array of that width, not a scalar. */
+const idxProxy = (rec: Set<number>, widths: number[] = []) => new Proxy([] as any[], {
   get(_t, p) {
-    if (typeof p === 'string' && /^\d+$/.test(p)) { rec.add(Number(p)); return 1; }
+    if (typeof p === 'string' && /^\d+$/.test(p)) {
+      rec.add(Number(p));
+      const w = widths[Number(p)] ?? 1;
+      return w > 1 ? new Array(w).fill(1) : 1;
+    }
     if (p === 'length') return 16;
     if (p === Symbol.iterator) return function* () { for (let i = 0; i < 16; i++) { rec.add(i); yield 1; } };
     const v = (Array.prototype as any)[p as any];
@@ -88,7 +94,7 @@ const idxProxy = (rec: Set<number>) => new Proxy([] as any[], {
   },
 });
 
-export function traceBlock(id: string, defaults: Record<string, any>, portIds: string[]): Trace | null {
+export function traceBlock(id: string, defaults: Record<string, any>, portIds: string[], widths: number[] = []): Trace | null {
   const fn = blockEquations[id];
   if (!fn) return null;
   const t: Trace = { across: new Set(), dAcross: new Set(), branch: new Set(), dBranch: new Set(), state: new Set(), dState: new Set(), params: new Set(), threw: false };
@@ -99,7 +105,7 @@ export function traceBlock(id: string, defaults: Record<string, any>, portIds: s
   const ctx: any = { dt: 1e-3, time: 0, parameters: {}, prevStates: [], states: [], stateDerivatives: [], order: 1 };
   try {
     fn({
-      across: idxProxy(t.across), dAcross: idxProxy(t.dAcross), branch: idxProxy(t.branch) as any, dBranch: idxProxy(t.dBranch) as any,
+      across: idxProxy(t.across, widths), dAcross: idxProxy(t.dAcross, widths), branch: idxProxy(t.branch) as any, dBranch: idxProxy(t.dBranch) as any,
       state: idxProxy(t.state) as any, dState: idxProxy(t.dState) as any, ctx, params, ports: portIds, nodeId: id,
     } as any);
   } catch {
@@ -151,7 +157,7 @@ function quiet<T>(fn: () => T): T {
 function resolvePortDomains(b: VLabBlock, names: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const p of b.ports) {
-    const re = new RegExp(`^Across_dut_${escRe(p.id)}(?:_(?:Px|Py|Pz|Rx|Ry|Rz))?_\\((.+)\\)$`);
+    const re = new RegExp(`^Across_dut_${escRe(p.id)}(?:_(?:Px|Py|Pz|Rx|Ry|Rz|ch\\d+|ph[abc]))?_\\((.+)\\)$`);
     for (const n of names) {
       const m = n.match(re);
       if (m) { out[p.id] = m[1]; break; }
@@ -183,11 +189,12 @@ export function assembleSingleBlock(b: VLabBlock): SingleBlockAssembly {
     if (fn) {
       const portIds = b.ports.map(p => p.id);
       const zeros = (n: number) => new Array(n).fill(0);
-      const across = portIds.map(id => (FRAME_DOMAINS.has(portDomains[id] ?? '') ? zeros(6) : 0));
+      const widthOfPort = (id: string) => widthOf(b.ports.find(p => p.id === id));
+      const across = portIds.map(id => (FRAME_DOMAINS.has(portDomains[id] ?? '') ? zeros(6) : widthOfPort(id) > 1 ? zeros(widthOfPort(id)) : 0));
       const ctx: any = { dt: 1e-3, time: 0, parameters: {}, prevStates: zeros(sys.systemSize), states: zeros(sys.systemSize), stateDerivatives: zeros(sys.systemSize), order: 1 };
       try {
         const res = quiet(() => fn({
-          across, dAcross: across.map(a => (Array.isArray(a) ? zeros(6) : 0)),
+          across, dAcross: across.map(a => (Array.isArray(a) ? zeros(a.length) : 0)),
           branch: zeros(allocatedBranches), dBranch: zeros(allocatedBranches),
           state: zeros(allocatedStates), dState: zeros(allocatedStates),
           ctx, params: libraryDefaults(b), ports: portIds, nodeId: 'dut', connectedPorts: [],
@@ -221,12 +228,14 @@ export function routeToScope(b: VLabBlock, portId: string): ScopeRoutingResult {
   const edge = { id: 'e', source: 'dut', sourceHandle: `${portId}_s`, target: 'scope', targetHandle: 'in1_t' } as any;
   try {
     const sys = quiet(() => new DAEAssembler().assemble([dutNode(b), scope], [edge]));
-    const idxs = sys.scopeOutputs.get('scope') ?? [];
-    const idx = idxs[0];
-    if (idx === undefined || idx < 0) return { routing: 'unrouted', detail: 'scope channel 1 has no variable' };
+    // a width-N output is routed when EVERY component has a variable (WP-09c); component 0 alone is never enough
+    const binding = sys.scopeChannels?.get('scope')?.[0];
+    const comps = binding && binding.width > 1 ? binding.indices : [(sys.scopeOutputs.get('scope') ?? [])[0]];
+    if (comps.some(i => i === undefined || i < 0)) return { routing: 'unrouted', detail: 'scope channel 1 has no variable' };
+    const idx = comps[0];
     const name = sys.variableNames[idx];
-    if (name.startsWith('dut_branch_')) return { routing: 'ok', variable: name };
-    const m = name.match(/^Across_(.+?)(?:_(?:Px|Py|Pz|Rx|Ry|Rz))?_\((.+)\)$/);
+    if (comps.every(i => sys.variableNames[i].startsWith('dut_branch_'))) return { routing: 'ok', variable: name };
+    const m = name.match(/^Across_(.+?)(?:_(?:Px|Py|Pz|Rx|Ry|Rz|ch\d+|ph[abc]))?_\((.+)\)$/);
     if (!m) return { routing: 'unrouted', variable: name, detail: 'scope bound to a non-port variable' };
     const [, root, domain] = m;
     if (domain !== 'physical') return { routing: 'ok', variable: name };

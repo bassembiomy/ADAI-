@@ -261,14 +261,34 @@
       "findings": []
     },
     {
-      "id": "WP-10",
-      "title": "Electrical passive, sources, sensors, reference",
-      "phase": "P2",
+      "id": "WP-09c",
+      "title": "Vector/composite port infrastructure: signal vectors (abc, dq0, ab0, seq) and Simscape-style composite three-phase electrical ports",
+      "phase": "R2",
       "deps": [
         "WP-13b"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/vector_ports.test.ts src/engine/vlab/review src/components/vlab src/utils/vlabLibrary.test.ts --reporter=dot",
+      "evidence": [
+        "VLabPort width/channelNames/composite three_phase; exact width rules; vector scope traces; 15 ports marked; phase_splitter, clarke, inv_clarke, park, inv_park, sym_comp, inv_sym_comp, ps_sine_3phase, ps_demux_3 implemented",
+        "35 controller/inverter vector ports planned in review/vectorPortPlan.ts (WP-12: pwm vabc; WP-20: the rest); a test enforces the backlog",
+        "planner re-run: 4261 pass / 154 expected-fail / 1 known; labs_sim passes alone (timeout flake under load, F-049)"
+      ],
+      "findings": [
+        "F-046"
+      ]
+    },
+    {
+      "id": "WP-10",
+      "title": "Electrical passive, sources, sensors, reference",
+      "phase": "P2",
+      "deps": [
+        "WP-09c"
+      ],
+      "blocks": [],
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
       "evidence": [],
@@ -279,7 +299,7 @@
       "title": "Semiconductors & switches",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -293,7 +313,7 @@
       "title": "Machines & power electronics",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -307,7 +327,7 @@
       "title": "Rotational mechanical",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -321,7 +341,7 @@
       "title": "Translational mechanical",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -335,7 +355,7 @@
       "title": "Thermal",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -349,7 +369,7 @@
       "title": "Magnetic",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -363,7 +383,7 @@
       "title": "Fluid / isothermal liquid / steam",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -377,7 +397,7 @@
       "title": "Gas",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -391,7 +411,7 @@
       "title": "WP-19b Multibody remainder (bodies, forces, sensors, frames) beyond joints",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -405,7 +425,7 @@
       "title": "Physical signal & control [98 blocks: split into WP-20a..d at dispatch]",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -419,7 +439,7 @@
       "title": "Composite / appliance / DOE / microwave / utilities",
       "phase": "P2",
       "deps": [
-        "WP-13b"
+        "WP-09c"
       ],
       "blocks": [],
       "status": "todo",
@@ -972,7 +992,8 @@
       "block": "abc/dq0/seq/ab0 vector ports",
       "layer": "eq",
       "summary": "A scalar solver port carries one channel. clarke, inv_clarke, inv_sym_comp, im/pmsm_curr_ctrl and ps_sine_3phase carry channel 1 only. Needs vector signal ports.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "infrastructure done WP-09c; remaining ports WP-12/WP-20"
     },
     {
       "id": "F-047",
@@ -1104,6 +1125,38 @@
       "layer": "port",
       "summary": "Old t/f ports removed. Saved models get an unknown-port diagnostic. Consider a migration that drops those edges with a notice.",
       "wp": "WP-41"
+    },
+    {
+      "id": "F-063",
+      "severity": "med",
+      "block": "sym_comp_transform, inv_sym_comp_transform",
+      "layer": "eq",
+      "summary": "WP-09c used the phasor magnitude via dx/dt (ripple, first step wrong). Planner did NOT sign off: implement the Simscape Sequence Analyzer method (running one-fundamental-period Fourier at f0), output magnitude and phase per the library.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-064",
+      "severity": "med",
+      "block": "DAEAssembler",
+      "layer": "solver",
+      "summary": "Unconnected electrical ports named b/c/n/ref/gnd are pinned to ground by NAME (only phase_splitter is exempt). Replace with explicit reference semantics. Check three_phase_source, machines and inverters.",
+      "wp": "WP-10/WP-12"
+    },
+    {
+      "id": "F-065",
+      "severity": "low",
+      "block": "ps_sine_3phase",
+      "layer": "eq",
+      "summary": "Inputs m and ang are unread.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-066",
+      "severity": "med",
+      "block": "environment",
+      "layer": "integration",
+      "summary": "node_modules lost the same 92 packages twice (incl. @babel/runtime, @alloc/quick-lru, the .bin shims), the second time during a full src/utils test run at 00:34. Find which test/script prunes it.",
+      "wp": "WP-31"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

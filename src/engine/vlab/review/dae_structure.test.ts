@@ -158,7 +158,8 @@ describe('fixed blocks (allocation == equation)', () => {
   it('signal branches follow port direction, not port name', () => {
     expect(alloc('switch')).toEqual(['branch_current']);              // `v` is an input
     expect(alloc('gas_flow_source')).toEqual(['branch_mass_flow']);   // `m` is an input
-    expect(alloc('clarke_transform')).toEqual(['branch_signal_ab0']); // `abc` input has no branch
+    // `abc` input has no branch; the width-3 `ab0` output allocates one signal branch per channel (WP-09c)
+    expect(alloc('clarke_transform')).toEqual(['branch_signal_ab0[0]', 'branch_signal_ab0[1]', 'branch_signal_ab0[2]']);
     expect(alloc('ps_smith_predictor')).toEqual(['branch_signal_u', 'state_y']);
     expect(alloc('hysteresis_ctrl_3ph')).toEqual(['branch_signal_s']);
     expect(alloc('ma_pt_sensor')).toEqual(['branch_signal_p']);

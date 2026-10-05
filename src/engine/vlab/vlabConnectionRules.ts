@@ -11,10 +11,14 @@
  *  - Physical (signal) ports carry a direction: out -> in only. One output may drive many inputs; an input accepts
  *    exactly one source. out->out and in->in are rejected.
  *  - Scope / probe inputs accept only a measurable signal output (Physical `out`), never a conserving or Frame port.
+ *    A scope is width-agnostic: a width-N signal shows N traces (WP-09c). A probe passes one scalar through.
+ *  - Vector ports (WP-09c): two signal ports connect only when their widths are EXACTLY equal (no broadcast, no truncation);
+ *    a composite three-phase electrical port connects only to another composite port (vlabVectorPorts.ts).
  *  - Dragging A->B and B->A yields the identical normalised edge (source = the signal output; otherwise the
  *    lexicographically smaller block/port) and the identical diagnostic.
  */
 import { VLAB_LIBRARY, type VLabBlock } from '../../utils/vlabLibrary';
+import { portShape, type PortShape } from './vlabVectorPorts';
 
 export type PortDirection = 'in' | 'out';
 export type PortKind = 'conserving' | 'signal' | 'property' | 'any' | 'transparent';
@@ -68,6 +72,10 @@ export interface ResolvedPort {
   kind: PortKind;
   /** signal ports only */
   direction?: PortDirection;
+  /** number of channels (1 = scalar). A composite three-phase port has width 3. WP-09c */
+  width: number;
+  channelNames: string[];
+  composite?: 'three_phase';
 }
 
 export type ConnectionCode =
@@ -76,7 +84,9 @@ export type ConnectionCode =
   // WP-08: numeric parameter that is not a finite number / violates its physical bound (vlabParams.ts)
   | 'invalid-parameter' | 'parameter-out-of-range'
   // WP-09a: block listed in vlabStructure.UNSUPPORTED_BLOCKS (the diagnostic names the missing specification)
-  | 'unsupported-block';
+  | 'unsupported-block'
+  // WP-09c: signal widths differ / composite three-phase port wired to a scalar port
+  | 'width-mismatch' | 'composite-mismatch';
 
 export interface ConnectionDiagnostic {
   blockId: string;
@@ -91,6 +101,9 @@ export interface ConnectionDiagnostic {
   /** parameter diagnostics only (code 'invalid-parameter' | 'parameter-out-of-range') */
   param?: string;
   raw?: unknown;
+  /** width diagnostics only (code 'width-mismatch' | 'composite-mismatch'): width the port expects vs the width wired to it */
+  expectedWidth?: number;
+  actualWidth?: number;
 }
 
 export interface NormalizedConnection {
@@ -168,7 +181,7 @@ export function resolvePort(node: RuleNode, handle?: string | null): PortLookup 
   });
 
   if (TRANSPARENT_BLOCKS.has(type)) {
-    return { ok: true, port: { nodeId: node.id, blockType: type, blockLabel: label, portId: portId ?? '', domain: 'transparent', kind: 'transparent' } };
+    return { ok: true, port: { nodeId: node.id, blockType: type, blockLabel: label, portId: portId ?? '', domain: 'transparent', kind: 'transparent', width: 1, channelNames: [] } };
   }
 
   const dataPort = Array.isArray(node.data?.ports) ? node.data.ports.find((p: any) => p?.id === portId) : undefined;
@@ -180,12 +193,16 @@ export function resolvePort(node: RuleNode, handle?: string | null): PortLookup 
     if (lib) return fail('unknown-port', `Block "${label}" (${type}) has no port "${portId ?? '(none)'}".`);
     if (!lib && node.data?.domain) {
       // unknown block type that only declares a block-level domain: use it for every port
-      return makeResolved(node, type, label, portId ?? '', node.data.domain, undefined, fail);
+      return makeResolved(node, type, label, portId ?? '', node.data.domain, undefined, fail, { width: 1, channelNames: [] });
     }
     return { ok: false, unverifiable: true };
   }
 
   let domain = libPort?.domain ?? dataPort?.domain ?? (synthScope ? 'Physical' : undefined) ?? node.data?.domain;
+  // width / composite metadata comes from the LIBRARY; an instance copy only fills in for a block the library does not know
+  let shape: PortShape;
+  try { shape = portShape(libPort ?? dataPort, `Port "${portId}" of "${label}" (${type})`); }
+  catch (e) { return fail('unknown-domain', e instanceof Error ? e.message : String(e)); }
   let direction: PortDirection | undefined = libPort?.direction ?? dataPort?.direction;
   if (synthScope) direction = 'in';
   if (type === 'doe_custom' && !libPort && dataPort) {
@@ -194,13 +211,14 @@ export function resolvePort(node: RuleNode, handle?: string | null): PortLookup 
     if (canonicalDomain(domain) === 'general') domain = 'Physical';
     if (!direction) direction = dataPort.type === 'input' ? 'in' : dataPort.type === 'output' ? 'out' : undefined;
   }
-  return makeResolved(node, type, label, portId!, domain, direction, fail);
+  return makeResolved(node, type, label, portId!, domain, direction, fail, shape);
 }
 
 function makeResolved(
   node: RuleNode, type: string, label: string, portId: string, rawDomain: string | undefined,
   direction: PortDirection | undefined,
   fail: (code: ConnectionCode, reason: string, domain?: string) => PortLookup,
+  shape: PortShape,
 ): PortLookup {
   const domain = canonicalDomain(rawDomain);
   if (!domain) return fail('unknown-domain', `Port "${portId}" of "${label}" (${type}) has no domain.`);
@@ -212,7 +230,19 @@ function makeResolved(
   else if (domain === 'beltproperty') kind = 'property';
   else if (CONSERVING_DOMAINS.has(domain)) kind = 'conserving';
   else return fail('unknown-domain', `Port "${portId}" of "${label}" (${type}) has unknown domain "${rawDomain}".`, domain);
-  return { ok: true, port: { nodeId: node.id, blockType: type, blockLabel: label, portId, domain, kind, direction: kind === 'signal' ? direction : undefined } };
+  if (shape.composite && domain !== 'electrical') {
+    return fail('unknown-domain', `Port "${portId}" of "${label}" (${type}) is a three-phase composite port but has domain "${rawDomain}"; only Electrical ports can be composite.`, domain);
+  }
+  if (shape.width > 1 && kind !== 'signal' && !shape.composite) {
+    return fail('unknown-domain', `Port "${portId}" of "${label}" (${type}) declares width ${shape.width} but is a ${domain} port; only Physical signal ports (and composite three-phase Electrical ports) can be wider than 1.`, domain);
+  }
+  return {
+    ok: true,
+    port: {
+      nodeId: node.id, blockType: type, blockLabel: label, portId, domain, kind, direction: kind === 'signal' ? direction : undefined,
+      width: shape.width, channelNames: shape.channelNames, composite: shape.composite,
+    },
+  };
 }
 
 const isMeasurementInput = (p: ResolvedPort) => MEASUREMENT_SINK_BLOCKS.has(p.blockType) && p.direction === 'in';
@@ -226,12 +256,14 @@ function ordered(a: ResolvedPort, b: ResolvedPort): [ResolvedPort, ResolvedPort]
   return portKey(a) <= portKey(b) ? [a, b] : [b, a];
 }
 
-const describe = (p: ResolvedPort) => `${p.domain} port (${p.blockLabel})`;
+const describe = (p: ResolvedPort) => `${p.composite ? 'composite three-phase ' : ''}${p.domain} port (${p.blockLabel})`;
+const widthText = (p: ResolvedPort) => (p.composite ? 'composite three-phase (a, b, c)' : p.width === 1 ? 'scalar (width 1)' : `width ${p.width}`);
 
-function reject(code: ConnectionCode, x: ResolvedPort, y: ResolvedPort, reason: string): ConnectionResult {
+function reject(code: ConnectionCode, x: ResolvedPort, y: ResolvedPort, reason: string, widths?: { expected: number; actual: number }): ConnectionResult {
   const diagnostic: ConnectionDiagnostic = {
     blockId: y.nodeId, portId: y.portId, expectedDomain: x.domain, actualDomain: y.domain, reason, code,
     otherBlockId: x.nodeId, otherPortId: x.portId,
+    ...(widths ? { expectedWidth: widths.expected, actualWidth: widths.actual } : {}),
   };
   return { valid: false, diagnostic, message: reason };
 }
@@ -239,7 +271,8 @@ function reject(code: ConnectionCode, x: ResolvedPort, y: ResolvedPort, reason: 
 /** Pairwise rules (domain, direction, measurement sinks). Fan-in is checked against the edge set separately. */
 export function checkPortPair(a: ResolvedPort, b: ResolvedPort): { ok: true; source: ResolvedPort; target: ResolvedPort } | Extract<ConnectionResult, { valid: false }> {
   const [x, y] = ordered(a, b);
-  const bad = (code: ConnectionCode, reason: string) => reject(code, x, y, reason) as Extract<ConnectionResult, { valid: false }>;
+  const bad = (code: ConnectionCode, reason: string, widths?: { expected: number; actual: number }) =>
+    reject(code, x, y, reason, widths) as Extract<ConnectionResult, { valid: false }>;
 
   if (x.kind === 'transparent' || y.kind === 'transparent') return { ok: true, source: x, target: y };
 
@@ -252,10 +285,28 @@ export function checkPortPair(a: ResolvedPort, b: ResolvedPort): { ok: true; sou
     }
   }
 
-  if (x.kind === 'any' || y.kind === 'any') return { ok: true, source: x, target: y };
+  if (x.kind === 'any' || y.kind === 'any') {
+    // WP-09c: the Simulink-PS converters carry ONE scalar; a vector / composite port behind them is a width error
+    const other = x.kind === 'any' ? y : x;
+    if (other.kind !== 'any' && (other.width !== 1 || other.composite)) {
+      return bad('width-mismatch',
+        `Cannot connect ${other.blockLabel}.${other.portId} (${widthText(other)}) to the Simulink-PS converter ${(x.kind === 'any' ? x : y).blockLabel}: converters carry one scalar signal (expected width 1, got width ${other.width}). ` +
+        `Split the vector first.`, { expected: 1, actual: other.width });
+    }
+    return { ok: true, source: x, target: y };
+  }
 
   if (x.domain !== y.domain) {
     return bad('domain-mismatch', `Cannot connect ${describe(x)} to ${describe(y)}. Use a domain converter block.`);
+  }
+
+  // WP-09c: a composite three-phase port meets only another composite port (phase_splitter bridges to the scalar phases)
+  if (!!x.composite !== !!y.composite) {
+    const comp = x.composite ? x : y; const scalar = x.composite ? y : x;
+    return bad('composite-mismatch',
+      `Cannot connect the three-phase composite port ${comp.blockLabel}.${comp.portId} to the scalar ${scalar.domain} port ${scalar.blockLabel}.${scalar.portId}: ` +
+      `a composite port connects only to another composite port (expected width ${comp.width}, got width ${scalar.width}). ` +
+      `Use a Phase Splitter to reach the individual phases a, b, c.`, { expected: comp.width, actual: scalar.width });
   }
 
   if (x.kind === 'signal' && y.kind === 'signal') {
@@ -264,6 +315,14 @@ export function checkPortPair(a: ResolvedPort, b: ResolvedPort): { ok: true; sou
     }
     if (x.direction === 'in' && y.direction === 'in') {
       return bad('input-to-input', `Cannot connect signal input (${x.blockLabel}.${x.portId}) to signal input (${y.blockLabel}.${y.portId}): neither end produces the signal.`);
+    }
+    // WP-09c: widths must match exactly. Scope inputs are width-agnostic (one trace per channel); a probe passes ONE scalar through.
+    if (!(sink && sink.blockType === 'scope') && x.width !== y.width) {
+      // after ordering, y is the signal input (or, for an undirected pair, the lexicographically later port): it defines the expected width
+      return bad('width-mismatch',
+        `Cannot connect ${x.blockLabel}.${x.portId} (${widthText(x)}) to ${y.blockLabel}.${y.portId} (${widthText(y)}): signal widths must match exactly ` +
+        `(expected width ${y.width} at ${y.blockLabel}.${y.portId}, got width ${x.width}); there is no implicit broadcast or truncation. ` +
+        `Use a Mux / Demux or a splitter block to change the width.`, { expected: y.width, actual: x.width });
     }
   }
   return { ok: true, source: x, target: y };

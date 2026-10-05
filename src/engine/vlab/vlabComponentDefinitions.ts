@@ -308,10 +308,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A low-impedance electrical conductor used to connect multiple branches. Models a common node with Kirchhoff\'s Current Law.'
   },
   phase_splitter: {
-    equations: ['Va = Vabc[0]', 'Vb = Vabc[1]', 'Vc = Vabc[2]'],
+    equations: ['Va = Vabc[a]', 'Vb = Vabc[b]', 'Vc = Vabc[c]', 'I_abc,k = I_k (KCL per phase)'],
     latex: ['\mathbf{V}_{abc} \\to V_a, V_b, V_c'],
     across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Decomposes a composite three-phase signal into three individual phase lines (A, B, and C).'
+    description: 'Splits the composite three-phase port abc (three nodes a, b, c, one KCL each) into three scalar electrical phase ports. The phases stay independent; a composite port connects only to another composite port.'
   },
   delta_ref: {
     equations: ['V_delta = V_ref'],
@@ -866,10 +866,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An advanced dead-time compensation controller. Predicts the plant output to eliminate the instability caused by transport delays.'
   },
   ps_sine_3phase: {
-    equations: ['Va = m * sin(wt)', 'Vb = m * sin(wt - 120)', 'Vc = m * sin(wt + 120)'],
+    equations: ['Va = Vpk * sin(wt)', 'Vb = Vpk * sin(wt - 120 deg)', 'Vc = Vpk * sin(wt + 120 deg)', 'wt = 2*pi*f*t'],
     latex: ['V_{abc} = M \\begin{bmatrix} \\sin(\\omega t) \\\\ \\sin(\\omega t - 120^\\circ) \\\\ \\sin(\\omega t + 120^\\circ) \\end{bmatrix}'],
     across: 'None', through: 'None',
-    description: 'Generates a three-phase sinusoidal physical signal vector with configurable amplitude and frequency.'
+    description: 'Generates a balanced positive-sequence three-phase sinusoidal signal vector (width-3 output abc) with configurable peak amplitude and frequency, plus the instantaneous angle wt.'
   },
   ps_second_order_filter: {
     equations: ['d2y/dt2 + 2*zeta*wn*dy/dt + wn^2*y = wn^2*u'],
@@ -956,28 +956,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Transforms 2-phase stationary coordinates back to 3-phase stationary coordinates.'
   },
   park_transform: {
-    equations: ['d = cos(th)*alpha + sin(th)*beta', 'q = -sin(th)*alpha + cos(th)*beta', '0 = zero'],
+    equations: ['d = cos(th)*alpha + sin(th)*beta', 'q = -sin(th)*alpha + cos(th)*beta', '0 = zero', '(90 deg behind A: th -> th - pi/2)'],
     latex: ['\mathbf{x}_{dq0} = \mathbf{T}_{park}(\\theta) \mathbf{x}_{\\alpha\\beta0}'],
     across: 'None', through: 'None',
-    description: 'Converts 2-phase stationary coordinates (alpha-beta) to rotating coordinates (dq) based on the rotor alignment convention.'
+    description: 'Converts the abc vector (through the amplitude-invariant Clarke transform) to rotating dq0 coordinates; the Alignment parameter selects whether the d axis is aligned with phase A or 90 degrees behind it.'
   },
   inv_park_transform: {
-    equations: ['alpha = cos(th)*d - sin(th)*q', 'beta = sin(th)*d + cos(th)*q', 'zero = 0'],
+    equations: ['alpha = cos(th)*d - sin(th)*q', 'beta = sin(th)*d + cos(th)*q', 'a = alpha + zero', 'b = -alpha/2 + sqrt(3)/2*beta + zero', 'c = -alpha/2 - sqrt(3)/2*beta + zero'],
     latex: ['\mathbf{x}_{\\alpha\\beta0} = \mathbf{T}_{park}^{-1}(\\theta) \mathbf{x}_{dq0}'],
     across: 'None', through: 'None',
-    description: 'Transforms rotating dq coordinates back to stationary alpha-beta coordinates.'
+    description: 'Transforms rotating dq0 coordinates back to the stationary abc vector (inverse of the Park transform with the same Alignment).'
   },
   sym_comp_transform: {
-    equations: ['pos = 1/3 * (a + a^1*b + a^2*c)', 'neg = 1/3 * (a + a^2*b + a^1*c)', 'zero = 1/3 * (a + b + c)'],
+    equations: ['V1 = 1/3 * (A + a*B + a^2*C)', 'V2 = 1/3 * (A + a^2*B + a*C)', 'V0 = 1/3 * (A + B + C)', 'a = exp(j*2*pi/3), A = x - j*(dx/dt)/(2*pi*freq)', 'seq = [|V1|, |V2|, |V0|]'],
     latex: ['\mathbf{x}_{+-0} = \mathbf{T}_{sym} \mathbf{x}_{abc}'],
     across: 'None', through: 'None',
-    description: 'Decomposes an unbalanced three-phase system into positive, negative, and zero sequence components using Symmetrical Components theory.'
+    description: 'Decomposes an unbalanced three-phase system into positive, negative and zero sequence components (Fortescue). The width-3 output carries the real peak magnitudes of the three sequence phasors at the base frequency.'
   },
   inv_sym_comp_transform: {
-    equations: ['a = p + n + z', 'b = a^2*p + a*n + z', 'c = a*p + a^2*n + z'],
+    equations: ['a = (V1 + V2 + V0)*cos(wt)', 'b = V1*cos(wt - 2*pi/3) + V2*cos(wt + 2*pi/3) + V0*cos(wt)', 'c = V1*cos(wt + 2*pi/3) + V2*cos(wt - 2*pi/3) + V0*cos(wt)'],
     latex: ['\mathbf{x}_{abc} = \mathbf{T}_{sym}^{-1} \mathbf{x}_{+-0}'],
     across: 'None', through: 'None',
-    description: 'Synthesizes three-phase $abc$ signals from their positive, negative, and zero sequence components.'
+    description: 'Synthesizes the three-phase abc signals at the base frequency from the magnitudes of their positive, negative and zero sequence components (phase a is the cos(wt) reference).'
   },
   im_flux_observer: {
     equations: ['d(phi_r)/dt = -(1/Tr - j*w_r)*phi_r + (Lm/Tr)*is', 'theta = atan2(phi_beta, phi_alpha)'],

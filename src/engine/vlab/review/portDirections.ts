@@ -37,8 +37,7 @@ export const CONFLICT_IS_INPUT: string[] = [];
 
 /** read as across AND driven; physics says the block produces it (the readback is a residual artefact). */
 export const CONFLICT_IS_OUTPUT = [
-  'ma_selector.t', 'park_transform.dq0', 'inv_park_transform.abc',
-  'sym_comp_transform.seq', 'pmsm_tq_est.tq_est',
+  'ma_selector.t', 'pmsm_tq_est.tq_est',
   // outputs the old name vocabulary called conserving (s, p): the equation still reads them back as across
   'hysteresis_ctrl_3ph.s', 'ma_pt_sensor.p',
 ];

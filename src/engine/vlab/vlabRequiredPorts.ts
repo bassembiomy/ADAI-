@@ -21,7 +21,7 @@ export const DERIVED_REQUIRED_SIGNAL_INPUTS: Readonly<Record<string, readonly st
   im_dtc_ctrl: ['flux_ref', 'tq_ref'],
   im_flux_observer: ['iabc', 'wr'],
   inv_clarke_transform: ['ab0'],
-  inv_park_transform: ['dq0'],
+  inv_park_transform: ['dq0', 'theta'],
   inv_sym_comp_transform: ['seq'],
   luenberger_observer: ['u', 'y'],
   ma_selector: ['in'],
@@ -89,4 +89,4 @@ export const DERIVED_REQUIRED_CONSERVING_PORTS: Readonly<Record<string, readonly
 };
 
 /** Blocks already singular with every conserving port tied to a reference: not judged per port. */
-export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'ctrl_temp_src', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'heat_flow_sensor', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'microwave_cavity', 'phase_splitter', 'pressure_source', 'steam_accumulator', 'temp_src', 'three_phase_source', 'trans_hard_stop'];
+export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'ctrl_temp_src', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'heat_flow_sensor', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'microwave_cavity', 'pressure_source', 'steam_accumulator', 'temp_src', 'three_phase_source', 'trans_hard_stop'];

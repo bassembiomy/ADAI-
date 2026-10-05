@@ -108,9 +108,21 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
     return Array.from({ length: numChannels }, (_, i) => getVLabSignalInfo(id, i, nodes, edges, data));
   }, [id, numChannels, nodes, edges, data]);
 
-  const channelKeys = useMemo(() => {
-    return Array.from({ length: numChannels }, (_, i) => `in${i + 1}`);
-  }, [numChannels]);
+  // One trace per scalar channel; a width-N signal (WP-09c) draws N traces `in<k>[<channel name>]` (a, b, c / d, q, 0), each
+  // labelled `<block>.<port>[<name>] - <quantity> [<unit>]`. Nothing is reduced to component 0.
+  const traces = useMemo(() => {
+    return signalInfos.flatMap((info, i) => {
+      const keys = info?.traceKeys && info.traceKeys.length > 0 ? info.traceKeys : [`in${i + 1}`];
+      return keys.map((key, k) => ({
+        key,
+        channelIndex: i,
+        label: info?.connected ? (info.traceLabels?.[k] || info.channelLabel || `${info.blockLabel}.${info.portName}`) : (info?.fullName || key),
+      }));
+    });
+  }, [signalInfos]);
+
+  const channelKeys = useMemo(() => traces.map(t => t.key), [traces]);
+  const gradientId = (key: string) => `grad-${key.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
   // Snap Cursor Helpers
   const handleSnapCursor = (cursor: 'C1' | 'C2', target: 'max' | 'min' | 'center') => {
@@ -295,16 +307,17 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
     if (!showStats || displayData.length === 0) return [];
     return channelKeys.map((key, i) => {
       const stats = calculateSignalStatistics(displayData, key);
-      const info = signalInfos[i];
+      const trace = traces[i];
+      const info = signalInfos[trace.channelIndex];
       const color = SIMULINK_SCOPE_COLORS[i % SIMULINK_SCOPE_COLORS.length];
       return {
         key,
-        name: info?.connected ? (info.channelLabel || `${info.blockLabel}.${info.portName}`) : `Channel ${i + 1}`,
+        name: info?.connected ? trace.label : `Channel ${trace.channelIndex + 1}`,
         color,
         ...stats
       };
     });
-  }, [showStats, displayData, channelKeys, signalInfos]);
+  }, [showStats, displayData, channelKeys, signalInfos, traces]);
 
   // Autoscale Handler (Simulink Binoculars)
   const handleAutoscale = () => {
@@ -706,10 +719,9 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                         <div className="flex items-center gap-2">
                           {plot.channels.map((chKey) => {
                             const chIndex = channelKeys.indexOf(chKey);
-                            const info = signalInfos[chIndex];
                             const color = SIMULINK_SCOPE_COLORS[chIndex % SIMULINK_SCOPE_COLORS.length];
                             const isHidden = !!hiddenChannels[chKey];
-                            const label = info?.connected ? (info.channelLabel || `${info.blockLabel}.${info.portName}`) : (info?.fullName || chKey);
+                            const label = traces[chIndex]?.label ?? chKey;
 
                             return (
                               <button
@@ -768,7 +780,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                               const chIndex = channelKeys.indexOf(chKey);
                               const color = SIMULINK_SCOPE_COLORS[chIndex % SIMULINK_SCOPE_COLORS.length];
                               return (
-                                <linearGradient key={chKey} id={`grad-${chKey}`} x1="0" y1="0" x2="0" y2="1">
+                                <linearGradient key={chKey} id={gradientId(chKey)} x1="0" y1="0" x2="0" y2="1">
                                   <stop offset="5%" stopColor={color} stopOpacity={0.2} />
                                   <stop offset="95%" stopColor={color} stopOpacity={0} />
                                 </linearGradient>
@@ -825,7 +837,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                                 stroke={color}
                                 strokeWidth={2.0}
                                 fillOpacity={1}
-                                fill={`url(#grad-${chKey})`}
+                                fill={`url(#${gradientId(chKey)})`}
                                 isAnimationActive={false}
                                 dot={false}
                                 connectNulls={false}
@@ -1083,7 +1095,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-amber-400' : 'bg-emerald-400'}`} />
                 <span className="text-gray-400 font-medium">{isPaused ? 'Halted / Paused' : 'Continuous Acquisition'}</span>
               </span>
-              <span>Channels: {numChannels}</span>
+              <span>Channels: {numChannels}{traces.length !== numChannels ? ` (${traces.length} traces)` : ''}</span>
               <span>Samples: {displayData.length} pts</span>
             </div>
 

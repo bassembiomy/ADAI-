@@ -12,6 +12,7 @@ import { VLAB_LIBRARY, type VLabBlock } from '../../utils/vlabLibrary';
 import { requiredPortsOf } from './vlabTopologyValidation';
 import { DAEAssembler } from './DAEAssembler';
 import { assertStructurallyWellPosed } from './vlabStructure';
+import { widthOf } from './vlabVectorPorts';
 
 /** Blocks that are themselves ideal voltage sources: their ports are loaded, never driven. */
 const ELECTRICAL_SOURCE_DUTS = ['three_phase_source'];
@@ -99,7 +100,19 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
     const portId = port.id;
     const domain = lower(port.domain);
 
-    if (domain === 'electrical') {
+    if (domain === 'electrical' && port.composite) {
+      // composite three-phase port (WP-09c): meets another composite port. A second Phase Splitter bridges it to three
+      // scalar phase nodes, each loaded with a resistor to ground.
+      addNode('gnd', 'ground', 50, 400);
+      addNode(`fx_split_${portId}`, 'phase_splitter', 120, 100 * idx);
+      wire(`e_comp_${portId}`, 'dut', `${portId}_s`, `fx_split_${portId}`, 'abc_t');
+      for (const ph of ['a', 'b', 'c']) {
+        addNode(`load_comp_${portId}_${ph}`, 'resistor', 200, 100 * idx, { R: 1000 });
+        wire(`e_comp_load_${portId}_${ph}`, `fx_split_${portId}`, `${ph}_s`, `load_comp_${portId}_${ph}`, 'p_t');
+        wire(`e_comp_gnd_${portId}_${ph}`, `load_comp_${portId}_${ph}`, 'n_s', 'gnd', 'a_t');
+      }
+      connected.add(portId);
+    } else if (domain === 'electrical') {
       addNode('gnd', 'ground', 50, 400);
       if (['p', 'p1', 'a', 'in_p', 'c', 'd'].includes(portId) && !ELECTRICAL_SOURCE_DUTS.includes(block.id)) {
         const srcId = `src_elec_${portId}`;
@@ -210,7 +223,15 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
       }
     } else if (domain === 'physical') {
       const wantsDrive = port.direction === 'in' && (LEGACY_DRIVEN_INPUTS.has(portId.toLowerCase()) || requiredSignal.has(portId));
-      if (wantsDrive) {
+      if (wantsDrive && widthOf(port) > 1) {
+        // width-N signal input (WP-09c): driven by a width-3 vector source (a scalar constant would be a width mismatch)
+        if (widthOf(port) === 3) {
+          const srcId = `src_ps_${portId}`;
+          addNode(srcId, 'ps_sine_3phase', 50, 100 * idx, { Vpk: 5, f: 50 });
+          wire(`e_ps_src_${portId}`, srcId, 'abc_s', 'dut', `${portId}_t`);
+          connected.add(portId);
+        }
+      } else if (wantsDrive) {
         const srcId = `src_ps_${portId}`;
         addNode(srcId, 'ps_constant', 50, 100 * idx, { value: PS_INPUT_VALUE[block.id] ?? 5.0 });
         wire(`e_ps_src_${portId}`, srcId, 'y_s', 'dut', `${portId}_t`);
@@ -259,7 +280,8 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
 
   // No measurable output: read a conserving port through a sensor of its own domain.
   if (!scopeConnected && block.ports.length > 0) {
-    const first = block.ports[0];
+    // a composite three-phase port cannot be read by a scalar sensor (WP-09c): read the first scalar port instead
+    const first = block.ports.find(p => !p.composite) ?? block.ports[0];
     const domain = lower(first.domain) || lower(VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type) || 'electrical';
     const sensorBy: Record<string, { type: string; sensorPort: string; out: string; id: string }> = {
       electrical: { id: 'diag_v_sensor', type: 'v_sensor', sensorPort: 'p', out: 'v' },

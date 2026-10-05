@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { VLAB_LIBRARY, type VLabBlock } from '../../../utils/vlabLibrary';
 import { blockEquations } from '../vlabEquations';
 import { UNSUPPORTED_BLOCKS } from '../vlabStructure';
+import { widthOf } from '../vlabVectorPorts';
 import {
   REPO_ROOT, assembleSingleBlock, libraryDefaults, parseDaeCaseLabels, routeToScope, traceBlock,
   type SingleBlockAssembly, type Trace,
@@ -67,7 +68,7 @@ export function buildContexts(): BlockContext[] {
   for (const d of VLAB_LIBRARY) {
     for (const block of d.blocks) {
       const ids = block.ports.map(p => p.id);
-      const trace = traceBlock(block.id, libraryDefaults(block), ids);
+      const trace = traceBlock(block.id, libraryDefaults(block), ids, block.ports.map(p => widthOf(p)));
       const assembly = assembleSingleBlock(block);
       const read = new Set<number>(trace ? [...trace.across, ...trace.dAcross] : []);
       const signalOutputPorts = block.ports
