@@ -180,6 +180,7 @@ import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransi
 import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView } from './services/sysmlProjectionState';
+import { projectActiveDiagram } from './engine/sysml/projection/activeDiagramProjection';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortKindActions } from './components/sysml/PortKindActions';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
@@ -6362,11 +6363,6 @@ const ADIA = () => {
     () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
     [sysmlStore],
   );
-  const sysmlCanvasProjection = useMemo(
-    () => projectLegacyDiagram(canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations),
-    [canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations],
-  );
-  const { packages, blocks, relationships, parts, connectors } = sysmlCanvasProjection;
   const selectedPackageDiagram = activePackageDiagramId ? canonicalSysmlRepository.diagrams[activePackageDiagramId] : undefined;
   const fallbackPackageDiagramId = Object.values(canonicalSysmlRepository.diagrams)
     .find(diagram => diagram.diagramKind === 'package')?.id;
@@ -6382,6 +6378,12 @@ const ADIA = () => {
     : (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode)
       ? activeSysmlDiagramIdState
       : Object.values(canonicalSysmlRepository.diagrams).find(d => d.diagramKind === diagramMode)?.id ?? diagramMode;
+
+  const sysmlCanvasProjection = useMemo(
+    () => projectActiveDiagram(sysmlStore, activeSysmlDiagramId),
+    [sysmlStore, activeSysmlDiagramId],
+  );
+  const { packages, blocks, relationships, parts, connectors } = sysmlCanvasProjection;
 
   // Behavior default for the tree projection (Task 3 note): the unified
   // projection only renders state-machine diagrams supplied by App state, so

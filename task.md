@@ -16,15 +16,15 @@
   - [x] Step 2.5: Verify tests and `tsc --noEmit` pass.
   - [x] Step 2.6: Profile rename, undo, redo (5 samples) and record components responsible for >=80% commit duration in `artifacts/scalability/diagnosis-10000.json`.
   - [x] Step 2.7: Commit Task 2 changes.
-- [ ] Task 3: Project only the active diagram
-  - [ ] Step 3.1: Write failing tests in `src/engine/sysml/projection/activeDiagramProjection.test.ts`.
-  - [ ] Step 3.2: Run `npx vitest run src/engine/sysml/projection/activeDiagramProjection.test.ts`; expect failure.
-  - [ ] Step 3.3: Add diagram-membership index to normalized store construction and incremental updates.
-  - [ ] Step 3.4: Implement `projectActiveDiagram` with direct indexed lookups.
-  - [ ] Step 3.5: Replace `projectLegacyDiagram` in `App.tsx` with active diagram selector.
-  - [ ] Step 3.6: Verify tests, `npm run test:sysml`, and `tsc --noEmit`.
-  - [ ] Step 3.7: Profile diagram switching across BDD, IBD, package, requirements, use-case at 10k.
-  - [ ] Step 3.8: Commit Task 3 changes.
+- [x] Task 3: Project only the active diagram
+  - [x] Step 3.1: Write failing tests in `src/engine/sysml/projection/activeDiagramProjection.test.ts`.
+  - [x] Step 3.2: Run `npx vitest run src/engine/sysml/projection/activeDiagramProjection.test.ts`; expect failure.
+  - [x] Step 3.3: Add diagram-membership index to normalized store construction and incremental updates.
+  - [x] Step 3.4: Implement `projectActiveDiagram` with direct indexed lookups.
+  - [x] Step 3.5: Replace `projectLegacyDiagram` in `App.tsx` with active diagram selector.
+  - [x] Step 3.6: Verify tests, `npm run test:sysml`, and `tsc --noEmit`.
+  - [x] Step 3.7: Profile diagram switching across BDD, IBD, package, requirements, use-case at 10k.
+  - [x] Step 3.8: Commit Task 3 changes.
 - [ ] Task 4: Replace full-tree rebuilding with paged explorer queries
   - [ ] Step 4.1: Write failing tests with 50,000 entities in `src/features/modelExplorer/modelExplorerQuery.test.ts`.
   - [ ] Step 4.2: Run `npx vitest run src/features/modelExplorer/modelExplorerQuery.test.ts`; expect failure.

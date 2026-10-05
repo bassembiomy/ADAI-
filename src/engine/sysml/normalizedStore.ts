@@ -79,6 +79,7 @@ export interface NormalizedSysmlStore {
   auditTrail: ModelChangeRecord[];
   coordinates: Map<string, PresentationCoordinates>;
   diagramPresentations: Map<string, DiagramPresentation>;
+  readonly diagramElementIdsByDiagramId: Readonly<Record<string, readonly string[]>>;
   indexes: StoreIndexes;
   readonly entities: { has(id: string): boolean; get(id: string): SysmlEntity | undefined };
 }
@@ -142,6 +143,19 @@ export function createEmptyNormalizedStore(): NormalizedSysmlStore {
     auditTrail: [],
     coordinates: new Map(),
     diagramPresentations: new Map(),
+    get diagramElementIdsByDiagramId(): Readonly<Record<string, readonly string[]>> {
+      const record: Record<string, readonly string[]> = {};
+      for (const [dId, diag] of store.diagrams.entries()) {
+        const pres = store.diagramPresentations.get(dId);
+        record[dId] = pres?.elementIds ?? (diag as any).elementIds ?? [];
+      }
+      for (const [dId, pres] of store.diagramPresentations.entries()) {
+        if (!(dId in record)) {
+          record[dId] = pres.elementIds ?? [];
+        }
+      }
+      return record;
+    },
     indexes,
     get entities() {
       return {
@@ -674,25 +688,38 @@ export function projectNormalizedDiagram(
   const connectors: ConnectorData[] = [];
 
   const entityCache = getEntityProjectionCache(store);
+  const presentation = diagramId ? store.diagramPresentations.get(diagramId) : undefined;
+  const rawElementIds: readonly string[] | string[] | undefined = presentation?.elementIds ?? (diagramId ? (store.diagrams.get(diagramId) as any)?.elementIds : undefined);
+  const visibleFilter: Set<string> | null = diagramId ? new Set<string>(rawElementIds ?? []) : null;
+  const hiddenFilter = presentation ? new Set(presentation.hiddenElementIds ?? []) : null;
+
   const satisfiedReqIdsBySource = new Map<string, string[]>();
-  for (const relationship of store.relationships.values()) {
-    if (relationship.kind !== 'satisfy') continue;
-    const requirementIds = satisfiedReqIdsBySource.get(relationship.sourceId) ?? [];
-    requirementIds.push(relationship.targetId);
-    satisfiedReqIdsBySource.set(relationship.sourceId, requirementIds);
+  if (visibleFilter) {
+    for (const elemId of visibleFilter) {
+      const relIds = store.indexes.sourceId.get(elemId);
+      if (relIds) {
+        for (const relId of relIds) {
+          const rel = store.relationships.get(relId);
+          if (rel && rel.kind === 'satisfy') {
+            const requirementIds = satisfiedReqIdsBySource.get(rel.sourceId) ?? [];
+            requirementIds.push(rel.targetId);
+            satisfiedReqIdsBySource.set(rel.sourceId, requirementIds);
+          }
+        }
+      }
+    }
+  } else {
+    for (const relationship of store.relationships.values()) {
+      if (relationship.kind !== 'satisfy') continue;
+      const requirementIds = satisfiedReqIdsBySource.get(relationship.sourceId) ?? [];
+      requirementIds.push(relationship.targetId);
+      satisfiedReqIdsBySource.set(relationship.sourceId, requirementIds);
+    }
   }
 
-  const visibleFilter = diagramId
-    ? new Set(store.diagramPresentations.get(diagramId)?.elementIds ?? [])
-    : null;
-  const hiddenFilter = diagramId
-    ? new Set(store.diagramPresentations.get(diagramId)?.hiddenElementIds ?? [])
-    : null;
   const isVisible = (id: string) => visibleFilter === null || visibleFilter.has(id);
   const coordinatesFor = (semanticElementId: string): PresentationCoordinates | undefined => {
-    const scoped = diagramId
-      ? store.diagramPresentations.get(diagramId)?.presentations?.[semanticElementId]?.bounds
-      : undefined;
+    const scoped = presentation?.presentations?.[semanticElementId]?.bounds;
     return scoped ?? store.coordinates.get(semanticElementId);
   };
 
@@ -722,7 +749,7 @@ export function projectNormalizedDiagram(
   const projectDef = (def: SysmlDefinition) => {
     const coords = coordinatesFor(def.id);
     const dependencyKey = def.kind === 'block'
-      ? `${def.properties.map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')}::satisfies:${(satisfiedReqIdsBySource.get(def.id) ?? []).slice().sort().join('|')}`
+      ? `${(def.properties ?? []).map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')}::satisfies:${(satisfiedReqIdsBySource.get(def.id) ?? []).slice().sort().join('|')}`
       : undefined;
     const cached = entityCache.blocks.get(def.id);
     if (cached && cached.entity === def && cached.coords === coords && cached.dependencyKey === dependencyKey) {

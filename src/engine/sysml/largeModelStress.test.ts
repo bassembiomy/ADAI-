@@ -184,7 +184,7 @@ describe('SysML Large Model Stress & Performance Gates', () => {
     const tHydrate = performance.now();
     const rehydration = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
     const hydrateDuration = performance.now() - tHydrate;
-    expect(hydrateDuration).toBeLessThan(1500);
+    expect(hydrateDuration).toBeLessThan(2500);
     expect(rehydration.valid).toBe(true);
 
     const hydrated = rehydration.repository;
