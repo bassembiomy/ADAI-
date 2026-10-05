@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   normalizeVector3,
   computeRelativeAngleAxis,
 } from './vlabFrameKinematics';
 import { blockEquations, BlockEquationArgs } from './vlabEquations';
 import { DAEAssembler } from './DAEAssembler';
+import { VLabPhysicsEngine } from './vlabPhysics';
+import { normalizeSolverConfiguration } from './kernel/PhysicalNetworkExtractor';
 import { ImplicitSolver } from './ImplicitSolver';
 import { Node, Edge } from '@xyflow/react';
 import {
@@ -260,45 +262,30 @@ describe('UNDEFINED_DIRECTION: static same-root check in DAEAssembler', () => {
   });
 });
 
-// ── Task 5: end-to-end reaction certification ──────────────────────────────
-//
-// These solve the assembled DAE directly via ImplicitSolver (the same Newton
-// solve vlabPhysics.VLabPhysicsEngine uses internally), rather than through
-// VLabPhysicsEngine.simulateStep(). That adaptive wrapper's own step-size/
-// method-escalation heuristics are drastically — and, empirically, pathologically
-// — slow for these purely-algebraic Frame-domain models (observed ~140s per
-// single 0.001s timestep on an already-well-posed model that solves correctly
-// in <100ms here), a pre-existing performance issue in that layer unrelated
-// to this plan's scope (the DAE equations, branch wiring and diagnostics).
-//
-// A lone dist_constraint/angle_constraint cannot position/orientation-pin a
-// genuinely free follower frame by itself (its own equation is 1 scalar row
-// for 3 unknowns) — doing so needs either a load that fixes the missing
-// direction (the "known-load" cases) or enough independent constraints to
-// remove the null space entirely (the "trilateration" zero-reaction cases).
-describe('Constraint reaction certification (direct DAE solve)', () => {
+// Certification includes assembly, startup and the workspace simulation engine.
+describe('Constraint reaction certification (simulation path)', () => {
   const solveOnce = (nodes: Node[], edges: Edge[]) => {
-    const assembler = new DAEAssembler();
-    const system = assembler.assemble(nodes, edges);
-    const n = system.systemSize;
-    // A tiny unique-per-variable seed breaks the all-new-variables-start-at-0
-    // tie between distinct frames (see vlabPhysics.ts) without perturbing any
-    // real result.
-    const x0 = new Array(n).fill(0).map((_, idx) => 0.01 * (idx + 1));
-    const ctx: any = { dt: 0.001, time: 0, parameters: {}, prevStates: x0 };
-    const solver = new ImplicitSolver();
-    solver.configure({ tolerance: 1e-7 });
-    const x = solver.solve(
-      (xi, c) => system.residuals(
-        xi,
-        xi.map((v, i) => system.isDifferentialState[i] ? (v - c.prevStates[i]) / c.dt : 0),
-        c
-      ),
-      x0,
-      ctx
-    );
-    const read = (name: string) => x[system.variableNames.indexOf(name)];
-    return { x, variableNames: system.variableNames, read };
+    let state;
+    for (const solver of [undefined, 'auto', 'bdf'] as const) {
+      const configuration = solver ? normalizeSolverConfiguration({ id: 'config', position: { x: 0, y: 0 }, data: { params: { solver, initialStep: 0.001, maximumStep: 0.001 } } } as Node) : null;
+      const engine = new VLabPhysicsEngine(configuration);
+      const spy = vi.spyOn(ImplicitSolver.prototype, 'solve');
+      const started = performance.now();
+      state = undefined;
+      try {
+        for (let i = 0; i < 5; i++) {
+          state = engine.simulateStep(nodes, edges, state, 0.001);
+          expect(state.x.every(Number.isFinite)).toBe(true);
+          expect(state.rejectedSteps).toBe(0);
+          expect(state.useSdirk).toBe(false);
+        }
+        expect(spy).toHaveBeenCalledTimes(5);
+        expect(performance.now() - started).toBeLessThan(1500);
+        expect(state!.time).toBeCloseTo(0.005, 12);
+      } finally { spy.mockRestore(); }
+    }
+    const read = (name: string) => state!.x[state!.variableNames.indexOf(name)];
+    return { read };
   };
 
   it('zero reaction: trilateration pins a free frame with 3 independent dist_constraints', () => {

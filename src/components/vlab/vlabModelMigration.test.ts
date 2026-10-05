@@ -11,9 +11,7 @@ const node = (id: string, type: string): VLabNode => ({
 describe('normalizeLegacyVLabGraph', () => {
   it('removes gas_properties nodes and their incident edges', () => {
     const nodes = [node('legacy', 'gas_properties'), node('source', 'gas_pressure_source')];
-    const edges: VLabEdge[] = [
-      { id: 'bad', source: 'source', target: 'legacy' },
-    ];
+    const edges: VLabEdge[] = [{ id: 'bad', source: 'source', target: 'legacy' }];
 
     expect(normalizeLegacyVLabGraph(nodes, edges)).toEqual({
       nodes: [nodes[1]],
@@ -32,5 +30,35 @@ describe('normalizeLegacyVLabGraph', () => {
     expect(result).toEqual({ nodes, edges });
     expect(nodes).toEqual(originalNodes);
     expect(edges).toEqual(originalEdges);
+  });
+  it('upgrades saved spherical joints to Frame ports and ideal measurements', () => {
+    const legacy = {
+      ...node('joint', 'spherical_joint'),
+      data: {
+        type: 'spherical_joint',
+        label: 'My joint',
+        ports: [
+          { id: 'b', pos: 'left' },
+          { id: 'f', pos: 'right' },
+        ],
+        params: { damping: { value: 0.05, unit: 'N-m-s/rad' } },
+      },
+    } as VLabNode;
+    const result = normalizeLegacyVLabGraph([legacy], []);
+    const upgraded = result.nodes[0];
+    expect(upgraded.data.ports?.find((p: { id: string; domain?: string }) => p.id === 'b')?.domain).toBe(
+      'Frame',
+    );
+    expect(upgraded.data.ports?.find((p: { id: string; domain?: string }) => p.id === 'f')?.domain).toBe(
+      'Frame',
+    );
+    expect(upgraded.data.ports?.find((p: { id: string; domain?: string }) => p.id === 'f_reac')?.domain).toBe(
+      'Physical',
+    );
+    expect(upgraded.data.params?.damping).toBeUndefined();
+    expect(upgraded.data.label).toBe('My joint');
+    expect(legacy.data.ports).toHaveLength(2);
+    expect(legacy.data.params?.damping).toBeDefined();
+    expect(normalizeLegacyVLabGraph(result.nodes, [])).toEqual(result);
   });
 });

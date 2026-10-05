@@ -1,3 +1,4 @@
+import { MultibodyConstraintDiagnosticError } from '../../engine/vlab/vlabConstraintDiagnostics';
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
 import {
@@ -1702,7 +1703,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         } catch (e) {
           // A configured solver failure must reach the simulation diagnostic.
           // Switching to a hardcoded model would discard the user's settings.
-          if (engine.getSolverConfiguration()) throw e;
+          if (engine.getSolverConfiguration() || e instanceof MultibodyConstraintDiagnosticError) throw e;
           console.warn("DAE Physics Engine failed, falling back to Euler model:", e);
           useFallback = true;
         }

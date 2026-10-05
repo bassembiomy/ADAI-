@@ -1,3 +1,4 @@
+import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import type { VLabEdge, VLabNode } from './VLabWorkspaceTypes';
 
 const LEGACY_REMOVED_BLOCKS = new Set(['gas_properties']);
@@ -14,7 +15,12 @@ export const normalizeLegacyVLabGraph = (
   );
 
   return {
-    nodes: nodes.filter((node) => !removedNodeIds.has(node.id)),
+    nodes: nodes.filter((node) => !removedNodeIds.has(node.id)).map(node => {
+      if (effectiveBlockType(node) !== 'spherical_joint') return node;
+      const block = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'spherical_joint')!;
+      const { damping: _legacyDamping, ...params } = node.data.params ?? {};
+      return { ...node, data: { ...node.data, params, ports: block.ports.map(port => ({ ...port })) } };
+    }),
     edges: edges.filter((edge) => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target)),
   };
 };

@@ -54,8 +54,8 @@ export class VLabPhysicsEngine {
    * Generates a unique hash for the current nodes and edges to detect topology changes.
    */
   private getTopologyHash(nodes: Node[], edges: Edge[]): string {
-    const nodeIds = nodes.map(n => n.id).sort().join(',');
-    const edgeIds = edges.map(e => `${e.source}_${e.target}`).sort().join(',');
+    const nodeIds = nodes.map(n => `${n.id}:${(n.data as any)?.type ?? n.type}:${JSON.stringify((n.data as any)?.ports ?? [])}`).sort().join(',');
+    const edgeIds = edges.map(e => `${e.source}:${e.sourceHandle ?? ''}_${e.target}:${e.targetHandle ?? ''}`).sort().join(',');
     const parameterHash = nodes.map(n => `${n.id}:${JSON.stringify((n.data as any)?.params ?? {})}`).sort().join('|');
     return `${nodeIds}|${edgeIds}|${parameterHash}`;
   }
@@ -70,6 +70,7 @@ export class VLabPhysicsEngine {
     }
     
     const system = this.currentSystem;
+    const isAlgebraicSystem = system.isPurelyAlgebraic === true;
     
     // Initialize solution vector x
     let x: number[];
@@ -114,6 +115,11 @@ export class VLabPhysicsEngine {
           // and this is negligible next to any real geometry (same idea as
           // the psiar/thermal/pressure seeds just above).
           x[idx] = 0.01 * (idx + 1);
+        } else if (isAlgebraicSystem && name.endsWith('_branch_lambda')) {
+          // A zero multiplier removes the direction derivatives from the
+          // initial constraint Jacobian. Seed it once, then let Newton find
+          // the actual reaction (including exactly zero for unloaded models).
+          x[idx] = 0.01 * (idx + 1);
         } else if (name.includes('_state_')) {
           const parts = name.split('_state_');
           if (parts.length === 2) {
@@ -152,7 +158,7 @@ export class VLabPhysicsEngine {
     let lastDt = sameMethod ? prevState?.prevDt : undefined;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
     // Configured auto uses BDF for VLab DAEs. Legacy unconfigured runs retain SDIRK fallback.
-    let useSdirk = !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
+    let useSdirk = !isAlgebraicSystem && !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
     let acceptedSteps = 0;
     let rejectedSteps = 0;
     const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
@@ -191,7 +197,13 @@ export class VLabPhysicsEngine {
           };
           
           let explicitLte = 0;
-          if (isExplicit && config) {
+          if (isAlgebraicSystem) {
+            // Solve once per algebraic step, with no artificial coordinate velocity.
+            nextX = this.solver.solve(
+              (solveX, solveCtx) => system.residuals(solveX, new Array(system.systemSize).fill(0), solveCtx),
+              xCurrent, ctx,
+            );
+          } else if (isExplicit && config) {
             const result = explicitSolverStep(system, xCurrent, ctx, config, this.solver);
             if (!result.accepted) {
               if (h <= stepFloor) throw new Error('Explicit solver cannot satisfy tolerances at minimumStep.');
@@ -312,7 +324,7 @@ export class VLabPhysicsEngine {
           // The first algebraic solve establishes source and physical-signal values.
           // Treating that initialization (for example Vg: 0 -> 4 V) as a temporal
           // crossing repeatedly shrinks the step before the simulation can start.
-          if (prevState || acceptedSteps > 0) {
+          if (!isAlgebraicSystem && (prevState || acceptedSteps > 0)) {
             const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
             if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
               const hEvent = h * eventInfo.fraction;
@@ -324,7 +336,7 @@ export class VLabPhysicsEngine {
           let lte = explicitLte;
           // Preserve the legacy unconfigured LTE path; configured runs use
           // their explicit minimum-step boundary for adaptive control.
-          if (!isExplicit && !useSdirk && (config || h > 1e-6)) {
+          if (!isAlgebraicSystem && !isExplicit && !useSdirk && (config || h > 1e-6)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
               return system.residuals(solveX, dx, solveCtx);
@@ -390,6 +402,7 @@ export class VLabPhysicsEngine {
               bdfOrder = 1;
             }
           } else {
+            if (isAlgebraicSystem) throw error;
             if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;
             if (!config && !useSdirk) {
               useSdirk = true;

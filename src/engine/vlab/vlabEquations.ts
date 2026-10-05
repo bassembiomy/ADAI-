@@ -14,6 +14,24 @@ import {
   evaluateLegacyDOEEquationDetailed
 } from '../doe/modelEvaluator';
 
+// These equations use derivatives or discrete history. Some differentiate
+// across/through variables without internal states, so state flags alone
+// cannot identify a static DAE. Keep this alongside their equation definitions.
+export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
+  'capacitor', 'inductor', 'inertia', 'mass', 'thermal_mass', 'washing_basket',
+  'dc_motor', 'bldc_motor', 'pmsm', 'gas_chamber', 'em_converter',
+  'spring_damper_force', 'fluid_capacitance', 'fluid_inertance',
+  'steam_accumulator', 'belt_spool', 'pulley', 'ps_lpf',
+  'memristor', 'rot_spring', 'rot_hard_stop', 'rot_motion_sensor',
+  'trans_motion_sensor', 'trans_spring', 'microwave_cavity',
+  'ps_integrator', 'ps_transfer_fcn', 'ps_pi_ctrl', 'ps_pid_ctrl',
+  'ac_motor', 'ma_chamber', 'lms_adaptive_filter', 'neural_neuron_learning',
+  'ac_motor_pid_control', 'luenberger_observer', 'im_flux_observer', 'pmsm_foc',
+  'ps_integrator_gen', 'ps_moving_avg', 'ps_sr_flipflop', 'ps_sample_hold',
+  'ps_smith_predictor', 'ps_second_order_filter', 'ps_washout',
+  'quad_decoder', 'resolver_to_digital', 'belt_end',
+]);
+
 export interface BlockEquationArgs {
   across: any[];        // values of across variables at the ports (scalars or 6-DOF frame arrays)
   dAcross: any[];          // derivatives of across variables (scalars or 6-DOF frame arrays)
@@ -1963,9 +1981,24 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     if (ports.includes('t_reac')) res.push((branch[next++] || 0) - Math.abs(lambda));
     return res;
   },
-  spherical_joint: ({ across, branch, params }) => {
-    const b = params.damping || 0.05;
-    return [branch[0] - b * (across[0] - across[1])];
+  spherical_joint: ({ across, branch, ports }) => {
+    const B = asFrame(across[ports.indexOf('b')]);
+    const F = asFrame(across[ports.indexOf('f')]);
+    const res = [F[0] - B[0], F[1] - B[1], F[2] - B[2]];
+    // Independent multipliers Fx/Fy/Fz; no rotational reaction branches.
+    const rotation = computeRelativeAngleAxis([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
+    const measurements: Record<string, number> = {
+      fx: branch[0], fy: branch[1], fz: branch[2],
+      f_reac: Math.hypot(branch[0], branch[1], branch[2]),
+      rx: rotation.angle * rotation.axis[0],
+      ry: rotation.angle * rotation.axis[1],
+      rz: rotation.angle * rotation.axis[2],
+    };
+    let next = 3;
+    for (const name of ['fx', 'fy', 'fz', 'f_reac', 'rx', 'ry', 'rz']) {
+      if (ports.includes(name)) res.push(branch[next++] - measurements[name]);
+    }
+    return res;
   },
   universal_joint: ({ across, branch, params }) => {
     const b = params.damping || 0.05;

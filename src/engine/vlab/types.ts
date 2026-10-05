@@ -58,6 +58,8 @@ export interface AssembledSystem {
   variableNames: string[];
   // Which variables are differential states vs algebraic
   isDifferentialState: boolean[];
+  // True only for known equations with no internal or across/branch derivatives.
+  isPurelyAlgebraic?: boolean;
   // The global residual function
   residuals: (x: number[], dx: number[], ctx: EquationContext) => number[];
   // Node-level Kirchhoff equations (through-variable sum = 0)

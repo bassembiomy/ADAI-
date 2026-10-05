@@ -1,7 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
-import { blockEquations } from './vlabEquations';
+import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES } from './vlabEquations';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
   ConstraintTopology,
@@ -458,6 +458,13 @@ export class DAEAssembler {
         branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
         break;
       case 'spherical_joint':
+        for (const name of ['fx', 'fy', 'fz']) {
+          branches.push({ name, ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        }
+        for (const name of ['fx', 'fy', 'fz', 'f_reac', 'rx', 'ry', 'rz']) {
+          if (ports.includes(name)) branches.push({ name: 'signal_' + name, ports: [{ id: name, sign: 1 }] });
+        }
+        break;
       case 'universal_joint':
       case 'revolute_joint':
         branches.push({ name: 'torque', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
@@ -1079,6 +1086,11 @@ export class DAEAssembler {
       while (grew) {
         grew = false;
         for (const link of rigidTransformLinks) {
+          // Rigid transforms are invertible: anchoring F prescribes B too.
+          if (prescribedFrameRoots.has(link.fRoot) && !prescribedFrameRoots.has(link.bRoot)) {
+            prescribedFrameRoots.add(link.bRoot);
+            grew = true;
+          }
           if (prescribedFrameRoots.has(link.bRoot) && !prescribedFrameRoots.has(link.fRoot)) {
             prescribedFrameRoots.add(link.fRoot);
             grew = true;
@@ -1089,7 +1101,7 @@ export class DAEAssembler {
       const constraintTopologies: ConstraintTopology[] = [];
       nodes.forEach(node => {
         const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-        if (type !== 'dist_constraint' && type !== 'angle_constraint') return;
+        if (type !== 'dist_constraint' && type !== 'angle_constraint' && type !== 'spherical_joint') return;
         const ports = nodePorts.get(node.id) || [];
         if (!ports.includes('b') || !ports.includes('f')) return;
         const baseRoot = uf.find(`${node.id}_b`);
@@ -1101,7 +1113,7 @@ export class DAEAssembler {
         // satisfy no matter how the solver iterates — a genuine, purely
         // structural fact, safe (and necessary) to catch once here rather
         // than relying on a runtime direction that can never become defined.
-        if (baseRoot === followerRoot) {
+        if (baseRoot === followerRoot && type !== 'spherical_joint') {
           const p = (node.data as any)?.params || {};
           const unwrap = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
           const targetKey = type === 'dist_constraint' ? 'dist' : 'angle';
@@ -1167,7 +1179,14 @@ export class DAEAssembler {
                 else if (bName === 'tx' || bName === 'torque') coord = 3;
                 else if (bName === 'ty') coord = 4;
                 else if (bName === 'tz') coord = 5;
-                if (coord >= 0) {
+                // Pure force elements have identically zero torque equations;
+                // their placeholder torque branches must not create empty KCL
+                // rows in place of the free rotational pose of a spherical joint.
+                const isZeroTorque = coord >= 3 && (
+                  type === 'grav_field' || type === 'spring_damper_force'
+                  || (type === 'external_force' && !['in_tx', 'in_ty', 'in_tz'].some(id => connectedPortKeys.has(node.id + '_' + id)))
+                );
+                if (coord >= 0 && !isZeroTorque) {
                   frameCoords[coord].throughIndices.push(globalBranchVarIndex);
                   frameCoords[coord].signs.push(bp.sign);
                 }
@@ -1311,6 +1330,18 @@ export class DAEAssembler {
       }
     });
 
+    // Empty rotational equilibrium rows on a spherical-joint frame are a
+    // choice of free pose, not an orientation constraint to the world origin.
+    const sphericalFrameRoots = new Set<string>();
+    for (const component of componentsList) {
+      if (component.blockType === 'spherical_joint') {
+        for (const port of ['b', 'f']) {
+          const root = component.portNodeMap.get(port);
+          if (root) sphericalFrameRoots.add(root);
+        }
+      }
+    }
+
     // 7. Assemble global residuals function
     const residuals = (x: number[], arg2: number[] | EquationContext, arg3?: EquationContext): number[] => {
       let dx: number[];
@@ -1402,7 +1433,8 @@ export class DAEAssembler {
               }
               res[acrossVarIdx + k] = sum;
             } else {
-              res[acrossVarIdx + k] = x[acrossVarIdx + k];
+              res[acrossVarIdx + k] = x[acrossVarIdx + k]
+                - (k >= 3 && sphericalFrameRoots.has(pn.id) ? (ctx.prevStates[acrossVarIdx + k] ?? 0) : 0);
             }
           }
         } else {
@@ -1448,6 +1480,9 @@ export class DAEAssembler {
       systemSize: varCount,
       variableNames,
       isDifferentialState,
+      isPurelyAlgebraic: !isDifferentialState.some(Boolean) && componentsList.every(c =>
+        !DERIVATIVE_DEPENDENT_BLOCK_TYPES.has(c.blockType)
+        && (c.equationCount === 0 || Boolean(blockEquations[c.blockType]))),
       residuals,
       kirchhoffNodes,
       components: componentsList,

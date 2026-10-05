@@ -14,7 +14,7 @@ export type ConstraintDiagnosticCode =
 
 export interface ConstraintTopology {
   blockId: string;
-  type: 'dist_constraint' | 'angle_constraint';
+  type: 'dist_constraint' | 'angle_constraint' | 'spherical_joint';
   /** Union-find root id of the constraint's B (base) frame port. */
   baseRoot: string;
   /** Union-find root id of the constraint's F (follower) frame port. */
@@ -28,7 +28,7 @@ export class MultibodyConstraintDiagnosticError extends Error {
     public readonly frameNodeIds: [string, string],
     message: string,
   ) {
-    super(message);
+    super(`${code}: ${message}`);
     this.name = 'MultibodyConstraintDiagnosticError';
   }
 }

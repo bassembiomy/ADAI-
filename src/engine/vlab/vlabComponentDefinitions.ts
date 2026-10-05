@@ -1222,7 +1222,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A 1-DOF translational joint that allows sliding along a single axis while constraining all other motions.'
   },
   spherical_joint: {
-    equations: ['P_b = P_f', 'v_b = v_f'],
+    equations: ['P_f - P_b = 0', 'F_f = [Fx, Fy, Fz]', 'F_b = -F_f', 'T_b = T_f = 0'],
     latex: ['\mathbf{P}_b = \mathbf{P}_f'],
     across: 'Frame', through: 'Force (N)',
     description: 'A 3-DOF "ball-and-socket" joint. Constrains the relative translation between two frames while allowing free rotation.'

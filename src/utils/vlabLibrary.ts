@@ -3,6 +3,7 @@ export interface VLabPort {
   pos: 'left' | 'right' | 'top' | 'bottom';
   label?: string;
   domain?: string;
+  unit?: string;
 }
 
 export interface VLabBlock {
@@ -6949,27 +6950,72 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#4b5563",
         "icon": "sphere_joint",
         "category": "Joints",
-        "params": {
-          "damping": {
-            "value": 0.05,
-            "unit": "N-m-s/rad",
-            "label": "Damping"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "rx",
+            "pos": "right",
+            "label": "rx (rad)",
+            "domain": "Physical",
+            "unit": "rad"
+          },
+          {
+            "id": "ry",
+            "pos": "right",
+            "label": "ry (rad)",
+            "domain": "Physical",
+            "unit": "rad"
+          },
+          {
+            "id": "rz",
+            "pos": "right",
+            "label": "rz (rad)",
+            "domain": "Physical",
+            "unit": "rad"
           }
         ],
-        "equation": "Spherical Joint governing physical equation",
-        "description": "Physical component model for Spherical Joint."
+        "equation": "Pf - Pb = 0; F_B = -F_F; T_B = T_F = 0",
+        "description": "Ideal ball-and-socket joint: locks relative XYZ translation, allows free rotation. Reaction outputs are in N; relative rotation vector rx/ry/rz are in rad."
       },
       {
         "id": "universal_joint",
