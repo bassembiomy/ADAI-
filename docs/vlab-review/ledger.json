@@ -1,0 +1,492 @@
+{
+  "wps": [
+    {
+      "id": "WP-00",
+      "title": "Baseline",
+      "phase": "P0",
+      "deps": [],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "git status --porcelain; see docs/vlab-review/baseline.md",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-01",
+      "title": "Inventory & cross-reference script",
+      "phase": "P0",
+      "deps": [
+        "WP-00"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx tsx scripts/vlab_review/inventory.ts",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-02",
+      "title": "Simscape environment probe + harness skeleton",
+      "phase": "P0",
+      "deps": [
+        "WP-01"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npm run test:vlab:simscape",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-03",
+      "title": "Port contract test (all blocks)",
+      "phase": "P0",
+      "deps": [
+        "WP-01"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/port_contract.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-04",
+      "title": "Baseline failure root-cause triage (F-001, F-003, F-004, F-002, F-005, F-007/F-008)",
+      "phase": "P0",
+      "deps": [
+        "WP-00"
+      ],
+      "blocks": [
+        "mass",
+        "spring",
+        "damper",
+        "inertia",
+        "rotational_damper",
+        "thermal_mass",
+        "conduction",
+        "gas_pipe",
+        "gas_reservoir",
+        "pid_ac_motor"
+      ],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/vlab.test.ts src/engine/vlab/whitebox_benchmarks --reporter=dot; all-blocks suite completes with per-block timeout",
+      "evidence": [],
+      "findings": [
+        "F-001",
+        "F-002",
+        "F-003",
+        "F-004",
+        "F-005",
+        "F-007",
+        "F-008"
+      ]
+    },
+    {
+      "id": "WP-10",
+      "title": "Electrical passive, sources, sensors, reference",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/electrical_passive.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-11",
+      "title": "Semiconductors & switches",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/semiconductors.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-12",
+      "title": "Machines & power electronics",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/machines_power.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-13",
+      "title": "Rotational mechanical",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/rotational.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-14",
+      "title": "Translational mechanical",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/translational.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-15",
+      "title": "Thermal",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/thermal.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-16",
+      "title": "Magnetic",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/magnetic.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-17",
+      "title": "Fluid / isothermal liquid / steam",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/fluid.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-18",
+      "title": "Gas",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/gas.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-19",
+      "title": "Multibody / frames",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/multibody.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-20",
+      "title": "Physical signal & control",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/signal_control.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-21",
+      "title": "Composite / appliance / DOE / microwave / utilities",
+      "phase": "P2",
+      "deps": [
+        "WP-03",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review/composite.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-30",
+      "title": "Cross-domain integration benchmarks",
+      "phase": "P4",
+      "deps": [
+        "WP-02",
+        "WP-10",
+        "WP-11",
+        "WP-12",
+        "WP-13",
+        "WP-14",
+        "WP-15",
+        "WP-16",
+        "WP-17",
+        "WP-18",
+        "WP-19",
+        "WP-20",
+        "WP-21"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npm run test:vlab:simscape",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-31",
+      "title": "Engine robustness",
+      "phase": "P4",
+      "deps": [
+        "WP-30"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/kernel src/engine/vlab/review/engine_robustness.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-32",
+      "title": "Worker / runtime",
+      "phase": "P4",
+      "deps": [
+        "WP-31"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/services/vlabWorkerClient.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-40",
+      "title": "Palette-node parity",
+      "phase": "P5",
+      "deps": [
+        "WP-03"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/components/vlab --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-41",
+      "title": "Connections & parameters",
+      "phase": "P5",
+      "deps": [
+        "WP-40"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/components/vlab --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-42",
+      "title": "Results & persistence",
+      "phase": "P5",
+      "deps": [
+        "WP-41"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/components/vlab --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-43",
+      "title": "E2E smoke (Playwright)",
+      "phase": "P5",
+      "deps": [
+        "WP-42"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npx playwright test tests/e2e/vlab-smoke.spec.ts",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-50",
+      "title": "Certification gate",
+      "phase": "P6",
+      "deps": [
+        "WP-00",
+        "WP-01",
+        "WP-02",
+        "WP-03",
+        "WP-10",
+        "WP-11",
+        "WP-12",
+        "WP-13",
+        "WP-14",
+        "WP-15",
+        "WP-16",
+        "WP-17",
+        "WP-18",
+        "WP-19",
+        "WP-20",
+        "WP-21",
+        "WP-30",
+        "WP-31",
+        "WP-32",
+        "WP-40",
+        "WP-41",
+        "WP-42",
+        "WP-43",
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "npm run test:vlab:certify",
+      "evidence": [],
+      "findings": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "high",
+      "block": "mass_spring_damper / translational mass",
+      "layer": "eq",
+      "summary": "Mass-spring-damper step response stays at x=0 (expected 0.1 m): vlab.test.ts, M-01, whitebox master mechanical.",
+      "wp": "WP-14"
+    },
+    {
+      "id": "F-002",
+      "severity": "med",
+      "block": "pid_ac_motor lab",
+      "layer": "solver",
+      "summary": "pid_ac_motor lab: repeated ImplicitSolver convergence failures and timeout (5 s) in labs_sim.test.ts.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-003",
+      "severity": "high",
+      "block": "rotational inertia/damper",
+      "layer": "eq",
+      "summary": "M-02 rotational spin-up: signal J remains zero for the whole run.",
+      "wp": "WP-13"
+    },
+    {
+      "id": "F-004",
+      "severity": "high",
+      "block": "thermal mass / conduction",
+      "layer": "eq",
+      "summary": "Thermal whitebox T-01 fails the judge and T-02 initial T = 0.057 K instead of about 293 K (initial condition handling).",
+      "wp": "WP-15"
+    },
+    {
+      "id": "F-005",
+      "severity": "med",
+      "block": "gas resistance",
+      "layer": "eq",
+      "summary": "Fluid whitebox F-01 gas flow resistance fails the oracle judge.",
+      "wp": "WP-18"
+    },
+    {
+      "id": "F-006",
+      "severity": "med",
+      "block": "unknown (at least one library icon)",
+      "layer": "ui",
+      "summary": "vlabSymbols.test: at least one library block falls back to UnknownSymbolGlyph.",
+      "wp": "WP-40"
+    },
+    {
+      "id": "F-007",
+      "severity": "high",
+      "block": "gas_pipe",
+      "layer": "solver",
+      "summary": "test:vlab:all-blocks hangs forever on gas_pipe (infinite loop, over 90 s in isolation).",
+      "wp": "WP-18"
+    },
+    {
+      "id": "F-008",
+      "severity": "high",
+      "block": "gas domain (near gas_reservoir)",
+      "layer": "solver",
+      "summary": "test:vlab:all-blocks hangs again after gas_reservoir output with gas_pipe excluded. Block unconfirmed.",
+      "wp": "WP-18"
+    },
+    {
+      "id": "F-009",
+      "severity": "low",
+      "block": "n/a (sysmlCommandGateway)",
+      "layer": "integration",
+      "summary": "tsc: 2 TS2339 errors in src/services/sysmlCommandGateway.ts lines 1483 and 1602 (not V-Lab).",
+      "wp": ""
+    }
+  ]
+}
