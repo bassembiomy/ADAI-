@@ -1,0 +1,277 @@
+{
+  "attributionByArea": {
+    "explorer": {
+      "totalDurationMs": 791.1,
+      "count": 15
+    },
+    "canvas": {
+      "totalDurationMs": 34.199999999999996,
+      "count": 15
+    },
+    "inspector": {
+      "totalDurationMs": 0.6,
+      "count": 15
+    },
+    "workspace": {
+      "totalDurationMs": 844.8999999999999,
+      "count": 15
+    }
+  },
+  "workflowBreakdowns": {
+    "rename": [
+      {
+        "sample": 1,
+        "handlerMs": 36.79999999701977,
+        "paintDelayMs": 168.20000000298023,
+        "settleMs": 232.29999999701977,
+        "maxHeartbeatGapMs": 171.69999998807907,
+        "longTasksMs": [
+          126
+        ],
+        "areaDuration": {
+          "explorer": 68.9,
+          "canvas": 3.2,
+          "inspector": 0.1,
+          "workspace": 73.4
+        }
+      },
+      {
+        "sample": 2,
+        "handlerMs": 20,
+        "paintDelayMs": 137.90000000596046,
+        "settleMs": 188.20000000298023,
+        "maxHeartbeatGapMs": 140.90000000596046,
+        "longTasksMs": [
+          113
+        ],
+        "areaDuration": {
+          "explorer": 56.3,
+          "canvas": 2.8,
+          "inspector": 0.1,
+          "workspace": 60.8
+        }
+      },
+      {
+        "sample": 3,
+        "handlerMs": 25,
+        "paintDelayMs": 121.70000000298023,
+        "settleMs": 187.20000000298023,
+        "maxHeartbeatGapMs": 120.79999999701977,
+        "longTasksMs": [
+          93
+        ],
+        "areaDuration": {
+          "explorer": 47.8,
+          "canvas": 2.2,
+          "inspector": 0,
+          "workspace": 51.6
+        }
+      },
+      {
+        "sample": 4,
+        "handlerMs": 21.599999994039536,
+        "paintDelayMs": 109.8999999910593,
+        "settleMs": 172.29999999701977,
+        "maxHeartbeatGapMs": 109,
+        "longTasksMs": [
+          84
+        ],
+        "areaDuration": {
+          "explorer": 41.6,
+          "canvas": 1.4,
+          "inspector": 0,
+          "workspace": 44.2
+        }
+      },
+      {
+        "sample": 5,
+        "handlerMs": 22,
+        "paintDelayMs": 120.59999999403954,
+        "settleMs": 172.70000000298023,
+        "maxHeartbeatGapMs": 119.5,
+        "longTasksMs": [
+          94
+        ],
+        "areaDuration": {
+          "explorer": 51.5,
+          "canvas": 2.4,
+          "inspector": 0.1,
+          "workspace": 55.2
+        }
+      }
+    ],
+    "undo": [
+      {
+        "sample": 1,
+        "handlerMs": 23.899999991059303,
+        "paintDelayMs": 157.8999999910593,
+        "settleMs": 211.79999999701977,
+        "maxHeartbeatGapMs": 161.8999999910593,
+        "longTasksMs": [
+          117
+        ],
+        "areaDuration": {
+          "explorer": 60.9,
+          "canvas": 2,
+          "inspector": 0,
+          "workspace": 63.9
+        }
+      },
+      {
+        "sample": 2,
+        "handlerMs": 21.200000002980232,
+        "paintDelayMs": 132.09999999403954,
+        "settleMs": 184.5,
+        "maxHeartbeatGapMs": 135.70000000298023,
+        "longTasksMs": [
+          106
+        ],
+        "areaDuration": {
+          "explorer": 60.6,
+          "canvas": 3.4,
+          "inspector": 0,
+          "workspace": 65.8
+        }
+      },
+      {
+        "sample": 3,
+        "handlerMs": 20.5,
+        "paintDelayMs": 118.20000000298023,
+        "settleMs": 174.79999999701977,
+        "maxHeartbeatGapMs": 117.5,
+        "longTasksMs": [
+          94
+        ],
+        "areaDuration": {
+          "explorer": 45.2,
+          "canvas": 1.8,
+          "inspector": 0,
+          "workspace": 47.9
+        }
+      },
+      {
+        "sample": 4,
+        "handlerMs": 16.400000005960464,
+        "paintDelayMs": 104.59999999403954,
+        "settleMs": 156.70000000298023,
+        "maxHeartbeatGapMs": 103.70000000298023,
+        "longTasksMs": [
+          84
+        ],
+        "areaDuration": {
+          "explorer": 44.1,
+          "canvas": 1.9,
+          "inspector": 0,
+          "workspace": 47
+        }
+      },
+      {
+        "sample": 5,
+        "handlerMs": 26.400000005960464,
+        "paintDelayMs": 126.20000000298023,
+        "settleMs": 185.40000000596046,
+        "maxHeartbeatGapMs": 125.40000000596046,
+        "longTasksMs": [
+          95
+        ],
+        "areaDuration": {
+          "explorer": 47.3,
+          "canvas": 1.3,
+          "inspector": 0,
+          "workspace": 49.5
+        }
+      }
+    ],
+    "redo": [
+      {
+        "sample": 1,
+        "handlerMs": 30.400000005960464,
+        "paintDelayMs": 132,
+        "settleMs": 185.70000000298023,
+        "maxHeartbeatGapMs": 130.90000000596046,
+        "longTasksMs": [
+          96
+        ],
+        "areaDuration": {
+          "explorer": 47.2,
+          "canvas": 1.8,
+          "inspector": 0,
+          "workspace": 50.1
+        }
+      },
+      {
+        "sample": 2,
+        "handlerMs": 20.799999997019768,
+        "paintDelayMs": 122.8999999910593,
+        "settleMs": 175.79999999701977,
+        "maxHeartbeatGapMs": 143.5,
+        "longTasksMs": [
+          97
+        ],
+        "areaDuration": {
+          "explorer": 49.9,
+          "canvas": 2.7,
+          "inspector": 0.1,
+          "workspace": 54.1
+        }
+      },
+      {
+        "sample": 3,
+        "handlerMs": 26.399999991059303,
+        "paintDelayMs": 143.3999999910593,
+        "settleMs": 204.59999999403954,
+        "maxHeartbeatGapMs": 147.20000000298023,
+        "longTasksMs": [
+          111
+        ],
+        "areaDuration": {
+          "explorer": 60.7,
+          "canvas": 2.9,
+          "inspector": 0.1,
+          "workspace": 65.3
+        }
+      },
+      {
+        "sample": 4,
+        "handlerMs": 21.299999997019768,
+        "paintDelayMs": 134.09999999403954,
+        "settleMs": 189.59999999403954,
+        "maxHeartbeatGapMs": 137.79999999701977,
+        "longTasksMs": [
+          108
+        ],
+        "areaDuration": {
+          "explorer": 64.3,
+          "canvas": 2.9,
+          "inspector": 0.1,
+          "workspace": 68.8
+        }
+      },
+      {
+        "sample": 5,
+        "handlerMs": 22.700000002980232,
+        "paintDelayMs": 105.29999999701977,
+        "settleMs": 161.20000000298023,
+        "maxHeartbeatGapMs": 104.59999999403954,
+        "longTasksMs": [
+          78
+        ],
+        "areaDuration": {
+          "explorer": 44.8,
+          "canvas": 1.5,
+          "inspector": 0,
+          "workspace": 47.3
+        }
+      }
+    ]
+  },
+  "componentShareOfInnerCommits": {
+    "explorer": "95.8%",
+    "canvas": "4.1%",
+    "inspector": "0.1%"
+  },
+  "dominantComponentsOver80Percent": [
+    "HierarchyTree / AppModelExplorer (explorer)"
+  ],
+  "conclusion": "Explorer (HierarchyTree / AppModelExplorer) accounts for >90% of post-command commit duration across rename, undo, and redo due to whole-tree projection/rebuilding on every repository change. Active diagram projection (Task 3) and paged explorer queries (Task 4) will eliminate this stall."
+}

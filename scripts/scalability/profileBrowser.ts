@@ -10,7 +10,8 @@ import { type WorkflowsMap } from './workflows';
 const size = Number(process.argv.find(arg => arg.startsWith('--size='))?.split('=')[1] ?? 10_000);
 const profileCpu = process.argv.includes('--cpu-profile');
 const outDirArg = process.argv.find(arg => arg.startsWith('--out-dir='))?.split('=')[1];
-const url = process.env.ADIA_PROFILE_URL ?? 'http://127.0.0.1:3105';
+const rawUrl = process.env.ADIA_PROFILE_URL ?? 'http://127.0.0.1:3105';
+const url = rawUrl.includes('perfTelemetry=') ? rawUrl : `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}perfTelemetry=1`;
 if (!Number.isSafeInteger(size) || size < 1_000) throw new Error('Provide --size=<integer >= 1000>');
 const fixture = generateScalabilityFixture({ semanticCount: size, seed: 42, topology: 'distributed' });
 const payload = buildCanonicalSysmlProjectPayload(
@@ -41,6 +42,7 @@ try {
   }
   await page.evaluate(() => {
     const w = window as any;
+    w.__ADIA_PERF_ENABLED__ = true;
     w.__profileTicks = [performance.now()];
     w.__profileLongTasks = [];
     w.__profileTimer = setInterval(() => w.__profileTicks.push(performance.now()), 16);
@@ -81,9 +83,9 @@ try {
   }
 
   const operations: {
-    rename: Array<{ handlerMs: number; paintDelayMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[] }>;
-    undo: Array<{ handlerMs: number; paintDelayMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[] }>;
-    redo: Array<{ handlerMs: number; paintDelayMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[] }>;
+    rename: Array<{ handlerMs: number; paintDelayMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[]; reactCommits?: any[]; renderCountsByArea?: any }>;
+    undo: Array<{ handlerMs: number; paintDelayMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[]; reactCommits?: any[]; renderCountsByArea?: any }>;
+    redo: Array<{ handlerMs: number; paintDelayMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[]; reactCommits?: any[]; renderCountsByArea?: any }>;
   } = { rename: [], undo: [], redo: [] };
 
   for (let i = 0; i < samplesCount; i++) {
@@ -91,13 +93,17 @@ try {
     // 1. Rename
     const renameRes = await page.evaluate(async (name) => {
       const w = window as any;
+      if (w.__ADIA_PERF__?.clearRenderTelemetry) w.__ADIA_PERF__.clearRenderTelemetry();
       w.__profileTicks = [performance.now()];
       w.__profileLongTasks = [];
+      performance.mark('command-dispatch-start');
       const start = performance.now();
       const result = w.__sysmlExecuteCommand({ type: 'updateElement', elementId: 'blk_1', patch: { name } });
       const handlerMs = performance.now() - start;
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      performance.mark('command-paint-end');
       const paintDelayMs = performance.now() - start;
+      const telemetry = w.__ADIA_PERF__?.getRenderTelemetry?.() ?? { entries: [], renderCountsByArea: {} };
       await new Promise(resolve => setTimeout(resolve, 50));
       const end = performance.now();
       const times = [...w.__profileTicks, end];
@@ -109,6 +115,8 @@ try {
         settleMs: end - start,
         maxHeartbeatGapMs: Math.max(...times.slice(1).map((val: number, idx: number) => val - times[idx])),
         longTasksMs: w.__profileLongTasks,
+        reactCommits: telemetry.entries,
+        renderCountsByArea: telemetry.renderCountsByArea,
       };
     }, targetName);
     if (!renameRes.committed || renameRes.name !== targetName) throw new Error(`Rename failed at sample ${i}`);
@@ -117,13 +125,17 @@ try {
     // 2. Undo
     const undoRes = await page.evaluate(async () => {
       const w = window as any;
+      if (w.__ADIA_PERF__?.clearRenderTelemetry) w.__ADIA_PERF__.clearRenderTelemetry();
       w.__profileTicks = [performance.now()];
       w.__profileLongTasks = [];
+      performance.mark('command-dispatch-start');
       const start = performance.now();
       const result = w.__sysmlExecuteCommand({ type: 'undo' });
       const handlerMs = performance.now() - start;
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      performance.mark('command-paint-end');
       const paintDelayMs = performance.now() - start;
+      const telemetry = w.__ADIA_PERF__?.getRenderTelemetry?.() ?? { entries: [], renderCountsByArea: {} };
       await new Promise(resolve => setTimeout(resolve, 50));
       const end = performance.now();
       const times = [...w.__profileTicks, end];
@@ -135,6 +147,8 @@ try {
         settleMs: end - start,
         maxHeartbeatGapMs: Math.max(...times.slice(1).map((val: number, idx: number) => val - times[idx])),
         longTasksMs: w.__profileLongTasks,
+        reactCommits: telemetry.entries,
+        renderCountsByArea: telemetry.renderCountsByArea,
       };
     });
     if (!undoRes.committed) throw new Error(`Undo failed at sample ${i}`);
@@ -143,13 +157,17 @@ try {
     // 3. Redo
     const redoRes = await page.evaluate(async (name) => {
       const w = window as any;
+      if (w.__ADIA_PERF__?.clearRenderTelemetry) w.__ADIA_PERF__.clearRenderTelemetry();
       w.__profileTicks = [performance.now()];
       w.__profileLongTasks = [];
+      performance.mark('command-dispatch-start');
       const start = performance.now();
       const result = w.__sysmlExecuteCommand({ type: 'redo' });
       const handlerMs = performance.now() - start;
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      performance.mark('command-paint-end');
       const paintDelayMs = performance.now() - start;
+      const telemetry = w.__ADIA_PERF__?.getRenderTelemetry?.() ?? { entries: [], renderCountsByArea: {} };
       await new Promise(resolve => setTimeout(resolve, 50));
       const end = performance.now();
       const times = [...w.__profileTicks, end];
@@ -161,6 +179,8 @@ try {
         settleMs: end - start,
         maxHeartbeatGapMs: Math.max(...times.slice(1).map((val: number, idx: number) => val - times[idx])),
         longTasksMs: w.__profileLongTasks,
+        reactCommits: telemetry.entries,
+        renderCountsByArea: telemetry.renderCountsByArea,
       };
     }, targetName);
     if (!redoRes.committed || redoRes.name !== targetName) throw new Error(`Redo failed at sample ${i}`);

@@ -8,14 +8,14 @@
   - [x] Step 1.5: Add package scripts (`profile:sysml`, `gate:sysml-profile`) and verify all evaluator unit tests pass.
   - [x] Step 1.6: Build and run 10k baseline against `vite preview`; save raw JSON in `artifacts/scalability/baseline/` and verify gate evaluation.
   - [x] Step 1.7: Commit Task 1 changes.
-- [ ] Task 2: Attribute post-command stalls to exact React work
-  - [ ] Step 2.1: Write failing telemetry tests in `src/features/sysml/performance/renderTelemetry.test.ts`.
-  - [ ] Step 2.2: Run `npx vitest run src/features/sysml/performance/renderTelemetry.test.ts`; expect failure.
-  - [ ] Step 2.3: Implement bounded telemetry buffer in `src/features/sysml/performance/renderTelemetry.ts` with `window.__ADIA_PERF__` reader.
-  - [ ] Step 2.4: Wrap boundaries (workspace, canvas, explorer, inspector) with React `Profiler` callbacks and performance marks.
-  - [ ] Step 2.5: Verify tests and `tsc --noEmit` pass.
-  - [ ] Step 2.6: Profile rename, undo, redo (5 samples) and record components responsible for >=80% commit duration in `artifacts/scalability/diagnosis-10000.json`.
-  - [ ] Step 2.7: Commit Task 2 changes.
+- [x] Task 2: Attribute post-command stalls to exact React work
+  - [x] Step 2.1: Write failing telemetry tests in `src/features/sysml/performance/renderTelemetry.test.ts`.
+  - [x] Step 2.2: Run `npx vitest run src/features/sysml/performance/renderTelemetry.test.ts`; expect failure.
+  - [x] Step 2.3: Implement bounded telemetry buffer in `src/features/sysml/performance/renderTelemetry.ts` with `window.__ADIA_PERF__` reader.
+  - [x] Step 2.4: Wrap boundaries (workspace, canvas, explorer, inspector) with React `Profiler` callbacks and performance marks.
+  - [x] Step 2.5: Verify tests and `tsc --noEmit` pass.
+  - [x] Step 2.6: Profile rename, undo, redo (5 samples) and record components responsible for >=80% commit duration in `artifacts/scalability/diagnosis-10000.json`.
+  - [x] Step 2.7: Commit Task 2 changes.
 - [ ] Task 3: Project only the active diagram
   - [ ] Step 3.1: Write failing tests in `src/engine/sysml/projection/activeDiagramProjection.test.ts`.
   - [ ] Step 3.2: Run `npx vitest run src/engine/sysml/projection/activeDiagramProjection.test.ts`; expect failure.

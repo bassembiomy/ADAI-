@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler } from 'react';
+import { recordRenderCommit } from './features/sysml/performance/renderTelemetry';
 import * as math from 'mathjs';
 import Plot from './components/doe/PlotlyRenderer';
 import { PlotlyPlots } from './components/doe/PlotlyPlots';
@@ -17638,8 +17639,9 @@ const ADIA = () => {
           </div>
         </div>
       )}
-      <div
-        className="flex flex-col ui-surface font-sans overflow-hidden"
+      <Profiler id="workspace" onRender={(_, phase, actualDuration) => recordRenderCommit('workspace', phase, actualDuration)}>
+        <div
+          className="flex flex-col ui-surface font-sans overflow-hidden"
         style={{
           zoom: uiZoom,
           width: `${100 / uiZoom}vw`,
@@ -18142,52 +18144,54 @@ const ADIA = () => {
                 </button>
               </div>
               {!isHierarchyCollapsed && (
-                <HierarchyTree
-                  states={states}
-                  layers={layers}
-                  transitions={transitions}
-                  junctions={junctions}
-                  activeStates={activeStates}
-                  currentLayerId={currentLayerId}
-                  diagramMode={diagramMode}
-                  blocks={blocks}
-                  parts={parts}
-                  diagrams={seededStateMachineDiagrams}
-                  diagramPresentations={sysmlDiagramPresentations}
-                  externalModels={hierarchyExternalModels}
-                  canonicalSysmlRepository={canonicalSysmlRepository}
-                  sysmlStore={sysmlStore}
-                  onSelect={(id: string, multiSelect?: boolean) => {
-                    if (!multiSelect && isDiagramHierarchyNode(id)) {
-                      activateHierarchyNode(id, 'diagram');
-                    }
-                    setSelectedIds([id]);
-                  }}
-                  onDoubleClick={(id: string, kind?: string) => activateHierarchyNode(id, kind)}
-                  selectedIds={selectedIds}
-                  onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
+                <Profiler id="explorer" onRender={(_, phase, actualDuration) => recordRenderCommit('explorer', phase, actualDuration)}>
+                  <HierarchyTree
+                    states={states}
+                    layers={layers}
+                    transitions={transitions}
+                    junctions={junctions}
+                    activeStates={activeStates}
+                    currentLayerId={currentLayerId}
+                    diagramMode={diagramMode}
+                    blocks={blocks}
+                    parts={parts}
+                    diagrams={seededStateMachineDiagrams}
+                    diagramPresentations={sysmlDiagramPresentations}
+                    externalModels={hierarchyExternalModels}
+                    canonicalSysmlRepository={canonicalSysmlRepository}
+                    sysmlStore={sysmlStore}
+                    onSelect={(id: string, multiSelect?: boolean) => {
+                      if (!multiSelect && isDiagramHierarchyNode(id)) {
+                        activateHierarchyNode(id, 'diagram');
+                      }
+                      setSelectedIds([id]);
+                    }}
+                    onDoubleClick={(id: string, kind?: string) => activateHierarchyNode(id, kind)}
+                    selectedIds={selectedIds}
+                    onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
 
 
 
-                  onExecuteSysmlCommand={handleExecuteSysmlCommand}
-                  onCommandResult={handleExplorerCommand}
-                  activeDiagramId={activeSysmlDiagramId}
-                  activeDiagramContext={(() => {
-                    const contextId = activeSysmlDiagramId;
-                    const presented = diagramMode === 'statemachine'
-                      ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
-                      : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
-                    return {
-                      diagramId: contextId,
-                      name: sysmlObjectLabel(canonicalSysmlRepository.diagrams[contextId]
-                        ?? seededStateMachineDiagrams.find(diagram => diagram.id === contextId), 'Diagram'),
-                      kind: diagramMode,
-                      domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
-                      presentedSemanticIds: presented,
-                      contextSemanticIds: [],
-                    } as ActiveDiagramContext;
-                  })()}
-                />
+                    onExecuteSysmlCommand={handleExecuteSysmlCommand}
+                    onCommandResult={handleExplorerCommand}
+                    activeDiagramId={activeSysmlDiagramId}
+                    activeDiagramContext={(() => {
+                      const contextId = activeSysmlDiagramId;
+                      const presented = diagramMode === 'statemachine'
+                        ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
+                        : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
+                      return {
+                        diagramId: contextId,
+                        name: sysmlObjectLabel(canonicalSysmlRepository.diagrams[contextId]
+                          ?? seededStateMachineDiagrams.find(diagram => diagram.id === contextId), 'Diagram'),
+                        kind: diagramMode,
+                        domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
+                        presentedSemanticIds: presented,
+                        contextSemanticIds: [],
+                      } as ActiveDiagramContext;
+                    })()}
+                  />
+                </Profiler>
               )}
             </aside>
           )}
@@ -18957,9 +18961,10 @@ const ADIA = () => {
               )}
 
 
-              <div
-                ref={canvasRef}
-                id="adia-diagram-canvas"
+              <Profiler id="canvas" onRender={(_, phase, actualDuration) => recordRenderCommit('canvas', phase, actualDuration)}>
+                <div
+                  ref={canvasRef}
+                  id="adia-diagram-canvas"
                 className="absolute inset-0"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -19138,6 +19143,7 @@ const ADIA = () => {
                   </g>
                 </svg>
               </div>
+            </Profiler>
 
               {/* Status bar */}
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#1a1a1a] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
@@ -19383,7 +19389,8 @@ const ADIA = () => {
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <>
             {/* Right Dock: Properties */}
-          <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+            <Profiler id="inspector" onRender={(_, phase, actualDuration) => recordRenderCommit('inspector', phase, actualDuration)}>
+              <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isPropertiesCollapsed && (
                 <div className="flex items-center overflow-hidden whitespace-nowrap">
@@ -20948,6 +20955,7 @@ const ADIA = () => {
               )}
             </div>
           </aside>
+        </Profiler>
             </>
           )}
         </div>
@@ -21965,6 +21973,7 @@ const ADIA = () => {
           </div>
         )}
       </div>
+      </Profiler>
     </>
   );
 };
