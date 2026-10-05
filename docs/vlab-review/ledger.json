@@ -20,10 +20,13 @@
         "WP-00"
       ],
       "blocks": [],
-      "status": "todo",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx tsx scripts/vlab_review/inventory.ts",
-      "evidence": [],
+      "evidence": [
+        "inventory.ts deterministic (hash-verified by planner); gaps in docs/vlab-review/inventory-gaps.md",
+        "package.json vlab:inventory line left uncommitted (file has user changes)"
+      ],
       "findings": []
     },
     {
@@ -270,7 +273,7 @@
     },
     {
       "id": "WP-20",
-      "title": "Physical signal & control",
+      "title": "Physical signal & control [98 blocks: planner will split into WP-20a..d]",
       "phase": "P2",
       "deps": [
         "WP-03",
@@ -498,8 +501,8 @@
       "severity": "med",
       "block": "unknown (at least one library icon)",
       "layer": "ui",
-      "summary": "vlabSymbols.test: at least one library block falls back to UnknownSymbolGlyph.",
-      "wp": "WP-40"
+      "summary": "gas_flow_sensor and gas_pressure_sensor have no symbol (fall back to UnknownSymbolGlyph)",
+      "wp": "WP-18"
     },
     {
       "id": "F-007",
@@ -566,6 +569,54 @@
       "wp": "WP-05",
       "summary": "Not in baseline and failing at HEAD: test_pressure_sensor gas mass flow, vlab_comprehensive L6-004, vlab_readiness_gate GATE-01, vlab_validation_contracts (2).",
       "severity": "low"
+    },
+    {
+      "layer": "eq",
+      "id": "F-015",
+      "wp": "WP-10..21",
+      "severity": "med",
+      "block": "73 blocks",
+      "summary": "Dead params: shown in the UI but never read by the equation. The user edits them with no effect. Triage per domain WP (inventory-gaps.md)."
+    },
+    {
+      "layer": "eq",
+      "id": "F-016",
+      "wp": "WP-10..21",
+      "severity": "low",
+      "block": "45 blocks",
+      "summary": "Equation reads params the library does not expose (some are aliases). Triage per domain WP."
+    },
+    {
+      "layer": "port",
+      "id": "F-017",
+      "wp": "WP-03",
+      "severity": "med",
+      "block": "146 blocks",
+      "summary": "Ports without a domain field (132 blocks have no port domain at all). Fix in WP-03."
+    },
+    {
+      "layer": "port",
+      "id": "F-018",
+      "wp": "WP-03",
+      "severity": "med",
+      "block": "153 blocks",
+      "summary": "Library ports never read by the equation. This is a candidate list: many are signal outputs written through DAE branches. Verify in WP-03 and the domain WPs."
+    },
+    {
+      "layer": "integration",
+      "id": "F-019",
+      "wp": "WP-21",
+      "severity": "low",
+      "block": "Inport,Outport,Subsystem,heat_sensor,reservoir_il,vfd_controller",
+      "summary": "Orphan equation keys (aliases or legacy). Confirm whether old models need them, else remove."
+    },
+    {
+      "layer": "ui",
+      "id": "F-020",
+      "wp": "WP-40",
+      "severity": "low",
+      "block": "217 blocks",
+      "summary": "No per-block help: HELP_DATA has 25 topic entries. 23 blocks have no component definition."
     }
   ]
 }
