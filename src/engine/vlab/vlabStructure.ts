@@ -84,11 +84,7 @@ export const UNSUPPORTED_BLOCKS: Record<string, UnsupportedBlockSpec> = {
     wp: 'WP-10',
     missingSpec: 'composite three-phase port `abc` needs a 3-element (vector) electrical port; the scalar solver ties a, b and c to the one composite node (V_a = V_b = V_c = V_abc), which short-circuits the phases',
   },
-  // ── WP-14 (mechanical translational) ──
-  lever: {
-    wp: 'WP-14',
-    missingSpec: 'pivot port `c` has no reaction force and the velocity-ratio sign is unspecified: the library text says v1/L1 = v2/L2, the equation uses v_a = -(L2/L1) v_b and ignores the pivot velocity; needs the published lever kinematics, the moment balance F_a L1 + F_b L2 = 0 and the pivot reaction F_c = -(F_a + F_b)',
-  },
+  // (lever: implemented in WP-13b with the pivot reaction F_C = -(F_A + F_B) and v_A/v_B = -L1/L2 at a fixed pivot)
   // ── WP-17 (moist air, F-035: allocated outputs that were never driven) ──
   ma_pipe: {
     wp: 'WP-17',

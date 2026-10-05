@@ -27,10 +27,14 @@ describe('Gas component control-port fallbacks', () => {
     expect(blockEquations.gas_flow_sensor({ across: [100000, 100000], branch: [-0.2, 0] } as any)).toEqual([0, -0.2]);
   });
 
-  it('keeps converter torque and force signs as pressure difference from a to h', () => {
+  it('delivered converter torque and force are the pressure difference from a to h (through variable is into the block)', () => {
+    // WP-13b: the through variable is the torque / force INTO the block at R, so the delivered torque D*(Pa - Ph) is
+    // -branch and the residual is branch + D*(Pa - Ph); this is the sign that conserves power (see gears_converters.test.ts).
     const torque = blockEquations.gas_rotational_conv({ across: [200000, 150000, 0, 0], branch: [0, 0], params: { D: 0.01 } } as any);
     const force = blockEquations.gas_translational_conv({ across: [200000, 150000, 0, 0], branch: [0, 0], params: { A: 0.001 } } as any);
-    expect(torque[1]).toBe(-500);
-    expect(force[1]).toBe(-50);
+    expect(torque[1]).toBe(500);
+    expect(force[1]).toBe(50);
+    // delivering exactly D*(Pa - Ph) (branch = -500 N*m) satisfies the equation
+    expect(blockEquations.gas_rotational_conv({ across: [200000, 150000, 0, 0], branch: [0, -500], params: { D: 0.01 } } as any)[1]).toBe(0);
   });
 });

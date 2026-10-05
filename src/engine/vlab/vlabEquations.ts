@@ -1,6 +1,6 @@
 import { EquationContext } from './types';
 import { numericParam, stringParam, vectorParam, unwrapParam } from './vlabParams';
-import { jointResiduals } from './vlabJointCore';
+import { interfaceResiduals, jointResiduals } from './vlabJointCore';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
   parseVector3,
@@ -643,15 +643,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - S];
   },
 
-  lever: ({ across, branch, params }) => {
-    // va = -(L2/L1)*vb => across[0] + L2/L1 * across[1] = 0
-    // Fa = (L2/L1)*Fb => branch[0] - L2/L1 * branch[1] = 0
-    const L1 = numericParam(params, 'L1', 1.0);
-    const L2 = numericParam(params, 'L2', 1.0);
-    const ratio = L2 / L1;
+  lever: ({ across, branch, params, ports = [] }) => {
+    // Ideal massless rigid lever, small angle, pivot C between A (arm L1) and B (arm L2, opposite side).
+    // Rigid-body kinematics about the pivot: v_A = v_C + w*L1, v_B = v_C - w*L2  (w = lever angular rate)
+    //   => (v_A - v_C)*L2 + (v_B - v_C)*L1 = 0                          (velocity relation, v_A/v_B = -L1/L2 at a fixed pivot)
+    // Statics (forces INTO the block, branch[k] = F_A, F_B, F_C): moment about the pivot F_A*L1 - F_B*L2 = 0, force sum
+    // F_A + F_B + F_C = 0 (pivot reaction)  =>  power F_A v_A + F_B v_B + F_C v_C = v_C*sum(F) + w*(F_A*L1 - F_B*L2) = 0.
+    const L1 = numericParam(params, 'L1', 0.5);
+    const L2 = numericParam(params, 'L2', 0.5);
+    const vA = across[portIndex(ports, 'a', 0)];
+    const vB = across[portIndex(ports, 'b', 1)];
+    const vC = across[portIndex(ports, 'c', 2)];
     return [
-      across[0] + ratio * across[1],
-      branch[0] - ratio * branch[1]
+      (vA - vC) * L2 + (vB - vC) * L1,
+      branch[0] * L1 - branch[1] * L2,
+      branch[0] + branch[1] + branch[2]
     ];
   },
 
@@ -728,12 +734,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── COUPLINGS ──────────────────────────────────────────────────────────────
   rotational_electromechanical_converter: ({ across, branch, params }) => {
-    // V = Ra*I + Ke*w => (Vp-Vn) - I*Ra - Ke*w = 0
-    // T = -Kt*I (power-preserving convention: electrical in = mechanical out)
-    const K = numericParam(params, 'K', 0.05);
-    const Ra = numericParam(params, 'R', 2.0);
+    // V = Ra*I + K*w => (Vp-Vn) - I*Ra - K*w = 0           (Simscape Foundation Rotational Electromechanical Converter, L = 0)
+    // T_in = -K*I: branch[1] is the torque INTO the block at R, the torque delivered is K*I
+    //   => V*I + T_in*w = Ra*I^2 (electrical power in = resistive loss + mechanical power out).
+    const K = numericParam(params, 'K', 1);
+    const Ra = numericParam(params, 'R', 1);
     const V = across[0] - across[1];
-    const w = across[2] - (across[3] || 0);
+    const w = across[2] - across[3];
     const I = branch[0];
     const T = branch[1];
     return [
@@ -744,11 +751,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   translational_electromechanical_converter: ({ across, branch, params }) => {
     // V = I*R + Bl*v
-    // F = -Bl*I
+    // F_in = -Bl*I: branch[1] is the force INTO the block at R, the force delivered is Bl*I
+    //   => V*I + F_in*v = R*I^2.
     const Bl = numericParam(params, 'Bl', 1.0);
     const R = numericParam(params, 'R', 1.0);
     const V = across[0] - across[1];
-    const v = across[2] - (across[3] || 0);
+    const v = across[2] - across[3];
     const I = branch[0];
     const F = branch[1];
     return [
@@ -1670,13 +1678,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const T = numericParam(params, 'T', 293.15);
     const P_a = across[0];
     const P_h = across[1];
-    const omega = across[2] - (across[3] || 0);
+    const omega = across[2] - across[3];
     const mdot = branch[0];
     const torque = branch[1];
     const deltaP = P_a - P_h;
+    // Ideal displacement machine: volumetric flow at A is V' = D*w (mdot = rho_A*V'), shaft torque delivered = D*(P_A - P_H).
+    // branch[1] is the torque INTO the block at R, so the delivered torque is -branch[1]:
+    //   P_shaft_in + P_gas_in = branch[1]*w + (P_A - P_H)*V' = w*(branch[1] + D*(P_A - P_H)) = 0.
     return [
       mdot - (P_a * D / (R * T)) * omega,
-      torque - D * deltaP
+      torque + D * deltaP
     ];
   },
   gas_translational_conv: ({ across, branch, params }) => {
@@ -1685,13 +1696,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const T = numericParam(params, 'T', 293.15);
     const P_a = across[0];
     const P_h = across[1];
-    const v = across[2] - (across[3] || 0);
+    const v = across[2] - across[3];
     const mdot = branch[0];
     const force = branch[1];
     const deltaP = P_a - P_h;
+    // Ideal double-acting cylinder: V' = A*v at A, force delivered = A*(P_A - P_H); branch[1] is the force INTO the block at R:
+    //   branch[1]*v + (P_A - P_H)*A*v = 0.
     return [
       mdot - (P_a * A / (R * T)) * v,
-      force - A * deltaP
+      force + A * deltaP
     ];
   },
   gas_flow_source: ({ across, branch, params, ports, connectedPorts }) => {
@@ -1744,8 +1757,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const mmf = across[2] - across[3];
     const I = branch[0];
     const dPhi = dBranch[1];
+    // MMF = N*I (MMF rise from S to N) and V = N dPhi_ext/dt, where phi_ext is the flux that leaves port N into the
+    // external circuit. branch[1] is the flux INTO the block at N (= -phi_ext), so V = -N dbranch[1]/dt. A reluctance R
+    // across N-S then gives phi_ext = N I/R and V = (N^2/R) dI/dt: a positive inductance L = N^2/R, and the electrical
+    // power V*I equals the stored-energy rate mmf * dphi_ext/dt (lossless).
     return [
-      V - N * dPhi,
+      V + N * dPhi,
       mmf - N * I
     ];
   },
@@ -2776,19 +2793,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  rot_multibody_interface: ({ across, branch }) => {
-    return [
-      across[0] - across[1],
-      branch[1] - branch[0]
-    ];
-  },
+  // Scalar <-> Frame bridges (vlabJointCore.ts conventions): the network port pair R-C follows the relative motion of the
+  // Frames B-F about / along the configured axis, and the through variable of the network is applied along the SAME
+  // world axis R_B*axis on F (+) with the reaction on B (-). Lossless: T*w_rel (F*v_rel) is handed over unchanged.
+  rot_multibody_interface: ({ across, dAcross, branch, params, ports = [], nodeId, ctx }) =>
+    interfaceResiduals('rotation', { across, dAcross, branch, params: params ?? {}, ports, nodeId: nodeId ?? '', dt: ctx?.dt }),
 
-  trans_multibody_interface: ({ across, branch }) => {
-    return [
-      across[0] - across[1],
-      branch[1] - branch[0]
-    ];
-  },
+  trans_multibody_interface: ({ across, dAcross, branch, params, ports = [], nodeId, ctx }) =>
+    interfaceResiduals('translation', { across, dAcross, branch, params: params ?? {}, ports, nodeId: nodeId ?? '', dt: ctx?.dt }),
 
   // ── BELT & CABLE MATERIAL ────────────────────────────────────────────────
   // belt_properties is a property-link block: it contributes no DAE residuals
@@ -2821,14 +2833,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const k = mat ? (mat.youngs * area) / len : numericParam(params, 'stiffness', 1e6);
     const rIdx = portIndex(ports, 'r', 0);
     const eIdx = portIndex(ports, 'e', 1);
-    const v = (across[rIdx] || 0) - (across[eIdx] || 0);
-    const x = state[0] || 0;
+    const v = across[rIdx] - across[eIdx];
+    const x = state[0];
+    // x = x_R - x_E (compression positive), F_R->E = k*x is the force INTO the block at R, so the tension of a stretched
+    // belt is T = -F_R->E = k*(x_E - x_R)
     const res = [
       branch[0] - k * x,
     ];
     if (branch.length > 1) {
-      // Measurement signal f couples to tensile force
-      res.push(branch[1] - branch[0]);
+      // Measurement signal f is the belt tension T = -F_R->E
+      res.push(branch[1] + branch[0]);
     }
     res.push(dState[0] - v);
     return res;
@@ -2839,11 +2853,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const mat = resolveBeltMaterial(params, ctx);
     const rIdx = portIndex(ports, 'r', 0);
     const aIdx = portIndex(ports, 'a', 1);
-    const w = across[rIdx] || 0;
-    const v = across[aIdx] || 0;
+    const w = across[rIdx];
+    const v = across[aIdx];
     // Spool inertia + wrapped-belt inertia (one circumference: m = rho*2*pi*R).
     const J = numericParam(params, 'inertia', 0) +(mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
-    const dw = (dAcross[rIdx] || 0);
+    const dw = dAcross[rIdx];
     const res = [
       v - w * R,
       branch[0] + branch[1] * R - J * dw
@@ -2861,11 +2875,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const rIdx = portIndex(ports, 'r', 0);
     const aIdx = portIndex(ports, 'a', 1);
     const bIdx = portIndex(ports, 'b', 2);
-    const w = across[rIdx] || 0;
-    const vA = across[aIdx] || 0;
-    const vB = across[bIdx] || 0;
+    const w = across[rIdx];
+    const vA = across[aIdx];
+    const vB = across[bIdx];
     const J = numericParam(params, 'inertia', 0.01) +(mat ? 2 * Math.PI * mat.density * R ** 3 : 0);
-    const dw = (dAcross[rIdx] || 0);
+    const dw = dAcross[rIdx];
     const res = [
       vA - w * R,
       vB + w * R,

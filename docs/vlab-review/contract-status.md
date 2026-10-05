@@ -7,14 +7,14 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 |---|---|
 | Live blocks | 248 |
 | Classification | physical 111, signal 73, measurement 20, source 33, utility 11 |
-| Total ports | 787 |
+| Total ports | 789 |
 | Ports without explicit domain | 0 |
 | Blocks with at least one port lacking a domain | 0 |
-| Blocks with generic "governing ... equation" label (equation or description) | 97 |
+| Blocks with generic "governing ... equation" label (equation or description) | 90 |
 | Blocks with no equation text | 0 |
 | Unsafe numeric `params.X ||` fallbacks in vlabEquations.ts | 0 |
-| Fully certified blocks (all checks pass, no expected failure) | 138 of 248 |
-| Expected failures (ratchet entries) | 159 across 110 blocks |
+| Fully certified blocks (all checks pass, no expected failure) | 146 of 248 |
+| Expected failures (ratchet entries) | 151 across 102 blocks |
 
 ## Per check (blocks)
 | Check | Meaning | Pass | Fail | Expected failure |
@@ -27,9 +27,9 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | params-dead | every exposed param is read by the equation | 207 | 41 | 41 |
 | dae-allocation | DAE branches/states allocated == consumed; residual length == allocated unknowns | 248 | 0 | 0 |
 | scope-routing | every signal output port is reachable by a scope through the real routing path | 248 | 0 | 0 |
-| unsupported | block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a) | 227 | 21 | 21 |
+| unsupported | block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a) | 228 | 20 | 20 |
 | finite-residual | every residual row is finite at the nominal evaluation point (a NaN is never masked as 0, F-045) | 248 | 0 | 0 |
-| equation-doc | library equation text is specific (not generic or missing) | 151 | 97 | 97 |
+| equation-doc | library equation text is specific (not generic or missing) | 158 | 90 | 90 |
 
 ## Expected failures per owning WP
 | WP | Total | Breakdown by check |
@@ -37,8 +37,7 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | WP-10 | 1 | unsupported 1 |
 | WP-12 | 1 | equation-doc 1 |
 | WP-13 | 1 | equation-doc 1 |
-| WP-13b | 7 | equation-doc 7 |
-| WP-14 | 3 | unsupported 1, equation-doc 2 |
+| WP-14 | 2 | equation-doc 2 |
 | WP-15 | 3 | equation-doc 3 |
 | WP-16 | 1 | equation-doc 1 |
 | WP-17 | 31 | params-dead 5, unsupported 6, equation-doc 20 |

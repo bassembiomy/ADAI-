@@ -250,10 +250,14 @@
         "WP-19a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review/gears_converters.test.ts --reporter=dot",
-      "evidence": [],
+      "evidence": [
+        "50 gears/converter tests; ideal power balance within 1e-9; lever implemented (removed from unsupported); sign fixes for em_converter (negative inductance), gas_*_conv (non-conserving), belt_end (tension, spec 2.4)",
+        "multibody interfaces redesigned as the only scalar<->Frame bridges; the removed t/f ports give an unknown-port diagnostic on load (planner tested)",
+        "planner re-run: 4237 pass / 171 expected-fail / 1 known; test:vlab 20/20"
+      ],
       "findings": []
     },
     {
@@ -859,7 +863,8 @@
       "block": "common_gear, rack_pinion",
       "layer": "port",
       "summary": "Rotational/Translational, not Frame. Decide versus Simscape Multibody.",
-      "wp": "WP-13b"
+      "wp": "WP-13b",
+      "status": "resolved-WP-13b: gears stay scalar (Driveline style)"
     },
     {
       "id": "F-034",
@@ -1067,6 +1072,38 @@
       "layer": "solver",
       "summary": "Joint rates assume a backward difference, but the SDIRK stage dt differs from the step.",
       "wp": "WP-31"
+    },
+    {
+      "id": "F-059",
+      "severity": "low",
+      "block": "dc_motor",
+      "layer": "eq",
+      "summary": "Kt and Ke are separate params. Kt != Ke creates or destroys energy (documented). Consider tying them in SI or warning.",
+      "wp": "WP-12"
+    },
+    {
+      "id": "F-060",
+      "severity": "med",
+      "block": "hydraulic converters",
+      "layer": "eq",
+      "summary": "No hydraulic pump/motor/cylinder with a shaft or rod port exists (pump_il is an ideal pressure source).",
+      "wp": "WP-17"
+    },
+    {
+      "id": "F-061",
+      "severity": "low",
+      "block": "belt_end",
+      "layer": "eq",
+      "summary": "No slack (tension-only) condition and no damping term c(dx_e - dx_r) as spec 2.4 requires.",
+      "wp": "WP-13"
+    },
+    {
+      "id": "F-062",
+      "severity": "low",
+      "block": "rot/trans_multibody_interface",
+      "layer": "port",
+      "summary": "Old t/f ports removed. Saved models get an unknown-port diagnostic. Consider a migration that drops those edges with a notice.",
+      "wp": "WP-41"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

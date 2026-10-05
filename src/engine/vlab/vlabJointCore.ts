@@ -518,3 +518,92 @@ export function rotationMatrixToEuler(R: Mat3): Vector3 {
   // gimbal lock: attribute the whole rotation to rz
   return [0, Math.atan2(sy, cy), Math.atan2(-R[0][1], R[1][1])];
 }
+
+// ── scalar <-> Frame interfaces (WP-13b) ────────────────────────────────────────────────────────
+/**
+ * The Rotational / Translational Multibody Interface blocks are the ONLY scalar <-> Frame bridges. They use the joint
+ * conventions above: the axis is a B-local unit vector (normalized at load, a zero / malformed vector is the
+ * INVALID_JOINT_PARAMETER diagnostic), the world axis is R_B axis, the through wrench acts on F (+) and B (-) with explicit
+ * Frame coordinates (jointBranchSpecs), and the relative rate is the discrete derivative over the solver step.
+ */
+export const INTERFACE_SIGNAL_PORT: Record<string, string> = { rot_multibody_interface: 'w', trans_multibody_interface: 'v' };
+
+export function interfaceAxis(params: Record<string, any> | undefined, nodeId: string, label: string): Vector3 {
+  const v = readVector(params?.axis, [0, 0, 1]);
+  if (!v || !v.every(Number.isFinite) || Math.hypot(v[0], v[1], v[2]) < 1e-12) {
+    throw new MultibodyConstraintDiagnosticError(
+      'INVALID_JOINT_PARAMETER', nodeId, ['b', 'f'], `${label} "${nodeId}": axis must contain three finite numbers and must be nonzero.`,
+    );
+  }
+  return unit(v as Vector3);
+}
+
+export interface InterfaceKinematics {
+  /** unit axis in world coordinates, R_B axis */
+  axisWorld: Vector3;
+  /** F - B origin offset in world coordinates (lever arm of a force on F about B's origin) */
+  offset: Vector3;
+  /** rotation rate of F relative to B about the axis (rad/s) or slide rate of F along it (m/s), per `kind` */
+  rate: number;
+}
+
+export function interfaceKinematics(
+  kind: 'rotation' | 'translation', Bf: number[], Ff: number[], dBf: number[], dFf: number[], axis: Vector3, dt?: number,
+): InterfaceKinematics {
+  const B = poseOf(Bf), F = poseOf(Ff);
+  const step = dt !== undefined && Number.isFinite(dt) && dt > 0 ? dt : 0;
+  const aW = mulMV(B.R, axis);
+  const d = sub(F.P, B.P);
+  const prev = step ? { B: poseOf(stepBack(Bf, dBf, step)), F: poseOf(stepBack(Ff, dFf, step)) } : null;
+  let rate: number;
+  if (kind === 'rotation') {
+    if (prev) {
+      const dR = mulMM(mulMM(transposeM(B.R), F.R), transposeM(mulMM(transposeM(prev.B.R), prev.F.R)));
+      rate = Math.atan2(dot(axis, skewVee(dR)), (trace(dR) - 1) / 2) / step;
+    } else {
+      rate = dot(sub(frameAngularVelocity(euler(Ff), euler(dFf)), frameAngularVelocity(euler(Bf), euler(dBf))), aW);
+    }
+  } else if (prev) {
+    rate = (dot(aW, d) - dot(mulMV(prev.B.R, axis), sub(prev.F.P, prev.B.P))) / step;
+  } else {
+    const wB = frameAngularVelocity(euler(Bf), euler(dBf));
+    rate = dot(aW, sub(pos(dFf), pos(dBf))) + dot(d, cross(wB, aW));
+  }
+  return { axisWorld: aW, offset: d, rate };
+}
+
+/** Branch layout of an interface: scalar through (R -> C), wrench components on F/B, then the signal branch when wired. */
+export function interfaceBranchSpecs(kind: 'rotation' | 'translation', ports: readonly string[]): JointBranchSpec[] {
+  const out: JointBranchSpec[] = [{ name: kind === 'rotation' ? 'torque' : 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] }];
+  const wrench = kind === 'rotation' ? 'tx ty tz' : 'fx fy fz';
+  const base = kind === 'rotation' ? 3 : 0;
+  wrench.split(' ').forEach((name, i) => out.push({ name, ports: [{ id: 'b', sign: -1, coord: base + i }, { id: 'f', sign: 1, coord: base + i }] }));
+  if (kind === 'translation') XYZ.forEach((a, i) => out.push({ name: `tb${a}`, ports: [{ id: 'b', sign: 1, coord: 3 + i }] }));
+  const signal = kind === 'rotation' ? 'w' : 'v';
+  if (ports.includes(signal)) out.push({ name: `signal_${signal}`, ports: [{ id: signal, sign: 1 }] });
+  return out;
+}
+
+/** Residual rows of an interface equation factory, aligned with interfaceBranchSpecs. */
+export function interfaceResiduals(
+  kind: 'rotation' | 'translation', input: Pick<JointInputs, 'across' | 'dAcross' | 'branch' | 'params' | 'ports' | 'nodeId' | 'dt'>,
+): number[] {
+  const label = kind === 'rotation' ? 'Rotational Multibody Interface' : 'Translational Multibody Interface';
+  const axis = interfaceAxis(input.params, input.nodeId, label);
+  const idx = (id: string) => input.ports.indexOf(id);
+  const Bf = frame(input.across[idx('b')]), Ff = frame(input.across[idx('f')]);
+  const dBf = frame(input.dAcross[idx('b')]), dFf = frame(input.dAcross[idx('f')]);
+  const k = interfaceKinematics(kind, Bf, Ff, dBf, dFf, axis, input.dt);
+  const br = input.branch;
+  const network = input.across[idx('r')] - input.across[idx('c')];
+  // kinematics: the network port pair follows the relative motion of the Frames; statics: the through variable of the
+  // network is the magnitude of the wrench applied along the world axis
+  const rows: number[] = [network - k.rate];
+  for (let i = 0; i < 3; i++) rows.push(br[1 + i] - br[0] * k.axisWorld[i]);
+  if (kind === 'translation') {
+    const lever = cross(k.offset, [br[1], br[2], br[3]]);
+    for (let i = 0; i < 3; i++) rows.push(br[4 + i] + lever[i]);
+  }
+  if (input.ports.includes(kind === 'rotation' ? 'w' : 'v')) rows.push(br[rows.length] - network);
+  return rows;
+}

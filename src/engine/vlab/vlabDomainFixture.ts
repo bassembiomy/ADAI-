@@ -37,6 +37,11 @@ const FRAME_CONSTRAINT_DUTS = new Set([
   'dist_constraint', 'spherical_joint', 'universal_joint', 'revolute_joint', 'prismatic_joint', 'weld_joint',
 ]);
 
+/** Multibody interfaces (WP-13b): the joint whose Frames the interface is wired across, with the interface's default axis. */
+const FRAME_INTERFACE_DUTS: Record<string, string> = {
+  rot_multibody_interface: 'revolute_joint', trans_multibody_interface: 'prismatic_joint',
+};
+
 const lower = (s?: string) => (s || '').toLowerCase();
 
 /** How a conserving port that has no source of its own is closed: tied straight to the domain reference, or through a load. */
@@ -180,6 +185,17 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
       } else {
         addNode('ref_thermal', 'thermal_ref', 50, 700);
         wire(`e_thermal_ref_conn_${portId}`, 'dut', `${portId}_s`, 'ref_thermal', 'a_t');
+      }
+      connected.add(portId);
+    } else if ((domain === 'frame' || domain === 'multibodyframe') && FRAME_INTERFACE_DUTS[block.id]) {
+      // scalar <-> Frame bridge: B/F are wired in parallel with the Frames of a joint with the same (default) axis
+      addNode('world', 'world_frame', 50, 800);
+      addNode('iface_joint', FRAME_INTERFACE_DUTS[block.id], 120, 900);
+      if (portId === 'b') {
+        wire('e_frame_b', 'world', 'w_s', 'dut', 'b_t');
+        wire('e_frame_joint_b', 'world', 'w_s', 'iface_joint', 'b_t');
+      } else if (portId === 'f') {
+        wire('e_frame_f', 'iface_joint', 'f_s', 'dut', 'f_t');
       }
       connected.add(portId);
     } else if ((domain === 'frame' || domain === 'multibodyframe') && FRAME_CONSTRAINT_DUTS.has(block.id)) {

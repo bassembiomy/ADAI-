@@ -621,8 +621,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = K * ω\\nτ = K * I",
-        "description": "Converts electrical power to mechanical rotational power based on back-EMF and motor constant K."
+        "equation": "V = R·I + K·ω [V],  ω = ω_R − ω_C [rad/s]\nτ = K·I [N·m]  (torque delivered at R, reaction at C)\nV·I = R·I² + τ·ω",
+        "description": "Ideal rotational electromechanical converter (DC machine without armature inductance) between the Electrical port pair + / − and the Rotational port pair R / C. K (V·s/rad) is the back-EMF constant and, in SI, equal to the torque constant. The armature resistance R is the only loss: the electrical input V·I equals R·I² plus the mechanical power K·I·ω, so with R = 0 the conversion is lossless. K may be negative (reversed polarity)."
       },
       {
         "id": "translational_electromechanical_converter",
@@ -634,7 +634,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Bl": {
             "value": 1,
             "unit": "N/A",
-            "label": "Magnetic Flux"
+            "label": "Force Constant (Bl)"
           },
           "R": {
             "value": 1,
@@ -669,8 +669,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "V = Bl * v\nF = Bl * I",
-        "description": "Converts electrical power to mechanical linear force via Lorentz force (Bl product)."
+        "equation": "V = R·I + Bl·v [V],  v = v_R − v_C [m/s]\nF = Bl·I [N]  (force delivered at R, reaction at C)\nV·I = R·I² + F·v",
+        "description": "Ideal translational electromechanical converter (voice coil / Lorentz actuator without coil inductance) between the Electrical port pair + / − and the Translational port pair R / C. Bl (N/A = V·s/m) is the force constant and equals the back-EMF constant. The winding resistance R is the only loss: V·I = R·I² + Bl·I·v, so with R = 0 the conversion is lossless. Bl may be negative (reversed polarity)."
       },
       {
         "id": "pmsm",
@@ -823,8 +823,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = Ra*I + La*dI/dt + Ke*ω\\nT = Kt*I = J*dω/dt + B*ω",
-        "description": "DC motor coupling armature electrical circuit with rotor shaft mechanics."
+        "equation": "V = Ra·I + La·dI/dt + Ke·ω [V]\nT = Kt*I = J·dω/dt + B·ω + τ_shaft [N·m]   (τ_shaft = torque delivered to the load)\nV·I = Ra·I² + d(½La·I²)/dt + B·ω² + d(½J·ω²)/dt + τ_shaft·ω   (Kt = Ke)",
+        "description": "Permanent-magnet DC motor: armature circuit (Ra, La, back-EMF constant Ke) coupled to a rotor with inertia J and viscous damping B. The rotor shaft is the scalar Rotational port R (referenced to the inertial frame); the torque delivered to the load is Kt·I minus the rotor inertia and damping terms. In SI the torque constant equals the back-EMF constant (Kt = Ke), which makes the conversion lossless apart from Ra·I² and B·ω²; unequal Kt and Ke would create or destroy energy."
       },
       {
         "id": "ac_motor",
@@ -2052,8 +2052,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Ph)",
-        "description": "Pneumatic rotary motor/compressor converting gas pressure differentials into shaft torque."
+        "equation": "ṁ(A→H) = ρ_A·D·ω [kg/s],  ρ_A = P_A/(R_gas·T),  ω = ω_R − ω_C [rad/s]\nτ = D·(P_A − P_H) [N·m]  (torque delivered at R, reaction at C)\n(P_A − P_H)·ṁ/ρ_A = −τ_in·ω",
+        "description": "Ideal positive-displacement rotary machine (vane or piston motor / compressor) between the gas ports A and H and the Rotational ports R / C. D (m³/rad) is the displacement: the volumetric flow at A is D·ω and the shaft torque is D·(P_A − P_H), so the shaft power τ·ω equals the pressure power (P_A − P_H)·V̇ and no power is lost. The gas is ideal at the fixed temperature T (R_gas = 287 J/(kg·K), air). Positive ω pumps gas from A to H."
       },
       {
         "id": "gas_translational_conv",
@@ -2103,8 +2103,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "mdot = A * v * ρ\nF = A * (Pa - Ph)",
-        "description": "Pneumatic cylinder converting differential gas pressure into translational piston force."
+        "equation": "ṁ(A→H) = ρ_A·A·v [kg/s],  ρ_A = P_A/(R_gas·T),  v = v_R − v_C [m/s]\nF = A·(P_A − P_H) [N]  (force delivered at R, reaction at C)\n(P_A − P_H)·ṁ/ρ_A = −F_in·v",
+        "description": "Ideal double-acting pneumatic cylinder between the gas ports A and H and the Translational ports R / C. A (m²) is the piston area: the volumetric flow at A is A·v and the piston force is A·(P_A − P_H), so the mechanical power F·v equals the pressure power (P_A − P_H)·V̇ and no power is lost. The gas is ideal at the fixed temperature T (R_gas = 287 J/(kg·K), air). Positive v pumps gas from A to H."
       },
       {
         "id": "gas_pressure_sensor",
@@ -2931,8 +2931,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "ω1 = ratio * ω2\\nτ2 = ratio * τ1",
-        "description": "An ideal mechanical gear transmission that scales angular velocity and torque."
+        "equation": "ω1 = ratio·ω2 [rad/s]\nτ1,in·ratio + τ2,in = 0 [N·m]   (delivered τ2 = ratio·τ1; P = τ1·ω1 + τ2·ω2 = 0)",
+        "description": "Ideal (lossless, massless, backlash-free) simple gear between shaft S1 (input / follower side, faster) and shaft S2 (output / base side); both shafts are scalar Rotational ports referenced to the inertial frame. ratio = ω1/ω2 (dimensionless, nonzero; a ratio of 0 is rejected). A positive ratio makes both shafts rotate in the same direction and a negative ratio reverses the direction (the Simscape Simple Gear 'output shaft rotates in the opposite direction' setting); the magnitude is the teeth ratio. The torque delivered to S2 is the torque into S1 multiplied by the ratio, so the transmitted power is zero for either sign."
       },
       {
         "id": "lever",
@@ -2976,8 +2976,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F1 * L1 = F2 * L2\nv1 / L1 = v2 / L2",
-        "description": "Ideal mechanical lever transforming displacement and force according to leverage arm lengths."
+        "equation": "(v_A − v_C)·L2 + (v_B − v_C)·L1 = 0 [m/s·m]   (opposite sides of the pivot: v_A − v_C = −(L1/L2)·(v_B − v_C))\nF_A·L1 − F_B·L2 = 0,  F_A + F_B + F_C = 0 [N]   (forces into the block; P = F_A·v_A + F_B·v_B + F_C·v_C = 0)",
+        "description": "Ideal massless rigid lever pivoting about port C, with port A at arm length L1 on one side of the pivot and port B at arm length L2 on the opposite side (small-angle, translational ports). Port C is the pivot (fulcrum) and carries the reaction force F_C = −(F_A + F_B); the pivot may move (v_C) or be tied to a Translational reference. A positive velocity at A gives a negative velocity at B relative to the pivot, with v_A/v_B = −L1/L2; the moment balance about the pivot is F_A·L1 = F_B·L2. Lossless: the three port powers sum to zero."
       },
       {
         "id": "wheel_axle",
@@ -3008,8 +3008,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "v = Rw × ω\nτ + Rw × F = 0",
-        "description": "Wheel and axle mechanism coupling vehicle linear road speed to axle rotational velocity."
+        "equation": "v_P = Rw·ω_A [m/s]\nτ_A,in + Rw·F_P,in = 0 [N·m]   (P = τ_A·ω_A + F_P·v_P = 0)",
+        "description": "Ideal wheel and axle (rolling without slip, lossless): the Translational port P moves at v = Rw·ω of the Rotational axle A (both referenced to the inertial frame) and the axle torque is the wheel radius times the force, τ = Rw·F, so the transmitted power is zero. Rw > 0 (m)."
       },
       {
         "id": "rot_multibody_interface",
@@ -3017,18 +3017,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "rot_multibody",
         "category": "Multibody Interfaces",
-        "params": {},
+        "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Rotation axis (B-local, normalized)"
+          }
+        },
         "ports": [
           {
-            "id": "t",
+            "id": "b",
             "pos": "left",
-            "label": "T",
-            "domain": "Physical",
-            "direction": "in"
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
+            "pos": "left",
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "r",
+            "pos": "right",
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
-            "pos": "left",
+            "pos": "right",
             "label": "C",
             "domain": "Rotational"
           },
@@ -3040,16 +3057,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "out",
             "quantity": "angular velocity",
             "unit": "rad/s"
-          },
-          {
-            "id": "r",
-            "pos": "right",
-            "label": "R",
-            "domain": "Rotational"
           }
         ],
-        "equation": "Rotational Multibody Interface governing physical equation",
-        "description": "Physical component model for Rotational Multibody Interface."
+        "equation": "ω_R − ω_C = ω_rel = a·(ω_F − ω_B)  [rad/s],  a = R_B·axis (world)\nτ_F = T·a,  τ_B = −T·a  [N·m]   (T = torque from R to C; P = T·ω_rel)",
+        "description": "Scalar-to-Frame bridge for a Rotational network (one of the only two allowed scalar/Frame connections). Wire B and F in parallel with the Frames of a joint (for example a Revolute Joint) that has the same axis: the angular velocity of F relative to B about the normalized B-local axis parameter is imposed on the Rotational port pair R-C (ω_R − ω_C = ω_rel), and the torque T of the Rotational network is applied as a pure couple T·a on F with the reaction −T·a on B, about the configured axis (never a fixed X or Z axis). Ideal and lossless: T·ω_rel is handed from the network to the Frames. Output w is ω_rel (rad/s)."
       },
       {
         "id": "trans_multibody_interface",
@@ -3057,18 +3068,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "trans_multibody",
         "category": "Multibody Interfaces",
-        "params": {},
+        "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Slide axis (B-local, normalized)"
+          }
+        },
         "ports": [
+          {
+            "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
           {
             "id": "f",
             "pos": "left",
             "label": "F",
-            "domain": "Physical",
-            "direction": "in"
+            "domain": "Frame"
+          },
+          {
+            "id": "r",
+            "pos": "right",
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "c",
-            "pos": "left",
+            "pos": "right",
             "label": "C",
             "domain": "Translational"
           },
@@ -3080,16 +3108,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "out",
             "quantity": "velocity",
             "unit": "m/s"
-          },
-          {
-            "id": "r",
-            "pos": "right",
-            "label": "R",
-            "domain": "Translational"
           }
         ],
-        "equation": "Translational Multibody Interface governing physical equation",
-        "description": "Physical component model for Translational Multibody Interface."
+        "equation": "v_R − v_C = v_rel = d/dt (a·(P_F − P_B))  [m/s],  a = R_B·axis (world)\nf_F = F·a,  f_B = −F·a,  τ_B = −(P_F − P_B) × F·a   (F = force from R to C; P = F·v_rel)",
+        "description": "Scalar-to-Frame bridge for a Translational network (one of the only two allowed scalar/Frame connections). Wire B and F in parallel with the Frames of a joint (for example a Prismatic Joint) that has the same axis: the slide rate of F relative to B along the normalized B-local axis parameter is imposed on the Translational port pair R-C (v_R − v_C = v_rel), and the force F of the Translational network is applied along that axis on F with the reaction on B (including the moment of the lever arm P_F − P_B), never along a fixed X axis. Ideal and lossless: F·v_rel is handed from the network to the Frames. Output v is v_rel (m/s)."
       },
       {
         "id": "inertia",
@@ -7643,8 +7665,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "BeltProperty"
           }
         ],
-        "equation": "Belt-Cable Properties governing physical equation",
-        "description": "Physical component model for Belt-Cable Properties."
+        "equation": "ρ = linear density [kg/m],  E = Young modulus [Pa]\nk = E·A/L [N/m] (Belt-Cable End),  J_belt = 2π·ρ·R³ [kg·m²] (spool, pulley)",
+        "description": "Property link: publishes the linear density ρ (kg/m) and the Young modulus E (Pa) to every Belt-Cable End, Spool and Pulley wired to its BeltProperty port P. It has no mechanical ports and exchanges no power; a belt block that is not wired to it uses its own stiffness / inertia parameters."
       },
       {
         "id": "belt_end",
@@ -7704,8 +7726,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N"
           }
         ],
-        "equation": "Belt-Cable End governing physical equation",
-        "description": "Physical component model for Belt-Cable End."
+        "equation": "dx/dt = v_R − v_E [m/s]\nF_R→E = k·x [N],  k = E·A/L (linked Belt-Cable Properties) or stiffness [N/m]\nf = −F_R→E = k·(x_E − x_R)  (belt tension, N)",
+        "description": "Elastic (tension-carrying) end of a belt or cable between two Translational ports R and E, k = E·A/L from a wired Belt-Cable Properties block (Young modulus E, section A, length L), otherwise the stiffness parameter. The stored energy is ½·k·x² and no power is dissipated (no internal damping parameter is exposed). Output f is the belt tension, positive when the belt is stretched (E moves away from R)."
       },
       {
         "id": "belt_spool",
@@ -7757,8 +7779,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N*m"
           }
         ],
-        "equation": "Belt-Cable Spool governing physical equation",
-        "description": "Physical component model for Belt-Cable Spool."
+        "equation": "v_A = R·ω_R [m/s]\nτ_R,in + R·F_A,in = J·dω/dt [N·m],  J = inertia + 2π·ρ·R³ (wrapped belt)\nt = τ_R,in",
+        "description": "Ideal spool (winch) that reels a belt or cable: the belt end at Translational port A moves at v = R·ω of the Rotational shaft R (both referenced to the inertial frame). The torque balance includes the spool inertia plus the inertia of one wrapped circumference of belt, ρ·2π·R·R², with ρ the linear density of a wired Belt-Cable Properties block. Power balance: τ·ω + F·v = d(½·J·ω²)/dt. Output t is the torque the shaft delivers into the spool (N·m)."
       },
       {
         "id": "pulley",
@@ -7816,8 +7838,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N*m"
           }
         ],
-        "equation": "Pulley governing physical equation",
-        "description": "Physical component model for Pulley."
+        "equation": "v_A = R·ω [m/s],  v_B = −R·ω [m/s]\nτ_R,in + R·(F_A,in − F_B,in) = J·dω/dt [N·m],  J = inertia + 2π·ρ·R³\nt = τ_R,in",
+        "description": "Ideal pulley carrying a belt over a wheel of radius R: the two belt segments A and B (Translational ports) move in opposite directions at ±R·ω of the Rotational hub R. The torque balance includes the hub inertia plus the wrapped-belt inertia 2π·ρ·R³ (linear density ρ from a wired Belt-Cable Properties block). Power balance: τ·ω + F_A·v_A + F_B·v_B = d(½·J·ω²)/dt. Output t is the torque the hub delivers into the pulley (N·m)."
       },
       {
         "id": "world_frame",
@@ -8947,8 +8969,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Common Gear Constraint governing physical equation",
-        "description": "Physical component model for Common Gear Constraint."
+        "equation": "ω_F = ratio·ω_B [rad/s]\nτ_B,in + ratio·τ_F,in = 0 [N·m]  (P = τ_B·ω_B + τ_F·ω_F = 0)",
+        "description": "Ideal (lossless, massless, backlash-free) gear pair between two scalar Rotational shafts B (base) and F (follower), each referenced to the inertial frame. ratio = ω_F/ω_B (dimensionless, nonzero); a negative ratio is an external mesh that reverses the direction. The constraint forces τ_F = -τ_B/ratio on the follower, so the transmitted power is zero. Both ports are scalar Rotational ports (the Simscape Driveline style): attach a body through a Rotational Multibody Interface, never wire a Frame to this block."
       },
       {
         "id": "rack_pinion",
@@ -8979,8 +9001,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "v = r * ω\nτ = r * F",
-        "description": "Converts rotary motion and torque into linear velocity and force via pinion radius r."
+        "equation": "v_F = r·ω_B [m/s]\nτ_B,in + r·F_F,in = 0 [N·m]  (P = τ_B·ω_B + F_F·v_F = 0)",
+        "description": "Ideal rack and pinion between a scalar Rotational pinion shaft B and a scalar Translational rack F, both referenced to the inertial frame. Positive pinion rotation drives the rack in the positive direction (v = r·ω); the rack force reacts on the pinion as τ = r·F, so the transmitted power is zero. Pinion pitch radius r > 0 (m). Scalar Rotational/Translational ports (Simscape Driveline style); a Frame must be attached through a Multibody Interface block."
       },
       {
         "id": "mech_config",

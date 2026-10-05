@@ -1,6 +1,6 @@
 import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
-import { jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
+import { interfaceBranchSpecs, jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches } from './vlabEquations';
 import { numericParam, stringParam, VLabParamError } from './vlabParams';
@@ -371,12 +371,12 @@ export class DAEAssembler {
         branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
         break;
       case 'gas_rotational_conv':
-        // Positive torque is defined from gas port a toward h when Pa > Ph.
+        // Through variable = torque INTO the block at r (delivered torque = D*(Pa - Ph) = -branch).
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
       case 'gas_translational_conv':
-        // Positive force is defined from gas port a toward h when Pa > Ph.
+        // Through variable = force INTO the block at r (delivered force = A*(Pa - Ph) = -branch).
         branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'h', sign: 1 }] });
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
         break;
@@ -574,6 +574,18 @@ export class DAEAssembler {
           break;
         case 'mass':
           branches.push({ name: 'force', ports: [{ id: 'p', sign: -1 }] });
+          break;
+        case 'lever':
+          // three forces INTO the block: arm A, arm B and the pivot reaction at C
+          branches.push({ name: 'force_a', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'force_b', ports: [{ id: 'b', sign: -1 }] });
+          branches.push({ name: 'force_c', ports: [{ id: 'c', sign: -1 }] });
+          break;
+        case 'rot_multibody_interface':
+          branches.push(...interfaceBranchSpecs('rotation', ports));
+          break;
+        case 'trans_multibody_interface':
+          branches.push(...interfaceBranchSpecs('translation', ports));
           break;
         case 'trans_spring':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });

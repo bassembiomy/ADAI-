@@ -170,13 +170,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An ideal controlled switch. Toggles between low (Ron) and high (Roff) resistance based on a control signal.'
   },
   rotational_electromechanical_converter: {
-    equations: ['V = K * omega', 'T = K * I'],
+    equations: ['V = R*I + K*omega', 'tau = K*I (delivered at R)', 'V*I = R*I^2 + tau*omega'],
     latex: ['v = K \\omega', '\tau = K i'],
     across: 'V, rad/s', through: 'I, N-m',
     description: 'Bridges the Electrical and Rotational domains. Models DC motors or generators where torque is proportional to current.'
   },
   translational_electromechanical_converter: {
-    equations: ['V = Bl * v', 'F = Bl * I'],
+    equations: ['V = R*I + Bl*v', 'F = Bl*I (delivered at R)', 'V*I = R*I^2 + F*v'],
     latex: ['v = (Bl) v_m', 'f = (Bl) i'],
     across: 'V, m/s', through: 'I, N',
     description: 'Bridges the Electrical and Translational domains. Models voice coils or solenoids where force is proportional to current.'
@@ -224,8 +224,8 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   dc_motor: {
     equations: [
       'Va = Ra*Ia + La*d(Ia)/dt + Ke*omega',
-      'Te = Kt*Ia',
-      'd(omega)/dt = (Te - T_load - B*omega) / J'
+      'tau_shaft = Kt*Ia - J*d(omega)/dt - B*omega',
+      'J*d(omega)/dt = Kt*Ia - B*omega - T_load  (Kt = Ke)'
     ],
     latex: ['V_a = R_a i_a + L_a \\frac{di_a}{dt} + K_e \\omega', 'T_e = K_t i_a'],
     across: 'Voltage, Ang. Vel', through: 'Current, Torque',
@@ -380,13 +380,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A constant pressure source representing a large tank or regulated gas supply.'
   },
   gas_rotational_conv: {
-    equations: ['mdot = (Pa * D / (R * T)) * omega', 'T_torque = D * (Pa - Ph)'],
+    equations: ['mdot(A->H) = (Pa * D / (R * T)) * omega', 'tau_delivered = D * (Pa - Ph)  (branch = -tau_delivered)'],
     latex: ['\dot{m} = \frac{P D}{RT} \omega', '\tau = D \Delta P'],
     across: 'P, rad/s', through: 'mdot, N-m',
     description: 'Bridges Gas and Rotational domains. Models pneumatic motors or compressors where mass flow is proportional to pressure and angular velocity.'
   },
   gas_translational_conv: {
-    equations: ['mdot = (Pa * A / (R * T)) * v', 'F_force = A * (Pa - Ph)'],
+    equations: ['mdot(A->H) = (Pa * A / (R * T)) * v', 'F_delivered = A * (Pa - Ph)  (branch = -F_delivered)'],
     latex: ['\dot{m} = \frac{P A}{RT} v', 'f = A \Delta P'],
     across: 'P, m/s', through: 'mdot, N',
     description: 'Bridges Gas and Translational domains. Models pneumatic cylinders where mass flow is proportional to pressure and linear velocity.'
@@ -518,16 +518,34 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An ideal angular velocity generator for rotational networks.'
   },
   gear_box: {
-    equations: ['omega1 = ratio * omega2', 'tau2 = ratio * tau1'],
+    equations: ['omega1 = ratio * omega2', 'tau2_delivered = ratio * tau1_in  (P = tau1*omega1 + tau2*omega2 = 0)'],
     latex: ['\\omega_1 = N \\omega_2', '\\tau_2 = N \\tau_1'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models a mechanical transmission that scales velocity and torque between shafts s1 and s2 based on the gear ratio.'
   },
   lever: {
-    equations: ['v_b = -(L2/L1) * v_a', 'f_a = (L2/L1) * f_b'],
-    latex: ['v_b = -\\frac{L_2}{L_1} v_a', 'f_a = \\frac{L_2}{L_1} f_b'],
+    equations: ['(v_a - v_c)*L2 + (v_b - v_c)*L1 = 0', 'f_a*L1 = f_b*L2', 'f_a + f_b + f_c = 0 (pivot reaction)'],
+    latex: ['(v_A - v_C) L_2 + (v_B - v_C) L_1 = 0', 'F_A L_1 = F_B L_2', 'F_A + F_B + F_C = 0'],
     across: 'Velocity (m/s)', through: 'Force (N)',
-    description: 'Models a mechanical lever. Scales translational velocity and force based on arm lengths.'
+    description: 'Ideal massless lever pivoting about port C with arm L1 at A and L2 at B on opposite sides of the pivot: v_A/v_B = -L1/L2 at a fixed pivot, moment balance F_A L1 = F_B L2 and pivot reaction F_C = -(F_A + F_B); lossless.'
+  },
+  wheel_axle: {
+    equations: ['v_p = Rw * omega_a', 'tau_a_in + Rw * F_p_in = 0  (P = 0)'],
+    latex: ['v = R_w \\omega', '\\tau = R_w F'],
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
+    description: 'Ideal wheel and axle (rolling without slip, lossless): the Translational port moves at Rw times the axle speed and the axle torque is Rw times the force.'
+  },
+  rot_multibody_interface: {
+    equations: ['omega_R - omega_C = a . (omega_F - omega_B),  a = R_B * axis', 'tau_F = T * a,  tau_B = -T * a  (P = T * omega_rel)'],
+    latex: ['\\omega_R - \\omega_C = \\mathbf{a}\\cdot(\\omega_F - \\omega_B)', '\\tau_F = T\\,\\mathbf{a}'],
+    across: 'Ang. Vel (rad/s), Frame pose', through: 'Torque (N-m), Frame wrench',
+    description: 'Scalar-to-Frame bridge for a Rotational network: imposes the relative angular velocity of F about B along the configured axis on R-C and applies the network torque as a couple along that axis on F (reaction on B). Lossless.'
+  },
+  trans_multibody_interface: {
+    equations: ['v_R - v_C = d/dt (a . (P_F - P_B)),  a = R_B * axis', 'f_F = F * a,  f_B = -F * a,  tau_B = -(P_F - P_B) x F * a  (P = F * v_rel)'],
+    latex: ['v_R - v_C = \\frac{d}{dt}\\mathbf{a}\\cdot(\\mathbf{P}_F-\\mathbf{P}_B)', '\\mathbf{f}_F = F\\,\\mathbf{a}'],
+    across: 'Velocity (m/s), Frame pose', through: 'Force (N), Frame wrench',
+    description: 'Scalar-to-Frame bridge for a Translational network: imposes the relative slide rate of F along the configured axis on R-C and applies the network force along that axis on F (reaction and lever-arm moment on B). Lossless.'
   },
   inertia: {
     equations: ['T = J * d(omega)/dt'],
@@ -1138,7 +1156,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
   },
   belt_end: {
-    equations: ['F = k * x', 'dx/dt = v_r - v_e', 'k = E*A/L (material) or stiffness'],
+    equations: ['F = k * x', 'dx/dt = v_r - v_e', 'k = E*A/L (material) or stiffness', 'f = -F (belt tension)'],
     latex: ['F = k \Delta x'],
     across: 'Translational Velocity (m/s)', through: 'Force (N)',
     description: 'Compliant termination of a belt/cable. Axial stiffness comes from the linked belt_properties material (k = youngs*area/length) and falls back to the fixed stiffness param when no material is available.'
@@ -1240,13 +1258,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A 0-DOF constraint that rigidly locks all 6 relative coordinates to a fixed reference pose (offset p0 and rotation R0; coincident by default). The reactions are the 6 multipliers (force and torque on F, and the torque on B about B, which carries the moment of an offset load). Outputs: reaction wrench and the relative pose error (m, rad). The constraint is ideal: there is no stiffness.'
   },
   common_gear: {
-    equations: ['omega_f = ratio * omega_b', 'Tau_b = ratio * Tau_f'],
+    equations: ['omega_f = ratio * omega_b', 'Tau_b_in + ratio * Tau_f_in = 0  (P = 0)'],
     latex: ['\omega_f = N \omega_b', '\\tau_b = N \\tau_f'],
     across: 'Ang. Vel', through: 'Torque (N-m)',
     description: 'Models a kinematic coupling between two rotational axes (gears). Transmits torque based on the specified gear ratio.'
   },
   rack_pinion: {
-    equations: ['v_f = omega_b * R', 'Tau_b = F_f * R'],
+    equations: ['v_f = omega_b * R', 'Tau_b_in + R * F_f_in = 0  (P = 0)'],
     latex: ['v_l = \omega R', '\\tau = F R'],
     across: 'Velocity, Ang. Vel', through: 'Force, Torque',
     description: 'Converts rotational motion from a pinion gear into linear motion of a rack. The coupling is defined by the pinion radius.'

@@ -215,12 +215,14 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
     const residuals = system.residuals(x, dx, ctx);
     expect(residuals.length).toBe(system.systemSize);
 
-    // Verify numerical coupling of signal_f to physical force
+    // Verify numerical coupling of signal_f to physical force. The through force F_R->E (into the block at R) is
+    // negative for a stretched belt, so the tension output is f = -F_R->E (WP-13b, spec section 2.4: tensile force
+    // k*(x_e - x_r) is positive when the belt is stretched): residual = f + F.
     const forceVarIdx = system.variableNames.indexOf('be1_branch_force');
     x[forceVarIdx] = 120.0;
     x[fVarIdx] = 75.0;
     const resCoupled = system.residuals(x, dx, ctx);
-    expect(resCoupled[fVarIdx]).toBeCloseTo(75.0 - 120.0);
+    expect(resCoupled[fVarIdx]).toBeCloseTo(75.0 + 120.0);
   });
 
   it('changing Young modulus alters calculated belt stiffness and force', () => {

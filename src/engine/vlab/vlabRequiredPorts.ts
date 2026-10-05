@@ -67,11 +67,9 @@ export const DERIVED_REQUIRED_SIGNAL_INPUTS: Readonly<Record<string, readonly st
   pwm_3ph_3level: ['vabc', 'vneut'],
   pwm_vienna: ['va', 'vb', 'vc', 'ic'],
   resolver_to_digital: ['vp', 'vx'],
-  rot_multibody_interface: ['t'],
   sym_comp_transform: ['abc'],
   thyristor_12pulse: ['theta'],
   thyristor_6pulse: ['theta', 'alpha'],
-  trans_multibody_interface: ['f'],
   velocity_ctrl: ['w_ref', 'w_mech'],
   vlab_probe: ['in'],
 };
@@ -91,4 +89,4 @@ export const DERIVED_REQUIRED_CONSERVING_PORTS: Readonly<Record<string, readonly
 };
 
 /** Blocks already singular with every conserving port tied to a reference: not judged per port. */
-export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'ctrl_temp_src', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'heat_flow_sensor', 'lever', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'microwave_cavity', 'phase_splitter', 'pressure_source', 'rot_multibody_interface', 'steam_accumulator', 'temp_src', 'three_phase_source', 'trans_hard_stop', 'trans_multibody_interface'];
+export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'ctrl_temp_src', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'heat_flow_sensor', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'microwave_cavity', 'phase_splitter', 'pressure_source', 'steam_accumulator', 'temp_src', 'three_phase_source', 'trans_hard_stop'];
