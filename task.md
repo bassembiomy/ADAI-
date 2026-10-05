@@ -68,10 +68,10 @@
   - [x] Step 8.7: Run 250k element load/edit/save/reopen tests.
   - [x] Step 8.8: Run 1,000,000 element capacity soak.
   - [x] Step 8.9: Commit Task 8 changes.
-- [ ] Task 9: Final regression, evidence, and support statement
-  - [ ] Step 9.1: Run `npm run test:sysml:release`, `npm run test:project-files`, `npm run test:sysml:scalability`, `tsc --noEmit`.
-  - [ ] Step 9.2: Verify clean `git diff --check`.
-  - [ ] Step 9.3: Re-run highest claimed tier on clean production build with 5 samples.
-  - [ ] Step 9.4: Update report support matrix.
-  - [ ] Step 9.5: Review final diff against architectural guidelines.
-  - [ ] Step 9.6: Commit Task 9 docs and qualification evidence.
+- [x] Task 9: Final regression, evidence, and support statement
+  - [x] Step 9.1: Run `npm run test:sysml:release`, `npm run test:project-files`, `npm run test:sysml:scalability`, `tsc --noEmit`.
+  - [x] Step 9.2: Verify clean `git diff --check`.
+  - [x] Step 9.3: Re-run highest claimed tier on clean production build with 5 samples.
+  - [x] Step 9.4: Update report support matrix.
+  - [x] Step 9.5: Review final diff against architectural guidelines.
+  - [x] Step 9.6: Commit Task 9 docs and qualification evidence.

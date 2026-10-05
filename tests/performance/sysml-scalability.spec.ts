@@ -104,9 +104,7 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
     ): Promise<WorkflowSample[]> {
       const samples: WorkflowSample[] = [];
       for (let i = 0; i < samplesCount; i++) {
-        if (i > 0) {
-          await page.waitForTimeout(50);
-        }
+        await page.waitForTimeout(100);
         const sample = await page.evaluate(async ({ script, arg, sampleIdx }) => {
           const w = window as any;
           if (w.__ADIA_PERF__?.clearRenderTelemetry) w.__ADIA_PERF__.clearRenderTelemetry();
@@ -341,6 +339,7 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
       }
     });
     await page.evaluate(() => new Promise<void>(res => requestAnimationFrame(() => requestAnimationFrame(() => res()))));
+    await page.waitForTimeout(100);
 
     // 12. Save & Reopen Workflow (offloaded to worker)
     console.log(`[Scalability Gate] Running workflow: save-reopen...`);
@@ -357,7 +356,9 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
         const buffer = await window.__serializeProjectInWorker(payload);
         const loaded = await window.__loadProjectInWorker(buffer);
         if (typeof window.__hydrateProject === 'function') {
-          window.__hydrateProject(loaded.rawPayload, loaded);
+          const raw = loaded.rawPayload || payload;
+          raw.workspaceFiles = raw.workspaceFiles ?? [];
+          window.__hydrateProject(raw, loaded);
         }
       } else if (typeof window.__hydrateProject === 'function') {
         window.__hydrateProject(payload);

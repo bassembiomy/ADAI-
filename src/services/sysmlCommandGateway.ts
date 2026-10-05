@@ -1482,7 +1482,7 @@ function executeSysmlCommandCore(
           }
         }
         const scopedVal = validateScopedSysmlRepository(repo, {
-          commandType: undoRes.appliedPatch.description ?? 'undo',
+          commandType: 'undo',
           affectedIds: undoRes.appliedPatch.forward.flatMap(op => op.op === 'batch' ? op.operations.map(b => b.id) : [op.id]),
           changedProperties,
           isPresentationOnly: undoRes.appliedPatch.description === 'updatePresentation' || undoRes.appliedPatch.description === 'addToDiagram',
@@ -1603,7 +1603,7 @@ function executeSysmlCommandCore(
           }
         }
         const scopedVal = validateScopedSysmlRepository(repo, {
-          commandType: redoRes.appliedPatch.description ?? 'redo',
+          commandType: 'redo',
           affectedIds: redoRes.appliedPatch.forward.flatMap(op => op.op === 'batch' ? op.operations.map(b => b.id) : [op.id]),
           changedProperties,
           isPresentationOnly: redoRes.appliedPatch.description === 'updatePresentation' || redoRes.appliedPatch.description === 'addToDiagram',
