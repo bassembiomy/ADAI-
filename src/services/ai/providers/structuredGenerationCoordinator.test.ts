@@ -42,4 +42,75 @@ describe('StructuredGenerationCoordinator with Shared Repair Loop', () => {
       modelId: 'm1'
     })).toThrowError(/Local provider must use exact loopback/);
   });
+
+  it('should fail closed with PROVIDER_TIMEOUT when the LLM times out', async () => {
+    const mockProvider = {
+      providerId: 'mock',
+      modelId: 'test-model',
+      capabilities: { maxContextTokens: 4096, supportsGrammarConstraint: false, supportsNativeToolCalling: false, isLocalOffline: true, streamingSupport: false },
+      generateRaw: vi.fn().mockImplementation(() => {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        return Promise.reject(err);
+      })
+    };
+
+    const coordinator = new StructuredGenerationCoordinator(mockProvider as any);
+    const result = await coordinator.generateAndRepair({
+      systemPrompt: 'System',
+      userPrompt: 'Design DC bus',
+      timeoutMs: 100
+    }, targetSchema);
+
+    expect(result.success).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'PROVIDER_TIMEOUT' })
+      ])
+    );
+  });
+
+  it('should fail closed with MALFORMED_JSON when the LLM returns non-JSON repeatedly', async () => {
+    const mockProvider = {
+      providerId: 'mock',
+      modelId: 'test-model',
+      capabilities: { maxContextTokens: 4096, supportsGrammarConstraint: false, supportsNativeToolCalling: false, isLocalOffline: true, streamingSupport: false },
+      generateRaw: vi.fn().mockResolvedValue({ rawText: 'This is not JSON at all' })
+    };
+
+    const coordinator = new StructuredGenerationCoordinator(mockProvider as any);
+    const result = await coordinator.generateAndRepair({
+      systemPrompt: 'System',
+      userPrompt: 'Design DC bus'
+    }, targetSchema);
+
+    expect(result.success).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'MALFORMED_JSON' })
+      ])
+    );
+  });
+
+  it('should fail closed with PROVIDER_OFFLINE when network or local LLM connection is refused', async () => {
+    const mockProvider = {
+      providerId: 'mock',
+      modelId: 'test-model',
+      capabilities: { maxContextTokens: 4096, supportsGrammarConstraint: false, supportsNativeToolCalling: false, isLocalOffline: true, streamingSupport: false },
+      generateRaw: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:11434'))
+    };
+
+    const coordinator = new StructuredGenerationCoordinator(mockProvider as any);
+    const result = await coordinator.generateAndRepair({
+      systemPrompt: 'System',
+      userPrompt: 'Design DC bus'
+    }, targetSchema);
+
+    expect(result.success).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'PROVIDER_OFFLINE' })
+      ])
+    );
+  });
 });

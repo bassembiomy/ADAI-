@@ -141,14 +141,14 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
   return (
     <div
-      className={`h-full w-full flex ${
+      className={`opm-panel ui-surface h-full w-full flex ${
         isWideLayout && hasInspector ? 'flex-row' : 'flex-col'
       } gap-2.5 p-2.5 overflow-y-auto custom-scrollbar font-sans text-xs select-none`}
     >
       {/* ─── SECTION A: SELECTED NODE INSPECTOR ─── */}
       {selectedNode && (
         <div
-          className={`${
+          className={`opm-inspector ui-card ${
             isWideLayout ? 'w-1/2 shrink-0' : 'w-full shrink-0'
           } bg-[#16161a]/95 backdrop-blur-md border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-3`}
         >
@@ -1074,7 +1074,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
         return (
           <div
             data-testid="link-execution-inspector"
-            className={`${
+            className={`opm-inspector ui-card ${
               isWideLayout ? 'w-1/2 shrink-0' : 'w-full shrink-0'
             } bg-[#16161a]/95 backdrop-blur-md border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5`}
           >
@@ -1387,13 +1387,14 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <div className="flex gap-1.5 bg-black/40 p-1.5 rounded-lg border border-white/5">
                   <button
                     data-testid="opm-sim-toggle"
+                    aria-label={simRunning ? "Pause Simulation" : "Start Simulation"}
                     onClick={onToggleSimulation}
                     className={`p-2 rounded-md transition-all ${
                       simRunning
                         ? 'bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30'
                         : 'bg-green-500/20 text-green-400 border border-green-500/40 hover:bg-green-500/30'
                     }`}
-                    title={simRunning ? 'Pause (Space)' : 'Start (Space)'}
+                    title={simRunning ? 'Pause Simulation (Space)' : 'Start Simulation (Space)'}
                   >
                     {simRunning ? <Pause size={13} /> : <Play size={13} />}
                   </button>

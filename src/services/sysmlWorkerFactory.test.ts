@@ -49,9 +49,15 @@ describe('sysmlWorkerFactory and sysmlWorkerClient integration', () => {
     expect(diag.fallbackReason).toContain('explicitly disabled');
 
     // Fast-path execution still succeeds synchronously
-    const repo = generate1kModel(7).repository;
-    const report = await client.validate(repo, 1);
+    const emptyRepo = createEmptyRepository();
+    const report = await client.validate(emptyRepo, emptyRepo.revision);
     expect(report.valid).toBe(true);
+
+    // Payloads above worker threshold fail safely instead of blocking main thread
+    const largeRepo = generate1kModel(7).repository;
+    await expect(client.validate(largeRepo, 2)).rejects.toThrow(
+      'Worker unavailable: large model processing exceeds main-thread safety threshold'
+    );
   });
 
   it('handles worker errors gracefully and records diagnostics', async () => {

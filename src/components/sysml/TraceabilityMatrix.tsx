@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { SysmlRepository } from '../../engine/sysml/model';
+import type { TraceabilityExternalElement } from '../../engine/sysml/traceabilityIndex';
 import {
   buildTraceabilityMatrix,
   computeCoverageMetrics,
@@ -8,9 +9,11 @@ import {
   type RtmChangeKind,
 } from '../../engine/sysml/rtm';
 import { VirtualizedTraceabilityGrid } from './VirtualizedTraceabilityGrid';
+import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 
 export interface TraceabilityMatrixProps {
   repository: SysmlRepository;
+  externalElements?: TraceabilityExternalElement[];
   onNavigate?: (elementId: string) => void;
   onExport?: (csv: string) => void;
 }
@@ -24,7 +27,7 @@ export function nextRtmFocusIndex(current: number, key: string, count: number): 
   return current;
 }
 
-export function TraceabilityMatrix({ repository, onNavigate, onExport }: TraceabilityMatrixProps) {
+export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onExport }: TraceabilityMatrixProps) {
   const [status, setStatus] = useState<RtmStatus | ''>('');
   const [owner, setOwner] = useState('');
   const [risk, setRisk] = useState('');
@@ -35,10 +38,12 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
   const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
   const baselines = Object.values(repository.baselines || {});
+  const labelRepository = useMemo(() => ({ ...repository, elements: Object.fromEntries(externalElements.map(element => [element.id, element])) }), [repository, externalElements]);
+  const referenceLabel = (id: string, fallbackKind?: string) => resolveSysmlReferenceLabel(labelRepository, id, fallbackKind);
   const complete = useMemo(() => buildTraceabilityMatrix(repository, {
     compareBaselineId: compareBaselineId || undefined,
     changeType: (changeType as any) || undefined,
-  }), [repository, compareBaselineId, changeType]);
+  }, undefined, externalElements), [repository, compareBaselineId, changeType, externalElements]);
 
   const matrix = useMemo(() => ({
     ...complete,
@@ -56,7 +61,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
   const owners = [...new Set(complete.rows.map(row => row.requirement.owner).filter((value): value is string => Boolean(value)))].sort();
 
   const exportCsv = () => {
-    const csv = exportRtmCsv(matrix);
+    const csv = exportRtmCsv(matrix, repository, externalElements);
     if (onExport) return onExport(csv);
     if (typeof document === 'undefined') return;
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -68,8 +73,8 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-[#111] text-neutral-100" aria-labelledby="rtm-title">
-      <header className="border-b border-neutral-800 p-3">
+    <section className="traceability-grid flex h-full min-h-0 flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-labelledby="rtm-title">
+      <header className="border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 id="rtm-title" className="text-sm font-semibold">Requirements Traceability Matrix</h2>
@@ -104,7 +109,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
           </select>
           <select aria-label="Compare with baseline" value={compareBaselineId} onChange={event => setCompareBaselineId(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">No baseline comparison</option>
-            {baselines.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {baselines.map(b => <option key={b.id} value={b.id}>{sysmlObjectLabel(b, 'Baseline')}</option>)}
           </select>
           <select aria-label="Filter by change type" value={changeType} onChange={event => setChangeType(event.target.value as any)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All change types</option>
@@ -119,14 +124,15 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
         {renderVirtualGrid ? (
           <VirtualizedTraceabilityGrid
             rows={matrix.rows}
+            resolveLabel={referenceLabel}
             onNavigate={onNavigate}
             containerHeight={500}
             rowHeight={42}
           />
         ) : (
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-neutral-950 text-neutral-400">
-              <tr>{['Requirement', 'Hierarchy & Relations', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-neutral-800 p-2 font-medium">{label}</th>)}</tr>
+          <table className="engineering-table w-full border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-[var(--table-header-bg)] text-[var(--text-secondary)]">
+              <tr>{['Requirement', 'Hierarchy & Relations', 'Status', 'Owner / Risk', 'Satisfied by', 'IBD', 'Verification', 'Evidence / Artifacts'].map(label => <th key={label} scope="col" className="border-b border-[var(--border-default)] p-2 font-medium">{label}</th>)}</tr>
             </thead>
             <tbody>
               {matrix.rows.map((row, index) => (
@@ -143,10 +149,27 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                     if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
                   }}
                 >
-                  <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{row.requirement.name}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
+                  <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
                   <td className="p-2">
                     <div className="flex flex-col gap-1 max-w-xs">
-                      {row.parents && row.parents.length > 0 && (
+                      {/* Containment Parents (Contained By) */}
+                      {row.containmentParents && row.containmentParents.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Contained By:</span>
+                          {row.containmentParents.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => onNavigate?.(p.id)}
+                              className="inline-flex items-center gap-1 rounded border border-blue-800/60 bg-blue-950/40 px-1.5 py-0.5 text-blue-200 hover:border-blue-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-blue-400 font-mono">«containment»</span>
+                              <span className="font-mono text-orange-300">{p.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: p.name }, 'Requirement')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : row.parents && row.parents.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Parent:</span>
                           {row.parents.map(p => (
@@ -158,12 +181,30 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                             >
                               <span className="text-[10px] text-blue-400 font-mono">«{p.kind === 'requirementContainment' ? 'containment' : p.kind}»</span>
                               <span className="font-mono text-orange-300">{p.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{p.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: p.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
                       )}
-                      {row.children && row.children.length > 0 && (
+
+                      {/* Containment Children (Contains) */}
+                      {row.containmentChildren && row.containmentChildren.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Contains:</span>
+                          {row.containmentChildren.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => onNavigate?.(c.id)}
+                              className="inline-flex items-center gap-1 rounded border border-purple-800/60 bg-purple-950/40 px-1.5 py-0.5 text-purple-200 hover:border-purple-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-purple-400 font-mono">«containment»</span>
+                              <span className="font-mono text-orange-300">{c.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: c.name }, 'Requirement')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : row.children && row.children.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Child:</span>
                           {row.children.map(c => (
@@ -175,12 +216,134 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                             >
                               <span className="text-[10px] text-purple-400 font-mono">«{c.kind === 'requirementContainment' ? 'containment' : c.kind}»</span>
                               <span className="font-mono text-orange-300">{c.requirementId}</span>
-                              <span className="truncate max-w-[100px]">{c.name}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: c.name }, 'Requirement')}</span>
                             </button>
                           ))}
                         </div>
                       )}
-                      {(!row.parents || row.parents.length === 0) && (!row.children || row.children.length === 0) && (
+
+                      {/* Derived From */}
+                      {row.derivedFrom && row.derivedFrom.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Derived From:</span>
+                          {row.derivedFrom.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => onNavigate?.(d.id)}
+                              className="inline-flex items-center gap-1 rounded border border-cyan-800/60 bg-cyan-950/40 px-1.5 py-0.5 text-cyan-200 hover:border-cyan-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-cyan-400 font-mono">«deriveReqt»</span>
+                              <span className="font-mono text-orange-300">{d.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: d.name }, 'Requirement')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Derived Requirements */}
+                      {row.derivedRequirements && row.derivedRequirements.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Derived Req:</span>
+                          {row.derivedRequirements.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => onNavigate?.(d.id)}
+                              className="inline-flex items-center gap-1 rounded border border-cyan-800/60 bg-cyan-950/40 px-1.5 py-0.5 text-cyan-200 hover:border-cyan-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-cyan-400 font-mono">«deriveReqt»</span>
+                              <span className="font-mono text-orange-300">{d.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: d.name }, 'Requirement')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Copied From */}
+                      {row.copiedFrom && row.copiedFrom.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Copied From:</span>
+                          {row.copiedFrom.map(cp => (
+                            <button
+                              key={cp.id}
+                              type="button"
+                              onClick={() => onNavigate?.(cp.id)}
+                              className="inline-flex items-center gap-1 rounded border border-pink-800/60 bg-pink-950/40 px-1.5 py-0.5 text-pink-200 hover:border-pink-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-pink-400 font-mono">«copy»</span>
+                              <span className="font-mono text-orange-300">{cp.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: cp.name }, 'Requirement')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Copied Requirements */}
+                      {row.copiedRequirements && row.copiedRequirements.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Copies:</span>
+                          {row.copiedRequirements.map(cp => (
+                            <button
+                              key={cp.id}
+                              type="button"
+                              onClick={() => onNavigate?.(cp.id)}
+                              className="inline-flex items-center gap-1 rounded border border-pink-800/60 bg-pink-950/40 px-1.5 py-0.5 text-pink-200 hover:border-pink-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-pink-400 font-mono">«copy»</span>
+                              <span className="font-mono text-orange-300">{cp.requirementId}</span>
+                              <span className="truncate max-w-[100px]">{sysmlObjectLabel({ name: cp.name }, 'Requirement')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Refined By */}
+                      {row.refinedBy && row.refinedBy.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Refined By:</span>
+                          {row.refinedBy.map(rf => (
+                            <button
+                              key={rf.id}
+                              type="button"
+                              onClick={() => onNavigate?.(rf.id)}
+                              className="inline-flex items-center gap-1 rounded border border-amber-800/60 bg-amber-950/40 px-1.5 py-0.5 text-amber-200 hover:border-amber-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-amber-400 font-mono">«refine»</span>
+                              <span className="truncate max-w-[100px]">{referenceLabel(rf.id)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Traced Elements */}
+                      {row.tracedElements && row.tracedElements.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 font-semibold uppercase">Traced:</span>
+                          {row.tracedElements.map(tr => (
+                            <button
+                              key={tr.id}
+                              type="button"
+                              onClick={() => onNavigate?.(tr.id)}
+                              className="inline-flex items-center gap-1 rounded border border-teal-800/60 bg-teal-950/40 px-1.5 py-0.5 text-teal-200 hover:border-teal-500 text-[11px]"
+                            >
+                              <span className="text-[10px] text-teal-400 font-mono">«trace»</span>
+                              <span className="truncate max-w-[100px]">{referenceLabel(tr.id)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {(!row.parents || row.parents.length === 0) &&
+                       (!row.children || row.children.length === 0) &&
+                       (!row.containmentParents || row.containmentParents.length === 0) &&
+                       (!row.containmentChildren || row.containmentChildren.length === 0) &&
+                       (!row.derivedFrom || row.derivedFrom.length === 0) &&
+                       (!row.derivedRequirements || row.derivedRequirements.length === 0) &&
+                       (!row.copiedFrom || row.copiedFrom.length === 0) &&
+                       (!row.copiedRequirements || row.copiedRequirements.length === 0) &&
+                       (!row.refinedBy || row.refinedBy.length === 0) &&
+                       (!row.tracedElements || row.tracedElements.length === 0) && (
                         <span className="text-neutral-600 italic">None</span>
                       )}
                     </div>
@@ -195,7 +358,21 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                   </td>
                   <td className="p-2 text-neutral-300"><span className="block">{row.requirement.owner || 'Unassigned'}</span><span className="text-neutral-500">{row.requirement.risk || 'unspecified'} risk</span></td>
                   <td className="p-2">
-                    {row.coveringBlocks && row.coveringBlocks.length > 0 ? (
+                    {row.satisfiedBy && row.satisfiedBy.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {row.satisfiedBy.map(cb => (
+                          <button
+                            key={cb.id}
+                            type="button"
+                            onClick={() => onNavigate?.(cb.id)}
+                            className="inline-flex items-center gap-1 rounded border border-emerald-800/60 bg-emerald-950/40 px-1.5 py-0.5 text-emerald-300 hover:border-emerald-500 text-[11px]"
+                          >
+                            <span className="text-[10px] text-emerald-400 font-mono">«{cb.kind}»</span>
+                            <span>{referenceLabel(cb.id, cb.type)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : row.coveringBlocks && row.coveringBlocks.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {row.coveringBlocks.map(cb => (
                           <button
@@ -205,7 +382,7 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                             className="inline-flex items-center gap-1 rounded border border-emerald-800/60 bg-emerald-950/40 px-1.5 py-0.5 text-emerald-300 hover:border-emerald-500 text-[11px]"
                           >
                             <span className="text-[10px] text-emerald-400 font-mono">«{cb.kind}»</span>
-                            <span>{cb.name}</span>
+                            <span>{referenceLabel(cb.id, cb.type)}</span>
                           </button>
                         ))}
                       </div>
@@ -214,7 +391,25 @@ export function TraceabilityMatrix({ repository, onNavigate, onExport }: Traceab
                     )}
                   </td>
                   <td className="p-2"><ElementLinks ids={[...row.ports, ...row.connectors]} repository={repository} onNavigate={onNavigate} empty="None" /></td>
-                  <td className="p-2"><ElementLinks ids={row.verificationCases} repository={repository} onNavigate={onNavigate} empty="Not verified" /></td>
+                  <td className="p-2">
+                    {row.verifiedBy && row.verifiedBy.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {row.verifiedBy.map(v => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => onNavigate?.(v.id)}
+                            className="inline-flex items-center gap-1 rounded border border-cyan-800/60 bg-cyan-950/40 px-1.5 py-0.5 text-cyan-300 hover:border-cyan-500 text-[11px]"
+                          >
+                            <span className="text-[10px] text-cyan-400 font-mono">«verify»</span>
+                            <span>{referenceLabel(v.id, 'Verification Case')}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <ElementLinks ids={row.verificationCases} repository={repository} onNavigate={onNavigate} empty="Not verified" />
+                    )}
+                  </td>
                   <td className="p-2"><ElementLinks ids={[...row.evidence, ...row.behaviors, ...row.simulations, ...row.artifacts]} repository={repository} onNavigate={onNavigate} empty="No evidence" /></td>
                 </tr>
               ))}
@@ -238,5 +433,5 @@ function ElementLinks({ ids, repository, onNavigate, empty }: { ids: string[]; r
 }
 
 function elementName(repository: SysmlRepository, id: string): string {
-  return repository.definitions[id]?.name ?? repository.usages[id]?.name ?? repository.verificationCases[id]?.name ?? repository.artifacts[id]?.name ?? repository.connectors[id]?.id ?? repository.evidence[id]?.id ?? id;
+  return resolveSysmlReferenceLabel(repository, id, repository.evidence[id] ? 'Evidence' : undefined);
 }

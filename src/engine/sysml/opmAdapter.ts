@@ -1,5 +1,6 @@
 import type { SysmlRepository } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { derivedDepthOneParts } from './partOccurrences';
 
 export type OpmMappingStatus = 'mapped' | 'conceptual-only' | 'unsupported' | 'unresolved';
 
@@ -76,6 +77,11 @@ export function projectSysmlToOpm(repo: SysmlRepository): OpmProjection {
   for (const usage of Object.values(repo.usages).sort(byId)) {
     mappings.push({ sourceSysmlId: usage.id, sourceKind: usage.kind, status: 'unsupported', diagnosticCode: 'OPM_USAGE_UNSUPPORTED' });
     diagnostics.push(warning('OPM_USAGE_UNSUPPORTED', usage.id, `${usage.kind} usage remains authoritative in SysML and is not projected as an OPM element`));
+  }
+  // Format 5: a part is a Block property rather than a usage record; it is just as authoritative in SysML.
+  for (const part of derivedDepthOneParts(repo)) {
+    mappings.push({ sourceSysmlId: part.id, sourceKind: 'part', status: 'unsupported', diagnosticCode: 'OPM_USAGE_UNSUPPORTED' });
+    diagnostics.push(warning('OPM_USAGE_UNSUPPORTED', part.id, 'part property remains authoritative in SysML and is not projected as an OPM element'));
   }
   for (const connector of Object.values(repo.connectors).sort(byId)) {
     mappings.push({ sourceSysmlId: connector.id, sourceKind: connector.kind, status: 'unsupported', diagnosticCode: 'OPM_IBD_CONNECTOR_UNSUPPORTED' });

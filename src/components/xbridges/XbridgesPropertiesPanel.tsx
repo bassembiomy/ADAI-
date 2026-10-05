@@ -366,7 +366,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   return (
     <div className={
       (isCollapsed ? 'w-12' : 'w-80') + 
-      ' bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text'
+      ' xbridges-panel ui-card bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text'
     }>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#333] bg-[#0a0a0a]">
@@ -385,7 +385,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
             <Triangle size={12} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
           </button>
           {!isCollapsed && (
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-250 transition-colors p-1">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-100 transition-colors p-1">
               <X size={16} />
             </button>
           )}
@@ -403,9 +403,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
       >
         {/* General */}
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">General</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">General</h3>
           <div>
-            <label className="block text-xs font-medium text-slate-455 mb-1">Block Name</label>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Block Name</label>
             <input 
               type="text" 
               value={localLabel}
@@ -435,7 +435,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
 
         {/* Parameters */}
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Parameters</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parameters</h3>
 
           {/* ── SUM_JUNCTION / Sum Sign Editor ── */}
           {(block.type === 'SUM_JUNCTION' || block.type === 'Sum') && (() => {
@@ -497,7 +497,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
             return (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Input Signs</label>
+                  <label className="text-xs font-semibold text-slate-400">Input Signs</label>
                   <button
                     onClick={addSignedInput}
                     className="flex items-center gap-1 text-[10px] font-bold text-[#28a745] bg-[#28a745]/10 px-2 py-1 rounded hover:bg-[#28a745]/20 transition-all border border-[#28a745]/20"
@@ -561,7 +561,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Numerator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Numerator Coefficients</label>
+                  <label className="text-xs font-semibold text-slate-400">Numerator Coefficients</label>
                   <button 
                     onClick={() => addArrayParam('numerator')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
@@ -602,7 +602,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Denominator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Denominator Coefficients</label>
+                  <label className="text-xs font-semibold text-slate-400">Denominator Coefficients</label>
                   <button 
                     onClick={() => addArrayParam('denominator')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
@@ -660,7 +660,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         step="any"
                         value={block.params.gain !== undefined ? block.params.gain : 1}
                         onChange={(e) => onUpdate(block.id, { params: { ...block.params, gain: Number(e.target.value) } })}
-                        className="w-16 text-xs text-center font-mono py-1 border border-[#333] bg-[#0a0a0a] text-emerald-450 font-bold rounded outline-none focus:border-[#c9a86c]"
+                        className="w-16 text-xs text-center font-mono py-1 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded outline-none focus:border-[#c9a86c]"
                       />
                     </div>
                   </div>
@@ -686,7 +686,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
  
               {/* Gain (K) */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-455">Gain (K)</label>
+                <label className="text-xs font-semibold text-slate-400">Gain (K)</label>
                 <input 
                   type="number" 
                   step="any"
@@ -699,7 +699,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Zeros */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Zeros</label>
+                  <label className="text-xs font-semibold text-slate-400">Zeros</label>
                   <button 
                     onClick={() => addArrayParam('zeros')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
@@ -742,7 +742,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Poles */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Poles</label>
+                  <label className="text-xs font-semibold text-slate-400">Poles</label>
                   <button 
                     onClick={() => addArrayParam('poles')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
@@ -1221,7 +1221,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
         {/* Ports */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">Input Ports</h3>
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Input Ports</h3>
             {block.allowDynamicInputs && block.type !== 'SUM_JUNCTION' && (
               <button onClick={handleAddInput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
                 <Plus size={10} /> Add
@@ -1262,7 +1262,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center justify-between mt-4">
-            <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">Output Ports</h3>
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Output Ports</h3>
             {block.allowDynamicOutputs && (
               <button onClick={handleAddOutput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
                 <Plus size={10} /> Add

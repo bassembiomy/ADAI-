@@ -1,11 +1,40 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { RelationshipEndEditor } from './RelationshipEndEditor';
+import {
+  createRejectedRelationshipChange,
+  filterRelationshipKinds,
+  RelationshipEndEditor,
+  validateRelationshipKindUpdate,
+} from './RelationshipEndEditor';
 import type { SysmlRelationship } from '../../engine/sysml/model';
 import type { SysmlDiagnostic } from '../../engine/sysml/validation';
 
+function findElementByAriaLabel(node: React.ReactNode, label: string): React.ReactElement | undefined {
+  if (!React.isValidElement(node)) return undefined;
+  if (node.props['aria-label'] === label) return node;
+  return React.Children.toArray(node.props.children)
+    .map(child => findElementByAriaLabel(child, label))
+    .find((element): element is React.ReactElement => Boolean(element));
+}
+
 describe('RelationshipEndEditor', () => {
+  it('uses endpoint labels in derived inheritance warnings', () => {
+    const sourceId = '65cb033e-421d-41e0-b789-87931d991010';
+    const targetId = '65cb033e-421d-41e0-b789-87931d991011';
+    const html = renderToStaticMarkup(<RelationshipEndEditor
+      relationship={{ id: 'relationship', kind: 'generalization', sourceId, targetId }}
+      sourceEndpoint={{ id: sourceId, name: ' Controller ', family: 'block' }}
+      targetEndpoint={{ id: targetId, name: ' ', family: 'block' }}
+      generalizationInfo={{ targetIsLeaf: true, targetIsAbstract: true, cycleDetected: true }}
+      onChange={vi.fn()}
+    />);
+    expect(html).toContain('Target Block is a leaf block');
+    expect(html).toContain('Inheritance cycle detected involving Controller');
+    expect(html).toContain('Target Block is abstract');
+    expect(html).not.toContain(sourceId);
+    expect(html).not.toContain(targetId);
+  });
   const relationship: SysmlRelationship = {
     id: 'rel1',
     kind: 'composition',
@@ -36,6 +65,86 @@ describe('RelationshipEndEditor', () => {
     expect(html).toContain('Navigable');
     expect(html).toContain('Aggregation');
     expect(html).toContain('composite');
+  });
+
+  it('hides IBD and requirement relationships from generic BDD choices', () => {
+    const html = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={relationship}
+        diagnostics={[]}
+        sourceEndpoint={{ id: 'blockA', name: 'Engine', family: 'block' }}
+        targetEndpoint={{ id: 'blockB', name: 'Mass', family: 'valueType' }}
+        diagram="bdd"
+        onChange={vi.fn()}
+      />
+    );
+    expect((html.match(/aria-label="Relationship kind"/g) ?? [])).toHaveLength(1);
+    expect(html).toContain('value="association"');
+    expect(html).not.toContain('value="binding"');
+    expect(html).not.toContain('value="deriveReqt"');
+    expect(html).not.toContain('value="composition"');
+  });
+
+  it('only offers requirement links when their endpoint direction is valid', () => {
+    const block = { id: 'block', name: 'Controller', family: 'block' as const };
+    const requirement = { id: 'req', name: 'Safety', family: 'requirement' as const };
+
+    expect(filterRelationshipKinds(block, requirement, 'rtm')).toContain('satisfy');
+    expect(filterRelationshipKinds(block, requirement, 'rtm')).not.toContain('verify');
+    expect(filterRelationshipKinds(requirement, block, 'rtm')).not.toContain('satisfy');
+  });
+
+  it('rejects a stale invalid kind update with an actionable policy diagnostic', () => {
+    const result = validateRelationshipKindUpdate(
+      'composition',
+      { id: 'blockA', name: 'Engine', family: 'block' },
+      { id: 'mass', name: 'Mass', family: 'valueType' },
+      'bdd',
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.diagnostics[0]).toMatchObject({
+      code: 'INVALID_AGGREGATION_ENDPOINTS',
+      correctiveAction: expect.stringContaining('value property'),
+    });
+  });
+
+  it('reports the rejected candidate kind and both resolved endpoints to the invalid-update callback', () => {
+    const source = { id: 'blockA', name: 'Engine', family: 'block' as const };
+    const target = { id: 'mass', name: 'Mass', family: 'valueType' as const };
+    const rejected = createRejectedRelationshipChange('composition', source, target, 'bdd');
+
+    expect(rejected).toMatchObject({
+      relationshipKind: 'composition',
+      source,
+      target,
+      diagnostic: { code: 'INVALID_AGGREGATION_ENDPOINTS' },
+    });
+  });
+
+  it('blocks a stale select interaction and sends its candidate kind to onInvalidChange', () => {
+    const onChange = vi.fn();
+    const onInvalidChange = vi.fn();
+    const editor = RelationshipEndEditor({
+      relationship,
+      diagnostics: [],
+      sourceEndpoint: { id: 'blockA', name: 'Engine', family: 'block' },
+      targetEndpoint: { id: 'mass', name: 'Mass', family: 'valueType' },
+      diagram: 'bdd',
+      onChange,
+      onInvalidChange,
+    });
+    const kindSelect = findElementByAriaLabel(editor, 'Relationship kind');
+
+    expect(kindSelect).toBeDefined();
+    kindSelect!.props.onChange({ target: { value: 'composition' } });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onInvalidChange).toHaveBeenCalledWith(expect.objectContaining({
+      relationshipKind: 'composition',
+      source: { id: 'blockA', name: 'Engine', family: 'block' },
+      target: { id: 'mass', name: 'Mass', family: 'valueType' },
+    }));
   });
 
   it('renders diagnostics matching property paths', () => {
@@ -72,6 +181,7 @@ describe('RelationshipEndEditor', () => {
         relationship={containmentRel}
         sourceIsRequirement={true}
         targetIsRequirement={true}
+        diagram="requirements"
         diagnostics={[]}
         onChange={vi.fn()}
       />
@@ -89,12 +199,78 @@ describe('RelationshipEndEditor', () => {
         relationship={containmentRel}
         sourceIsRequirement={false}
         targetIsRequirement={true}
+        diagram="requirements"
         diagnostics={[]}
         onChange={vi.fn()}
       />
     );
 
-    expect(htmlDisabled).toMatch(/value="requirementContainment"[^>]*disabled/);
+    expect(htmlDisabled).not.toContain('value="requirementContainment"');
+  });
+
+  it('renders generalization inheritance guidance with parent chain, leaf/cycle diagnostics, and abstract guidance', () => {
+    const generalization: SysmlRelationship = {
+      id: 'gen1',
+      kind: 'generalization',
+      sourceId: 'child',
+      targetId: 'parent',
+    };
+    const html = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={generalization}
+        diagnostics={[
+          { code: 'LEAF_SPECIALIZATION', severity: 'error', elementId: 'gen1', propertyPath: 'supertypeIds', message: 'Leaf block parent cannot be specialized' },
+          { code: 'INHERITANCE_CYCLE', severity: 'error', elementId: 'gen1', propertyPath: 'supertypeIds', message: 'Inheritance cycle includes child' },
+        ]}
+        generalizationInfo={{
+          parentChain: [{ id: 'grandparent', name: 'Grandparent' }, { id: 'parent', name: 'Parent' }],
+          targetIsAbstract: true,
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Inheritance guidance');
+    expect(html).toContain('Grandparent');
+    expect(html).toContain('Parent');
+    expect(html).toContain('[LEAF_SPECIALIZATION]');
+    expect(html).toContain('[INHERITANCE_CYCLE]');
+    expect(html).toContain('[ABSTRACT_INSTANTIATION]');
+  });
+
+  it('announces an empty state when a generalization has no inheritance issues', () => {
+    const generalization: SysmlRelationship = {
+      id: 'gen2',
+      kind: 'generalization',
+      sourceId: 'child',
+      targetId: 'parent',
+    };
+    const html = renderToStaticMarkup(
+      <RelationshipEndEditor
+        relationship={generalization}
+        diagnostics={[]}
+        generalizationInfo={{ parentChain: [{ id: 'parent', name: 'Parent' }] }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(html).toContain('No inheritance issues detected');
+  });
+  it('parses text 0..* into canonical Multiplicity { lower: 0, upper: "*", ordered: false, unique: true }', () => {
+    const onChange = vi.fn();
+    const editor = RelationshipEndEditor({
+      relationship,
+      diagnostics: [],
+      diagram: 'bdd',
+      onChange,
+    });
+    const multInput = findElementByAriaLabel(editor, 'Target multiplicity');
+    expect(multInput).toBeDefined();
+    // Multiplicity commits on blur/Enter (a per-keystroke parse made "0..*"
+    // impossible to type), so drive the committed value directly.
+    multInput!.props.onCommit('0..*');
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      targetMultiplicity: { lower: 0, upper: '*', ordered: false, unique: true },
+    }));
   });
 });
-

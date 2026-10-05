@@ -8,10 +8,12 @@ import {
   type WorkerTaskType,
   type CompactProjectDelta,
   type CompactImpactDelta,
+  type SerializedSemanticEndpointContext,
   SYSML_WORKER_PROTOCOL_VERSION,
   WORKER_FAST_PATH_THRESHOLD,
   shouldRunInWorker,
 } from '../engine/sysml/workerProtocol';
+import type { SemanticEndpointContext } from '../engine/sysml/semanticEndpointIndex';
 import { handleWorkerMessage } from '../engine/sysml/sysmlWorker';
 import { createSysmlWorker, isWorkerSupported } from './sysmlWorkerFactory';
 import { toWorkerSnapshot } from '../engine/sysml/normalizedStore';
@@ -32,6 +34,15 @@ export interface SysmlWorkerDiagnostics {
   staleCount: number;
   lastTaskDurationMs: number | null;
 }
+
+/**
+ * Finding 4 review fix: endpoint context accepted by validate/project (and
+ * the scheduleValidation pass-through). The live Map shape and the
+ * plain-object postMessage/JSON shape are both accepted; the worker coerces
+ * either via requestEndpointContext, so the client forwards the value
+ * unchanged under the exact `endpointContext` field the worker reads.
+ */
+export type SysmlWorkerEndpointContext = SemanticEndpointContext | SerializedSemanticEndpointContext;
 
 interface PendingRequest<T> {
   requestId: string;
@@ -113,7 +124,7 @@ export class SysmlWorkerClient {
     if (response.success) {
       pending.resolve(response.result);
     } else {
-      pending.reject(new Error(response.error || 'Worker request failed'));
+      pending.reject(new Error((response as any).error || 'Worker request failed'));
     }
   }
 
@@ -157,20 +168,24 @@ export class SysmlWorkerClient {
 
     const request = createRequest(requestId);
 
-    // Fast path: if payload is small or no WebWorker instance available, compute synchronously
+    // Fast path: if payload is small, compute synchronously.
     const count = entityCount ?? ('payload' in request ? this.countEntities((request as any).payload) : 0);
-    if (!this.worker || !shouldRunInWorker(count)) {
-      if (!this.worker && shouldRunInWorker(count)) {
-        this.isMainThreadFallback = true;
-        this.fallbackReason = this.fallbackReason || 'Worker unavailable: falling back to main-thread processing for large model';
-      }
+    const runInWorker = shouldRunInWorker(count);
+
+    if (!this.worker && runInWorker) {
+      this.isMainThreadFallback = false;
+      this.fallbackReason = 'Worker unavailable: large model processing exceeds main-thread safety threshold';
+      throw new Error('Worker unavailable: large model processing exceeds main-thread safety threshold. Please enable Web Workers to prevent UI freeze.');
+    }
+
+    if (!this.worker || !runInWorker) {
       const t0 = performance.now();
       const response = handleWorkerMessage(request);
       this.lastTaskDurationMs = performance.now() - t0;
       if (response.success) {
         return response.result as T;
       }
-      throw new Error(response.error || 'Execution failed');
+      throw new Error((response as any).error || 'Execution failed');
     }
 
     // Off-thread path via WebWorker
@@ -200,12 +215,13 @@ export class SysmlWorkerClient {
     payload: SysmlRepository | NormalizedSysmlStore,
     revision: number,
     onResult: (report: SysmlValidationReport) => void,
-    onError?: (err: any) => void
+    onError?: (err: any) => void,
+    endpointContext?: SysmlWorkerEndpointContext,
   ): () => void {
     let cancelled = false;
     const reqId = this.nextRequestId();
 
-    this.validate(payload, revision, reqId)
+    this.validate(payload, revision, reqId, endpointContext)
       .then(report => {
         if (!cancelled) {
           onResult(report);
@@ -227,6 +243,7 @@ export class SysmlWorkerClient {
     payload: SysmlRepository | NormalizedSysmlStore,
     revision: number,
     requestIdOverride?: string,
+    endpointContext?: SysmlWorkerEndpointContext,
   ): Promise<SysmlValidationReport> {
     return this.execute<SysmlValidationReport>('validate', revision, requestId => ({
       version: SYSML_WORKER_PROTOCOL_VERSION,
@@ -234,21 +251,24 @@ export class SysmlWorkerClient {
       revision,
       taskType: 'validate',
       payload,
+      ...(endpointContext ? { endpointContext } : {}),
     }), undefined, requestIdOverride);
   }
 
   public async project(
     payload: SysmlRepository | NormalizedSysmlStore,
     revision: number,
-    diagramId?: string
-  ): Promise<{ view: LegacySysmlView; delta: CompactProjectDelta }> {
-    return this.execute<{ view: LegacySysmlView; delta: CompactProjectDelta }>('project', revision, requestId => ({
+    diagramId?: string,
+    endpointContext?: SysmlWorkerEndpointContext,
+  ): Promise<{ view: LegacySysmlView; delta: CompactProjectDelta; diagnosticCodes: string[] }> {
+    return this.execute<{ view: LegacySysmlView; delta: CompactProjectDelta; diagnosticCodes: string[] }>('project', revision, requestId => ({
       version: SYSML_WORKER_PROTOCOL_VERSION,
       requestId,
       revision,
       taskType: 'project',
       diagramId,
       payload,
+      ...(endpointContext ? { endpointContext } : {}),
     }));
   }
 

@@ -30,7 +30,9 @@ export class ThermalFixtures {
         edge('e4', 'sensor', 'b_s', 'reference', 'a_t'),
         edge('e5', 'sensor', 't_s', 'scope', 'in1_t'),
       ],
-      probes: [{ id: 'p1', sourceNodeId: 'sensor', sourceHandle: 't_s', variableName: 'T_sensor', unit: 'K' }],
+      // temp_sensor outputs Ta - Tb relative to thermal_ref (pinned at 293.15 K by the engine),
+      // so probe the absolute node temperature (K) instead of the differential signal.
+      probes: [{ id: 'p1', sourceNodeId: 'sensor', sourceHandle: 'a', variableName: 'T_sensor', engineVariable: 'Across_sensor_a_(thermal)', unit: 'K' }],
     };
   }
 
@@ -57,7 +59,8 @@ export class ThermalFixtures {
         edge('e4', 'sensor', 'b_s', 'reference', 'a_t'),
         edge('e5', 'sensor', 't_s', 'scope', 'in1_t'),
       ],
-      probes: [{ id: 'p1', sourceNodeId: 'sensor', sourceHandle: 't_s', variableName: 'T_mass', unit: 'K' }],
+      // Absolute mass-node temperature (see note in createThermalConductionCircuit).
+      probes: [{ id: 'p1', sourceNodeId: 'sensor', sourceHandle: 'a', variableName: 'T_mass', engineVariable: 'Across_sensor_a_(thermal)', unit: 'K' }],
     };
   }
 }

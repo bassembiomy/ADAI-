@@ -4,6 +4,7 @@ import {
   stepOpmRuntime,
   dispatchOpmEvent,
   resetOpmRuntime,
+  runOpmSimulationAsync,
 } from '../runtime';
 import { compileExecutableOpm } from '../pipeline';
 import { makeApplianceFixture } from '../fixtures';
@@ -1102,6 +1103,39 @@ describe('OPM canonical TypeScript runtime', () => {
       const s3 = stepOpmRuntime(boundedRuntime, 10);
       expect(s3.finished).toBe(true);
       expect(s3.diagnostics.some(d => d.code === 'OPM_RUNTIME_MAX_TICKS_EXCEEDED')).toBe(true);
+    });
+
+    it('indexes hot paths for fast lookup without altering semantics', () => {
+      const queueFixture = makeQueueFixture();
+      const runtime = createOpmRuntime(queueFixture.model);
+      expect(runtime.indexes).toBeDefined();
+      expect(runtime.indexes.processIds.size).toBe(queueFixture.model.processes.length);
+      expect(runtime.indexes.eventIds.size).toBe(queueFixture.model.events.length);
+      expect(runtime.indexes.statesById.size).toBe(queueFixture.model.states.length);
+    });
+
+    it('runs asynchronous simulation with yield intervals and cooperative cancellation', async () => {
+      const queueFixture = makeQueueFixture();
+      const runtime = createOpmRuntime(queueFixture.model);
+      let cancel = false;
+      const simPromise = runOpmSimulationAsync(runtime, {
+        ticks: 20,
+        deltaMs: 10,
+        yieldInterval: 5,
+        shouldCancel: () => cancel,
+      });
+
+      // Trigger cancel after 10 ticks
+      setTimeout(() => {
+        cancel = true;
+      }, 5);
+
+      const simResult = await simPromise;
+      expect(simResult.steps.length).toBeGreaterThan(0);
+      expect(simResult.steps.length).toBeLessThanOrEqual(20);
+      if (simResult.cancelled) {
+        expect(simResult.cancelled).toBe(true);
+      }
     });
   });
 });

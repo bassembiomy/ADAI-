@@ -1,0 +1,9 @@
+{
+  "id": "rc_charging",
+  "class": "linear_smooth",
+  "stopTime": 5,
+  "signals": [
+    { "name": "v_c", "unit": "V", "vlabProbe": { "nodeId": "sensor", "handle": "v_s", "variableName": "v_c" } }
+  ],
+  "analytic": { "type": "first_order_step", "final": 10, "tau": 1 }
+}

@@ -1,5 +1,13 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  evaluateCompliance,
+  type ComplianceResult,
+  type EvidenceRunContext,
+  type FourLevelCompliance,
+  type RegisteredExecutableCaseId,
+  type SemanticAuthority,
+} from './compliance';
 
 export interface ConformanceRow {
   id: string;
@@ -9,6 +17,13 @@ export interface ConformanceRow {
   implementationEvidence: string[];
   automatedEvidence: string[];
   remainingLimitation?: string;
+  authority?: SemanticAuthority;
+  levels?: FourLevelCompliance;
+  domainType?: string;
+  command?: string;
+  validator?: string;
+  persistence?: string;
+  projection?: string;
 }
 
 export interface ConformanceManifest {
@@ -29,7 +44,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.1',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/bdd.ts', 'src/services/sysmlCommandGateway.ts'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/sysmlConformance.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/sysmlConformance.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-002',
@@ -37,7 +52,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.14',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/bdd.ts', 'src/components/sysml/BlockPropertiesEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/model.test.ts', 'src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockPropertiesEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/model.test.ts', 'src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockPropertiesEditor.test.tsx', 'src/services/sysmlPropertyRules.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-003',
@@ -45,7 +60,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.3',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/bdd.ts', 'src/components/sysml/BlockFeatureEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx', 'src/services/sysmlCommandGateway.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-004',
@@ -53,7 +68,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.11',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/bdd.ts', 'src/components/sysml/BlockFeatureEditor.tsx', 'src/features/reporting/reportDiagrams.ts'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx', 'src/features/reporting/reportDiagrams.sysml.test.ts'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx', 'src/features/reporting/reportDiagrams.sysml.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/reportSnapshotAdapter.test.ts'],
     },
     {
       id: 'SYSML-005',
@@ -61,7 +76,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 9.3.2.7',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/bdd.ts', 'src/components/sysml/BlockFeatureEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx', 'src/services/sysmlCommandGateway.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-006',
@@ -69,15 +84,15 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 9.3.2.8 / 9.3.2.12',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/bdd.ts', 'src/components/sysml/BlockFeatureEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/ibd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/ibd.test.ts', 'src/components/sysml/BlockFeatureEditor.test.tsx', 'src/services/sysmlCommandGateway.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-007',
       capability: 'BDD composition',
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.3',
-      implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/engine/sysml/mutations.ts', 'src/services/sysmlTransactionAdapter.ts', 'src/components/sysml/RelationshipEndEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/mutations.test.ts', 'src/services/sysmlTransactionAdapter.test.ts', 'tests/e2e/sysml-deletion-lifecycle.spec.ts'],
+      implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/engine/sysml/mutations.ts', 'src/services/sysmlTransactionAdapter.ts', 'src/components/sysml/RelationshipEndEditor.tsx', 'src/engine/sysml/connectionPolicy.ts'],
+      automatedEvidence: ['src/engine/sysml/mutations.test.ts', 'src/services/sysmlTransactionAdapter.test.ts', 'tests/e2e/sysml-deletion-lifecycle.spec.ts', 'src/engine/sysml/patches.test.ts', 'src/engine/sysml/connectionPolicy.test.ts', 'tests/e2e/sysml-connection-policy.spec.ts'],
     },
     {
       id: 'SYSML-008',
@@ -85,7 +100,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.11',
       implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/engine/sysml/mutations.ts', 'src/components/sysml/RelationshipEndEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/mutations.test.ts', 'src/components/sysml/RelationshipEndEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/mutations.test.ts', 'src/components/sysml/RelationshipEndEditor.test.tsx', 'src/services/sysmlCommandGateway.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-009',
@@ -93,7 +108,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.1',
       implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/components/sysml/RelationshipEndEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/RelationshipEndEditor.test.tsx', 'src/services/sysmlCreationRules.test.ts'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/components/sysml/RelationshipEndEditor.test.tsx', 'src/services/sysmlCreationRules.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-010',
@@ -101,7 +116,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.1',
       implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/engine/sysml/validation.ts'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/validation.test.ts'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/validation.test.ts', 'src/engine/sysml/sysmlConformance.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-011',
@@ -109,7 +124,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 7.3.2.1',
       implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/components/sysml/RelationshipEndEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/services/sysmlCreationRules.test.ts'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/services/sysmlCreationRules.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-012',
@@ -117,7 +132,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 15.3.2.1',
       implementationEvidence: ['src/engine/sysml/bdd.ts', 'src/components/sysml/RelationshipEndEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/opmAdapter.test.ts'],
+      automatedEvidence: ['src/engine/sysml/bdd.test.ts', 'src/engine/sysml/opmAdapter.test.ts', 'src/engine/sysml/sysmlConformance.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-013',
@@ -125,7 +140,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.1 / 8.3.2.3',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/ibd.ts', 'src/services/sysmlCommandGateway.ts'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/services/sysmlTransactionAdapter.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/services/sysmlTransactionAdapter.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-014',
@@ -133,7 +148,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 9.3.2.8',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/ibd.ts'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/engine/sysml/profileFixture.test.ts'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/engine/sysml/profileFixture.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-015',
@@ -141,7 +156,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 9.3.2.12',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/ibd.ts'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/engine/sysml/profileFixture.test.ts'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/engine/sysml/profileFixture.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-016',
@@ -149,7 +164,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.1',
       implementationEvidence: ['src/engine/sysml/ibd.ts', 'src/components/sysml/IbdConnectorEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/services/sysmlIntegrityService.test.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-017',
@@ -157,7 +172,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 9.3.2.9',
       implementationEvidence: ['src/engine/sysml/ibd.ts', 'src/components/sysml/IbdConnectorEditor.tsx', 'src/features/reporting/reportDiagrams.ts'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/features/reporting/reportDiagrams.ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/features/reporting/reportDiagrams.ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/reportSnapshotAdapter.test.ts'],
     },
     {
       id: 'SYSML-018',
@@ -165,7 +180,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 8.3.2.2',
       implementationEvidence: ['src/engine/sysml/model.ts', 'src/engine/sysml/ibd.ts', 'src/components/sysml/IbdConnectorEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx', 'src/services/sysmlIntegrityService.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-019',
@@ -173,7 +188,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 9.3.2.8',
       implementationEvidence: ['src/engine/sysml/ibd.ts', 'src/components/sysml/IbdConnectorEditor.tsx'],
-      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/ibd.test.ts', 'src/components/sysml/IbdConnectorEditor.test.tsx', 'src/services/sysmlIntegrityService.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/normalizedStore.test.ts'],
     },
     {
       id: 'SYSML-020',
@@ -181,7 +196,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.4',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/components/sysml/RequirementGovernancePanel.tsx'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/services/reportModelConsistency.test.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-021',
@@ -189,7 +204,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.2',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/engine/sysml/validation.ts'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/services/sysmlCreationRules.test.ts'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/services/sysmlCreationRules.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-022',
@@ -197,7 +212,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.5',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/components/sysml/RequirementGovernancePanel.tsx'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx', 'src/services/reportModelConsistency.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-023',
@@ -205,7 +220,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.7',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/engine/sysml/evidence.ts', 'src/components/sysml/RequirementGovernancePanel.tsx'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/engine/sysml/evidence.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/engine/sysml/evidence.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx', 'src/services/reportModelConsistency.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-024',
@@ -213,7 +228,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.3',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/engine/sysml/validation.ts'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/services/sysmlCreationRules.test.ts'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/services/sysmlCreationRules.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-025',
@@ -221,7 +236,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.6',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/engine/sysml/rtm.ts'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/engine/sysml/rtm.test.ts'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/engine/sysml/rtm.test.ts', 'src/features/reporting/reportDiagrams.trace.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/traceabilityIndex.test.ts'],
     },
     {
       id: 'SYSML-026',
@@ -229,7 +244,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.2.1',
       implementationEvidence: ['src/engine/sysml/requirements.ts', 'src/components/sysml/RequirementGovernancePanel.tsx'],
-      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/requirements.test.ts', 'src/components/sysml/RequirementGovernancePanel.test.tsx', 'src/services/reportModelConsistency.test.ts', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/engine/sysml/persistence.test.ts'],
     },
     {
       id: 'SYSML-027',
@@ -237,7 +252,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.1',
       implementationEvidence: ['src/engine/sysml/rtm.ts', 'src/components/sysml/TraceabilityMatrix.tsx', 'src/components/sysml/VirtualizedTraceabilityGrid.tsx'],
-      automatedEvidence: ['src/engine/sysml/rtm.test.ts', 'src/components/sysml/TraceabilityMatrix.test.tsx', 'src/components/sysml/VirtualizedTraceabilityGrid.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts'],
+      automatedEvidence: ['src/engine/sysml/rtm.test.ts', 'src/components/sysml/TraceabilityMatrix.test.tsx', 'src/components/sysml/VirtualizedTraceabilityGrid.test.tsx', 'tests/e2e/sysml-bdd-ibd-requirements-rtm.spec.ts', 'src/features/reporting/reportDiagrams.trace.test.ts', 'src/engine/sysml/traceabilityIndex.test.ts'],
     },
     {
       id: 'SYSML-028',
@@ -245,7 +260,7 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
       status: 'supported',
       normativeReference: 'OMG SysML 1.6 Clause 16.3.1',
       implementationEvidence: ['src/engine/sysml/persistence.ts', 'src/engine/sysml/rtm.ts', 'src/components/sysml/TraceabilityMatrix.tsx'],
-      automatedEvidence: ['src/engine/sysml/persistence.test.ts', 'src/engine/sysml/rtm.test.ts', 'src/components/sysml/TraceabilityMatrix.test.tsx'],
+      automatedEvidence: ['src/engine/sysml/persistence.test.ts', 'src/engine/sysml/rtm.test.ts', 'src/components/sysml/TraceabilityMatrix.test.tsx', 'src/engine/sysml/sysmlConformance.test.ts', 'tests/e2e/sysml-persistence-report.spec.ts'],
     },
     {
       id: 'SYSML-029',
@@ -277,7 +292,55 @@ export const CONFORMANCE_MANIFEST: ConformanceManifest = {
         'src/components/sysml/RelationshipEndEditor.test.tsx',
         'src/features/reporting/reportDiagrams.sysml.test.ts',
         'tests/e2e/sysml-deletion-lifecycle.spec.ts',
+        'src/engine/sysml/persistence.test.ts',
       ],
+    },
+    {
+      id: 'SYSML-031',
+      capability: 'Typed semantic policy decisions',
+      status: 'supported',
+      normativeReference: 'OMG SysML 1.6 / ISO/IEC 19514:2017',
+      implementationEvidence: [
+        'src/engine/sysml/policy.ts',
+        'src/engine/sysml/bdd.ts',
+        'src/engine/sysml/ibd.ts',
+        'src/engine/sysml/mutations.ts',
+        'src/engine/sysml/connectionPolicy.ts',
+      ],
+      automatedEvidence: [
+        'src/engine/sysml/policy.test.ts',
+        'src/engine/sysml/bdd.test.ts',
+        'src/engine/sysml/ibd.test.ts',
+        'src/engine/sysml/validation.test.ts',
+        'src/engine/sysml/mutations.test.ts',
+        'src/services/sysmlTransactionAdapter.test.ts',
+        'tests/e2e/sysml-deletion-lifecycle.spec.ts',
+        'src/engine/sysml/patches.test.ts',
+        'src/engine/sysml/connectionPolicy.test.ts',
+        'tests/e2e/sysml-connection-policy.spec.ts',
+      ],
+    },
+    {
+      id: 'SYSML-032',
+      capability: 'SysML Use-Case Metamodel & Persistence',
+      status: 'partial',
+      normativeReference: 'OMG SysML 1.6 Clause 16 / ISO/IEC 19514:2017',
+      implementationEvidence: [
+        'src/engine/sysml/model.ts',
+        'src/engine/sysml/useCases.ts',
+        'src/engine/sysml/normalizedStore.ts',
+        'src/engine/sysml/persistence.ts',
+        'src/engine/sysml/connectionPolicy.ts',
+        'src/services/sysmlCommandGateway.ts',
+        'src/features/reporting/reportDiagrams.ts',
+      ],
+      automatedEvidence: [
+        'src/engine/sysml/useCases.test.ts',
+        'src/engine/sysml/useCaseMigration.test.ts',
+        'src/engine/sysml/useCaseLifecycle.test.ts',
+        'src/engine/sysml/useCaseLargeModel.test.ts',
+      ],
+      remainingLimitation: 'Use case UI workspace module removed from application; core metamodel, gateway commands, and persistence retained.',
     },
   ],
 };
@@ -313,6 +376,255 @@ export function verifyConformanceManifest(repoRoot: string = process.cwd()): Con
   };
 }
 
+/**
+ * Mass-production release evidence tiers. Every `supported` capability must be
+ * proven at all four levels before promotion:
+ * - `unit`: engine/component test exercising the capability in isolation.
+ * - `integration`: cross-module test (gateway, adapter, creation rules,
+ *   reporting, or lifecycle harness) proving wiring beyond the engine.
+ * - `browser`: real-browser Playwright end-to-end spec proving the capability
+ *   renders and interacts correctly in the shipped UI.
+ * - `persistence`: chunked/normalized persistence (or large-model / snapshot /
+ *   worker persistence) test proving the capability round-trips through save/load.
+ */
+export type ReleaseEvidenceTier = 'unit' | 'integration' | 'browser' | 'persistence';
+
+export const RELEASE_EVIDENCE_TIERS: ReleaseEvidenceTier[] = ['unit', 'integration', 'browser', 'persistence'];
+
+// NOTE: tier classification trusts file-naming/path conventions — it inspects
+// the evidence *path*, never file contents. A path is credited for a tier when
+// it matches that tier's established prefix/pattern (see branches below), and a
+// single path may credit multiple tiers. Consequence for maintainers: new
+// evidence files MUST live under the conventional locations
+// (src/engine|components for unit, src/services|features or the named harness
+// patterns for integration, tests/e2e for browser, persistence/large-model/
+// snapshot/traceability/worker patterns for persistence) or the release gate
+// will report the row as missing that tier even if the test content covers it.
+export function classifyAutomatedEvidence(evidencePath: string): ReleaseEvidenceTier[] {
+  const tiers: ReleaseEvidenceTier[] = [];
+  const p = evidencePath.replace(/\\/g, '/');
+  if (p.startsWith('tests/e2e/') || p.includes('sysmlBrowserFlow')) {
+    tiers.push('browser');
+  }
+  if (/persistence|normalizedStore|patches|largeModel|reportSnapshotAdapter|traceabilityIndex|sysmlWorker|largeModelMemoryPressure/i.test(p)) {
+    tiers.push('persistence');
+  }
+  if (
+    p.startsWith('src/services/') ||
+    p.startsWith('src/features/') ||
+    /profileFixture|sysmlConformance|interchangeReport|reportModelConsistency|CreationRules|TransactionAdapter|CommandGateway|IntegrityService/i.test(p)
+  ) {
+    tiers.push('integration');
+  }
+  if (p.startsWith('src/engine/') || p.startsWith('src/components/')) {
+    tiers.push('unit');
+  }
+  return tiers;
+}
+
+export interface ReleaseGateEvidenceReport {
+  valid: boolean;
+  profileOk: boolean;
+  unsupportedMarkedSupported: string[];
+  rowsMissingImplementation: string[];
+  rowsMissingTiers: Array<{ id: string; missing: ReleaseEvidenceTier[] }>;
+}
+
+export function verifyReleaseGateEvidence(manifest: ConformanceManifest = CONFORMANCE_MANIFEST): ReleaseGateEvidenceReport {
+  const profileOk = manifest.profileId === 'OMG-SysML-1.6-ADIA';
+  const unsupportedMarkedSupported = manifest.rows
+    .filter(row => row.status === 'supported' && (row.id === 'SYSML-029' || /sysml\s*v2/i.test(row.capability)))
+    .map(row => row.id);
+  const rowsMissingImplementation = manifest.rows
+    .filter(row => row.status === 'supported' && row.implementationEvidence.length === 0)
+    .map(row => row.id);
+  const rowsMissingTiers = manifest.rows
+    .filter(row => row.status === 'supported')
+    .map(row => {
+      const covered = new Set<ReleaseEvidenceTier>();
+      for (const evidence of row.automatedEvidence) {
+        for (const tier of classifyAutomatedEvidence(evidence)) covered.add(tier);
+      }
+      const missing = RELEASE_EVIDENCE_TIERS.filter(tier => !covered.has(tier));
+      return { id: row.id, missing };
+    })
+    .filter(entry => entry.missing.length > 0);
+
+  return {
+    valid:
+      profileOk &&
+      unsupportedMarkedSupported.length === 0 &&
+      rowsMissingImplementation.length === 0 &&
+      rowsMissingTiers.length === 0,
+    profileOk,
+    unsupportedMarkedSupported,
+    rowsMissingImplementation,
+    rowsMissingTiers,
+  };
+}
+
+export interface FourLevelComplianceManifestReport {
+  valid: boolean;
+  totalFeatures: number;
+  compliantFeatures: number;
+  partialFeatures: number;
+  nonCompliantFeatures: number;
+  results: ComplianceResult[];
+}
+
+/**
+ * Review follow-up (Finding 3, fail-closed manifest): explicit, reviewable
+ * binding from manifest rows to the registered executable evidence cases
+ * (`EXECUTABLE_EVIDENCE` in `./compliance/evidenceRegistry`) that
+ * substantiate them. Only rows genuinely covered by a registered case are
+ * listed here; every other non-unsupported row intentionally carries no
+ * binding and therefore can never read COMPLIANT (see
+ * `evaluateManifestCompliance`). The typed `RegisteredExecutableCaseId`
+ * values make an unregistered case ID a compile-time error; the manifest
+ * test suite additionally asserts every listed ID is registered.
+ */
+export const MANIFEST_EXECUTABLE_CASES: Record<string, RegisteredExecutableCaseId[]> = {
+  // BDD ports: every registered port case exercises port creation, typing,
+  // rejection, nesting, or persistence through the port command/validator path.
+  'SYSML-006': [
+    'PORT_UML_STANDARD_OWNED',
+    'PORT_PROXY_INTERFACE_TYPING',
+    'PORT_PROXY_WRONG_TYPE_REJECTED',
+    'PORT_FULL_BLOCK_TYPING',
+    'PORT_FLOW_LEGACY_OWNED',
+    'PORT_NESTED_PROXY_VALIDATED',
+    'PORT_PERSISTENCE_STABLE',
+  ],
+  // IBD full port: FullPort typing plus port persistence round-trip.
+  'SYSML-014': ['PORT_FULL_BLOCK_TYPING', 'PORT_PERSISTENCE_STABLE'],
+  // IBD proxy port: ProxyPort typing, wrong-type rejection, nesting, persistence.
+  'SYSML-015': [
+    'PORT_PROXY_INTERFACE_TYPING',
+    'PORT_PROXY_WRONG_TYPE_REJECTED',
+    'PORT_NESTED_PROXY_VALIDATED',
+    'PORT_PERSISTENCE_STABLE',
+  ],
+  // IBD assembly connector: part-to-part creation, boundary rejection, persistence.
+  'SYSML-016': [
+    'IBD_ASSEMBLY_PART_TO_PART',
+    'IBD_ASSEMBLY_BOUNDARY_REJECTED',
+    'IBD_CONNECTOR_PERSISTENCE',
+  ],
+  // IBD delegation connector: boundary delegation creation plus connector persistence.
+  'SYSML-019': ['IBD_BOUNDARY_DELEGATION_PERSISTS', 'IBD_CONNECTOR_PERSISTENCE'],
+  // satisfy: State-to-Requirement satisfy identity, direction, and persistence.
+  'SYSML-022': [
+    'STATE_SATISFY_REAL_ID_REQUIRED',
+    'STATE_SATISFY_DIRECTION_ENFORCED',
+    'STATE_SATISFY_RELATIONSHIP_PERSISTS',
+  ],
+  // verify/evidence: TestCase verify-relationship persistence.
+  'SYSML-023': ['REQ_TESTCASE_VERIFIES_PERSISTED'],
+  // Typed semantic policy decisions: the fail-closed rejection/decision cases
+  // (standard-port admission, proxy wrong-type rejection, assembly-context
+  // rejection, satisfy-direction enforcement).
+  'SYSML-031': [
+    'PORT_UML_STANDARD_OWNED',
+    'PORT_PROXY_WRONG_TYPE_REJECTED',
+    'IBD_ASSEMBLY_BOUNDARY_REJECTED',
+    'STATE_SATISFY_DIRECTION_ENFORCED',
+  ],
+};
+
+/** Registered executable cases bound to a manifest row (empty when unbound). */
+export function executableCasesForManifestRow(rowId: string): RegisteredExecutableCaseId[] {
+  return MANIFEST_EXECUTABLE_CASES[rowId] ?? [];
+}
+
+export function evaluateManifestCompliance(
+  manifest: ConformanceManifest = CONFORMANCE_MANIFEST,
+  runContext?: EvidenceRunContext | null,
+): FourLevelComplianceManifestReport {
+  const results: ComplianceResult[] = manifest.rows.map(row => {
+    const authority = row.authority ?? (row.id === 'SYSML-029' ? 'ADIA_EXTENSION' : /generalization|association|dependency|use-case/i.test(row.capability) ? 'UML_FOUNDATION' : 'OMG_SYSML_1_6');
+    const levels = row.levels ?? (
+      row.status === 'unsupported'
+        ? { element: 'FAIL', properties: 'FAIL', relationships: 'FAIL', constraints: 'FAIL' }
+        : row.status === 'partial'
+        ? { element: 'PASS', properties: 'PASS', relationships: 'PASS', constraints: 'FAIL' }
+        : { element: 'PASS', properties: 'PASS', relationships: 'PASS', constraints: 'PASS' }
+    );
+
+    const executableCases = executableCasesForManifestRow(row.id);
+    const result = evaluateCompliance({
+      id: row.id,
+      name: row.capability,
+      authority,
+      levels,
+      evidence: {
+        specificationSection: row.normativeReference,
+        sourceFile: row.implementationEvidence[0] ?? '',
+        domainType: row.domainType ?? 'SemanticElement',
+        command: row.command ?? 'SysmlCommand',
+        validator: row.validator ?? 'SysmlValidator',
+        persistence: row.persistence ?? 'SysmlPersistence',
+        projection: row.projection ?? 'SysmlProjection',
+        tests: row.automatedEvidence,
+        // Fail-closed binding: rows with registered coverage declare their
+        // executable cases so the evaluator binds them to current-run results;
+        // rows without coverage declare none and are forced PARTIAL below.
+        ...(executableCases.length > 0 ? { executableCases: [...executableCases] } : {}),
+      },
+      notes: row.remainingLimitation,
+    }, runContext ?? undefined);
+
+    // Fail-closed rule (Finding 3): a non-unsupported row must never read
+    // COMPLIANT without bound executable evidence.
+    // - Row declares executable cases but the evaluator could not bind them
+    //   to the current run (no usable runContext, missing/stale/failed
+    //   outcome): the evaluator already returns PARTIAL; name the row in
+    //   missingEvidence so the gap is attributable.
+    if (
+      row.status !== 'unsupported' &&
+      executableCases.length > 0 &&
+      result.status !== 'COMPLIANT' &&
+      result.missingEvidence.includes('evidenceRunResults') &&
+      !result.missingEvidence.includes(`manifestRow:${row.id}`)
+    ) {
+      return {
+        ...result,
+        missingEvidence: [...result.missingEvidence, `manifestRow:${row.id}`],
+        reasons: [
+          ...result.reasons,
+          `Manifest row ${row.id} (${row.capability}) declares executable cases with no bound current-run results`,
+        ],
+      };
+    }
+    // - Row has no executable-case binding at all: no silent COMPLIANT
+    //   without evidence — force PARTIAL with reason.
+    if (row.status !== 'unsupported' && executableCases.length === 0 && result.status === 'COMPLIANT') {
+      return {
+        ...result,
+        status: 'PARTIAL' as const,
+        missingEvidence: [...result.missingEvidence, `manifestRow:${row.id}:noExecutableCases`],
+        reasons: [
+          ...result.reasons,
+          `Manifest row ${row.id} (${row.capability}) has no registered executable evidence binding; COMPLIANT requires bound test execution`,
+        ],
+      };
+    }
+    return result;
+  });
+
+  const compliantFeatures = results.filter(r => r.status === 'COMPLIANT').length;
+  const partialFeatures = results.filter(r => r.status === 'PARTIAL').length;
+  const nonCompliantFeatures = results.filter(r => r.status === 'NON_COMPLIANT').length;
+
+  return {
+    valid: nonCompliantFeatures === manifest.rows.filter(r => r.status === 'unsupported').length,
+    totalFeatures: results.length,
+    compliantFeatures,
+    partialFeatures,
+    nonCompliantFeatures,
+    results,
+  };
+}
+
 export function generateConformanceMatrixMarkdown(manifest: ConformanceManifest = CONFORMANCE_MANIFEST): string {
   const lines: string[] = [
     '# ADIA SysML Profile Conformance Matrix',
@@ -337,9 +649,11 @@ export function generateConformanceMatrixMarkdown(manifest: ConformanceManifest 
   lines.push('');
   lines.push('## Current automated qualification');
   lines.push('');
-  lines.push('- `npm run test:sysml`: 162 unit & integration tests passing.');
-  lines.push('- `npm run test:sysml:release`: 162 SysML tests, 73 reporting tests, and full TypeScript check passing with zero errors.');
-  lines.push('- `npm run test:e2e:sysml`: Playwright real-browser end-to-end qualification across BDD, IBD, Requirements, RTM, and deletion lifecycle passing.');
+  lines.push('- `npm run test:sysml`: 357 unit & integration tests passing (39 files).');
+  lines.push('- `npm run test:sysml:release`: SysML suite plus reporting qualification and full TypeScript check passing with zero errors.');
+  lines.push('- `npm run test:opm:qualification`: 41 runtime-conformance and generator-boundary tests passing.');
+  lines.push('- `npm run test:opm:codegen`: 14 host-compilation, golden-execution, and mutation-resistance tests passing (requires the pinned C compiler).');
+  lines.push('- `npm run test:e2e:sysml`: Playwright real-browser end-to-end qualification across BDD, IBD, Requirements, RTM, and deletion lifecycle passing (22 passed, 1 skipped).');
   lines.push('- Production `npm run build`: cleanly passes bundle generation.');
   lines.push('');
   lines.push('The machine-readable registry is `src/engine/sysml/profile.ts` and `src/engine/sysml/conformanceManifest.ts`. Every supported row maps to canonical types, fail-closed validation, user interface components, and automated test evidence.');

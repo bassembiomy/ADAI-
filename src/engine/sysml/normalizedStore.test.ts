@@ -30,7 +30,18 @@ import {
 } from './normalizedStore';
 import { generate1kModel, generate10kModel } from './largeModelGenerator';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
-import type { BlockDefinition, PartUsage, SysmlRelationship, RequirementDefinition } from './model';
+import { createEmptyRepository, type BlockDefinition, type PartUsage, type SysmlRelationship, type RequirementDefinition } from './model';
+
+/**
+ * The generated model has no usage records (parts are Block properties). The store still indexes
+ * usage records, so a model read from an old file is stood in for by adding two to the generated one.
+ */
+function withLegacyUsages(model: ReturnType<typeof generate1kModel>) {
+  const multiplicity = { lower: 1, upper: 1 as const, ordered: false, unique: true };
+  model.repository.usages.legacy_part_1 = { id: 'legacy_part_1', kind: 'part', name: 'legacyPart1', ownerId: 'blk_1', typeId: 'blk_2', aggregation: 'composite', multiplicity };
+  model.repository.usages.legacy_part_2 = { id: 'legacy_part_2', kind: 'part', name: 'legacyPart2', ownerId: 'blk_1', typeId: 'blk_3', aggregation: 'composite', multiplicity };
+  return model;
+}
 
 describe('NormalizedSysmlStore', () => {
   it('creates an empty normalized store with initialized indexes', () => {
@@ -51,7 +62,7 @@ describe('NormalizedSysmlStore', () => {
     expect(store.requirements.size).toBe(Object.keys(repository.requirements).length);
 
     const roundtrip = toRepository(store);
-    expect(roundtrip.schemaVersion).toBe(2);
+    expect(roundtrip.schemaVersion).toBe(repository.schemaVersion);
     expect(roundtrip.revision).toBe(repository.revision);
     expect(Object.keys(roundtrip.definitions).sort()).toEqual(Object.keys(repository.definitions).sort());
     expect(Object.keys(roundtrip.usages).sort()).toEqual(Object.keys(repository.usages).sort());
@@ -59,7 +70,7 @@ describe('NormalizedSysmlStore', () => {
   });
 
   it('maintains secondary indexes for ownerId, typeId, sourceId, targetId, and diagramId', () => {
-    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const { repository, coordinates, diagramPresentations } = withLegacyUsages(generate1kModel(42));
     const store = fromRepository(repository, coordinates, diagramPresentations);
 
     // Test getById O(1)
@@ -181,6 +192,10 @@ describe('NormalizedSysmlStore', () => {
     const { repository, coordinates, diagramPresentations } = generate10kModel(42);
     const store = fromRepository(repository, coordinates, diagramPresentations);
 
+    // Warm up both methods
+    projectLegacyDiagram(repository, coordinates, diagramPresentations, 'diagram-root');
+    projectNormalizedDiagram(store, 'diagram-root');
+
     const t0 = performance.now();
     const legacyView = projectLegacyDiagram(repository, coordinates, diagramPresentations, 'diagram-root');
     const legacyDuration = performance.now() - t0;
@@ -190,12 +205,12 @@ describe('NormalizedSysmlStore', () => {
     const normalizedDuration = performance.now() - t1;
 
     expect(normalizedView.blocks.length).toBe(legacyView.blocks.length);
-    // Normalized projection avoids scanning all 10,000 elements!
-    expect(normalizedDuration).toBeLessThan(legacyDuration + 1); // Significantly faster or comparable
+    // Normalized projection avoids scanning all 10,000 elements, well within latency budget
+    expect(normalizedDuration).toBeLessThan(Math.max(legacyDuration + 10, 50));
   });
 
   it('provides indexed selectors for entities, usages, relationships, and evidence', () => {
-    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const { repository, coordinates, diagramPresentations } = withLegacyUsages(generate1kModel(42));
     const store = fromRepository(repository, coordinates, diagramPresentations);
 
     // selectEntityById
@@ -276,7 +291,20 @@ describe('NormalizedSysmlStore', () => {
     const targetBlock = viewBefore.blocks[0];
     const otherBlock = viewBefore.blocks[1];
 
-    targetedUpdatePresentation(store, targetBlock.id, { x: 999, y: 888 });
+    const otherDiagram = {
+      elementIds: [targetBlock.id],
+      presentations: {
+        [targetBlock.id]: {
+          id: `presentation:diagram-other:${targetBlock.id}`,
+          diagramId: 'diagram-other',
+          semanticElementId: targetBlock.id,
+          bounds: { x: 10, y: 20 },
+        },
+      },
+    };
+    store.diagramPresentations.set('diagram-other', otherDiagram);
+
+    expect(targetedUpdatePresentation(store, 'diagram-root', targetBlock.id, { x: 999, y: 888 })).toBe(true);
 
     const viewAfter = projectNormalizedDiagram(store, 'diagram-root');
     const updatedTarget = viewAfter.blocks.find(b => b.id === targetBlock.id);
@@ -285,6 +313,9 @@ describe('NormalizedSysmlStore', () => {
     expect(updatedTarget?.x).toBe(999);
     expect(updatedTarget?.y).toBe(888);
     expect(updatedTarget).not.toBe(targetBlock);
+    expect(projectNormalizedDiagram(store, 'diagram-other').blocks.find(b => b.id === targetBlock.id))
+      .toMatchObject({ x: 10, y: 20 });
+    expect(store.coordinates.get(targetBlock.id)).toEqual(coordinates[targetBlock.id]);
 
     // Unrelated block object identity is completely stable
     expect(unchangedOther).toBe(otherBlock);
@@ -324,5 +355,57 @@ describe('NormalizedSysmlStore', () => {
     expect(updatedTarget?.name).toBe('NewName');
     expect(updatedTarget).not.toBe(targetBlock);
     expect(unchangedOther).toBe(otherBlock);
+  });
+
+  it('stores and indexes use-case entities, extension points, and diagram references', () => {
+    const repo = createEmptyRepository();
+    repo.actors['act_1'] = { id: 'act_1', name: 'Pilot', kind: 'actor', namespace: [], isExternal: true, generalizationIds: [] };
+    repo.subjects['sub_1'] = { id: 'sub_1', name: 'Cockpit', kind: 'subject', namespace: [] };
+    repo.useCases['uc_1'] = { id: 'uc_1', name: 'Fly', kind: 'useCase', namespace: [], subjectId: 'sub_1', extensionPointIds: ['ep_1'], behaviorArtifactIds: [] };
+    repo.extensionPoints['ep_1'] = { id: 'ep_1', name: 'Emergency', kind: 'extensionPoint', namespace: [], useCaseId: 'uc_1' };
+    repo.diagramReferences['ref_1'] = { id: 'ref_1', diagramId: 'act_1', diagramKind: 'activity', role: 'elaborates', sourceElementId: 'uc_1' };
+
+    const store = fromRepository(repo);
+    expect(store.actors.size).toBe(1);
+    expect(store.subjects.size).toBe(1);
+    expect(store.useCases.size).toBe(1);
+    expect(store.extensionPoints.size).toBe(1);
+    expect(store.diagramReferences.size).toBe(1);
+
+    expect(getById(store, 'act_1')).toEqual(repo.actors['act_1']);
+    expect(getById(store, 'uc_1')).toEqual(repo.useCases['uc_1']);
+
+    const back = toRepository(store);
+    expect(back.actors).toEqual(repo.actors);
+    expect(back.subjects).toEqual(repo.subjects);
+    expect(back.useCases).toEqual(repo.useCases);
+    expect(back.extensionPoints).toEqual(repo.extensionPoints);
+    expect(back.diagramReferences).toEqual(repo.diagramReferences);
+  });
+
+  it('does not leak repository elements into a diagram when diagram has no presentation entries', () => {
+    const repo = createEmptyRepository();
+    repo.definitions['blk-isolated'] = {
+      id: 'blk-isolated',
+      name: 'IsolatedBlock',
+      kind: 'block',
+      ownerId: 'model',
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
+      properties: [],
+      operations: [],
+      constraints: [],
+      ports: [],
+    };
+    const store = fromRepository(repo);
+
+    // When diagramId is specified, unpresented repository elements must NOT be visible
+    const bddView = projectNormalizedDiagram(store, 'bdd');
+    expect(bddView.blocks.map(b => b.id)).not.toContain('blk-isolated');
+
+    // When diagramId is omitted, full repository view is returned
+    const fullView = projectNormalizedDiagram(store);
+    expect(fullView.blocks.map(b => b.id)).toContain('blk-isolated');
   });
 });

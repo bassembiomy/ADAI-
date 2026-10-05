@@ -52,4 +52,19 @@ export class GeminiProvider implements ILLMProvider {
       }
     };
   }
+
+  async healthCheck(signal?: AbortSignal): Promise<any> {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`, { signal });
+      if (!res.ok) {
+        return { isHealthy: false, availableModels: [], error: `HTTP ${res.status}` };
+      }
+      const data = await res.json();
+      const models = Array.isArray(data.models) ? data.models.map((m: any) => m.name) : [];
+      return { isHealthy: true, availableModels: models };
+    } catch (err: any) {
+      return { isHealthy: false, availableModels: [], error: err.message || String(err) };
+    }
+  }
 }
+

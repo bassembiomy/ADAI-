@@ -1,0 +1,1004 @@
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import type {
+  ModelTreeNode,
+  ModelExplorerCommand,
+  ModelExplorerAdapter,
+  ExplorerCapability,
+  ExplorerImpact,
+  ExplorerClipboardPayload,
+  ActiveDiagramContext,
+  ExplorerCommandResult,
+  ExplorerDomain,
+} from '../../features/modelExplorer/modelExplorerTypes';
+import { hashImpact } from '../../features/modelExplorer/modelExplorerTypes';
+import { ModelExplorer } from './ModelExplorer';
+import { MoveImpactDialog } from './MoveImpactDialog';
+import { RelationshipWizard } from './RelationshipWizard';
+import { TypeSelectionPrompt } from '../sysml/TypeSelectionPrompt';
+import type { TypeSelectionPayload } from '../sysml/typeSelectionTypes';
+import {
+  copyOwnershipForest,
+} from '../../features/modelExplorer/modelExplorerClipboard';
+import {
+  createStateMachineExplorerAdapter,
+  type StateMachineExplorerSnapshot,
+} from '../../features/modelExplorer/adapters/stateMachineExplorerAdapter';
+import { createSysmlExplorerAdapter } from '../../features/modelExplorer/adapters/sysmlExplorerAdapter';
+import {
+  createModelExplorerCommandBus,
+  isPreflightClear,
+  hasMaterialImpact,
+} from '../../features/modelExplorer/modelExplorerCommandBus';
+import type { StateData, Layer, TransitionData, JunctionData, StateMachineDiagramData } from '../../types/sm_types';
+import type { BlockData, PartData } from '../../types/sysml_types';
+import { createEmptyRepository, parseMultiplicity, type SysmlRepository } from '../../engine/sysml/model';
+import type { SysmlGatewayState, SysmlEditorCommand, SysmlCommandResult } from '../../services/sysmlCommandGateway';
+import { executeSysmlCommand } from '../../services/sysmlCommandGateway';
+import { fromRepository } from '../../engine/sysml/normalizedStore';
+import { createHistory } from '../../engine/sysml/mutations';
+import { normalizeDiagramPresentations } from '../../engine/sysml/presentationState';
+
+import {
+  computeRangeSelection,
+  computeToggleSelection,
+  loadPersistedExplorerUiState,
+} from '../../features/modelExplorer/modelExplorerMultiSelect';
+import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
+import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
+import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
+import { resolveDiagramSemanticOwner } from '../../features/modelExplorer/diagramTreeContext';
+import { getDiagramKindLabel, getElementKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
+import { resolveActiveSysmlDiagramTarget } from '../../services/sysmlDiagramTarget';
+import { resolveInteractionContext } from '../../features/sysml/interactionContext';
+import { migrateV3ToV4 } from '../../engine/sysml/persistence/migrateV3ToV4';
+import type { SysmlRepositoryV4 } from '../../engine/sysml/domain';
+
+export interface CapabilityActionContext {
+  activeDiagramId?: string;
+  activeDiagramContext?: ActiveDiagramContext;
+  selectedSemanticIds?: string[];
+  hasClipboard?: boolean;
+  parentSemanticId?: string;
+  defaultOwnerId?: string;
+}
+
+export function gateClipboardCapabilities(
+  capabilities: ExplorerCapability[],
+  clipboard: ExplorerClipboardPayload | null,
+  targetDomain: ExplorerDomain,
+): ExplorerCapability[] {
+  return capabilities.map(capability => {
+    if (capability.kind !== 'paste') return capability;
+    const compatible = clipboard?.domain === targetDomain;
+    if (!clipboard) {
+      return { ...capability, enabled: false, reason: 'Copy an element first to enable Paste.' };
+    }
+    if (!compatible) {
+      return {
+        ...capability,
+        enabled: false,
+        reason: `Cannot paste ${clipboard.domain} elements into a ${targetDomain} model.`,
+      };
+    }
+    return capability;
+  });
+}
+
+export type CapabilityActionResult =
+  | { kind: 'command'; command: ModelExplorerCommand }
+  | { kind: 'openRelationshipWizard'; sourceNode: ModelTreeNode; relationshipKind?: string; direction?: 'incoming' | 'outgoing' }
+  | { kind: 'startRename'; nodeId: string }
+  | { kind: 'move'; semanticIds: string[]; targetOwnerId: string }
+  | { kind: 'copy'; semanticIds: string[] }
+  | { kind: 'paste'; targetOwnerId: string }
+  | { kind: 'duplicate'; semanticIds: string[]; targetOwnerId: string }
+  | { kind: 'delete'; semanticIds: string[] }
+  | { kind: 'addToDiagram'; semanticIds: string[]; diagramId: string }
+  | { kind: 'removeFromDiagram'; semanticIds: string[]; diagramId: string }
+  | { kind: 'openSpecification'; semanticId: string }
+  | { kind: 'reveal'; semanticId: string }
+  | { kind: 'unhandled' };
+
+export function explorerAdapterDomain(node: ModelTreeNode): 'stateMachine' | 'sysml' {
+  return node.domain === 'stateMachine' ? 'stateMachine' : 'sysml';
+}
+
+export function resolveSemanticOwnerId(
+  node: ModelTreeNode,
+  context: Pick<CapabilityActionContext, 'parentSemanticId' | 'defaultOwnerId'> = {},
+): string {
+  return node.ownerSemanticId ?? context.parentSemanticId ?? context.defaultOwnerId ??
+    (node.domain === 'stateMachine' ? 'root' : 'model');
+}
+
+const PILLAR_DIAGRAM_KINDS: Record<string, readonly string[]> = {
+  structural: ['bdd'],
+  behavior: ['stateMachine'],
+  parametric: ['parametric'],
+  requirements: ['requirements', 'rtm'],
+};
+
+/** Virtual explorer pillars are viewpoints, never semantic command owners. */
+export function resolveCapabilityOwnerId(node: ModelTreeNode, diagramKind?: string): string {
+  if (node.kind === 'pillar' || node.domain === 'project') {
+    if (node.virtualKind === 'behavior' || diagramKind === 'stateMachine') return 'root';
+    return node.ownerSemanticId ?? 'model';
+  }
+  return node.semanticId;
+}
+
+/**
+ * Resolves where a capability executed from `node` must create its element.
+ * A diagram row is a viewpoint, so creation is redirected to the legal
+ * semantic owner of the diagram and the diagram is only recorded as the
+ * presentation target of whatever gets created.
+ */
+export function resolveCreationContext(
+  node: ModelTreeNode,
+  sysml: SysmlRepository,
+  stateMachine: StateMachineExplorerSnapshot,
+  requestedMetaclass: string = 'Block',
+): { ownerId: string; diagramId?: string } {
+  if (node.domain === 'stateMachine' || node.virtualKind === 'behavior') {
+    if (node.kind !== 'diagram') return { ownerId: resolveCapabilityOwnerId(node) };
+    return {
+      ownerId: resolveDiagramSemanticOwner(node, sysml, stateMachine),
+      diagramId: node.semanticId,
+    };
+  }
+
+  const canonicalRepo: SysmlRepositoryV4 = (sysml as any)?.elements
+    ? (sysml as unknown as SysmlRepositoryV4)
+    : migrateV3ToV4(sysml);
+
+  const resolved = resolveInteractionContext({
+    repository: canonicalRepo,
+    source: 'tree',
+    treeElementId: node.semanticId,
+    requestedMetaclass: requestedMetaclass as any,
+  });
+
+  if (resolved.status === 'resolved') {
+    return {
+      ownerId: resolved.ownerId,
+      diagramId: resolved.diagramId,
+    };
+  }
+
+  if (node.kind === 'diagram') {
+    return {
+      ownerId: resolveDiagramSemanticOwner(node, sysml, stateMachine),
+      diagramId: node.semanticId,
+    };
+  }
+  return { ownerId: resolveCapabilityOwnerId(node) };
+}
+
+export function capabilitiesForExplorerNode(
+  node: ModelTreeNode,
+  capabilities: ExplorerCapability[],
+): ExplorerCapability[] {
+  if (node.kind === 'connectorEnd') {
+    return [
+      ...capabilities,
+      {
+        id: `reveal:${node.semanticId}`,
+        kind: 'reveal',
+        label: 'Reveal in Tree',
+        enabled: true,
+      },
+    ];
+  }
+  if (node.kind !== 'pillar' || !node.virtualKind) return capabilities;
+  const allowedDiagramKinds = PILLAR_DIAGRAM_KINDS[node.virtualKind] ?? [];
+  const allowed = new Set(allowedDiagramKinds);
+  const result = capabilities.filter(capability =>
+    capability.kind !== 'createDiagram' || Boolean(capability.elementKind && allowed.has(capability.elementKind))
+  );
+  for (const diagramKind of allowedDiagramKinds) {
+    if (result.some(capability => capability.kind === 'createDiagram' && capability.elementKind === diagramKind)) continue;
+    result.push({
+      id: `createDiagram:${diagramKind}`,
+      kind: 'createDiagram',
+      label: getDiagramKindLabel(diagramKind),
+      enabled: true,
+      elementKind: diagramKind,
+    });
+  }
+  return result;
+}
+
+export function filterNonCreatingCapabilities(capabilities: ExplorerCapability[]): ExplorerCapability[] {
+  return capabilities;
+}
+
+export function capabilityToAction(
+  capability: ExplorerCapability,
+  node: ModelTreeNode,
+  context: CapabilityActionContext
+): CapabilityActionResult {
+  const selectedIds = context.selectedSemanticIds && context.selectedSemanticIds.length > 0
+    ? context.selectedSemanticIds
+    : [node.semanticId];
+
+  switch (capability.kind) {
+    case 'createElement':
+    case 'createOwnedFeature':
+      return {
+        kind: 'command',
+        command: {
+          type: 'createElement',
+          ownerId: node.kind === 'diagram' ? (node.ownerSemanticId ?? 'model') : node.semanticId,
+          elementKind: capability.elementKind || 'block',
+        },
+      };
+    case 'createDiagram':
+      const diagramKind = capability.elementKind || 'bdd';
+      const ownerId = node.kind === 'diagram' ? (node.ownerSemanticId ?? 'model') : resolveCapabilityOwnerId(node, diagramKind);
+      return {
+        kind: 'command',
+        command: {
+          type: 'createDiagram',
+          ownerId,
+          diagramKind,
+          ...(diagramKind === 'ibd' ? { contextElementId: ownerId } : {}),
+        },
+      };
+    case 'createRelationship':
+      return {
+        kind: 'openRelationshipWizard',
+        sourceNode: node,
+        relationshipKind: capability.relationshipKind,
+        direction: capability.direction,
+      };
+    case 'rename':
+      return {
+        kind: 'startRename',
+        nodeId: node.nodeId,
+      };
+    case 'move':
+      return {
+        kind: 'move',
+        semanticIds: selectedIds,
+        targetOwnerId: resolveSemanticOwnerId(node, context),
+      };
+    case 'copy':
+      return {
+        kind: 'copy',
+        semanticIds: selectedIds,
+      };
+    case 'paste':
+      return {
+        kind: 'paste',
+        targetOwnerId: node.semanticId,
+      };
+    case 'duplicate':
+      return {
+        kind: 'duplicate',
+        semanticIds: selectedIds,
+        targetOwnerId: resolveSemanticOwnerId(node, context),
+      };
+    case 'delete':
+      return {
+        kind: 'delete',
+        semanticIds: selectedIds,
+      };
+    case 'addToDiagram':
+      return {
+        kind: 'addToDiagram',
+        semanticIds: selectedIds,
+        diagramId: context.activeDiagramId || '',
+      };
+    case 'showPackageContents':
+      return { kind: 'command', command: {
+        type: 'showPackageContents', packageId: node.semanticId, diagramId: context.activeDiagramId || '',
+        mode: capability.elementKind === 'recursive' || capability.elementKind === 'packages' ? capability.elementKind : 'direct',
+      } };
+    case 'removeFromDiagram':
+      return {
+        kind: 'removeFromDiagram',
+        semanticIds: selectedIds,
+        diagramId: context.activeDiagramId || '',
+      };
+    case 'openSpecification':
+      return {
+        kind: 'openSpecification',
+        semanticId: node.semanticId,
+      };
+    case 'reveal':
+      return {
+        kind: 'reveal',
+        semanticId: node.semanticId,
+      };
+    default:
+      return { kind: 'unhandled' };
+  }
+}
+
+export interface AppModelExplorerProps {
+  diagramMode: string;
+  states: StateData[];
+  layers: Layer[];
+  transitions: TransitionData[];
+  junctions: JunctionData[];
+  diagrams?: StateMachineDiagramData[];
+  activeStates?: Record<string, string>;
+  currentLayerId?: string;
+  blocks: BlockData[];
+  parts: PartData[];
+  externalModels?: ExternalModelDescriptor[];
+  canonicalSysmlRepository?: SysmlRepository;
+  sysmlStore?: import('../../engine/sysml/normalizedStore').NormalizedSysmlStore;
+  diagramPresentations?: Record<string, import('../../engine/sysml/presentationState').DiagramPresentationInput>;
+  selectedIds: string[];
+  onSelect: (id: string, multiSelect?: boolean) => void;
+  onSelectMultiple?: (ids: string[]) => void;
+  onDoubleClick: (id: string, kind?: string) => void;
+  onCommitStateMachineSnapshot?: (snapshot: StateMachineExplorerSnapshot, description: string) => void;
+  onUpdateStates?: (states: StateData[]) => void;
+  onUpdateLayers?: (layers: Layer[]) => void;
+  onUpdateTransitions?: (transitions: TransitionData[]) => void;
+  onUpdateJunctions?: (junctions: JunctionData[]) => void;
+  onExecuteSysmlCommand?: (command: SysmlEditorCommand) => SysmlCommandResult;
+  activeDiagramId?: string;
+  activeDiagramContext?: ActiveDiagramContext;
+  onAddToDiagram?: (elementIds: string[], diagramId: string) => void;
+  onRevealInContainment?: (semanticId: string) => void;
+  onOpenSpecification?: (semanticId: string) => void;
+  onCommandResult?: (result: ExplorerCommandResult, command?: ModelExplorerCommand) => void;
+  projectId?: string;
+  className?: string;
+  height?: number;
+}
+
+export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
+  diagramMode,
+  states,
+  layers,
+  transitions,
+  junctions,
+  diagrams,
+  currentLayerId = 'root',
+  blocks,
+  parts,
+  externalModels = [],
+  canonicalSysmlRepository,
+  sysmlStore,
+  diagramPresentations = {},
+  selectedIds,
+  onSelect,
+  onSelectMultiple,
+  onDoubleClick,
+  onCommitStateMachineSnapshot,
+  onUpdateStates,
+  onUpdateLayers,
+  onUpdateTransitions,
+  onUpdateJunctions,
+  onExecuteSysmlCommand,
+  activeDiagramId,
+  activeDiagramContext,
+  onAddToDiagram,
+  onRevealInContainment,
+  onOpenSpecification,
+  onCommandResult,
+  projectId,
+  className = '',
+  height,
+}) => {
+  const isStateMachine = diagramMode === 'statemachine';
+  const [lastSelectedSemanticId, setLastSelectedSemanticId] = useState<string | null>(null);
+
+  // Impact dialog state
+  const [pendingImpact, setPendingImpact] = useState<{
+    impact: ExplorerImpact;
+    impactHash: string;
+    command: ModelExplorerCommand;
+  } | null>(null);
+  const [pendingType, setPendingType] = useState<{
+    command: Extract<ModelExplorerCommand, { type: 'createElement' }>;
+    selection: TypeSelectionPayload;
+    diagramId?: string;
+  } | null>(null);
+
+  // Relationship wizard state
+  const [relationshipWizardState, setRelationshipWizardState] = useState<{
+    isOpen: boolean;
+    sourceNode: ModelTreeNode;
+    relationshipKind?: string;
+    direction?: 'incoming' | 'outgoing';
+  } | null>(null);
+
+  // Clipboard changes must cause the context menu to re-evaluate Paste availability.
+  const [clipboardPayload, setClipboardPayload] = useState<ExplorerClipboardPayload | null>(null);
+
+  const acceptResult = useCallback((result: ExplorerCommandResult, command?: ModelExplorerCommand) => {
+    if (result.clipboard) setClipboardPayload(result.clipboard);
+    if (result.selectedIds?.length) onSelectMultiple?.(result.selectedIds);
+    if (!result.committed && command && result.impact && hasMaterialImpact(result.impact)) {
+      setPendingImpact({
+        impact: result.impact,
+        impactHash: result.impactHash || hashImpact(result.impact),
+        command,
+      });
+    }
+    onCommandResult?.(result, command);
+    return result;
+  }, [onCommandResult, onSelectMultiple]);
+
+
+  // State Machine adapter
+  const smAdapter = useMemo(() => {
+    return createStateMachineExplorerAdapter({
+      getSnapshot: (): StateMachineExplorerSnapshot => ({
+        states,
+        layers,
+        transitions,
+        junctions,
+        diagrams: diagrams && diagrams.length > 0 ? diagrams : layers.map(l => ({
+          id: l.id,
+          name: l.name,
+          layerId: l.id,
+          ownerId: l.parentStateId || 'root',
+          contextRegionId: l.id,
+        })),
+      }),
+      onCommit: (nextSnapshot, description) => {
+        if (onCommitStateMachineSnapshot) {
+          onCommitStateMachineSnapshot(nextSnapshot, description);
+        } else {
+          onUpdateStates?.(nextSnapshot.states);
+          onUpdateLayers?.(nextSnapshot.layers);
+          onUpdateTransitions?.(nextSnapshot.transitions);
+          onUpdateJunctions?.(nextSnapshot.junctions);
+        }
+      },
+    });
+  }, [
+    states,
+    layers,
+    transitions,
+    junctions,
+    diagrams,
+    onCommitStateMachineSnapshot,
+    onUpdateStates,
+    onUpdateLayers,
+    onUpdateTransitions,
+    onUpdateJunctions,
+  ]);
+
+  // One repository instance backs the adapter, the tree projection, and
+  // diagram-context creation resolution so all three agree on element identity.
+  const sysmlRepository = useMemo<SysmlRepository>(() => {
+    if (canonicalSysmlRepository) return canonicalSysmlRepository;
+    const repository = createEmptyRepository();
+    for (const block of blocks) {
+      repository.definitions[block.id] = {
+        id: block.id, name: block.name, namespace: ['model'], ownerId: 'model', kind: 'block',
+        isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+      };
+    }
+    // Format 5: a part is a part property of its Block, not a usage record.
+    for (const part of parts) {
+      const owner = repository.definitions[part.blockId || 'model'];
+      if (owner?.kind !== 'block') continue;
+      owner.properties.push({
+        id: part.id, name: part.name, kind: 'part', typeId: part.typeId || '',
+        multiplicity: parseMultiplicity(part.multiplicity || '1'),
+      });
+    }
+    return repository;
+  }, [canonicalSysmlRepository, blocks, parts]);
+
+  // SysML adapter
+  const sysmlAdapter = useMemo(() => {
+    const repo = sysmlRepository;
+
+    const state: SysmlGatewayState = {
+      repository: repo,
+      history: createHistory(repo),
+      store: sysmlStore ?? fromRepository(repo, {}, diagramPresentations),
+      coordinates: {},
+      diagramPresentations: normalizeDiagramPresentations(diagramPresentations ?? {}),
+    };
+    // Mutable local snapshot: refreshed after each committed command so the
+    // pending type-selection resume sees the just-created type. Reassignment
+    // requires `let` (const would throw on CreateNewType resume).
+    const refreshState = (result: SysmlCommandResult) => {
+      state.repository = result.repository;
+      state.history = result.history;
+      state.store = result.store;
+      state.patchHistory = result.patchHistory;
+      state.coordinates = result.coordinates;
+      state.diagramPresentations = result.diagramPresentations;
+      state.presentationHistory = result.presentationHistory;
+      state.actionStack = result.actionStack;
+      state.redoStack = result.redoStack;
+    };
+
+    return createSysmlExplorerAdapter({
+      getState: () => state,
+      executeCommand: (cmd) => {
+        const result = onExecuteSysmlCommand ? onExecuteSysmlCommand(cmd) : executeSysmlCommand(state, cmd);
+        if (result.committed) {
+          refreshState(result);
+        }
+        return result;
+      },
+    });
+  }, [sysmlRepository, sysmlStore, diagramPresentations, onExecuteSysmlCommand]);
+
+  const activeAdapter = isStateMachine ? smAdapter : sysmlAdapter;
+
+  const stateMachineSnapshot = useMemo<StateMachineExplorerSnapshot>(
+    () => ({ states, layers, transitions, junctions, diagrams: diagrams ?? [], revision: smAdapter.getRevision() }),
+    [states, layers, transitions, junctions, diagrams, smAdapter],
+  );
+
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => {
+    const persisted = projectId ? loadPersistedExplorerUiState(projectId) : null;
+    if (persisted?.expandedNodeIds && persisted.expandedNodeIds.length > 0) {
+      return new Set(persisted.expandedNodeIds);
+    }
+    return new Set([
+      'project:model',
+      'project:pillar:structural',
+      'project:pillar:behavior',
+      'project:pillar:parametric',
+      'project:pillar:requirements',
+    ]);
+  });
+
+  // Project tree
+  const projection = useMemo(() => {
+    return buildUnifiedModelProjection({
+      sysml: sysmlRepository,
+      stateMachine: stateMachineSnapshot,
+      externalModels,
+      revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision()),
+      diagramPresentations,
+      expandedNodeIds,
+    });
+  }, [diagramPresentations, expandedNodeIds, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository]);
+
+  const selectedNodeIds = useMemo(() => {
+    const set = new Set<string>();
+    const selSet = new Set(selectedIds);
+    for (const id of selectedIds) {
+      if (projection.nodes[id]) set.add(id);
+      const sysmlId = `sysml:element:${id}`;
+      if (projection.nodes[sysmlId]) set.add(sysmlId);
+      const smId = `sm:state:${id}`;
+      if (projection.nodes[smId]) set.add(smId);
+    }
+    if (set.size < selectedIds.length) {
+      for (const nodeId in projection.nodes) {
+        const node = projection.nodes[nodeId];
+        if (selSet.has(node.semanticId) || selSet.has(nodeId)) {
+          set.add(nodeId);
+        }
+      }
+    }
+    return set;
+  }, [projection.nodes, selectedIds]);
+
+  const handleSelectNode = useCallback(
+    (node: ModelTreeNode, multiSelect?: boolean, rangeSelect?: boolean) => {
+      if (rangeSelect && lastSelectedSemanticId && onSelectMultiple) {
+        const visibleRows = projectModelTree({
+          nodesById: projection.nodes,
+          rootNodeIds: projection.roots,
+          expandedNodeIds: new Set(Object.keys(projection.nodes)),
+        });
+        const range = computeRangeSelection(visibleRows, lastSelectedSemanticId, node.semanticId);
+        onSelectMultiple(range);
+      } else if (multiSelect && onSelectMultiple) {
+        const next = computeToggleSelection(selectedIds, node.semanticId);
+        onSelectMultiple(next);
+        setLastSelectedSemanticId(node.semanticId);
+      } else {
+        setLastSelectedSemanticId(node.semanticId);
+        onSelect(node.semanticId, multiSelect);
+      }
+    },
+    [lastSelectedSemanticId, onSelectMultiple, onSelect, projection.nodes, projection.roots, selectedIds]
+  );
+
+  const handleActivateNode = useCallback(
+    (node: ModelTreeNode) => {
+      if (node.kind === 'connectorEnd') {
+        const targetId = node.targetSemanticId || node.label;
+        if (targetId) {
+          onSelect(targetId);
+          onDoubleClick(targetId, 'port');
+          return;
+        }
+      }
+      onDoubleClick(node.semanticId, node.kind);
+    },
+    [onDoubleClick, onSelect]
+  );
+
+  /**
+   * Records a freshly created element on the diagram the command was issued
+   * from. State-machine diagrams derive membership from the region a state is
+   * created in, so only SysML diagrams need an explicit presentation command.
+   */
+  const presentCreatedElement = useCallback(
+    (adapter: ModelExplorerAdapter, diagramId: string | undefined, creation: ExplorerCommandResult) => {
+      if (!diagramId || adapter.domain !== 'sysml') return;
+      if (!creation.committed || !creation.selectedIds?.length) return;
+      const presentationCommand: ModelExplorerCommand = {
+        type: 'addToDiagram',
+        diagramId,
+        elementIds: creation.selectedIds,
+      };
+      acceptResult(createModelExplorerCommandBus(adapter).dispatch(presentationCommand), presentationCommand);
+    },
+    [acceptResult],
+  );
+
+  const handleExecuteCapability = useCallback(
+    (capability: ExplorerCapability, node: ModelTreeNode) => {
+      // A diagram row offers the capabilities of the element that legally owns
+      // what it presents; the diagram itself is never a semantic owner.
+      const creationContext = resolveCreationContext(node, sysmlRepository, stateMachineSnapshot);
+      const capabilityOwnerId = creationContext.ownerId;
+      // Behavior-pillar nodes carry domain 'project', so domain routing alone
+      // would send State Machine diagrams to the SysML store. Route by diagram
+      // kind so stateMachine creation always reaches the SM adapter/store.
+      const isStateMachineDiagramTarget =
+        capability.kind === 'createDiagram' &&
+        (capability.elementKind === 'stateMachine' || node.virtualKind === 'behavior');
+      const nodeAdapter = explorerAdapterDomain(node) === 'stateMachine' || isStateMachineDiagramTarget ? smAdapter : sysmlAdapter;
+      if (capability.enabled === false) return;
+      if (capability.kind === 'rename') return;
+
+      if (capability.kind === 'createElement' || capability.kind === 'createOwnedFeature') {
+        const command: Extract<ModelExplorerCommand, { type: 'createElement' }> = {
+          type: 'createElement',
+          ownerId: capabilityOwnerId,
+          elementKind: capability.elementKind || 'Block',
+        };
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch(command);
+        if (res.typeSelection && explorerAdapterDomain(node) === 'sysml') {
+          setPendingType({ command, selection: res.typeSelection, diagramId: creationContext.diagramId });
+        } else {
+          acceptResult(res, command);
+          presentCreatedElement(nodeAdapter, creationContext.diagramId, res);
+        }
+        return;
+      }
+
+      if (capability.kind === 'createDiagram') {
+        const diagramKind = capability.elementKind || 'bdd';
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
+          type: 'createDiagram',
+          ownerId: capabilityOwnerId,
+          diagramKind,
+          ...(diagramKind === 'ibd' ? { contextElementId: capabilityOwnerId } : {}),
+        });
+        acceptResult(res, {
+          type: 'createDiagram',
+          ownerId: capabilityOwnerId,
+          diagramKind,
+          ...(diagramKind === 'ibd' ? { contextElementId: capabilityOwnerId } : {}),
+        });
+        return;
+      }
+
+      if (capability.kind === 'openSpecification') {
+        if (onOpenSpecification) {
+          onOpenSpecification(node.semanticId);
+        } else {
+          onSelect(node.semanticId);
+        }
+        return;
+      }
+
+      if (capability.kind === 'reveal') {
+        if (node.kind === 'connectorEnd') {
+          const targetId = node.targetSemanticId || node.label;
+          if (targetId) {
+            onSelect(targetId);
+            if (onRevealInContainment) onRevealInContainment(targetId);
+            return;
+          }
+        }
+        if (node.kind === 'diagram') {
+          onDoubleClick(node.semanticId, node.kind);
+        } else if (onRevealInContainment) {
+          onRevealInContainment(node.semanticId);
+        } else {
+          onSelect(node.semanticId);
+        }
+        return;
+      }
+
+      if (capability.kind === 'createRelationship') {
+        setRelationshipWizardState({
+          isOpen: true,
+          sourceNode: node,
+          relationshipKind: capability.relationshipKind,
+          direction: capability.direction,
+        });
+        return;
+      }
+
+      if (capability.kind === 'copy') {
+        const selectedSemanticIds = selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId];
+        const res = createModelExplorerCommandBus(nodeAdapter).dispatch({
+          type: 'copy',
+          elementIds: selectedSemanticIds,
+        });
+        acceptResult(res, { type: 'copy', elementIds: selectedSemanticIds });
+        return;
+      }
+
+      let cmd: ModelExplorerCommand | null = null;
+      if (capability.kind === 'delete') {
+        cmd = {
+          type: 'delete',
+          elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
+        };
+      } else if (capability.kind === 'duplicate') {
+        cmd = {
+          type: 'duplicate',
+          elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
+          targetOwnerId: resolveSemanticOwnerId(
+            node,
+            {
+              parentSemanticId: node.parentNodeId ? projection.nodes[node.parentNodeId]?.semanticId : undefined,
+              defaultOwnerId: isStateMachine ? 'root' : 'model',
+            },
+          ),
+        };
+      } else if (capability.kind === 'paste') {
+        if (!clipboardPayload) {
+          acceptResult({
+            committed: false,
+            revision: nodeAdapter.getRevision(),
+            diagnostics: [{ code: 'CLIPBOARD_EMPTY', severity: 'error', message: 'Clipboard is empty.' }],
+          });
+          return;
+        }
+        cmd = {
+          type: 'paste',
+          payload: clipboardPayload,
+          targetOwnerId: capabilityOwnerId,
+          mode: 'copy',
+        };
+      } else if (capability.kind === 'addToDiagram') {
+        const targetDiagramId = resolveActiveSysmlDiagramTarget({
+          diagramMode,
+          activeDiagramId,
+          currentLayerId,
+        });
+        if (onAddToDiagram) {
+          onAddToDiagram(
+            selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
+            targetDiagramId
+          );
+          return;
+        }
+        cmd = {
+          type: 'addToDiagram',
+          elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
+          diagramId: targetDiagramId,
+        };
+      } else if (capability.kind === 'showPackageContents') {
+        cmd = {
+          type: 'showPackageContents', packageId: node.semanticId,
+          diagramId: activeDiagramId || '',
+          mode: capability.elementKind === 'recursive' || capability.elementKind === 'packages' ? capability.elementKind : 'direct',
+        };
+      } else if (capability.kind === 'removeFromDiagram') {
+        const targetDiagramId = resolveActiveSysmlDiagramTarget({
+          diagramMode,
+          activeDiagramId,
+          currentLayerId,
+        });
+        cmd = {
+          type: 'removeFromDiagram',
+          elementIds: selectedIds.includes(node.semanticId) && selectedIds.length > 0 ? selectedIds : [node.semanticId],
+          diagramId: targetDiagramId,
+        };
+      }
+
+      if (!cmd) {
+        acceptResult({
+          committed: false,
+          revision: nodeAdapter.getRevision(),
+          diagnostics: [{ code: 'UNSUPPORTED_COMMAND', severity: 'error', message: `Unsupported capability: ${capability.kind}` }],
+        });
+        return;
+      }
+
+      const res = createModelExplorerCommandBus(nodeAdapter).dispatch(cmd);
+      acceptResult(res, cmd);
+    },
+    [
+      activeDiagramId,
+      canonicalSysmlRepository,
+      currentLayerId,
+      diagramMode,
+      isStateMachine,
+      junctions,
+      layers,
+      onAddToDiagram,
+      onDoubleClick,
+      onOpenSpecification,
+      onRevealInContainment,
+      onSelect,
+      selectedIds,
+      smAdapter,
+      states,
+      sysmlAdapter,
+      sysmlRepository,
+      stateMachineSnapshot,
+      presentCreatedElement,
+      transitions,
+      clipboardPayload,
+      acceptResult,
+    ]
+  );
+
+  const handleSelectType = useCallback((typeId: string) => {
+    if (!pendingType || !pendingType.selection.candidates.some(candidate => candidate.id === typeId)) return;
+    const command = { ...pendingType.command, typeId };
+    const diagramId = pendingType.diagramId;
+    setPendingType(null);
+    const result = createModelExplorerCommandBus(sysmlAdapter).dispatch(command);
+    acceptResult(result, command);
+    presentCreatedElement(sysmlAdapter, diagramId, result);
+  }, [pendingType, sysmlAdapter, acceptResult, presentCreatedElement]);
+
+  const handleCreateNewType = useCallback(() => {
+    if (!pendingType) return;
+    const diagramId = pendingType.diagramId;
+    const metaclass = pendingType.selection.action.payload?.suggestedMetaclass;
+    const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
+    const ownerId = canonicalSysmlRepository?.definitions[pendingType.command.ownerId]?.ownerId || 'model';
+    const command: ModelExplorerCommand = { type: 'createElement', ownerId, elementKind };
+    const result = createModelExplorerCommandBus(sysmlAdapter).dispatch(command);
+    acceptResult(result, command);
+    if (result.committed && result.selectedIds?.[0]) {
+      const featureCommand = { ...pendingType.command, typeId: result.selectedIds[0] };
+      setPendingType(null);
+      const featureResult = createModelExplorerCommandBus(sysmlAdapter).dispatch(featureCommand);
+      acceptResult(featureResult, featureCommand);
+      presentCreatedElement(sysmlAdapter, diagramId, featureResult);
+    } else {
+      setPendingType(null);
+    }
+  }, [pendingType, canonicalSysmlRepository, sysmlAdapter, acceptResult, presentCreatedElement]);
+
+  const handleMoveNode = useCallback(
+    (draggedNode: ModelTreeNode, targetNode: ModelTreeNode) => {
+      const cmd: ModelExplorerCommand = {
+        type: 'move',
+        elementIds: [draggedNode.semanticId],
+        targetOwnerId: targetNode.semanticId,
+      };
+
+      const res = createModelExplorerCommandBus(activeAdapter).dispatch(cmd);
+      acceptResult(res, cmd);
+    },
+    [activeAdapter, acceptResult]
+  );
+
+  const handleConfirmImpact = useCallback(
+    (confirmedImpactHash: string) => {
+      if (!pendingImpact) return;
+      const bus = createModelExplorerCommandBus(activeAdapter);
+      const res = bus.confirm(pendingImpact.command, confirmedImpactHash);
+      setPendingImpact(null);
+      acceptResult(res, pendingImpact.command);
+    },
+    [activeAdapter, pendingImpact, acceptResult]
+  );
+
+  return (
+    <div className={`app-model-explorer-wrapper flex flex-col h-full w-full ${className}`}>
+      <ModelExplorer
+        nodesById={projection.nodes}
+        rootNodeIds={projection.roots}
+        selectedNodeIds={selectedNodeIds}
+        expandedNodeIds={expandedNodeIds}
+        onExpandedNodeIdsChange={setExpandedNodeIds}
+        activeDiagramContext={activeDiagramContext}
+        onSelectNode={handleSelectNode}
+        onActivateNode={handleActivateNode}
+        getCapabilities={(node) => {
+          const domain = explorerAdapterDomain(node);
+          return gateClipboardCapabilities(
+            filterNonCreatingCapabilities(
+              capabilitiesForExplorerNode(
+                node,
+                (domain === 'stateMachine' ? smAdapter : sysmlAdapter)
+                  .capabilities([resolveCreationContext(node, sysmlRepository, stateMachineSnapshot).ownerId], activeDiagramId, { includeAllTypes: true }),
+              )
+            ),
+            clipboardPayload,
+            domain,
+          );
+        }}
+        onExecuteCapability={handleExecuteCapability}
+        onMoveNode={handleMoveNode}
+        onRenameCommit={(nodeId, newName) => {
+          const node = projection.nodes[nodeId];
+          if (!node) return;
+          const bus = createModelExplorerCommandBus(explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter);
+          const res = bus.dispatch({
+            type: 'rename',
+            elementId: node.semanticId,
+            name: newName,
+          });
+          acceptResult(res, {
+            type: 'rename',
+            elementId: node.semanticId,
+            name: newName,
+          });
+        }}
+        height={height}
+        projectId={projectId}
+      />
+
+      {pendingImpact && (
+        <MoveImpactDialog
+          isOpen={true}
+          impact={pendingImpact.impact}
+          impactHash={pendingImpact.impactHash}
+          onConfirm={handleConfirmImpact}
+          onCancel={() => setPendingImpact(null)}
+        />
+      )}
+
+      {pendingType && (
+        <TypeSelectionPrompt
+          isOpen
+          featureKind={getElementKindLabel(pendingType.command.elementKind)}
+          candidates={pendingType.selection.candidates}
+          error={pendingType.selection.candidates.length === 0 ? 'TYPE_NOT_FOUND: No compatible existing type.' : undefined}
+          onSelectType={handleSelectType}
+          onCreateNewType={handleCreateNewType}
+          onCancel={() => setPendingType(null)}
+        />
+      )}
+
+      {relationshipWizardState && relationshipWizardState.isOpen && (
+        <RelationshipWizard
+          isOpen={true}
+          sourceNode={relationshipWizardState.sourceNode}
+          targetCandidates={activeAdapter.relationshipTargets(
+            relationshipWizardState.sourceNode.semanticId,
+            relationshipWizardState.relationshipKind || (isStateMachine ? 'transition' : 'association'),
+            relationshipWizardState.direction || 'outgoing'
+          )}
+          allowedRelationshipKinds={
+            relationshipWizardState.relationshipKind
+              ? [relationshipWizardState.relationshipKind]
+              : isStateMachine
+              ? ['transition']
+              : ['association', 'composition', 'sharedAggregation', 'generalization', 'dependency', 'satisfy', 'verify', 'refine', 'trace']
+          }
+          onClose={() => setRelationshipWizardState(null)}
+          onCreateRelationship={(kind, targetSemanticId) => {
+            const isIncoming = relationshipWizardState.direction === 'incoming';
+            const sourceId = isIncoming ? targetSemanticId : relationshipWizardState.sourceNode.semanticId;
+            const targetId = isIncoming ? relationshipWizardState.sourceNode.semanticId : targetSemanticId;
+            const cmd: ModelExplorerCommand = {
+              type: 'createRelationship',
+              relationshipKind: kind,
+              sourceId,
+              targetId,
+            };
+            const bus = createModelExplorerCommandBus(activeAdapter);
+            const res = bus.dispatch(cmd);
+            acceptResult(res);
+            setRelationshipWizardState(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};

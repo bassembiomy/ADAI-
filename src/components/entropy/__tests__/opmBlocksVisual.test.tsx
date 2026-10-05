@@ -24,6 +24,7 @@ describe('opm bold blocks', () => {
     expect(html).toContain('«Object»');
     expect(html).toContain('Pump');
     expect(html).toContain('backdrop-blur-md');
+    expect(html).toContain('opm-node');
   });
 
   it('active state renders solid orange fill', () => {

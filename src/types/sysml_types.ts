@@ -4,7 +4,8 @@ export interface PortData {
   id: string;
   name: string;
   type: string; // e.g. 'int', 'float', 'signal'
-  kind?: 'standard' | 'flow' | 'proxy';
+  /** UML Port and SysML v1 legacy/SysML port usages. */
+  kind?: 'standard' | 'flow' | 'proxy' | 'full';
   direction?: 'in' | 'out' | 'inout';
   unit?: string;
   side?: 'top' | 'bottom' | 'left' | 'right';
@@ -17,7 +18,7 @@ export interface ValuePropertyData {
   name: string;
   type: string;
   defaultValue?: string;
-  kind?: 'value' | 'part' | 'reference' | 'flow';
+  kind?: 'value' | 'part' | 'reference' | 'flow' | 'constraint';
   typeId?: string;
   multiplicity?: string;
   unit?: string;
@@ -42,6 +43,9 @@ export interface BlockData {
   constraints: string[];
   classes: string[]; // Nested classes/parts definitions
   ports: PortData[];
+  /** Names of elements allocated to / from this one («allocate», SysML 1.6 Clause 15); compartments draw only when non-empty. */
+  allocatedFrom?: string[];
+  allocatedTo?: string[];
   reqId?: string;
   description?: string;
   status?: string;
@@ -49,6 +53,10 @@ export interface BlockData {
   satisfiedReqIds?: string[];
   risk?: string;
   verificationMethod?: string;
+  /** Viewpoint (SysML 1.6 §7.3.2.2) compartment text: purpose, stakeholders and concerns. */
+  viewpointPurpose?: string;
+  viewpointStakeholders?: string[];
+  viewpointConcerns?: string[];
   source?: string;
   ibdX?: number;
   ibdY?: number;
@@ -73,17 +81,47 @@ export interface RelationshipData {
   id: string;
   sourceId: string;
   targetId: string;
-  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'requirementContainment';
+  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'packageImport' | 'elementImport' | 'packageMerge' | 'requirementContainment' | 'conform' | 'expose';
   label: string;
+  name?: string;
+  sourceRole?: string;
+  targetRole?: string;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
+  sourceNavigable?: boolean;
+  targetNavigable?: boolean;
+  sourceAggregation?: 'none' | 'shared' | 'composite';
+  targetAggregation?: 'none' | 'shared' | 'composite';
+}
+
+/** UML Package notation projected from the semantic repository for a diagram. */
+export interface PackageData {
+  id: string;
+  name: string;
+  ownerId?: string;
+  namespace?: string[];
+  /** Applied Package stereotype keyword, e.g. 'modelLibrary'. */
+  stereotype?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface PartData {
   id: string;
+  /** Stable identity of the owning Block property projected by this IBD usage. */
+  propertyId?: string;
   name: string;
   blockId: string | null;
   typeId?: string | null;
+  /**
+   * Ownership semantics of this typed usage (OMG SysML 1.6 / UML).
+   * Composite usages are lifetime-owned by their whole and cascade on
+   * deletion; shared/reference usages never cascade implicitly and surface
+   * as unresolved impacts instead. Absent means composite (legacy default).
+   */
+  aggregation?: 'composite' | 'shared' | 'reference';
   x: number;
   y: number;
   width: number;

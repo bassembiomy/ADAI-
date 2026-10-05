@@ -1,24 +1,40 @@
 import React, { useState } from 'react';
-import type { ModelBaseline, RequirementDefinition, SysmlRelationship, VerificationEvidence } from '../../engine/sysml/model';
+import type { ModelBaseline, RequirementDefinition, SysmlRelationship, SysmlRepository, VerificationEvidence } from '../../engine/sysml/model';
+import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
+import type { ImpactSeverity } from '../../engine/sysml/mutations';
 
 export interface RequirementGovernancePanelProps {
+  repository?: SysmlRepository;
   requirement: RequirementDefinition;
   masterRequirement?: RequirementDefinition;
   baselines: Record<string, ModelBaseline>;
   suspectLinks?: SysmlRelationship[];
   evidenceHistory?: VerificationEvidence[];
+  deletionSeverity?: ImpactSeverity;
+  unresolvedUsageIds?: string[];
+  invalidatedEvidenceIds?: string[];
+  blockedBaselineIds?: string[];
   onCreateBaseline?: (name: string) => void;
+  onCloneBaseline?: (baselineId: string) => void;
+  onAuthorizeBaseline?: (baselineId: string) => void;
   onClearSuspect?: (relationshipId: string) => void;
   onSyncFromMaster?: () => void;
 }
 
 export function RequirementGovernancePanel({
+  repository,
   requirement,
   masterRequirement,
   baselines,
   suspectLinks = [],
   evidenceHistory = [],
+  deletionSeverity,
+  unresolvedUsageIds = [],
+  invalidatedEvidenceIds = [],
+  blockedBaselineIds = [],
   onCreateBaseline,
+  onCloneBaseline,
+  onAuthorizeBaseline,
   onClearSuspect,
   onSyncFromMaster,
 }: RequirementGovernancePanelProps) {
@@ -27,6 +43,11 @@ export function RequirementGovernancePanel({
 
   const baselineList = Object.values(baselines);
   const currentBaseline = requirement.baselineId ? baselines[requirement.baselineId] : undefined;
+  const referenceRepository = {
+    ...repository,
+    requirements: { ...repository?.requirements, [requirement.id]: requirement, ...(masterRequirement ? { [masterRequirement.id]: masterRequirement } : {}) },
+  };
+  const baselineLabel = (id: string) => sysmlObjectLabel(baselines[id], 'Baseline');
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +80,7 @@ export function RequirementGovernancePanel({
         <div className="flex items-center justify-between">
           <div>
             <span className="text-gray-400">Current Baseline: </span>
-            <span className="font-mono text-gray-200">{currentBaseline ? currentBaseline.name : 'Working Draft (Unfrozen)'}</span>
+            <span className="font-mono text-gray-200">{currentBaseline ? sysmlObjectLabel(currentBaseline, 'Baseline') : 'Working Draft (Unfrozen)'}</span>
           </div>
           <button
             type="button"
@@ -106,23 +127,27 @@ export function RequirementGovernancePanel({
             Upstream/downstream artifacts changed since last verification. Review impact and re-validate.
           </p>
           <div className="space-y-1.5">
-            {suspectLinks.map(link => (
-              <div key={link.id} className="flex items-center justify-between rounded bg-[#1e1e1e] p-1.5 border border-gray-800">
-                <div>
-                  <span className="font-mono text-gray-300">«{link.kind}»</span>
-                  <span className="text-gray-400 text-[10px]"> {link.sourceId} ➔ {link.targetId}</span>
+            {suspectLinks.map(link => {
+              const unavailable = !hasSysmlReference(referenceRepository, link.sourceId) || !hasSysmlReference(referenceRepository, link.targetId);
+              return (
+                <div key={link.id} className="flex items-center justify-between rounded bg-[#1e1e1e] p-1.5 border border-gray-800">
+                  <div>
+                    <span className="font-mono text-gray-300">{sysmlObjectLabel(link, 'Relationship')}</span>
+                    <span className="text-gray-400 text-[10px]"> {resolveSysmlReferenceLabel(referenceRepository, link.sourceId)} -&gt; {resolveSysmlReferenceLabel(referenceRepository, link.targetId)}</span>
+                    {unavailable && <span className="block text-amber-300 text-[10px]">Referenced element is unavailable</span>}
+                  </div>
+                  {onClearSuspect && (
+                    <button
+                      type="button"
+                      onClick={() => onClearSuspect(link.id)}
+                      className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/50"
+                    >
+                      Mark Validated
+                    </button>
+                  )}
                 </div>
-                {onClearSuspect && (
-                  <button
-                    type="button"
-                    onClick={() => onClearSuspect(link.id)}
-                    className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/50"
-                  >
-                    Mark Validated
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </fieldset>
       )}
@@ -132,8 +157,11 @@ export function RequirementGovernancePanel({
         <fieldset className="rounded border border-gray-700 p-2 space-y-2">
           <legend className="px-1 font-semibold text-gray-300">Copy Synchronization</legend>
           <div className="text-[11px] text-gray-400">
-            Copied from master requirement: <span className="font-mono text-gray-200">{requirement.copiedFromId}</span>
+            Copied from master requirement: <span className="font-mono text-gray-200">{resolveSysmlReferenceLabel(referenceRepository, requirement.copiedFromId, 'Requirement')}</span>
           </div>
+          {!hasSysmlReference(referenceRepository, requirement.copiedFromId) && (
+            <div className="text-amber-300 text-[10px]">Referenced element is unavailable</div>
+          )}
 
           {masterRequirement && (
             <div className="rounded bg-[#141414] p-2 space-y-1 border border-gray-800 text-[11px]">
@@ -165,6 +193,68 @@ export function RequirementGovernancePanel({
             >
               Sync from Master
             </button>
+          )}
+        </fieldset>
+      )}
+
+      {/* Deletion Impact & Recovery Section */}
+      {(deletionSeverity || unresolvedUsageIds.length > 0 || invalidatedEvidenceIds.length > 0 || blockedBaselineIds.length > 0) && (
+        <fieldset className="rounded border border-gray-700 p-2 space-y-2" aria-label="Deletion impact and recovery">
+          <legend className="px-1 font-semibold text-gray-300">Deletion Impact & Recovery</legend>
+          {deletionSeverity && (
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Impact severity:</span>
+              <span className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase border ${
+                deletionSeverity === 'blocked'
+                  ? 'bg-red-950 text-red-400 border-red-700'
+                  : deletionSeverity === 'review'
+                    ? 'bg-amber-950 text-amber-400 border-amber-700'
+                    : 'bg-emerald-950 text-emerald-400 border-emerald-700'
+              }`}>
+                {deletionSeverity}
+              </span>
+            </div>
+          )}
+          {unresolvedUsageIds.length > 0 && (
+            <div className="text-[11px] text-gray-400">
+              Typed usages kept unresolved (explicit resolution required):
+              <span className="font-mono text-gray-200"> {unresolvedUsageIds.map(id => resolveSysmlReferenceLabel(referenceRepository, id, 'Usage')).join(', ')}</span>
+            </div>
+          )}
+          {invalidatedEvidenceIds.length > 0 && (
+            <div className="text-[11px] text-gray-400">
+              Evidence invalidated by deletion:
+              <span className="font-mono text-gray-200"> {invalidatedEvidenceIds.map(() => 'Evidence').join(', ')}</span>
+            </div>
+          )}
+          {blockedBaselineIds.length > 0 && (
+            <div className="rounded border border-red-800/60 bg-red-950/20 p-2 space-y-1.5">
+              <p className="text-[11px] text-red-300">
+                Protected baseline{blockedBaselineIds.length > 1 ? 's' : ''} {blockedBaselineIds.map(baselineLabel).join(', ')} forbid{blockedBaselineIds.length > 1 ? '' : 's'} this deletion. Clone into a working copy or authorize explicitly.
+              </p>
+              <div className="flex gap-2">
+                {onCloneBaseline && blockedBaselineIds.map(id => (
+                  <button
+                    key={`clone-${id}`}
+                    type="button"
+                    onClick={() => onCloneBaseline(id)}
+                    className="rounded border border-gray-600 px-2 py-0.5 text-[11px] text-gray-300 hover:bg-gray-800"
+                  >
+                    Clone {baselineLabel(id)}
+                  </button>
+                ))}
+                {onAuthorizeBaseline && blockedBaselineIds.map(id => (
+                  <button
+                    key={`auth-${id}`}
+                    type="button"
+                    onClick={() => onAuthorizeBaseline(id)}
+                    className="rounded border border-red-700 bg-red-950/40 px-2 py-0.5 text-[11px] font-semibold text-red-300 hover:bg-red-900/50"
+                  >
+                    Authorize {baselineLabel(id)}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </fieldset>
       )}

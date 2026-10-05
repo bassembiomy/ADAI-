@@ -63,6 +63,19 @@ try {
     /50 MB limit/i
   );
 
+  // A successful save must always be readable under the same size limit.
+  let wroteOversizeTemporaryFile = false;
+  const oversizedData = { text: 'x'.repeat(MAX_PROJECT_BYTES) };
+  assert.throws(
+    () => writeProjectFile(hugePath, oversizedData, { fsImpl: {
+      writeFileSync: () => { wroteOversizeTemporaryFile = true; },
+      renameSync: () => {},
+      existsSync: () => false,
+    } }),
+    /50 MB limit/i
+  );
+  assert.strictEqual(wroteOversizeTemporaryFile, false);
+
   // Atomic write failure cleanup test
   const targetPath = path.join(tempDir, 'failing.adia');
   const failingFs = {

@@ -54,4 +54,22 @@ export class OpenAiCompatibleProvider implements ILLMProvider {
       }
     };
   }
+
+  async healthCheck(signal?: AbortSignal): Promise<any> {
+    try {
+      const res = await fetch(`${this.baseUrl}/models`, {
+        headers: { 'Authorization': `Bearer ${this.apiKey}` },
+        signal
+      });
+      if (!res.ok) {
+        return { isHealthy: false, availableModels: [], error: `HTTP ${res.status}` };
+      }
+      const data = await res.json();
+      const models = Array.isArray(data.data) ? data.data.map((m: any) => m.id) : [];
+      return { isHealthy: true, availableModels: models };
+    } catch (err: any) {
+      return { isHealthy: false, availableModels: [], error: err.message || String(err) };
+    }
+  }
 }
+

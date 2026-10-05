@@ -128,6 +128,9 @@ export const runVerifySmCodegen = async (
     if (act.summary) {
       log(`    -> ${act.summary}`);
     }
+    if (act.status === 'FAIL' && act.command?.stderr) {
+      log(`    -> STDERR:\n${act.command.stderr}`);
+    }
   }
 
   log('');

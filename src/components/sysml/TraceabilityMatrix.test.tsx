@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 import React from 'react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyRepository } from '../../engine/sysml/model';
 import { nextRtmFocusIndex, TraceabilityMatrix } from './TraceabilityMatrix';
 
@@ -13,8 +15,55 @@ function repository() {
 }
 
 describe('professional traceability matrix workspace', () => {
+  afterEach(cleanup);
+  it.each([false, true])('labels unnamed requirements and related requirements (virtual=%s)', virtual => {
+    const repo = repository();
+    repo.requirements.r.name = ' ';
+    repo.requirements.parent = { ...repo.requirements.r, id: 'parent', requirementId: 'REQ-9', name: ' ' };
+    repo.relationships.parent = { id: 'parent-rel', kind: 'requirementContainment', sourceId: 'parent', targetId: 'r' };
+    const { container } = render(<TraceabilityMatrix repository={repo} />);
+    if (virtual) fireEvent.click(screen.getByRole('button', { name: 'Virtualized Grid' }));
+    expect(screen.getAllByText('Requirement').length).toBeGreaterThan(1);
+    if (virtual) expect(container.querySelector('[title="Contained By: [REQ-9] Requirement"]')).toBeTruthy();
+    else expect(container.innerHTML).toContain('>Requirement</span>');
+  });
+  it.each([false, true])('labels unnamed and unresolved endpoints in matrix view (virtual=%s)', virtual => {
+    const repo = repository();
+    repo.definitions.b.name = ' ';
+    const missingId = '65cb033e-421d-41e0-b789-87931d991012';
+    const verificationId = '65cb033e-421d-41e0-b789-87931d991013';
+    repo.relationships.refine = { id: 'refine', kind: 'refine', sourceId: missingId, targetId: 'r' };
+    repo.verificationCases[verificationId] = { id: verificationId, name: ' ', kind: 'verificationCase', namespace: [], method: 'test', verifiesRequirementIds: ['r'] };
+    const { container } = render(<TraceabilityMatrix repository={repo} />);
+    if (virtual) fireEvent.click(screen.getByRole('button', { name: 'Virtualized Grid' }));
+    expect(screen.getByText('Block')).toBeTruthy();
+    expect(screen.getByText('Verification Case')).toBeTruthy();
+    if (!virtual) expect(screen.getByText('Element')).toBeTruthy();
+    for (const id of [missingId, verificationId]) expect(container.textContent).not.toContain(id);
+  });
+  it('uses metaclasses for unnamed linked elements and preserves navigation IDs', () => {
+    const repo = repository();
+    const connectorId = '65cb033e-421d-41e0-b789-87931d991010';
+    const evidenceId = '65cb033e-421d-41e0-b789-87931d991011';
+    repo.connectors[connectorId] = { id: connectorId, kind: 'assembly', ownerId: 'b', sourcePortId: 'p1', targetPortId: 'p2' };
+    repo.relationships.trace = { id: 'trace', kind: 'trace', sourceId: connectorId, targetId: 'r' };
+    repo.evidence[evidenceId] = { id: evidenceId, requirementId: 'r', verificationCaseId: 'test', revision: 0, result: 'passed', executedAt: '' };
+    const onNavigate = vi.fn();
+    const { container } = render(<TraceabilityMatrix repository={repo} onNavigate={onNavigate} />);
+    expect(screen.getByText('Controller')).toBeTruthy();
+    expect(screen.getAllByText('Assembly').length).toBeGreaterThan(0);
+    expect(screen.getByText('Evidence')).toBeTruthy();
+    for (const id of [connectorId, evidenceId]) {
+      expect(screen.queryByText(id)).toBeNull();
+      expect(container.textContent?.includes(id)).toBe(false);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Assembly' }));
+    expect(onNavigate).toHaveBeenCalledWith(connectorId);
+  });
   it('renders accessible status text, metrics, filters, source cells, and export control', () => {
     const html = renderToStaticMarkup(<TraceabilityMatrix repository={repository()} />);
+    expect(html).toContain('traceability-grid');
+    expect(html).toContain('engineering-table');
     expect(html).toContain('Requirements Traceability Matrix');
     expect(html).toContain('covered');
     expect(html).toContain('Controller');
@@ -72,5 +121,63 @@ describe('professional traceability matrix workspace', () => {
     expect(html).toContain('REQ-2');
     expect(html).toContain('«satisfy»');
     expect(html).toContain('Controller');
+  });
+
+  it('renders a State display name for a satisfy endpoint rather than its UUID', () => {
+    const repo = repository();
+    repo.relationships.stateSatisfy = { id: 'stateSatisfy', kind: 'satisfy', sourceId: 'state-uuid-123', targetId: 'r' };
+
+    const html = renderToStaticMarkup(<TraceabilityMatrix
+      repository={repo}
+      externalElements={[{ id: 'state-uuid-123', name: 'State_1', kind: 'state' }]}
+    />);
+
+    expect(html).toContain('State_1');
+    expect(html).not.toContain('state-uuid-123');
+  });
+
+  it('renders deriveReqt, copy, refine, trace, and verify directional badges', () => {
+    const repo = repository();
+    repo.requirements.rDerived = {
+      id: 'rDerived',
+      name: 'Derived Safety',
+      namespace: [],
+      kind: 'requirement',
+      requirementId: 'REQ-3',
+      text: 'Derived',
+      status: 'approved',
+      version: '1',
+    };
+    repo.requirements.rCopy = {
+      id: 'rCopy',
+      name: 'Copy Safety',
+      namespace: [],
+      kind: 'requirement',
+      requirementId: 'REQ-4',
+      text: 'Copy',
+      status: 'approved',
+      version: '1',
+    };
+    repo.verificationCases.vc1 = {
+      id: 'vc1',
+      name: 'Safety Test Case',
+      namespace: [],
+      kind: 'verificationCase',
+      method: 'test',
+      verifiesRequirementIds: [],
+    };
+    repo.relationships.rDer = { id: 'rDer', kind: 'deriveReqt', sourceId: 'rDerived', targetId: 'r' };
+    repo.relationships.rCp = { id: 'rCp', kind: 'copy', sourceId: 'rCopy', targetId: 'r' };
+    repo.relationships.rRef = { id: 'rRef', kind: 'refine', sourceId: 'b', targetId: 'r' };
+    repo.relationships.rTr = { id: 'rTr', kind: 'trace', sourceId: 'r', targetId: 'rCopy' };
+    repo.relationships.rVer = { id: 'rVer', kind: 'verify', sourceId: 'vc1', targetId: 'r' };
+
+    const html = renderToStaticMarkup(<TraceabilityMatrix repository={repo} />);
+    expect(html).toContain('«deriveReqt»');
+    expect(html).toContain('«copy»');
+    expect(html).toContain('«refine»');
+    expect(html).toContain('«trace»');
+    expect(html).toContain('«verify»');
+    expect(html).toContain('Safety Test Case');
   });
 });

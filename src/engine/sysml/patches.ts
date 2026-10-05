@@ -167,7 +167,7 @@ export function applyPatch(store: NormalizedSysmlStore, operations: PatchOperati
         store.diagramPresentations.delete(op.id);
         store.indexes.diagramId.delete(op.id);
       } else {
-        const pres = op.value as { elementIds: string[] };
+        const pres = op.value as import('./presentationState').DiagramPresentation;
         store.diagramPresentations.set(op.id, pres);
         const set = new Set(pres.elementIds);
         store.indexes.diagramId.set(op.id, set);

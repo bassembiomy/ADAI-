@@ -8,6 +8,9 @@ export interface ProviderConfig {
   apiKey?: string;
   baseUrl?: string;
   modelId?: string;
+  temperature?: number;
+  timeoutMs?: number;
+  contextTokens?: number;
 }
 
 export class ProviderFactory {
@@ -28,7 +31,14 @@ export class ProviderFactory {
         if (config.baseUrl && !isStrictLoopback(config.baseUrl)) {
           throw new Error('Local provider must use exact loopback (127.0.0.1, localhost, ::1) hostname for air-gapped security.');
         }
-        return new LocalOllamaProvider({ baseUrl: config.baseUrl, modelId: config.modelId });
+        return new LocalOllamaProvider({
+          baseUrl: config.baseUrl,
+          modelId: config.modelId,
+          temperature: config.temperature,
+          timeoutMs: config.timeoutMs,
+          contextTokens: config.contextTokens
+        });
+
 
       case 'lmstudio':
         if (config.baseUrl && !isStrictLoopback(config.baseUrl)) {

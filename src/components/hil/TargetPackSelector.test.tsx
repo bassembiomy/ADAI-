@@ -25,4 +25,16 @@ describe('TargetPackSelector integration', () => {
     expect(html).not.toContain('>Certified<');
     expect(html).not.toContain('HARDWARE_TESTED');
   });
+
+  it('exposes semantic panel and target card classes', () => {
+    const html = renderToStaticMarkup(
+      <TargetPackSelector
+        selectedTargetId="stm32f407vgt6"
+        selectedDriverMode="vendor"
+        onSelectTarget={() => undefined}
+      />,
+    );
+    expect(html).toContain('hil-panel');
+    expect(html).toContain('hil-target-card');
+  });
 });

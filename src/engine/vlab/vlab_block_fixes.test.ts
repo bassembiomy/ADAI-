@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
+import { blockEquations } from './vlabEquations';
 
 describe('VLab Block Port & Parameter Fixes', () => {
   const findBlock = (blockId: string) => {
@@ -29,6 +30,13 @@ describe('VLab Block Port & Parameter Fixes', () => {
   });
 
   describe('switch', () => {
+    it('uses the current control value and preserves zero resistance parameters', () => {
+      const equation = blockEquations.switch;
+      const args = { across: [10, 0, 1], branch: [1], params: { Ron: 0, Roff: 1_000_000, threshold: 0.5 } } as any;
+      expect(equation(args)[0]).toBe(10);
+      args.across[2] = 0;
+      expect(equation(args)[0]).toBe(-999_990);
+    });
     it('should define Physical domain on port v and Electrical domain on ports p and n', () => {
       const { block } = findBlock('switch');
       const portP = block.ports.find(p => p.id === 'p');
@@ -66,6 +74,20 @@ describe('VLab Block Port & Parameter Fixes', () => {
       expect(block.equation).toContain('threshold');
       expect(block.equation).toContain('Roff');
     });
+  });
+
+  describe('diode', () => {
+    it('uses the piecewise linear forward and reverse equations with zero-valued resistances', () => {
+      const equation = blockEquations.diode;
+      expect(equation({ across: [0.70093, 0], branch: [0.09299], params: { Ron: 0.01, Roff: 1_000_000, Vf: 0.7 } } as any)[0]).toBeCloseTo(0, 5);
+      expect(equation({ across: [1, 0], branch: [0.1], params: { Ron: 0, Roff: 0, Vf: 0.7 } } as any)[0]).toBeCloseTo(0.3, 10);
+      expect(equation({ across: [0.2, 0], branch: [1e-6], params: { Ron: 0.01, Roff: 1_000_000, Vf: 0.7 } } as any)[0]).toBeCloseTo(-0.8, 5);
+    });
+  });
+
+  it('switches a PS Step at the declared inclusive StepTime', () => {
+    const equation = blockEquations.ps_step;
+    expect(equation({ branch: [2], params: { time: 1, initial: 0, final: 2 }, ctx: { time: 1 } } as any)[0]).toBe(0);
   });
 
   describe('translational_electromechanical_converter', () => {
