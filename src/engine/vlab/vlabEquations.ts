@@ -1665,7 +1665,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   gas_reservoir: ({ across, branch, params, ports, connectedPorts }) => {
-    const P_ctrl = inputOrParam({ across, ports, connectedPorts }, 's', params.P ?? 101325, 1);
+    const P_ctrl = inputOrParam({ across, ports, connectedPorts }, 's', params?.P ?? 101325, 1);
     return [across[0] - P_ctrl];
   },
   gas_resistance: ({ across, branch, params }) => {
