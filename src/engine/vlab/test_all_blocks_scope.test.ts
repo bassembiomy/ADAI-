@@ -9,6 +9,12 @@ const hasEquationFactory = (blockId: string): boolean => {
   return !!blockEquations[blockId];
 };
 
+// Per-block limits: 3 steps per block, each bounded to 3 s wall clock / 2000 step attempts,
+// plus a vitest timeout as a backstop for the async path.
+const PER_STEP_ATTEMPT_LIMIT = 2000;
+const PER_STEP_WALL_CLOCK_MS = 3000;
+const PER_BLOCK_TIMEOUT_MS = 30000;
+
 describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
   const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
 
@@ -23,6 +29,10 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
 
     it(`Tests block: ${block.id} (${block.name})`, () => {
       const engine = new VLabPhysicsEngine();
+      // A synchronous solver loop cannot be interrupted by vitest's test timeout, so
+      // bound every simulateStep inside the engine: a non-convergent block must throw
+      // a diagnosable error (recorded as a solver error below) instead of hanging the suite.
+      engine.setStepBudget({ maxStepAttempts: PER_STEP_ATTEMPT_LIMIT, wallClockMs: PER_STEP_WALL_CLOCK_MS });
       const nodes: Node[] = [];
       const edges: Edge[] = [];
 
@@ -355,7 +365,7 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
 
       diagnosticResults.push(status);
       expect(true).toBe(true); // Always pass test so the loop continues diagnostics
-    });
+    }, PER_BLOCK_TIMEOUT_MS);
   });
 
   afterAll(() => {

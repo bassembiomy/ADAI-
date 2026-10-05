@@ -26,6 +26,26 @@ export class VLabPhysicsEngine {
   private currentSystem: AssembledSystem | null = null;
   private prevTopologyHash: string = '';
   private solverConfiguration: SolverConfiguration | null;
+  /**
+   * Max rejected step attempts inside one simulateStep call. Accepted steps are
+   * not counted, so long fine-step runs (e.g. µs PWM) are never cut off.
+   */
+  private maxStepAttempts = 20000;
+  /** Optional wall-clock budget (ms) for one simulateStep call; 0 disables it. */
+  private wallClockBudgetMs = 0;
+
+  /**
+   * Bound the work done by a single simulateStep so a non-convergent model fails
+   * with a diagnosable error instead of step-halving down to minStep forever.
+   */
+  setStepBudget(options: { maxStepAttempts?: number; wallClockMs?: number }): void {
+    if (Number.isFinite(options.maxStepAttempts) && (options.maxStepAttempts ?? 0) > 0) {
+      this.maxStepAttempts = Math.floor(options.maxStepAttempts!);
+    }
+    if (options.wallClockMs !== undefined && Number.isFinite(options.wallClockMs) && options.wallClockMs >= 0) {
+      this.wallClockBudgetMs = options.wallClockMs;
+    }
+  }
 
   constructor(solverConfiguration: SolverConfiguration | null = null) {
     this.assembler = new DAEAssembler();
@@ -161,6 +181,8 @@ export class VLabPhysicsEngine {
     let useSdirk = !isAlgebraicSystem && !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
     let acceptedSteps = 0;
     let rejectedSteps = 0;
+    let rejectedAttempts = 0;
+    const budgetStart = Date.now();
     const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
     const maxStep = typeof config?.maximumStep === 'number' ? config.maximumStep : Math.max(minStep, 0.05);
     
@@ -180,9 +202,25 @@ export class VLabPhysicsEngine {
       if (t + h === t) throw new Error('Solver step is too small to advance simulation time.');
       
       let stepAccepted = false;
+      let attemptsThisStep = 0;
       let nextX: number[] = [];
       
       while (!stepAccepted) {
+        if (attemptsThisStep++ > 0) rejectedAttempts++;
+        if (
+          rejectedAttempts > this.maxStepAttempts ||
+          (this.wallClockBudgetMs > 0 && Date.now() - budgetStart > this.wallClockBudgetMs)
+        ) {
+          const reason = rejectedAttempts > this.maxStepAttempts
+            ? `exceeded ${this.maxStepAttempts} rejected step attempts`
+            : `exceeded ${this.wallClockBudgetMs} ms wall-clock budget`;
+          throw new Error(
+            `VLab solver ${reason} advancing to t=${tTarget} ` +
+            `(reached t=${t}, h=${h}, accepted=${acceptedSteps}, rejected=${rejectedSteps}, ` +
+            `blocks=[${nodes.map(n => ((n.data as any)?.type ?? n.type ?? n.id)).join(', ')}]). ` +
+            `The model is likely non-convergent; check parameters and connections.`
+          );
+        }
         // Enforce minimum step size to prevent infinite loops
         h = Math.max(stepFloor, h);
         

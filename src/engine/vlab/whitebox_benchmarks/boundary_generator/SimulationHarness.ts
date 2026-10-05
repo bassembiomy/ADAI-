@@ -27,7 +27,9 @@ export class SimulationHarness {
 
         // 1. Check exact variable name in system.variableNames
         if (state?.x && sys?.variableNames) {
-          let varIdx = sys.variableNames.findIndex((name: string) => name === probe.variableName);
+          let varIdx = sys.variableNames.findIndex(
+            (name: string) => name === (probe.engineVariable ?? probe.variableName)
+          );
 
           // 2. Check signal branch for the specific port handle
           if (varIdx === -1 && probe.sourceHandle) {

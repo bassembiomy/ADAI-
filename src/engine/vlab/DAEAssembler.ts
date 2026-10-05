@@ -980,7 +980,8 @@ export class DAEAssembler {
             ctx,
             params,
             ports,
-            nodeId: node.id
+            nodeId: node.id,
+            connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
           });
         } catch (e) {
           console.error(`Error calculating residual for ${node.id} (${type}):`, e);

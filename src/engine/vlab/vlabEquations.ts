@@ -43,6 +43,13 @@ export interface BlockEquationArgs {
   params: Record<string, any>;
   ports: string[];
   nodeId: string;
+  /**
+   * Port ids that are wired to another block. Optional physical-signal inputs
+   * (e.g. the `s` port of force_source) read as 0 when unwired, so equations
+   * must consult this to fall back to their parameter instead of using 0.
+   * Undefined (direct unit-test calls) means "assume every port is connected".
+   */
+  connectedPorts?: string[];
 }
 
 export type BlockEquationFactory = (args: BlockEquationArgs) => number[];
@@ -471,9 +478,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - torque, dState[0] - omega];
   },
   
-  torque_source: ({ across, branch, params }) => {
-    // Torque = S
-    const S = across[2] !== undefined ? across[2] : (params.torque !== undefined ? params.torque : (params.T !== undefined ? params.T : 5));
+  torque_source: ({ across, branch, params, ports, connectedPorts }) => {
+    // Torque = S (commanded via the `s` port when wired, else the T parameter)
+    const sIdx = ports ? ports.indexOf('s') : 2;
+    const sWired = sIdx !== -1 && across[sIdx] !== undefined && (!connectedPorts || connectedPorts.includes('s'));
+    const S = sWired ? across[sIdx] : (params.torque !== undefined ? params.torque : (params.T !== undefined ? params.T : 5));
     return [branch[0] - S];
   },
   
@@ -613,8 +622,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - force - 1.0 * v];
   },
   
-  force_source: ({ across, branch, params }) => {
-    const S = across[2] !== undefined ? across[2] : (params.force !== undefined ? params.force : (params.F !== undefined ? params.F : 10));
+  force_source: ({ across, branch, params, ports, connectedPorts }) => {
+    // Force = S (commanded via the `s` port when wired, else the F parameter)
+    const sIdx = ports ? ports.indexOf('s') : 2;
+    const sWired = sIdx !== -1 && across[sIdx] !== undefined && (!connectedPorts || connectedPorts.includes('s'));
+    const S = sWired ? across[sIdx] : (params.force !== undefined ? params.force : (params.F !== undefined ? params.F : 10));
     return [branch[0] - S];
   },
 
@@ -1685,8 +1697,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const mdot = across[2] === undefined ? (params.mdot ?? 0.1) : across[2];
     return [branch[0] - mdot];
   },
-  gas_pressure_source: ({ across, branch, params }) => {
-    const P = across[2] === undefined ? (params.P ?? 200000) : across[2];
+  gas_pressure_source: ({ across, branch, params, ports, connectedPorts }) => {
+    // Pb - Pa = P_source (commanded via the `p` port when wired, else the P parameter)
+    const pIdx = ports ? ports.indexOf('p') : 2;
+    const pWired = pIdx !== -1 && across[pIdx] !== undefined && (!connectedPorts || connectedPorts.includes('p'));
+    const P = pWired ? across[pIdx] : (params.P ?? 200000);
     return [(across[1] - across[0]) - P];
   },
   gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
@@ -2785,8 +2800,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── MECHANICAL & MULTIBODY ──────────────────────────────────────────────────
-  ang_vel_source: ({ across, params }) => {
-    const w = across[2] !== undefined ? across[2] : (params.omega !== undefined ? Number(params.omega) : (params.w !== undefined ? Number(params.w) : 50));
+  ang_vel_source: ({ across, params, ports, connectedPorts }) => {
+    // omega commanded via the `s` port when wired, else the omega (or legacy w) parameter
+    const sIdx = ports ? ports.indexOf('s') : 2;
+    const sWired = sIdx !== -1 && across[sIdx] !== undefined && (!connectedPorts || connectedPorts.includes('s'));
+    const w = sWired ? across[sIdx] : (params.omega !== undefined ? Number(params.omega) : (params.w !== undefined ? Number(params.w) : 50));
     return [across[0] - (across[1] || 0) - w];
   },
 
