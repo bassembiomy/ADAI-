@@ -7024,26 +7024,101 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "univ_joint",
         "category": "Joints",
         "params": {
+          "axis1": {
+            "value": "[1 0 0]",
+            "unit": "",
+            "label": "Axis 1 (B-local, normalized)"
+          },
+          "axis2": {
+            "value": "[0 1 0]",
+            "unit": "",
+            "label": "Axis 2 (F-local, orthogonalized to axis 1)"
+          },
           "damping": {
             "value": 0.05,
-            "unit": "N-m-s/rad",
-            "label": "Damping"
+            "unit": "N*m*s/rad",
+            "label": "Damping on permitted axes"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "angle1",
+            "pos": "right",
+            "label": "angle1 (rad)",
+            "domain": "Physical",
+            "unit": "rad"
+          },
+          {
+            "id": "angle2",
+            "pos": "right",
+            "label": "angle2 (rad)",
+            "domain": "Physical",
+            "unit": "rad"
+          },
+          {
+            "id": "w1",
+            "pos": "right",
+            "label": "w1 (rad/s)",
+            "domain": "Physical",
+            "unit": "rad/s"
+          },
+          {
+            "id": "w2",
+            "pos": "right",
+            "label": "w2 (rad/s)",
+            "domain": "Physical",
+            "unit": "rad/s"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "unit": "N"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "unit": "N*m"
           }
         ],
-        "equation": "Universal Joint governing physical equation",
-        "description": "Physical component model for Universal Joint."
+        "equation": "Pf = Pb; (Rb axis1) dot (Rf axis2) = 0; equal/opposite reactions",
+        "description": "Two-axis universal joint. axis1 belongs to B and axis2 to F; nonparallel reference axes are orthonormalized. Angles are signed principal values in rad; t_reac is signed constrained torque on F. Damping opposes permitted-axis angular velocity only."
       },
       {
         "id": "weld_joint",

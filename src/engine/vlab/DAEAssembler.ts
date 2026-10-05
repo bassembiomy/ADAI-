@@ -1,5 +1,6 @@
 import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
+import { universalJointParameters, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES } from './vlabEquations';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
@@ -466,6 +467,11 @@ export class DAEAssembler {
         }
         break;
       case 'universal_joint':
+        for (const name of ['fx', 'fy', 'fz']) branches.push({ name, ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        branches.push({ name: 'lambda', ports: [] });
+        for (const name of ['tx', 'ty', 'tz']) branches.push({ name, ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        for (const name of UNIVERSAL_MEASUREMENTS) if (ports.includes(name)) branches.push({ name: 'signal_' + name, ports: [{ id: name, sign: 1 }] });
+        break;
       case 'revolute_joint':
         branches.push({ name: 'torque', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
         break;
@@ -903,6 +909,7 @@ export class DAEAssembler {
       }
 
       // Inject belt/cable material (density, youngs) from belt_properties blocks
+      if (type === 'universal_joint') universalJointParameters(params, node.id);
       injectBeltMaterial(node.id, type, ports, params, node.data);
 
       // Look up equation factory
@@ -1102,7 +1109,7 @@ export class DAEAssembler {
       const constraintTopologies: ConstraintTopology[] = [];
       nodes.forEach(node => {
         const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-        if (type !== 'dist_constraint' && type !== 'angle_constraint' && type !== 'spherical_joint') return;
+        if (type !== 'dist_constraint' && type !== 'angle_constraint' && type !== 'spherical_joint' && type !== 'universal_joint') return;
         const ports = nodePorts.get(node.id) || [];
         if (!ports.includes('b') || !ports.includes('f')) return;
         const baseRoot = uf.find(`${node.id}_b`);
@@ -1114,7 +1121,7 @@ export class DAEAssembler {
         // satisfy no matter how the solver iterates — a genuine, purely
         // structural fact, safe (and necessary) to catch once here rather
         // than relying on a runtime direction that can never become defined.
-        if (baseRoot === followerRoot && type !== 'spherical_joint') {
+        if (baseRoot === followerRoot && (type === 'dist_constraint' || type === 'angle_constraint')) {
           const p = (node.data as any)?.params || {};
           const unwrap = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
           const targetKey = type === 'dist_constraint' ? 'dist' : 'angle';

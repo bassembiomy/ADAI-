@@ -1228,10 +1228,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A 3-DOF "ball-and-socket" joint. Constrains the relative translation between two frames while allowing free rotation.'
   },
   universal_joint: {
-    equations: ['DOF = 2 (Rotation)'],
+    equations: ['P_f - P_b = 0', '(R_b axis1) dot (R_f axis2) = 0', 'F_b = -F_f', 'T_f = lambda (a1 cross a2) - damping (w1 a1 + w2 a2)', 'T_b = -T_f'],
     latex: ['\\text{DOF} = 2'],
-    across: 'Frame', through: 'Torque (N-m)',
-    description: 'A 2-DOF joint that transmits rotation between non-parallel axes, common in drive shafts.'
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'Locks translation and permits rotation about B-local axis1 and F-local axis2. Nonparallel input axes are orthonormalized. Damping opposes only the permitted angular rates; zero disables it. Angles are signed principal radians, and t_reac is the constrained reaction on F.'
   },
   weld_joint: {
     equations: ['Tb = Tf', 'vb = vf', 'wb = wf'],

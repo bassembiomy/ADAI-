@@ -1,4 +1,5 @@
 import { EquationContext } from './types';
+import { universalJointParameters, universalJointKinematics, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
   parseVector3,
@@ -18,6 +19,7 @@ import {
 // across/through variables without internal states, so state flags alone
 // cannot identify a static DAE. Keep this alongside their equation definitions.
 export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
+  'universal_joint',
   'capacitor', 'inductor', 'inertia', 'mass', 'thermal_mass', 'washing_basket',
   'dc_motor', 'bldc_motor', 'pmsm', 'gas_chamber', 'em_converter',
   'spring_damper_force', 'fluid_capacitance', 'fluid_inertance',
@@ -53,6 +55,36 @@ export interface BlockEquationArgs {
 }
 
 export type BlockEquationFactory = (args: BlockEquationArgs) => number[];
+
+/**
+ * Single pattern for an optional physical-signal input with a parameter fallback.
+ * An unwired physical input reads 0 (not undefined), so the port value is used only
+ * when the port is actually wired (per `connectedPorts`). The port is located by id
+ * (first match when several aliases are given); `legacyIdx` is only used by direct
+ * unit-test calls that pass no `ports` array. `connectedPorts` undefined means
+ * "assume every port is connected".
+ */
+export function inputOrParam(
+  args: { across: number[]; ports?: string[]; connectedPorts?: string[] },
+  portId: string | string[],
+  fallback: number,
+  legacyIdx = -1,
+): number {
+  const { across, ports, connectedPorts } = args;
+  const ids = Array.isArray(portId) ? portId : [portId];
+  let idx = -1;
+  let id = ids[0];
+  if (ports) {
+    for (const cand of ids) {
+      const i = ports.indexOf(cand);
+      if (i !== -1) { idx = i; id = cand; break; }
+    }
+  } else {
+    idx = legacyIdx;
+  }
+  const wired = idx !== -1 && across[idx] !== undefined && (!connectedPorts || !ports || connectedPorts.includes(id));
+  return wired ? across[idx] : fallback;
+}
 
 // Accepts 0 as a valid value; only missing/non-numeric params fall back.
 const numericParam = (value: any, fallback: number): number => {
@@ -143,10 +175,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [(across[0] - across[1]) - branch[0] * R];
   },
   
-  variable_resistor: ({ across, branch, params }) => {
-    // Vp - Vn - I*R_ctrl = 0 (R_ctrl is the control signal at across[2])
+  variable_resistor: ({ across, branch, params, ports, connectedPorts }) => {
+    // Vp - Vn - I*R_ctrl = 0 (R_ctrl is the control signal at port 'r'; 100 ohm when unwired)
     const R_min = params.R_min !== undefined ? params.R_min : 0.1;
-    const R_ctrl = Math.max(R_min, across[2] !== undefined ? across[2] : 100);
+    const R_ctrl = Math.max(R_min, inputOrParam({ across, ports, connectedPorts }, 'r', 100, 2));
     return [(across[0] - across[1]) - branch[0] * R_ctrl];
   },
   
@@ -179,12 +211,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   
-  switch: ({ across, branch, params }) => {
+  switch: ({ across, branch, params, ports, connectedPorts }) => {
     // V = I * (ctrl > threshold ? Ron : Roff)
     const Ron = params.Ron ?? 0.01;
     const Roff = params.Roff ?? 1e6;
     const threshold = params.threshold !== undefined ? params.threshold : 0.5;
-    const ctrl = across[2] !== undefined ? across[2] : 0;
+    const ctrl = inputOrParam({ across, ports, connectedPorts }, 'v', 0, 2);
     const R = ctrl > threshold ? Ron : Roff;
     return [(across[0] - across[1]) - branch[0] * R];
   },
@@ -293,9 +325,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [(across[0] - across[1]) - V_ac - branch[0] * R_int];
   },
   
-  controlled_voltage: ({ across, branch, params }) => {
-    // Vp - Vn - S = 0 (S is the signal at across[2])
-    const S = across[2] !== undefined ? across[2] : 0;
+  controlled_voltage: ({ across, branch, params, ports, connectedPorts }) => {
+    // Vp - Vn - S = 0 (S is the signal at port 's'; 0 V when unwired)
+    const S = inputOrParam({ across, ports, connectedPorts }, 's', 0, 2);
     const R_int = params.R_int || 1e-3;
     return [(across[0] - across[1]) - S - branch[0] * R_int];
   },
@@ -480,9 +512,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   torque_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Torque = S (commanded via the `s` port when wired, else the T parameter)
-    const sIdx = ports ? ports.indexOf('s') : 2;
-    const sWired = sIdx !== -1 && across[sIdx] !== undefined && (!connectedPorts || connectedPorts.includes('s'));
-    const S = sWired ? across[sIdx] : (params.torque !== undefined ? params.torque : (params.T !== undefined ? params.T : 5));
+    const S = inputOrParam({ across, ports, connectedPorts }, 's', (params.torque !== undefined ? params.torque : (params.T !== undefined ? params.T : 5)), 2);
     return [branch[0] - S];
   },
   
@@ -624,9 +654,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   force_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Force = S (commanded via the `s` port when wired, else the F parameter)
-    const sIdx = ports ? ports.indexOf('s') : 2;
-    const sWired = sIdx !== -1 && across[sIdx] !== undefined && (!connectedPorts || connectedPorts.includes('s'));
-    const S = sWired ? across[sIdx] : (params.force !== undefined ? params.force : (params.F !== undefined ? params.F : 10));
+    const S = inputOrParam({ across, ports, connectedPorts }, 's', (params.force !== undefined ? params.force : (params.F !== undefined ? params.F : 10)), 2);
     return [branch[0] - S];
   },
 
@@ -704,15 +732,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [across[0] - T];
   },
   
-  ctrl_heat_src: ({ across, branch, ports }) => {
-    const sIdx = ports ? ports.indexOf('s') : -1;
-    const Q = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[2] !== undefined ? across[2] : (across[1] ?? 0));
+  ctrl_heat_src: ({ across, branch, ports, connectedPorts }) => {
+    const Q = inputOrParam({ across, ports, connectedPorts }, 's', 0, 2);
     return [branch[0] - Q];
   },
   
-  ctrl_temp_src: ({ across, branch, ports }) => {
-    const sIdx = ports ? ports.indexOf('s') : -1;
-    const S = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[2] !== undefined ? across[2] : 293.15);
+  ctrl_temp_src: ({ across, branch, ports, connectedPorts }) => {
+    const S = inputOrParam({ across, ports, connectedPorts }, 's', 293.15, 2);
     const Ta = across[0] ?? 0;
     const Tb = (ports && ports.includes('b') && across[1] !== undefined) ? across[1] : 0;
     return [(Ta - Tb) - S];
@@ -762,9 +788,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  microwave_inverter: ({ across, branch, params }) => {
+  microwave_inverter: ({ across, branch, params, ports, connectedPorts }) => {
     // branch[0] is current_in, branch[1] is current_out
-    const ctrl_val = across[2] !== undefined ? across[2] : 1.0;
+    const ctrl_val = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 1.0, 2);
     const v_out_target = (params.v_out || 4000) * ctrl_val;
     const v_in_nom = params.v_in || 230;
     const V_out = across[1];
@@ -1323,9 +1349,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  vfd_controller: ({ across, branch, params, ctx, ports }) => {
-    const wRefIdx = ports.findIndex(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref'));
-    const w_ref = (wRefIdx !== -1 && across[wRefIdx] !== undefined) ? across[wRefIdx] : 1500;
+  vfd_controller: ({ across, branch, params, ctx, ports, connectedPorts }) => {
+    const wRefId = ports.find(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref')) ?? 'w_ref';
+    const w_ref = inputOrParam({ across, ports, connectedPorts }, wRefId, 1500);
     const w_rad = w_ref * (2 * Math.PI / 60);
     ctx.parameters['grid_freq'] = w_rad;
     const V_mag = Math.max(0.1, Math.min(1.0, Math.abs(w_ref) / 1500));
@@ -1344,10 +1370,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return residuals;
   },
 
-  im_foc_ctrl: ({ across, branch, params, ctx, ports }) => {
-    const wRefIdx = ports.findIndex(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref'));
-    const w_ref_val = (wRefIdx !== -1 && across[wRefIdx] !== undefined) ? across[wRefIdx] : undefined;
-    const w_ref = w_ref_val !== undefined ? w_ref_val : (params.target_rpm ? params.target_rpm : 1500);
+  im_foc_ctrl: ({ across, branch, params, ctx, ports, connectedPorts }) => {
+    const wRefId = ports.find(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref')) ?? 'wr_ref';
+    const w_ref = inputOrParam({ across, ports, connectedPorts }, wRefId, params.target_rpm ? params.target_rpm : 1500);
     const w_rad = w_ref * (2 * Math.PI / 60);
     ctx.parameters['grid_freq'] = w_rad;
 
@@ -1399,19 +1424,20 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ma_pressure_source: ({ across, branch, params }) => {
-    // Pb - Pa - P_max * ctrl = 0
+  ma_pressure_source: ({ across, branch, params, ports, connectedPorts }) => {
+    // Pb - Pa - P_max * ctrl = 0 (ctrl = 1 when port 's' is unwired)
     const P_max = params.P || 150;
-    const ctrl = across[2] !== undefined ? across[2] : 1.0;
+    const ctrl = inputOrParam({ across, ports, connectedPorts }, 's', 1.0, 2);
     const Pa = across[0];
     const Pb = across[1];
     return [(Pb - Pa) - P_max * ctrl];
   },
 
-  lms_adaptive_filter: ({ across, branch, state, dState, params }) => {
-    const x = across[0] !== undefined ? across[0] : 0;
-    const d = across[1] !== undefined ? across[1] : 0;
-    const lr = across[2] !== undefined ? across[2] : (params.lr || 0.05);
+  lms_adaptive_filter: ({ across, branch, state, dState, params, ports, connectedPorts }) => {
+    const a = { across, ports, connectedPorts };
+    const x = inputOrParam(a, 'x', 0, 0);
+    const d = inputOrParam(a, 'd', 0, 1);
+    const lr = inputOrParam(a, 'lr', params.lr || 0.05, 2);
     const w1 = state[0];
     const w2 = state[1];
     const x_prev = state[2];
@@ -1430,11 +1456,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  neural_neuron_learning: ({ across, branch, state, dState, params }) => {
-    const x1 = across[0] !== undefined ? across[0] : 0;
-    const x2 = across[1] !== undefined ? across[1] : 0;
-    const target = across[2] !== undefined ? across[2] : 0;
-    const lr = across[3] !== undefined ? across[3] : (params.lr || 0.1);
+  neural_neuron_learning: ({ across, branch, state, dState, params, ports, connectedPorts }) => {
+    const a = { across, ports, connectedPorts };
+    const x1 = inputOrParam(a, 'x1', 0, 0);
+    const x2 = inputOrParam(a, 'x2', 0, 1);
+    const target = inputOrParam(a, 'target', 0, 2);
+    const lr = inputOrParam(a, 'lr', params.lr || 0.1, 3);
 
     const w1 = state[0];
     const w2 = state[1];
@@ -1544,9 +1571,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ac_motor_pid_control: ({ across, branch, state, dState, params, ctx }) => {
-    const w_ref = across[0] !== undefined ? across[0] : (params.w_ref || 157);
-    const tl = across[1] !== undefined ? across[1] : (params.tl || 0);
+  ac_motor_pid_control: ({ across, branch, state, dState, params, ctx, ports, connectedPorts }) => {
+    const w_ref = inputOrParam({ across, ports, connectedPorts }, 'w_ref', params.w_ref || 157, 0);
+    const tl = inputOrParam({ across, ports, connectedPorts }, 'tl', params.tl || 0, 1);
 
     const ias = state[0];
     const ibs = state[1];
@@ -1637,17 +1664,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       dP - (R * T / V) * (mdot_a + mdot_b)
     ];
   },
-  gas_reservoir: ({ across, branch, params }) => {
-    const P_ctrl = across[1] === undefined ? (params.P ?? 101325) : across[1];
+  gas_reservoir: ({ across, branch, params, ports, connectedPorts }) => {
+    const P_ctrl = inputOrParam({ across, ports, connectedPorts }, 's', params.P ?? 101325, 1);
     return [across[0] - P_ctrl];
   },
   gas_resistance: ({ across, branch, params }) => {
     const k = params.k !== undefined ? params.k : 1e-5;
     return [branch[0] - k * (across[0] - across[1])];
   },
-  gas_restriction: ({ across, branch, params }) => {
+  gas_restriction: ({ across, branch, params, ports, connectedPorts }) => {
     const Cd = params.Cd || 0.62;
-    const A = across[2] === undefined ? (params.area ?? 1e-4) : across[2];
+    const A = inputOrParam({ across, ports, connectedPorts }, 'ar', params.area ?? 1e-4, 2);
     const T = params.T || 293.15;
     const k = Cd * A / Math.sqrt(T);
     return [branch[0] - k * (across[0] - across[1])];
@@ -1693,15 +1720,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       force - A * deltaP
     ];
   },
-  gas_flow_source: ({ across, branch, params }) => {
-    const mdot = across[2] === undefined ? (params.mdot ?? 0.1) : across[2];
+  gas_flow_source: ({ across, branch, params, ports, connectedPorts }) => {
+    const mdot = inputOrParam({ across, ports, connectedPorts }, 'm', params.mdot ?? 0.1, 2);
     return [branch[0] - mdot];
   },
   gas_pressure_source: ({ across, branch, params, ports, connectedPorts }) => {
     // Pb - Pa = P_source (commanded via the `p` port when wired, else the P parameter)
-    const pIdx = ports ? ports.indexOf('p') : 2;
-    const pWired = pIdx !== -1 && across[pIdx] !== undefined && (!connectedPorts || connectedPorts.includes('p'));
-    const P = pWired ? across[pIdx] : (params.P ?? 200000);
+    const P = inputOrParam({ across, ports, connectedPorts }, 'p', params.P ?? 200000, 2);
     return [(across[1] - across[0]) - P];
   },
   gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
@@ -1717,15 +1742,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const R = params.R || 1e6;
     return [(across[0] - across[1]) - branch[0] * R];
   },
-  variable_reluctance: ({ across, branch, params, ports }) => {
+  variable_reluctance: ({ across, branch, params, ports, connectedPorts }) => {
     const nIdx = ports ? ports.indexOf('n') : 0;
     const sIdx = ports ? ports.indexOf('s') : 1;
-    const ctrlIdx = ports ? ports.indexOf('ctrl') : 2;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
-    const ctrlVal = (ctrlIdx !== -1 && across[ctrlIdx] !== undefined) ? across[ctrlIdx] : (across[2] !== undefined ? across[2] : undefined);
+    const ctrlVal = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 1e6, 2);
     const Rmin = params.Rmin !== undefined ? Number(params.Rmin) : 1e5;
-    const R_ctrl = Math.max(Rmin, ctrlVal !== undefined ? Number(ctrlVal) : 1e6);
+    const R_ctrl = Math.max(Rmin, Number(ctrlVal));
     return [(Vn - Vs) - branch[0] * R_ctrl];
   },
   permanent_magnet: ({ across, branch, params, ports }) => {
@@ -1804,13 +1828,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const phi = params.phi || 0.001;
     return [branch[0] - phi];
   },
-  mag_controlled_mmf: ({ across, params, ports }) => {
+  mag_controlled_mmf: ({ across, params, ports, connectedPorts }) => {
     const nIdx = ports ? ports.indexOf('n') : 0;
     const sIdx = ports ? ports.indexOf('s') : 1;
-    const srcIdx = ports ? (ports.indexOf('src') !== -1 ? ports.indexOf('src') : ports.indexOf('s_in')) : 2;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
-    const S = (srcIdx !== -1 && across[srcIdx] !== undefined) ? across[srcIdx] : (across[2] !== undefined ? across[2] : (params.MMF ?? 0));
+    const S = inputOrParam({ across, ports, connectedPorts }, ['src', 's_in'], params.MMF ?? 0, 2);
     return [(Vn - Vs) - S];
   },
 
@@ -2015,9 +2038,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     }
     return res;
   },
-  universal_joint: ({ across, branch, params }) => {
-    const b = params.damping || 0.05;
-    return [branch[0] - b * (across[0] - across[1])];
+  universal_joint: ({ across, dAcross, branch, params, ports, nodeId }) => {
+    const bi = ports.indexOf('b'), fi = ports.indexOf('f');
+    const B = asFrame(across[bi]), F = asFrame(across[fi]);
+    const configuration = universalJointParameters(params, nodeId);
+    const k = universalJointKinematics(B, F, asFrame(dAcross[bi]), asFrame(dAcross[fi]), configuration);
+    // [Fx,Fy,Fz,lambda,Tx,Ty,Tz]; reported wrench acts on F.
+    const torque = k.n.map((v, i) => branch[3] * v - configuration.damping * (k.w1 * k.a[i] + k.w2 * k.b[i]));
+    const res = [F[0] - B[0], F[1] - B[1], F[2] - B[2], k.constraint, ...torque.map((v, i) => branch[4 + i] - v)];
+    const measurements: Record<string, number> = { angle1: k.angle1, angle2: k.angle2, w1: k.w1, w2: k.w2,
+      fx: branch[0], fy: branch[1], fz: branch[2], f_reac: Math.hypot(...branch.slice(0, 3)), t_reac: branch[3] };
+    let next = 7;
+    for (const name of UNIVERSAL_MEASUREMENTS) if (ports.includes(name)) res.push(branch[next++] - measurements[name]);
+    return res;
   },
   weld_joint: ({ across }) => [across[0] - across[1]],
   common_gear: ({ across, branch, params }) => {
@@ -2140,9 +2173,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [across[0] - P];
   },
 
-  ctrl_pressure_source: ({ across, ports }) => {
-    const ctrlIndex = ports.indexOf('ctrl');
-    const P = ctrlIndex >= 0 && across[ctrlIndex] !== undefined ? across[ctrlIndex] : 101325;
+  ctrl_pressure_source: ({ across, ports, connectedPorts }) => {
+    const P = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 101325);
     return [across[0] - P];
   },
 
@@ -2168,11 +2200,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [dP - branch[0] * R];
   },
 
-  steam_generator_fluid: ({ across, branch, params }) => {
+  steam_generator_fluid: ({ across, branch, params, ports, connectedPorts }) => {
     const P = across[0];
     const T_sat = 100 + (P - 101325) / 3600;
     const h_fg = (2257 - 2.175 * Math.max(0, T_sat - 100)) * 1000;
-    const Q_in = across[2] !== undefined ? across[2] : (params.Q || 1000);
+    const Q_in = inputOrParam({ across, ports, connectedPorts }, 'q_in', params.Q || 1000, 2);
     const mdot_steam = Math.max(0, Q_in / h_fg);
     return [branch[0] - mdot_steam];
   },
@@ -2802,9 +2834,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── MECHANICAL & MULTIBODY ──────────────────────────────────────────────────
   ang_vel_source: ({ across, params, ports, connectedPorts }) => {
     // omega commanded via the `s` port when wired, else the omega (or legacy w) parameter
-    const sIdx = ports ? ports.indexOf('s') : 2;
-    const sWired = sIdx !== -1 && across[sIdx] !== undefined && (!connectedPorts || connectedPorts.includes('s'));
-    const w = sWired ? across[sIdx] : (params.omega !== undefined ? Number(params.omega) : (params.w !== undefined ? Number(params.w) : 50));
+    const w = inputOrParam({ across, ports, connectedPorts }, 's', (params.omega !== undefined ? Number(params.omega) : (params.w !== undefined ? Number(params.w) : 50)), 2);
     return [across[0] - (across[1] || 0) - w];
   },
 

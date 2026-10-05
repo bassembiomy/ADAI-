@@ -34,21 +34,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('Frame simulation diagnostics and retry policy', () => {
-  it.each(['dist_constraint', 'angle_constraint', 'spherical_joint'])(
-    'reports FULLY_PRESCRIBED immediately for %s before solving',
-    (type) => {
-      for (const reversed of [false, true]) {
-        const { nodes, edges } = prescribed(type, reversed);
-        const spy = vi.spyOn(ImplicitSolver.prototype, 'solve');
-        const started = performance.now();
-        expect(() => new VLabPhysicsEngine(config).simulateStep(nodes, edges, null, 0.01)).toThrow(
-          /FULLY_PRESCRIBED/,
-        );
-        expect(spy).not.toHaveBeenCalled();
-        expect(performance.now() - started).toBeLessThan(500);
-      }
-    },
-  );
+  it.each([
+    'dist_constraint',
+    'angle_constraint',
+    'spherical_joint',
+    'universal_joint',
+  ])('reports FULLY_PRESCRIBED immediately for %s before solving', (type) => {
+    for (const reversed of [false, true]) {
+      const { nodes, edges } = prescribed(type, reversed);
+      const spy = vi.spyOn(ImplicitSolver.prototype, 'solve');
+      const started = performance.now();
+      expect(() =>
+        new VLabPhysicsEngine(config).simulateStep(nodes, edges, null, 0.01),
+      ).toThrow(/FULLY_PRESCRIBED/);
+      expect(spy).not.toHaveBeenCalled();
+      expect(performance.now() - started).toBeLessThan(500);
+    }
+  });
   it('invalidates cached assembly when only a frame handle changes', () => {
     const { nodes, edges } = prescribed('spherical_joint');
     const initialEdges = edges.map((e) =>
@@ -56,10 +58,14 @@ describe('Frame simulation diagnostics and retry policy', () => {
     );
     const engine = new VLabPhysicsEngine(config);
     // Isolate cache invalidation from convergence of a degenerate same-root joint.
-    const spy = vi.spyOn(ImplicitSolver.prototype, 'solve').mockImplementation((_residual, x) => x);
+    const spy = vi
+      .spyOn(ImplicitSolver.prototype, 'solve')
+      .mockImplementation((_residual, x) => x);
     const state = engine.simulateStep(nodes, initialEdges, null, 0.01);
     spy.mockRestore();
-    expect(() => engine.simulateStep(nodes, edges, state, 0.01)).toThrow(/FULLY_PRESCRIBED/);
+    expect(() => engine.simulateStep(nodes, edges, state, 0.01)).toThrow(
+      /FULLY_PRESCRIBED/,
+    );
   });
   it('keeps ordinary algebraic measurement processing on the one-solve path', () => {
     const nodes = [
@@ -74,7 +80,12 @@ describe('Frame simulation diagnostics and retry policy', () => {
       edge('output', 'gain', 'y', 'scope', 'in1'),
     ];
     const spy = vi.spyOn(ImplicitSolver.prototype, 'solve');
-    const state = new VLabPhysicsEngine(config).simulateStep(nodes, edges, null, 0.01);
+    const state = new VLabPhysicsEngine(config).simulateStep(
+      nodes,
+      edges,
+      null,
+      0.01,
+    );
     expect(state.x.every(Number.isFinite)).toBe(true);
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -106,12 +117,21 @@ describe('Frame simulation diagnostics and retry policy', () => {
         edge('limit-scope', 'limit', 'y', 'scope', 'in1'),
       ];
       const configuration = normalizeSolverConfiguration(
-        node('config', 'solver_config', { solver, initialStep: 0.01, maximumStep: 0.01 }),
+        node('config', 'solver_config', {
+          solver,
+          initialStep: 0.01,
+          maximumStep: 0.01,
+        }),
       );
       const engine = new VLabPhysicsEngine(configuration);
       const spy = vi.spyOn(ImplicitSolver.prototype, 'solve');
       const initial = engine.simulateStep(nodes, edges, null, 0.01);
-      const result = engine.simulateStep(nodes, edges, { ...initial, useSdirk: true }, 0.01);
+      const result = engine.simulateStep(
+        nodes,
+        edges,
+        { ...initial, useSdirk: true },
+        0.01,
+      );
       expect(spy).toHaveBeenCalledTimes(2);
       expect(result.scopeValues).toBeCloseTo(0.5, 7);
       expect(result.rejectedSteps).toBe(0);
@@ -119,16 +139,26 @@ describe('Frame simulation diagnostics and retry policy', () => {
     },
   );
   it('does not escalate or retry an algebraic nonlinear solve failure', () => {
-    const nodes = [node('world', 'world_frame'), node('joint', 'spherical_joint')];
+    const nodes = [
+      node('world', 'world_frame'),
+      node('joint', 'spherical_joint'),
+    ];
     const edges = [edge('base', 'world', 'w', 'joint', 'b')];
-    const spy = vi.spyOn(ImplicitSolver.prototype, 'solve').mockImplementation(() => {
-      throw new Error('nonlinear failure');
-    });
+    const spy = vi
+      .spyOn(ImplicitSolver.prototype, 'solve')
+      .mockImplementation(() => {
+        throw new Error('nonlinear failure');
+      });
     for (const configuration of [null, config]) {
       spy.mockClear();
-      expect(() => new VLabPhysicsEngine(configuration).simulateStep(nodes, edges, null, 0.01)).toThrow(
-        'nonlinear failure',
-      );
+      expect(() =>
+        new VLabPhysicsEngine(configuration).simulateStep(
+          nodes,
+          edges,
+          null,
+          0.01,
+        ),
+      ).toThrow('nonlinear failure');
       expect(spy).toHaveBeenCalledTimes(1);
     }
   });
@@ -136,14 +166,37 @@ describe('Frame simulation diagnostics and retry policy', () => {
     const worker = { onmessage: null as any, postMessage: vi.fn() };
     vi.stubGlobal('self', worker);
     await import('./vlabWorker');
-    const { nodes, edges } = prescribed('dist_constraint');
     const spy = vi.spyOn(ImplicitSolver.prototype, 'solve');
+    for (const type of ['dist_constraint', 'universal_joint']) {
+      const { nodes, edges } = prescribed(type);
+      worker.onmessage({
+        data: {
+          requestId: 42,
+          nodes,
+          edges,
+          configuration: config,
+          previousState: null,
+          dt: 0.01,
+        },
+      });
+      expect(worker.postMessage).toHaveBeenLastCalledWith({
+        requestId: 42,
+        error: expect.stringContaining('FULLY_PRESCRIBED'),
+      });
+    }
     worker.onmessage({
-      data: { requestId: 42, nodes, edges, configuration: config, previousState: null, dt: 0.01 },
+      data: {
+        requestId: 43,
+        nodes: [node('joint', 'universal_joint', { axis1: '[0 0 0]' })],
+        edges: [],
+        configuration: config,
+        previousState: null,
+        dt: 0.01,
+      },
     });
-    expect(worker.postMessage).toHaveBeenCalledWith({
-      requestId: 42,
-      error: expect.stringContaining('FULLY_PRESCRIBED'),
+    expect(worker.postMessage).toHaveBeenLastCalledWith({
+      requestId: 43,
+      error: expect.stringContaining('INVALID_JOINT_PARAMETER'),
     });
     expect(spy).not.toHaveBeenCalled();
   });

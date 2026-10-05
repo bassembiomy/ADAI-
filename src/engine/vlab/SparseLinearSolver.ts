@@ -3,6 +3,52 @@
  * Supports dense LU decomposition with partial pivoting and basic sparse structures.
  */
 export class SparseLinearSolver {
+  /** Rank-revealing elimination for joints with genuinely free coordinates.
+   * Zero Newton increments on free columns preserve the current pose. The
+   * nonlinear solver still checks every residual, including redundant rows.
+   */
+  static solveRankDeficient(A: number[][], b: number[], preferFreeColumns: number[] = []): number[] {
+    const n = b.length;
+    const matrix = A.map((row, i) => {
+      const scale = Math.max(...row.map(Math.abs), 1e-30);
+      return [...row.map(v => v / scale), b[i] / scale];
+    });
+    // Equilibrate columns as well: row scaling alone mistakes independent
+    // coordinates for free ones when a stiffness couples very different units.
+    const columnScales = Array.from({ length: n }, (_, j) => Math.max(...matrix.map(row => Math.abs(row[j])), 1e-30));
+    for (const row of matrix) for (let j = 0; j < n; j++) row[j] /= columnScales[j];
+    const columns = Array.from({ length: n }, (_, i) => i);
+    const free = new Set(preferFreeColumns);
+    let rank = 0;
+    for (let k = 0; k < n; k++) {
+      let pivot = 0, row = k, col = k;
+      for (const priority of [false, true]) {
+        for (let i = k; i < n; i++) for (let j = k; j < n; j++) {
+          if (free.has(columns[j]) !== priority) continue;
+          if (Math.abs(matrix[i][j]) > pivot) { pivot = Math.abs(matrix[i][j]); row = i; col = j; }
+        }
+        if (pivot >= 1e-7) break;
+      }
+      if (pivot < 1e-7) break;
+      [matrix[k], matrix[row]] = [matrix[row], matrix[k]];
+      for (const r of matrix) [r[k], r[col]] = [r[col], r[k]];
+      [columns[k], columns[col]] = [columns[col], columns[k]];
+      for (let i = k + 1; i < n; i++) {
+        const factor = matrix[i][k] / matrix[k][k];
+        matrix[i][k] = 0;
+        for (let j = k + 1; j <= n; j++) matrix[i][j] -= factor * matrix[k][j];
+      }
+      rank++;
+    }
+    const result = new Array(n).fill(0), permuted = new Array(n).fill(0);
+    for (let i = rank - 1; i >= 0; i--) {
+      let value = matrix[i][n];
+      for (let j = i + 1; j < rank; j++) value -= matrix[i][j] * permuted[j];
+      permuted[i] = value / matrix[i][i];
+    }
+    columns.forEach((col, i) => { result[col] = permuted[i] / columnScales[col]; });
+    return result;
+  }
   /**
    * Solves Ax = b using Gaussian elimination with partial pivoting.
    * This is extremely robust for DAE algebraic constraints.

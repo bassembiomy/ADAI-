@@ -4,6 +4,7 @@ import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
 import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
+import { initializeUniversalJointFrames } from './vlabJointInitialization';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -90,6 +91,11 @@ export class VLabPhysicsEngine {
     }
     
     const system = this.currentSystem;
+    const universalJoints = system.components.filter(c => c.blockType === 'universal_joint');
+    this.solver.configure({
+      allowUnderdetermined: universalJoints.length > 0,
+      preferFreeColumns: system.variableNames.flatMap((name, idx) => /_R[xyz]_\((frame|multibodyframe)\)/i.test(name) ? [idx] : []),
+    });
     const isAlgebraicSystem = system.isPurelyAlgebraic === true;
     
     // Initialize solution vector x
@@ -135,7 +141,7 @@ export class VLabPhysicsEngine {
           // and this is negligible next to any real geometry (same idea as
           // the psiar/thermal/pressure seeds just above).
           x[idx] = 0.01 * (idx + 1);
-        } else if (isAlgebraicSystem && name.endsWith('_branch_lambda')) {
+        } else if (name.endsWith('_branch_lambda') && (isAlgebraicSystem || universalJoints.some(c => name === c.blockId + '_branch_lambda'))) {
           // A zero multiplier removes the direction derivatives from the
           // initial constraint Jacobian. Seed it once, then let Newton find
           // the actual reaction (including exactly zero for unloaded models).
@@ -164,6 +170,7 @@ export class VLabPhysicsEngine {
           }
         }
       });
+      if (universalJoints.length > 0) initializeUniversalJointFrames(system, x);
     }
 
     const config = this.solverConfiguration;

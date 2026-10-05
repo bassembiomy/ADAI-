@@ -10,11 +10,12 @@
 export type ConstraintDiagnosticCode =
   | 'FULLY_PRESCRIBED'
   | 'DUPLICATE_CONSTRAINT'
-  | 'UNDEFINED_DIRECTION';
+  | 'UNDEFINED_DIRECTION'
+  | 'INVALID_JOINT_PARAMETER';
 
 export interface ConstraintTopology {
   blockId: string;
-  type: 'dist_constraint' | 'angle_constraint' | 'spherical_joint';
+  type: 'dist_constraint' | 'angle_constraint' | 'spherical_joint' | 'universal_joint';
   /** Union-find root id of the constraint's B (base) frame port. */
   baseRoot: string;
   /** Union-find root id of the constraint's F (follower) frame port. */

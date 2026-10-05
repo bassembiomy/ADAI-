@@ -9,9 +9,40 @@ const node = (id: string, type: string): VLabNode => ({
 });
 
 describe('normalizeLegacyVLabGraph', () => {
+  it('restores universal Frame ports and axes without replacing zero damping', () => {
+    const legacy = {
+      ...node('joint', 'universal_joint'),
+      data: {
+        type: 'universal_joint',
+        params: { damping: 0 },
+        ports: [
+          { id: 'b', pos: 'left' },
+          { id: 'f', pos: 'right' },
+        ],
+      },
+    } as VLabNode;
+    const result = normalizeLegacyVLabGraph([legacy], []);
+    expect(
+      result.nodes[0].data.ports?.find(
+        (p: { id: string; domain?: string }) => p.id === 'b',
+      )?.domain,
+    ).toBe('Frame');
+    expect(result.nodes[0].data.params).toMatchObject({
+      damping: 0,
+      axis1: { value: '[1 0 0]' },
+      axis2: { value: '[0 1 0]' },
+    });
+    expect(normalizeLegacyVLabGraph(result.nodes, [])).toEqual(result);
+    expect(legacy.data.ports).toHaveLength(2);
+  });
   it('removes gas_properties nodes and their incident edges', () => {
-    const nodes = [node('legacy', 'gas_properties'), node('source', 'gas_pressure_source')];
-    const edges: VLabEdge[] = [{ id: 'bad', source: 'source', target: 'legacy' }];
+    const nodes = [
+      node('legacy', 'gas_properties'),
+      node('source', 'gas_pressure_source'),
+    ];
+    const edges: VLabEdge[] = [
+      { id: 'bad', source: 'source', target: 'legacy' },
+    ];
 
     expect(normalizeLegacyVLabGraph(nodes, edges)).toEqual({
       nodes: [nodes[1]],
@@ -20,8 +51,13 @@ describe('normalizeLegacyVLabGraph', () => {
   });
 
   it('preserves unrelated data without mutating the input arrays', () => {
-    const nodes = [node('source', 'gas_pressure_source'), node('sink', 'gas_reservoir')];
-    const edges: VLabEdge[] = [{ id: 'valid', source: 'source', target: 'sink' }];
+    const nodes = [
+      node('source', 'gas_pressure_source'),
+      node('sink', 'gas_reservoir'),
+    ];
+    const edges: VLabEdge[] = [
+      { id: 'valid', source: 'source', target: 'sink' },
+    ];
     const originalNodes = [...nodes];
     const originalEdges = [...edges];
 
@@ -46,15 +82,21 @@ describe('normalizeLegacyVLabGraph', () => {
     } as VLabNode;
     const result = normalizeLegacyVLabGraph([legacy], []);
     const upgraded = result.nodes[0];
-    expect(upgraded.data.ports?.find((p: { id: string; domain?: string }) => p.id === 'b')?.domain).toBe(
-      'Frame',
-    );
-    expect(upgraded.data.ports?.find((p: { id: string; domain?: string }) => p.id === 'f')?.domain).toBe(
-      'Frame',
-    );
-    expect(upgraded.data.ports?.find((p: { id: string; domain?: string }) => p.id === 'f_reac')?.domain).toBe(
-      'Physical',
-    );
+    expect(
+      upgraded.data.ports?.find(
+        (p: { id: string; domain?: string }) => p.id === 'b',
+      )?.domain,
+    ).toBe('Frame');
+    expect(
+      upgraded.data.ports?.find(
+        (p: { id: string; domain?: string }) => p.id === 'f',
+      )?.domain,
+    ).toBe('Frame');
+    expect(
+      upgraded.data.ports?.find(
+        (p: { id: string; domain?: string }) => p.id === 'f_reac',
+      )?.domain,
+    ).toBe('Physical');
     expect(upgraded.data.params?.damping).toBeUndefined();
     expect(upgraded.data.label).toBe('My joint');
     expect(legacy.data.ports).toHaveLength(2);
