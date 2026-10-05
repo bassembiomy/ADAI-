@@ -190,16 +190,34 @@
       "findings": []
     },
     {
-      "id": "WP-09",
-      "title": "DAE structural mapping + structural rank + scope/probe routing by exact port id with quantity/unit",
+      "id": "WP-09a",
+      "title": "DAE structural mapping: direction-driven signal branches, exact handle parsing, residual/allocation agreement, structural rank",
       "phase": "R2",
       "deps": [
         "WP-08"
       ],
       "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/dae_structure.test.ts src/engine/vlab/review/scope_routing.test.ts --reporter=dot",
+      "evidence": [
+        "dae-allocation 44 -> 0, scope-routing 11 -> 0; branches from port.direction; exact handle ids; DAEStructureError + structural rank check pre-solve",
+        "planner re-run (after npm install repair): 3600 pass / 186 expected-fail / 1 known; test:vlab 20/20",
+        "21 blocks now explicit unsupported (vlabStructure.ts UNSUPPORTED_BLOCKS): WP-10 phase_splitter; WP-14 lever; WP-17 6 ma_*; WP-20 13 controllers/transforms. Domain WPs MUST implement them (mandate: equations are stated)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-09b",
+      "title": "Scope/probe routing by exact port id with quantity+unit; vector/Frame never silently scalar; scope channels survive save/open",
+      "phase": "R2",
+      "deps": [
+        "WP-09a"
+      ],
+      "blocks": [],
       "status": "in_progress",
       "attempts": 0,
-      "acceptance": "npx vitest run src/engine/vlab/review/dae_structure.test.ts src/engine/vlab/review/scope_routing.test.ts --reporter=dot",
+      "acceptance": "npx vitest run src/engine/vlab/review/scope_routing.test.ts src/components/vlab --reporter=dot",
       "evidence": [],
       "findings": []
     },
@@ -208,7 +226,7 @@
       "title": "Multibody joints: revolute, prismatic, spherical, universal, weld (DOF, Frame ports, reactions, outputs, reference tests)",
       "phase": "R2",
       "deps": [
-        "WP-09"
+        "WP-09b"
       ],
       "blocks": [],
       "status": "todo",
@@ -525,7 +543,7 @@
         "WP-06b",
         "WP-07",
         "WP-08",
-        "WP-09",
+        "WP-09b",
         "WP-19a",
         "WP-13b",
         "WP-10",
@@ -763,7 +781,8 @@
       "block": "46 blocks (busbar, lever, ps_demux_3, ma_*_sensor, hysteresis_ctrl_3ph, pmsm_foc, ps_integrator_gen...)",
       "layer": "solver",
       "summary": "Equation residual count does not match the DAE-allocated unknowns. Extra rows are silently dropped and missing rows zero-filled.",
-      "wp": "WP-09"
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
     },
     {
       "id": "F-026",
@@ -771,7 +790,8 @@
       "block": "bldc_pwm_ctrl, dcdc_ctrl, im_foc_ctrl, im_dtc_ctrl, cycloconverter_ctrl, dc_voltage_ctrl, pmsm_foc, ac_motor_pid_control",
       "layer": "port",
       "summary": "Output ports named g/ctrl/p match the isPhysicalOutputPort input-name list, so no signal branch is allocated and the scope reads a silent 0.",
-      "wp": "WP-09"
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
     },
     {
       "id": "F-027",
@@ -797,7 +817,8 @@
       "block": "busbar",
       "layer": "port",
       "summary": "Param nodes=4 but only 2 ports.",
-      "wp": "WP-09"
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
     },
     {
       "id": "F-030",
@@ -846,7 +867,8 @@
       "block": "ma_pipe, ma_rot_conv, ma_trans_conv, ma_selector, ma_separator",
       "layer": "eq",
       "summary": "Explicit Physical ports allocate signal branches that the stub MA equations never drive.",
-      "wp": "WP-09"
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
     },
     {
       "id": "F-036",
@@ -854,7 +876,8 @@
       "block": "DAEAssembler isPhysicalOutputPort",
       "layer": "solver",
       "summary": "18 inputs get spurious signal branches (switch.v, gas_flow_source.m, clarke/park/sym_comp abc...). 2 outputs and 13 unimplemented outputs get none. The assembler must use port.direction. clarke_transform and inv_sym_comp_transform are it.fails.",
-      "wp": "WP-09"
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
     },
     {
       "id": "F-037",
@@ -862,7 +885,8 @@
       "block": "DAEAssembler handle parsing",
       "layer": "port",
       "summary": "Strips /_[st]$/ from handles, so ports ending in _s/_t (pmsm_foc.vdc_s, iabc_s, w_s, th_s) are mis-parsed.",
-      "wp": "WP-09"
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
     },
     {
       "id": "F-038",
@@ -919,6 +943,46 @@
       "layer": "integration",
       "summary": "The lab used the dead param Rth=35, so the heater ran on the default R (about 5.3 kW). Now R=35, about 1.5 kW (realistic). Behaviour change in the shipped lab.",
       "wp": "WP-21"
+    },
+    {
+      "id": "F-045",
+      "severity": "high",
+      "block": "DAEAssembler.residual",
+      "layer": "solver",
+      "summary": "Per-eval catch returns zeros(equationCount) on exceptions, and compRes[i] || 0 turns NaN into 0. Silent-zero/NaN masking violates the mandate.",
+      "wp": "WP-09b"
+    },
+    {
+      "id": "F-046",
+      "severity": "med",
+      "block": "abc/dq0/seq/ab0 vector ports",
+      "layer": "eq",
+      "summary": "A scalar solver port carries one channel. clarke, inv_clarke, inv_sym_comp, im/pmsm_curr_ctrl and ps_sine_3phase carry channel 1 only. Needs vector signal ports.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-047",
+      "severity": "high",
+      "block": "frame blocks",
+      "layer": "eq",
+      "summary": "Frame mapping assigns coords by branch NAME (force->X, torque->Rx). revolute torque->Rx and prismatic force->Px regardless of axis. weld has a single force->Px. Frame pose unknowns are exempt from the structural check.",
+      "wp": "WP-19a"
+    },
+    {
+      "id": "F-048",
+      "severity": "low",
+      "block": "whitebox SimulationHarness.ts:36",
+      "layer": "port",
+      "summary": "Still strips /_[st]$/ from probe handles.",
+      "wp": "WP-09b"
+    },
+    {
+      "id": "F-049",
+      "severity": "low",
+      "block": "test infra",
+      "layer": "integration",
+      "summary": "labs_sim / vlab_comprehensive / airfryer time out at 5 s under full parallel load. Set per-file timeouts or speed them up.",
+      "wp": "WP-31"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

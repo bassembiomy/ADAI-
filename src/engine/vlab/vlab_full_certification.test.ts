@@ -156,6 +156,8 @@ const ZERO_RESIDUAL_FACTORIES = new Set([
   'thermal_ref', 'ma_ref', 'gas_ref', 'mag_ref', 'world_frame',
   'ref_frame', 'ps_terminator', 'fluid_ref', 'scope', 'solver_config', 'mech_config',
   'belt_properties', 'ma_properties', 'hydraulic_reference_il', 'reservoir_il',
+  // WP-09a: a net label has no through variable, and a DOE instance without an `out` port has nothing to drive
+  'conn_label', 'doe_custom',
 ]);
 
 const numericParams = (block: VLabBlock): Record<string, number | string> =>

@@ -13,8 +13,8 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | Blocks with generic "governing ... equation" label (equation or description) | 101 |
 | Blocks with no equation text | 0 |
 | Unsafe numeric `params.X ||` fallbacks in vlabEquations.ts | 0 |
-| Fully certified blocks (all checks pass, no expected failure) | 127 of 248 |
-| Expected failures (ratchet entries) | 198 across 121 blocks |
+| Fully certified blocks (all checks pass, no expected failure) | 134 of 248 |
+| Expected failures (ratchet entries) | 164 across 114 blocks |
 
 ## Per check (blocks)
 | Check | Meaning | Pass | Fail | Expected failure |
@@ -25,24 +25,25 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | equation-factory | exactly one equation factory (and at most one DAE case) | 248 | 0 | 0 |
 | params-hidden | every param the equation reads is exposed or a documented alias | 248 | 0 | 0 |
 | params-dead | every exposed param is read by the equation | 206 | 42 | 42 |
-| dae-allocation | DAE branches/states allocated == consumed; residual length == allocated unknowns | 204 | 44 | 44 |
-| scope-routing | every signal output port is reachable by a scope through the real routing path | 237 | 11 | 11 |
+| dae-allocation | DAE branches/states allocated == consumed; residual length == allocated unknowns | 248 | 0 | 0 |
+| scope-routing | every signal output port is reachable by a scope through the real routing path | 248 | 0 | 0 |
+| unsupported | block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a) | 227 | 21 | 21 |
 | equation-doc | library equation text is specific (not generic or missing) | 147 | 101 | 101 |
 
 ## Expected failures per owning WP
 | WP | Total | Breakdown by check |
 |---|---|---|
-| WP-09 | 55 | dae-allocation 44, scope-routing 11 |
 | WP-19a | 4 | params-dead 1, equation-doc 3 |
+| WP-10 | 1 | unsupported 1 |
 | WP-12 | 1 | equation-doc 1 |
 | WP-13 | 1 | equation-doc 1 |
 | WP-13b | 7 | equation-doc 7 |
-| WP-14 | 2 | equation-doc 2 |
+| WP-14 | 3 | unsupported 1, equation-doc 2 |
 | WP-15 | 3 | equation-doc 3 |
 | WP-16 | 1 | equation-doc 1 |
-| WP-17 | 25 | params-dead 5, equation-doc 20 |
+| WP-17 | 31 | params-dead 5, unsupported 6, equation-doc 20 |
 | WP-19 | 10 | equation-doc 10 |
-| WP-20 | 85 | params-dead 36, equation-doc 49 |
+| WP-20 | 98 | params-dead 36, unsupported 13, equation-doc 49 |
 | WP-21 | 4 | equation-doc 4 |
 
 ## Documented orphans (allow-lists in blockClassification.ts)

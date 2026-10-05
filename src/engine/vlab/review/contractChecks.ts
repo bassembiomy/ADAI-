@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { VLAB_LIBRARY, type VLabBlock } from '../../../utils/vlabLibrary';
 import { blockEquations } from '../vlabEquations';
+import { UNSUPPORTED_BLOCKS } from '../vlabStructure';
 import {
   REPO_ROOT, assembleSingleBlock, libraryDefaults, parseDaeCaseLabels, routeToScope, traceBlock,
   type SingleBlockAssembly, type Trace,
@@ -17,7 +18,7 @@ import {
 
 export const CHECK_IDS = [
   'unique-ids', 'classification', 'port-domains', 'equation-factory', 'params-hidden', 'params-dead',
-  'dae-allocation', 'scope-routing', 'equation-doc',
+  'dae-allocation', 'scope-routing', 'unsupported', 'equation-doc',
 ] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
 
@@ -30,6 +31,7 @@ export const CHECK_TITLES: Record<CheckId, string> = {
   'params-dead': 'every exposed param is read by the equation',
   'dae-allocation': 'DAE branches/states allocated == consumed; residual length == allocated unknowns',
   'scope-routing': 'every signal output port is reachable by a scope through the real routing path',
+  'unsupported': 'block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a)',
   'equation-doc': 'library equation text is specific (not generic or missing)',
 };
 
@@ -142,8 +144,15 @@ export function evaluateBlock(ctx: BlockContext): Record<CheckId, string[]> {
     res['params-hidden'].push('equation threw while traced; param reads unknown');
   }
 
+  // 6. explicitly unsupported blocks are rejected by the assembler with a missing-spec diagnostic (WP-09a): that is
+  // reported by the `unsupported` check, not as an allocation or routing failure.
+  const unsupported = UNSUPPORTED_BLOCKS[block.id];
+  if (unsupported) res['unsupported'].push(`${unsupported.wp}: ${unsupported.missingSpec}`);
+
   // 6. DAE allocation
-  if (!assembly.assembled) {
+  if (unsupported) {
+    // assembly is rejected on purpose
+  } else if (!assembly.assembled) {
     res['dae-allocation'].push(`single-block assembly failed: ${assembly.error}`);
   } else {
     const alloc = assembly.allocatedBranches + assembly.allocatedStates;
@@ -163,7 +172,7 @@ export function evaluateBlock(ctx: BlockContext): Record<CheckId, string[]> {
   }
 
   // 7. scope routing of signal outputs
-  if (cls !== 'utility') {
+  if (cls !== 'utility' && !unsupported) {
     for (const portId of ctx.signalOutputPorts) {
       const r = routeToScope(block, portId);
       if (r.routing !== 'ok') res['scope-routing'].push(`output port "${portId}": ${r.routing}${r.detail ? ` (${r.detail})` : ''}`);
@@ -225,6 +234,8 @@ export function wpFor(ctx: BlockContext, check: CheckId): WpId | null {
     // equation needs, owned by the block's domain WP.
     case 'params-hidden': case 'params-dead': return equationWp(ctx);
     case 'dae-allocation': case 'scope-routing': return JOINTS.has(ctx.block.id) ? 'WP-19a' : 'WP-09';
+    // the unsupported table names the work package that owns the missing spec
+    case 'unsupported': return (UNSUPPORTED_BLOCKS[ctx.block.id]?.wp as WpId | undefined) ?? null;
     case 'equation-doc': return equationWp(ctx);
     default: return null; // unique-ids, classification, equation-factory must pass today; never expected to fail
   }

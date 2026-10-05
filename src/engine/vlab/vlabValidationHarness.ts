@@ -2,6 +2,7 @@ import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { buildDomainFixture } from './vlabDomainFixture';
 import { TopologyValidationError } from './vlabTopologyValidation';
+import { DAEStructureError } from './vlabStructure';
 import { VLabValidationContract } from './vlabValidationContracts';
 
 export interface VLabValidationResult {
@@ -55,8 +56,12 @@ export const runBlockValidationHarness = (
       }
       finalVal = state?.x?.[0] ?? 0;
     } catch (err) {
-      // An invalid topology is a harness/fixture defect and must never pass silently.
+      // An invalid topology is a harness/fixture defect and must never pass silently. The one exception is a block the
+      // engine explicitly rejects as unsupported (WP-09a): that diagnostic names the missing spec, nothing is hidden.
       if (err instanceof TopologyValidationError) {
+        if (err.diagnostics.some(d => d.code !== 'unsupported-block')) diagnostics.push(err.message);
+      } else if (err instanceof DAEStructureError) {
+        // a structurally singular or mis-sized network is a block/fixture defect, never a solver hiccup
         diagnostics.push(err.message);
       }
       // Solver non-convergence on a minimal single-block network is not a gate-blocking issue (F-012);

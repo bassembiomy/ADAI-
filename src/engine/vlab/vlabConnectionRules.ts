@@ -74,7 +74,9 @@ export type ConnectionCode =
   | 'domain-mismatch' | 'output-to-output' | 'input-to-input' | 'input-already-driven'
   | 'scope-needs-measurable-output' | 'unknown-port' | 'unknown-domain' | 'wildcard-not-allowed' | 'unconnected-required-port'
   // WP-08: numeric parameter that is not a finite number / violates its physical bound (vlabParams.ts)
-  | 'invalid-parameter' | 'parameter-out-of-range';
+  | 'invalid-parameter' | 'parameter-out-of-range'
+  // WP-09a: block listed in vlabStructure.UNSUPPORTED_BLOCKS (the diagnostic names the missing specification)
+  | 'unsupported-block';
 
 export interface ConnectionDiagnostic {
   blockId: string;

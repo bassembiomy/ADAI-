@@ -379,12 +379,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  busbar: ({ across }) => {
-    // All terminals equal voltage
+  busbar: ({ across, branch }) => {
+    // Library equation: V_1 = V_2 = ... = V_n and sum I_k = 0. branch[k] is the current into the bar at terminal k,
+    // so n terminals give (n - 1) potential equalities plus one current balance = n rows for n unknowns.
     const residuals: number[] = [];
     for (let i = 1; i < across.length; i++) {
       residuals.push(across[i] - across[0]);
     }
+    residuals.push(branch.reduce((sum, current) => sum + current, 0));
     return residuals;
   },
 
@@ -1111,9 +1113,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const drag = numericParam(params, 'drag_coeff', 0.05); // base viscous drag coefficient (N-m-s/rad)
     const viscosity = drag + (Det * 0.02) + (Water * 0.005);
     const torque = viscosity * across[0] + 0.01 * Math.sign(across[0]) * across[0] * across[0];
+    // One rotational port `r` -> one torque branch (the second row duplicated it and had no unknown, F-025).
     return [
-      branch[0] - torque,
-      branch[1] - torque
+      branch[0] - torque
     ];
   },
   
@@ -2237,8 +2239,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   ps_simulink_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   simulink_ps_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  conn_label: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  doe_custom: ({ across, branch, params, nodeId, ctx }) => {
+  // A net label only names the net its single port is wired to: it has no through variable, hence no residual.
+  conn_label: () => [],
+  doe_custom: ({ across, branch, params, nodeId, ctx, ports }) => {
     let deployment: any = unwrapParam(params?.deploymentModel);
     if (typeof deployment === 'string') {
       try {
@@ -2283,7 +2286,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
         y = NaN;
       }
     }
-    return [branch[0] - y];
+    // The response drives the instance's declared output port `out` (engine/doe/integration.ts); an instance without
+    // one (the bare library block has no ports) has nothing to drive and therefore no residual row.
+    return ports.includes('out') ? [branch[0] - y] : [];
   },
 
   ps_demux_3: ({ across, branch }) => {
@@ -2348,13 +2353,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_sine_3phase: ({ branch, params, ctx }) => {
+    // Two scalar outputs: `abc` carries phase a of the 3-phase set, Vpk*sin(wt) (phases b and c, shifted -/+ 120 deg,
+    // need a vector port, WP-20), and `wt` the instantaneous phase angle wt = 2*pi*f*t of the sinusoid. The old rows
+    // were bound to the wrong ports (phase a on the input `m`, b on `abc`, c on `wt`) through the name vocabulary.
+    // The `m` / `ang` inputs are still not read (WP-20).
     const Vpk = numericParam(params, 'Vpk', 325);
     const f = numericParam(params, 'f', 50);
     const w = 2 * Math.PI * f;
     return [
       branch[0] - Vpk * Math.sin(w * ctx.time),
-      branch[1] - Vpk * Math.sin(w * ctx.time - 2 * Math.PI / 3),
-      branch[2] - Vpk * Math.sin(w * ctx.time + 2 * Math.PI / 3)
+      branch[1] - w * ctx.time
     ];
   },
 
@@ -2403,13 +2411,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── MATH TRANSFORMS ─────────────────────────────────────────────────────────
   inv_clarke_transform: ({ across, branch }) => {
+    // The `abc` output is ONE scalar port: it carries phase a, I_a = I_alpha (library equation). Phases b and c
+    // (-0.5*alpha +/- sqrt(3)/2*beta) need a vector port the solver does not have yet (F-0xx, WP-20).
     const alpha = across[0] || 0;
-    const beta = across[1] || 0;
-    const zero = across[2] || 0;
     return [
-      branch[0] - (alpha + zero),
-      branch[1] - (-0.5 * alpha + Math.sqrt(3)/2 * beta + zero),
-      branch[2] - (-0.5 * alpha - Math.sqrt(3)/2 * beta + zero)
+      branch[0] - alpha
     ];
   },
 
@@ -2461,13 +2467,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   inv_sym_comp_transform: ({ across, branch }) => {
+    // Fortescue: V_a = V_0 + V_1 + V_2. The `seq` input is ONE scalar port that carries the positive-sequence channel
+    // (V_0 = V_2 = 0, a balanced set), so the single `abc` output port carries phase a = V_1. The old row also read
+    // the block's own output port (across[1]) as the negative sequence, which made the residual unsolvable (F-026).
     const pos = across[0] || 0;
-    const neg = across[1] || 0;
-    const zero = across[2] || 0;
     return [
-      branch[0] - (pos + neg + zero),
-      branch[1] - (-0.5*pos - 0.5*neg + zero),
-      branch[2] - (-0.5*pos - 0.5*neg + zero)
+      branch[0] - pos
     ];
   },
 
@@ -2738,20 +2743,20 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   im_curr_ctrl: ({ across, branch }) => {
+    // idq_ref / idq / vdq_ref are single scalar ports: they carry the d channel. The q-channel row read vdq_ff and
+    // v_max (across[2], across[3]) as if they were idq_ref_q / idq_q and had no unknown (F-025); it is removed until
+    // vector ports exist (WP-20). The gain 2.0 is the unexposed placeholder tracked by params-dead (WP-20).
     const error_d = (across[0] || 0) - (across[1] || 0);
-    const error_q = (across[2] || 0) - (across[3] || 0);
     return [
-      branch[0] - error_d * 2.0,
-      branch[1] - error_q * 2.0
+      branch[0] - error_d * 2.0
     ];
   },
 
   pmsm_curr_ctrl: ({ across, branch }) => {
+    // Same single d-channel mapping as im_curr_ctrl (see there).
     const error_d = (across[0] || 0) - (across[1] || 0);
-    const error_q = (across[2] || 0) - (across[3] || 0);
     return [
-      branch[0] - error_d * 2.0,
-      branch[1] - error_q * 2.0
+      branch[0] - error_d * 2.0
     ];
   },
 
@@ -2989,3 +2994,17 @@ const rlStateCache = new Map<string, {
   currentAction: number;
   currentMaxQ: number;
 }>();
+
+/**
+ * Run `fn` and then restore every equation cache that outlives a single evaluation (the RL Q-table). The assembler's
+ * structural probe evaluates each factory once at assembly time; that must not advance a running block's memory.
+ */
+export function withStatefulEquationCaches<T>(fn: () => T): T {
+  const snapshot = new Map([...rlStateCache].map(([k, v]) => [k, structuredClone(v)] as const));
+  try {
+    return fn();
+  } finally {
+    rlStateCache.clear();
+    snapshot.forEach((v, k) => rlStateCache.set(k, v));
+  }
+}

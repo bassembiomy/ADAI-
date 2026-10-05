@@ -1,20 +1,21 @@
 /**
- * WP-07: signal-direction derivation for Physical (signal) ports (F-030).
+ * WP-07: signal-direction derivation for Physical (signal) ports (F-030), updated by WP-09a (F-026 / F-036).
+ *
+ * The library `direction` is the single source of truth: the assembler allocates a signal branch for a Physical port iff
+ * the library says `out` (DAEAssembler.isPhysicalOutputPort; the old port-name vocabulary is gone). This module is now the
+ * ratchet that keeps the library, the equations and the allocation consistent:
  *
  * Tier 1, from the equation (never from port position):
  *   - the block's equation reads the port as `across` and the assembler gives the port no signal branch  -> `in`
  *   - the equation never reads the port as `across` and the assembler allocates a signal branch for it    -> `out`
  * "Driven" is read from the real DAEAssembler: the port's Kirchhoff node carries one of the block's branches.
  *
- * Tier 2, block physics (documented below). The trace is ambiguous or silent for these ports:
- *   - read AND driven: `isPhysicalOutputPort` in DAEAssembler classifies by port-name vocabulary (F-026, WP-09),
- *     so a real input can carry a spurious branch and a real output is also read back as `across`.
- *   - neither read nor driven: the equation does not implement the port yet (dead input/output, WP-08/WP-09).
- *   - never read but driven although it is an input by physics (name vocabulary says output).
- *   - read but undriven although it is an output by physics (name vocabulary says conserving).
+ * Tier 2, block physics (documented below). The trace is silent or ambiguous for these ports:
+ *   - read AND driven: the equation reads one of its own outputs back as `across` (a residual artefact), it is an output.
+ *   - neither read nor driven: the equation does not implement the port (an unread input), or the block is a container
+ *     (inport) with no branches at all.
  * Every tier-2 entry is checked against the live trace by connections.test.ts, so the table cannot go stale.
- */
-import { DAEAssembler } from '../DAEAssembler';
+ */import { DAEAssembler } from '../DAEAssembler';
 import { libraryDefaults } from './contractInventory';
 import type { BlockContext } from './contractChecks';
 import type { VLabBlock } from '../../../utils/vlabLibrary';
@@ -29,29 +30,33 @@ export const NO_DIRECTION_PORTS: Record<string, string> = {
   'conn_label.a': 'Net label: names the net it is wired to, so it takes the direction of whatever it is wired to.',
 };
 
-/** read as across AND given a signal branch by the name vocabulary; physics says the block reads it. */
-export const CONFLICT_IS_INPUT = [
-  'switch.v', 'gas_flow_source.m', 'rot_multibody_interface.t', 'trans_multibody_interface.f',
-  'dcdc_ctrl.v', 'dc_current_ctrl.i', 'dc_voltage_ctrl.v', 'clarke_transform.abc', 'park_transform.abc',
-  'park_transform.theta', 'inv_park_transform.theta', 'sym_comp_transform.abc', 'luenberger_observer.y',
-];
+/**
+ * read as across AND given a signal branch: physics says the block reads it. Empty since WP-09a: the assembler no longer
+ * gives an input a spurious branch (switch.v, gas_flow_source.m, clarke/park/sym_comp abc, ... are plain tier-1 inputs).
+ */
+export const CONFLICT_IS_INPUT: string[] = [];
 
 /** read as across AND driven; physics says the block produces it (the readback is a residual artefact). */
 export const CONFLICT_IS_OUTPUT = [
-  'ma_selector.t', 'inv_clarke_transform.abc', 'park_transform.dq0', 'inv_park_transform.abc',
-  'sym_comp_transform.seq', 'inv_sym_comp_transform.abc', 'pmsm_tq_est.tq_est',
+  'ma_selector.t', 'park_transform.dq0', 'inv_park_transform.abc',
+  'sym_comp_transform.seq', 'pmsm_tq_est.tq_est',
+  // outputs the old name vocabulary called conserving (s, p): the equation still reads them back as across
+  'hysteresis_ctrl_3ph.s', 'ma_pt_sensor.p',
 ];
 
-/** driven only because the NAME (y, m, x, a) is in the output vocabulary; the block never writes it, it is a feedback/measurement input. */
-export const DRIVEN_BY_NAME_BUT_INPUT = [
-  'ps_smith_predictor.y', 'ps_sine_3phase.m', 'ps_state_feedback.x', 'ps_sliding_mode.y', 'quad_decoder.a',
-];
+/**
+ * driven only because the NAME (y, m, x, a) was in the output vocabulary. Empty since WP-09a: these feedback / measurement
+ * inputs are now undriven (see SILENT_IS_INPUT).
+ */
+export const DRIVEN_BY_NAME_BUT_INPUT: string[] = [];
 
-/** read but not driven only because the NAME (s, p) is in the conserving vocabulary; it is an output signal. */
-export const READ_BUT_OUTPUT = ['hysteresis_ctrl_3ph.s', 'ma_pt_sensor.p'];
+/** read but not driven only because the NAME (s, p) was in the conserving vocabulary. Empty since WP-09a (see CONFLICT_IS_OUTPUT). */
+export const READ_BUT_OUTPUT: string[] = [];
 
 /** not read and not driven (equation does not implement it): decided from the block physics, input. */
 export const SILENT_IS_INPUT = [
+  'ps_smith_predictor.y', 'ps_sine_3phase.m', 'ps_state_feedback.x', 'ps_sliding_mode.y', 'quad_decoder.a',
+  'im_curr_ctrl.vdq_ff', 'im_curr_ctrl.v_max', 'pmsm_curr_ctrl.vdq_ff', 'pmsm_curr_ctrl.v_max',
   'scope.in1', 'ps_switch.ctrl', 'ps_min.u2', 'ps_max.u2', 'bldc_commutation.dir',
   'bldc_current_ctrl.reset', 'bldc_current_ctrl.hall', 'bldc_current_ctrl.dir',
   'bldc_pwm_ctrl.is', 'bldc_pwm_ctrl.reset', 'bldc_pwm_ctrl.hall', 'bldc_pwm_ctrl.dir',
@@ -65,11 +70,9 @@ export const SILENT_IS_INPUT = [
   'pmsm_tq_est.idq', 'pwm_3ph_2level.vabc', 'ps_terminator.u', 'outport.in', 'ma_moisture_source.s', 'ma_flow_source.s',
 ];
 
-/** not read and not driven (equation does not implement it): decided from the block physics, output. */
+/** not read and not driven (the block has no equation / no branch): decided from the block physics, output. */
 export const SILENT_IS_OUTPUT = [
-  'ps_demux_3.b', 'ps_demux_3.c', 'ma_separator.d', 'ma_selector.p', 'bldc_pwm_ctrl.g', 'dcdc_ctrl.ctrl',
-  'cycloconverter_ctrl.p', 'dc_voltage_ctrl.ctrl', 'im_foc_ctrl.g', 'im_dtc_ctrl.g', 'pmsm_foc.g',
-  'ac_motor_pid_control.error', 'inport.out',
+  'inport.out',
 ];
 
 export const TIER2_DIRECTION: Record<string, Direction> = (() => {

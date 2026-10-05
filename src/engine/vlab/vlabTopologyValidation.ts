@@ -24,6 +24,7 @@
 import type { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
 import { validateBlockParams } from './vlabParams';
+import { UNSUPPORTED_BLOCKS, unsupportedBlockReason } from './vlabStructure';
 import { DERIVED_REQUIRED_SIGNAL_INPUTS, DERIVED_REQUIRED_CONSERVING_PORTS } from './vlabRequiredPorts';
 import {
   TRANSPARENT_BLOCKS, blockTypeOf, checkEdgeSet, libraryBlock, portIdFromHandle, resolvePort,
@@ -98,6 +99,15 @@ export function validateTopology(nodes: Node[], edges: Edge[]): TopologyReport {
       diagnostics.push({
         blockId: d.blockId, portId: '', expectedDomain: 'parameter', actualDomain: 'parameter',
         code: d.code, reason: d.reason, param: d.param, raw: d.raw,
+      });
+    }
+    // (WP-09a) a block whose library promise the engine cannot represent is rejected with the missing specification
+    // instead of simulating a placeholder equation.
+    const unsupported = UNSUPPORTED_BLOCKS[type];
+    if (unsupported) {
+      diagnostics.push({
+        blockId: n.id, portId: '', expectedDomain: 'supported', actualDomain: 'unsupported', code: 'unsupported-block',
+        reason: unsupportedBlockReason(n.id, type, unsupported),
       });
     }
     if (TRANSPARENT_BLOCKS.has(type)) continue;

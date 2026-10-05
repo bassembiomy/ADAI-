@@ -16,6 +16,7 @@ import { VLAB_LIBRARY, type VLabBlock } from '../../../utils/vlabLibrary';
 import { DAEAssembler } from '../DAEAssembler';
 import { blockEquations, type BlockEquationArgs } from '../vlabEquations';
 import { assembleSingleBlock, libraryDefaults } from './contractInventory';
+import { DAEStructureError } from '../vlabStructure';
 
 const CONSERVING = new Set(['electrical', 'thermal', 'translational', 'rotational', 'magnetic', 'fluid', 'gas', 'isothermal_liquid', 'frame', 'multibodyframe']);
 const FRAME = new Set(['frame', 'multibodyframe']);
@@ -123,16 +124,22 @@ export function requiredConservingPorts(b: VLabBlock): ConservingAnalysis {
     const ctx = () => ({ dt: h, time: 0.1, parameters: {}, prevStates: x.map(v => v * 0.99), states: x, stateDerivatives: dx, order: 1 }) as any;
     const F = (xv: number[], dxv: number[]) => quiet(() => sys.residuals(xv, dxv, ctx()));
     const J: Matrix = Array.from({ length: n }, () => new Array(n).fill(0));
-    for (let j = 0; j < n; j++) {
-      const eps = 1e-6 * (1 + Math.abs(x[j]));
-      const xp = x.slice(); xp[j] += eps; const xm = x.slice(); xm[j] -= eps;
-      const dp = dx.slice(); dp[j] += eps; const dm = dx.slice(); dm[j] -= eps;
-      const fxp = F(xp, dx), fxm = F(xm, dx), fdp = F(x, dp), fdm = F(x, dm);
-      for (let i = 0; i < n; i++) {
-        const v = (fxp[i] - fxm[i]) / (2 * eps) + (1 / h) * (fdp[i] - fdm[i]) / (2 * eps);
-        if (!Number.isFinite(v)) return null;
-        J[i][j] = v;
+    try {
+      for (let j = 0; j < n; j++) {
+        const eps = 1e-6 * (1 + Math.abs(x[j]));
+        const xp = x.slice(); xp[j] += eps; const xm = x.slice(); xm[j] -= eps;
+        const dp = dx.slice(); dp[j] += eps; const dm = dx.slice(); dm[j] -= eps;
+        const fxp = F(xp, dx), fxm = F(xm, dx), fdp = F(x, dp), fdm = F(x, dm);
+        for (let i = 0; i < n; i++) {
+          const v = (fxp[i] - fxm[i]) / (2 * eps) + (1 / h) * (fdp[i] - fdm[i]) / (2 * eps);
+          if (!Number.isFinite(v)) return null;
+          J[i][j] = v;
+        }
       }
+    } catch (e) {
+      // WP-09a: a block whose equation does not match its allocation (explicitly unsupported) has no Jacobian to judge
+      if (e instanceof DAEStructureError) return null;
+      throw e;
     }
     return J;
   };

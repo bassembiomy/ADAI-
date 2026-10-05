@@ -21,6 +21,7 @@ import {
   SILENT_IS_INPUT, SILENT_IS_OUTPUT, resolveDirection, tracePortDirections,
 } from './portDirections';
 import { deriveRequiredTables } from './requiredPorts';
+import { UNSUPPORTED_BLOCKS } from '../vlabStructure';
 import { normalizeLegacyVLabGraph } from '../../../components/vlab/vlabModelMigration';
 import { LEARNING_LABS, reconstructLabNodes } from '../../../components/vlab/VLabWorkspace';
 
@@ -507,7 +508,11 @@ describe('pre-simulation topology validation (before the engine assembles or sol
       for (const [k, v] of Object.entries(b.params || {})) params[k] = (v as any).value;
       const { nodes, edges } = buildDomainFixture(b, params);
       const r = validateTopology(nodes, edges);
-      if (!r.valid) bad.push(`${b.id}: ${r.diagnostics.map(d => d.reason).join(' | ')}`);
+      // an explicitly unsupported block (WP-09a) is reported by its own diagnostic and nothing else
+      const unsupported = !!UNSUPPORTED_BLOCKS[b.id];
+      const other = r.diagnostics.filter(d => !(unsupported && d.code === 'unsupported-block' && d.blockId === 'dut'));
+      if (other.length) bad.push(`${b.id}: ${other.map(d => d.reason).join(' | ')}`);
+      if (unsupported) expect(r.diagnostics.filter(d => d.code === 'unsupported-block').map(d => d.blockId)).toEqual(['dut']);
     }
     expect(bad).toEqual([]);
   });

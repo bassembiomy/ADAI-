@@ -2,7 +2,7 @@ import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { universalJointParameters, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
-import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES } from './vlabEquations';
+import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches } from './vlabEquations';
 import { numericParam, stringParam, VLabParamError } from './vlabParams';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -10,6 +10,8 @@ import {
   MultibodyConstraintDiagnosticError,
   validateMultibodyConstraintTopology,
 } from './vlabConstraintDiagnostics';
+import { portIdFromHandle } from './vlabConnectionRules';
+import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
   'ps_lookup_2d', 'bldc_commutation', 'bldc_current_ctrl', 'bldc_pwm_ctrl',
@@ -77,7 +79,11 @@ export class DAEAssembler {
     const nodePorts = new Map<string, string[]>();
     const nodePortDomains = new Map<string, PhysicalDomain>();
     const nodePortPositions = new Map<string, string>();
-    
+    // Signal direction of every Physical port, from the library (source of truth) or the instance's own port metadata.
+    const nodePortDirections = new Map<string, 'in' | 'out'>();
+    // Ports that exist in the block's library definition (everything else is a dynamic instance port).
+    const libraryPortKeys = new Set<string>();
+
     // Helper to get ports of a block type
     const getBlockPortsFromLib = (blockType: string) => {
       for (const domain of VLAB_LIBRARY) {
@@ -94,7 +100,8 @@ export class DAEAssembler {
             return {
               id: p.id,
               domain: d.toLowerCase() as PhysicalDomain,
-              pos: p.pos
+              pos: p.pos,
+              direction: p.direction
             };
           });
         }
@@ -102,12 +109,22 @@ export class DAEAssembler {
       return [];
     };
 
+    // Exact port id behind an edge handle (`<node>-<port>` editor format). The library/instance port ids are tried
+    // first, so ports that really end in `_s` / `_t` (pmsm_foc.vdc_s, iabc_s, w_s, th_s) are never mis-parsed; the
+    // legacy `<port>_s|_t` suffix is only stripped when the exact id does not exist (vlabConnectionRules.portIdFromHandle).
+    const nodeById = new Map<string, Node>(nodes.map(n => [n.id, n]));
+    const resolveHandlePort = (nodeId: string, handle: string | null | undefined): string => {
+      const n = nodeById.get(nodeId);
+      const id = n ? portIdFromHandle(n as any, handle) : undefined;
+      return id ?? 'p';
+    };
+
     // Find all ports from library, custom definitions, or connected edges
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       const portsSet = new Set<string>();
       const isSignalCtrl = SIGNAL_CONTROL_BLOCKS.has(type);
-      
+
       // Get ports from library
       const libPorts = getBlockPortsFromLib(type);
       libPorts.forEach(p => {
@@ -115,8 +132,10 @@ export class DAEAssembler {
         const resolvedDomain = isSignalCtrl ? 'physical' : p.domain;
         nodePortDomains.set(`${node.id}_${p.id}`, resolvedDomain);
         nodePortPositions.set(`${node.id}_${p.id}`, p.pos);
+        libraryPortKeys.add(`${node.id}_${p.id}`);
+        if (p.direction) nodePortDirections.set(`${node.id}_${p.id}`, p.direction);
       });
-      
+
       // Get ports from node data
       if (node.data && Array.isArray((node.data as any).ports)) {
         (node.data as any).ports.forEach((p: any) => {
@@ -129,28 +148,23 @@ export class DAEAssembler {
             if (p.pos) {
               nodePortPositions.set(`${node.id}_${p.id}`, p.pos);
             }
+            // DOE deployment ports declare `type: input|output` instead of `direction` (same rule as vlabConnectionRules).
+            const direction = p.direction ?? (p.type === 'output' ? 'out' : p.type === 'input' ? 'in' : undefined);
+            if (direction === 'in' || direction === 'out') nodePortDirections.set(`${node.id}_${p.id}`, direction);
           }
         });
       }
-      
+
       // Discover ports from edges
       edges.forEach(edge => {
         if (edge.source === node.id && edge.sourceHandle) {
-          let pId = edge.sourceHandle.replace(/_[st]$/, '');
-          if (pId.startsWith(node.id + '-') || pId.startsWith(node.id + '_')) {
-            pId = pId.slice(node.id.length + 1);
-          }
-          portsSet.add(pId);
+          portsSet.add(resolveHandlePort(node.id, edge.sourceHandle));
         }
         if (edge.target === node.id && edge.targetHandle) {
-          let pId = edge.targetHandle.replace(/_[st]$/, '');
-          if (pId.startsWith(node.id + '-') || pId.startsWith(node.id + '_')) {
-            pId = pId.slice(node.id.length + 1);
-          }
-          portsSet.add(pId);
+          portsSet.add(resolveHandlePort(node.id, edge.targetHandle));
         }
       });
-      
+
       nodePorts.set(node.id, Array.from(portsSet));
     });
 
@@ -196,15 +210,9 @@ export class DAEAssembler {
     const connectedPortKeys = new Set<string>();
     const warnedUnconnectedNmosGates = new Set<string>();
     edges.forEach(edge => {
-      let sourcePort = (edge.sourceHandle || 'p').replace(/_[st]$/, '');
-      if (sourcePort.startsWith(edge.source + '-') || sourcePort.startsWith(edge.source + '_')) {
-        sourcePort = sourcePort.slice(edge.source.length + 1);
-      }
-      let targetPort = (edge.targetHandle || 'p').replace(/_[st]$/, '');
-      if (targetPort.startsWith(edge.target + '-') || targetPort.startsWith(edge.target + '_')) {
-        targetPort = targetPort.slice(edge.target.length + 1);
-      }
-      
+      const sourcePort = resolveHandlePort(edge.source, edge.sourceHandle);
+      const targetPort = resolveHandlePort(edge.target, edge.targetHandle);
+
       const sourceKey = `${edge.source}_${sourcePort}`;
       const targetKey = `${edge.target}_${targetPort}`;
       
@@ -297,33 +305,17 @@ export class DAEAssembler {
         return { branches, states };
       }
 
+      // A Physical (signal) port gets a signal branch iff it is an OUTPUT. The library `direction` is the single source
+      // of truth (F-026/F-036); there is no name vocabulary any more. Only a DYNAMIC instance port that carries no
+      // metadata at all (an edge-discovered handle, a custom port without `direction`) falls back to its position:
+      // a port drawn on the right/bottom edge is an output, anything else is an input.
       const isPhysicalOutputPort = (portId: string) => {
-        const id = portId.toLowerCase();
-        if (blockType === 'rot_motion_sensor' && ['w', 'a'].includes(id)) return true;
-        // The thyristor phase and firing-angle ports are inputs even though
-        // their names also appear in the generic signal-output vocabulary.
-        if (blockType === 'thyristor_12pulse' && ['theta', 'alpha', 'pdelta', 'pwye'].includes(id)) return false;
-        if (['ctrl', 'src', 'ref', 'setpoint', 'target', 'sp', 'gate', 'g', 'mod', 'duty', 'w_ref', 'tl', 'reset', 'enable', 'd', 'lr', 'x1', 'x2', 'error', 'reward'].includes(id) ||
-            id.startsWith('ctrl') || id.startsWith('in_') || id.startsWith('input') || (id === 'in' && blockType !== 'scope')) {
-          return false;
-        }
-        if (['n', 's', 'p', 'p1', 'p2', 'n1', 'n2', 'r', 'c', 'r1', 'r2', 'c1', 'c2', 's1', 's2', 'a', 'b'].includes(id) &&
-            !['v_sensor', 'i_sensor', 'temp_sensor', 'heat_sensor', 'heat_flow_sensor', 'pressure_sensor', 'flow_sensor'].includes(blockType)) {
-          return false;
-        }
-        if (blockType === 'lms_adaptive_filter' && ['x', 'd', 'lr'].includes(id)) return false;
-        if (blockType === 'neural_neuron_learning' && ['x1', 'x2', 'target', 'lr'].includes(id)) return false;
-        if (blockType === 'rl_q_learning_controller' && ['error', 'reward', 'reset'].includes(id)) return false;
-        if (blockType === 'ac_motor_pid_control' && ['w_ref', 'tl'].includes(id)) return false;
-        if (blockType === 'thyristor_6pulse' && ['theta', 'alpha'].includes(id)) return false;
-
         const key = `${blockId}_${portId}`;
+        const direction = nodePortDirections.get(key);
+        if (direction) return direction === 'out';
+        if (libraryPortKeys.has(key)) return false; // library port without a direction (transparent): never driven
         const pos = nodePortPositions.get(key);
-        if (pos === 'right' || pos === 'bottom') {
-          return true;
-        }
-        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'p', 'f', 'x', 'h', 'm', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps', 'phi'].includes(id) || 
-               id.startsWith('out') || id.startsWith('signal');
+        return pos === 'right' || pos === 'bottom';
       };
 
       // 1. Allocate standard physical branch currents/forces/heat flows
@@ -729,12 +721,25 @@ export class DAEAssembler {
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
           break;
         case 'ps_integrator':
+        case 'ps_integrator_gen':
+        case 'ps_moving_avg':
+        case 'ps_smith_predictor':
         case 'ps_transfer_fcn':
         case 'ps_lpf':
         case 'ps_washout':
         case 'ps_sample_hold':
         case 'ps_sr_flipflop':
           states.push('y');
+          break;
+        case 'ps_simulink_conv':
+        case 'simulink_ps_conv':
+          // Simulink boundary converters: `in` (Any) is read, `out` (Any) is driven. Wildcard ports carry no direction metadata.
+          branches.push({ name: 'signal_out', ports: [{ id: 'out', sign: 1 }] });
+          break;
+        case 'busbar':
+          // Ideal bus bar (V_1 = V_2 = ... = V_n, sum I_k = 0): one current into the bar per terminal. Without these
+          // unknowns the equalities had no row and the terminals were not tied together at all (F-025).
+          ports.forEach(portId => branches.push({ name: `current_${portId}`, ports: [{ id: portId, sign: -1 }] }));
           break;
         case 'ps_pi_ctrl':
           states.push('integral');
@@ -781,13 +786,16 @@ export class DAEAssembler {
         case 'pressure_source':
         case 'ctrl_pressure_source':
         case 'mass_flow_source':
-        case 'fluid_ref':
         case 'pressure_sensor':
           branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }] });
           break;
+        case 'fluid_ref':
+          // Pressure reference (like `ground`): its node is pinned to the reference pressure and absorbs any flow,
+          // so the block has no through variable and no residual (F-025).
+          break;
         case 'fluid_inertance':
+          // dP = Li * d(mdot)/dt reads the mass-flow branch derivative; there is no separate `mdot` state.
           branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
-          states.push('mdot');
           break;
         case 'steam_accumulator':
           branches.push({ name: 'flow_in', ports: [{ id: 'pin', sign: -1 }] });
@@ -798,15 +806,19 @@ export class DAEAssembler {
         case 'restriction_il':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
           break;
-        default:
-          if (ports.includes('p') && ports.includes('n')) {
+        default: {
+          // Generic two-terminal fallback for conserving ports only: the signal ports of a controller/demux that happen
+          // to be called a/b/p/n/r/c are not terminals (they get their own signal branches below).
+          const terminal = (id: string) => ports.includes(id) && nodePortDomains.get(`${blockId}_${id}`) !== 'physical';
+          if (terminal('p') && terminal('n')) {
             branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
-          } else if (ports.includes('r') && ports.includes('c')) {
+          } else if (terminal('r') && terminal('c')) {
             branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
-          } else if (ports.includes('a') && ports.includes('b')) {
+          } else if (terminal('a') && terminal('b')) {
             branches.push({ name: 'through', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
           }
           break;
+        }
       }
 
       // 2. Automatically allocate physical signal output branches
@@ -865,8 +877,14 @@ export class DAEAssembler {
       }
     };
 
+    const exemptVariableIndices: number[] = [];
+    const structuralProbes: { blockId: string; blockType: string; run: () => StructuralDiagnostic | null }[] = [];
+    const nodeTypeOf = (n: Node) => (n.data as any)?.type || n.type || (n.data as any)?.blockId || '';
     nodes.forEach(node => {
-      const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+      const type = nodeTypeOf(node);
+      // Explicitly unsupported blocks are rejected before the solve by vlabTopologyValidation (missing-spec diagnostic);
+      // their placeholder equations are known not to match their allocation, so they are not structurally probed.
+      const isUnsupported = type in UNSUPPORTED_BLOCKS;
       const ports = nodePorts.get(node.id) || [];
       const spec = getComponentSpec(node.id, type, ports);
       const branchIndices: number[] = [];
@@ -917,8 +935,9 @@ export class DAEAssembler {
       const equationFactory = blockEquations[type];
       const equationCount = spec.branches.length + spec.states.length;
       
-      // Build component equation residual
-      const residual = (x: number[], dx: number[], ctx: EquationContext): number[] => {
+      // Evaluate the block's equation factory. `guard` (structural probe only) records branch/state reads outside the
+      // allocation instead of letting them silently read `undefined`.
+      const evaluate = (x: number[], dx: number[], ctx: EquationContext, guard?: Set<string>): number[] => {
         if (!equationFactory) {
           // If no equation is defined for this block, return 0 residuals for its variables
           return new Array(equationCount).fill(0);
@@ -970,12 +989,18 @@ export class DAEAssembler {
         });
 
         // Map component branch variables and their derivatives
-        const branchVals = branchIndices.map(idx => x[idx]);
-        const branchDervs = branchIndices.map(idx => dx[idx]);
-        
+        const watch = (arr: number[], label: string): number[] => !guard ? arr : new Proxy(arr, {
+          get(target, prop, receiver) {
+            if (typeof prop === 'string' && /^\d+$/.test(prop) && Number(prop) >= target.length) guard.add(`${label}[${prop}]`);
+            return Reflect.get(target, prop, receiver);
+          },
+        });
+        const branchVals = watch(branchIndices.map(idx => x[idx]), 'branch');
+        const branchDervs = watch(branchIndices.map(idx => dx[idx]), 'dBranch');
+
         // Map component internal states and their derivatives
-        const stateVals = stateIndices.map(idx => x[idx]);
-        const stateDervs = stateIndices.map(idx => dx[idx]);
+        const stateVals = watch(stateIndices.map(idx => x[idx]), 'state');
+        const stateDervs = watch(stateIndices.map(idx => dx[idx]), 'dState');
 
         try {
           return equationFactory({
@@ -998,10 +1023,44 @@ export class DAEAssembler {
               ...d, blockId: node.id, reason: d.reason.replace(/^Parameter "([^"]+)"/, `Parameter "$1" of block "${node.id}" (${type})`),
             }));
           }
+          if (guard) throw e; // structural probe: the caller skips the check when the equation cannot be evaluated
           console.error(`Error calculating residual for ${node.id} (${type}):`, e);
           return new Array(equationCount).fill(0);
         }
       };
+
+      // The equation must return exactly one row per allocated unknown. A mismatch is a structural error, never padded
+      // with 0 or truncated (F-025); it is checked once at assembly (below) and on every evaluation.
+      const residual = (x: number[], dx: number[], ctx: EquationContext): number[] => {
+        const rows = evaluate(x, dx, ctx);
+        if (rows.length !== equationCount) {
+          throw new DAEStructureError([rowCountDiagnostic(node.id, type, equationCount, rows.length, [])]);
+        }
+        return rows;
+      };
+
+      if (typeof equationFactory === 'function' && !isUnsupported) {
+        structuralProbes.push({
+          blockId: node.id,
+          blockType: type,
+          run: () => {
+            const reads = new Set<string>();
+            const zeros = new Array(varCount).fill(0);
+            const probeCtx: EquationContext = { dt: 1e-3, time: 0, parameters: {}, prevStates: zeros.slice(), states: zeros.slice(), stateDerivatives: zeros.slice(), order: 1 };
+            let rows: number[];
+            try {
+              rows = withStatefulEquationCaches(() => evaluate(zeros.slice(), zeros.slice(), probeCtx, reads));
+            } catch (e) {
+              // cannot be evaluated at the origin (e.g. a malformed parameter that the pre-solve validation reports);
+              // the per-evaluation row check still applies
+              return null;
+            }
+            if (!Array.isArray(rows)) return rowCountDiagnostic(node.id, type, equationCount, 0, [...reads]);
+            if (rows.length !== equationCount || reads.size > 0) return rowCountDiagnostic(node.id, type, equationCount, rows.length, [...reads]);
+            return null;
+          },
+        });
+      }
 
       componentsList.push({
         blockId: node.id,
@@ -1013,6 +1072,16 @@ export class DAEAssembler {
         equationCount
       });
     });
+
+    // Structural check of every block equation against its allocation (rows == unknowns, no unallocated reads).
+    {
+      const diagnostics: StructuralDiagnostic[] = [];
+      for (const probe of structuralProbes) {
+        const d = probe.run();
+        if (d) diagnostics.push(d);
+      }
+      if (diagnostics.length) throw new DAEStructureError(diagnostics);
+    }
 
     // 5. Setup Kirchhoff Conservation nodes
     // Identify which variables represent through-variables and which nodes they affect
@@ -1067,7 +1136,8 @@ export class DAEAssembler {
         if (portsInRoot.length === 1) {
           const domain = nodePortDomains.get(key);
           const isFrameDomain = (domain === 'frame' || domain === 'multibodyframe');
-          if ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain) ||
+          // Signal ports are never references by name: an unconnected output called `b` / `c` is driven by its own branch.
+          if ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical') ||
               domain === 'fluid' || domain === 'gas' || domain === 'thermal') {
             referenceNodeIds.add(root);
           }
@@ -1129,6 +1199,11 @@ export class DAEAssembler {
         // structural fact, safe (and necessary) to catch once here rather
         // than relying on a runtime direction that can never become defined.
         if (baseRoot === followerRoot && (type === 'dist_constraint' || type === 'angle_constraint')) {
+          // Both ports on the same frame: the constraint is redundant and its direction undefined at every position, so the
+          // multiplier and reaction components are indeterminate by design (structural check exemption, WP-19a owns it).
+          variableNames.forEach((name, idx) => {
+            if (new RegExp(`^${node.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_branch_(lambda|fx|fy|fz|tx|ty|tz)$`).test(name)) exemptVariableIndices.push(idx);
+          });
           const p = (node.data as any)?.params || {};
           const unwrap = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
           const targetKey = type === 'dist_constraint' ? 'dist' : 'angle';
@@ -1265,17 +1340,11 @@ export class DAEAssembler {
           const targetKey = `${node.id}_${pId}`;
           const edge = edges.find(e => {
             if (e.target === node.id) {
-              let tPort = (e.targetHandle || 'in1').replace(/_[st]$/, '');
-              if (tPort.startsWith(e.target + '-')) {
-                tPort = tPort.slice(e.target.length + 1);
-              }
+              const tPort = resolveHandlePort(e.target, e.targetHandle || 'in1');
               const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
               return norm(tPort) === norm(pId) || (norm(pId) === 'in1' && (norm(tPort) === 'p' || norm(tPort) === 'in' || !tPort));
             } else if (e.source === node.id) {
-              let sPort = (e.sourceHandle || 'in1').replace(/_[st]$/, '');
-              if (sPort.startsWith(e.source + '-')) {
-                sPort = sPort.slice(e.source.length + 1);
-              }
+              const sPort = resolveHandlePort(e.source, e.sourceHandle || 'in1');
               const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
               return norm(sPort) === norm(pId) || (norm(pId) === 'in1' && (norm(sPort) === 'p' || norm(sPort) === 'in' || !sPort));
             }
@@ -1287,10 +1356,7 @@ export class DAEAssembler {
             const otherNodeId = isTarget ? edge.source : edge.target;
             const otherHandle = isTarget ? edge.sourceHandle : edge.targetHandle;
 
-            let srcPort = (otherHandle || 'y').replace(/_[st]$/, '');
-            if (srcPort.startsWith(otherNodeId + '-')) {
-              srcPort = srcPort.slice(otherNodeId.length + 1);
-            }
+            const srcPort = resolveHandlePort(otherNodeId, otherHandle || 'y');
             const srcKey = `${otherNodeId}_${srcPort}`;
             
             // Prefer the source component's explicit signal branch when it exists (e.g. sensors, PS blocks).
@@ -1491,7 +1557,27 @@ export class DAEAssembler {
       return res;
     };
 
+    // Owners of every unknown / residual row (row i is the equation of unknown i): the block that owns a branch or
+    // state, the first block wired to a net for an across variable. Used by the structural-rank diagnostics.
+    const keyOwner = new Map<string, { blockId: string; blockType: string }>();
+    nodes.forEach(node => {
+      const owner = { blockId: node.id, blockType: nodeTypeOf(node) };
+      (nodePorts.get(node.id) || []).forEach(portId => keyOwner.set(`${node.id}_${portId}`, owner));
+    });
+    const variableOwners: { blockId: string; blockType: string }[] = new Array(varCount).fill({ blockId: '', blockType: '' });
+    physicalNodes.forEach(pn => {
+      const owner = keyOwner.get(pn.id) ?? { blockId: '', blockType: '' };
+      const stride = (pn.domain === 'frame' || pn.domain === 'multibodyframe') ? 6 : 1;
+      for (let k = 0; k < stride; k++) variableOwners[pn.acrossVarIndex + k] = owner;
+    });
+    componentsList.forEach(c => {
+      const owner = { blockId: c.blockId, blockType: c.blockType };
+      (componentBranchVarIndices.get(c.blockId) || []).forEach(i => { variableOwners[i] = owner; });
+      (componentStateVarIndices.get(c.blockId) || []).forEach(i => { variableOwners[i] = owner; });
+    });
+
     return {
+      structure: { variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices },
       systemSize: varCount,
       variableNames,
       isDifferentialState,

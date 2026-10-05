@@ -6,6 +6,7 @@ import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
 import { initializeUniversalJointFrames } from './vlabJointInitialization';
 import { assertValidTopology } from './vlabTopologyValidation';
+import { assertStructurallyWellPosed } from './vlabStructure';
 import { numericParam } from './vlabParams';
 
 // SDIRK-3 Butcher tableau constants
@@ -101,7 +102,10 @@ export class VLabPhysicsEngine {
     if (!this.currentSystem || topoHash !== this.prevTopologyHash || prevState?.systemSize !== this.currentSystem.systemSize) {
       // Fail fast on invalid wiring / unconnected required ports before anything is assembled or solved.
       if (this.topologyValidationEnabled) assertValidTopology(nodes, edges);
-      this.currentSystem = this.assembler.assemble(nodes, edges);
+      const assembled = this.assembler.assemble(nodes, edges);
+      // Structural rank (no free unknown, full bipartite matching of the Jacobian pattern) before any Newton step.
+      if (this.topologyValidationEnabled) assertStructurallyWellPosed(assembled);
+      this.currentSystem = assembled;
       this.prevTopologyHash = topoHash;
     }
     

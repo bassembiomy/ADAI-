@@ -10,6 +10,8 @@
 import type { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY, type VLabBlock } from '../../utils/vlabLibrary';
 import { requiredPortsOf } from './vlabTopologyValidation';
+import { DAEAssembler } from './DAEAssembler';
+import { assertStructurallyWellPosed } from './vlabStructure';
 
 /** Blocks that are themselves ideal voltage sources: their ports are loaded, never driven. */
 const ELECTRICAL_SOURCE_DUTS = ['three_phase_source'];
@@ -29,7 +31,36 @@ export interface DomainFixture {
 
 const lower = (s?: string) => (s || '').toLowerCase();
 
+/** How a conserving port that has no source of its own is closed: tied straight to the domain reference, or through a load. */
+type Termination = 'reference' | 'load';
+
+/**
+ * Domain-correct fixture that is also structurally well-posed (WP-09a). The first attempt ties unsourced conserving
+ * ports straight to their domain reference. Blocks that determine their through variables only from the network
+ * around them (pressure/flow sources, flow sensors, chambers, gears, converters, ...) are structurally singular when
+ * every port is pinned like that; for those the unsourced ports are closed through a resistive load to the reference.
+ */
 export function buildDomainFixture(block: VLabBlock, dutParams: Record<string, any>): DomainFixture {
+  const direct = buildFixture(block, dutParams, 'reference');
+  if (isStructurallyWellPosed(direct)) return direct;
+  const loaded = buildFixture(block, dutParams, 'load');
+  return isStructurallyWellPosed(loaded) ? loaded : direct;
+}
+
+function isStructurallyWellPosed(fixture: DomainFixture): boolean {
+  const e = console.error; const w = console.warn;
+  console.error = () => {}; console.warn = () => {};
+  try {
+    assertStructurallyWellPosed(new DAEAssembler().assemble(fixture.nodes, fixture.edges));
+    return true;
+  } catch {
+    return false; // the caller keeps the original fixture; the consumer reports the real error
+  } finally {
+    console.error = e; console.warn = w;
+  }
+}
+
+function buildFixture(block: VLabBlock, dutParams: Record<string, any>, termination: Termination): DomainFixture {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const has = (id: string) => nodes.some(n => n.id === id);
@@ -79,6 +110,10 @@ export function buildDomainFixture(block: VLabBlock, dutParams: Record<string, a
         // an ideal torque source needs an inertia to drive
         addNode(`load_rot_${portId}`, 'inertia', 120, 100 * idx, { J: 0.01 });
         wire(`e_rot_load_${portId}`, 'dut', `${portId}_s`, `load_rot_${portId}`, 'r_t');
+      } else if (termination === 'load') {
+        addNode(`term_rot_${portId}`, 'rot_damper', 120, 100 * idx, { b: 0.1 });
+        wire(`e_rot_term_${portId}`, 'dut', `${portId}_s`, `term_rot_${portId}`, 'r_t');
+        wire(`e_rot_term_ref_${portId}`, `term_rot_${portId}`, 'c_s', 'ref_rot', 'r_t');
       } else {
         wire(`e_rot_ref_conn_${portId}`, 'dut', `${portId}_s`, 'ref_rot', 'r_t');
       }
@@ -93,6 +128,10 @@ export function buildDomainFixture(block: VLabBlock, dutParams: Record<string, a
         // an ideal force source drives a mass
         addNode(`load_trans_${portId}`, 'mass', 120, 100 * idx, { m: 1 });
         wire(`e_trans_load_${portId}`, 'dut', `${portId}_s`, `load_trans_${portId}`, 'p_t');
+      } else if (termination === 'load') {
+        addNode(`term_trans_${portId}`, 'trans_damper', 120, 100 * idx, { b: 10 });
+        wire(`e_trans_term_${portId}`, 'dut', `${portId}_s`, `term_trans_${portId}`, 'r_t');
+        wire(`e_trans_term_ref_${portId}`, `term_trans_${portId}`, 'c_s', 'ref_trans', 'p_t');
       } else {
         wire(`e_trans_ref_conn_${portId}`, 'dut', `${portId}_s`, 'ref_trans', 'p_t');
       }
@@ -125,6 +164,11 @@ export function buildDomainFixture(block: VLabBlock, dutParams: Record<string, a
       } else if (['a', 'h'].includes(portId)) {
         addNode(`src_thermal_${portId}`, 'temp_src', 50, 100 * idx, { T: 350 });
         wire(`e_thermal_src_${portId}`, `src_thermal_${portId}`, 'a_s', 'dut', `${portId}_t`);
+      } else if (termination === 'load') {
+        addNode('ref_thermal', 'thermal_ref', 50, 700);
+        addNode(`term_thermal_${portId}`, 'conductive_heat', 120, 100 * idx, { k: 2 });
+        wire(`e_thermal_term_${portId}`, 'dut', `${portId}_s`, `term_thermal_${portId}`, 'a_t');
+        wire(`e_thermal_term_ref_${portId}`, `term_thermal_${portId}`, 'b_s', 'ref_thermal', 'a_t');
       } else {
         addNode('ref_thermal', 'thermal_ref', 50, 700);
         wire(`e_thermal_ref_conn_${portId}`, 'dut', `${portId}_s`, 'ref_thermal', 'a_t');
@@ -153,10 +197,28 @@ export function buildDomainFixture(block: VLabBlock, dutParams: Record<string, a
     gas: { type: 'gas_ref', port: 'g' },
     isothermal_liquid: { type: 'hydraulic_reference_il', port: 'a' },
   };
+  // Load that closes a port through a resistive path to the reference (termination 'load').
+  const LOAD: Record<string, { type: string; a: string; b: string; params: Record<string, any> }> = {
+    magnetic: { type: 'reluctance', a: 'n', b: 's', params: { R: 1e6 } },
+    fluid: { type: 'fluid_resistance', a: 'p', b: 'n', params: { Rf: 1e5 } },
+    gas: { type: 'gas_resistance', a: 'a', b: 'b', params: { k: 1 } },
+    isothermal_liquid: { type: 'pipe_il', a: 'a', b: 'b', params: { R: 1e5 } },
+  };
   for (const port of block.ports) {
     const d = lower(port.domain);
-    if (!requiredConserving.has(port.id) || connected.has(port.id) || !REFERENCE[d]) continue;
+    if (connected.has(port.id) || !REFERENCE[d]) continue;
     const ref = REFERENCE[d];
+    if (termination === 'load') {
+      // every still-unsourced conserving port of these domains is closed through a load
+      const load = LOAD[d];
+      addNode(`ref_${d}`, ref.type, 50, 800);
+      addNode(`term_${d}_${port.id}`, load.type, 120, 800, load.params);
+      wire(`e_term_${d}_${port.id}`, 'dut', `${port.id}_s`, `term_${d}_${port.id}`, `${load.a}_t`);
+      wire(`e_term_ref_${d}_${port.id}`, `term_${d}_${port.id}`, `${load.b}_s`, `ref_${d}`, `${ref.port}_t`);
+      connected.add(port.id);
+      continue;
+    }
+    if (!requiredConserving.has(port.id)) continue;
     addNode(`ref_${d}`, ref.type, 50, 800);
     wire(`e_ref_${d}_${port.id}`, 'dut', `${port.id}_s`, `ref_${d}`, `${ref.port}_t`);
   }

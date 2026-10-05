@@ -68,4 +68,11 @@ export interface AssembledSystem {
   components: ComponentEquation[];
   // Scope output mapping: scopeNodeId -> variable index
   scopeOutputs: Map<string, number[]>;
+  // Which block owns each unknown and each residual row (diagnostics of the structural rank check)
+  structure?: {
+    variableOwners: { blockId: string; blockType: string }[];
+    rowOwners: { blockId: string; blockType: string }[];
+    /** unknowns that are indeterminate by design (e.g. reaction of a constraint wired to one frame twice) */
+    exemptVariables?: number[];
+  };
 }
