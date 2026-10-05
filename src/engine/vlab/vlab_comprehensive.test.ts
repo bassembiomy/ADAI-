@@ -442,6 +442,7 @@ const LEARNING_LABS = [
       { id: 'vfd_controller', blockId: 'im_foc_ctrl', position: { x: 300, y: 100 }, label: 'VFD Controller', params: { mode: 1 } },
       { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
       { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
+      { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 700, y: 300 }, label: 'Speed Sensor' },
       { id: 'vfd_scope', blockId: 'scope', position: { x: 800, y: 200 }, label: 'VFD Performance', params: { time_range: 5 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'Common Ground' }
     ],
@@ -455,7 +456,8 @@ const LEARNING_LABS = [
       { id: 've4_b', source: 'inverter', target: 'im_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
       { id: 've4_c', source: 'inverter', target: 'im_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
       { id: 've4_n', source: 'im_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 've5', source: 'im_motor', target: 'vfd_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+      { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
   },
   {
@@ -469,6 +471,7 @@ const LEARNING_LABS = [
       { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'wash_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Direct Drive Motor' },
       { id: 'basket_load', blockId: 'washing_basket', position: { x: 750, y: 300 }, label: 'Washing Basket', params: { load_mass: 6 } },
+      { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Speed Sensor' },
       { id: 'wash_scope', blockId: 'scope', position: { x: 950, y: 200 }, label: 'Cycle Analysis', params: { time_range: 10 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'System Ground' }
     ],
@@ -482,7 +485,8 @@ const LEARNING_LABS = [
       { id: 'we3_c', source: 'inverter', target: 'wash_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
       { id: 'we3_n', source: 'wash_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'we4', source: 'wash_motor', target: 'basket_load', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'we5', source: 'wash_motor', target: 'wash_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+      { id: 'we5', source: 'wash_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
   },
   {

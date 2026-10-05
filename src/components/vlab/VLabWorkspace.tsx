@@ -28,6 +28,8 @@ import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
+import { checkEdgeSet, validateConnection } from '../../engine/vlab/vlabConnectionRules';
+import { TopologyValidationError, formatTopologyMessage, validateTopology } from '../../engine/vlab/vlabTopologyValidation';
 import { SolverConfiguration, validateSolverConfiguration } from '../../engine/vlab/kernel/types';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -140,7 +142,7 @@ export function refreshVLabSolverJobAtStepBoundary(
   };
 }
 
-const LEARNING_LABS = [
+export const LEARNING_LABS = [
   {
     id: 'air_fryer_thermal',
     name: 'Air Fryer Heat Transfer',
@@ -242,6 +244,7 @@ const LEARNING_LABS = [
       { id: 'vfd_controller', blockId: 'im_foc_ctrl', position: { x: 300, y: 100 }, label: 'VFD Controller', params: { mode: 1 } },
       { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
       { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
+      { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 700, y: 300 }, label: 'Speed Sensor' },
       { id: 'vfd_scope', blockId: 'scope', position: { x: 800, y: 200 }, label: 'VFD Performance', params: { time_range: 5 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'Common Ground' }
     ],
@@ -255,7 +258,8 @@ const LEARNING_LABS = [
       { id: 've4_b', source: 'inverter', target: 'im_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
       { id: 've4_c', source: 'inverter', target: 'im_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
       { id: 've4_n', source: 'im_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 've5', source: 'im_motor', target: 'vfd_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+      { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
   },
   {
@@ -270,6 +274,7 @@ const LEARNING_LABS = [
       { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive' },
       { id: 'wash_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Direct Drive Motor' },
       { id: 'basket_load', blockId: 'washing_basket', position: { x: 750, y: 300 }, label: 'Washing Basket', params: { load_mass: 6 } },
+      { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Speed Sensor' },
       { id: 'wash_scope', blockId: 'scope', position: { x: 950, y: 200 }, label: 'Cycle Analysis', params: { time_range: 10 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'System Ground' }
     ],
@@ -283,7 +288,8 @@ const LEARNING_LABS = [
       { id: 'we3_c', source: 'inverter', target: 'wash_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
       { id: 'we3_n', source: 'wash_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'we4', source: 'wash_motor', target: 'basket_load', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'we5', source: 'wash_motor', target: 'wash_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+      { id: 'we5', source: 'wash_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
   },
   {
@@ -342,7 +348,7 @@ const LEARNING_LABS = [
   }
 ];
 
-const reconstructLabNodes = (labNodes: LabNode[]): Node[] => {
+export const reconstructLabNodes = (labNodes: LabNode[]): Node[] => {
   const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
 
   return labNodes.map(ln => {
@@ -928,17 +934,6 @@ const VLabScopeWindow = ({
       )}
     </div>
   );
-};
-
-export const areDomainsCompatible = (d1?: string, d2?: string): boolean => {
-  if (!d1 || !d2) return true;
-  const a = d1.toLowerCase();
-  const b = d2.toLowerCase();
-  if (a === b) return true;
-  if ((a === 'frame' || a === 'multibodyframe') && (b === 'frame' || b === 'multibodyframe')) return true;
-  if (a === 'mechanical' && (b === 'translational' || b === 'rotational')) return true;
-  if (b === 'mechanical' && (a === 'translational' || a === 'rotational')) return true;
-  return false;
 };
 
 export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
@@ -1703,7 +1698,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         } catch (e) {
           // A configured solver failure must reach the simulation diagnostic.
           // Switching to a hardcoded model would discard the user's settings.
-          if (engine.getSolverConfiguration() || e instanceof MultibodyConstraintDiagnosticError) throw e;
+          // An invalid topology must surface its diagnostic, never be hidden by the fallback model.
+          if (engine.getSolverConfiguration() || e instanceof MultibodyConstraintDiagnosticError || e instanceof TopologyValidationError) throw e;
           console.warn("DAE Physics Engine failed, falling back to Euler model:", e);
           useFallback = true;
         }
@@ -2122,53 +2118,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       return;
     }
 
-    // Dynamic real-time connection check
-    const invalidErrors: string[] = [];
-    edges.forEach(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
-      if (!sourceNode || !targetNode) return;
-
-      const sourceData = sourceNode.data as any;
-      const targetData = targetNode.data as any;
-
-      const sPortId = edge.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      const tPortId = edge.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      
-      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
-      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
-
-      const sDomain = sourcePort?.domain || sourceData.domain;
-      const tDomain = targetPort?.domain || targetData.domain;
-
-      const isUniversalBlock = (id: string) =>
-        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
-        id === 'subsystem' || id === 'Subsystem' ||
-        id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport' ||
-        id === 'solver_config' || id === 'solver_configuration';
-      // Domain-bridge converters accept a connection from ANY domain on either
-      // side so they can join blocks from two different physical models.
-      const isDomainBridge = (id: string) =>
-        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
-      const isWildcardDomain = (d: any) =>
-        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
-        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
-        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
-
-      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
-        const sLabel = sourceData.label || sourceData.type;
-        const tLabel = targetData.label || targetData.type;
-        invalidErrors.push(`${sLabel} (${sDomain}) ➔ ${tLabel} (${tDomain})`);
-      }
-    });
-
-    if (invalidEdges.size > 0 || invalidErrors.length > 0) {
-      const detail = invalidErrors.length > 0 ? ` Incompatible: ${invalidErrors.slice(0, 2).join('; ')}${invalidErrors.length > 2 ? ` (+${invalidErrors.length - 2} more)` : ''}` : '';
-      setStatus({ 
-        message: `CANNOT RUN SIMULATION: ${Math.max(invalidEdges.size, invalidErrors.length)} invalid connection(s) detected.${detail}`, 
-        type: 'error' 
+    // Pre-simulation topology validation: the same rules as the editor (vlabConnectionRules) re-run on the
+    // loaded model, plus unconnected REQUIRED ports. A model saved by an older editor may hold invalid wires;
+    // it loads and shows these diagnostics instead of crashing or solving garbage.
+    const topology = validateTopology(nodes as any, edges as any);
+    if (!topology.valid) {
+      setStatus({
+        message: `CANNOT RUN SIMULATION: ${formatTopologyMessage(topology.diagnostics)}`,
+        type: 'error'
       });
       return;
     }
@@ -2185,10 +2142,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     setScopeData([]);
     setPerScopeData({});
     setStatus({ message: 'Simulation started successfully.', type: 'success' });
-  }, [isSimulating, edges, nodes, invalidEdges]);
+  }, [isSimulating, edges, nodes]);
 
   const onConnect = useCallback((params: Connection) => {
-    // 1. Domain connection validation (Simscape connection safety parity)
+    // 1. Scope channel capacity / first-free-channel assignment (editor concern, not a wiring rule)
     const sourceNode = nodes.find(n => n.id === params.source);
     const targetNode = nodes.find(n => n.id === params.target);
     if (sourceNode && targetNode) {
@@ -2253,67 +2210,24 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           return; // Block excess channel connection
         }
 
-        const alreadyConnected = edges.some(e => {
-          if (e.target === scopeId) {
-            let p = (e.targetHandle || '').replace(/_[st]$/, '');
-            if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
-            return p === scopePortId;
-          }
-          if (e.source === scopeId) {
-            let p = (e.sourceHandle || '').replace(/_[st]$/, '');
-            if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
-            return p === scopePortId;
-          }
-          return false;
-        });
-
-        if (alreadyConnected) {
-          setStatus({
-            message: `Channel ${chNum} on Scope '${scopeData.label || 'Scope'}' is already connected. Disconnect existing wire first.`,
-            type: 'error'
-          });
-          setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
-          return;
-        }
-      }
-
-      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
-      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
-
-      const sDomain = sourcePort?.domain || sourceData.domain;
-      const tDomain = targetPort?.domain || targetData.domain;
-
-      const isUniversalBlock = (id: string) =>
-        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
-        id === 'subsystem' || id === 'Subsystem' ||
-        id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport' ||
-        id === 'solver_config' || id === 'solver_configuration';
-      // Domain-bridge converters accept a connection from ANY domain on either
-      // side so they can join blocks from two different physical models.
-      const isDomainBridge = (id: string) =>
-        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
-      const isWildcardDomain = (d: any) =>
-        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
-        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
-        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
-
-      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
-        const sName = sourceData.label || sourceData.type;
-        const tName = targetData.label || targetData.type;
-        setStatus({
-          message: `Cannot connect ${sDomain} port (${sName}) to ${tDomain} port (${tName}). Use a domain converter block.`,
-          type: 'error'
-        });
-        setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
-        return; // Block the connection
+        // A channel that already has a source is rejected by the shared fan-in rule below.
       }
     }
+
+    // 2. Every wiring rule (domain, signal direction, fan-in, measurable-only scope inputs) lives in
+    //    vlabConnectionRules; the editor, the saved-model check and the engine all call that one module.
+    const result = validateConnection(nodes as any, edges as any, params);
+    if (!result.valid) {
+      setStatus({ message: result.message, type: 'error' });
+      setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
+      return; // Block the connection
+    }
+    if (result.duplicate) return; // identical wire already present (either drag direction)
 
     setHistory(h => [...h, { nodes, edges }].slice(-20)); // Keep last 20 steps
     const edge = {
       ...params,
+      ...result.edge, // normalised: A->B and B->A produce the identical edge
       animated: true,
       style: { stroke: '#6c9ac6', strokeWidth: 2 },
     };
@@ -2321,48 +2235,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   }, [edges, nodes, setEdges]);
 
   useEffect(() => {
+    // Same rule engine as onConnect and the pre-simulation check (vlabConnectionRules)
     const invalid = new Set<string>();
-    edges.forEach(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
-      if (!sourceNode || !targetNode) return;
-
-      const sourceData = sourceNode.data as any;
-      const targetData = targetNode.data as any;
-
-      const sPortId = edge.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      const tPortId = edge.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      
-      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
-      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
-
-      const sDomain = sourcePort?.domain || sourceData.domain;
-      const tDomain = targetPort?.domain || targetData.domain;
-
-      // Relaxed validation for scopes and probes to allow easy visualization
-      const isUniversalBlock = (id: string) =>
-        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
-        id === 'subsystem' || id === 'Subsystem' ||
-        id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport' ||
-        id === 'solver_config' || id === 'solver_configuration';
-      // Domain-bridge converters accept a connection from ANY domain on either
-      // side so they can join blocks from two different physical models.
-      const isDomainBridge = (id: string) =>
-        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
-      const isWildcardDomain = (d: any) =>
-        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
-        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
-        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
-
-      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
-        invalid.add(edge.id);
-      }
-    });
+    const edgeDiagnostics = checkEdgeSet(nodes as any, edges as any);
+    edgeDiagnostics.forEach(d => { if (d.edgeId) invalid.add(d.edgeId); });
     setInvalidEdges(invalid);
     if (invalid.size > 0) {
-      setStatus({ message: `${invalid.size} invalid connection(s) detected. Fix red pulse edges.`, type: 'warning' });
+      // a model saved by an older editor loads with its invalid wires marked and the first diagnostic shown
+      const first = edgeDiagnostics[0]?.reason;
+      setStatus({ message: `${invalid.size} invalid connection(s) detected. Fix red pulse edges.${first ? ` ${first}` : ''}`, type: 'warning' });
     } else if (status.type === 'warning') {
       setStatus({ message: 'Connections validated.', type: 'success' });
       setTimeout(() => setStatus(s => s.type === 'success' ? { message: 'System Ready', type: 'idle' } : s), 3000);
@@ -2817,7 +2698,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             id: `in${i + 1}`,
             pos: 'left',
             label: `${i + 1}`,
-            domain: 'Physical'
+            domain: 'Physical',
+            direction: 'in'
           }));
           // Prune any incoming edges to channels exceeding new capacity
           setEdges(eds => eds.filter(e => {
@@ -4187,7 +4069,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       id: `in${i + 1}`,
                       pos: 'left',
                       label: `${i + 1}`,
-                      domain: 'Physical'
+                      domain: 'Physical',
+                      direction: 'in'
                     }));
                     // Prune any incoming edges to channels exceeding new capacity
                     setEdges(eds => eds.filter(e => {

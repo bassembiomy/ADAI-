@@ -57,6 +57,10 @@ describe('Air Fryer Simulation debug', () => {
   it('exposes a 373.15 K chamber state as 100 °C at the air-fryer scope', () => {
     const fixture = createAirFryerScopeFixture();
     const engine = new VLabPhysicsEngine();
+    // This test exercises the engine's scope-on-thermal-node K->degC conversion, a LEGACY wire (a Scope directly on a
+    // conserving port) that the editor no longer accepts (WP-07). Saved models that still contain it fail
+    // pre-simulation topology validation with a diagnostic; the conversion path itself is checked here in isolation.
+    engine.setTopologyValidation(false);
     const seededState = engine.simulateStep(fixture.nodes, fixture.edges, null, 0.001);
     const tempIndex = seededState.variableNames.indexOf('air_chamber_state_temp');
     expect(tempIndex).toBeGreaterThanOrEqual(0);

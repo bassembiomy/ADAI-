@@ -104,8 +104,8 @@ export const KNOWN_PORT_DOMAINS = new Set([
   ...CONSERVING_DOMAINS, 'physical', 'beltproperty', 'any',
 ]);
 
-/** `Any` is a Simulink<->PS boundary wildcard and is only legal on these converters. */
-export const ANY_DOMAIN_BLOCKS = new Set(['ps_simulink_conv', 'simulink_ps_conv']);
+/** `Any` is a Simulink<->PS boundary wildcard and is only legal on these converters (single source: the connection rules, WP-07). */
+export { ANY_DOMAIN_BLOCKS } from '../vlabConnectionRules';
 
 /**
  * Equation keys that are not a live library block id. Each is a documented alias or a legacy leftover.

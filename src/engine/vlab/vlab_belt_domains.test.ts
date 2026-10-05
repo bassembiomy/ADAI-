@@ -26,7 +26,7 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       { id: 'r', pos: 'left', label: 'R', domain: 'Translational' },
       { id: 'e', pos: 'right', label: 'E', domain: 'Translational' },
       { id: 'p', pos: 'top', label: 'P', domain: 'BeltProperty' },
-      { id: 'f', pos: 'bottom', label: 'F', domain: 'Physical' }
+      { id: 'f', pos: 'bottom', label: 'F', domain: 'Physical', direction: 'out' }
     ]);
   });
 
@@ -37,7 +37,7 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       { id: 'r', pos: 'left', label: 'R', domain: 'Rotational' },
       { id: 'a', pos: 'right', label: 'A', domain: 'Translational' },
       { id: 'p', pos: 'top', label: 'P', domain: 'BeltProperty' },
-      { id: 't', pos: 'bottom', label: 'T', domain: 'Physical' }
+      { id: 't', pos: 'bottom', label: 'T', domain: 'Physical', direction: 'out' }
     ]);
   });
 
@@ -49,7 +49,7 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       { id: 'a', pos: 'right', label: 'A', domain: 'Translational' },
       { id: 'b', pos: 'right', label: 'B', domain: 'Translational' },
       { id: 'p', pos: 'top', label: 'P', domain: 'BeltProperty' },
-      { id: 't', pos: 'bottom', label: 'T', domain: 'Physical' }
+      { id: 't', pos: 'bottom', label: 'T', domain: 'Physical', direction: 'out' }
     ]);
   });
 

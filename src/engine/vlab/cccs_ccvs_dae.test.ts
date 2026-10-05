@@ -80,13 +80,13 @@ describe('CCCS and CCVS DAE Branch and Simulation Validation', () => {
       // Input loop: src(+) -> rin(p), rin(n) -> cccs(cp), cccs(cn) -> gnd, src(-) -> gnd
       { id: 'e1', source: 'src', sourceHandle: 'p', target: 'rin', targetHandle: 'p' },
       { id: 'e2', source: 'rin', sourceHandle: 'n', target: 'cccs_1', targetHandle: 'cp' },
-      { id: 'e3', source: 'cccs_1', sourceHandle: 'cn', target: 'gnd', targetHandle: 'p' },
-      { id: 'e4', source: 'src', sourceHandle: 'n', target: 'gnd', targetHandle: 'p' },
+      { id: 'e3', source: 'cccs_1', sourceHandle: 'cn', target: 'gnd', targetHandle: 'a' },
+      { id: 'e4', source: 'src', sourceHandle: 'n', target: 'gnd', targetHandle: 'a' },
 
       // Output loop: cccs(p) -> rload(p), rload(n) -> gnd, cccs(n) -> gnd
       { id: 'e5', source: 'cccs_1', sourceHandle: 'p', target: 'rload', targetHandle: 'p' },
-      { id: 'e6', source: 'rload', sourceHandle: 'n', target: 'gnd', targetHandle: 'p' },
-      { id: 'e7', source: 'cccs_1', sourceHandle: 'n', target: 'gnd', targetHandle: 'p' },
+      { id: 'e6', source: 'rload', sourceHandle: 'n', target: 'gnd', targetHandle: 'a' },
+      { id: 'e7', source: 'cccs_1', sourceHandle: 'n', target: 'gnd', targetHandle: 'a' },
     ];
 
     const engine = new VLabPhysicsEngine();
@@ -127,13 +127,13 @@ describe('CCCS and CCVS DAE Branch and Simulation Validation', () => {
       // Input loop: src(+) -> rin(p), rin(n) -> ccvs(cp), ccvs(cn) -> gnd, src(-) -> gnd
       { id: 'e1', source: 'src', sourceHandle: 'p', target: 'rin', targetHandle: 'p' },
       { id: 'e2', source: 'rin', sourceHandle: 'n', target: 'ccvs_1', targetHandle: 'cp' },
-      { id: 'e3', source: 'ccvs_1', sourceHandle: 'cn', target: 'gnd', targetHandle: 'p' },
-      { id: 'e4', source: 'src', sourceHandle: 'n', target: 'gnd', targetHandle: 'p' },
+      { id: 'e3', source: 'ccvs_1', sourceHandle: 'cn', target: 'gnd', targetHandle: 'a' },
+      { id: 'e4', source: 'src', sourceHandle: 'n', target: 'gnd', targetHandle: 'a' },
 
       // Output loop: ccvs(p) -> rload(p), rload(n) -> gnd, ccvs(n) -> gnd
       { id: 'e5', source: 'ccvs_1', sourceHandle: 'p', target: 'rload', targetHandle: 'p' },
-      { id: 'e6', source: 'rload', sourceHandle: 'n', target: 'gnd', targetHandle: 'p' },
-      { id: 'e7', source: 'ccvs_1', sourceHandle: 'n', target: 'gnd', targetHandle: 'p' },
+      { id: 'e6', source: 'rload', sourceHandle: 'n', target: 'gnd', targetHandle: 'a' },
+      { id: 'e7', source: 'ccvs_1', sourceHandle: 'n', target: 'gnd', targetHandle: 'a' },
     ];
 
     const engine = new VLabPhysicsEngine();

@@ -5,6 +5,7 @@ import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
 import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
 import { initializeUniversalJointFrames } from './vlabJointInitialization';
+import { assertValidTopology } from './vlabTopologyValidation';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -32,6 +33,17 @@ export class VLabPhysicsEngine {
    * not counted, so long fine-step runs (e.g. µs PWM) are never cut off.
    */
   private maxStepAttempts = 20000;
+  /** Pre-simulation topology validation (vlabTopologyValidation). Always on in product paths. */
+  private topologyValidationEnabled = true;
+
+  /**
+   * Disable pre-simulation topology validation. ONLY for assembler/solver unit tests that deliberately drive an
+   * incomplete network (e.g. one block with unwired inputs). The editor and the worker never call this.
+   */
+  setTopologyValidation(enabled: boolean): void {
+    this.topologyValidationEnabled = enabled;
+  }
+
   /** Optional wall-clock budget (ms) for one simulateStep call; 0 disables it. */
   private wallClockBudgetMs = 0;
 
@@ -86,6 +98,8 @@ export class VLabPhysicsEngine {
     
     // Assemble system only if topology has changed or system is cached as empty
     if (!this.currentSystem || topoHash !== this.prevTopologyHash || prevState?.systemSize !== this.currentSystem.systemSize) {
+      // Fail fast on invalid wiring / unconnected required ports before anything is assembled or solved.
+      if (this.topologyValidationEnabled) assertValidTopology(nodes, edges);
       this.currentSystem = this.assembler.assemble(nodes, edges);
       this.prevTopologyHash = topoHash;
     }

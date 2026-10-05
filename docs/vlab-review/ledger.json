@@ -163,10 +163,13 @@
         "WP-06b"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review/connections.test.ts src/components/vlab --reporter=dot",
-      "evidence": [],
+      "evidence": [
+        "single rules module vlabConnectionRules.ts used by UI onConnect + Run + engine pre-solve; 404 signal ports directed (207 in / 197 out)",
+        "planner re-run: 2429 pass / 268 expected-fail / 1 known (vlabSymbols); test:vlab 20/20; library 248 blocks / 751 ports unchanged"
+      ],
       "findings": []
     },
     {
@@ -177,7 +180,7 @@
         "WP-07"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review/params.test.ts src/engine/vlab --reporter=dot",
       "evidence": [],
@@ -773,7 +776,8 @@
       "block": "vlabConnectionValidation.test.ts",
       "layer": "ui",
       "summary": "The test carries its own copy of validateConnection, so the real VLabWorkspace.onConnect is untested.",
-      "wp": "WP-07"
+      "wp": "WP-07",
+      "status": "resolved-WP-07"
     },
     {
       "id": "F-028",
@@ -781,7 +785,8 @@
       "block": "vlabValidationHarness",
       "layer": "integration",
       "summary": "The default topology wires dc_voltage.p to every DUT p handle, giving cross-domain edges that bypass validation. It also uses the type thermal_reference, but the library id is thermal_ref (also in vlab_connected_benchmarks).",
-      "wp": "WP-07"
+      "wp": "WP-07",
+      "status": "resolved-WP-07"
     },
     {
       "id": "F-029",
@@ -797,7 +802,8 @@
       "block": "physical-signal ports",
       "layer": "port",
       "summary": "VLabPort has no direction field. Signal in/out is not declared.",
-      "wp": "WP-07"
+      "wp": "WP-07",
+      "status": "resolved-WP-07"
     },
     {
       "id": "F-031",
@@ -838,6 +844,54 @@
       "layer": "eq",
       "summary": "Explicit Physical ports allocate signal branches that the stub MA equations never drive.",
       "wp": "WP-09"
+    },
+    {
+      "id": "F-036",
+      "severity": "high",
+      "block": "DAEAssembler isPhysicalOutputPort",
+      "layer": "solver",
+      "summary": "18 inputs get spurious signal branches (switch.v, gas_flow_source.m, clarke/park/sym_comp abc...). 2 outputs and 13 unimplemented outputs get none. The assembler must use port.direction. clarke_transform and inv_sym_comp_transform are it.fails.",
+      "wp": "WP-09"
+    },
+    {
+      "id": "F-037",
+      "severity": "med",
+      "block": "DAEAssembler handle parsing",
+      "layer": "port",
+      "summary": "Strips /_[st]$/ from handles, so ports ending in _s/_t (pmsm_foc.vdc_s, iabc_s, w_s, th_s) are mis-parsed.",
+      "wp": "WP-09"
+    },
+    {
+      "id": "F-038",
+      "severity": "med",
+      "block": "ps_step + ps_pid_ctrl + ps_saturation",
+      "layer": "solver",
+      "summary": "A step input into a PID with an active saturation clamp collapses the step to 1e-6 and exhausts the budget. Needs discontinuity/event handling.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-039",
+      "severity": "med",
+      "block": "vlabValidationHarness",
+      "layer": "integration",
+      "summary": "Still swallows solver non-convergence, so GATE-02 is largely vacuous on solver failures.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-040",
+      "severity": "low",
+      "block": "doe_custom (engine/doe/integration.ts)",
+      "layer": "port",
+      "summary": "Emits the domain General. The producer should emit Physical + direction.",
+      "wp": "WP-21"
+    },
+    {
+      "id": "F-041",
+      "severity": "low",
+      "block": "vlab_connected_benchmarks",
+      "layer": "integration",
+      "summary": "Benchmarks 1-6 and 8-10 only assert finite state (they did before too). Add independent reference values.",
+      "wp": "WP-30"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

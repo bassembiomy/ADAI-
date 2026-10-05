@@ -68,6 +68,16 @@ export const NodeErrorBoundary = class extends React.Component<{ children: React
   }
 };
 
+/** Handle tooltip: signal ports show their direction (library direction), the rest are conserving ports. */
+const portTitle = (port: any, blockDomain?: string): string => {
+  if (port.domain === 'isothermal_liquid') return 'Isothermal Liquid conserving port';
+  const domain = port.domain || blockDomain || 'Physical';
+  if (String(domain).toLowerCase() === 'physical') {
+    return port.direction ? `Physical signal ${port.direction === 'out' ? 'output' : 'input'}` : 'Physical signal port';
+  }
+  return `${domain} conserving port`;
+};
+
 export const VLabNode = ({ id, data, selected }: { id: string; data: any; selected: boolean }) => {
   const updateNodeInternals = useUpdateNodeInternals();
   const rotation = data.rotation || 0;
@@ -173,7 +183,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   type="source"
                   position={rotatedPos}
                   id={handleId}
-                  title={port.domain === 'isothermal_liquid' ? 'Isothermal Liquid conserving port' : `${port.domain || data.domain || 'Physical'} conserving port`}
+                  title={portTitle(port, data.domain)}
                   className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
                   style={{ ['--pc' as any]: pc }}
                 />
@@ -181,7 +191,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   type="target"
                   position={rotatedPos}
                   id={handleId}
-                  title={port.domain === 'isothermal_liquid' ? 'Isothermal Liquid conserving port' : `${port.domain || data.domain || 'Physical'} conserving port`}
+                  title={portTitle(port, data.domain)}
                   className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
                   style={{ ['--pc' as any]: pc }}
                 />

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PhysicalNetworkExtractor } from './kernel/PhysicalNetworkExtractor';
-import { validateConnection } from '../../components/vlab/vlabConnectionValidation.test';
+import { validateConnection } from './vlabConnectionRules';
 
 describe('Isothermal Liquid Network Validation', () => {
   const extractor = new PhysicalNetworkExtractor();
@@ -52,11 +52,16 @@ describe('Isothermal Liquid Network Validation', () => {
   });
 
   it('rejects connection from isothermal_liquid to electrical or thermal', () => {
-    const ilNode = { data: { type: 'hydraulic_reference_il', domain: 'isothermal_liquid', label: 'IL Ref' } };
-    const elecNode = { data: { type: 'resistor', domain: 'electrical', label: 'Resistor' } };
-
-    const result = validateConnection(ilNode as any, elecNode as any);
+    // real rules module (F-027): exact port ids, not a test-local copy
+    const nodes = [
+      { id: 'il', data: { type: 'hydraulic_reference_il', label: 'IL Ref' } },
+      { id: 'res', data: { type: 'resistor', label: 'Resistor' } },
+    ];
+    const result = validateConnection(nodes, [], { source: 'il', sourceHandle: 'il-a', target: 'res', targetHandle: 'res-p' });
     expect(result.valid).toBe(false);
-    expect(result.error).toContain('Cannot connect');
+    if (!result.valid) {
+      expect(result.message).toContain('Cannot connect');
+      expect(result.diagnostic).toMatchObject({ code: 'domain-mismatch' });
+    }
   });
 });

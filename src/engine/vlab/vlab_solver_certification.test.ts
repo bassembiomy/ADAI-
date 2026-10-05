@@ -43,8 +43,8 @@ describe('V-Lab Solver Certification Suite', () => {
     const edges: Edge[] = [
       { id: 'e1', source: 'dc', target: 'res', sourceHandle: 'p', targetHandle: 'p' },
       { id: 'e2', source: 'res', target: 'cap', sourceHandle: 'n', targetHandle: 'p' },
-      { id: 'e3', source: 'cap', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' },
-      { id: 'e4', source: 'dc', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' },
+      { id: 'e3', source: 'cap', target: 'gnd', sourceHandle: 'n', targetHandle: 'a' },
+      { id: 'e4', source: 'dc', target: 'gnd', sourceHandle: 'n', targetHandle: 'a' },
     ];
 
     let state: any = null;
@@ -66,8 +66,8 @@ describe('V-Lab Solver Certification Suite', () => {
     ];
     const edges: Edge[] = [
       { id: 'e1', source: 'dc', target: 'res', sourceHandle: 'p', targetHandle: 'p' },
-      { id: 'e2', source: 'res', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' },
-      { id: 'e3', source: 'dc', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' },
+      { id: 'e2', source: 'res', target: 'gnd', sourceHandle: 'n', targetHandle: 'a' },
+      { id: 'e3', source: 'dc', target: 'gnd', sourceHandle: 'n', targetHandle: 'a' },
     ];
 
     let state1: any = null;
@@ -92,8 +92,8 @@ describe('V-Lab Solver Certification Suite', () => {
     const edges: Edge[] = [
       { id: 'e1', source: 'dc', target: 'res', sourceHandle: 'p', targetHandle: 'p' },
       { id: 'e2', source: 'res', target: 'cap', sourceHandle: 'n', targetHandle: 'p' },
-      { id: 'e3', source: 'cap', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' },
-      { id: 'e4', source: 'dc', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' },
+      { id: 'e3', source: 'cap', target: 'gnd', sourceHandle: 'n', targetHandle: 'a' },
+      { id: 'e4', source: 'dc', target: 'gnd', sourceHandle: 'n', targetHandle: 'a' },
     ];
 
     const runSim = (dt: number, totalSteps: number) => {

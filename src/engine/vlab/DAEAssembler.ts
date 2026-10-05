@@ -1498,7 +1498,8 @@ export class DAEAssembler {
     };
   }
 
-  private flattenSubsystems(nodes: Node[], edges: Edge[]): { flatNodes: Node[]; flatEdges: Edge[] } {
+  /** Public so pre-simulation topology validation checks the same flattened graph the assembler solves. */
+  flattenSubsystems(nodes: Node[], edges: Edge[]): { flatNodes: Node[]; flatEdges: Edge[] } {
     let currentNodes = [...nodes];
     let currentEdges = [...edges];
     let iterations = 0;

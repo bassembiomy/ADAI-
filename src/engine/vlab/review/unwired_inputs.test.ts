@@ -78,7 +78,11 @@ const captureArgs = (c: Case, wired: boolean): BlockEquationArgs => {
       edges.push({ id: 'e_sig', source: 'sig', target: 'dut', sourceHandle: 'y_s', targetHandle: `${c.port}_t` });
     }
     try {
-      new VLabPhysicsEngine().simulateStep(nodes, edges, null, 0.01);
+      const engine = new VLabPhysicsEngine();
+      // This test observes the assembler's connectedPorts contract on a deliberately incomplete single-block
+      // network; WP-07 pre-simulation topology validation would (correctly) reject that network before assembly.
+      engine.setTopologyValidation(false);
+      engine.simulateStep(nodes, edges, null, 0.01);
     } catch {
       // solver may reject an under-constrained single block; the captured args are what matter here
     }
