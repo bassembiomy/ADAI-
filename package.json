@@ -57,6 +57,8 @@
     "verify:repository-codegen-isolation": "vitest run src/utils/stateMachineCodeGenerator.repositoryIsolation.test.ts src/utils/stateMachineCodeGenerator.golden.test.ts && npm run verify:sm:codegen",
     "test:workers": "vitest run src/services/backgroundWorkerClient.test.ts src/services/vlabWorkerClient.test.ts src/services/xbridgesWorkerClient.test.ts src/engine/xbridges/xbridgesWorker.test.ts src/engine/sysml/reportWorker.test.ts src/services/doeWorkerClient.test.ts src/engine/doe/doeWorker.test.ts src/services/hilTelemetryBuffer.test.ts",
     "test:freeze-gate": "playwright test tests/performance/no-renderer-blocking.spec.ts",
+    "profile:sysml": "tsx scripts/scalability/profileBrowser.ts",
+    "gate:sysml-profile": "tsx scripts/scalability/assertBrowserProfile.ts",
     "audit:prebuild": "npm audit --omit=dev --audit-level=high",
     "prebuild": "npm run build:sm-runtime && npm run audit:prebuild"
   },

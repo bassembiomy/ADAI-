@@ -1,41 +1,77 @@
-# ADIA Large-Model Edit Freeze Remediation Implementation Plan
+# ADIA Remaining Scalability Fixes Implementation Plan
 
-- [x] Task 0: Repair the measurement gate before optimizing
-  - [x] Step 0.1: Write failing benchmark-harness test (`scripts/scalability/benchWorker.test.ts`) that rejects a stale-state edit sequence and an undo that does not restore the expected name.
-  - [x] Step 0.2: Update `scripts/scalability/benchWorker.ts` to advance gateway state after each command (`{ ...state, ...result }`), use distinct valid names, assert committed revision/name and undo/redo effects, and emit streaming phase results to sidecar JSONL.
-  - [x] Step 0.3: Update `scripts/scalability/metrics.ts` and `scripts/scalability/runBaseline.ts` to separate timeout per model size from per-phase timeout, classify 250k as `timedOut` (not OOM), and mark unattempted sizes (500k, 1M) as `notRun`.
-  - [x] Step 0.4: Configure production-browser qualification workflow to run against an explicit fresh Vite production build/preview, keeping dev-server Playwright tests distinctly labeled as functional tests.
-  - [x] Step 0.5: Capture missing operation baseline rows (save/reopen, expansion, pan/zoom, startup, create/delete, search, 50k browser load) with 5+ samples for p95, preserve original raw baseline as historical evidence, and publish corrected baseline.
-  - [x] Step 0.6: Run verification (`vitest`, `tsc --noEmit`, production browser workflow) and verify Task 0 review gate.
-- [x] Task 1: Cache diagram membership during Model Browser projection
-  - [x] Step 1.1: Add regression and equivalence tests in [diagramTreeContext.test.ts](file:///g:/adia%20project/src/features/modelExplorer/diagramTreeContext.test.ts) covering explicit presentation, inference from endpoints, hidden elements, diagram precedence, and State Machine references.
-  - [x] Step 1.2: Profile and confirm the repeated membership allocation hotspot in `buildDiagramVisualParentIndex`.
-  - [x] Step 1.3: Move diagram presented-ID and hidden-ID `Set` construction outside the relationship loop in [diagramTreeContext.ts](file:///g:/adia%20project/src/features/modelExplorer/diagramTreeContext.ts).
-  - [x] Step 1.4: Run tests (`diagramTreeContext.test.ts`, unified projection tests, `tsc`), repeat 10k/50k stage profiles (10k: 660ms -> 12ms; 50k: 1,938ms -> 17ms), and verify Task 1 gate.
-- [x] Task 2: Make V4 owner indexing linear
-  - [x] Step 2.1: Add a golden test with duplicate registration opportunities and several owners, plus a wide-owner test (10k siblings) in [migrateV3ToV4.test.ts](file:///g:/adia%20project/src/engine/sysml/persistence/migrateV3ToV4.test.ts) verifying uniqueness, exact child order, and a bounded build-time budget (fails before fix: ~2852ms > 250ms).
-  - [x] Step 2.2: Replace `owned.includes(id)` plus `[...owned, id]` in `registerElement` in [migrateV3ToV4.ts](file:///g:/adia%20project/src/engine/sysml/persistence/migrateV3ToV4.ts) with push plus per-owner `Set` deduplication (drops wide-owner test to 73ms).
-  - [x] Step 2.3: Compare `migrateV3ToV4` results before/after across BDD, IBD, Requirements, Use Case, Package, State Machine-adjacent references, and diagrams (all 42 persistence tests pass).
-  - [x] Step 2.4: Repeat 10k/50k stage profiles and verify Task 2 gate: 50k V4 inspector projection dropped from 5,191ms to 584ms (8.9x faster); peak heap dropped from 336MB to 267MB.
-- [x] Task 3: Remove unnecessary whole-model views from ordinary edits
-  - [x] Step 3.1: Inventory every `sysmlCanvasProjection` and `inspectorRepoV4` consumer in `App.tsx` and write regression tests for active diagram scoping and lazy V4 inspector conversion (`lazyInspectorConversion.test.ts`).
-  - [x] Step 3.2: Prove gateway-store consistency against `fromRepository` across create, update, move, connect, presentation update, delete, undo, and redo (`gatewayStoreConsistency.test.ts`), and eliminate redundant store rebuilds in `App.tsx` and `AppModelExplorer.tsx`.
-  - [x] Step 3.3: Introduce active-diagram canvas projection behind a checked adapter while preserving whole-project export/reports.
-  - [x] Step 3.4: Gate V4 inspector conversion on actual panel visibility and selected IDs with `createEmptyRepositoryV4()` fallback.
-  - [x] Step 3.5: Run tests, 10k/50k stage profiles, and verify Task 3 gate (eliminated redundant store rebuilds and unselected V4 conversion pauses).
-- [x] Task 4: Dependency-scoped interactive validation
-  - [x] Step 4.1: Classify current validation rules into local, dependency-neighborhood, indexed-global, and full-only rules in `src/engine/sysml/validation/dependencyScope.ts`.
-  - [x] Step 4.2: Add differential tests in `src/engine/sysml/validation/scopedValidation.test.ts` comparing introduced errors from scoped validation to a full validation oracle after rename, property edit, move, connect, delete, undo, and redo.
-  - [x] Step 4.3: Implement `validateScopedSysmlRepository` in `src/engine/sysml/validation/dependencyScope.ts` using store indexes (ownerId, typeId, sourceId, targetId).
-  - [x] Step 4.4: Integrate scoped validation into `executeSysmlCommandCore` in `src/services/sysmlCommandGateway.ts` for common covered commands (rename, property edit, presentation update, undo, redo) while preserving full validation for audits, import/export, and unsupported commands.
-  - [x] Step 4.5: Re-run semantic, gateway, and scalability stage profiles; measure 10k/50k edit latency and verify Task 4 gate: 10k rename dropped from 184ms to 68ms, 10k undo dropped from 163ms to 72ms (both <100ms gate); 50k rename dropped from 1,239ms to 204ms, 50k undo dropped from 1,277ms to 163ms (87% reduction).
-- [x] Task 5: Lazy Browser projection only if profiling still requires it
-  - [x] Step 5.1: Profile browser projection allocation in production preview; verified 11,962 nodes allocated on 10k model for only 28 rendered DOM rows.
-  - [x] Step 5.2: Optimize `applyDiagramVisualParents` to map semantic IDs directly instead of scanning `Object.values(nodes)` (250 iterations instead of 60,000 iterations); optimize `rebuildChildren` and `selectedNodeIds` O(1) lookups.
-  - [x] Step 5.3: Add bounded tree projection in `buildUnifiedModelProjection` accepting `expandedNodeIds?: ReadonlySet<string>` while preserving full tree fallback when omitted; add unit and equivalence tests in `unifiedModelExplorerProjection.test.ts`.
-  - [x] Step 5.4: Wire `expandedNodeIds` into `AppModelExplorer.tsx` and verify all 132 model explorer tests and `tsc --noEmit` pass.
-- [x] Task 6: Qualification of this remediation slice
-  - [x] Step 6.1: Run benchmark harness `benchWorker.ts` on 10k and 50k models with 5 samples to measure p50/p95/max latency for rename, property edit, undo, redo, and validation (10k edit p50: 40.5ms, p95: 66.3ms; 50k edit p50: 173.4ms).
-  - [x] Step 6.2: Run real production browser workflow (`tests/e2e/scalability-real-workflow.spec.ts`) against Vite production preview (`http://localhost:3105`) with 5 samples (rename handler p50: 32.8ms, p95: 59.7ms; undo handler p50: 31.8ms, p95: 45.7ms — both <100ms gate).
-  - [x] Step 6.3: Run critical regression suites (`test:sysml` with 118 files / 1178 tests passed, `test:sysml:release-gate` with 23 tests passed, codegen isolation verified).
-  - [x] Step 6.4: Publish qualification artifact (`docs/scalability/2026-10-05-remediation-results.md`) comparing before vs. after metrics, confirming interactive gate status (<100ms p95), and documenting remaining bottlenecks.
+- [x] Task 1: Make the responsiveness gate truthful and reproducible
+  - [x] Step 1.1: Write failing evaluator tests (`scripts/scalability/assertBrowserProfile.test.ts`) covering exactly-at-limit failure, five-sample p95 calculation, a fast handler followed by a slow heartbeat, and a long task above 100 ms.
+  - [x] Step 1.2: Run `npx vitest run scripts/scalability/assertBrowserProfile.test.ts`; expect failure because evaluator does not exist.
+  - [x] Step 1.3: Implement workflow/result types and pure evaluator in `scripts/scalability/workflows.ts` and `scripts/scalability/assertBrowserProfile.ts`.
+  - [x] Step 1.4: Update runner `scripts/scalability/profileBrowser.ts` (default no-CPU-profile, 5 independent samples, input-to-next-paint + heartbeat delay).
+  - [x] Step 1.5: Add package scripts (`profile:sysml`, `gate:sysml-profile`) and verify all evaluator unit tests pass.
+  - [x] Step 1.6: Build and run 10k baseline against `vite preview`; save raw JSON in `artifacts/scalability/baseline/` and verify gate evaluation.
+  - [x] Step 1.7: Commit Task 1 changes.
+- [ ] Task 2: Attribute post-command stalls to exact React work
+  - [ ] Step 2.1: Write failing telemetry tests in `src/features/sysml/performance/renderTelemetry.test.ts`.
+  - [ ] Step 2.2: Run `npx vitest run src/features/sysml/performance/renderTelemetry.test.ts`; expect failure.
+  - [ ] Step 2.3: Implement bounded telemetry buffer in `src/features/sysml/performance/renderTelemetry.ts` with `window.__ADIA_PERF__` reader.
+  - [ ] Step 2.4: Wrap boundaries (workspace, canvas, explorer, inspector) with React `Profiler` callbacks and performance marks.
+  - [ ] Step 2.5: Verify tests and `tsc --noEmit` pass.
+  - [ ] Step 2.6: Profile rename, undo, redo (5 samples) and record components responsible for >=80% commit duration in `artifacts/scalability/diagnosis-10000.json`.
+  - [ ] Step 2.7: Commit Task 2 changes.
+- [ ] Task 3: Project only the active diagram
+  - [ ] Step 3.1: Write failing tests in `src/engine/sysml/projection/activeDiagramProjection.test.ts`.
+  - [ ] Step 3.2: Run `npx vitest run src/engine/sysml/projection/activeDiagramProjection.test.ts`; expect failure.
+  - [ ] Step 3.3: Add diagram-membership index to normalized store construction and incremental updates.
+  - [ ] Step 3.4: Implement `projectActiveDiagram` with direct indexed lookups.
+  - [ ] Step 3.5: Replace `projectLegacyDiagram` in `App.tsx` with active diagram selector.
+  - [ ] Step 3.6: Verify tests, `npm run test:sysml`, and `tsc --noEmit`.
+  - [ ] Step 3.7: Profile diagram switching across BDD, IBD, package, requirements, use-case at 10k.
+  - [ ] Step 3.8: Commit Task 3 changes.
+- [ ] Task 4: Replace full-tree rebuilding with paged explorer queries
+  - [ ] Step 4.1: Write failing tests with 50,000 entities in `src/features/modelExplorer/modelExplorerQuery.test.ts`.
+  - [ ] Step 4.2: Run `npx vitest run src/features/modelExplorer/modelExplorerQuery.test.ts`; expect failure.
+  - [ ] Step 4.3: Add parent/child and lowercase-search-token indexes to normalized store.
+  - [ ] Step 4.4: Implement paged queries with revision-keyed caches in `src/features/modelExplorer/modelExplorerQuery.ts`.
+  - [ ] Step 4.5: Update `AppModelExplorer` to request roots and expanded children on demand.
+  - [ ] Step 4.6: Verify focused tests, existing model explorer tests, and `tsc --noEmit`.
+  - [ ] Step 4.7: Profile expand, collapse, search, clear-search, selection at 10k and 50k.
+  - [ ] Step 4.8: Commit Task 4 changes.
+- [ ] Task 5: Isolate editor state updates from the monolithic App render
+  - [ ] Step 5.1: Write failing store tests in `src/features/sysml/runtime/sysmlEditorStore.test.ts`.
+  - [ ] Step 5.2: Run store tests; expect failure.
+  - [ ] Step 5.3: Implement external store (`sysmlEditorStore.ts`, `useSysmlEditorSelector.ts`) using immutable slice replacement and `useSyncExternalStore`.
+  - [ ] Step 5.4: Extract `SysmlWorkspace` and subscribe canvas, explorer, inspector to minimal slices.
+  - [ ] Step 5.5: Add render-count assertions ensuring isolated rerenders.
+  - [ ] Step 5.6: Run store tests, `npm run test:sysml`, `tsc --noEmit`, and production browser profile.
+  - [ ] Step 5.7: Commit Task 5 changes.
+- [ ] Task 6: Move project load and save preparation off the renderer thread
+  - [ ] Step 6.1: Write failing client tests in `src/engine/sysml/workers/projectIoClient.test.ts`.
+  - [ ] Step 6.2: Run client test; expect failure.
+  - [ ] Step 6.3: Implement typed worker protocol in `src/engine/sysml/workers/projectIo.worker.ts`.
+  - [ ] Step 6.4: Integrate load with atomic store swap and progress.
+  - [ ] Step 6.5: Integrate save preparation via worker serialization.
+  - [ ] Step 6.6: Run project-file tests, SysML tests, `tsc --noEmit`, and load/save profiles.
+  - [ ] Step 6.7: Commit Task 6 changes.
+- [ ] Task 7: Turn all missing workflows into a release gate
+  - [ ] Step 7.1: Write Playwright cases in `tests/performance/sysml-scalability.spec.ts` for all workflows.
+  - [ ] Step 7.2: Run suite at 1,000 elements for functional assertions.
+  - [ ] Step 7.3: Run production suite at 10,000 elements with 5 samples; enforce 100ms gate.
+  - [ ] Step 7.4: Run suite at 50,000 elements and record limits.
+  - [ ] Step 7.5: Update remediation report with raw artifact paths and SHA.
+  - [ ] Step 7.6: Mark completed items with evidence.
+  - [ ] Step 7.7: Commit Task 7 changes.
+- [ ] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
+  - [ ] Step 8.1: Write failing round-trip tests for chunked storage.
+  - [ ] Step 8.2: Run persistence tests; expect failure.
+  - [ ] Step 8.3: Implement manifest and fixed-size entity chunks.
+  - [ ] Step 8.4: Implement lazy hydration with LRU cache and dirty-chunk tracking.
+  - [ ] Step 8.5: Connect worker load/save to lazy store for >50k elements.
+  - [ ] Step 8.6: Run round-trip, project-file, SysML tests, and `tsc --noEmit`.
+  - [ ] Step 8.7: Run 250k element load/edit/save/reopen tests.
+  - [ ] Step 8.8: Run 1,000,000 element capacity soak.
+  - [ ] Step 8.9: Commit Task 8 changes.
+- [ ] Task 9: Final regression, evidence, and support statement
+  - [ ] Step 9.1: Run `npm run test:sysml:release`, `npm run test:project-files`, `npm run test:sysml:scalability`, `tsc --noEmit`.
+  - [ ] Step 9.2: Verify clean `git diff --check`.
+  - [ ] Step 9.3: Re-run highest claimed tier on clean production build with 5 samples.
+  - [ ] Step 9.4: Update report support matrix.
+  - [ ] Step 9.5: Review final diff against architectural guidelines.
+  - [ ] Step 9.6: Commit Task 9 docs and qualification evidence.
