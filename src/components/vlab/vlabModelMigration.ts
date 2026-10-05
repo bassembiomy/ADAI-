@@ -2,6 +2,7 @@ import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import type { VLabEdge, VLabNode } from './VLabWorkspaceTypes';
 
 const LEGACY_REMOVED_BLOCKS = new Set(['gas_properties']);
+const MULTIBODY_JOINT_TYPES = new Set(['revolute_joint', 'prismatic_joint', 'spherical_joint', 'universal_joint', 'weld_joint']);
 
 const effectiveBlockType = (node: VLabNode): string =>
   String(node.data?.type ?? node.type ?? '').toLowerCase();
@@ -70,6 +71,8 @@ export const LEGACY_PARAM_DROPS: Record<string, string[]> = {
   ma_chamber: ['heat_capacity'],
   // amp / freq were library parameters no equation read; the equation always ran on Vpk / f
   ps_sine_3phase: ['amp', 'freq'],
+  // WP-19a: the ideal weld has no stiffness (the old value was never read by any equation; the constraint is exact)
+  weld_joint: ['stiffness'],
 };
 
 /** Library parameters exposed by WP-08 (previously hidden): backfilled into saved nodes so the inspector shows them. */
@@ -83,6 +86,8 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
   upper_heater: ['efficiency'], mag_controlled_mmf: ['MMF'], washing_basket: ['damping'], doe_custom: ['deploymentModel'],
   ps_dead_zone: ['upper', 'lower'], ps_sine_3phase: ['Vpk', 'f'],
+  // WP-19a: joint parameters of the shared multibody joint core (axis defaults to Z like Simscape; weld reference pose)
+  revolute_joint: ['axis'], prismatic_joint: ['axis'], weld_joint: ['offset', 'rotation'],
 };
 
 const isWrapper = (v: unknown): v is { value: unknown } =>
@@ -175,8 +180,8 @@ export const normalizeLegacyVLabGraph = (
       .map(canonicalizeNodeParams)
       .map((node) => {
         const type = effectiveBlockType(node);
-        if (type !== 'spherical_joint' && type !== 'universal_joint')
-          return node;
+        // Every joint is re-synchronised with the library ports (new typed outputs are added, existing ids never renamed).
+        if (!MULTIBODY_JOINT_TYPES.has(type)) return node;
         const block = VLAB_LIBRARY.flatMap((domain) => domain.blocks).find(
           (block) => block.id === type,
         )!;
@@ -194,7 +199,9 @@ export const normalizeLegacyVLabGraph = (
             },
           };
         }
-        const { damping: _legacyDamping, ...params } = node.data.params ?? {};
+        // the ball joint has no rotational damping; revolute / prismatic / weld keep their (canonicalized) parameters
+        const { damping: _legacyDamping, ...withoutDamping } = node.data.params ?? {};
+        const params = type === 'spherical_joint' ? withoutDamping : { ...(node.data.params ?? {}) };
         return {
           ...node,
           data: {

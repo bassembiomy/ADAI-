@@ -7944,7 +7944,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "relative rotation about x",
-            "unit": "deg"
+            "unit": "rad"
           },
           {
             "id": "ry",
@@ -7953,7 +7953,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "relative rotation about y",
-            "unit": "deg"
+            "unit": "rad"
           },
           {
             "id": "rz",
@@ -7962,7 +7962,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "relative rotation about z",
-            "unit": "deg"
+            "unit": "rad"
           }
         ],
         "equation": "Transform Sensor governing physical equation",
@@ -8050,7 +8050,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "angle",
-            "unit": "deg"
+            "unit": "rad"
           },
           {
             "id": "t_reac",
@@ -8286,10 +8286,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rev_joint",
         "category": "Joints",
         "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Rotation axis (B-local, normalized)"
+          },
           "damping": {
             "value": 0.1,
             "unit": "N-m-s/rad",
-            "label": "Damping",
+            "label": "Damping (free DOF only)",
             "min": 0
           }
         },
@@ -8305,10 +8310,100 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "right",
             "label": "F",
             "domain": "Frame"
+          },
+          {
+            "id": "q",
+            "pos": "right",
+            "label": "q (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint angle",
+            "unit": "rad"
+          },
+          {
+            "id": "w",
+            "pos": "right",
+            "label": "w (rad/s)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint angular velocity",
+            "unit": "rad/s"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tx",
+            "pos": "right",
+            "label": "tx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque x",
+            "unit": "N*m"
+          },
+          {
+            "id": "ty",
+            "pos": "right",
+            "label": "ty (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tz",
+            "pos": "right",
+            "label": "tz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque z",
+            "unit": "N*m"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constrained reaction torque magnitude",
+            "unit": "N*m"
           }
         ],
-        "equation": "Revolute Joint governing physical equation",
-        "description": "Physical component model for Revolute Joint."
+        "equation": "Pf = Pb; (Rb t_j) . (Rf a) = 0 for t_j perpendicular to a (j = 1, 2); Ff = -Fb; Tf = sum_j lambda_j ((Rf a) x (Rb t_j)) - c w (Rb a); Tb = -Tf",
+        "description": "1-DOF revolute joint: rotation about the normalized B-local axis a (a is also the F-local axis at q = 0). Constrains the 3 relative translations and the 2 rotations perpendicular to a. Reactions are the Lagrange multipliers of those 5 constraints: force Ff on F (equal and opposite on B) and the constrained torque, always perpendicular to a. Damping c [N*m*s/rad] acts only on the free rotation about a (0 is allowed). Outputs: q [rad] and w [rad/s] about the axis, reaction force (fx, fy, fz, f_reac) and torque (tx, ty, tz total on F including damping; t_reac is the constrained part only)."
       },
       {
         "id": "prismatic_joint",
@@ -8317,10 +8412,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "prism_joint",
         "category": "Joints",
         "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Slide axis (B-local, normalized)"
+          },
           "damping": {
             "value": 1,
             "unit": "N-s/m",
-            "label": "Damping",
+            "label": "Damping (free DOF only)",
             "min": 0
           }
         },
@@ -8336,10 +8436,127 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "right",
             "label": "F",
             "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "x (m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint displacement",
+            "unit": "m"
+          },
+          {
+            "id": "v",
+            "pos": "right",
+            "label": "v (m/s)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint velocity",
+            "unit": "m/s"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tx",
+            "pos": "right",
+            "label": "tx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque x",
+            "unit": "N*m"
+          },
+          {
+            "id": "ty",
+            "pos": "right",
+            "label": "ty (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tz",
+            "pos": "right",
+            "label": "tz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque z",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbx",
+            "pos": "right",
+            "label": "tbx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B x",
+            "unit": "N*m"
+          },
+          {
+            "id": "tby",
+            "pos": "right",
+            "label": "tby (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbz",
+            "pos": "right",
+            "label": "tbz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B z",
+            "unit": "N*m"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constrained reaction torque magnitude",
+            "unit": "N*m"
           }
         ],
-        "equation": "Prismatic Joint governing physical equation",
-        "description": "Physical component model for Prismatic Joint."
+        "equation": "(Rb c_j) . (Pf - Pb) = 0 for c_j perpendicular to a (j = 1, 2); Rf = Rb; Ff = sum_j lambda_j (Rb c_j) - c v (Rb a); Tb = -Tf - (Pf - Pb) x Ff",
+        "description": "1-DOF prismatic joint: translation along the normalized B-local axis a. Constrains the 2 translations perpendicular to a and all 3 rotations. Reactions are the Lagrange multipliers of those 5 constraints: constraint force perpendicular to a (f_reac) plus the viscous force c v along a (fx, fy, fz are the total force on F), and the 3 constrained torques (tx, ty, tz on F about F; tbx, tby, tbz on B about B, which include the lever arm of the displacement). Damping c [N*s/m] acts only on the slide (0 is allowed). Outputs: displacement x [m] and velocity v [m/s]."
       },
       {
         "id": "spherical_joint",
@@ -8425,8 +8642,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "rad"
           }
         ],
-        "equation": "Pf - Pb = 0; F_B = -F_F; T_B = T_F = 0",
-        "description": "Ideal ball-and-socket joint: locks relative XYZ translation, allows free rotation. Reaction outputs are in N; relative rotation vector rx/ry/rz are in rad."
+        "equation": "Pf - Pb = 0; Ff = -Fb (3 multipliers); Tf = Tb = 0",
+        "description": "Ideal 3-DOF ball-and-socket joint: locks the relative X/Y/Z translation and leaves every rotation free, so it transmits no torque (there is no rotational damping or friction model). Reactions are the 3 force multipliers (fx, fy, fz, f_reac) in N. Outputs rx, ry, rz are the relative rotation vector (angle times axis of Rb^T Rf) in rad."
       },
       {
         "id": "universal_joint",
@@ -8557,10 +8774,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "weld_joint",
         "category": "Joints",
         "params": {
-          "stiffness": {
-            "value": 1000000000,
-            "unit": "N/m",
-            "label": "Stiffness"
+          "offset": {
+            "value": "[0 0 0]",
+            "unit": "m",
+            "label": "Reference offset of F in B (B-local)"
+          },
+          "rotation": {
+            "value": "[0 0 0]",
+            "unit": "deg",
+            "label": "Reference rotation of F relative to B"
           }
         },
         "ports": [
@@ -8575,10 +8797,127 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "right",
             "label": "F",
             "domain": "Frame"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tx",
+            "pos": "right",
+            "label": "tx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque x",
+            "unit": "N*m"
+          },
+          {
+            "id": "ty",
+            "pos": "right",
+            "label": "ty (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tz",
+            "pos": "right",
+            "label": "tz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque z",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbx",
+            "pos": "right",
+            "label": "tbx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B x",
+            "unit": "N*m"
+          },
+          {
+            "id": "tby",
+            "pos": "right",
+            "label": "tby (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbz",
+            "pos": "right",
+            "label": "tbz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B z",
+            "unit": "N*m"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constrained reaction torque magnitude",
+            "unit": "N*m"
+          },
+          {
+            "id": "pos_err",
+            "pos": "right",
+            "label": "pos_err (m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative position error",
+            "unit": "m"
+          },
+          {
+            "id": "rot_err",
+            "pos": "right",
+            "label": "rot_err (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative rotation error",
+            "unit": "rad"
           }
         ],
-        "equation": "Weld Joint governing physical equation",
-        "description": "Physical component model for Weld Joint."
+        "equation": "Pf - Pb - Rb p0 = 0; Rf = Rb R0; Ff = -Fb; Tb = -Tf - (Pf - Pb) x Ff (6 multipliers)",
+        "description": "0-DOF weld: locks all 6 relative coordinates to the fixed reference pose given by offset p0 (B-local, m) and rotation R0 (deg, Z-Y-X Euler like Rigid Transform); the default is coincident, aligned frames. Reactions are the 6 multipliers: force fx, fy, fz and torque tx, ty, tz exerted on F, plus the torque on B about B (tbx, tby, tbz = -t - d x f, which carries the moment of an offset load). pos_err [m] and rot_err [rad] report the residual relative pose error. There is no stiffness: the constraint is ideal."
       },
       {
         "id": "common_gear",
@@ -8661,11 +9000,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "c",
             "pos": "right",
             "label": "C",
-            "domain": "Physical"
+            "domain": "Frame"
           }
         ],
-        "equation": "Mechanism Configuration governing physical equation",
-        "description": "Physical component model for Mechanism Configuration."
+        "equation": "g = [gx gy gz] attached to the Frame network it is wired to; no wrench, no constraint",
+        "description": "Mechanism Configuration (Simscape Multibody): its single port C is a Frame connection that attaches the uniform gravity vector g [m/s2] to the mechanism it is wired to. It contributes no wrench and no constraint equation. Gravity is applied by the Gravitational Field block (this block records the mechanism gravity and rejects a malformed vector)."
       },
       {
         "id": "ps_terminator",

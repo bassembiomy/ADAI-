@@ -11,8 +11,8 @@
  *   - UNIT_INHERIT ('*'): the block is unit-polymorphic (a gain, filter, source or selector); the channel carries the unit
  *     of the signal wired to its input, which the library cannot know. Quantity names the operation instead.
  *   - '1': dimensionless (gate / logic / duty / modulation signals, ratios, weights).
- *   - transform_sensor.rx/ry/rz and angle_constraint.ang are published in DEGREES by their equations (x * 180/pi), so
- *     their unit is `deg`; this is recorded as finding F-049 (WP-19: SI would be rad).
+ *   - transform_sensor.rx/ry/rz and angle_constraint.ang are published in rad (WP-19a, F-053: they were degrees; only the
+ *     angle_constraint `angle` PARAMETER and the Rigid Transform / Weld rotation parameters stay in degrees).
  *   - UNSPECIFIED blocks are explicitly unsupported by the solver (vlabStructure.UNSUPPORTED_BLOCKS, F-025/F-035): their
  *     output has no defined physics yet, so the quantity is `unspecified` until the owning WP writes the spec.
  */
@@ -69,12 +69,12 @@ export const PORT_QUANTITIES: Record<string, PortQuantity> = {
   'transform_sensor.x': q('relative position x', 'm'),
   'transform_sensor.y': q('relative position y', 'm'),
   'transform_sensor.z': q('relative position z', 'm'),
-  'transform_sensor.rx': q('relative rotation about x', 'deg'),
-  'transform_sensor.ry': q('relative rotation about y', 'deg'),
-  'transform_sensor.rz': q('relative rotation about z', 'deg'),
+  'transform_sensor.rx': q('relative rotation about x', 'rad'),
+  'transform_sensor.ry': q('relative rotation about y', 'rad'),
+  'transform_sensor.rz': q('relative rotation about z', 'rad'),
   'dist_constraint.d': q('distance', 'm'),
   'dist_constraint.f_reac': q('constraint reaction force', 'N'),
-  'angle_constraint.ang': q('angle', 'deg'),
+  'angle_constraint.ang': q('angle', 'rad'),
   'angle_constraint.t_reac': q('constraint reaction torque', 'N*m'),
   'grav_field.fm': q('gravity force magnitude', 'N'),
   'spring_damper_force.x': q('spring length', 'm'),
@@ -98,6 +98,42 @@ export const PORT_QUANTITIES: Record<string, PortQuantity> = {
   'universal_joint.fz': q('constraint force z', 'N'),
   'universal_joint.f_reac': q('constraint force magnitude', 'N'),
   'universal_joint.t_reac': q('constraint torque magnitude', 'N*m'),
+  'revolute_joint.q': q('joint angle', 'rad'),
+  'revolute_joint.w': q('joint angular velocity', 'rad/s'),
+  'revolute_joint.fx': q('joint reaction force x', 'N'),
+  'revolute_joint.fy': q('joint reaction force y', 'N'),
+  'revolute_joint.fz': q('joint reaction force z', 'N'),
+  'revolute_joint.f_reac': q('constraint force magnitude', 'N'),
+  'revolute_joint.tx': q('joint reaction torque x', 'N*m'),
+  'revolute_joint.ty': q('joint reaction torque y', 'N*m'),
+  'revolute_joint.tz': q('joint reaction torque z', 'N*m'),
+  'revolute_joint.t_reac': q('constrained reaction torque magnitude', 'N*m'),
+  'prismatic_joint.x': q('joint displacement', 'm'),
+  'prismatic_joint.v': q('joint velocity', 'm/s'),
+  'prismatic_joint.fx': q('joint reaction force x', 'N'),
+  'prismatic_joint.fy': q('joint reaction force y', 'N'),
+  'prismatic_joint.fz': q('joint reaction force z', 'N'),
+  'prismatic_joint.f_reac': q('constraint force magnitude', 'N'),
+  'prismatic_joint.tx': q('joint reaction torque x', 'N*m'),
+  'prismatic_joint.ty': q('joint reaction torque y', 'N*m'),
+  'prismatic_joint.tz': q('joint reaction torque z', 'N*m'),
+  'prismatic_joint.tbx': q('reaction torque on B x', 'N*m'),
+  'prismatic_joint.tby': q('reaction torque on B y', 'N*m'),
+  'prismatic_joint.tbz': q('reaction torque on B z', 'N*m'),
+  'prismatic_joint.t_reac': q('constrained reaction torque magnitude', 'N*m'),
+  'weld_joint.fx': q('joint reaction force x', 'N'),
+  'weld_joint.fy': q('joint reaction force y', 'N'),
+  'weld_joint.fz': q('joint reaction force z', 'N'),
+  'weld_joint.f_reac': q('constraint force magnitude', 'N'),
+  'weld_joint.tx': q('joint reaction torque x', 'N*m'),
+  'weld_joint.ty': q('joint reaction torque y', 'N*m'),
+  'weld_joint.tz': q('joint reaction torque z', 'N*m'),
+  'weld_joint.tbx': q('reaction torque on B x', 'N*m'),
+  'weld_joint.tby': q('reaction torque on B y', 'N*m'),
+  'weld_joint.tbz': q('reaction torque on B z', 'N*m'),
+  'weld_joint.t_reac': q('constrained reaction torque magnitude', 'N*m'),
+  'weld_joint.pos_err': q('relative position error', 'm'),
+  'weld_joint.rot_err': q('relative rotation error', 'rad'),
 
   // ── physical-signal math / sources (unit follows the wired input or the user's value) ──
   'ps_demux_3.a': sig('demux component 1'),

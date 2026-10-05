@@ -149,7 +149,7 @@ describe('Multibody Component Equations and Scope Connectivity', () => {
     expect(scopeData[0]).toBeCloseTo(1, 2);
     expect(scopeData[1]).toBeCloseTo(2, 2);
     expect(scopeData[2]).toBeCloseTo(3, 2);
-    expect(scopeData[3]).toBeCloseTo(90, 1);
+    expect(scopeData[3]).toBeCloseTo(Math.PI / 2, 4); // Rz in rad (F-053)
 
     // Verify mutating offset and rotation changes measurements dynamically
     const mutatedNodes = nodes.map(n => {

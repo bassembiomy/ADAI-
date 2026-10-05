@@ -38,11 +38,11 @@ export const ANY_DOMAIN_BLOCKS: ReadonlySet<string> = new Set(['ps_simulink_conv
 
 /**
  * Blocks that are domain transparent: the connection carries whatever the other end is, so the rules neither
- * compare domains nor direction. solver_config / mech_config attach to a node of any network, conn_label names a
+ * compare domains nor direction. solver_config attaches to a node of any network, conn_label names a
  * net, subsystem/inport/outport are containers that are flattened away before assembly.
  */
 export const TRANSPARENT_BLOCKS: ReadonlySet<string> = new Set([
-  'solver_config', 'solver_configuration', 'mech_config', 'conn_label',
+  'solver_config', 'solver_configuration', 'conn_label',
   'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport',
 ]);
 

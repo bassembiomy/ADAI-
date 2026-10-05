@@ -1,6 +1,6 @@
 import { EquationContext } from './types';
 import { numericParam, stringParam, vectorParam, unwrapParam } from './vlabParams';
-import { universalJointParameters, universalJointKinematics, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
+import { jointResiduals } from './vlabJointCore';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
   parseVector3,
@@ -20,7 +20,8 @@ import {
 // across/through variables without internal states, so state flags alone
 // cannot identify a static DAE. Keep this alongside their equation definitions.
 export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
-  'universal_joint',
+  // joints with a free DOF read the joint rate for their viscous term (discrete derivative of the pose)
+  'universal_joint', 'revolute_joint', 'prismatic_joint',
   'capacitor', 'inductor', 'inertia', 'mass', 'thermal_mass', 'washing_basket',
   'dc_motor', 'bldc_motor', 'pmsm', 'gas_chamber', 'em_converter',
   'spring_damper_force', 'fluid_capacitance', 'fluid_inertance',
@@ -1902,9 +1903,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const dx = F[0] - B[0];
     const dy = F[1] - B[1];
     const dz = F[2] - B[2];
-    const drx = (F[3] - B[3]) * 180 / Math.PI;
-    const dry = (F[4] - B[4]) * 180 / Math.PI;
-    const drz = (F[5] - B[5]) * 180 / Math.PI;
+    // SI: the Euler-angle differences are published in rad (F-053; they were degrees before WP-19a)
+    const drx = F[3] - B[3];
+    const dry = F[4] - B[4];
+    const drz = F[5] - B[5];
 
     return [
       (branch[0] || 0) - dx,
@@ -1981,44 +1983,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     res.push((branch[3] || 0) - lambda * axis[2]);
 
     let next = 4;
-    if (ports.includes('ang')) res.push((branch[next++] || 0) - actualAngle * 180 / Math.PI);
+    // SI: the measured angle is published in rad (F-053); only the `angle` parameter stays in degrees
+    if (ports.includes('ang')) res.push((branch[next++] || 0) - actualAngle);
     if (ports.includes('t_reac')) res.push((branch[next++] || 0) - Math.abs(lambda));
     return res;
   },
-  spherical_joint: ({ across, branch, ports }) => {
-    const B = asFrame(across[ports.indexOf('b')]);
-    const F = asFrame(across[ports.indexOf('f')]);
-    const res = [F[0] - B[0], F[1] - B[1], F[2] - B[2]];
-    // Independent multipliers Fx/Fy/Fz; no rotational reaction branches.
-    const rotation = computeRelativeAngleAxis([B[3], B[4], B[5]], [F[3], F[4], F[5]]);
-    const measurements: Record<string, number> = {
-      fx: branch[0], fy: branch[1], fz: branch[2],
-      f_reac: Math.hypot(branch[0], branch[1], branch[2]),
-      rx: rotation.angle * rotation.axis[0],
-      ry: rotation.angle * rotation.axis[1],
-      rz: rotation.angle * rotation.axis[2],
-    };
-    let next = 3;
-    for (const name of ['fx', 'fy', 'fz', 'f_reac', 'rx', 'ry', 'rz']) {
-      if (ports.includes(name)) res.push(branch[next++] - measurements[name]);
-    }
-    return res;
-  },
-  universal_joint: ({ across, dAcross, branch, params, ports, nodeId }) => {
-    const bi = ports.indexOf('b'), fi = ports.indexOf('f');
-    const B = asFrame(across[bi]), F = asFrame(across[fi]);
-    const configuration = universalJointParameters(params, nodeId);
-    const k = universalJointKinematics(B, F, asFrame(dAcross[bi]), asFrame(dAcross[fi]), configuration);
-    // [Fx,Fy,Fz,lambda,Tx,Ty,Tz]; reported wrench acts on F.
-    const torque = k.n.map((v, i) => branch[3] * v - configuration.damping * (k.w1 * k.a[i] + k.w2 * k.b[i]));
-    const res = [F[0] - B[0], F[1] - B[1], F[2] - B[2], k.constraint, ...torque.map((v, i) => branch[4 + i] - v)];
-    const measurements: Record<string, number> = { angle1: k.angle1, angle2: k.angle2, w1: k.w1, w2: k.w2,
-      fx: branch[0], fy: branch[1], fz: branch[2], f_reac: Math.hypot(...branch.slice(0, 3)), t_reac: branch[3] };
-    let next = 7;
-    for (const name of UNIVERSAL_MEASUREMENTS) if (ports.includes(name)) res.push(branch[next++] - measurements[name]);
-    return res;
-  },
-  weld_joint: ({ across }) => [across[0] - across[1]],
+  // ── multibody joints: one shared implementation (vlabJointCore.ts, WP-19a) ──
+  spherical_joint: (a) => jointResiduals('spherical', { ...a, dt: a.ctx?.dt }),
+  universal_joint: (a) => jointResiduals('universal', { ...a, dt: a.ctx?.dt }),
+  revolute_joint: (a) => jointResiduals('revolute', { ...a, dt: a.ctx?.dt }),
+  prismatic_joint: (a) => jointResiduals('prismatic', { ...a, dt: a.ctx?.dt }),
+  weld_joint: (a) => jointResiduals('weld', { ...a, dt: a.ctx?.dt }),
   common_gear: ({ across, branch, params }) => {
     const ratio = numericParam(params, 'ratio', 2);
     return [
@@ -2085,14 +2060,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     if (ports.includes('fm')) res.push((branch[next++] || 0) - Math.hypot(F[0], F[1], F[2]));
     if (ports.includes('tm')) res.push((branch[next++] || 0) - Math.hypot(T[0], T[1], T[2]));
     return res;
-  },
-  revolute_joint: ({ across, branch, params }) => {
-    const b = numericParam(params, 'damping', 0.1);
-    return [branch[0] - b * (across[0] - across[1])];
-  },
-  prismatic_joint: ({ across, branch, params }) => {
-    const b = numericParam(params, 'damping', 1.0);
-    return [branch[0] - b * (across[0] - across[1])];
   },
 
   // ── MISCELLANEOUS & SINKS & SOURCES ────────────────────────────────────────
@@ -2237,7 +2204,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── SIMULATION & UTILITIES ──────────────────────────────────────────────────
   scope: () => [],
   solver_config: () => [],
-  mech_config: () => [],
+  // Mechanism Configuration (F-032): a Frame connection that records the mechanism's uniform gravity vector. It owns no
+  // branch and no constraint (zero rows); the vector is validated here so a malformed value is a diagnostic, never ignored.
+  mech_config: ({ params }) => {
+    parseVector3(params?.gravity, [0, 0, -9.81], 'gravity');
+    return [];
+  },
   ps_simulink_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   simulink_ps_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],

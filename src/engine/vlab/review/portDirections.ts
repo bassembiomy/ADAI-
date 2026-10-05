@@ -26,7 +26,6 @@ export type TraceVerdict = 'in' | 'out' | 'read+driven' | 'silent';
 /** Ports of non-simulating utility blocks that are domain transparent: no direction (see vlabConnectionRules). */
 export const NO_DIRECTION_PORTS: Record<string, string> = {
   'solver_config.a': 'Solver Configuration attaches to a node of any physical network; it is not a signal port.',
-  'mech_config.c': 'Mechanism Configuration attaches to a multibody network node; it is not a signal port.',
   'conn_label.a': 'Net label: names the net it is wired to, so it takes the direction of whatever it is wired to.',
 };
 

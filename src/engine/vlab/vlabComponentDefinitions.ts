@@ -1177,7 +1177,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['P = P_f - P_b', 'R = R_f - R_b'],
     latex: ['\Delta \mathbf{P} = \mathbf{P}_f - \mathbf{P}_b', '\Delta \mathbf{\theta} = \mathbf{\theta}_f - \mathbf{\theta}_b'],
     across: 'Frame', through: 'None',
-    description: 'Measures relative 3D position and Euler angle orientation between follower and base frames.'
+    description: 'Measures relative 3D position (m) and the Euler-angle difference (rad, SI) between follower and base frames.'
   },
   dist_constraint: {
     equations: ['|Pf - Pb| = L_set', 'Ff = lambda * (Pf - Pb) / |Pf - Pb|', 'Fb = -Ff'],
@@ -1210,22 +1210,22 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Applies force and torque vectors from physical-signal inputs (Fx..Tz), scaled by force_scale and torque_scale, to frame F. Outputs |F| and |T|.'
   },
   revolute_joint: {
-    equations: ['theta = angle(b, f)', 'Tau = J*alpha + b*omega'],
-    latex: ['\\tau = J \dot{\omega} + B \omega'],
-    across: 'Ang. Vel', through: 'Torque (N-m)',
-    description: 'A 1-DOF rotational joint that allows rotation about a single axis. Constrains all translational and remaining rotational degrees of freedom.'
+    equations: ['Pf - Pb = 0', '(Rb t_j) . (Rf a) = 0, t_j perpendicular to a (j = 1, 2)', 'Ff = -Fb', 'Tf = sum_j lambda_j ((Rf a) x (Rb t_j)) - c w (Rb a)', 'Tb = -Tf'],
+    latex: ['\\mathbf{P}_f = \\mathbf{P}_b', '(\\mathbf{R}_b \\mathbf{t}_j) \\cdot (\\mathbf{R}_f \\mathbf{a}) = 0', '\\boldsymbol{\\tau}_f = \\sum_j \\lambda_j\\, (\\mathbf{R}_f \\mathbf{a}) \\times (\\mathbf{R}_b \\mathbf{t}_j) - c\\, w\\, \\mathbf{R}_b \\mathbf{a}'],
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'A 1-DOF joint that rotates about the normalized B-local axis a. It constrains the 3 relative translations and the 2 rotations perpendicular to a; the reactions are the Lagrange multipliers of those constraints (force on F, equal and opposite on B, and a constrained torque perpendicular to a). Damping acts only on the free rotation; 0 is accepted. Outputs: joint angle q (rad), rate w (rad/s), reaction force and torque.'
   },
   prismatic_joint: {
-    equations: ['v = dx/dt', 'F = m*a + b*v'],
-    latex: ['F = m \ddot{x} + B \dot{x}'],
-    across: 'Velocity', through: 'Force (N)',
-    description: 'A 1-DOF translational joint that allows sliding along a single axis while constraining all other motions.'
+    equations: ['(Rb c_j) . (Pf - Pb) = 0, c_j perpendicular to a (j = 1, 2)', 'Rf = Rb', 'Ff = sum_j lambda_j (Rb c_j) - c v (Rb a)', 'Tb = -Tf - (Pf - Pb) x Ff'],
+    latex: ['(\\mathbf{R}_b \\mathbf{c}_j) \\cdot (\\mathbf{P}_f - \\mathbf{P}_b) = 0', '\\mathbf{F}_f = \\sum_j \\lambda_j\\, \\mathbf{R}_b \\mathbf{c}_j - c\\, v\\, \\mathbf{R}_b \\mathbf{a}', '\\boldsymbol{\\tau}_b = -\\boldsymbol{\\tau}_f - (\\mathbf{P}_f - \\mathbf{P}_b) \\times \\mathbf{F}_f'],
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'A 1-DOF joint that slides along the normalized B-local axis a. It constrains the 2 translations perpendicular to a and all 3 rotations; the reactions are the Lagrange multipliers of those constraints, and the torque on B includes the lever arm of the displacement. Damping acts only on the slide; 0 is accepted. Outputs: displacement x (m), velocity v (m/s), reaction force and torque.'
   },
   spherical_joint: {
-    equations: ['P_f - P_b = 0', 'F_f = [Fx, Fy, Fz]', 'F_b = -F_f', 'T_b = T_f = 0'],
-    latex: ['\mathbf{P}_b = \mathbf{P}_f'],
+    equations: ['P_f - P_b = 0', 'F_f = [Fx, Fy, Fz] (3 multipliers)', 'F_b = -F_f', 'T_b = T_f = 0'],
+    latex: ['\\mathbf{P}_b = \\mathbf{P}_f'],
     across: 'Frame', through: 'Force (N)',
-    description: 'A 3-DOF "ball-and-socket" joint. Constrains the relative translation between two frames while allowing free rotation.'
+    description: 'A 3-DOF "ball-and-socket" joint. Constrains the relative translation between two frames while allowing free rotation; it transmits no torque (no rotational damping or friction). Outputs: the 3 reaction force components and magnitude (N) and the relative rotation vector (rad).'
   },
   universal_joint: {
     equations: ['P_f - P_b = 0', '(R_b axis1) dot (R_f axis2) = 0', 'F_b = -F_f', 'T_f = lambda (a1 cross a2) - damping (w1 a1 + w2 a2)', 'T_b = -T_f'],
@@ -1234,10 +1234,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Locks translation and permits rotation about B-local axis1 and F-local axis2. Nonparallel input axes are orthonormalized. Damping opposes only the permitted angular rates; zero disables it. Angles are signed principal radians, and t_reac is the constrained reaction on F.'
   },
   weld_joint: {
-    equations: ['Tb = Tf', 'vb = vf', 'wb = wf'],
-    latex: ['\mathbf{T}_b = \mathbf{T}_f'],
-    across: 'Frame', through: 'Force, Torque',
-    description: 'A 0-DOF constraint that rigidly locks two frames together. No relative motion is permitted.'
+    equations: ['Pf - Pb - Rb p0 = 0', 'Rf = Rb R0', 'Ff = -Fb', 'Tb = -Tf - (Pf - Pb) x Ff'],
+    latex: ['\\mathbf{P}_f - \\mathbf{P}_b = \\mathbf{R}_b \\mathbf{p}_0', '\\mathbf{R}_f = \\mathbf{R}_b \\mathbf{R}_0', '\\boldsymbol{\\tau}_b = -\\boldsymbol{\\tau}_f - (\\mathbf{P}_f - \\mathbf{P}_b) \\times \\mathbf{F}_f'],
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'A 0-DOF constraint that rigidly locks all 6 relative coordinates to a fixed reference pose (offset p0 and rotation R0; coincident by default). The reactions are the 6 multipliers (force and torque on F, and the torque on B about B, which carries the moment of an offset load). Outputs: reaction wrench and the relative pose error (m, rad). The constraint is ideal: there is no stiffness.'
   },
   common_gear: {
     equations: ['omega_f = ratio * omega_b', 'Tau_b = ratio * Tau_f'],
@@ -1252,10 +1252,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Converts rotational motion from a pinion gear into linear motion of a rack. The coupling is defined by the pinion radius.'
   },
   mech_config: {
-    equations: ['g = gravity_vector'],
-    latex: ['\mathbf{g} = [g_x, g_y, g_z]'],
-    across: 'None', through: 'None',
-    description: 'Defines global parameters for the mechanical mechanism, including the gravity vector and uniform linearization parameters.'
+    equations: ['g = [gx gy gz] (uniform gravity of the connected mechanism)'],
+    latex: ['\\mathbf{g} = [g_x, g_y, g_z]'],
+    across: 'Frame', through: 'None',
+    description: 'Mechanism Configuration. Its single port C is a Frame connection attaching the uniform gravity vector (m/s2) to the mechanism it is wired to; it adds no wrench and no constraint. A malformed gravity vector is rejected.'
   },
   conductive_heat: {
     equations: ['Q = k * (Ta - Tb)'],

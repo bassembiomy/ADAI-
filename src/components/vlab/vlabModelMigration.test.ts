@@ -67,6 +67,37 @@ describe('normalizeLegacyVLabGraph', () => {
     expect(nodes).toEqual(originalNodes);
     expect(edges).toEqual(originalEdges);
   });
+  // WP-19a: the revolute / prismatic / weld joints were rewritten for 6-vector Frames with typed outputs
+  it('upgrades saved revolute and prismatic joints: ports refreshed, axis added, damping (incl. 0) and label kept', () => {
+    for (const [type, damping] of [['revolute_joint', 0], ['prismatic_joint', { value: 2.5, unit: 'N-s/m' }]] as const) {
+      const legacy = {
+        ...node('joint', type),
+        data: { type, label: 'Hinge', ports: [{ id: 'b', pos: 'left' }, { id: 'f', pos: 'right' }], params: { damping } },
+      } as VLabNode;
+      const result = normalizeLegacyVLabGraph([legacy], []);
+      const upgraded = result.nodes[0];
+      const ids = (upgraded.data.ports ?? []).map((p: { id: string }) => p.id);
+      expect(ids.slice(0, 2)).toEqual(['b', 'f']); // existing port ids are never renamed
+      expect(ids).toEqual(expect.arrayContaining(type === 'revolute_joint' ? ['q', 'w', 't_reac'] : ['x', 'v', 'tbx']));
+      expect((upgraded.data.ports ?? []).find((p: { id: string }) => p.id === 'b')?.domain).toBe('Frame');
+      expect(upgraded.data.params).toMatchObject({ damping, axis: { value: '[0 0 1]' } });
+      expect(upgraded.data.label).toBe('Hinge');
+      expect(normalizeLegacyVLabGraph(result.nodes, [])).toEqual(result);
+    }
+  });
+  it('upgrades a saved weld joint: the dead stiffness is dropped and the reference pose params are added', () => {
+    const legacy = {
+      ...node('joint', 'weld_joint'),
+      data: { type: 'weld_joint', ports: [{ id: 'b', pos: 'left' }, { id: 'f', pos: 'right' }], params: { stiffness: { value: 1e9, unit: 'N/m' } } },
+    } as VLabNode;
+    const result = normalizeLegacyVLabGraph([legacy], []);
+    const params = result.nodes[0].data.params as Record<string, any>;
+    expect(params).not.toHaveProperty('stiffness');
+    expect(params).toMatchObject({ offset: { value: '[0 0 0]' }, rotation: { value: '[0 0 0]' } });
+    expect((result.nodes[0].data.ports ?? []).map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['fx', 'tbx', 'pos_err', 'rot_err']));
+    expect(normalizeLegacyVLabGraph(result.nodes, [])).toEqual(result);
+    expect((legacy.data.params as Record<string, any>).stiffness).toBeDefined(); // the input is not mutated
+  });
   it('upgrades saved spherical joints to Frame ports and ideal measurements', () => {
     const legacy = {
       ...node('joint', 'spherical_joint'),

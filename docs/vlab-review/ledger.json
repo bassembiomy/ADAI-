@@ -232,11 +232,13 @@
         "WP-09b"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review/multibody_joints.test.ts src/engine/vlab/vlab_multibody_frames.test.ts src/engine/vlab/vlab_constraint_reactions.test.ts src/engine/vlab/vlab_spherical_joint.test.ts --reporter=dot",
       "evidence": [
-        "Build on the universal joint in c4cdc6f1 (vlabUniversalJoint.ts, vlabJointInitialization.ts, vlab_universal_joint.test.ts, plan 2026-10-05-universal-joint.md). Audit it against the mandate; do not rewrite it."
+        "shared vlabJointCore.ts: relative pose B->F, DOF mask, multipliers along the constraint gradient; 5 joints with Frame ports, SI outputs, reactions on the true axis",
+        "76 tests vs analytic references: revolute/prismatic/weld <1e-7 %, spherical 3e-14 %, Cardan ratio 0.073 % (quasi-static: there is no body inertia yet)",
+        "planner re-run: 4219 pass / 180 expected-fail / 1 known; test:vlab 20/20"
       ],
       "findings": []
     },
@@ -248,7 +250,7 @@
         "WP-19a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review/gears_converters.test.ts --reporter=dot",
       "evidence": [],
@@ -776,7 +778,8 @@
       "block": "universal_joint",
       "layer": "eq",
       "summary": "vlab_full_certification universal_joint axis1 INVALID_JOINT_PARAMETER (seen in a dir-wide run). The concurrent session is changing universal_joint -> WP-19a",
-      "wp": "WP-19a"
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
     },
     {
       "id": "F-025",
@@ -838,7 +841,8 @@
       "block": "revolute_joint, prismatic_joint, weld_joint",
       "layer": "eq",
       "summary": "Ports are now Frame (6-vector across), but the legacy scalar equations compute across[0]-across[1], which is NaN on arrays. Interim: unusable with Frame blocks until WP-19a rewrites them.",
-      "wp": "WP-19a"
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
     },
     {
       "id": "F-032",
@@ -846,7 +850,8 @@
       "block": "mech_config",
       "layer": "port",
       "summary": "Simscape port C is a Frame, but it is classified utility and so Physical. The validator rejects Frame links. Decide the classification.",
-      "wp": "WP-19a"
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
     },
     {
       "id": "F-033",
@@ -970,7 +975,8 @@
       "block": "frame blocks",
       "layer": "eq",
       "summary": "Frame mapping assigns coords by branch NAME (force->X, torque->Rx). revolute torque->Rx and prismatic force->Px regardless of axis. weld has a single force->Px. Frame pose unknowns are exempt from the structural check.",
-      "wp": "WP-19a"
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
     },
     {
       "id": "F-048",
@@ -1019,7 +1025,8 @@
       "block": "transform_sensor rx/ry/rz, angle_constraint.ang",
       "layer": "eq",
       "summary": "Outputs are in degrees, not SI rad.",
-      "wp": "WP-19a"
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
     },
     {
       "id": "F-054",
@@ -1027,6 +1034,38 @@
       "block": "kernel/PhysicalSystemCompiler",
       "layer": "integration",
       "summary": "Number(val)||0 masks a NaN param in the separate kernel pipeline.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-055",
+      "severity": "high",
+      "block": "Frame/multibody domain",
+      "layer": "eq",
+      "summary": "There are no rigid-body inertia dynamics: pendulum period, energy and sliding acceleration cannot be simulated. Joint tests are quasi-static only. Rigid body mass/inertia (Newton-Euler) is needed for real multibody dynamics.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-056",
+      "severity": "med",
+      "block": "rigid_transform",
+      "layer": "eq",
+      "summary": "Adds Euler angles componentwise and passes no lever-arm moment.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-057",
+      "severity": "low",
+      "block": "transform_sensor",
+      "layer": "eq",
+      "summary": "Reports an Euler difference, not the relative rotation.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-058",
+      "severity": "low",
+      "block": "joints",
+      "layer": "solver",
+      "summary": "Joint rates assume a backward difference, but the SDIRK stage dt differs from the step.",
       "wp": "WP-31"
     }
   ],

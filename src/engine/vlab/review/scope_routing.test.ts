@@ -40,15 +40,11 @@ const quiet = <T>(fn: () => T): T => {
 // Blocks that cannot be simulated today. Each is a documented, owned reason; the test asserts the engine still REFUSES them
 // (so a block that starts to simulate fails here and must be removed from the list: ratchet).
 const NOT_SIMULATED: Record<string, string> = {
-  dist_constraint: 'F-012 / WP-19: constraint rows unbalanced in the minimal fixture',
   im_flux_observer: 'F-012 / WP-20: observer collapses the step in the minimal fixture',
-  revolute_joint: 'F-045 / WP-19a: equation subtracts Frame vectors as scalars (NaN residual, formerly masked as 0)',
-  prismatic_joint: 'F-045 / WP-19a: equation subtracts Frame vectors as scalars (NaN residual, formerly masked as 0)',
-  weld_joint: 'F-045 / WP-19a: equation subtracts Frame vectors as scalars (NaN residual, formerly masked as 0)',
 };
 for (const [id, spec] of Object.entries(UNSUPPORTED_BLOCKS)) NOT_SIMULATED[id] ??= `explicitly unsupported (${spec.wp}): ${spec.missingSpec}`;
 
-const SI_UNITS = new Set(['V', 'A', 'Pa', 'kg/s', 'Wb', 'N', 'rad/s', 'rad', 'N*m', 'm/s', 'm', 'W', 'K', 'kg/m^3', '1', 'deg', UNIT_INHERIT]);
+const SI_UNITS = new Set(['V', 'A', 'Pa', 'kg/s', 'Wb', 'N', 'rad/s', 'rad', 'N*m', 'm/s', 'm', 'W', 'K', 'kg/m^3', '1', UNIT_INHERIT]);
 
 const paramsOf = (b: VLabBlock) => Object.fromEntries(Object.entries(b.params || {}).map(([k, v]) => [k, v.value]));
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -405,11 +401,14 @@ describe('no silent zero: NaN residuals and throwing equations are diagnostics (
   });
 
   it('catalog: a block whose equation is NaN at the nominal point is a contract failure (finite-residual), never a pass', async () => {
-    const { CHECK_IDS } = await import('./contractChecks');
+    const { CHECK_IDS, buildContexts, evaluateBlock } = await import('./contractChecks');
     expect(CHECK_IDS).toContain('finite-residual');
     const { CONTRACT_EXPECTED_FAILURES } = await import('./contractExpectedFailures');
+    // WP-19a rewrote revolute/prismatic/weld for 6-vector Frames: their rows are finite now, so the expected failure is gone
+    const contexts = buildContexts();
     for (const id of ['revolute_joint', 'prismatic_joint', 'weld_joint']) {
-      expect(CONTRACT_EXPECTED_FAILURES[id]?.['finite-residual'], id).toBe('WP-19a');
+      expect(CONTRACT_EXPECTED_FAILURES[id]?.['finite-residual'], id).toBeUndefined();
+      expect(evaluateBlock(contexts.find(c => c.block.id === id)!)['finite-residual'], id).toEqual([]);
     }
   });
 });

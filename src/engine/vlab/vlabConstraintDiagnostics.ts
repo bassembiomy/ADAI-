@@ -15,7 +15,9 @@ export type ConstraintDiagnosticCode =
 
 export interface ConstraintTopology {
   blockId: string;
-  type: 'dist_constraint' | 'angle_constraint' | 'spherical_joint' | 'universal_joint';
+  type:
+    | 'dist_constraint' | 'angle_constraint'
+    | 'revolute_joint' | 'prismatic_joint' | 'spherical_joint' | 'universal_joint' | 'weld_joint';
   /** Union-find root id of the constraint's B (base) frame port. */
   baseRoot: string;
   /** Union-find root id of the constraint's F (follower) frame port. */

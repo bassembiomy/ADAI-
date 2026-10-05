@@ -19,16 +19,7 @@ const PER_BLOCK_TIMEOUT_MS = 30000;
 // F-012: blocks whose minimal fixture is well-posed enough yet the solver still fails.
 // Not fixed here; the equations belong to the named domain work package.
 const KNOWN_SOLVER_FAILURES: Record<string, { finding: string; wp: string; diagnosis: string }> = {
-  dist_constraint: {
-    finding: 'F-012', wp: 'WP-10..21 (multibody)',
-    diagnosis: 'frame ports b/f are unconnected by the fixture (no multibody world/rigid body); constraint rows unbalanced',
-  },
-  // WP-09b (F-045): these joint equations subtract two 6-vector Frame values as scalars (`across[0] - across[1]`), which
-  // is NaN. The assembler used to turn that NaN into a 0 residual (`|| 0`), so the joint silently carried no torque/force.
-  // The NaN is now a diagnostic naming the block; the physics (frame-pose constraint + reaction wrench) belongs to WP-19a.
-  revolute_joint: { finding: 'F-045', wp: 'WP-19a', diagnosis: 'equation treats Frame ports as scalars: residual is NaN (was masked as 0)' },
-  prismatic_joint: { finding: 'F-045', wp: 'WP-19a', diagnosis: 'equation treats Frame ports as scalars: residual is NaN (was masked as 0)' },
-  weld_joint: { finding: 'F-045', wp: 'WP-19a', diagnosis: 'equation treats Frame ports as scalars: residual is NaN (was masked as 0)' },
+  // WP-19a: dist_constraint and the five joints now simulate in a well-posed fixture (World frame on B, weight on F).
   // WP-07: the fixture now wires every signal input by its declared direction (library `direction`). These blocks used to
   // pass only because the old name-vocabulary fixture put a Scope on an input port and left the real input unwired.
   im_flux_observer: {

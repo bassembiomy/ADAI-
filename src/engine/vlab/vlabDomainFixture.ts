@@ -29,6 +29,14 @@ export interface DomainFixture {
   scopeConnected: boolean;
 }
 
+/**
+ * Multibody constraint / joint blocks: base frame B is anchored to a World frame and follower frame F carries a weight
+ * (grav_field), so the constraint reaction is determined by the load instead of a floating, unwired frame (WP-19a, F-012).
+ */
+const FRAME_CONSTRAINT_DUTS = new Set([
+  'dist_constraint', 'spherical_joint', 'universal_joint', 'revolute_joint', 'prismatic_joint', 'weld_joint',
+]);
+
 const lower = (s?: string) => (s || '').toLowerCase();
 
 /** How a conserving port that has no source of its own is closed: tied straight to the domain reference, or through a load. */
@@ -174,6 +182,16 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
         wire(`e_thermal_ref_conn_${portId}`, 'dut', `${portId}_s`, 'ref_thermal', 'a_t');
       }
       connected.add(portId);
+    } else if ((domain === 'frame' || domain === 'multibodyframe') && FRAME_CONSTRAINT_DUTS.has(block.id)) {
+      if (portId === 'b') {
+        addNode('world', 'world_frame', 50, 800);
+        wire('e_frame_b', 'world', 'w_s', 'dut', 'b_t');
+        connected.add(portId);
+      } else if (portId === 'f') {
+        addNode('load_frame', 'grav_field', 120, 800, { mass: 1, g: 9.81, direction: '[0 0 -1]' });
+        wire('e_frame_f', 'dut', 'f_s', 'load_frame', 'f_t');
+        connected.add(portId);
+      }
     } else if (domain === 'physical') {
       const wantsDrive = port.direction === 'in' && (LEGACY_DRIVEN_INPUTS.has(portId.toLowerCase()) || requiredSignal.has(portId));
       if (wantsDrive) {

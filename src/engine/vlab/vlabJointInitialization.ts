@@ -5,12 +5,19 @@ import {
   transformPoint,
   Vector3,
 } from './vlabFrameKinematics';
+import {
+  jointConfiguration,
+  jointKindOf,
+  jointReferenceBase,
+  jointReferencePose,
+} from './vlabJointCore';
 
 /** Seed a new joint at its reference pose, before estimating any velocity.
- * Propagation follows the existing rigid_transform equations (Euler offsets).
+ * Propagation follows the existing rigid_transform equations (Euler offsets); a joint passes the pose of its anchored
+ * side to the other side (zero joint coordinate, or the weld's reference offset/rotation).
  * It changes only the initial guess, never a previously simulated state.
  */
-export function initializeUniversalJointFrames(
+export function initializeJointFrames(
   system: AssembledSystem,
   x: number[],
 ): void {
@@ -19,6 +26,7 @@ export function initializeUniversalJointFrames(
     c.portNodeMap.get('b'),
     c.portNodeMap.get('f'),
   ];
+  const isJoint = (c: AssembledSystem['components'][number]) => jointKindOf(c.blockType) !== undefined;
   for (const c of system.components)
     if (c.blockType === 'world_frame') {
       for (const root of c.portNodeMap.values())
@@ -52,8 +60,10 @@ export function initializeUniversalJointFrames(
           poses.set(b, [...shift.map((v, i) => F[i] - v), ...r]);
         }
         changed = true;
-      } else if (c.blockType === 'universal_joint') {
-        poses.set(B ? f : b, [...(B ?? F)!]);
+      } else if (isJoint(c)) {
+        const cfg = jointConfiguration(jointKindOf(c.blockType)!, c.params, c.blockId);
+        if (B) poses.set(f, jointReferencePose(cfg, B));
+        else poses.set(b, jointReferenceBase(cfg, F!));
         changed = true;
       }
     }
@@ -64,7 +74,7 @@ export function initializeUniversalJointFrames(
   }
   // Unanchored joints choose an origin as their initial free reference pose.
   for (const c of system.components)
-    if (c.blockType === 'universal_joint') {
+    if (isJoint(c)) {
       const [b, f] = roots(c);
       if (b && f && !poses.has(b) && !poses.has(f)) {
         poses.set(b, new Array(6).fill(0));
@@ -84,3 +94,6 @@ export function initializeUniversalJointFrames(
     }
   }
 }
+
+/** @deprecated kept for existing imports; the initialization now covers every joint kind. */
+export const initializeUniversalJointFrames = initializeJointFrames;

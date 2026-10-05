@@ -116,7 +116,7 @@ describe('angle_constraint equation: lambda mapped onto a 3D reaction torque', (
   it('balances a satisfied angle constraint along the relative rotation axis', () => {
     const res = blockEquations.angle_constraint(baseArgs({
       across: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, PI / 2, 0]],
-      branch: [12, 0, 12, 0, 90, 12],
+      branch: [12, 0, 12, 0, PI / 2, 12], // [lambda, tx, ty, tz, ang (rad, F-053), t_reac]
       params: { angle: 90 },
       ports: ['b', 'f', 'ang', 't_reac'],
       nodeId: 'a1',
@@ -371,7 +371,7 @@ describe('Constraint reaction certification (simulation path)', () => {
     ];
 
     const { read } = solveOnce(nodes, edges);
-    expect(read('angle_c_branch_signal_ang')).toBeCloseTo(30, 4);
+    expect(read('angle_c_branch_signal_ang')).toBeCloseTo((30 * Math.PI) / 180, 8); // SI rad (F-053)
     expect(read('angle_c_branch_signal_t')).toBeCloseTo(7, 5);
   });
 });

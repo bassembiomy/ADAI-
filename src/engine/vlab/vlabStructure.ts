@@ -280,11 +280,14 @@ export function assertStructurallyWellPosed(system: AssembledSystem): void {
   if (!full) return;
   const diagnostics: StructuralDiagnostic[] = [];
 
-  // Multibody frame poses are allowed to be under-determined by design (an open Frame port is a free rotation / translation
-  // DOF that the solver resolves from the previous step; see vlabTopologyValidation, "Frame ports are never required").
-  // Those pose coordinates are exempt from the free-unknown and matching checks; every other unknown must be determined.
-  const exempt = system.variableNames.map(name => FRAME_POSE_VARIABLE.test(name));
-  (system.structure?.exemptVariables ?? []).forEach(j => { exempt[j] = true; });
+  // Multibody frame poses are NOT blanket-exempt any more (WP-19a, F-047). The assembler declares exactly what may stay
+  // undetermined (system.structure.exemptVariables): the frames of a free body (no World / reference frame in their
+  // connected set), the coordinates a joint leaves free (rotation of revolute / universal / spherical, slide of prismatic)
+  // and the indeterminate multipliers of a self-referential constraint. The solver resolves those from the previous step.
+  // A system assembled without that information falls back to the old behaviour for pose variables only.
+  const declared = system.structure?.exemptVariables;
+  const exempt = system.variableNames.map(name => !declared && FRAME_POSE_VARIABLE.test(name));
+  (declared ?? []).forEach(j => { exempt[j] = true; });
   const pattern = full.map(cols => cols.filter(j => !exempt[j]));
 
   const used = new Array(n).fill(false);

@@ -1,6 +1,6 @@
 import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
-import { universalJointParameters, UNIVERSAL_MEASUREMENTS } from './vlabUniversalJoint';
+import { jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches } from './vlabEquations';
 import { numericParam, stringParam, VLabParamError } from './vlabParams';
@@ -42,7 +42,7 @@ const FRAME_FORCE_MEASUREMENTS: Record<string, string[]> = {
 // Blocks that load or observe a frame without constraining its pose. A frame
 // node touched only by these has no kinematic definition and is held at origin.
 const FRAME_NON_KINEMATIC_TYPES = new Set([
-  'grav_field', 'spring_damper_force', 'external_force', 'transform_sensor',
+  'grav_field', 'spring_damper_force', 'external_force', 'transform_sensor', 'mech_config',
   'scope', 'vlab_probe', 'conn_label',
 ]);
 
@@ -300,7 +300,7 @@ export class DAEAssembler {
 
     // Define branch configurations for common components
     const getComponentSpec = (blockId: string, blockType: string, ports: string[]) => {
-      const branches: { name: string; ports: { id: string; sign: number }[] }[] = [];
+      const branches: { name: string; ports: { id: string; sign: number; coord?: number }[] }[] = [];
       const states: string[] = [];
 
       if (['subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport'].includes(blockType)) {
@@ -451,27 +451,13 @@ export class DAEAssembler {
         if (ports.includes('t_reac')) branches.push({ name: 'signal_t', ports: [{ id: 't_reac', sign: 1 }] });
         break;
       case 'weld_joint':
-        branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
-        break;
       case 'spherical_joint':
-        for (const name of ['fx', 'fy', 'fz']) {
-          branches.push({ name, ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
-        }
-        for (const name of ['fx', 'fy', 'fz', 'f_reac', 'rx', 'ry', 'rz']) {
-          if (ports.includes(name)) branches.push({ name: 'signal_' + name, ports: [{ id: name, sign: 1 }] });
-        }
-        break;
       case 'universal_joint':
-        for (const name of ['fx', 'fy', 'fz']) branches.push({ name, ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
-        branches.push({ name: 'lambda', ports: [] });
-        for (const name of ['tx', 'ty', 'tz']) branches.push({ name, ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
-        for (const name of UNIVERSAL_MEASUREMENTS) if (ports.includes(name)) branches.push({ name: 'signal_' + name, ports: [{ id: name, sign: 1 }] });
-        break;
       case 'revolute_joint':
-        branches.push({ name: 'torque', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
-        break;
       case 'prismatic_joint':
-        branches.push({ name: 'force', ports: [{ id: 'b', sign: -1 }, { id: 'f', sign: 1 }] });
+        // One shared joint core (vlabJointCore.ts): wrench components with explicit Frame coordinates, multipliers
+        // and one signal branch per wired measurement port.
+        branches.push(...jointBranchSpecs(jointKindOf(blockType)!, ports));
         break;
       case 'common_gear':
         branches.push({ name: 'torque1', ports: [{ id: 'b', sign: -1 }] });
@@ -930,7 +916,9 @@ export class DAEAssembler {
       }
 
       // Inject belt/cable material (density, youngs) from belt_properties blocks
-      if (type === 'universal_joint') universalJointParameters(params, node.id);
+      // Joint parameters (axes, damping, weld pose) are validated here, before any solve (INVALID_JOINT_PARAMETER).
+      const jointKind = jointKindOf(type);
+      if (jointKind) jointConfiguration(jointKind, params, node.id);
       injectBeltMaterial(node.id, type, ports, params, node.data);
 
       // Look up equation factory
@@ -1218,7 +1206,7 @@ export class DAEAssembler {
       const constraintTopologies: ConstraintTopology[] = [];
       nodes.forEach(node => {
         const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-        if (type !== 'dist_constraint' && type !== 'angle_constraint' && type !== 'spherical_joint' && type !== 'universal_joint') return;
+        if (type !== 'dist_constraint' && type !== 'angle_constraint' && !jointKindOf(type)) return;
         const ports = nodePorts.get(node.id) || [];
         if (!ports.includes('b') || !ports.includes('f')) return;
         const baseRoot = uf.find(`${node.id}_b`);
@@ -1259,6 +1247,49 @@ export class DAEAssembler {
       validateMultibodyConstraintTopology(constraintTopologies, prescribedFrameRoots);
     }
 
+    // Structural freedom of Frame poses (WP-19a). The structural-rank check no longer exempts every frame pose
+    // coordinate; it exempts only what is legitimately undetermined and held at its previous value by the solver:
+    //  - every frame of a free body: a connected set of frames that contains no World / reference frame;
+    //  - the coordinates a joint leaves free: the rotation of a revolute / universal / spherical joint, the slide of a
+    //    prismatic joint (both sides: the freedom may sit on either frame).
+    // Any other frame pose that no equation determines is reported (free-unknown / structural-rank-deficient).
+    {
+      const isFrameDomain = (d: string | undefined) => d === 'frame' || d === 'multibodyframe';
+      const link = new UnionFind();
+      physicalNodes.forEach(pn => { if (isFrameDomain(pn.domain)) link.find(pn.id); });
+      nodes.forEach(node => {
+        const framePorts = (nodePorts.get(node.id) || []).filter(p => {
+          const key = `${node.id}_${p}`;
+          return isFrameDomain(nodePortDomains.get(key)) && connectedPortKeys.has(key);
+        });
+        for (let i = 1; i < framePorts.length; i++) {
+          link.union(uf.find(`${node.id}_${framePorts[0]}`), uf.find(`${node.id}_${framePorts[i]}`));
+        }
+      });
+      const anchoredBodies = new Set<string>();
+      physicalNodes.forEach(pn => { if (isFrameDomain(pn.domain) && referenceNodeIds.has(pn.id)) anchoredBodies.add(link.find(pn.id)); });
+      physicalNodes.forEach(pn => {
+        if (!isFrameDomain(pn.domain) || anchoredBodies.has(link.find(pn.id))) return;
+        for (let k = 0; k < 6; k++) exemptVariableIndices.push(pn.acrossVarIndex + k);
+      });
+      const FREE_COORDINATES: Record<string, number[]> = {
+        revolute: [3, 4, 5], universal: [3, 4, 5], spherical: [3, 4, 5], prismatic: [0, 1, 2],
+        // a distance constraint leaves both orientations free, an angle constraint both positions
+        dist_constraint: [3, 4, 5], angle_constraint: [0, 1, 2],
+      };
+      nodes.forEach(node => {
+        const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
+        const coordinates = FREE_COORDINATES[jointKindOf(type) ? jointKindOf(type)! : type];
+        if (!coordinates) return;
+        for (const port of ['b', 'f']) {
+          const key = `${node.id}_${port}`;
+          if (!nodePortDomains.has(key)) continue;
+          const pn = physicalNodes.find(item => item.id === uf.find(key));
+          if (pn && isFrameDomain(pn.domain)) coordinates.forEach(k => exemptVariableIndices.push(pn.acrossVarIndex + k));
+        }
+      });
+    }
+
     // KCL excluded node set remains empty so that physical signal nodes are mapped to branch variables for propagation
     const kclExcludedNodeIds = new Set<string>();
 
@@ -1293,9 +1324,12 @@ export class DAEAssembler {
             const root = uf.find(portKey);
             if (root === pn.id) {
               if (isFrame) {
-                let coord = -1;
+                // Joints name the Frame coordinate of every through variable explicitly (bp.coord); the legacy blocks
+                // (force elements, rigid_transform, constraints) are still routed by their wrench branch name.
+                let coord = bp.coord ?? -1;
                 const bName = b.name.toLowerCase();
-                if (bName === 'fx' || bName === 'force') coord = 0;
+                if (coord >= 0) { /* explicit */ }
+                else if (bName === 'fx' || bName === 'force') coord = 0;
                 else if (bName === 'fy') coord = 1;
                 else if (bName === 'fz') coord = 2;
                 else if (bName === 'tx' || bName === 'torque') coord = 3;

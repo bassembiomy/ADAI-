@@ -4,7 +4,8 @@ import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
 import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
-import { initializeUniversalJointFrames } from './vlabJointInitialization';
+import { initializeJointFrames } from './vlabJointInitialization';
+import { jointKindOf, isJointMultiplierName } from './vlabJointCore';
 import { assertValidTopology } from './vlabTopologyValidation';
 import { assertStructurallyWellPosed, DAEStructureError } from './vlabStructure';
 import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagnostics';
@@ -112,9 +113,12 @@ export class VLabPhysicsEngine {
     }
     
     const system = this.currentSystem;
-    const universalJoints = system.components.filter(c => c.blockType === 'universal_joint');
+    // Every multibody joint has free or redundantly constrained coordinates (a free DOF, an unloaded frame, redundant
+    // closed-loop constraints): the rank-revealing solve holds those at their previous value.
+    const joints = system.components.filter(c => jointKindOf(c.blockType) !== undefined);
+    const jointIds = new Set(joints.map(c => c.blockId));
     this.solver.configure({
-      allowUnderdetermined: universalJoints.length > 0,
+      allowUnderdetermined: joints.length > 0,
       preferFreeColumns: system.variableNames.flatMap((name, idx) => /_R[xyz]_\((frame|multibodyframe)\)/i.test(name) ? [idx] : []),
     });
     const isAlgebraicSystem = system.isPurelyAlgebraic === true;
@@ -162,7 +166,10 @@ export class VLabPhysicsEngine {
           // and this is negligible next to any real geometry (same idea as
           // the psiar/thermal/pressure seeds just above).
           x[idx] = 0.01 * (idx + 1);
-        } else if (name.endsWith('_branch_lambda') && (isAlgebraicSystem || universalJoints.some(c => name === c.blockId + '_branch_lambda'))) {
+        } else if (isJointMultiplierName(name) && jointIds.has(name.replace(/_branch_lambda\d*$/, ''))) {
+          // Joint multipliers are seeded like the distance/angle constraint multiplier (no degenerate first Jacobian).
+          x[idx] = 0.01 * (idx + 1);
+        } else if (name.endsWith('_branch_lambda') && isAlgebraicSystem) {
           // A zero multiplier removes the direction derivatives from the
           // initial constraint Jacobian. Seed it once, then let Newton find
           // the actual reaction (including exactly zero for unloaded models).
@@ -188,7 +195,7 @@ export class VLabPhysicsEngine {
           }
         }
       });
-      if (universalJoints.length > 0) initializeUniversalJointFrames(system, x);
+      if (joints.length > 0) initializeJointFrames(system, x);
     }
 
     const config = this.solverConfiguration;

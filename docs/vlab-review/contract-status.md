@@ -6,15 +6,15 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | Item | Value |
 |---|---|
 | Live blocks | 248 |
-| Classification | physical 110, signal 73, measurement 20, source 33, utility 12 |
-| Total ports | 751 |
+| Classification | physical 111, signal 73, measurement 20, source 33, utility 11 |
+| Total ports | 787 |
 | Ports without explicit domain | 0 |
 | Blocks with at least one port lacking a domain | 0 |
-| Blocks with generic "governing ... equation" label (equation or description) | 101 |
+| Blocks with generic "governing ... equation" label (equation or description) | 97 |
 | Blocks with no equation text | 0 |
 | Unsafe numeric `params.X ||` fallbacks in vlabEquations.ts | 0 |
-| Fully certified blocks (all checks pass, no expected failure) | 134 of 248 |
-| Expected failures (ratchet entries) | 167 across 114 blocks |
+| Fully certified blocks (all checks pass, no expected failure) | 138 of 248 |
+| Expected failures (ratchet entries) | 159 across 110 blocks |
 
 ## Per check (blocks)
 | Check | Meaning | Pass | Fail | Expected failure |
@@ -24,17 +24,16 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | port-domains | every port has an explicit, known domain (no fallback) | 248 | 0 | 0 |
 | equation-factory | exactly one equation factory (and at most one DAE case) | 248 | 0 | 0 |
 | params-hidden | every param the equation reads is exposed or a documented alias | 248 | 0 | 0 |
-| params-dead | every exposed param is read by the equation | 206 | 42 | 42 |
+| params-dead | every exposed param is read by the equation | 207 | 41 | 41 |
 | dae-allocation | DAE branches/states allocated == consumed; residual length == allocated unknowns | 248 | 0 | 0 |
 | scope-routing | every signal output port is reachable by a scope through the real routing path | 248 | 0 | 0 |
 | unsupported | block is simulated by the solver, not rejected with an explicit unsupported-spec diagnostic (WP-09a) | 227 | 21 | 21 |
-| finite-residual | every residual row is finite at the nominal evaluation point (a NaN is never masked as 0, F-045) | 245 | 3 | 3 |
-| equation-doc | library equation text is specific (not generic or missing) | 147 | 101 | 101 |
+| finite-residual | every residual row is finite at the nominal evaluation point (a NaN is never masked as 0, F-045) | 248 | 0 | 0 |
+| equation-doc | library equation text is specific (not generic or missing) | 151 | 97 | 97 |
 
 ## Expected failures per owning WP
 | WP | Total | Breakdown by check |
 |---|---|---|
-| WP-19a | 7 | params-dead 1, finite-residual 3, equation-doc 3 |
 | WP-10 | 1 | unsupported 1 |
 | WP-12 | 1 | equation-doc 1 |
 | WP-13 | 1 | equation-doc 1 |
@@ -43,7 +42,7 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | WP-15 | 3 | equation-doc 3 |
 | WP-16 | 1 | equation-doc 1 |
 | WP-17 | 31 | params-dead 5, unsupported 6, equation-doc 20 |
-| WP-19 | 10 | equation-doc 10 |
+| WP-19 | 9 | equation-doc 9 |
 | WP-20 | 98 | params-dead 36, unsupported 13, equation-doc 49 |
 | WP-21 | 4 | equation-doc 4 |
 

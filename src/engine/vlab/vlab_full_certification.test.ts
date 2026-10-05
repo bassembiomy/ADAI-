@@ -163,11 +163,13 @@ const ZERO_RESIDUAL_FACTORIES = new Set([
 const numericParams = (block: VLabBlock): Record<string, number | string> =>
   Object.fromEntries(Object.entries(block.params).map(([name, parameter]) => [name, parameter.value]));
 
-const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}): BlockEquationArgs => ({
+// ranches is the number of branch unknowns the DAE assembler really allocates for the block (a joint with many signal
+// outputs allocates more than the historical 16-entry sample array).
+const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}, branches = 0): BlockEquationArgs => ({
   across: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 1 + index * 0.25),
   dAcross: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.1 + index * 0.01),
-  branch: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.5 + index * 0.05),
-  dBranch: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.2 + index * 0.02),
+  branch: Array.from({ length: Math.max(16, ports.length + 4, branches) }, (_, index) => 0.5 + index * 0.05),
+  dBranch: Array.from({ length: Math.max(16, ports.length + 4, branches) }, (_, index) => 0.2 + index * 0.02),
   state: Array.from({ length: 16 }, (_, index) => 0.25 + index * 0.01),
   dState: Array.from({ length: 16 }, (_, index) => 0.05 + index * 0.005),
   ctx: {
@@ -216,9 +218,17 @@ const collectEquationIssues = (): CertificationIssue[] => {
       numericParams(block),
       ...(contract?.boundaryParameters ?? []),
     ];
+    const allocated = (() => {
+      try {
+        const probe = new DAEAssembler().assemble([{ id: 'alloc', type: 'default', position: { x: 0, y: 0 }, data: { type: block.id, params: block.params, ports: block.ports } } as Node], []);
+        return probe.variableNames.filter((name) => name.startsWith('alloc_branch_')).length;
+      } catch {
+        return 0;
+      }
+    })();
 
     cases.forEach((params, caseIndex) => {
-      const args = makeEquationArgs(block.ports.map((port) => port.id), params);
+      const args = makeEquationArgs(block.ports.map((port) => port.id), params, allocated);
       const before = cloneArgs(args);
       const immutableBefore = immutableInputs(args);
       try {
