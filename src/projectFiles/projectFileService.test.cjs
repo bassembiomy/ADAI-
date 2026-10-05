@@ -43,6 +43,15 @@ try {
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(savedPath, 'utf8')), sampleData);
   assert.deepStrictEqual(readProjectFile(savedPath).data, sampleData);
 
+  // Pre-serialized buffer and string support
+  const stringData = JSON.stringify({ version: '1.0', source: 'string' });
+  const strPath = writeProjectFile(path.join(tempDir, 'StringProject.adia'), stringData);
+  assert.deepStrictEqual(readProjectFile(strPath).data, { version: '1.0', source: 'string' });
+
+  const bufData = Buffer.from(JSON.stringify({ version: '1.0', source: 'buffer' }));
+  const bufPath = writeProjectFile(path.join(tempDir, 'BufProject.adia'), bufData);
+  assert.deepStrictEqual(readProjectFile(bufPath).data, { version: '1.0', source: 'buffer' });
+
   // Legacy JSON handling
   const legacyPath = path.join(tempDir, 'legacy.json');
   fs.writeFileSync(legacyPath, JSON.stringify({ projectName: 'Legacy' }), 'utf8');

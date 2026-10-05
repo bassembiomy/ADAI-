@@ -66,11 +66,25 @@ function writeProjectFile(filePath, data, deps = {}) {
   const target = normalizeAdiaPath(resolved);
   const temporary = `${target}.tmp-${process.pid}-${deps.randomId ? deps.randomId() : Date.now()}`;
   try {
-    const serialized = `${JSON.stringify(data, null, 2)}\n`;
-    if (Buffer.byteLength(serialized, 'utf8') > MAX_PROJECT_BYTES) {
+    let serialized;
+    if (typeof data === 'string') {
+      serialized = data.endsWith('\n') ? data : `${data}\n`;
+    } else if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
+      serialized = data;
+    } else if (data instanceof ArrayBuffer) {
+      serialized = Buffer.from(data);
+    } else {
+      serialized = `${JSON.stringify(data, null, 2)}\n`;
+    }
+    const byteLength = Buffer.isBuffer(serialized)
+      ? serialized.length
+      : (serialized instanceof Uint8Array
+        ? serialized.byteLength
+        : Buffer.byteLength(serialized, 'utf8'));
+    if (byteLength > MAX_PROJECT_BYTES) {
       throw new Error('Project file exceeds the 50 MB limit');
     }
-    fsImpl.writeFileSync(temporary, serialized, 'utf8');
+    fsImpl.writeFileSync(temporary, serialized, Buffer.isBuffer(serialized) || serialized instanceof Uint8Array ? undefined : 'utf8');
     fsImpl.renameSync(temporary, target);
     return target;
   } catch (error) {
@@ -91,6 +105,19 @@ const CURRENT_SYSML_FORMAT = 5;
  * no SysML data, or something unreadable).
  */
 function detectSysmlRepositoryFormat(data) {
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  } else if (Buffer.isBuffer(data) || data instanceof Uint8Array || data instanceof ArrayBuffer) {
+    try {
+      data = JSON.parse(Buffer.from(data).toString('utf8'));
+    } catch {
+      return null;
+    }
+  }
   if (!data || typeof data !== 'object') return null;
   let repository = data.sysmlRepository !== undefined ? data.sysmlRepository : data.canonicalSysmlRepository;
   if (repository === undefined || repository === null) {

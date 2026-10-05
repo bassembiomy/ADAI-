@@ -155,6 +155,7 @@ import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
 import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { loadProjectInWorker, serializeProjectInWorker } from './engine/sysml/workers/projectIoClient';
 import { createInterface, createBlock as createBlockDefinition, createValueType as createValueTypeDefinition, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
 import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
@@ -8189,7 +8190,7 @@ const ADIA = () => {
   }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
 
 
-  const hydrateProject = useCallback((importedData: any) => {
+  const hydrateProject = useCallback((importedData: any, preloadedResult?: any) => {
     try {
       // Canonical repositories are preferred; legacy imports are migrated by
       // the same loader, then all canvas views are refreshed from that model.
@@ -8210,10 +8211,14 @@ const ADIA = () => {
           });
         }
       }
-      const hydratedRepository = applyCanonicalProjectLoad(loadCanonicalSysmlProject({
-        ...importedData,
-        sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
-      }, hydrationEndpoints.size > 0 ? { externalEndpoints: hydrationEndpoints } : undefined));
+      const hydratedRepository = applyCanonicalProjectLoad(
+        preloadedResult && preloadedResult.valid && hydrationEndpoints.size === 0
+          ? preloadedResult
+          : loadCanonicalSysmlProject({
+              ...importedData,
+              sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
+            }, hydrationEndpoints.size > 0 ? { externalEndpoints: hydrationEndpoints } : undefined)
+      );
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
@@ -8633,9 +8638,9 @@ const ADIA = () => {
           addError('error', `Failed to save project: ${result?.message || result?.error || 'Unknown error'}`);
         }
       } else {
-        // Web / Browser Fallback
-        const jsonStr = JSON.stringify(payload, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
+        // Web / Browser Fallback: serialize in worker so UI thread does not freeze
+        const buffer = await serializeProjectInWorker(payload);
+        const blob = new Blob([buffer], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -12729,14 +12734,10 @@ const ADIA = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        let raw = (event.target?.result as string) || '';
-        if (raw.charCodeAt(0) === 0xFEFF) {
-          raw = raw.slice(1);
-        }
-        const text = raw.trim();
-        if (!text) {
+        const buffer = event.target?.result as ArrayBuffer;
+        if (!buffer || buffer.byteLength === 0) {
           setImportValidationError({
             isValid: false,
             errorTitle: 'Empty File',
@@ -12744,7 +12745,8 @@ const ADIA = () => {
           });
           return;
         }
-        const importedData = JSON.parse(text);
+        const loaded = await loadProjectInWorker(buffer);
+        const importedData = loaded.rawPayload;
         const validation = validateImportedJson(importedData);
         if (!validation.isValid) {
           setImportValidationError(validation);
@@ -12765,17 +12767,17 @@ const ADIA = () => {
             saveStoredPerformanceLimits({ ...limits, forcePerformanceMode: true });
           }
         }
-        hydrateProject(dataToHydrate);
+        hydrateProject(dataToHydrate, loaded);
         addError('info', `Imported project: ${file.name}`);
       } catch (error) {
         setImportValidationError({
           isValid: false,
-          errorTitle: 'JSON Syntax Error',
-          errors: [`Failed to parse project file JSON: ${error instanceof Error ? error.message : 'Invalid JSON format'}`]
+          errorTitle: 'Project Load Error',
+          errors: [`Failed to parse project file: ${error instanceof Error ? error.message : 'Invalid project format'}`]
         });
       }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
     if (projectImportRef.current) projectImportRef.current.value = '';
   }, [hydrateProject, addError]);
 
