@@ -41,6 +41,7 @@ import { normalizeDiagramPresentations } from '../../engine/sysml/presentationSt
 import {
   computeRangeSelection,
   computeToggleSelection,
+  loadPersistedExplorerUiState,
 } from '../../features/modelExplorer/modelExplorerMultiSelect';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
@@ -533,6 +534,20 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     [states, layers, transitions, junctions, diagrams, smAdapter],
   );
 
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => {
+    const persisted = projectId ? loadPersistedExplorerUiState(projectId) : null;
+    if (persisted?.expandedNodeIds && persisted.expandedNodeIds.length > 0) {
+      return new Set(persisted.expandedNodeIds);
+    }
+    return new Set([
+      'project:model',
+      'project:pillar:structural',
+      'project:pillar:behavior',
+      'project:pillar:parametric',
+      'project:pillar:requirements',
+    ]);
+  });
+
   // Project tree
   const projection = useMemo(() => {
     return buildUnifiedModelProjection({
@@ -541,14 +556,26 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       externalModels,
       revision: Math.max(smAdapter.getRevision(), sysmlAdapter.getRevision()),
       diagramPresentations,
+      expandedNodeIds,
     });
-  }, [diagramPresentations, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository]);
+  }, [diagramPresentations, expandedNodeIds, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository]);
 
   const selectedNodeIds = useMemo(() => {
     const set = new Set<string>();
-    for (const [nodeId, node] of Object.entries(projection.nodes)) {
-      if (selectedIds.includes(node.semanticId) || selectedIds.includes(nodeId)) {
-        set.add(nodeId);
+    const selSet = new Set(selectedIds);
+    for (const id of selectedIds) {
+      if (projection.nodes[id]) set.add(id);
+      const sysmlId = `sysml:element:${id}`;
+      if (projection.nodes[sysmlId]) set.add(sysmlId);
+      const smId = `sm:state:${id}`;
+      if (projection.nodes[smId]) set.add(smId);
+    }
+    if (set.size < selectedIds.length) {
+      for (const nodeId in projection.nodes) {
+        const node = projection.nodes[nodeId];
+        if (selSet.has(node.semanticId) || selSet.has(nodeId)) {
+          set.add(nodeId);
+        }
       }
     }
     return set;
@@ -876,6 +903,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         nodesById={projection.nodes}
         rootNodeIds={projection.roots}
         selectedNodeIds={selectedNodeIds}
+        expandedNodeIds={expandedNodeIds}
+        onExpandedNodeIdsChange={setExpandedNodeIds}
         activeDiagramContext={activeDiagramContext}
         onSelectNode={handleSelectNode}
         onActivateNode={handleActivateNode}

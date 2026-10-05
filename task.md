@@ -17,12 +17,25 @@
   - [x] Step 2.2: Replace `owned.includes(id)` plus `[...owned, id]` in `registerElement` in [migrateV3ToV4.ts](file:///g:/adia%20project/src/engine/sysml/persistence/migrateV3ToV4.ts) with push plus per-owner `Set` deduplication (drops wide-owner test to 73ms).
   - [x] Step 2.3: Compare `migrateV3ToV4` results before/after across BDD, IBD, Requirements, Use Case, Package, State Machine-adjacent references, and diagrams (all 42 persistence tests pass).
   - [x] Step 2.4: Repeat 10k/50k stage profiles and verify Task 2 gate: 50k V4 inspector projection dropped from 5,191ms to 584ms (8.9x faster); peak heap dropped from 336MB to 267MB.
-- [ ] Task 3: Remove unnecessary whole-model views from ordinary edits
-  - [ ] Step 3.1: Inventory every `sysmlCanvasProjection` and `inspectorRepoV4` consumer in `App.tsx` and write regression tests for active diagram scoping and lazy V4 inspector conversion.
-  - [ ] Step 3.2: Prove gateway-store consistency against `fromRepository` to eliminate the redundant store rebuild in `App.tsx`.
-  - [ ] Step 3.3: Introduce active-diagram canvas projection behind a checked adapter while preserving whole-project export/reports.
-  - [ ] Step 3.4: Gate V4 inspector conversion on actual panel visibility and selected IDs.
-  - [ ] Step 3.5: Run tests, 10k/50k stage profiles, and verify Task 3 gate.
-- [ ] Task 4: Dependency-scoped interactive validation
-- [ ] Task 5: Lazy Browser projection only if profiling still requires it
-- [ ] Task 6: Qualification of this remediation slice
+- [x] Task 3: Remove unnecessary whole-model views from ordinary edits
+  - [x] Step 3.1: Inventory every `sysmlCanvasProjection` and `inspectorRepoV4` consumer in `App.tsx` and write regression tests for active diagram scoping and lazy V4 inspector conversion (`lazyInspectorConversion.test.ts`).
+  - [x] Step 3.2: Prove gateway-store consistency against `fromRepository` across create, update, move, connect, presentation update, delete, undo, and redo (`gatewayStoreConsistency.test.ts`), and eliminate redundant store rebuilds in `App.tsx` and `AppModelExplorer.tsx`.
+  - [x] Step 3.3: Introduce active-diagram canvas projection behind a checked adapter while preserving whole-project export/reports.
+  - [x] Step 3.4: Gate V4 inspector conversion on actual panel visibility and selected IDs with `createEmptyRepositoryV4()` fallback.
+  - [x] Step 3.5: Run tests, 10k/50k stage profiles, and verify Task 3 gate (eliminated redundant store rebuilds and unselected V4 conversion pauses).
+- [x] Task 4: Dependency-scoped interactive validation
+  - [x] Step 4.1: Classify current validation rules into local, dependency-neighborhood, indexed-global, and full-only rules in `src/engine/sysml/validation/dependencyScope.ts`.
+  - [x] Step 4.2: Add differential tests in `src/engine/sysml/validation/scopedValidation.test.ts` comparing introduced errors from scoped validation to a full validation oracle after rename, property edit, move, connect, delete, undo, and redo.
+  - [x] Step 4.3: Implement `validateScopedSysmlRepository` in `src/engine/sysml/validation/dependencyScope.ts` using store indexes (ownerId, typeId, sourceId, targetId).
+  - [x] Step 4.4: Integrate scoped validation into `executeSysmlCommandCore` in `src/services/sysmlCommandGateway.ts` for common covered commands (rename, property edit, presentation update, undo, redo) while preserving full validation for audits, import/export, and unsupported commands.
+  - [x] Step 4.5: Re-run semantic, gateway, and scalability stage profiles; measure 10k/50k edit latency and verify Task 4 gate: 10k rename dropped from 184ms to 68ms, 10k undo dropped from 163ms to 72ms (both <100ms gate); 50k rename dropped from 1,239ms to 204ms, 50k undo dropped from 1,277ms to 163ms (87% reduction).
+- [x] Task 5: Lazy Browser projection only if profiling still requires it
+  - [x] Step 5.1: Profile browser projection allocation in production preview; verified 11,962 nodes allocated on 10k model for only 28 rendered DOM rows.
+  - [x] Step 5.2: Optimize `applyDiagramVisualParents` to map semantic IDs directly instead of scanning `Object.values(nodes)` (250 iterations instead of 60,000 iterations); optimize `rebuildChildren` and `selectedNodeIds` O(1) lookups.
+  - [x] Step 5.3: Add bounded tree projection in `buildUnifiedModelProjection` accepting `expandedNodeIds?: ReadonlySet<string>` while preserving full tree fallback when omitted; add unit and equivalence tests in `unifiedModelExplorerProjection.test.ts`.
+  - [x] Step 5.4: Wire `expandedNodeIds` into `AppModelExplorer.tsx` and verify all 132 model explorer tests and `tsc --noEmit` pass.
+- [x] Task 6: Qualification of this remediation slice
+  - [x] Step 6.1: Run benchmark harness `benchWorker.ts` on 10k and 50k models with 5 samples to measure p50/p95/max latency for rename, property edit, undo, redo, and validation (10k edit p50: 40.5ms, p95: 66.3ms; 50k edit p50: 173.4ms).
+  - [x] Step 6.2: Run real production browser workflow (`tests/e2e/scalability-real-workflow.spec.ts`) against Vite production preview (`http://localhost:3105`) with 5 samples (rename handler p50: 32.8ms, p95: 59.7ms; undo handler p50: 31.8ms, p95: 45.7ms — both <100ms gate).
+  - [x] Step 6.3: Run critical regression suites (`test:sysml` with 118 files / 1178 tests passed, `test:sysml:release-gate` with 23 tests passed, codegen isolation verified).
+  - [x] Step 6.4: Publish qualification artifact (`docs/scalability/2026-10-05-remediation-results.md`) comparing before vs. after metrics, confirming interactive gate status (<100ms p95), and documenting remaining bottlenecks.

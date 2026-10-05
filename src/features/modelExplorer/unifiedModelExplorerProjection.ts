@@ -146,6 +146,11 @@ export interface UnifiedExplorerInput {
    * the diagram that presents it; it never changes semantic ownership.
    */
   diagramPresentations?: Record<string, DiagramPresentationInput>;
+  /**
+   * Optional set of expanded node IDs. When supplied, projection bounds
+   * node allocation to visible/expanded branches.
+   */
+  expandedNodeIds?: ReadonlySet<string>;
 }
 
 
@@ -177,14 +182,18 @@ const register = (nodes: Record<string, ModelTreeNode>, node: ModelTreeNode) => 
   nodes[node.nodeId] = node;
 };
 
-const rebuildChildren = (nodes: Record<string, ModelTreeNode>) => {
-  const allNodes = Object.values(nodes);
-  for (const node of allNodes) {
+const rebuildChildren = (nodes: Record<string, ModelTreeNode>, ownersWithChildren?: Set<string>) => {
+  for (const nodeId in nodes) {
+    const node = nodes[nodeId];
     node.childNodeIds = [];
-    node.hasChildren = false;
+    node.hasChildren = ownersWithChildren
+      ? (ownersWithChildren.has(node.semanticId) || ownersWithChildren.has(node.nodeId))
+      : false;
   }
-  for (const node of allNodes) {
-    const parent = node.parentNodeId ? nodes[node.parentNodeId] : undefined;
+  for (const nodeId in nodes) {
+    const node = nodes[nodeId];
+    if (!node.parentNodeId) continue;
+    const parent = nodes[node.parentNodeId];
     if (!parent) continue;
     parent.childNodeIds.push(node.nodeId);
     parent.hasChildren = true;
@@ -252,8 +261,44 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
 
   const sysmlNodeId = (id: string) => `sysml:element:${id}`;
   const requirementParents = requirementContainmentParents(input.sysml);
+
+  const ownersWithChildren = new Set<string>();
+  for (const p of Object.values(input.sysml.packages)) {
+    if (p.ownerId && p.ownerId !== 'model') ownersWithChildren.add(p.ownerId);
+  }
+  for (const d of Object.values(input.sysml.definitions)) {
+    if (d.ownerId && d.ownerId !== 'model') ownersWithChildren.add(d.ownerId);
+    if (d.kind === 'block') {
+      if ((d.properties?.length ?? 0) > 0 || (d.ports?.length ?? 0) > 0 || (d.operations?.length ?? 0) > 0) {
+        ownersWithChildren.add(d.id);
+      }
+    }
+  }
+  for (const u of Object.values(input.sysml.usages)) {
+    if (u.ownerId && u.ownerId !== 'model') ownersWithChildren.add(u.ownerId);
+  }
+  for (const r of Object.values(input.sysml.requirements)) {
+    if (r.ownerId && r.ownerId !== 'model') ownersWithChildren.add(r.ownerId);
+  }
+  for (const [, source] of requirementParents) {
+    ownersWithChildren.add(source);
+  }
+  for (const [, visualParentId] of visualParentBySemanticId) {
+    ownersWithChildren.add(visualParentId);
+  }
+
   const ownerNodeId = (ownerId: string | undefined, pillar: ModelPillar) => {
-    if (ownerId && nodes[sysmlNodeId(ownerId)]) return sysmlNodeId(ownerId);
+    if (ownerId && ownerId !== 'model') {
+      if (
+        input.sysml.packages[ownerId] ||
+        input.sysml.definitions[ownerId] ||
+        input.sysml.usages[ownerId] ||
+        input.sysml.requirements[ownerId] ||
+        nodes[sysmlNodeId(ownerId)]
+      ) {
+        return sysmlNodeId(ownerId);
+      }
+    }
     return `project:pillar:${pillar}`;
   };
   const sysmlEntries = [
@@ -273,6 +318,18 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     const ownerId = item.kind === 'requirement'
       ? requirementParents.get(item.id) ?? item.ownerId
       : item.ownerId;
+    const parentNode = ownerNodeId(ownerId, pillar);
+
+    const visualParentSemantic = visualParentBySemanticId.get(item.id);
+    const visualParentNode = visualParentSemantic ? sysmlNodeId(visualParentSemantic) : undefined;
+    if (
+      input.expandedNodeIds &&
+      !input.expandedNodeIds.has(parentNode) &&
+      (!visualParentNode || !input.expandedNodeIds.has(visualParentNode))
+    ) {
+      continue;
+    }
+
     const resolvedPort = item.kind === 'port' ? resolvePortUsage(input.sysml, item.id) : undefined;
     register(nodes, {
       nodeId: sysmlNodeId(item.id),
@@ -289,10 +346,10 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
         : undefined,
       badges: item.kind === 'port' && resolvedPort && !hasSysmlReference(input.sysml, resolvedPort.definition.typeId)
         ? [{ kind: 'warning', label: 'Unresolved type' }] : undefined,
-      parentNodeId: ownerNodeId(ownerId, pillar),
+      parentNodeId: parentNode,
       ownerSemanticId: ownerId || 'model',
       childNodeIds: [],
-      hasChildren: false,
+      hasChildren: ownersWithChildren.has(item.id) || ownersWithChildren.has(sysmlNodeId(item.id)),
     });
   }
   // Extension points belong to their Use Case (never to a diagram), so they
@@ -300,6 +357,10 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   for (const extensionPoint of Object.values(input.sysml.extensionPoints ?? {})) {
     const owner = input.sysml.useCases?.[extensionPoint.useCaseId];
     if (!owner) continue;
+    const parentNode = sysmlNodeId(owner.id);
+    if (input.expandedNodeIds && !input.expandedNodeIds.has(parentNode)) {
+      continue;
+    }
     register(nodes, {
       nodeId: sysmlNodeId(extensionPoint.id),
       semanticId: extensionPoint.id,
@@ -307,7 +368,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       kind: extensionPoint.kind,
       label: sysmlObjectLabel(extensionPoint, 'Extension Point'),
       secondaryLabel: extensionPoint.location ? `@ ${extensionPoint.location}` : undefined,
-      parentNodeId: sysmlNodeId(owner.id),
+      parentNodeId: parentNode,
       ownerSemanticId: owner.id,
       childNodeIds: [],
       hasChildren: false,
@@ -318,6 +379,10 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   // top-level repository usages. Project them into the same containment tree
   // so tree navigation and canvas/inspector creation expose one semantic feature.
   for (const block of Object.values(input.sysml.definitions ?? {}).filter(item => item.kind === 'block')) {
+    const blockNodeId = sysmlNodeId(block.id);
+    if (input.expandedNodeIds && !input.expandedNodeIds.has(blockNodeId)) {
+      continue;
+    }
     for (const port of block.ports ?? []) {
       const nodeId = sysmlNodeId(port.id);
       if (nodes[nodeId]) continue;
@@ -610,7 +675,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   }
 
   applyDiagramVisualParents(nodes, visualParentBySemanticId);
-  rebuildChildren(nodes);
+  rebuildChildren(nodes, ownersWithChildren);
   return { roots: [modelId], nodes, revision: input.revision };
 }
 
@@ -651,10 +716,20 @@ function applyDiagramVisualParents(
     return false;
   };
 
-  for (const node of Object.values(nodes)) {
-    if (!isDiagramMember(node)) continue;
-    const visualParentId = visualParentBySemanticId.get(node.semanticId);
+  const semanticToNodeId = new Map<string, string>();
+  for (const nodeId in nodes) {
+    const node = nodes[nodeId];
+    if (node.semanticId && !semanticToNodeId.has(node.semanticId)) {
+      semanticToNodeId.set(node.semanticId, nodeId);
+    }
+  }
+
+  for (const [semanticId, visualParentId] of visualParentBySemanticId) {
     if (!visualParentId || !nodes[visualParentId]) continue;
+    const nodeId = semanticToNodeId.get(semanticId);
+    if (!nodeId) continue;
+    const node = nodes[nodeId];
+    if (!node || !isDiagramMember(node)) continue;
     if (node.parentNodeId === visualParentId) continue;
     if (wouldCreateCycle(node.nodeId, visualParentId)) continue;
     node.parentNodeId = visualParentId;

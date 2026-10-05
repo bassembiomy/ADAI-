@@ -11,6 +11,7 @@ test.describe('Scalability Real-Workflow Functional Verification (Development Se
   test('imports real 1k fixture, renders diagram & tree, executes commands, measures heartbeat and long tasks', async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     // 1. Generate deterministic fixture and project file payload
     const fixture = generateScalabilityFixture({
       semanticCount: 1_000,

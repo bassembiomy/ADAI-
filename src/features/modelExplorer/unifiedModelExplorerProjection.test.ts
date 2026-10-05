@@ -577,5 +577,57 @@ describe('buildUnifiedModelProjection', () => {
     expect(projection.nodes['sysml:element:port-1'].ownerSemanticId).toBe('block-1');
     expect(projection.nodes['sysml:element:port-1'].parentNodeId).toBe('sysml:element:block-1');
   });
+
+  it('lazily projects only expanded working set when expandedNodeIds is provided, matching full tree output', () => {
+    const repository = createEmptyRepository();
+    // 5 packages, each with 20 blocks
+    for (let p = 0; p < 5; p++) {
+      const pkgId = `pkg-${p}`;
+      repository.packages[pkgId] = {
+        id: pkgId, name: `Package ${p}`, namespace: ['model'], ownerId: 'model', kind: 'package',
+      };
+      for (let b = 0; b < 20; b++) {
+        const blkId = `blk-${p}-${b}`;
+        repository.definitions[blkId] = {
+          id: blkId, name: `Block ${p}-${b}`, namespace: ['model', `Package ${p}`], ownerId: pkgId, kind: 'block',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        };
+      }
+    }
+
+    const input = {
+      sysml: repository,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+    };
+
+    const fullProjection = buildUnifiedModelProjection(input);
+    expect(Object.keys(fullProjection.nodes).length).toBeGreaterThan(100);
+
+    const expanded = new Set([
+      'project:model',
+      'project:pillar:structural',
+      'project:pillar:behavior',
+      'project:pillar:parametric',
+      'project:pillar:requirements',
+    ]);
+
+    const lazyProjection = buildUnifiedModelProjection({
+      ...input,
+      expandedNodeIds: expanded,
+    });
+
+    // In lazy projection with only pillars expanded, individual blocks inside collapsed packages must NOT be allocated
+    expect(Object.keys(lazyProjection.nodes).length).toBeLessThan(20);
+    // But the packages under the structural pillar must be present and marked hasChildren: true
+    const structuralChildren = lazyProjection.nodes['project:pillar:structural'].childNodeIds;
+    expect(structuralChildren).toEqual(fullProjection.nodes['project:pillar:structural'].childNodeIds);
+    for (let p = 0; p < 5; p++) {
+      const pkgNode = lazyProjection.nodes[`sysml:element:pkg-${p}`];
+      expect(pkgNode).toBeDefined();
+      expect(pkgNode.hasChildren).toBe(true);
+    }
+  });
 });
 

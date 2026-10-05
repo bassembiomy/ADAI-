@@ -577,6 +577,7 @@ const HierarchyTree: React.FC<any> = (props) => (
     diagrams={props.diagrams}
     externalModels={props.externalModels}
     canonicalSysmlRepository={props.canonicalSysmlRepository}
+    sysmlStore={props.sysmlStore}
     diagramPresentations={props.diagramPresentations}
     selectedIds={props.selectedIds}
     onSelect={props.onSelect}
@@ -18155,6 +18156,7 @@ const ADIA = () => {
                   diagramPresentations={sysmlDiagramPresentations}
                   externalModels={hierarchyExternalModels}
                   canonicalSysmlRepository={canonicalSysmlRepository}
+                  sysmlStore={sysmlStore}
                   onSelect={(id: string, multiSelect?: boolean) => {
                     if (!multiSelect && isDiagramHierarchyNode(id)) {
                       activateHierarchyNode(id, 'diagram');

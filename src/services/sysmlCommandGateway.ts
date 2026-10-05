@@ -49,6 +49,7 @@ import {
   type MutationHistory,
 } from '../engine/sysml/mutations';
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
+import { validateScopedSysmlRepository } from '../engine/sysml/validation/dependencyScope';
 import { activityNestedIds, findInActivity } from '../engine/sysml/activity';
 import { interactionNestedIds, planOperationRenames } from '../engine/sysml/interaction';
 import { serializeRepository, loadRepository, rekeyPresentationState, serializeSysmlProjectState, type V5UpgradeReport } from '../engine/sysml/persistence';
@@ -1468,7 +1469,22 @@ function executeSysmlCommandCore(
         const repo = toRepository(store);
         const nextCoords = Object.fromEntries(store.coordinates);
         const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-        const validation = validateSysmlRepository(repo, endpointContext);
+        const forwardOp = undoRes.appliedPatch.forward.find(op => (op.op === 'replace' || op.op === 'add') && (op as any).id);
+        let changedProperties: string[] | undefined;
+        if (forwardOp && forwardOp.op === 'replace' && (forwardOp as any).oldValue && (forwardOp as any).value) {
+          const oldVal = (forwardOp as any).oldValue;
+          const newVal = (forwardOp as any).value;
+          if (typeof oldVal === 'object' && typeof newVal === 'object') {
+            changedProperties = Object.keys({ ...oldVal, ...newVal }).filter(k => (oldVal as any)[k] !== (newVal as any)[k]);
+          }
+        }
+        const scopedVal = validateScopedSysmlRepository(repo, {
+          commandType: undoRes.appliedPatch.description ?? 'undo',
+          affectedIds: undoRes.appliedPatch.forward.flatMap(op => op.op === 'batch' ? op.operations.map(b => b.id) : [op.id]),
+          changedProperties,
+          isPresentationOnly: undoRes.appliedPatch.description === 'updatePresentation' || undoRes.appliedPatch.description === 'addToDiagram',
+        }, store, endpointContext);
+        const validation = scopedVal ?? validateSysmlRepository(repo, endpointContext);
         const view = getView(repo, nextCoords, nextDiagrams);
         const nextHistory: MutationHistory = {
           past: [],
@@ -1513,7 +1529,11 @@ function executeSysmlCommandCore(
           }
           store.diagramPresentations = new Map(Object.entries(prev.diagramPresentations));
           store.revision += 1;
-          const validation = validateSysmlRepository(state.repository, endpointContext);
+          const validation = validateScopedSysmlRepository(state.repository, {
+            commandType: 'updatePresentation',
+            affectedIds: [],
+            isPresentationOnly: true,
+          }, store, endpointContext) ?? validateSysmlRepository(state.repository, endpointContext);
           const view = getView(state.repository, prev.coordinates, prev.diagramPresentations);
           return {
             repository: state.repository,
@@ -1568,7 +1588,22 @@ function executeSysmlCommandCore(
         const repo = toRepository(store);
         const nextCoords = Object.fromEntries(store.coordinates);
         const nextDiagrams = Object.fromEntries(store.diagramPresentations);
-        const validation = validateSysmlRepository(repo, endpointContext);
+        const forwardOp = redoRes.appliedPatch.forward.find(op => (op.op === 'replace' || op.op === 'add') && (op as any).id);
+        let changedProperties: string[] | undefined;
+        if (forwardOp && forwardOp.op === 'replace' && (forwardOp as any).oldValue && (forwardOp as any).value) {
+          const oldVal = (forwardOp as any).oldValue;
+          const newVal = (forwardOp as any).value;
+          if (typeof oldVal === 'object' && typeof newVal === 'object') {
+            changedProperties = Object.keys({ ...oldVal, ...newVal }).filter(k => (oldVal as any)[k] !== (newVal as any)[k]);
+          }
+        }
+        const scopedVal = validateScopedSysmlRepository(repo, {
+          commandType: redoRes.appliedPatch.description ?? 'redo',
+          affectedIds: redoRes.appliedPatch.forward.flatMap(op => op.op === 'batch' ? op.operations.map(b => b.id) : [op.id]),
+          changedProperties,
+          isPresentationOnly: redoRes.appliedPatch.description === 'updatePresentation' || redoRes.appliedPatch.description === 'addToDiagram',
+        }, store, endpointContext);
+        const validation = scopedVal ?? validateSysmlRepository(repo, endpointContext);
         const view = getView(repo, nextCoords, nextDiagrams);
         const nextHistory: MutationHistory = {
           past: [],
@@ -1613,7 +1648,11 @@ function executeSysmlCommandCore(
           }
           store.diagramPresentations = new Map(Object.entries(next.diagramPresentations));
           store.revision += 1;
-          const validation = validateSysmlRepository(state.repository, endpointContext);
+          const validation = validateScopedSysmlRepository(state.repository, {
+            commandType: 'updatePresentation',
+            affectedIds: [],
+            isPresentationOnly: true,
+          }, store, endpointContext) ?? validateSysmlRepository(state.repository, endpointContext);
           const view = getView(state.repository, next.coordinates, next.diagramPresentations);
           return {
             repository: state.repository,
@@ -1763,7 +1802,12 @@ function executeSysmlCommandCore(
     });
     pushPatch(patchHistory, patch, store);
 
-    const validation = validateSysmlRepository(state.repository, endpointContext);
+    const scopedVal = validateScopedSysmlRepository(state.repository, {
+      commandType: 'updatePresentation',
+      affectedIds: [command.elementId],
+      isPresentationOnly: true,
+    }, store, endpointContext);
+    const validation = scopedVal ?? validateSysmlRepository(state.repository, endpointContext);
     const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
     return {
       repository: state.repository,
@@ -2456,10 +2500,12 @@ function executeSysmlCommandCore(
       rewrittenInteractions.push({ before, after });
     }
 
-    // Full semantic validation runs on the staged state BEFORE any mutation.
-    // Any error aborts with the original repository/history and untouched
-    // store/patchHistory, so a success never carries errors.
-    const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const scopedVal = validateScopedSysmlRepository(nextRepo, {
+      commandType: 'updateElement',
+      affectedIds: [command.elementId],
+      changedProperties: Object.keys(command.patch),
+    }, store, endpointContext);
+    const stagedValidation = scopedVal ?? validateSysmlRepository(nextRepo, endpointContext);
     const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
@@ -2799,7 +2845,12 @@ function executeSysmlCommandCore(
     };
     const nextActionStack: Array<'semantic' | 'presentation'> = [...(state.actionStack ?? []), 'presentation'];
 
-    const validation = validateSysmlRepository(state.repository, endpointContext);
+    const scopedVal = validateScopedSysmlRepository(state.repository, {
+      commandType: 'removeFromDiagram',
+      affectedIds: command.elementIds,
+      isPresentationOnly: true,
+    }, store, endpointContext);
+    const validation = scopedVal ?? validateSysmlRepository(state.repository, endpointContext);
     const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
 
     return {
@@ -3317,7 +3368,12 @@ function executeSysmlCommandCore(
     });
     pushPatch(patchHistory, patch, store);
 
-    const validation = validateSysmlRepository(state.repository, endpointContext);
+    const scopedVal = validateScopedSysmlRepository(state.repository, {
+      commandType: 'addToDiagram',
+      affectedIds: command.elementIds,
+      isPresentationOnly: true,
+    }, store, endpointContext);
+    const validation = scopedVal ?? validateSysmlRepository(state.repository, endpointContext);
     const view = getView(state.repository, coordinates, nextDiagramPresentations, command.diagramId);
     return {
       repository: state.repository,

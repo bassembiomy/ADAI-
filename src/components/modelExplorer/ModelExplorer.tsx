@@ -43,6 +43,8 @@ export interface ModelExplorerProps {
   projectId?: string;
   className?: string;
   height?: number;
+  expandedNodeIds?: Set<string>;
+  onExpandedNodeIdsChange?: (expanded: Set<string>) => void;
 }
 
 /**
@@ -72,6 +74,8 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   projectId,
   className = '',
   height,
+  expandedNodeIds: propExpandedNodeIds,
+  onExpandedNodeIdsChange,
 }) => {
   const persistedState = useMemo(() => {
     return projectId ? loadPersistedExplorerUiState(projectId) : null;
@@ -82,19 +86,35 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => {
+  const [internalExpandedNodeIds, setInternalExpandedNodeIds] = useState<Set<string>>(() => {
     if (persistedState?.expandedNodeIds && persistedState.expandedNodeIds.length > 0) {
       return new Set(persistedState.expandedNodeIds);
     }
     const expanded = new Set(rootNodeIds);
-    const nodeMap = nodesById instanceof Map ? nodesById : new Map(Object.entries(nodesById));
-    nodeMap.forEach(node => {
+    const checkAndExpandInitial = (node: ModelTreeNode) => {
       if (node.virtualKind === 'model' || node.virtualKind === 'structural' || node.virtualKind === 'behavior' || node.virtualKind === 'parametric' || node.virtualKind === 'requirements' || node.kind === 'stateMachine' || node.kind === 'region') {
         expanded.add(node.nodeId);
       }
-    });
+    };
+    if (nodesById instanceof Map) {
+      nodesById.forEach(checkAndExpandInitial);
+    } else {
+      for (const nodeId in nodesById) {
+        checkAndExpandInitial(nodesById[nodeId]);
+      }
+    }
     return expanded;
   });
+
+  const expandedNodeIds = propExpandedNodeIds ?? internalExpandedNodeIds;
+  const setExpandedNodeIds = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    if (onExpandedNodeIdsChange) {
+      const next = typeof updater === 'function' ? updater(expandedNodeIds) : updater;
+      onExpandedNodeIdsChange(next);
+    } else {
+      setInternalExpandedNodeIds(updater);
+    }
+  }, [expandedNodeIds, onExpandedNodeIdsChange]);
   const [internalFavorites, setInternalFavorites] = useState<Set<string>>(() => {
     if (persistedState?.favorites && persistedState.favorites.length > 0) {
       return new Set(persistedState.favorites);
@@ -125,13 +145,19 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
           changed = true;
         }
       }
-      const nodeMap = nodesById instanceof Map ? nodesById : new Map(Object.entries(nodesById));
-      nodeMap.forEach(node => {
+      const checkAndExpand = (node: ModelTreeNode) => {
         if ((node.virtualKind === 'model' || node.virtualKind === 'structural' || node.virtualKind === 'behavior' || node.virtualKind === 'parametric' || node.virtualKind === 'requirements' || node.kind === 'stateMachine' || node.kind === 'region') && !next.has(node.nodeId)) {
           next.add(node.nodeId);
           changed = true;
         }
-      });
+      };
+      if (nodesById instanceof Map) {
+        nodesById.forEach(checkAndExpand);
+      } else {
+        for (const nodeId in nodesById) {
+          checkAndExpand(nodesById[nodeId]);
+        }
+      }
       return changed ? next : prev;
     });
   }, [nodesById, rootNodeIds]);

@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { generateScalabilityFixture } from '../../src/engine/sysml/largeModelGenerator';
 import { buildCanonicalSysmlProjectPayload, createSysmlGatewayState } from '../../src/services/sysmlCommandGateway';
+import { calculateStats } from './metrics';
 
 const size = Number(process.argv.find(arg => arg.startsWith('--size='))?.split('=')[1] ?? 10_000);
 const url = process.env.ADIA_PROFILE_URL ?? 'http://127.0.0.1:3105';
@@ -67,32 +68,94 @@ try {
   });
   if (load.activeDiagramId !== 'diagram-ordinary') throw new Error(`Unexpected active diagram: ${load.activeDiagramId}`);
 
+  const samplesCount = Number(process.argv.find(arg => arg.startsWith('--samples='))?.split('=')[1] ?? 5);
+
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Profiler.enable');
   await cdp.send('Profiler.start');
-  const edit = await page.evaluate(async () => {
-    const w = window as any;
-    w.__profileTicks = [performance.now()];
-    w.__profileLongTasks = [];
-    const start = performance.now();
-    const result = w.__sysmlExecuteCommand({ type: 'updateElement', elementId: 'blk_1', patch: { name: 'Browser Profiled Block' } });
-    const handlerMs = performance.now() - start;
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    await new Promise(resolve => setTimeout(resolve, 50));
-    const end = performance.now();
-    const times = [...w.__profileTicks, end];
-    return {
-      committed: result?.committed,
-      name: w.__sysmlRepository?.definitions?.blk_1?.name,
-      handlerMs,
-      settleMs: end - start,
-      maxHeartbeatGapMs: Math.max(...times.slice(1).map((value, index) => value - times[index])),
-      longTasksMs: w.__profileLongTasks,
-      treeDomRows: document.querySelectorAll('.model-tree-row').length,
-    };
-  });
+
+  const operations: {
+    rename: Array<{ handlerMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[] }>;
+    undo: Array<{ handlerMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[] }>;
+    redo: Array<{ handlerMs: number; settleMs: number; maxHeartbeatGapMs: number; longTasksMs: number[] }>;
+  } = { rename: [], undo: [], redo: [] };
+
+  for (let i = 0; i < samplesCount; i++) {
+    const targetName = `Browser Profiled Block ${i + 1}`;
+    // 1. Rename
+    const renameRes = await page.evaluate(async (name) => {
+      const w = window as any;
+      w.__profileTicks = [performance.now()];
+      w.__profileLongTasks = [];
+      const start = performance.now();
+      const result = w.__sysmlExecuteCommand({ type: 'updateElement', elementId: 'blk_1', patch: { name } });
+      const handlerMs = performance.now() - start;
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const end = performance.now();
+      const times = [...w.__profileTicks, end];
+      return {
+        committed: result?.committed,
+        name: w.__sysmlRepository?.definitions?.blk_1?.name,
+        handlerMs,
+        settleMs: end - start,
+        maxHeartbeatGapMs: Math.max(...times.slice(1).map((val: number, idx: number) => val - times[idx])),
+        longTasksMs: w.__profileLongTasks,
+      };
+    }, targetName);
+    if (!renameRes.committed || renameRes.name !== targetName) throw new Error(`Rename failed at sample ${i}`);
+    operations.rename.push(renameRes);
+
+    // 2. Undo
+    const undoRes = await page.evaluate(async () => {
+      const w = window as any;
+      w.__profileTicks = [performance.now()];
+      w.__profileLongTasks = [];
+      const start = performance.now();
+      const result = w.__sysmlExecuteCommand({ type: 'undo' });
+      const handlerMs = performance.now() - start;
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const end = performance.now();
+      const times = [...w.__profileTicks, end];
+      return {
+        committed: result?.committed,
+        name: w.__sysmlRepository?.definitions?.blk_1?.name,
+        handlerMs,
+        settleMs: end - start,
+        maxHeartbeatGapMs: Math.max(...times.slice(1).map((val: number, idx: number) => val - times[idx])),
+        longTasksMs: w.__profileLongTasks,
+      };
+    });
+    if (!undoRes.committed) throw new Error(`Undo failed at sample ${i}`);
+    operations.undo.push(undoRes);
+
+    // 3. Redo
+    const redoRes = await page.evaluate(async (name) => {
+      const w = window as any;
+      w.__profileTicks = [performance.now()];
+      w.__profileLongTasks = [];
+      const start = performance.now();
+      const result = w.__sysmlExecuteCommand({ type: 'redo' });
+      const handlerMs = performance.now() - start;
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const end = performance.now();
+      const times = [...w.__profileTicks, end];
+      return {
+        committed: result?.committed,
+        name: w.__sysmlRepository?.definitions?.blk_1?.name,
+        handlerMs,
+        settleMs: end - start,
+        maxHeartbeatGapMs: Math.max(...times.slice(1).map((val: number, idx: number) => val - times[idx])),
+        longTasksMs: w.__profileLongTasks,
+      };
+    }, targetName);
+    if (!redoRes.committed || redoRes.name !== targetName) throw new Error(`Redo failed at sample ${i}`);
+    operations.redo.push(redoRes);
+  }
+
   const { profile } = await cdp.send('Profiler.stop');
-  if (!edit.committed || edit.name !== 'Browser Profiled Block') throw new Error('Browser rename did not commit');
   const weights = new Map<number, number>();
   profile.samples?.forEach((id, index) => weights.set(id, (weights.get(id) ?? 0) + (profile.timeDeltas?.[index] ?? 0)));
   const hotspots = profile.nodes.map(node => ({
@@ -101,12 +164,42 @@ try {
     line: node.callFrame.lineNumber + 1,
     selfMs: Number(((weights.get(node.id) ?? 0) / 1000).toFixed(2)),
   })).sort((left, right) => right.selfMs - left.selfMs).slice(0, 20);
+
+  const stats = {
+    rename: {
+      handler: calculateStats(operations.rename.map(o => o.handlerMs)),
+      settle: calculateStats(operations.rename.map(o => o.settleMs)),
+      heartbeatGap: calculateStats(operations.rename.map(o => o.maxHeartbeatGapMs)),
+    },
+    undo: {
+      handler: calculateStats(operations.undo.map(o => o.handlerMs)),
+      settle: calculateStats(operations.undo.map(o => o.settleMs)),
+      heartbeatGap: calculateStats(operations.undo.map(o => o.maxHeartbeatGapMs)),
+    },
+    redo: {
+      handler: calculateStats(operations.redo.map(o => o.handlerMs)),
+      settle: calculateStats(operations.redo.map(o => o.settleMs)),
+      heartbeatGap: calculateStats(operations.redo.map(o => o.maxHeartbeatGapMs)),
+    },
+  };
+
   const outputDir = resolve('artifacts/scalability');
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(resolve(outputDir, `profile-browser-${size}.cpuprofile`), JSON.stringify(profile));
-  const result = { size, seed: 42, productionUrl: url, fileMB: file.length / 1024 / 1024, load, edit, hotspots, errors };
+  const result = {
+    size,
+    samplesCount,
+    seed: 42,
+    productionUrl: url,
+    fileMB: file.length / 1024 / 1024,
+    load,
+    operations,
+    stats,
+    hotspots,
+    errors,
+  };
   writeFileSync(resolve(outputDir, `profile-browser-${size}.json`), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ size, load, stats }, null, 2));
   await cdp.detach();
   await page.close();
 } finally {
