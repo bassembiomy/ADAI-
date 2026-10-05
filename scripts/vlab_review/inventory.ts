@@ -10,82 +10,11 @@ import { VLAB_LIBRARY } from '../../src/utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../src/engine/vlab/vlabComponentDefinitions';
 import { blockEquations } from '../../src/engine/vlab/vlabEquations';
 import { HELP_DATA } from '../../src/HelpData';
+import { parseDae, parseSymbols, traceBlock, sortedNums } from '../../src/engine/vlab/review/contractInventory';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = path.join(ROOT, 'docs', 'vlab-review');
-const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
-// ── DAEAssembler: the single `switch (blockType)` that allocates branches/states ──
-interface DaeCase { branches: string[]; states: string[]; }
-function parseDae(): Map<string, DaeCase> {
-  const lines = read('src/engine/vlab/DAEAssembler.ts').split('\n');
-  const start = lines.findIndex(l => /switch \(blockType\) \{/.test(l));
-  const map = new Map<string, DaeCase>();
-  let labels: string[] = [];
-  let body: string[] = [];
-  const flush = () => {
-    if (!labels.length) return;
-    const text = body.join('\n');
-    const branches = [...text.matchAll(/branches\.push\(\{ name: ([^,]+),/g)].map(m => m[1].replace(/['"`]/g, ''));
-    const states = [...text.matchAll(/states\.push\(([^)]*)\)/g)]
-      .flatMap(m => m[1].split(',').map(s => s.trim().replace(/['"`]/g, '')).filter(Boolean));
-    for (const l of labels) map.set(l, { branches, states });
-    labels = []; body = [];
-  };
-  for (let i = start + 1; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (/^default:/.test(t)) { flush(); break; }
-    const m = t.match(/^case '([^']+)':\s*(\{)?$/);
-    if (m) {
-      if (body.length) flush();
-      labels.push(m[1]);
-    } else if (labels.length) body.push(lines[i]);
-  }
-  flush();
-  return map;
-}
-
-// ── VLabSymbols: type keys of RawSymbolRenderer's switch ──
-function parseSymbols(): Set<string> {
-  const src = read('src/components/vlab/VLabSymbols.tsx');
-  const a = src.indexOf('export const RawSymbolRenderer');
-  const b = src.indexOf('export const UnknownSymbolGlyph');
-  const seg = src.slice(a, b);
-  return new Set([...seg.matchAll(/case '([^']+)':/g)].map(m => m[1]));
-}
-
-// ── Recording proxies ──
-interface Trace { across: Set<number>; dAcross: Set<number>; branch: Set<number>; dBranch: Set<number>; state: Set<number>; dState: Set<number>; params: Set<string>; }
-const idxProxy = (rec: Set<number>) => new Proxy([] as any[], {
-  get(_t, p) {
-    if (typeof p === 'string' && /^\d+$/.test(p)) { rec.add(Number(p)); return 1; }
-    if (p === 'length') return 16;
-    if (p === Symbol.iterator) return function* () { for (let i = 0; i < 16; i++) { rec.add(i); yield 1; } };
-    const v = (Array.prototype as any)[p as any];
-    return typeof v === 'function' ? v.bind([1, 1, 1, 1, 1, 1, 1, 1]) : v;
-  },
-});
-function traceBlock(id: string, defaults: Record<string, any>, portIds: string[]): Trace | null {
-  const fn = blockEquations[id];
-  if (!fn) return null;
-  const t: Trace = { across: new Set(), dAcross: new Set(), branch: new Set(), dBranch: new Set(), state: new Set(), dState: new Set(), params: new Set() };
-  const params = new Proxy({ ...defaults }, {
-    get(target, p) { if (typeof p === 'string') { t.params.add(p); return (target as any)[p]; } return undefined; },
-    has(target, p) { if (typeof p === 'string') t.params.add(p); return p in target; },
-  });
-  const ctx: any = { dt: 1e-3, time: 0, parameters: {}, prevStates: [], states: [], stateDerivatives: [], order: 1 };
-  try {
-    fn({
-      across: idxProxy(t.across), dAcross: idxProxy(t.dAcross), branch: idxProxy(t.branch) as any, dBranch: idxProxy(t.dBranch) as any,
-      state: idxProxy(t.state) as any, dState: idxProxy(t.dState) as any, ctx, params, ports: portIds, nodeId: id,
-    } as any);
-  } catch {
-    return { ...t, params: t.params, across: new Set(['threw' as any]) } as any;
-  }
-  return t;
-}
-const sortedNums = (s: Set<number>) => [...s].sort((a, b) => a - b);
 
 // ── Collect ──
 const dae = parseDae();
@@ -112,7 +41,7 @@ for (const dom of VLAB_LIBRARY) {
     for (const [k, v] of Object.entries(b.params || {})) defaults[k] = v.value;
     const portIds = b.ports.map(p => p.id);
     const tr = traceBlock(b.id, defaults, portIds);
-    const threw = !!tr && (tr.across as Set<any>).has('threw');
+    const threw = !!tr && tr.threw;
     let portsRead: string[] | 'unknown' | null = null;
     let paramsRead: string[] | 'unknown' | null = null;
     let trace: any = null;

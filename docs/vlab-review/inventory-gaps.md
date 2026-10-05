@@ -30,8 +30,8 @@
 | HELP_DATA topics (topic-level only, no per-block pages) | 25 |
 | Library block without equation | 0 |
 | Orphan equation (no library block) | 6 |
-| Blocks with a port lacking `domain` | 146 (all ports lack it: 132) |
-| Blocks with library ports never read | 153 |
+| Blocks with a port lacking `domain` | 145 (all ports lack it: 131) |
+| Blocks with library ports never read | 154 |
 | Blocks with dead params | 73 |
 | Blocks reading a param not exposed (incl. aliases) | 45 |
 | Library block without symbol | 2 |
@@ -43,11 +43,11 @@
 `Inport`, `Outport`, `Subsystem`, `heat_sensor`, `reservoir_il`, `vfd_controller`
 
 ## Ports without a domain
-Library ports carry no `domain` field for these blocks; the domain is only implied by the group. All-ports-missing blocks: 132. Partially missing: 14.
+Library ports carry no `domain` field for these blocks; the domain is only implied by the group. All-ports-missing blocks: 131. Partially missing: 14.
 
 Partially missing: `ctrl_pressure_source`, `flow_sensor`, `igbt`, `ma_flow_source`, `ma_moisture_source`, `ma_pipe`, `ma_trans_conv`, `mag_controlled_mmf`, `mag_flux_sensor`, `mag_mmf_sensor`, `nmos`, `pressure_sensor`, `steam_generator_fluid`, `variable_reluctance`
 
-Fully missing: `bldc_commutation`, `bldc_current_ctrl`, `bldc_pwm_ctrl`, `busbar`, `capacitor`, `cccs`, `ccvs`, `check_valve`, `clarke_transform`, `common_gear`, `conn_label`, `cycloconverter_ctrl`, `dc_current`, `dc_current_ctrl`, `dc_voltage_ctrl`, `dcdc_ctrl`, `delta_ref`, `diode`, `em_converter`, `fluid_capacitance`, `fluid_inertance`, `fluid_ref`, `fluid_resistance`, `fundamental_reluctance`, `gas_chamber`, `gas_fixed_res`, `gas_inf_resistance`, `gas_pipe`, `gas_ref`, `ground`, `gyrator`, `hysteresis_ctrl_3ph`, `im_curr_ctrl`, `im_dtc_ctrl`, `im_flux_observer`, `im_scalar_ctrl`, `inductor`, `infinite_resistance`, `inport`, `inv_clarke_transform`, `inv_park_transform`, `inv_sym_comp_transform`, `luenberger_observer`, `ma_flow_sensor`, `ma_moisture_sensor`, `ma_pt_sensor`, `ma_ref`, `ma_rot_conv`, `ma_selector`, `ma_separator`, `ma_thermo_sensor`, `mag_flux_source`, `mag_mmf_source`, `mag_ref`, `mass_flow_source`, `mech_config`, `memristor`, `opamp`, `open_circuit`, `orifice`, `outport`, `park_transform`, `permanent_magnet`, `pfc_rectifier_ctrl`, `phase_splitter`, `pmsm_curr_ctrl`, `pmsm_field_weakening`, `pmsm_foc`, `pmsm_ref_gen`, `pmsm_tq_est`, `pressure_source`, `prismatic_joint`, `ps_abs`, `ps_add`, `ps_dead_zone`, `ps_delay`, `ps_demux_3`, `ps_divide`, `ps_gain`, `ps_integrator`, `ps_integrator_gen`, `ps_lookup_1d`, `ps_lookup_2d`, `ps_lpf`, `ps_math`, `ps_max`, `ps_min`, `ps_moving_avg`, `ps_pi_ctrl`, `ps_pid_ctrl`, `ps_product`, `ps_ramp`, `ps_rms`, `ps_sample_hold`, `ps_saturation`, `ps_second_order_filter`, `ps_sine`, `ps_sine_3phase`, `ps_sliding_mode`, `ps_smith_predictor`, `ps_sr_flipflop`, `ps_stair_gen`, `ps_state_feedback`, `ps_step`, `ps_subtract`, `ps_sum`, `ps_switch`, `ps_terminator`, `ps_transfer_fcn`, `ps_washout`, `quad_decoder`, `rack_pinion`, `relief_valve`, `reluctance`, `resistor`, `resolver_to_digital`, `revolute_joint`, `rot_multibody_interface`, `rot_spring`, `solver_config`, `steam_accumulator`, `steam_nozzle`, `sym_comp_transform`, `three_phase_source`, `trans_multibody_interface`, `transformer`, `universal_joint`, `vccs`, `vcvs`, `velocity_ctrl`, `vlab_probe`, `weld_joint`
+Fully missing: `bldc_commutation`, `bldc_current_ctrl`, `bldc_pwm_ctrl`, `busbar`, `capacitor`, `cccs`, `ccvs`, `check_valve`, `clarke_transform`, `common_gear`, `conn_label`, `cycloconverter_ctrl`, `dc_current`, `dc_current_ctrl`, `dc_voltage_ctrl`, `dcdc_ctrl`, `delta_ref`, `diode`, `em_converter`, `fluid_capacitance`, `fluid_inertance`, `fluid_ref`, `fluid_resistance`, `fundamental_reluctance`, `gas_chamber`, `gas_fixed_res`, `gas_inf_resistance`, `gas_pipe`, `gas_ref`, `ground`, `gyrator`, `hysteresis_ctrl_3ph`, `im_curr_ctrl`, `im_dtc_ctrl`, `im_flux_observer`, `im_scalar_ctrl`, `inductor`, `infinite_resistance`, `inport`, `inv_clarke_transform`, `inv_park_transform`, `inv_sym_comp_transform`, `luenberger_observer`, `ma_flow_sensor`, `ma_moisture_sensor`, `ma_pt_sensor`, `ma_ref`, `ma_rot_conv`, `ma_selector`, `ma_separator`, `ma_thermo_sensor`, `mag_flux_source`, `mag_mmf_source`, `mag_ref`, `mass_flow_source`, `mech_config`, `memristor`, `opamp`, `open_circuit`, `orifice`, `outport`, `park_transform`, `permanent_magnet`, `pfc_rectifier_ctrl`, `phase_splitter`, `pmsm_curr_ctrl`, `pmsm_field_weakening`, `pmsm_foc`, `pmsm_ref_gen`, `pmsm_tq_est`, `pressure_source`, `prismatic_joint`, `ps_abs`, `ps_add`, `ps_dead_zone`, `ps_delay`, `ps_demux_3`, `ps_divide`, `ps_gain`, `ps_integrator`, `ps_integrator_gen`, `ps_lookup_1d`, `ps_lookup_2d`, `ps_lpf`, `ps_math`, `ps_max`, `ps_min`, `ps_moving_avg`, `ps_pi_ctrl`, `ps_pid_ctrl`, `ps_product`, `ps_ramp`, `ps_rms`, `ps_sample_hold`, `ps_saturation`, `ps_second_order_filter`, `ps_sine`, `ps_sine_3phase`, `ps_sliding_mode`, `ps_smith_predictor`, `ps_sr_flipflop`, `ps_stair_gen`, `ps_state_feedback`, `ps_step`, `ps_subtract`, `ps_sum`, `ps_switch`, `ps_terminator`, `ps_transfer_fcn`, `ps_washout`, `quad_decoder`, `rack_pinion`, `relief_valve`, `reluctance`, `resistor`, `resolver_to_digital`, `revolute_joint`, `rot_multibody_interface`, `rot_spring`, `solver_config`, `steam_accumulator`, `steam_nozzle`, `sym_comp_transform`, `three_phase_source`, `trans_multibody_interface`, `transformer`, `vccs`, `vcvs`, `velocity_ctrl`, `vlab_probe`, `weld_joint`
 
 ## Library ports never read by the equation
 Port index i of `across`/`dAcross` is mapped to library port i (assumes the assembler orders across values by library ports). Reads of `branch`/`state` are indices into DAE-allocated unknowns, not ports (see `equationTrace` in inventory.json). Signal-output ports written via DAE branches are also reported here, so cross-check with the DAE case.
@@ -200,6 +200,7 @@ Port index i of `across`/`dAcross` is mapped to library port i (assumes the asse
 | `trans_multibody_interface` | `v`, `r` | `f`, `c` |
 | `trans_ref` | `p` | _none_ |
 | `transform_sensor` | `x`, `y`, `z`, `rx`, `ry`, `rz` | `b`, `f` |
+| `universal_joint` | `angle1`, `angle2`, `w1`, `w2`, `fx`, `fy`, `fz`, `f_reac`, `t_reac` | `b`, `f` |
 | `upper_heater` | `h` | `p`, `n` |
 | `v_sensor` | `v` | `p`, `n` |
 | `vccs` | `p`, `n` | `cp`, `cn` |

@@ -112,10 +112,13 @@
         "WP-05"
       ],
       "blocks": [],
-      "status": "todo",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review/contract.test.ts --reporter=dot (failures allowed only as it.fails tied to a later WP)",
-      "evidence": [],
+      "evidence": [
+        "planner re-run: 1913 pass / 404 it.fails (ratchet map, regenerate via scripts/vlab_review/genContractExpectedFailures.ts)",
+        "246 = test_all_blocks skips scope+ground; GATE-01 246 and contracts 247 were stale snapshots; live 248 (+gas_pressure_sensor, gas_flow_sensor, transform_sensor; -gas_properties)"
+      ],
       "findings": []
     },
     {
@@ -126,7 +129,7 @@
         "WP-03"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "contract.test port-domain checks green for these groups",
       "evidence": [],
@@ -199,7 +202,9 @@
       "status": "todo",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review/multibody_joints.test.ts src/engine/vlab/vlab_multibody_frames.test.ts src/engine/vlab/vlab_constraint_reactions.test.ts src/engine/vlab/vlab_spherical_joint.test.ts --reporter=dot",
-      "evidence": [],
+      "evidence": [
+        "Build on the universal joint in c4cdc6f1 (vlabUniversalJoint.ts, vlabJointInitialization.ts, vlab_universal_joint.test.ts, plan 2026-10-05-universal-joint.md). Audit it against the mandate; do not rewrite it."
+      ],
       "findings": []
     },
     {
@@ -739,8 +744,37 @@
       "layer": "eq",
       "summary": "vlab_full_certification universal_joint axis1 INVALID_JOINT_PARAMETER (seen in a dir-wide run). The concurrent session is changing universal_joint -> WP-19a",
       "wp": "WP-19a"
+    },
+    {
+      "id": "F-025",
+      "severity": "high",
+      "block": "46 blocks (busbar, lever, ps_demux_3, ma_*_sensor, hysteresis_ctrl_3ph, pmsm_foc, ps_integrator_gen...)",
+      "layer": "solver",
+      "summary": "Equation residual count does not match the DAE-allocated unknowns. Extra rows are silently dropped and missing rows zero-filled.",
+      "wp": "WP-09"
+    },
+    {
+      "id": "F-026",
+      "severity": "high",
+      "block": "bldc_pwm_ctrl, dcdc_ctrl, im_foc_ctrl, im_dtc_ctrl, cycloconverter_ctrl, dc_voltage_ctrl, pmsm_foc, ac_motor_pid_control",
+      "layer": "port",
+      "summary": "Output ports named g/ctrl/p match the isPhysicalOutputPort input-name list, so no signal branch is allocated and the scope reads a silent 0.",
+      "wp": "WP-09"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",
-  "mandate": "docs/superpowers/plans/2026-10-05-vlab-simscape-review.md section 0 (user, 2026-10-05)"
+  "mandate": "docs/superpowers/plans/2026-10-05-vlab-simscape-review.md section 0 (user, 2026-10-05)",
+  "ownership": "The loop owns V-Lab exclusively from 2026-10-05 (user paused the concurrent Antigravity session)",
+  "stats_before": {
+    "date": "2026-10-05",
+    "live_blocks": 248,
+    "ports": 751,
+    "missing_domain_ports": 386,
+    "affected_blocks": 145,
+    "generic_equation_labels": 101,
+    "unsafe_numeric_fallbacks": 169,
+    "fully_certified": 45,
+    "classification": "physical 110, signal 73, measurement 20, source 33, utility 12",
+    "dae_allocation_mismatch_blocks": 46
+  }
 }

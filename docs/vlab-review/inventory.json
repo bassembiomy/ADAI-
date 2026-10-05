@@ -14719,22 +14719,95 @@
       {
         "id": "b",
         "pos": "left",
-        "domain": null,
+        "domain": "Frame",
         "unit": null,
         "label": "B"
       },
       {
         "id": "f",
         "pos": "right",
-        "domain": null,
+        "domain": "Frame",
         "unit": null,
         "label": "F"
+      },
+      {
+        "id": "angle1",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "rad",
+        "label": "angle1 (rad)"
+      },
+      {
+        "id": "angle2",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "rad",
+        "label": "angle2 (rad)"
+      },
+      {
+        "id": "w1",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "rad/s",
+        "label": "w1 (rad/s)"
+      },
+      {
+        "id": "w2",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "rad/s",
+        "label": "w2 (rad/s)"
+      },
+      {
+        "id": "fx",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "N",
+        "label": "fx (N)"
+      },
+      {
+        "id": "fy",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "N",
+        "label": "fy (N)"
+      },
+      {
+        "id": "fz",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "N",
+        "label": "fz (N)"
+      },
+      {
+        "id": "f_reac",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "N",
+        "label": "f_reac (N)"
+      },
+      {
+        "id": "t_reac",
+        "pos": "right",
+        "domain": "Physical",
+        "unit": "N*m",
+        "label": "t_reac (N*m)"
       }
     ],
     "params": [
       {
+        "name": "axis1",
+        "unit": "",
+        "default": "[1 0 0]"
+      },
+      {
+        "name": "axis2",
+        "unit": "",
+        "default": "[0 1 0]"
+      },
+      {
         "name": "damping",
-        "unit": "N-m-s/rad",
+        "unit": "N*m*s/rad",
         "default": 0.05
       }
     ],
@@ -14742,7 +14815,8 @@
     "hasDefinition": true,
     "daeCase": {
       "branches": [
-        "torque"
+        "lambda",
+        "signal_ + name"
       ],
       "states": []
     },
@@ -14753,11 +14827,28 @@
       "f"
     ],
     "paramsReadByEquation": [
+      "axis1",
+      "axis2",
       "damping"
     ],
     "equationTrace": {
       "branchIdx": [
-        0
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
       ],
       "dBranchIdx": [],
       "stateIdx": [],
