@@ -11,6 +11,7 @@ export type SysmlCommand = { kind: 'deleteElements'; elementIds: string[] };
 
 export interface DeletionAuthorization {
   authorizedBaselineIds?: readonly string[];
+  skipValidation?: boolean;
 }
 
 export type ImpactSeverity = 'safe' | 'review' | 'blocked';
@@ -69,25 +70,48 @@ export function computeTouchedProtectedBaselines(
   const deleted = deletedElementIds instanceof Set ? deletedElementIds : new Set(deletedElementIds);
   const affectedReqs = affectedRequirementIds instanceof Set ? affectedRequirementIds : new Set(affectedRequirementIds);
   const touched = new Set<string>();
-  for (const baseline of Object.values(repo.baselines)) {
+  for (const bId in repo.baselines) {
+    const baseline = repo.baselines[bId];
     if (!baseline.protected) continue;
     if (deleted.has(baseline.id)) {
       touched.add(baseline.id);
       continue;
     }
-    if (baseline.elementHashes && [...deleted].some(id => id in (baseline.elementHashes as Record<string, string>))) {
-      touched.add(baseline.id);
-      continue;
+    if (baseline.elementHashes) {
+      const hashes = baseline.elementHashes as Record<string, string>;
+      let hit = false;
+      for (const id of deleted) {
+        if (id in hashes) {
+          hit = true;
+          break;
+        }
+      }
+      if (hit) {
+        touched.add(baseline.id);
+        continue;
+      }
     }
     // Baselines without a content snapshot fall back to requirement linkage:
     // a protected baseline is touched when a baselined requirement is deleted
     // or otherwise affected by the mutation.
     if (!baseline.elementHashes) {
-      for (const id of [...deleted, ...affectedReqs]) {
+      let hit = false;
+      for (const id of deleted) {
         if (repo.requirements[id]?.baselineId === baseline.id) {
-          touched.add(baseline.id);
+          hit = true;
           break;
         }
+      }
+      if (!hit) {
+        for (const id of affectedReqs) {
+          if (repo.requirements[id]?.baselineId === baseline.id) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      if (hit) {
+        touched.add(baseline.id);
       }
     }
   }
@@ -156,32 +180,41 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   for (const feature of features) {
     if (feature.propertyId) {
       deleted.add(feature.propertyId);
-      for (const usage of Object.values(repo.usages)) if (usage.kind === 'part' && usage.propertyId === feature.propertyId) deleted.add(usage.id);
+      for (const uId in repo.usages) {
+        const usage = repo.usages[uId];
+        if (usage.kind === 'part' && usage.propertyId === feature.propertyId) deleted.add(usage.id);
+      }
     }
     if (feature.portId) deleted.add(feature.portId);
   }
 
   // Package ownership is semantic containment. Deleting a Package removes its
   // owned namespace recursively, including diagrams, before edge impact is computed.
-  const ownedEntities = [
-    ...Object.values(repo.packages), ...Object.values(repo.diagrams), ...Object.values(repo.definitions),
-    ...Object.values(repo.usages), ...Object.values(repo.requirements), ...Object.values(repo.verificationCases),
-    ...Object.values(repo.artifacts), ...Object.values(repo.actors), ...Object.values(repo.subjects),
-    ...Object.values(repo.useCases), ...Object.values(repo.extensionPoints),
-  ];
-  const ownedBy = new Map<string, string[]>();
-  for (const entity of ownedEntities) if (entity.ownerId) {
-    ownedBy.set(entity.ownerId, [...(ownedBy.get(entity.ownerId) ?? []), entity.id]);
-  }
   const packageQueue = [...command.elementIds].filter(id => Boolean(repo.packages[id]));
-  const seenPackages = new Set<string>();
-  for (let index = 0; index < packageQueue.length; index++) {
-    const packageId = packageQueue[index];
-    if (seenPackages.has(packageId)) continue;
-    seenPackages.add(packageId);
-    for (const childId of ownedBy.get(packageId) ?? []) {
-      deleted.add(childId);
-      if (repo.packages[childId]) packageQueue.push(childId);
+  if (packageQueue.length > 0) {
+    const ownedEntities = [
+      ...Object.values(repo.packages), ...Object.values(repo.diagrams), ...Object.values(repo.definitions),
+      ...Object.values(repo.usages), ...Object.values(repo.requirements), ...Object.values(repo.verificationCases),
+      ...Object.values(repo.artifacts), ...Object.values(repo.actors), ...Object.values(repo.subjects),
+      ...Object.values(repo.useCases), ...Object.values(repo.extensionPoints),
+    ];
+    const ownedBy = new Map<string, string[]>();
+    for (const entity of ownedEntities) {
+      if (entity.ownerId) {
+        const list = ownedBy.get(entity.ownerId);
+        if (list) list.push(entity.id);
+        else ownedBy.set(entity.ownerId, [entity.id]);
+      }
+    }
+    const seenPackages = new Set<string>();
+    for (let index = 0; index < packageQueue.length; index++) {
+      const packageId = packageQueue[index];
+      if (seenPackages.has(packageId)) continue;
+      seenPackages.add(packageId);
+      for (const childId of ownedBy.get(packageId) ?? []) {
+        deleted.add(childId);
+        if (repo.packages[childId]) packageQueue.push(childId);
+      }
     }
   }
 
@@ -202,16 +235,17 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   // independent port-ownership loop. Definition-typed usages become unresolved
   // impacts, never implicit children. Shared and reference usages never join
   // the part closure.
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const id of [...deleted]) {
-      const decision = classifyDeletionTarget(repo, id);
-      for (const cascadeId of decision.cascadeIds) {
-        if (!deleted.has(cascadeId)) {
-          deleted.add(cascadeId);
-          changed = true;
-        }
+  const cascadeQueue = [...deleted];
+  const classified = new Set<string>();
+  while (cascadeQueue.length > 0) {
+    const id = cascadeQueue.pop()!;
+    if (classified.has(id)) continue;
+    classified.add(id);
+    const decision = classifyDeletionTarget(repo, id);
+    for (const cascadeId of decision.cascadeIds) {
+      if (!deleted.has(cascadeId)) {
+        deleted.add(cascadeId);
+        cascadeQueue.push(cascadeId);
       }
     }
   }
@@ -225,13 +259,17 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     for (const port of definition.ports) goneFeatureIds.add(port.id);
   }
   const goneForConnectors = new Set([...deleted, ...goneFeatureIds]);
-  for (const connector of Object.values(repo.connectors)) {
+  for (const connId in repo.connectors) {
+    const connector = repo.connectors[connId];
     if (deleted.has(connector.ownerId) || deleted.has(connector.sourcePortId) || deleted.has(connector.targetPortId)
       || pathConnectorTouches(connector, goneForConnectors)) deleted.add(connector.id);
   }
-  for (const ref of Object.values(repo.diagramReferences ?? {})) {
-    if (ref.sourceElementId && deleted.has(ref.sourceElementId)) {
-      deleted.add(ref.id);
+  if (repo.diagramReferences) {
+    for (const refId in repo.diagramReferences) {
+      const ref = repo.diagramReferences[refId];
+      if (ref.sourceElementId && deleted.has(ref.sourceElementId)) {
+        deleted.add(ref.id);
+      }
     }
   }
   const removedRelationshipIdsSet = new Set<string>();
@@ -244,7 +282,8 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
     if (definition?.kind === 'activity') activityNestedIds(definition).forEach(nestedId => deletedNested.add(nestedId));
     if (definition?.kind === 'interaction') interactionNestedIds(definition).forEach(nestedId => deletedNested.add(nestedId));
   }
-  for (const relationship of Object.values(repo.relationships)) {
+  for (const relId in repo.relationships) {
+    const relationship = repo.relationships[relId];
     if (deleted.has(relationship.id) || deleted.has(relationship.sourceId) || deleted.has(relationship.targetId)
       || goneFeatureIds.has(relationship.sourceId) || goneFeatureIds.has(relationship.targetId)
       || deletedNested.has(relationship.sourceId) || deletedNested.has(relationship.targetId)) {
@@ -256,12 +295,21 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   }
   for (const id of requested) if (repo.requirements[id]) affectedRequirements.add(id);
 
-  const invalidatedEvidence = Object.values(repo.evidence)
-    .filter(e => deleted.has(e.id) || deleted.has(e.verificationCaseId) || deleted.has(e.requirementId) || affectedRequirements.has(e.requirementId))
-    .map(e => e.id);
-  invalidatedEvidence.forEach(id => deleted.add(id));
+  const invalidatedEvidence: string[] = [];
+  for (const evId in repo.evidence) {
+    const e = repo.evidence[evId];
+    if (deleted.has(e.id) || deleted.has(e.verificationCaseId) || deleted.has(e.requirementId) || affectedRequirements.has(e.requirementId)) {
+      invalidatedEvidence.push(e.id);
+      deleted.add(e.id);
+    }
+  }
 
-  const deletedDefinitions = new Set(Object.values(repo.definitions).filter(d => deleted.has(d.id)).map(d => d.id));
+  const deletedDefinitions = new Set<string>();
+  for (const id of deleted) {
+    if (repo.definitions[id]) {
+      deletedDefinitions.add(id);
+    }
+  }
   // Unresolved impacts come from the central policy: every definition-typed
   // usage that is not an owned composite cascade child.
   const unresolvedFromPolicy = new Set<string>();
@@ -277,29 +325,56 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   const unresolvedUsageIds = [...unresolvedFromPolicy].sort();
 
   const diagramKinds = new Set<MutationImpact['affectedDiagramKinds'][number]>();
-  if ([...deleted].some(id => repo.definitions[id])) diagramKinds.add('bdd');
-  if ([...deleted].some(id => repo.usages[id] || repo.connectors[id]) || features.length > 0) diagramKinds.add('ibd');
-  if (affectedRequirements.size || [...deleted].some(id => repo.requirements[id])) diagramKinds.add('requirements');
-  if (affectedRequirements.size || invalidatedEvidence.length) diagramKinds.add('rtm');
-  const hasUseCaseEntities = [...deleted].some(id =>
-    Boolean(repo.actors?.[id] || repo.subjects?.[id] || repo.useCases?.[id] || repo.extensionPoints?.[id] || repo.diagramReferences?.[id])
-  );
-  const hasUseCaseRel = [...removedRelationshipIdsSet].some(id => {
+  for (const id of deleted) {
+    if (repo.definitions[id]) diagramKinds.add('bdd');
+    if (repo.usages[id] || repo.connectors[id]) diagramKinds.add('ibd');
+    if (repo.requirements[id]) {
+      diagramKinds.add('requirements');
+      diagramKinds.add('rtm');
+    }
+    if (repo.actors?.[id] || repo.subjects?.[id] || repo.useCases?.[id] || repo.extensionPoints?.[id] || repo.diagramReferences?.[id]) {
+      diagramKinds.add('useCase');
+    }
+    if (repo.definitions[id]?.kind === 'interaction' || repo.diagrams[id]?.diagramKind === 'sequence') {
+      diagramKinds.add('sequence');
+    }
+    if (repo.packages[id] || repo.diagrams[id]) {
+      diagramKinds.add('package');
+    }
+  }
+  if (features.length > 0) diagramKinds.add('ibd');
+  if (affectedRequirements.size) {
+    diagramKinds.add('requirements');
+    diagramKinds.add('rtm');
+  }
+  if (invalidatedEvidence.length) diagramKinds.add('rtm');
+  for (const id of removedRelationshipIdsSet) {
     const rel = repo.relationships[id];
-    return rel && ['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace'].includes(rel.kind);
-  });
-  if (hasUseCaseEntities || hasUseCaseRel) diagramKinds.add('useCase');
+    if (rel) {
+      if (['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace'].includes(rel.kind)) {
+        diagramKinds.add('useCase');
+      }
+      if (['packageImport', 'elementImport', 'packageMerge'].includes(rel.kind)) {
+        diagramKinds.add('package');
+      }
+    }
+  }
   // Lifelines/messages that point at something being deleted keep existing but
   // lose the reference; deleting an Interaction or its diagram affects sequence diagrams too.
   const goneForBehaviors = new Set([...deleted, ...goneFeatureIds]);
+  const affectedVerificationCases: string[] = [];
+  for (const vcId in repo.verificationCases) {
+    const verificationCase = repo.verificationCases[vcId];
+    if (!deleted.has(verificationCase.id) && verificationCase.behaviorId && deleted.has(verificationCase.behaviorId)) {
+      affectedVerificationCases.push(verificationCase.id);
+    }
+  }
   const affectedBehaviorElementIds = [
     ...interactionReferencesTo(repo, goneForBehaviors),
     // Actions that call a deleted Activity/Interaction become opaque actions.
     ...clearCalledBehaviorReferences(repo, goneForBehaviors).flatMap(edit => edit.nodeIds),
     // Test cases whose procedure is deleted keep existing without it.
-    ...Object.values(repo.verificationCases)
-      .filter(verificationCase => !deleted.has(verificationCase.id) && verificationCase.behaviorId && deleted.has(verificationCase.behaviorId))
-      .map(verificationCase => verificationCase.id),
+    ...affectedVerificationCases,
   ].sort();
   if (affectedBehaviorElementIds.length > 0
     || [...deleted].some(id => repo.definitions[id]?.kind === 'interaction' || repo.diagrams[id]?.diagramKind === 'sequence')) {
@@ -336,8 +411,13 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
   };
 }
 
-export function applyCommand(repo: SysmlRepository, command: SysmlCommand, authorization: DeletionAuthorization = {}): MutationResult {
-  const impact = analyzeMutation(repo, command);
+export function applyCommand(
+  repo: SysmlRepository,
+  command: SysmlCommand,
+  authorization: DeletionAuthorization = {},
+  precomputedImpact?: MutationImpact,
+): MutationResult {
+  const impact = precomputedImpact ?? analyzeMutation(repo, command);
   const authorized = new Set(authorization.authorizedBaselineIds ?? []);
   const unauthorized = impact.affectedBaselineIds.filter(id => !authorized.has(id));
   if (unauthorized.length > 0) {
@@ -427,60 +507,78 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
   if (next.extensionPoints) removeFrom(next.extensionPoints, removed);
   if (next.diagramReferences) removeFrom(next.diagramReferences, removed);
 
+  const hasRemovedRequirement = impact.deletedElementIds.some(id => repo.requirements[id] !== undefined);
+  const hasRemovedBehavior = impact.deletedElementIds.some(id => repo.definitions[id]?.kind === 'activity' || repo.definitions[id]?.kind === 'interaction');
+  const hasRemovedStakeholder = impact.deletedElementIds.some(id => repo.definitions[id]?.kind === 'stakeholder');
+  const hasRemovedActor = impact.deletedElementIds.some(id => repo.actors?.[id] !== undefined);
+  const hasRemovedSignal = impact.deletedElementIds.some(id => repo.definitions[id]?.kind === 'signal');
+
   // Evidence-invalidation state: filtering verifiesRequirementIds is part of
   // the atomic deletion, so the inverse patch must restore the exact prior
   // lists (not just re-add removed entities). Record a replace pair per
   // touched verification case to keep undo/redo byte-exact.
-  for (const verificationCase of Object.values(repo.verificationCases)) {
-    if (removed.has(verificationCase.id)) continue;
-    // The test procedure (Activity or Interaction) is gone: keep the case, clear the reference.
-    if (verificationCase.behaviorId && removed.has(verificationCase.behaviorId)) {
-      const { behaviorId, ...cleared } = verificationCase;
-      next.verificationCases[verificationCase.id] = cleared;
-      forwardOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['behaviorId'], oldValue: behaviorId, value: undefined });
-      inverseOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['behaviorId'], oldValue: undefined, value: behaviorId });
+  if ((hasRemovedRequirement || hasRemovedBehavior) && Object.keys(repo.verificationCases).length > 0) {
+    for (const id in repo.verificationCases) {
+      const verificationCase = repo.verificationCases[id];
+      if (!verificationCase || removed.has(verificationCase.id)) continue;
+      // The test procedure (Activity or Interaction) is gone: keep the case, clear the reference.
+      if (verificationCase.behaviorId && removed.has(verificationCase.behaviorId)) {
+        const { behaviorId, ...cleared } = verificationCase;
+        next.verificationCases[verificationCase.id] = cleared;
+        forwardOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['behaviorId'], oldValue: behaviorId, value: undefined });
+        inverseOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['behaviorId'], oldValue: undefined, value: behaviorId });
+      }
+      const before = verificationCase.verifiesRequirementIds;
+      const after = before.filter(vId => !removed.has(vId));
+      if (after.length === before.length) continue;
+      const updated = { ...next.verificationCases[verificationCase.id], verifiesRequirementIds: after };
+      next.verificationCases[verificationCase.id] = updated;
+      forwardOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['verifiesRequirementIds'], oldValue: before, value: after });
+      inverseOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['verifiesRequirementIds'], oldValue: after, value: before });
     }
-    const before = verificationCase.verifiesRequirementIds;
-    const after = before.filter(id => !removed.has(id));
-    if (after.length === before.length) continue;
-    const updated = { ...next.verificationCases[verificationCase.id], verifiesRequirementIds: after };
-    next.verificationCases[verificationCase.id] = updated;
-    forwardOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['verifiesRequirementIds'], oldValue: before, value: after });
-    inverseOps.push({ op: 'replace', collection: 'verificationCases', id: verificationCase.id, path: ['verifiesRequirementIds'], oldValue: after, value: before });
   }
   // A Viewpoint must not keep pointing at a deleted Stakeholder or concern
   // Requirement: filter those references in the same atomic deletion.
-  for (const definition of Object.values(repo.definitions)) {
-    if (definition.kind !== 'viewpoint' || removed.has(definition.id)) continue;
-    let updated = definition;
-    for (const key of ['stakeholderIds', 'concernIds'] as const) {
-      const before = definition[key];
-      const after = before.filter(id => !removed.has(id));
-      if (after.length === before.length) continue;
-      updated = { ...updated, [key]: after };
-      forwardOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: [key], oldValue: before, value: after });
-      inverseOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: [key], oldValue: after, value: before });
+  if (hasRemovedStakeholder || hasRemovedRequirement) {
+    for (const id in repo.definitions) {
+      const definition = repo.definitions[id];
+      if (!definition || definition.kind !== 'viewpoint' || removed.has(definition.id)) continue;
+      let updated = definition;
+      for (const key of ['stakeholderIds', 'concernIds'] as const) {
+        const before = definition[key];
+        const after = before.filter(vId => !removed.has(vId));
+        if (after.length === before.length) continue;
+        updated = { ...updated, [key]: after };
+        forwardOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: [key], oldValue: before, value: after });
+        inverseOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: [key], oldValue: after, value: before });
+      }
+      if (updated !== definition) next.definitions[definition.id] = updated;
     }
-    if (updated !== definition) next.definitions[definition.id] = updated;
   }
   // An Actor must not keep specializing a deleted Actor.
-  for (const actor of Object.values(repo.actors ?? {})) {
-    if (removed.has(actor.id) || !actor.generalizationIds?.some(id => removed.has(id))) continue;
-    const before = actor.generalizationIds;
-    const after = before.filter(id => !removed.has(id));
-    next.actors[actor.id] = { ...actor, generalizationIds: after };
-    forwardOps.push({ op: 'replace', collection: 'actors', id: actor.id, path: ['generalizationIds'], oldValue: before, value: after });
-    inverseOps.push({ op: 'replace', collection: 'actors', id: actor.id, path: ['generalizationIds'], oldValue: after, value: before });
+  if (hasRemovedActor && repo.actors) {
+    for (const id in repo.actors) {
+      const actor = repo.actors[id];
+      if (!actor || removed.has(actor.id) || !actor.generalizationIds?.some(gId => removed.has(gId))) continue;
+      const before = actor.generalizationIds;
+      const after = before.filter(gId => !removed.has(gId));
+      next.actors[actor.id] = { ...actor, generalizationIds: after };
+      forwardOps.push({ op: 'replace', collection: 'actors', id: actor.id, path: ['generalizationIds'], oldValue: before, value: after });
+      inverseOps.push({ op: 'replace', collection: 'actors', id: actor.id, path: ['generalizationIds'], oldValue: after, value: before });
+    }
   }
   // A Block must not keep receiving a deleted Signal: drop it from `receptions`
   // in the same atomic deletion (the inverse patch restores the exact list).
-  for (const definition of Object.values(repo.definitions)) {
-    if (definition.kind !== 'block' || removed.has(definition.id) || !definition.receptions?.some(id => removed.has(id))) continue;
-    const before = definition.receptions;
-    const after = before.filter(id => !removed.has(id));
-    next.definitions[definition.id] = { ...definition, receptions: after };
-    forwardOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['receptions'], oldValue: before, value: after });
-    inverseOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['receptions'], oldValue: after, value: before });
+  if (hasRemovedSignal) {
+    for (const id in repo.definitions) {
+      const definition = repo.definitions[id];
+      if (!definition || definition.kind !== 'block' || removed.has(definition.id) || !definition.receptions?.some(rId => removed.has(rId))) continue;
+      const before = definition.receptions;
+      const after = before.filter(rId => !removed.has(rId));
+      next.definitions[definition.id] = { ...definition, receptions: after };
+      forwardOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['receptions'], oldValue: before, value: after });
+      inverseOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['receptions'], oldValue: after, value: before });
+    }
   }
   // Format 5: a deleted part or port is removed from the Block that declares it.
   const removedProperties = new Map<string, Set<string>>();
@@ -566,7 +664,9 @@ export function applyCommand(repo: SysmlRepository, command: SysmlCommand, autho
     applied: true,
     repository: next,
     impact: authorizedImpact,
-    validation: validateSysmlRepository(next),
+    validation: authorization.skipValidation
+      ? { valid: true, diagnostics: [], canSimulate: true, canExport: true, canReport: true, canVerify: true }
+      : validateSysmlRepository(next),
     forwardPatch,
     inversePatch,
   };
@@ -589,8 +689,14 @@ export function redo(history: MutationHistory): MutationHistory {
 }
 
 function removeFrom<T>(record: Record<string, T>, removed: ReadonlySet<string>) {
-  for (const [key, value] of Object.entries(record)) {
-    if (removed.has(key) || removed.has((value as { id?: string }).id ?? '')) delete record[key];
+  if (removed.size < 100) {
+    for (const id of removed) {
+      delete record[id];
+    }
+  } else {
+    for (const key in record) {
+      if (removed.has(key)) delete record[key];
+    }
   }
 }
 

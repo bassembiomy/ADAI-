@@ -100,7 +100,12 @@ export function isInteractionDefinition(value: unknown): value is InteractionDef
 }
 
 export function listInteractions(repo: SysmlRepository): InteractionDefinition[] {
-  return Object.values(repo.definitions).filter(isInteractionDefinition);
+  const result: InteractionDefinition[] = [];
+  for (const id in repo.definitions) {
+    const d = repo.definitions[id];
+    if (d && isInteractionDefinition(d)) result.push(d);
+  }
+  return result;
 }
 
 export type InteractionElementKind = 'lifeline' | 'message' | 'fragment' | 'use' | 'stateInvariant' | 'constraint';

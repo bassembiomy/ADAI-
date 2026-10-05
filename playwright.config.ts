@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   workers: 1,
-  timeout: 45000,
+  timeout: process.env.SCALABILITY_SIZE ? 600000 : 45000,
   expect: {
     timeout: 10000,
   },

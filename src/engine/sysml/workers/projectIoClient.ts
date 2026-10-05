@@ -1,5 +1,6 @@
 import { loadCanonicalSysmlProject } from '../../../services/sysmlCommandGateway';
-import type { SysmlModelRepository } from '../model';
+import { serializeSysmlProjectState } from '../persistence';
+import type { SysmlRepository } from '../model';
 
 export type ProgressPhase = 'read' | 'parse' | 'migrate' | 'normalize' | 'validate' | 'serialize';
 
@@ -9,8 +10,8 @@ export interface ProjectWorkerOptions {
 }
 
 export interface LoadedProjectResult {
-  repository: SysmlModelRepository;
-  coordinates: Record<string, { x: number; y: number }>;
+  repository: SysmlRepository;
+  coordinates: Record<string, any>;
   diagramPresentations?: Record<string, any>;
   valid: boolean;
   diagnostics: any[];
@@ -170,7 +171,21 @@ export async function serializeProjectInWorker(
     options?.onProgress?.('serialize');
     checkAborted(options?.signal);
 
-    const jsonText = JSON.stringify(payload);
+    let payloadToSerialize = payload;
+    if (payloadToSerialize && typeof payloadToSerialize.sysmlRepository === 'object') {
+      const savedSysml = serializeSysmlProjectState(
+        payloadToSerialize.sysmlRepository,
+        payloadToSerialize.diagramPresentations,
+        payloadToSerialize.sysmlCoordinates,
+      );
+      payloadToSerialize = {
+        ...payloadToSerialize,
+        sysmlRepository: savedSysml.sysmlRepository,
+        diagramPresentations: savedSysml.diagramPresentations,
+        sysmlCoordinates: savedSysml.sysmlCoordinates ?? payloadToSerialize.sysmlCoordinates,
+      };
+    }
+    const jsonText = JSON.stringify(payloadToSerialize);
     const encoder = new TextEncoder();
     return encoder.encode(jsonText).buffer;
   }

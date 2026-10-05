@@ -186,8 +186,9 @@ export interface ActivityBehaviorEdit { activityId: string; nodes: ActivityNode[
  */
 export function clearCalledBehaviorReferences(repo: SysmlRepository, gone: ReadonlySet<string>): ActivityBehaviorEdit[] {
   const edits: ActivityBehaviorEdit[] = [];
-  for (const definition of Object.values(repo.definitions)) {
-    if (definition.kind !== 'activity' || gone.has(definition.id)) continue;
+  for (const id in repo.definitions) {
+    const definition = repo.definitions[id];
+    if (!definition || definition.kind !== 'activity' || gone.has(definition.id)) continue;
     const nodeIds: string[] = [];
     const nodes = (definition.nodes ?? []).map(node => {
       if (!node.behaviorId || !gone.has(node.behaviorId)) return node;

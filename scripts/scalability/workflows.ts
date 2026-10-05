@@ -7,7 +7,9 @@ export type WorkflowName =
   | 'tree-search'
   | 'undo'
   | 'redo'
-  | 'save-reopen';
+  | 'save-reopen'
+  | 'diagram-switch'
+  | 'stress-diagram';
 
 export interface WorkflowSample {
   handlerMs?: number;

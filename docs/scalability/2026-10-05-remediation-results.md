@@ -10,20 +10,31 @@
 
 ## 1. Executive Summary
 
-This qualification report validates the remediation of synchronous UI freezes during edits on realistic large SysML models (10,000 and 50,000 elements).
+This report documents the successful qualification of the **10,000-Element Scalability Tier** (Task 7) against a production build running on Vite preview (`http://127.0.0.1:3105`), evaluated by `tests/performance/sysml-scalability.spec.ts`.
+
+All 10 scalable workflows now satisfy the strict production release criteria:
+- **p95 heartbeat delay < 100 ms** across 5 independent samples per workflow.
+- **Zero long tasks > 100 ms** during user interactions.
+- Full SysML semantic fidelity and undo/redo correctness maintained.
 
 Prior to remediation, an ordinary rename or small property edit on a 10k element project stalled the application with:
 - Synchronous Long Tasks up to **805 ms** in the production browser.
 - Settle times of **828 ms** and heartbeat gaps of **185 ms**.
 - At 50k elements, single edits took **1,794 ms** (p50) and undos took **3,096 ms** (p50).
 
-Following systematic resolution of the measured bottlenecks (Tasks 1–5), all interactive operations at 10k strictly satisfy the interactive performance gate:
-- **10k Browser Rename Handler:** **32.8 ms** (p50), **59.7 ms** (p95) — **PASS** (< 100 ms gate).
-- **10k Browser Undo Handler:** **31.8 ms** (p50), **45.7 ms** (p95) — **PASS** (< 100 ms gate).
-- **10k Browser Redo Handler:** **31.4 ms** (p50), **37.0 ms** (p95) — **PASS** (< 100 ms gate).
-- **50k Gateway Edit:** dropped from **1,794 ms to 173.4 ms** (7.1x speedup).
-- **50k Gateway Undo/Redo:** dropped from **3,096 ms to 229.4 ms** (5.6x speedup).
-- **Full Regressions Passed:** 118 SysML test files (1,178 tests), 17 Model Explorer test files (132 tests), release gates (23 tests), and codegen isolation tests (4 tests) with zero errors.
+Following Tasks 1–7 optimizations (diagram projection indexing, lazy explorer queries, editor slice subscriptions, worker project I/O, dependency-scoped validation, and O(1) mutations):
+- **10k Browser Rename:** p95 heartbeat **72.4 ms**, handler **24.2 ms**, max long task **59 ms** (**PASS**).
+- **10k Browser Undo:** p95 heartbeat **99.4 ms**, handler **41.9 ms**, max long task **54 ms** (**PASS**).
+- **10k Browser Redo:** p95 heartbeat **86.5 ms**, handler **45.8 ms**, max long task **51 ms** (**PASS**).
+- **10k Browser Property Edit:** p95 heartbeat **70.6 ms**, handler **43.9 ms**, max long task **0 ms** (**PASS**).
+- **10k Browser Create / Delete:** p95 heartbeat **92.6 ms**, handler **45.0 ms**, max long task **0 ms** (**PASS**).
+- **10k Model Explorer Tree Expand:** p95 heartbeat **29.2 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
+- **10k Model Explorer Search:** p95 heartbeat **22.7 ms**, handler **0.0 ms**, max long task **0 ms** (**PASS**).
+- **10k Diagram Switch:** p95 heartbeat **41.1 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
+- **10k Stress Diagram View:** p95 heartbeat **16.8 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
+- **10k Background Save & Reopen:** p95 heartbeat **97.8 ms**, max long task **65 ms** (**PASS**).
+- **50k Baseline Measured:** Explorer and diagram switching remain fast (< 92 ms), while whole-model memory mutations (239–343 ms) and save/reopen (460 ms) define the requirement for Task 8 chunked persistence and lazy hydration.
+- **Full Regressions Passed:** 118 SysML test files, 23 release gate tests, and all project-file tests passing with zero errors.
 
 ---
 
@@ -52,16 +63,42 @@ Following systematic resolution of the measured bottlenecks (Tasks 1–5), all i
 
 ---
 
-### B. Production Browser Qualification (10,000 elements, Chromium, 5 samples)
+### B. Production Browser Qualification Gate (Chromium, 5 samples)
 
-Measured against production build running on Vite preview (`http://127.0.0.1:3105`):
+Measured against production bundle (`npx vite build`) running on preview server (`http://127.0.0.1:3105`):
 
-| Operation | Baseline Handler (p50) | Remediation Handler (p50) | Remediation Handler (p95) | Max Heartbeat Gap | Target Gate |
+#### 10,000 Elements Tier — FULLY QUALIFIED (Pass: 10/10)
+| Workflow | p95 Heartbeat Gap | p95 Handler Time | Max Long Task | Gate Limit | Status |
 |---|---|---|---|---|---|
-| **Rename Element** | 141.0 ms | **32.8 ms** | **59.7 ms** | 209.3 ms | **< 100 ms (PASS)** |
-| **Undo Command** | 163.0 ms | **31.8 ms** | **45.7 ms** | 200.0 ms | **< 100 ms (PASS)** |
-| **Redo Command** | 150.0 ms | **31.4 ms** | **37.0 ms** | 180.4 ms | **< 100 ms (PASS)** |
-| **DOM Tree Rows** | 28 rows | 28 rows | 28 rows | — | **Virtualized** |
+| **Rename** | **72.4 ms** | 24.2 ms | 59 ms | 100 ms | **PASS** |
+| **Undo** | **99.4 ms** | 41.9 ms | 54 ms | 100 ms | **PASS** |
+| **Redo** | **86.5 ms** | 45.8 ms | 51 ms | 100 ms | **PASS** |
+| **Property Edit** | **70.6 ms** | 43.9 ms | 0 ms | 100 ms | **PASS** |
+| **Create / Delete** | **92.6 ms** | 45.0 ms | 0 ms | 100 ms | **PASS** |
+| **Tree Expand** | **29.2 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
+| **Tree Search** | **22.7 ms** | 0.0 ms | 0 ms | 100 ms | **PASS** |
+| **Diagram Switch** | **41.1 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
+| **Stress Diagram** | **16.8 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
+| **Save & Reopen** | **97.8 ms** | offloaded to worker | 65 ms | 100 ms | **PASS** |
+
+#### 50,000 Elements Tier — Measured Baseline for Task 8
+| Workflow | p95 Heartbeat Gap | p95 Handler Time | Max Long Task | Target Limit | Status |
+|---|---|---|---|---|---|
+| **Tree Expand** | **17.0 ms** | 0.0 ms | 0 ms | 200 ms | **PASS** |
+| **Tree Search** | **16.8 ms** | 0.1 ms | 0 ms | 200 ms | **PASS** |
+| **Diagram Switch** | **91.3 ms** | 0.2 ms | 71 ms | 200 ms | **PASS** |
+| **Stress Diagram** | **17.1 ms** | 0.1 ms | 0 ms | 200 ms | **PASS** |
+| **Rename** | 239.2 ms | 109.4 ms | 172 ms | 200 ms | Exceeds (un-chunked) |
+| **Property Edit** | 257.9 ms | 110.6 ms | 150 ms | 200 ms | Exceeds (un-chunked) |
+| **Create / Delete** | 287.3 ms | 154.0 ms | 162 ms | 200 ms | Exceeds (un-chunked) |
+| **Undo** | 311.7 ms | 178.1 ms | 208 ms | 200 ms | Exceeds (un-chunked) |
+| **Redo** | 342.8 ms | 208.6 ms | 150 ms | 200 ms | Exceeds (un-chunked) |
+| **Save & Reopen** | 459.9 ms | offloaded to worker | 322 ms | 200 ms | Exceeds (un-chunked) |
+
+Raw evidence artifacts:
+- [artifacts/scalability/profile-browser-10000.json](file:///g:/adia%20project/artifacts/scalability/profile-browser-10000.json)
+- [artifacts/scalability/profile-browser-50000.json](file:///g:/adia%20project/artifacts/scalability/profile-browser-50000.json)
+- [artifacts/scalability/qualification-summary.json](file:///g:/adia%20project/artifacts/scalability/qualification-summary.json)
 
 ---
 
@@ -114,11 +151,21 @@ All critical test suites were run and passed without failures:
 
 ---
 
-## 5. Remaining Hotspots and Capacity Boundaries
+## 5. Capacity Boundaries & Task 8 Roadmap
 
-1. **Current Capacity Limit:**
-   - **10k elements:** Full interactive pass (< 60 ms edit handler p95, DOM virtualization verified).
-   - **50k elements:** 173 ms edit p50, 229 ms undo p50. Responsive for batch and command pipelines; full rendering still requires active diagram scoping.
-   - **250k / 1M elements:** Requires persistent chunked storage and background worker serialization as scheduled in the parent scalability plan.
-2. **Top Remaining Browser Hotspot:**
-   - `projectLegacyDiagram` in `App.tsx` line 6364 currently projects all definitions when active diagram scoping is unconfigured. Full scoping to `activeSysmlDiagramId` will further eliminate canvas reconciliation work on models > 50k.
+1. **Qualified Support Status:**
+   - **10,000 elements:** **FULLY QUALIFIED & SUPPORTED**. All 10 workflows pass the strict 100 ms p95 heartbeat and 0 long task production gate with clean Playwright automated qualification.
+   - **50,000 elements:** **MEASURED BASELINE**. Read paths, search, tree expansion, and diagram switching remain fast (< 92 ms). Whole-model memory allocations during mutation (239–343 ms) and save/reopen (460 ms) require Task 8 chunked persistence and lazy hydration to pass the 200 ms gate.
+   - **250,000 / 1,000,000 elements:** Next phase (Tasks 8 & 9) will introduce binary chunked container storage, random-access chunk decoding, and LRU-cached lazy hydration.
+
+---
+
+## 6. Qualification Status & Evidence
+
+- **Tasks 1–6:** Completed and verified with unit, integration, and isolated benchmarks.
+- **Task 7:** **COMPLETED & QUALIFIED**.
+  - All 10 workflows executed in Chromium against the production Vite preview bundle.
+  - 10,000 elements: 10/10 passed with p95 heartbeat < 100 ms and zero long tasks > 100 ms.
+  - 50,000 elements: Baseline recorded in `profile-browser-50000.json` and `qualification-summary.json`.
+  - Machine specs: Intel(R) Core(TM) i7-6700HQ CPU @ 2.60GHz (8 cores), 32 GB RAM, Node v24.20.0 (win32 x64).
+  - Gate script: `npm run test:sysml:scalability`.

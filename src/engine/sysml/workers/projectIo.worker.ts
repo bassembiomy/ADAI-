@@ -1,4 +1,5 @@
 import { loadCanonicalSysmlProject } from '../../../services/sysmlCommandGateway';
+import { serializeSysmlProjectState } from '../persistence';
 
 export type ProgressPhase = 'read' | 'parse' | 'migrate' | 'normalize' | 'validate' | 'serialize';
 
@@ -78,12 +79,27 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
         if (cancelledIds.has(data.id)) return;
         self.postMessage({ id: data.id, type: 'progress', phase: 'serialize' });
 
-        const jsonText = JSON.stringify(data.payload);
+        let payloadToSerialize = data.payload;
+        if (payloadToSerialize && typeof payloadToSerialize.sysmlRepository === 'object') {
+          const savedSysml = serializeSysmlProjectState(
+            payloadToSerialize.sysmlRepository,
+            payloadToSerialize.diagramPresentations,
+            payloadToSerialize.sysmlCoordinates,
+          );
+          payloadToSerialize = {
+            ...payloadToSerialize,
+            sysmlRepository: savedSysml.sysmlRepository,
+            diagramPresentations: savedSysml.diagramPresentations,
+            sysmlCoordinates: savedSysml.sysmlCoordinates ?? payloadToSerialize.sysmlCoordinates,
+          };
+        }
+
+        const jsonText = JSON.stringify(payloadToSerialize);
         const encoder = new TextEncoder();
         const encoded = encoder.encode(jsonText);
         const buffer = encoded.buffer;
 
-        self.postMessage(
+        (self as any).postMessage(
           {
             id: data.id,
             type: 'serializeSuccess',

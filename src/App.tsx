@@ -6504,8 +6504,8 @@ const ADIA = () => {
       const targetDiagramId = mode === 'package'
         ? (activePackageDiagramId && currentRepo.diagrams[activePackageDiagramId]?.diagramKind === 'package'
             ? activePackageDiagramId
-            : Object.values(currentRepo.diagrams).find(d => d.diagramKind === 'package')?.id ?? 'package')
-        : (Object.values(currentRepo.diagrams).find(d => d.diagramKind === mode)?.id ?? (['bdd', 'requirements', 'package', 'rtm'].includes(mode) ? mode : null));
+            : Object.values(currentRepo.diagrams).find((d: any) => d?.diagramKind === 'package')?.id ?? 'package')
+        : (Object.values(currentRepo.diagrams).find((d: any) => d?.diagramKind === mode)?.id ?? (['bdd', 'requirements', 'package', 'rtm'].includes(mode) ? mode : null));
       if (targetDiagramId && currentRepo.diagrams[targetDiagramId]) {
         openExactDiagramById(targetDiagramId, { preserveReturnStack: true });
       } else if (targetDiagramId) {
@@ -6673,8 +6673,8 @@ const ADIA = () => {
     // idempotently before any projection/store is derived, so the tree,
     // canvas, and workspace tabs resolve the same exact IDs.
     const repository = ensureDefaultSysmlDiagrams(loaded.repository).repository;
-    const store = fromRepository(repository, loaded.coordinates, loaded.diagramPresentations);
-    sysmlGatewayStateRef.current = createSysmlGatewayState(repository, loaded.coordinates, loaded.diagramPresentations);
+    const store = (loaded as any).store ?? fromRepository(repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current = createSysmlGatewayState(repository, loaded.coordinates, loaded.diagramPresentations, undefined, undefined, store);
     sysmlGatewayStateRef.current.store = store;
     setCanonicalSysmlRepository(repository);
     setSysmlStore(store);
@@ -6692,7 +6692,9 @@ const ADIA = () => {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__sysmlExecuteCommand = handleExecuteSysmlCommand;
+      (window as any).__sysmlExecuteConfirmedDeletion = executeConfirmedDeletion;
       (window as any).__setActivePackageDiagramId = setActivePackageDiagramId;
+      (window as any).__setActiveSysmlDiagramId = setActiveSysmlDiagramIdState;
       try {
         Object.defineProperty(window, '__sysmlRepository', {
           get: () => sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository,
@@ -6702,7 +6704,7 @@ const ADIA = () => {
         (window as any).__sysmlRepository = canonicalSysmlRepository;
       }
     }
-  }, [handleExecuteSysmlCommand, canonicalSysmlRepository]);
+  }, [handleExecuteSysmlCommand, canonicalSysmlRepository, setActiveSysmlDiagramIdState]);
 
   // Task 7 browser-gate read access (spec 6, 8.3): stable test selectors for
   // the real save/reload path. These hooks expose production state only —
@@ -8782,6 +8784,15 @@ const ADIA = () => {
       addError('error', `Failed to open project: ${err?.message || String(err)}`);
     }
   }, [confirmProjectReplacementIfDirty, hydrateProject, buildUnifiedProjectPayload, addError]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__hydrateProject = hydrateProject;
+      (window as any).__buildUnifiedProjectPayload = buildUnifiedProjectPayload;
+      (window as any).__serializeProjectInWorker = serializeProjectInWorker;
+      (window as any).__loadProjectInWorker = loadProjectInWorker;
+    }
+  }, [hydrateProject, buildUnifiedProjectPayload]);
 
   useEffect(() => {
     const electron = (window as any).electronAPI;

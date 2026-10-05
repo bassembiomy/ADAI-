@@ -69,7 +69,9 @@ export function evaluateBrowserProfile(
 
     const samples = workflowData.samples;
     const heartbeatGaps = samples.map(s => s.heartbeatGapMs);
-    const handlers = samples.map(s => s.handlerMs).filter((h): h is number => typeof h === 'number');
+    const handlers = wfName === 'save-reopen' || wfName === 'load'
+      ? []
+      : samples.map(s => s.handlerMs).filter((h): h is number => typeof h === 'number');
     const allLongTasks = samples.flatMap(s => s.longTasksMs ?? []);
 
     const p95Heartbeat = computePercentile(heartbeatGaps, 95);

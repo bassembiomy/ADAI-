@@ -421,36 +421,61 @@ export function classifyDeletionTarget(repo: SysmlRepository, elementId: string)
     // Ports are lifetime-owned children (OMG SysML 1.6: a port usage lives
     // and dies with its owning context), so ports owned by the deleted
     // element cascade too. The composite-only rule still applies to parts.
-    const compositeChildren = Object.values(repo.usages)
-      .filter(usage => usage.kind === 'part' && usage.ownerId === elementId && usage.aggregation === 'composite')
-      .map(usage => usage.id)
-      .sort();
+    const compositeChildren: string[] = [];
+    for (const uId in repo.usages) {
+      const usage = repo.usages[uId];
+      if (usage.kind === 'part' && usage.ownerId === elementId && usage.aggregation === 'composite') {
+        compositeChildren.push(usage.id);
+      }
+    }
+    compositeChildren.sort();
+
     const ownedPortIds = collectOwnedPortIds(repo, new Set([elementId]));
     // Activities live and die with their owner, and an Activity's own diagrams
     // die with it.
-    const ownedActivityIds = Object.values(repo.definitions)
-      .filter(candidate => (candidate.kind === 'activity' || candidate.kind === 'interaction') && candidate.ownerId === elementId)
-      .map(candidate => candidate.id);
-    const activityDiagramIds = definition.kind === 'activity' || definition.kind === 'interaction'
-      ? Object.values(repo.diagrams)
-        .filter(diagram => diagram.diagramKind === (definition.kind === 'activity' ? 'activity' : 'sequence')
-          && (diagram.contextElementId === elementId || diagram.ownerId === elementId))
-        .map(diagram => diagram.id)
-      : [];
+    const ownedActivityIds: string[] = [];
+    for (const dId in repo.definitions) {
+      const candidate = repo.definitions[dId];
+      if ((candidate.kind === 'activity' || candidate.kind === 'interaction') && candidate.ownerId === elementId) {
+        ownedActivityIds.push(candidate.id);
+      }
+    }
+
+    const activityDiagramIds: string[] = [];
+    if (definition.kind === 'activity' || definition.kind === 'interaction') {
+      const expectedKind = definition.kind === 'activity' ? 'activity' : 'sequence';
+      for (const diagId in repo.diagrams) {
+        const diagram = repo.diagrams[diagId];
+        if (diagram.diagramKind === expectedKind && (diagram.contextElementId === elementId || diagram.ownerId === elementId)) {
+          activityDiagramIds.push(diagram.id);
+        }
+      }
+    }
+
     const cascadeIds = [...compositeChildren, ...ownedPortIds, ...ownedActivityIds, ...activityDiagramIds].sort();
     const cascadeSet = new Set(cascadeIds);
-    const unresolvedUsageIds = Object.values(repo.usages)
-      .filter(usage => usage.kind === 'part' && usage.typeId === elementId && !cascadeSet.has(usage.id))
-      .map(usage => usage.id)
-      .sort();
+
+    const unresolvedUsageIds: string[] = [];
+    for (const uId in repo.usages) {
+      const usage = repo.usages[uId];
+      if (usage.kind === 'part' && usage.typeId === elementId && !cascadeSet.has(usage.id)) {
+        unresolvedUsageIds.push(usage.id);
+      }
+    }
+    unresolvedUsageIds.sort();
+
     // Format 5: a part is only a property, so the properties typed by this
     // definition (in other Blocks, not covered by a part usage) are the unresolved impacts.
     if (definition.kind === 'block') {
       const linked = linkedPropertyIds(repo);
-      for (const other of Object.values(repo.definitions)) {
-        if (other.kind !== 'block' || other.id === elementId) continue;
-        for (const property of other.properties) {
-          if (property.typeId === elementId && isPartProperty(repo, property) && !linked.has(property.id)) unresolvedUsageIds.push(property.id);
+      for (const defId in repo.definitions) {
+        const other = repo.definitions[defId];
+        if (other.kind !== 'block' || other.id === elementId || !other.properties) continue;
+        for (let i = 0; i < other.properties.length; i++) {
+          const property = other.properties[i];
+          if (property.typeId === elementId && isPartProperty(repo, property) && !linked.has(property.id)) {
+            unresolvedUsageIds.push(property.id);
+          }
         }
       }
       unresolvedUsageIds.sort();

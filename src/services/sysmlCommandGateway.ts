@@ -309,11 +309,12 @@ export function createSysmlGatewayState(
   initialDiagramPresentations?: Record<string, DiagramPresentationInput>,
   budgetOptions?: HistoryBudgetOptions,
   context?: SemanticEndpointContext,
+  existingStore?: NormalizedSysmlStore,
 ): SysmlGatewayState {
   const repo = initialRepo ?? createEmptyRepository();
   const coords = initialCoordinates ?? {};
   const diagrams = normalizeDiagramPresentations(initialDiagramPresentations ?? {}, coords);
-  const store = fromRepository(repo, coords, diagrams);
+  const store = existingStore ?? fromRepository(repo, coords, diagrams);
   const patchHistory = createPatchHistory(budgetOptions);
 
   return {
@@ -1467,8 +1468,10 @@ function executeSysmlCommandCore(
       if (undoRes) {
         store.revision = Math.max(0, undoRes.appliedPatch.revision - 1);
         const repo = toRepository(store);
-        const nextCoords = Object.fromEntries(store.coordinates);
-        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+        const touchesCoords = undoRes.appliedPatch.forward.some(op => (op as any).collection === 'coordinates');
+        const nextCoords = touchesCoords ? Object.fromEntries(store.coordinates) : coordinates;
+        const touchesDiagrams = undoRes.appliedPatch.forward.some(op => (op as any).collection === 'diagramPresentations');
+        const nextDiagrams = touchesDiagrams ? Object.fromEntries(store.diagramPresentations) : diagramPresentations;
         const forwardOp = undoRes.appliedPatch.forward.find(op => (op.op === 'replace' || op.op === 'add') && (op as any).id);
         let changedProperties: string[] | undefined;
         if (forwardOp && forwardOp.op === 'replace' && (forwardOp as any).oldValue && (forwardOp as any).value) {
@@ -1586,8 +1589,10 @@ function executeSysmlCommandCore(
       if (redoRes) {
         store.revision = redoRes.appliedPatch.revision;
         const repo = toRepository(store);
-        const nextCoords = Object.fromEntries(store.coordinates);
-        const nextDiagrams = Object.fromEntries(store.diagramPresentations);
+        const touchesCoords = redoRes.appliedPatch.forward.some(op => (op as any).collection === 'coordinates');
+        const nextCoords = touchesCoords ? Object.fromEntries(store.coordinates) : coordinates;
+        const touchesDiagrams = redoRes.appliedPatch.forward.some(op => (op as any).collection === 'diagramPresentations');
+        const nextDiagrams = touchesDiagrams ? Object.fromEntries(store.diagramPresentations) : diagramPresentations;
         const forwardOp = redoRes.appliedPatch.forward.find(op => (op.op === 'replace' || op.op === 'add') && (op as any).id);
         let changedProperties: string[] | undefined;
         if (forwardOp && forwardOp.op === 'replace' && (forwardOp as any).oldValue && (forwardOp as any).value) {
@@ -2345,7 +2350,11 @@ function executeSysmlCommandCore(
     // Full semantic validation runs on the staged state BEFORE any mutation.
     // Any error aborts with the original repository/history/coordinates and
     // untouched store/patchHistory, so a success never carries errors.
-    const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const scopedVal = validateScopedSysmlRepository(nextRepo, {
+      commandType: 'createElement',
+      affectedIds: [command.element.id],
+    }, store, endpointContext);
+    const stagedValidation = scopedVal ?? validateSysmlRepository(nextRepo, endpointContext);
     const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
@@ -2693,7 +2702,8 @@ function executeSysmlCommandCore(
     const mutationResult = applyCommand(
       state.repository,
       { kind: 'deleteElements', elementIds: command.elementIds },
-      { authorizedBaselineIds: [...authorized] },
+      { authorizedBaselineIds: [...authorized], skipValidation: true },
+      analyzed,
     );
     if (!mutationResult.applied) {
       const view = getView(state.repository, coordinates, diagramPresentations);
@@ -2778,7 +2788,11 @@ function executeSysmlCommandCore(
     // Post-commit validation resolves through the same endpoint context as
     // admission, so an unrelated deletion cannot invalidate a valid
     // State-to-Requirement link whose State lives outside the repository.
-    const postDeleteValidation = validateSysmlRepository(nextRepo, endpointContext);
+    const scopedVal = validateScopedSysmlRepository(nextRepo, {
+      commandType: 'deleteElements',
+      affectedIds: impact.deletedElementIds,
+    }, store, endpointContext);
+    const postDeleteValidation = scopedVal ?? validateSysmlRepository(nextRepo, endpointContext);
 
     return {
       repository: nextRepo,

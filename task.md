@@ -25,39 +25,39 @@
   - [x] Step 3.6: Verify tests, `npm run test:sysml`, and `tsc --noEmit`.
   - [x] Step 3.7: Profile diagram switching across BDD, IBD, package, requirements, use-case at 10k.
   - [x] Step 3.8: Commit Task 3 changes.
-- [ ] Task 4: Replace full-tree rebuilding with paged explorer queries
-  - [ ] Step 4.1: Write failing tests with 50,000 entities in `src/features/modelExplorer/modelExplorerQuery.test.ts`.
-  - [ ] Step 4.2: Run `npx vitest run src/features/modelExplorer/modelExplorerQuery.test.ts`; expect failure.
-  - [ ] Step 4.3: Add parent/child and lowercase-search-token indexes to normalized store.
-  - [ ] Step 4.4: Implement paged queries with revision-keyed caches in `src/features/modelExplorer/modelExplorerQuery.ts`.
-  - [ ] Step 4.5: Update `AppModelExplorer` to request roots and expanded children on demand.
-  - [ ] Step 4.6: Verify focused tests, existing model explorer tests, and `tsc --noEmit`.
-  - [ ] Step 4.7: Profile expand, collapse, search, clear-search, selection at 10k and 50k.
-  - [ ] Step 4.8: Commit Task 4 changes.
-- [ ] Task 5: Isolate editor state updates from the monolithic App render
-  - [ ] Step 5.1: Write failing store tests in `src/features/sysml/runtime/sysmlEditorStore.test.ts`.
-  - [ ] Step 5.2: Run store tests; expect failure.
-  - [ ] Step 5.3: Implement external store (`sysmlEditorStore.ts`, `useSysmlEditorSelector.ts`) using immutable slice replacement and `useSyncExternalStore`.
-  - [ ] Step 5.4: Extract `SysmlWorkspace` and subscribe canvas, explorer, inspector to minimal slices.
-  - [ ] Step 5.5: Add render-count assertions ensuring isolated rerenders.
-  - [ ] Step 5.6: Run store tests, `npm run test:sysml`, `tsc --noEmit`, and production browser profile.
-  - [ ] Step 5.7: Commit Task 5 changes.
-- [ ] Task 6: Move project load and save preparation off the renderer thread
-  - [ ] Step 6.1: Write failing client tests in `src/engine/sysml/workers/projectIoClient.test.ts`.
-  - [ ] Step 6.2: Run client test; expect failure.
-  - [ ] Step 6.3: Implement typed worker protocol in `src/engine/sysml/workers/projectIo.worker.ts`.
-  - [ ] Step 6.4: Integrate load with atomic store swap and progress.
-  - [ ] Step 6.5: Integrate save preparation via worker serialization.
-  - [ ] Step 6.6: Run project-file tests, SysML tests, `tsc --noEmit`, and load/save profiles.
-  - [ ] Step 6.7: Commit Task 6 changes.
-- [ ] Task 7: Turn all missing workflows into a release gate
-  - [ ] Step 7.1: Write Playwright cases in `tests/performance/sysml-scalability.spec.ts` for all workflows.
-  - [ ] Step 7.2: Run suite at 1,000 elements for functional assertions.
-  - [ ] Step 7.3: Run production suite at 10,000 elements with 5 samples; enforce 100ms gate.
-  - [ ] Step 7.4: Run suite at 50,000 elements and record limits.
-  - [ ] Step 7.5: Update remediation report with raw artifact paths and SHA.
-  - [ ] Step 7.6: Mark completed items with evidence.
-  - [ ] Step 7.7: Commit Task 7 changes.
+- [x] Task 4: Replace full-tree rebuilding with paged explorer queries
+  - [x] Step 4.1: Write failing tests with 50,000 entities in `src/features/modelExplorer/modelExplorerQuery.test.ts`.
+  - [x] Step 4.2: Run `npx vitest run src/features/modelExplorer/modelExplorerQuery.test.ts`; expect failure.
+  - [x] Step 4.3: Add parent/child and lowercase-search-token indexes to normalized store.
+  - [x] Step 4.4: Implement paged queries with revision-keyed caches in `src/features/modelExplorer/modelExplorerQuery.ts`.
+  - [x] Step 4.5: Update `AppModelExplorer` to request roots and expanded children on demand.
+  - [x] Step 4.6: Verify focused tests, existing model explorer tests, and `tsc --noEmit`.
+  - [x] Step 4.7: Profile expand, collapse, search, clear-search, selection at 10k and 50k.
+  - [x] Step 4.8: Commit Task 4 changes.
+- [x] Task 5: Isolate editor state updates from the monolithic App render
+  - [x] Step 5.1: Write failing store tests in `src/features/sysml/runtime/sysmlEditorStore.test.ts`.
+  - [x] Step 5.2: Run store tests; expect failure.
+  - [x] Step 5.3: Implement external store (`sysmlEditorStore.ts`, `useSysmlEditorSelector.ts`) using immutable slice replacement and `useSyncExternalStore`.
+  - [x] Step 5.4: Extract `SysmlWorkspace` and subscribe canvas, explorer, inspector to minimal slices.
+  - [x] Step 5.5: Add render-count assertions ensuring isolated rerenders.
+  - [x] Step 5.6: Run store tests, `npm run test:sysml`, `tsc --noEmit`, and production browser profile.
+  - [x] Step 5.7: Commit Task 5 changes.
+- [x] Task 6: Move project load and save preparation off the renderer thread
+  - [x] Step 6.1: Write failing client tests in `src/engine/sysml/workers/projectIoClient.test.ts`.
+  - [x] Step 6.2: Run client test; expect failure.
+  - [x] Step 6.3: Implement typed worker protocol in `src/engine/sysml/workers/projectIo.worker.ts`.
+  - [x] Step 6.4: Integrate load with atomic store swap and progress.
+  - [x] Step 6.5: Integrate save preparation via worker serialization.
+  - [x] Step 6.6: Run project-file tests, SysML tests, `tsc --noEmit`, and load/save profiles.
+  - [x] Step 6.7: Commit Task 6 changes.
+- [x] Task 7: Turn all missing workflows into a release gate
+  - [x] Step 7.1: Write Playwright cases in `tests/performance/sysml-scalability.spec.ts` for all workflows.
+  - [x] Step 7.2: Run suite at 1,000 elements for functional assertions.
+  - [x] Step 7.3: Run production suite at 10,000 elements with 5 samples; enforce 100ms gate.
+  - [x] Step 7.4: Run suite at 50,000 elements and record limits.
+  - [x] Step 7.5: Update remediation report with raw artifact paths and SHA.
+  - [x] Step 7.6: Mark completed items with evidence.
+  - [x] Step 7.7: Commit Task 7 changes.
 - [ ] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
   - [ ] Step 8.1: Write failing round-trip tests for chunked storage.
   - [ ] Step 8.2: Run persistence tests; expect failure.

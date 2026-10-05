@@ -66,8 +66,9 @@ export function checkDuplicateQualifiedName(
   element: { name: string; namespace: readonly string[] },
 ): SysmlDiagnostic | null {
   const targetQName = qualifiedName(element.namespace, element.name);
-  for (const def of Object.values(repo.definitions)) {
-    if (def.id === elementId) continue;
+  for (const id in repo.definitions) {
+    const def = repo.definitions[id];
+    if (!def || def.id === elementId || def.name !== element.name) continue;
     if (qualifiedName(def.namespace, def.name) === targetQName) {
       return {
         code: 'DUPLICATE_QUALIFIED_NAME',
@@ -78,8 +79,9 @@ export function checkDuplicateQualifiedName(
       };
     }
   }
-  for (const req of Object.values(repo.requirements)) {
-    if (req.id === elementId) continue;
+  for (const id in repo.requirements) {
+    const req = repo.requirements[id];
+    if (!req || req.id === elementId || req.name !== element.name) continue;
     if (qualifiedName(req.namespace, req.name) === targetQName) {
       return {
         code: 'DUPLICATE_QUALIFIED_NAME',
@@ -212,12 +214,15 @@ export function validateScopedSysmlRepository(
   store?: NormalizedSysmlStore,
   context?: SemanticEndpointContext,
 ): SysmlValidationReport | null {
-  // 1. Pure presentation updates never invalidate semantic rules
+  // 1. Pure presentation updates or clean deletions never invalidate semantic rules
   if (
     change.isPresentationOnly ||
     change.commandType === 'updatePresentation' ||
     change.commandType === 'addToDiagram' ||
-    change.commandType === 'removeFromDiagram'
+    change.commandType === 'removeFromDiagram' ||
+    change.commandType === 'deleteElements' ||
+    change.commandType === 'undo' ||
+    change.commandType === 'redo'
   ) {
     return {
       valid: true,
@@ -229,7 +234,28 @@ export function validateScopedSysmlRepository(
     };
   }
 
-  // 2. Element update (e.g. rename or property edit)
+  // 2. Element creation (e.g. new block, requirement)
+  if (change.commandType === 'createElement' && change.affectedIds.length === 1) {
+    const elementId = change.affectedIds[0];
+    const def = repo.definitions[elementId];
+    const req = repo.requirements[elementId];
+    const target = def ?? req;
+    if (target) {
+      const diagnostics: SysmlDiagnostic[] = [];
+      const nameDiagnostic = checkDuplicateQualifiedName(repo, elementId, target);
+      if (nameDiagnostic) diagnostics.push(nameDiagnostic);
+      return {
+        valid: diagnostics.filter(d => d.severity === 'error').length === 0,
+        diagnostics,
+        canSimulate: diagnostics.length === 0,
+        canExport: true,
+        canReport: true,
+        canVerify: true,
+      };
+    }
+  }
+
+  // 3. Element update (e.g. rename or property edit)
   if (change.commandType === 'updateElement' && change.affectedIds.length === 1) {
     const elementId = change.affectedIds[0];
     const def = repo.definitions[elementId];
@@ -254,9 +280,8 @@ export function validateScopedSysmlRepository(
           if (cycle) diagnostics.push(cycle);
         }
         if (changed.includes('properties')) {
-          const blockIds = new Set(Object.values(repo.definitions).filter(d => d.kind === 'block').map(d => d.id));
           for (const prop of def.properties ?? []) {
-            if ((prop.kind === 'part' || prop.kind === 'reference') && prop.typeId && !blockIds.has(prop.typeId)) {
+            if ((prop.kind === 'part' || prop.kind === 'reference') && prop.typeId && repo.definitions[prop.typeId]?.kind !== 'block') {
               diagnostics.push({
                 code: 'MISSING_PROPERTY_TYPE',
                 severity: 'error',

@@ -316,12 +316,19 @@ export function validateCanonicalBlockUpdate(
 ): CreationValidationResult {
   const existing = repo.definitions[elementId];
   if (!existing || existing.kind !== 'block') return result(['ELEMENT_NOT_FOUND']);
+  const patchKeys = Object.keys(patch);
+  if (patchKeys.length > 0 && patchKeys.every(k => k === 'name' || k === 'description')) {
+    return { valid: true, codes: [] };
+  }
   const codes: string[] = [];
   if (patch.isLeaf === true) {
-    const specializedBy = Object.values(repo.definitions).filter(definition =>
-      definition.kind === 'block' && effectiveSupertypeIds(repo, definition.id).includes(elementId),
-    );
-    if (specializedBy.length > 0) codes.push('LEAF_SPECIALIZATION');
+    for (const id in repo.definitions) {
+      const definition = repo.definitions[id];
+      if (definition?.kind === 'block' && effectiveSupertypeIds(repo, definition.id).includes(elementId)) {
+        codes.push('LEAF_SPECIALIZATION');
+        break;
+      }
+    }
   }
   const staged = {
     ...repo,

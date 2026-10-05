@@ -321,74 +321,35 @@ export function fromRepository(
   store.revision = repo.revision ?? 0;
   store.auditTrail = [...(repo.auditTrail ?? [])];
 
-  for (const [id, pkg] of Object.entries(repo.packages ?? {})) {
-    store.packages.set(id, pkg);
-    indexEntity(store, 'packages', id, pkg);
-  }
-  for (const [id, diag] of Object.entries(repo.diagrams ?? {})) {
-    store.diagrams.set(id, diag);
-    indexEntity(store, 'diagrams', id, diag);
-  }
-  for (const [id, def] of Object.entries(repo.definitions ?? {})) {
-    store.definitions.set(id, def);
-    indexEntity(store, 'definitions', id, def);
-  }
-  for (const [id, usage] of Object.entries(repo.usages ?? {})) {
-    store.usages.set(id, usage);
-    indexEntity(store, 'usages', id, usage);
-  }
-  for (const [id, conn] of Object.entries(repo.connectors ?? {})) {
-    store.connectors.set(id, conn);
-    indexEntity(store, 'connectors', id, conn);
-  }
-  for (const [id, rel] of Object.entries(repo.relationships ?? {})) {
-    store.relationships.set(id, rel);
-    indexEntity(store, 'relationships', id, rel);
-  }
-  for (const [id, req] of Object.entries(repo.requirements ?? {})) {
-    store.requirements.set(id, req);
-    indexEntity(store, 'requirements', id, req);
-  }
-  for (const [id, vc] of Object.entries(repo.verificationCases ?? {})) {
-    store.verificationCases.set(id, vc);
-    indexEntity(store, 'verificationCases', id, vc);
-  }
-  for (const [id, ev] of Object.entries(repo.evidence ?? {})) {
-    store.evidence.set(id, ev);
-    indexEntity(store, 'evidence', id, ev);
-  }
-  for (const [id, base] of Object.entries(repo.baselines ?? {})) {
-    store.baselines.set(id, base);
-    indexEntity(store, 'baselines', id, base);
-  }
-  for (const [id, art] of Object.entries(repo.artifacts ?? {})) {
-    store.artifacts.set(id, art);
-    indexEntity(store, 'artifacts', id, art);
-  }
-  for (const [id, act] of Object.entries(repo.actors ?? {})) {
-    store.actors.set(id, act);
-    indexEntity(store, 'actors', id, act);
-  }
-  for (const [id, sub] of Object.entries(repo.subjects ?? {})) {
-    store.subjects.set(id, sub);
-    indexEntity(store, 'subjects', id, sub);
-  }
-  for (const [id, uc] of Object.entries(repo.useCases ?? {})) {
-    store.useCases.set(id, uc);
-    indexEntity(store, 'useCases', id, uc);
-  }
-  for (const [id, ep] of Object.entries(repo.extensionPoints ?? {})) {
-    store.extensionPoints.set(id, ep);
-    indexEntity(store, 'extensionPoints', id, ep);
-  }
-  for (const [id, ref] of Object.entries(repo.diagramReferences ?? {})) {
-    store.diagramReferences.set(id, ref);
-    indexEntity(store, 'diagramReferences', id, ref);
-  }
+  const addEntities = <T extends SysmlEntity>(collection: SysmlEntityCollection, record?: Record<string, T>, targetMap?: Map<string, T>) => {
+    if (!record) return;
+    for (const id in record) {
+      const entity = record[id];
+      if (targetMap) targetMap.set(id, entity);
+      indexEntity(store, collection, id, entity);
+    }
+  };
+
+  addEntities('packages', repo.packages, store.packages);
+  addEntities('diagrams', repo.diagrams, store.diagrams);
+  addEntities('definitions', repo.definitions, store.definitions);
+  addEntities('usages', repo.usages, store.usages);
+  addEntities('connectors', repo.connectors, store.connectors);
+  addEntities('relationships', repo.relationships, store.relationships);
+  addEntities('requirements', repo.requirements, store.requirements);
+  addEntities('verificationCases', repo.verificationCases, store.verificationCases);
+  addEntities('evidence', repo.evidence, store.evidence);
+  addEntities('baselines', repo.baselines, store.baselines);
+  addEntities('artifacts', repo.artifacts, store.artifacts);
+  addEntities('actors', repo.actors, store.actors);
+  addEntities('subjects', repo.subjects, store.subjects);
+  addEntities('useCases', repo.useCases, store.useCases);
+  addEntities('extensionPoints', repo.extensionPoints, store.extensionPoints);
+  addEntities('diagramReferences', repo.diagramReferences, store.diagramReferences);
 
   if (coordinates) {
-    for (const [id, coord] of Object.entries(coordinates)) {
-      store.coordinates.set(id, coord);
+    for (const id in coordinates) {
+      store.coordinates.set(id, coordinates[id]);
     }
   }
 
@@ -410,29 +371,43 @@ export function fromRepository(
  * Keys are emitted in deterministic sorted-id order so serialization is stable
  * across runs; semantic IDs themselves are never rewritten.
  */
+const deterministicIdCollator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+const byCode = (a: string, b: string): number => deterministicIdCollator.compare(a, b);
+
 export function toRepository(store: NormalizedSysmlStore): SysmlRepository {
-  const sortedEntries = <T>(entries: Iterable<[string, T]>): Record<string, T> =>
-    Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b)));
+  const toRecord = <T>(map: Map<string, T>): Record<string, T> => {
+    const record: Record<string, T> = {};
+    if (map.size <= 1) {
+      map.forEach((val, key) => { record[key] = val; });
+      return record;
+    }
+    const keys = Array.from(map.keys()).sort(byCode);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      record[key] = map.get(key)!;
+    }
+    return record;
+  };
   return {
     schemaVersion: (store.schemaVersion ?? 3) as 2 | 3,
     profileId: store.profileId,
     revision: store.revision,
-    packages: sortedEntries(store.packages),
-    diagrams: sortedEntries(store.diagrams),
-    definitions: sortedEntries(store.definitions),
-    usages: sortedEntries(store.usages),
-    connectors: sortedEntries(store.connectors),
-    relationships: sortedEntries(store.relationships),
-    requirements: sortedEntries(store.requirements),
-    verificationCases: sortedEntries(store.verificationCases),
-    evidence: sortedEntries(store.evidence),
-    baselines: sortedEntries(store.baselines),
-    artifacts: sortedEntries(store.artifacts),
-    actors: sortedEntries(store.actors),
-    subjects: sortedEntries(store.subjects),
-    useCases: sortedEntries(store.useCases),
-    extensionPoints: sortedEntries(store.extensionPoints),
-    diagramReferences: sortedEntries(store.diagramReferences),
+    packages: toRecord(store.packages),
+    diagrams: toRecord(store.diagrams),
+    definitions: toRecord(store.definitions),
+    usages: toRecord(store.usages),
+    connectors: toRecord(store.connectors),
+    relationships: toRecord(store.relationships),
+    requirements: toRecord(store.requirements),
+    verificationCases: toRecord(store.verificationCases),
+    evidence: toRecord(store.evidence),
+    baselines: toRecord(store.baselines),
+    artifacts: toRecord(store.artifacts),
+    actors: toRecord(store.actors),
+    subjects: toRecord(store.subjects),
+    useCases: toRecord(store.useCases),
+    extensionPoints: toRecord(store.extensionPoints),
+    diagramReferences: toRecord(store.diagramReferences),
     auditTrail: [...store.auditTrail],
   };
 }
