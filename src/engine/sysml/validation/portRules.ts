@@ -61,17 +61,13 @@ export function validatePort(port: Port, context: PortValidationContext): SysmlD
     }
   }
 
+  // An untyped ProxyPort is incomplete rather than invalid: it can be created
+  // directly on a block and typed later from the inspector.
   if (port.portKind === 'proxyPort' && !port.typeId) {
     diagnostics.push({
       code: PORT_DIAGNOSTICS.PROXY_PORT_TYPE_REQUIRED,
-      severity: 'error',
-      message: `ProxyPort "${port.name || port.id}" requires an InterfaceBlock type.`,
-      elementId: port.id,
-    });
-    diagnostics.push({
-      code: PORT_DIAGNOSTICS.PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK,
-      severity: 'error',
-      message: `ProxyPort "${port.name || port.id}" requires an InterfaceBlock type.`,
+      severity: 'warning',
+      message: `ProxyPort "${port.name || port.id}" has no type yet; assign an InterfaceBlock.`,
       elementId: port.id,
     });
   }

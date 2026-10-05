@@ -32,12 +32,13 @@ export interface LegacySysmlDeletionResult {
  * composite default, preserving existing models byte-for-byte.
  */
 function projectLegacyRepository(model: LegacySysmlModel): SysmlRepository {
+  // A transient projection of the editor's flat arrays: it keeps usage records so its ids stay the editor's ids.
   const repository = loadRepository({
     blocks: model.blocks,
     relationships: model.relationships,
     parts: model.parts,
     connectors: model.connectors,
-  }).repository;
+  }, undefined, { upgrade: 'never' }).repository;
   for (const part of model.parts) {
     const usage = repository.usages[part.id];
     if (usage && usage.kind === 'part' && (part.aggregation === 'shared' || part.aggregation === 'reference')) {
@@ -97,7 +98,7 @@ function isSemanticEqual(
 }
 
 export function mergeLegacyDiagramIntoRepository(repository: SysmlRepository, model: LegacySysmlModel): SysmlRepository {
-  const projected = loadRepository({ blocks: model.blocks, relationships: model.relationships, parts: model.parts, connectors: model.connectors }).repository;
+  const projected = loadRepository({ blocks: model.blocks, relationships: model.relationships, parts: model.parts, connectors: model.connectors }, undefined, { upgrade: 'never' }).repository;
   const mergeRecords = <T extends { id: string }>(current: Record<string, T>, incoming: Record<string, T>): Record<string, T> =>
     Object.fromEntries(Object.entries(incoming).map(([id, value]) => [id, { ...current[id], ...value }]));
   const retainedCanonicalRelationships = Object.fromEntries(Object.entries(repository.relationships).filter(([, relationship]) =>
@@ -143,7 +144,8 @@ export function requiresDeletionConfirmation(impact: MutationImpact): boolean {
     || impact.invalidatedEvidenceIds.length > 0
     || impact.affectedRequirementIds.some(id => !requested.has(id))
     || impact.affectedBaselineIds.length > 0
-    || (impact.affectedPresentationIds ?? []).length > 0;
+    || (impact.affectedPresentationIds ?? []).length > 0
+    || (impact.affectedBehaviorElementIds ?? []).length > 0;
 }
 
 export function formatLegacyDeletionImpact(impact: MutationImpact): string {
@@ -160,6 +162,7 @@ export function formatLegacyDeletionImpact(impact: MutationImpact): string {
     `Removed relationships: ${impact.removedRelationshipIds.join(', ') || 'none'}`,
     `Affected diagrams: ${impact.affectedDiagramKinds.join(', ') || 'none'}`,
     `Affected presentations: ${(impact.affectedPresentationIds ?? []).join(', ') || 'none'}`,
+    `Interaction lifelines/messages losing a reference: ${(impact.affectedBehaviorElementIds ?? []).join(', ') || 'none'}`,
     `Affected requirements: ${impact.affectedRequirementIds.join(', ') || 'none'}`,
     `Typed usages left unresolved: ${impact.unresolvedUsageIds.join(', ') || 'none'}`,
     `Invalidated evidence: ${impact.invalidatedEvidenceIds.join(', ') || 'none'}`,

@@ -12,7 +12,7 @@ describe('ports and typed property creation', () => {
     if (!result.ok) expect(result.action).not.toHaveProperty('type');
   });
 
-  it('does not auto-create an InterfaceBlock for ProxyPort', () => {
+  it('creates an untyped ProxyPort directly without auto-creating an InterfaceBlock', () => {
     const state = createSysmlGatewayState();
     const block: BlockDefinition = {
       id: 'vehicle',
@@ -29,10 +29,14 @@ describe('ports and typed property creation', () => {
     };
     state.repository.definitions['vehicle'] = block;
 
-    const adapter = createSysmlExplorerAdapter({ getState: () => state });
+    const harness = { state, getState: () => harness.state };
+    const adapter = createSysmlExplorerAdapter(harness);
+    const definitionCount = Object.keys(state.repository.definitions).length;
     const result = adapter.execute({ type: 'createElement', ownerId: 'vehicle', elementKind: 'ProxyPort', name: 'control' });
-    expect(result.committed).toBe(false);
-    expect(result.diagnostics[0].code).toBe('TYPE_NOT_FOUND');
+    expect(result.committed).toBe(true);
+    const vehicle = harness.state.repository.definitions['vehicle'] as BlockDefinition;
+    expect(vehicle.ports).toContainEqual(expect.objectContaining({ name: 'control', portKind: 'proxyPort', typeId: '' }));
+    expect(Object.keys(harness.state.repository.definitions)).toHaveLength(definitionCount);
   });
 
   it('creates typed part usage when type is present', () => {
@@ -54,6 +58,7 @@ describe('ports and typed property creation', () => {
     const result = createTypedUsageCommand(repo, { ownerId: 'vehicle', name: 'leftMotor', typeId: 'blk-motor', kind: 'part' });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.command.type).toBe('createElement');
+    // Format 5: the typed part is a property of its owner Block, created through createOwnedFeature.
+    expect(result.command.type).toBe('createOwnedFeature');
   });
 });

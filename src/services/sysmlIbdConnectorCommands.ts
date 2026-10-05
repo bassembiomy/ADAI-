@@ -1,24 +1,32 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { ConnectorUsage, PortDefinition, PortUsage, SysmlRepository } from '../engine/sysml/model';
+import type { ConnectorUsage, SysmlRepository } from '../engine/sysml/model';
 import type { SysmlDiagnostic } from '../engine/sysml/validation';
-import { createIbdConnector, findPortDefinition } from '../engine/sysml/ibd';
-import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
+import { createIbdConnector } from '../engine/sysml/ibd';
+import { connectorEndKey, type ConnectorEnd } from '../engine/sysml/connectorEnds';
+import { resolveOccurrenceKey } from '../engine/sysml/partOccurrences';
+import type { SysmlEditorCommand } from './sysmlCommandGateway';
 
-export interface IbdEndpointResolution {
-  ok: boolean;
-  portUsageId?: string;
-  portUsage?: PortUsage;
-  ownerId?: string;
-  definitionId?: string;
-  portDefinition?: PortDefinition;
-  isBoundary: boolean;
-  diagnostics: SysmlDiagnostic[];
-}
-
+/**
+ * IBD connectors (format 5): every connector end is a `ConnectorEnd` — a property
+ * path under the context Block plus an optional port declared by the type of the
+ * last property (path `[]` + port = a boundary port of the context Block). No
+ * part or port usage record is read or created.
+ */
 export interface IbdEndpointSpec {
+  /**
+   * The part the end attaches to, as the IBD shows it: a property id or a path
+   * string (`a/b`). Null, omitted or the context id means the context boundary.
+   */
   occurrenceId?: string | null;
-  portDefinitionId: string;
-  portUsageId?: string;
+  /** Omit (or leave empty) to connect the part itself instead of one of its ports. */
+  portDefinitionId?: string;
+  /**
+   * Nested connector end: property path under the context Block (empty or omitted
+   * with a port id means the boundary). Takes precedence over `occurrenceId`.
+   */
+  path?: string[];
+  /** Port id on the type of the last path property (or on the context Block for an empty path). */
+  portId?: string;
 }
 
 export interface CreateIbdConnectorIntent {
@@ -37,171 +45,56 @@ export interface CreateIbdConnectorCommandPlan {
   diagnostics: SysmlDiagnostic[];
 }
 
-export function resolveIbdEndpoint(
-  repo: SysmlRepository,
-  contextId: string,
-  occurrenceId: string | null | undefined,
-  portDefinitionId: string,
-): IbdEndpointResolution {
-  const isBoundary = occurrenceId == null || occurrenceId === contextId;
+type PathSpecOutcome = { ok: true; spec: IbdEndpointSpec & { path: string[] } } | { ok: false; diagnostics: SysmlDiagnostic[] };
 
-  if (isBoundary) {
-    const contextDef = repo.definitions[contextId];
-    if (!contextDef || contextDef.kind !== 'block') {
-      return {
-        ok: false,
-        isBoundary: true,
-        diagnostics: [{
-          code: 'ENDPOINT_OUTSIDE_IBD_CONTEXT',
-          severity: 'error',
-          elementId: contextId,
-          message: `Context Block ${contextId} does not exist in repository definitions.`,
-        }],
-      };
-    }
-
-    const portDef = findPortDefinition(repo, contextId, portDefinitionId);
-    if (!portDef) {
-      return {
-        ok: false,
-        isBoundary: true,
-        diagnostics: [{
-          code: 'PORT_NOT_FOUND',
-          severity: 'error',
-          elementId: portDefinitionId,
-          message: `Port ${portDefinitionId} not found on Context Block ${contextId}.`,
-        }],
-      };
-    }
-
-    const existingUsage = Object.values(repo.usages).find(
-      (u): u is PortUsage => u.kind === 'port' && u.ownerId === contextId && (u.definitionId === portDef.id || u.id === portDefinitionId),
-    );
-
-    const portUsageId = existingUsage ? existingUsage.id : `${contextId}::${portDef.id}`;
-    const portUsage: PortUsage = existingUsage ?? {
-      id: portUsageId,
-      name: portDef.name,
-      kind: 'port',
-      ownerId: contextId,
-      definitionId: portDef.id,
-    };
-
-    return {
-      ok: true,
-      isBoundary: true,
-      ownerId: contextId,
-      definitionId: portDef.id,
-      portDefinition: portDef,
-      portUsageId,
-      portUsage,
-      diagnostics: [],
-    };
-  }
-
-  // Occurrence port on PartProperty inside context block
-  const partUsage = repo.usages[occurrenceId];
-  if (!partUsage || partUsage.kind !== 'part') {
-    return {
-      ok: false,
-      isBoundary: false,
-      diagnostics: [{
-        code: 'PART_NOT_FOUND',
-        severity: 'error',
-        elementId: occurrenceId,
-        message: `Part usage ${occurrenceId} does not exist.`,
-      }],
-    };
-  }
-
-  if (partUsage.ownerId !== contextId) {
-    return {
-      ok: false,
-      isBoundary: false,
-      diagnostics: [{
-        code: 'ENDPOINT_OUTSIDE_IBD_CONTEXT',
-        severity: 'error',
-        elementId: occurrenceId,
-        message: `Part usage ${occurrenceId} belongs to ${partUsage.ownerId}, not the active IBD context ${contextId}.`,
-      }],
-    };
-  }
-
-  const portDef = findPortDefinition(repo, partUsage.typeId, portDefinitionId);
-  if (!portDef) {
-    return {
-      ok: false,
-      isBoundary: false,
-      diagnostics: [{
-        code: 'PORT_NOT_FOUND',
-        severity: 'error',
-        elementId: portDefinitionId,
-        message: `Port ${portDefinitionId} not found on Part ${occurrenceId} (typed by ${partUsage.typeId}).`,
-      }],
-    };
-  }
-
-  const existingUsage = Object.values(repo.usages).find(
-    (u): u is PortUsage => u.kind === 'port' && u.ownerId === occurrenceId && (u.definitionId === portDef.id || u.id === portDefinitionId),
-  );
-
-  const portUsageId = existingUsage ? existingUsage.id : `${occurrenceId}::${portDef.id}`;
-  const portUsage: PortUsage = existingUsage ?? {
-    id: portUsageId,
-    name: portDef.name,
-    kind: 'port',
-    ownerId: occurrenceId,
-    definitionId: portDef.id,
-  };
-
-  return {
-    ok: true,
-    isBoundary: false,
-    ownerId: occurrenceId,
-    definitionId: portDef.id,
-    portDefinition: portDef,
-    portUsageId,
-    portUsage,
-    diagnostics: [],
-  };
+function failure(code: string, elementId: string, message: string): PathSpecOutcome {
+  return { ok: false, diagnostics: [{ code, severity: 'error', elementId, message }] };
 }
 
-export function buildCreateIbdConnectorCommand(
+function pathEndOf(spec: IbdEndpointSpec & { path: string[] }): ConnectorEnd {
+  const portId = spec.portId ?? spec.portDefinitionId;
+  return { path: [...spec.path], ...(portId ? { portId } : {}) };
+}
+
+/** Turns the part the IBD shows (property id or path string) into the property path of a connector end. */
+function toPathSpec(repo: SysmlRepository, contextId: string, spec: IbdEndpointSpec): PathSpecOutcome {
+  const portId = spec.portId ?? spec.portDefinitionId;
+  if (spec.path) return { ok: true, spec: { ...spec, path: [...spec.path] } };
+  const occurrenceId = spec.occurrenceId;
+  if (occurrenceId == null || occurrenceId === contextId) {
+    const context = repo.definitions[contextId];
+    if (!context || context.kind !== 'block') {
+      return failure('ENDPOINT_OUTSIDE_IBD_CONTEXT', contextId, `Context Block ${contextId} does not exist in repository definitions.`);
+    }
+    if (!portId) {
+      return failure('PORT_NOT_FOUND', contextId, 'The context Block itself cannot be a connector end; choose one of its ports.');
+    }
+    return { ok: true, spec: { path: [], portId } };
+  }
+  const occurrence = resolveOccurrenceKey(repo, occurrenceId, contextId);
+  if (occurrence) return { ok: true, spec: { path: occurrence.path, ...(portId ? { portId } : {}) } };
+  if (resolveOccurrenceKey(repo, occurrenceId)) {
+    return failure('ENDPOINT_OUTSIDE_IBD_CONTEXT', occurrenceId, `Part ${occurrenceId} does not belong to the active IBD context ${contextId}.`);
+  }
+  return failure('PART_NOT_FOUND', occurrenceId, `Part ${occurrenceId} does not exist.`);
+}
+
+/**
+ * Plans a connector whose ends are property paths (nested connector ends). It
+ * creates no part or port usage records: the ends are validated against the
+ * Block properties and ports, then stored as `ConnectorEnd`s.
+ */
+export function buildCreatePathIbdConnectorCommand(
   repo: SysmlRepository,
   intent: CreateIbdConnectorIntent,
 ): CreateIbdConnectorCommandPlan {
-  const sourceRes = resolveIbdEndpoint(
-    repo,
-    intent.contextId,
-    intent.source.occurrenceId,
-    intent.source.portUsageId || intent.source.portDefinitionId,
-  );
-  if (!sourceRes.ok) {
-    return { ok: false, diagnostics: sourceRes.diagnostics };
-  }
-
-  const targetRes = resolveIbdEndpoint(
-    repo,
-    intent.contextId,
-    intent.target.occurrenceId,
-    intent.target.portUsageId || intent.target.portDefinitionId,
-  );
-  if (!targetRes.ok) {
-    return { ok: false, diagnostics: targetRes.diagnostics };
-  }
-
-  let kind = intent.kind;
-  if (!kind) {
-    if (sourceRes.isBoundary !== targetRes.isBoundary) {
-      kind = 'delegation';
-    } else if (!sourceRes.isBoundary && !targetRes.isBoundary) {
-      kind = 'assembly';
-    } else {
-      kind = 'assembly';
-    }
-  }
-
-  if (sourceRes.isBoundary && targetRes.isBoundary && kind === 'assembly') {
+  const sourceSpec = toPathSpec(repo, intent.contextId, intent.source);
+  if (!sourceSpec.ok) return { ok: false, diagnostics: sourceSpec.diagnostics };
+  const targetSpec = toPathSpec(repo, intent.contextId, intent.target);
+  if (!targetSpec.ok) return { ok: false, diagnostics: targetSpec.diagnostics };
+  const source = pathEndOf(sourceSpec.spec);
+  const target = pathEndOf(targetSpec.spec);
+  if (source.path.length === 0 && target.path.length === 0 && (intent.kind ?? 'assembly') === 'assembly') {
     return {
       ok: false,
       diagnostics: [{
@@ -212,61 +105,36 @@ export function buildCreateIbdConnectorCommand(
       }],
     };
   }
-
-  const workingRepo: SysmlRepository = {
-    ...repo,
-    usages: { ...repo.usages },
-    connectors: { ...repo.connectors },
-  };
-  const setupCommands: SysmlMutationCommand[] = [];
-
-  if (!workingRepo.usages[sourceRes.portUsageId!]) {
-    workingRepo.usages[sourceRes.portUsageId!] = sourceRes.portUsage!;
-    setupCommands.push({ type: 'createElement', element: sourceRes.portUsage! });
-  }
-  if (!workingRepo.usages[targetRes.portUsageId!]) {
-    workingRepo.usages[targetRes.portUsageId!] = targetRes.portUsage!;
-    setupCommands.push({ type: 'createElement', element: targetRes.portUsage! });
-  }
-
+  // A delegation joins a boundary port to a port of an internal part; anything else (a part end, two parts) is an assembly.
+  const kind: ConnectorUsage['kind'] = intent.kind
+    ?? ((source.path.length === 0) !== (target.path.length === 0) && source.portId && target.portId ? 'delegation' : 'assembly');
   const connectorId = intent.connectorId || uuidv4();
-  const connectorCandidate: ConnectorUsage = {
+  const input = {
     id: connectorId,
     kind,
     ownerId: intent.contextId,
-    sourcePortId: sourceRes.portUsageId!,
-    targetPortId: targetRes.portUsageId!,
+    sourcePortId: connectorEndKey(source),
+    targetPortId: connectorEndKey(target),
+    sourceEnd: source,
+    targetEnd: target,
     itemFlowId: intent.itemFlowId,
   };
-
-  const validation = createIbdConnector(workingRepo, {
-    id: connectorId,
-    kind,
-    ownerId: intent.contextId,
-    sourcePortId: sourceRes.portUsageId!,
-    targetPortId: targetRes.portUsageId!,
-    itemFlowId: intent.itemFlowId,
-  });
-
+  const validation = createIbdConnector(repo, input);
   if (validation.diagnostics.length > 0 || !validation.connector) {
     return { ok: false, diagnostics: validation.diagnostics };
   }
-
-  const mainCommand: SysmlMutationCommand = {
-    type: 'createAndPresent',
-    diagramId: intent.contextId,
-    element: connectorCandidate,
-    presentation: {},
-  };
-
-  const command: SysmlEditorCommand = setupCommands.length > 0
-    ? { type: 'batch', commands: [...setupCommands, mainCommand] }
-    : mainCommand;
-
   return {
     ok: true,
-    command,
-    connector: connectorCandidate,
+    connector: validation.connector,
+    command: { type: 'createAndPresent', diagramId: intent.contextId, element: validation.connector, presentation: {} },
     diagnostics: [],
   };
+}
+
+/** Plans a connector between the parts/ports the IBD shows; the ends are stored as property paths. */
+export function buildCreateIbdConnectorCommand(
+  repo: SysmlRepository,
+  intent: CreateIbdConnectorIntent,
+): CreateIbdConnectorCommandPlan {
+  return buildCreatePathIbdConnectorCommand(repo, intent);
 }

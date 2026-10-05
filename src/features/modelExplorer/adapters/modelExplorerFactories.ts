@@ -10,7 +10,20 @@ import type {
   PropertyDefinition,
   ModelDiagramDefinition,
   UseCaseDefinition,
+  ActorDefinition,
+  SubjectDefinition,
+  ExtensionPoint,
   SysmlRepository,
+  EnumerationDefinition,
+  SignalDefinition,
+  ConstraintBlockDefinition,
+  QuantityKindDefinition,
+  UnitDefinition,
+  ViewDefinition,
+  ActivityDefinition,
+  InteractionDefinition,
+  ViewpointDefinition,
+  StakeholderDefinition,
 } from '../../../engine/sysml/model';
 import type {
   Block,
@@ -52,9 +65,11 @@ export function createPackage(options: {
   name?: string;
   ownerId: string;
   existingNames?: Iterable<string>;
+  stereotype?: PackageDefinition['stereotype'];
 }): PackageDefinition {
   const chosenId = options.id ?? generateId('pkg');
-  const chosenName = options.name ?? (options.existingNames ? generateUniqueName('Package', options.existingNames) : 'Package');
+  const baseName = options.stereotype === 'modelLibrary' ? 'ModelLibrary' : 'Package';
+  const chosenName = options.name ?? (options.existingNames ? generateUniqueName(baseName, options.existingNames) : baseName);
   const outcome = createSemanticElement(
     {
       metaclass: 'Package',
@@ -71,6 +86,7 @@ export function createPackage(options: {
     kind: 'package',
     namespace: el?.namespace ?? [],
     ownerId: options.ownerId,
+    ...(options.stereotype ? { stereotype: options.stereotype } : {}),
   };
 }
 
@@ -135,6 +151,128 @@ export function createValueType(options: {
     ownerId: options.ownerId,
     unit: options.unit,
     dimension: options.dimension,
+  };
+}
+
+export function createEnumeration(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+  literals?: string[];
+}): EnumerationDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Enumeration', options.existingNames) : 'Enumeration');
+  return { id: options.id ?? generateId('enum'), name, kind: 'enumeration', namespace: [], ownerId: options.ownerId, literals: options.literals ?? [] };
+}
+
+export function createSignal(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): SignalDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Signal', options.existingNames) : 'Signal');
+  return { id: options.id ?? generateId('sig'), name, kind: 'signal', namespace: [], ownerId: options.ownerId };
+}
+
+export function createQuantityKind(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+  symbol?: string;
+}): QuantityKindDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('QuantityKind', options.existingNames) : 'QuantityKind');
+  return { id: options.id ?? generateId('qk'), name, kind: 'quantityKind', namespace: [], ownerId: options.ownerId, symbol: options.symbol };
+}
+
+/** A Unit needs a symbol (validated), so a new one starts with its name as the symbol until the user edits it. */
+export function createUnit(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+  symbol?: string;
+  quantityKindId?: string;
+}): UnitDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Unit', options.existingNames) : 'Unit');
+  return {
+    id: options.id ?? generateId('unit'), name, kind: 'unit', namespace: [], ownerId: options.ownerId,
+    symbol: options.symbol ?? name, quantityKindId: options.quantityKindId,
+  };
+}
+
+export function createView(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): ViewDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('View', options.existingNames) : 'View');
+  return { id: options.id ?? generateId('view'), name, kind: 'view', namespace: [], ownerId: options.ownerId };
+}
+
+export function createViewpoint(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): ViewpointDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Viewpoint', options.existingNames) : 'Viewpoint');
+  return {
+    id: options.id ?? generateId('vpt'), name, kind: 'viewpoint', namespace: [], ownerId: options.ownerId,
+    stakeholderIds: [], concernIds: [], concerns: [], purpose: '', languages: [], presentation: [],
+  };
+}
+
+export function createStakeholder(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): StakeholderDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Stakeholder', options.existingNames) : 'Stakeholder');
+  return { id: options.id ?? generateId('stk'), name, kind: 'stakeholder', namespace: [], ownerId: options.ownerId, concerns: [] };
+}
+
+export function createConstraintBlock(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+  parameters?: ConstraintBlockDefinition['parameters'];
+  constraints?: string[];
+}): ConstraintBlockDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('ConstraintBlock', options.existingNames) : 'ConstraintBlock');
+  return {
+    id: options.id ?? generateId('cblk'), name, kind: 'constraintBlock', namespace: [], ownerId: options.ownerId,
+    parameters: options.parameters ?? [], constraints: options.constraints ?? [],
+  };
+}
+
+export function createActivity(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): ActivityDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Activity', options.existingNames) : 'Activity');
+  return {
+    id: options.id ?? generateId('act'), name, kind: 'activity', namespace: [], ownerId: options.ownerId,
+    parameters: [], nodes: [], edges: [], partitions: [],
+  };
+}
+
+export function createInteraction(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): InteractionDefinition {
+  const name = options.name ?? (options.existingNames ? generateUniqueName('Interaction', options.existingNames) : 'Interaction');
+  return {
+    id: options.id ?? generateId('int'), name, kind: 'interaction', namespace: [], ownerId: options.ownerId,
+    lifelines: [], messages: [], fragments: [],
   };
 }
 
@@ -260,33 +398,53 @@ export function createUseCase(options: {
   };
 }
 
-export function createPartUsage(options: {
+export function createActor(options: {
   id?: string;
   name?: string;
   ownerId: string;
-  typeId: string;
-  aggregation?: 'composite' | 'shared' | 'reference';
   existingNames?: Iterable<string>;
-}): PartUsage {
-  const outcome = createSemanticElement(
-    {
-      metaclass: 'PartProperty',
-      id: options.id,
-      name: options.name,
-      ownerId: options.ownerId,
-      typeId: options.typeId,
-    },
-    DUMMY_REPO
-  );
-  const el = outcome.ok ? (outcome.element as PartProperty) : null;
+  isExternal?: boolean;
+}): ActorDefinition {
   return {
-    id: el?.id ?? options.id ?? generateId('part'),
-    name: el?.name ?? options.name ?? 'part',
-    kind: 'part',
+    id: options.id ?? generateId('actor'),
+    name: options.name ?? (options.existingNames ? generateUniqueName('Actor', options.existingNames) : 'Actor'),
+    kind: 'actor',
+    namespace: [],
     ownerId: options.ownerId,
-    typeId: options.typeId,
-    aggregation: options.aggregation ?? 'composite',
-    multiplicity: el?.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
+    isExternal: options.isExternal ?? true,
+    generalizationIds: [],
+  };
+}
+
+export function createSubject(options: {
+  id?: string;
+  name?: string;
+  ownerId: string;
+  existingNames?: Iterable<string>;
+}): SubjectDefinition {
+  return {
+    id: options.id ?? generateId('subject'),
+    name: options.name ?? (options.existingNames ? generateUniqueName('Subject', options.existingNames) : 'Subject'),
+    kind: 'subject',
+    namespace: [],
+    ownerId: options.ownerId,
+  };
+}
+
+export function createExtensionPoint(options: {
+  id?: string;
+  name?: string;
+  useCaseId: string;
+  existingNames?: Iterable<string>;
+  location?: string;
+}): ExtensionPoint {
+  return {
+    id: options.id ?? generateId('ep'),
+    name: options.name ?? (options.existingNames ? generateUniqueName('extensionPoint', options.existingNames) : 'extensionPoint'),
+    kind: 'extensionPoint',
+    namespace: [],
+    useCaseId: options.useCaseId,
+    ...(options.location ? { location: options.location } : {}),
   };
 }
 
@@ -350,11 +508,14 @@ export function createDiagramDefinition(options: {
   id?: string;
   name?: string;
   ownerId: string;
-  diagramKind: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'stateMachine' | 'package';
+  diagramKind: ModelDiagramDefinition['diagramKind'];
   existingNames?: Iterable<string>;
   contextElementId?: string;
 }): ModelDiagramDefinition {
-  const defaultBase = options.diagramKind.toUpperCase();
+  const defaultBase = options.diagramKind === 'useCase' ? 'UseCaseDiagram'
+    : options.diagramKind === 'activity' ? 'ActivityDiagram'
+    : options.diagramKind === 'sequence' ? 'SequenceDiagram'
+    : options.diagramKind.toUpperCase();
   const name = options.name ?? generateUniqueName(defaultBase, options.existingNames ?? []);
   return {
     id: options.id ?? generateId('diag'),

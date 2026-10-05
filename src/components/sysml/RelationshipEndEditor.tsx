@@ -94,6 +94,41 @@ export function createRejectedRelationshipChange(
 
 const AGGREGATION_KINDS: NonNullable<SysmlRelationship['sourceAggregation']>[] = ['none', 'shared', 'composite'];
 
+/**
+ * Text field that edits a local draft and commits on blur/Enter. Committing
+ * per keystroke re-normalized the value mid-typing (e.g. "0" became "0..1"
+ * and "*" was dropped), so values like "0..*" could never be entered.
+ */
+function DraftTextInput({ value, onCommit, ...rest }: {
+  value: string;
+  onCommit: (value: string) => void;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'>) {
+  const [draft, setDraft] = React.useState(value);
+  // The draft last handed to onCommit: the blur that follows an Enter must not commit it again (a second undo step).
+  const committedDraft = React.useRef<string | null>(null);
+  React.useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft === value || draft === committedDraft.current) return;
+    committedDraft.current = draft;
+    onCommit(draft);
+  };
+  return (
+    <input
+      {...rest}
+      value={draft}
+      onChange={e => { committedDraft.current = null; setDraft(e.target.value); }}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') { committedDraft.current = null; setDraft(value); }
+        rest.onKeyDown?.(e);
+      }}
+    />
+  );
+}
+
+const formatMult = (m?: Multiplicity) => (m ? (m.lower === m.upper ? `${m.lower}` : `${m.lower}..${m.upper}`) : '');
+
 // Canonical inheritance/governance codes surfaced in the guidance panel
 // (OMG SysML 1.6 ADIA profile; mirrors policy.ts resolveInheritance).
 const INHERITANCE_GUIDANCE_CODES = new Set([
@@ -142,11 +177,14 @@ export function RelationshipEndEditor({
     onChange(candidate);
   };
 
-  const parseMult = (text: string, current?: Multiplicity): Multiplicity => {
+  const parseMult = (text: string, current?: Multiplicity): Multiplicity | undefined => {
     const trimmed = text.trim();
-    const parts = trimmed.split('..');
-    const lower = parseInt(parts[0], 10) || 0;
-    const upper = parts[1] === '*' ? '*' : parseInt(parts[1] || parts[0], 10) || 1;
+    if (!trimmed) return undefined;
+    const [lowerText, upperText = lowerText] = trimmed.split('..').map(part => part.trim());
+    // "*" alone means 0..*; a "*" lower bound is not meaningful.
+    const lower = lowerText === '*' ? 0 : Math.max(0, parseInt(lowerText, 10) || 0);
+    const parsedUpper = parseInt(upperText, 10);
+    const upper = upperText === '*' ? '*' : Number.isFinite(parsedUpper) ? Math.max(lower, parsedUpper) : lower;
     return {
       lower,
       upper,
@@ -255,20 +293,20 @@ export function RelationshipEndEditor({
         <div className="grid grid-cols-2 gap-2">
           <label>
             Role name {isContainment && <span className="text-gray-400 font-normal">(Container (parent))</span>}
-            <input
+            <DraftTextInput
               aria-label="Source role name"
               value={relationship.sourceRole || ''}
-              onChange={e => update({ sourceRole: e.target.value || undefined })}
+              onCommit={text => update({ sourceRole: text.trim() || undefined })}
               className="w-full rounded border border-gray-700 bg-transparent px-2 py-1"
               placeholder="e.g. parent"
             />
           </label>
           <label>
             Multiplicity
-            <input
+            <DraftTextInput
               aria-label="Source multiplicity"
-              value={relationship.sourceMultiplicity ? `${relationship.sourceMultiplicity.lower}..${relationship.sourceMultiplicity.upper}` : ''}
-              onChange={e => update({ sourceMultiplicity: parseMult(e.target.value, relationship.sourceMultiplicity) })}
+              value={formatMult(relationship.sourceMultiplicity)}
+              onCommit={text => update({ sourceMultiplicity: parseMult(text, relationship.sourceMultiplicity) })}
               className="w-full rounded border border-gray-700 bg-transparent px-2 py-1"
               placeholder="1 or 0..1"
             />
@@ -306,20 +344,20 @@ export function RelationshipEndEditor({
         <div className="grid grid-cols-2 gap-2">
           <label>
             Role name {isContainment && <span className="text-gray-400 font-normal">(Nested (child))</span>}
-            <input
+            <DraftTextInput
               aria-label="Target role name"
               value={relationship.targetRole || ''}
-              onChange={e => update({ targetRole: e.target.value || undefined })}
+              onCommit={text => update({ targetRole: text.trim() || undefined })}
               className="w-full rounded border border-gray-700 bg-transparent px-2 py-1"
               placeholder="e.g. child"
             />
           </label>
           <label>
             Multiplicity
-            <input
+            <DraftTextInput
               aria-label="Target multiplicity"
-              value={relationship.targetMultiplicity ? `${relationship.targetMultiplicity.lower}..${relationship.targetMultiplicity.upper}` : ''}
-              onChange={e => update({ targetMultiplicity: parseMult(e.target.value, relationship.targetMultiplicity) })}
+              value={formatMult(relationship.targetMultiplicity)}
+              onCommit={text => update({ targetMultiplicity: parseMult(text, relationship.targetMultiplicity) })}
               className="w-full rounded border border-gray-700 bg-transparent px-2 py-1"
               placeholder="* or 0..*"
             />

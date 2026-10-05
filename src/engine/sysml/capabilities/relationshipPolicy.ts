@@ -4,6 +4,7 @@ import type {
   SysmlRepositoryV4,
   MetaclassKind,
 } from '../domain';
+import { evaluateSysmlConnection, familyOfMetaclass, type ConnectionPolicyInput, type SysmlEndpointFamily } from '../connectionPolicy';
 
 export interface RelationshipValidationDecision {
   allowed: boolean;
@@ -122,11 +123,11 @@ const RELATIONSHIP_RULES: Record<SupportedRelationshipMetaclass, RelationshipRul
     allowedTargets: ['Requirement'],
   },
   Verify: {
-    allowedSources: ['TestCase', 'Block', 'Operation', 'Activity'],
+    allowedSources: ['TestCase', 'Block', 'Operation', 'Activity', 'Interaction'],
     allowedTargets: ['Requirement'],
   },
   Refine: {
-    allowedSources: ['Block', 'UseCase', 'Activity', 'Operation', 'Requirement'],
+    allowedSources: ['Block', 'UseCase', 'Activity', 'Interaction', 'Operation', 'Requirement'],
     allowedTargets: ['Requirement'],
   },
   Trace: {
@@ -175,6 +176,43 @@ const RELATIONSHIP_RULES: Record<SupportedRelationshipMetaclass, RelationshipRul
   },
 };
 
+/**
+ * Kinds whose endpoint legality is owned by the central connection policy
+ * (connectionPolicy.ts). Only kinds the policy does not model (connectors,
+ * item flows, behaviour edges) keep the metaclass table below.
+ */
+const POLICY_DELEGATED: Partial<Record<SupportedRelationshipMetaclass, Pick<ConnectionPolicyInput, 'relationshipKind' | 'diagram'>>> = {
+  Association: { relationshipKind: 'association', diagram: 'bdd' },
+  SharedAggregation: { relationshipKind: 'sharedAggregation', diagram: 'bdd' },
+  Composition: { relationshipKind: 'composition', diagram: 'bdd' },
+  Generalization: { relationshipKind: 'generalization', diagram: 'bdd' },
+  Dependency: { relationshipKind: 'dependency', diagram: 'bdd' },
+  Allocate: { relationshipKind: 'allocation', diagram: 'bdd' },
+  Satisfy: { relationshipKind: 'satisfy', diagram: 'rtm' },
+  Verify: { relationshipKind: 'verify', diagram: 'rtm' },
+  Refine: { relationshipKind: 'refine', diagram: 'rtm' },
+  Trace: { relationshipKind: 'trace', diagram: 'rtm' },
+  RequirementContainment: { relationshipKind: 'requirementContainment', diagram: 'requirements' },
+  DeriveReqt: { relationshipKind: 'deriveReqt', diagram: 'requirements' },
+  Copy: { relationshipKind: 'copy', diagram: 'requirements' },
+};
+
+const PROBE_FAMILIES: readonly SysmlEndpointFamily[] = [
+  'block', 'interfaceBlock', 'interface', 'valueType', 'enumeration', 'signal', 'constraintBlock', 'requirement', 'verificationCase',
+  'part', 'port', 'property', 'actor', 'useCase', 'subject', 'state', 'activity', 'operation',
+];
+
+function connectionAllows(
+  delegated: Pick<ConnectionPolicyInput, 'relationshipKind' | 'diagram'>,
+  sourceFamily: SysmlEndpointFamily,
+  targetFamily: SysmlEndpointFamily,
+): boolean {
+  return evaluateSysmlConnection({
+    ...delegated,
+    source: { id: 'source', name: 'source', family: sourceFamily },
+    target: { id: 'target', name: 'target', family: targetFamily },
+  }).allowed;
+}
 export function validateRelationshipEndpoints(
   rel: SemanticRelationship,
   repo: SysmlRepositoryV4
@@ -209,9 +247,12 @@ export function validateRelationshipEndpoints(
     };
   }
 
+  const delegated = POLICY_DELEGATED[normKind];
   const rule = RELATIONSHIP_RULES[normKind];
-  const sourceAllowed = rule.allowedSources === 'ANY' || rule.allowedSources.includes(source.metaclass);
-  const targetAllowed = rule.allowedTargets === 'ANY' || rule.allowedTargets.includes(target.metaclass);
+  const sourceAllowed = delegated
+    ? connectionAllows(delegated, familyOfMetaclass(source.metaclass), familyOfMetaclass(target.metaclass))
+    : rule.allowedSources === 'ANY' || rule.allowedSources.includes(source.metaclass);
+  const targetAllowed = delegated ? sourceAllowed : rule.allowedTargets === 'ANY' || rule.allowedTargets.includes(target.metaclass);
 
   if (!sourceAllowed || !targetAllowed) {
     const diagnostic = `${normKind.toUpperCase()}_INVALID_ENDPOINTS`;
@@ -234,6 +275,16 @@ export function getLegalRelationshipKinds(
   const legalKinds: SupportedRelationshipMetaclass[] = [];
 
   for (const [kind, rule] of Object.entries(RELATIONSHIP_RULES) as Array<[SupportedRelationshipMetaclass, RelationshipRule]>) {
+    const delegated = POLICY_DELEGATED[kind];
+    if (delegated) {
+      // Probe the shared policy with one representative of every family.
+      const own = familyOfMetaclass(source.metaclass);
+      const legal = PROBE_FAMILIES.some(other => direction === 'outgoing'
+        ? connectionAllows(delegated, own, other)
+        : connectionAllows(delegated, other, own));
+      if (legal) legalKinds.push(kind);
+      continue;
+    }
     if (direction === 'outgoing') {
       if (rule.allowedSources === 'ANY' || rule.allowedSources.includes(source.metaclass)) {
         legalKinds.push(kind);

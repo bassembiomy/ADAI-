@@ -39,6 +39,9 @@ export type MetaclassKind =
   | 'ValueType'
   | 'QuantityKind'
   | 'Unit'
+  | 'View'
+  | 'Viewpoint'
+  | 'Stakeholder'
   | 'Enumeration'
   | 'EnumerationLiteral'
   | 'Signal'
@@ -61,9 +64,11 @@ export type MetaclassKind =
   | 'TestCase'
   | 'VerificationCase'
   // Behaviors
+  | 'Actor'
   | 'UseCase'
   | 'Activity'
   | 'ActivityPartition'
+  | 'Interaction'
   // Diagrams
   | 'Diagram';
 

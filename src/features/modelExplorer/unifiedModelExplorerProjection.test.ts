@@ -26,6 +26,31 @@ function defaultWorkspaceInput(): UnifiedExplorerInput {
 }
 
 describe('buildUnifiedModelProjection', () => {
+  it('projects 10,000 sibling blocks within a responsive tree-building budget', () => {
+    const repository = createEmptyRepository();
+    for (let index = 0; index < 10_000; index++) {
+      const id = `wide-block-${index}`;
+      repository.definitions[id] = {
+        id, name: `Block ${index}`, namespace: [], ownerId: 'model', kind: 'block',
+        isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+      };
+    }
+    const start = performance.now();
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      stateMachine: emptyStateMachine(),
+      externalModels: [],
+      revision: 1,
+    });
+    const elapsedMs = performance.now() - start;
+    const children = projection.nodes['project:pillar:structural'].childNodeIds;
+    expect(children).toHaveLength(10_000);
+    expect(new Set(children).size).toBe(10_000);
+    expect(children[0]).toBe('sysml:element:wide-block-0');
+    expect(children.at(-1)).toBe('sysml:element:wide-block-9999');
+    expect(elapsedMs).toBeLessThan(1_500);
+  });
+
   it('creates ordered pillars and classifies owned external models', () => {
     const repository = createEmptyRepository();
     repository.definitions['block-1'] = {

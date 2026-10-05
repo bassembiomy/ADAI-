@@ -410,7 +410,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
                     setLocalRenamingNodeId(row.node.nodeId);
                   }
                 }}
-                draggable={!effectiveRenamingId}
+                draggable={!effectiveRenamingId && !row.node.readOnly}
                 onDragStart={(e) => {
                   setDraggedNode(row.node);
                   const payload = createModelExplorerDragPayload(row.node);

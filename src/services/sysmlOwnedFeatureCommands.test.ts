@@ -132,22 +132,34 @@ describe('SysML Owned Feature Commands', () => {
     );
   });
 
-  it('returns TYPE_NOT_FOUND, candidates, and CreateNewType action when typeId is missing or unresolvable', () => {
+  it('builds an untyped port command when typeId is missing, and TYPE_NOT_FOUND when it is unresolvable', () => {
     const repo = createFixture();
 
-    const result = buildCreateOwnedPortCommand(repo, {
+    const untyped = buildCreateOwnedPortCommand(repo, {
       ownerBlockId: 'vehicle',
       portKind: 'proxyPort',
-      // no typeId
     });
+    expect(untyped.ok).toBe(true);
+    expect(untyped.command?.intent).toMatchObject({ featureKind: 'port', ownerBlockId: 'vehicle', portKind: 'proxyPort' });
+    expect((untyped.command?.intent as { typeId?: string }).typeId).toBeUndefined();
 
-    expect(result).toMatchObject({
-      ok: false,
-      diagnostics: [{ code: 'TYPE_NOT_FOUND' }],
-      action: { kind: 'CreateNewType' },
+    const unresolved = buildCreateOwnedPortCommand(repo, {
+      ownerBlockId: 'vehicle',
+      portKind: 'proxyPort',
+      typeId: 'missing-type',
     });
-    expect(result.candidates).toBeDefined();
-    expect(result.candidates!.every(candidate => candidate.id in repo.definitions)).toBe(true);
+    expect(unresolved).toMatchObject({ ok: false, diagnostics: [{ code: 'TYPE_NOT_FOUND' }] });
+  });
+
+  it('builds an untyped property command when typeId is missing', () => {
+    const repo = createFixture();
+    const result = buildCreateOwnedPropertyCommand(repo, { ownerBlockId: 'vehicle', propertyKind: 'part', name: 'engine' });
+    expect(result.ok).toBe(true);
+    if (result.command?.intent.featureKind !== 'property') throw new Error('expected property intent');
+    expect(result.command.intent).toMatchObject({ ownerBlockId: 'vehicle', propertyKind: 'part', name: 'engine' });
+    expect(result.command.intent.typeId).toBeUndefined();
+    // Format 5: the part is the property; the intent carries no usage record id.
+    expect(result.command.intent).not.toHaveProperty('usageId');
   });
 
   it('builds equivalent semantic patches for tree and canvas intents', () => {
@@ -329,7 +341,7 @@ describe('SysML Owned Feature Commands', () => {
     });
 
     it.each(['proxyPort', 'fullPort', 'flowPort'] as const)(
-      'plans canvas %s without a type as type-selection, never a silent command',
+      'plans canvas %s without a type as a direct untyped command on the owner',
       (portKind) => {
         const repo = createFixture();
         const plan = planOwnedPortCreation(repo, {
@@ -338,41 +350,38 @@ describe('SysML Owned Feature Commands', () => {
           diagramId: 'bdd-1',
           presentation: { x: 5, y: 5 },
         });
-        expect(plan.outcome).toBe('typeSelection');
-        if (plan.outcome !== 'typeSelection') return;
-        expect(plan.request.ownerId).toBe('vehicle');
-        expect(plan.request.candidates.length).toBeGreaterThan(0);
-        expect(plan.request.action).toMatchObject({ kind: 'CreateNewType' });
-        expect(plan.request.candidates.every(c => c.id in repo.definitions)).toBe(true);
+        expect(plan.outcome).toBe('command');
+        if (plan.outcome !== 'command') return;
+        expect(plan.command.intent).toMatchObject({ featureKind: 'port', ownerBlockId: 'vehicle', portKind });
+        expect((plan.command.intent as { typeId?: string }).typeId).toBeUndefined();
       },
     );
 
-    it('planning never mutates the repository, even when selection is cancelled', () => {
+    it('planning never mutates the repository', () => {
       const repo = createFixture();
       const before = JSON.stringify(repo);
-      const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'proxyPort' });
-      expect(plan.outcome).toBe('typeSelection');
-      // Cancel: no command is dispatched.
+      planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'proxyPort' });
+      planOwnedPropertyCreation(repo, { ownerBlockId: 'vehicle', propertyKind: 'part' });
       expect(JSON.stringify(repo)).toBe(before);
     });
 
-    it('produces identical property candidate IDs for tree and canvas intents', () => {
+    it('produces equivalent untyped property intents for tree and canvas', () => {
       const repo = createFixture();
       const cases: CreateOwnedPropertyIntent['propertyKind'][] = ['part', 'reference', 'value'];
       for (const propertyKind of cases) {
-        const tree = planOwnedPropertyCreation(repo, { ownerBlockId: 'vehicle', propertyKind });
+        const ids = { featureId: `prop-${propertyKind}`, name: propertyKind };
+        const tree = planOwnedPropertyCreation(repo, { ownerBlockId: 'vehicle', propertyKind, ...ids });
         const canvas = planOwnedPropertyCreation(repo, {
           ownerBlockId: 'vehicle',
           propertyKind,
+          ...ids,
           diagramId: 'bdd-1',
           presentation: { x: 1, y: 2 },
         });
-        expect(tree.outcome).toBe('typeSelection');
-        expect(canvas.outcome).toBe('typeSelection');
-        if (tree.outcome !== 'typeSelection' || canvas.outcome !== 'typeSelection') continue;
-        expect(canvas.request.candidates.map(c => c.id).sort())
-          .toEqual(tree.request.candidates.map(c => c.id).sort());
-        expect(canvas.request.action).toEqual(tree.request.action);
+        expect(tree.outcome).toBe('command');
+        expect(canvas.outcome).toBe('command');
+        if (tree.outcome !== 'command' || canvas.outcome !== 'command') continue;
+        expect(canvas.command.intent).toEqual(tree.command.intent);
       }
     });
 
@@ -380,11 +389,11 @@ describe('SysML Owned Feature Commands', () => {
       const repo = createFixture();
       const tree: CreateOwnedPropertyIntent = {
         ownerBlockId: 'vehicle', propertyKind: 'part', typeId: 'motor',
-        name: 'engine', featureId: 'prop-engine', usageId: 'usage-engine',
+        name: 'engine', featureId: 'prop-engine',
       };
       const canvas: CreateOwnedPropertyIntent = {
         ownerBlockId: 'vehicle', propertyKind: 'part', typeId: 'motor',
-        name: 'engine', featureId: 'prop-engine', usageId: 'usage-engine',
+        name: 'engine', featureId: 'prop-engine',
         diagramId: 'bdd-1', presentation: { x: 1, y: 2 },
       };
       const treePlan = planOwnedPropertyCreation(repo, tree);
@@ -397,22 +406,17 @@ describe('SysML Owned Feature Commands', () => {
       expect(canvasPlan.command.presentation).toEqual({ x: 1, y: 2 });
     });
 
-    it('resumes port creation with the explicitly selected type and nothing else', () => {
+    it('creates a port with an explicitly given type and nothing else', () => {
       const repo = createFixture();
-      const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'proxyPort' });
-      expect(plan.outcome).toBe('typeSelection');
-      if (plan.outcome !== 'typeSelection') return;
-      const selected = plan.request.candidates[0];
-      const resumed = buildCreateOwnedPortCommand(repo, {
-        ownerBlockId: 'vehicle', portKind: 'proxyPort', typeId: selected.id,
-      });
-      expect(resumed.ok).toBe(true);
-      expect(resumed.command?.intent).toMatchObject({ featureKind: 'port', portKind: 'proxyPort', typeId: selected.id });
+      const plan = planOwnedPortCreation(repo, { ownerBlockId: 'vehicle', portKind: 'proxyPort', typeId: 'canBus' });
+      expect(plan.outcome).toBe('command');
+      if (plan.outcome !== 'command') return;
+      expect(plan.command.intent).toMatchObject({ featureKind: 'port', portKind: 'proxyPort', typeId: 'canBus' });
     });
   });
 
   describe('Task 3 contract: caller-provided IDs pass through to the gateway intent', () => {
-    it('preserves caller featureId and usageId on property commands', () => {
+    it('preserves caller featureId on property commands', () => {
       const repo = createFixture();
       const res = buildCreateOwnedPropertyCommand(repo, {
         ownerBlockId: 'vehicle',
@@ -420,12 +424,10 @@ describe('SysML Owned Feature Commands', () => {
         typeId: 'motor',
         name: 'engine',
         featureId: 'prop-engine',
-        usageId: 'usage-engine',
       });
       expect(res.ok).toBe(true);
       if (res.command?.intent.featureKind !== 'property') throw new Error('expected property intent');
       expect(res.command.intent.featureId).toBe('prop-engine');
-      expect(res.command.intent.usageId).toBe('usage-engine');
     });
 
     it('preserves caller featureId on port commands', () => {
@@ -444,19 +446,18 @@ describe('SysML Owned Feature Commands', () => {
   });
 
   describe('Task 4: Active Block Owner Context and Canonical Part Creation', () => {
-    it('with Block Vehicle active, a canvas Add Part intent without ownerBlockId resolves owner to Vehicle, requires an explicit type, and creates one canonical PartUsage ID', () => {
+    it('with Block Vehicle active, a canvas Add Part intent without ownerBlockId resolves owner to Vehicle and creates the part as a Block property', () => {
       const repo = createFixture();
-      // 1. Without type: requires explicit existing Block type
+      // 1. Without type: a direct command owned by the active block
       const noTypePlan = planOwnedPropertyCreation(repo, {
         activeBlockId: 'vehicle',
         propertyKind: 'part',
       });
-      expect(noTypePlan.outcome).toBe('typeSelection');
-      if (noTypePlan.outcome !== 'typeSelection') return;
-      expect(noTypePlan.request.ownerId).toBe('vehicle');
-      expect(noTypePlan.request.candidates.map(c => c.id)).toContain('motor');
+      expect(noTypePlan.outcome).toBe('command');
+      if (noTypePlan.outcome !== 'command') return;
+      expect(noTypePlan.command.intent.ownerBlockId).toBe('vehicle');
 
-      // 2. With explicit type: resolves owner to vehicle and creates one canonical PartUsage ID
+      // 2. With explicit type: resolves owner to vehicle and creates the part as a Block property
       const withType = buildCreateOwnedPropertyCommand(repo, {
         activeBlockId: 'vehicle',
         propertyKind: 'part',
@@ -467,8 +468,7 @@ describe('SysML Owned Feature Commands', () => {
       expect(withType.command?.intent.ownerBlockId).toBe('vehicle');
       if (withType.command?.intent.featureKind !== 'property') throw new Error('expected property intent');
       expect(withType.command.intent.typeId).toBe('motor');
-      expect(withType.command.intent.usageId).toBeDefined();
-      expect(typeof withType.command.intent.usageId).toBe('string');
+      expect(withType.command.intent).not.toHaveProperty('usageId');
     });
   });
 });

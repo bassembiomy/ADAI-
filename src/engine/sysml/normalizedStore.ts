@@ -39,6 +39,9 @@ import type {
   PortData,
 } from '../../types/sysml_types';
 import type { WorkerStoreSnapshot } from './workerProtocol';
+import { createEmptyRepository } from './model';
+import { isPathConnector } from './connectorEnds';
+import { collectDerivedParts, pathEndpointOf } from '../../features/sysml/pathConnectorProjection';
 
 export interface StoreIndexes {
   ownerId: Map<string, Set<string>>;
@@ -887,10 +890,36 @@ export function projectNormalizedDiagram(
     }
   };
 
+  // Format 5: parts and path-based connector ends are derived from Block
+  // properties. The repository form of the store is built once, and only when
+  // a derived part or a path connector exists.
+  let derivedRepository: SysmlRepository | undefined;
+  // Derivation reads only definitions, usages, connectors and generalizations, so it gets a
+  // cheap unsorted view of those instead of the full sorted export (which dominates on 10k+ models).
+  const repositoryForDerivation = (): SysmlRepository => (derivedRepository ??= {
+    ...createEmptyRepository(),
+    definitions: Object.fromEntries(store.definitions),
+    usages: Object.fromEntries(store.usages),
+    connectors: Object.fromEntries(store.connectors),
+    relationships: Object.fromEntries(store.relationships),
+  });
+  const parseEndpoint = (conn: ConnectorUsage, side: 'source' | 'target') => {
+    if (isPathConnector(conn)) {
+      const end = pathEndpointOf(repositoryForDerivation(), conn, side);
+      if (end) return end;
+    }
+    const portUsageId = side === 'source' ? conn.sourcePortId : conn.targetPortId;
+    if (portUsageId.includes('::')) {
+      const [partId, portId] = portUsageId.split('::');
+      return { partId, portId };
+    }
+    return { partId: conn.ownerId, portId: portUsageId };
+  };
+
   const projectConn = (conn: ConnectorUsage) => {
     if (!isVisible(conn.id)) {
-      const sp = conn.sourcePortId.split('::')[0];
-      const tp = conn.targetPortId.split('::')[0];
+      const sp = isPathConnector(conn) ? parseEndpoint(conn, 'source').partId : conn.sourcePortId.split('::')[0];
+      const tp = isPathConnector(conn) ? parseEndpoint(conn, 'target').partId : conn.targetPortId.split('::')[0];
       if (!isVisible(sp) || !isVisible(tp)) return;
     }
 
@@ -900,15 +929,8 @@ export function projectNormalizedDiagram(
       return;
     }
 
-    const parseEndpoint = (portUsageId: string) => {
-      if (portUsageId.includes('::')) {
-        const [partId, portId] = portUsageId.split('::');
-        return { partId, portId };
-      }
-      return { partId: conn.ownerId, portId: portUsageId };
-    };
-    const src = parseEndpoint(conn.sourcePortId);
-    const tgt = parseEndpoint(conn.targetPortId);
+    const src = parseEndpoint(conn, 'source');
+    const tgt = parseEndpoint(conn, 'target');
 
     const result: ConnectorData = {
       id: conn.id,
@@ -1054,6 +1076,60 @@ export function projectNormalizedDiagram(
     for (const usage of store.usages.values()) projectPart(usage);
     for (const conn of store.connectors.values()) projectConn(conn);
     for (const rel of store.relationships.values()) projectRel(rel);
+  }
+
+  // Parts that no PartUsage record represents are derived from Block properties.
+  const hasDerivedParts = (): boolean => {
+    const linked = new Set<string>();
+    for (const usage of store.usages.values()) if (usage.kind === 'part' && usage.propertyId) linked.add(usage.propertyId);
+    for (const definition of store.definitions.values()) {
+      if (definition.kind !== 'block') continue;
+      for (const property of definition.properties) {
+        if ((property.kind === 'part' || property.kind === 'reference') && !linked.has(property.id)
+          && store.definitions.get(property.typeId)?.kind === 'block') return true;
+      }
+    }
+    for (const connector of store.connectors.values()) if (isPathConnector(connector)) return true;
+    return false;
+  };
+  // A diagram-scoped projection needs derived parts only when it presents something that is not a
+  // top-level element (a part shown by property id or path) or a path-based connector.
+  const scopeNeedsDerivedParts = (): boolean => {
+    if (!visibleFilter) return true;
+    for (const id of visibleFilter) {
+      const meta = store.indexes.byId.get(id);
+      if (!meta) return true;
+      if (meta.collection === 'connectors') {
+        const connector = store.connectors.get(id);
+        if (connector && isPathConnector(connector)) return true;
+      }
+    }
+    return false;
+  };
+  if (scopeNeedsDerivedParts() && hasDerivedParts()) {
+    const diagramContextId = diagramId
+      ? (store.diagrams.get(diagramId)?.contextElementId ?? (store.definitions.get(diagramId) ? diagramId : undefined))
+      : undefined;
+    for (const { part, contextId } of collectDerivedParts(repositoryForDerivation(), { isVisible, visibleIds: visibleFilter, diagramContextId })) {
+      const coords = coordinatesFor(part.id);
+      parts.push({
+        id: part.id,
+        propertyId: part.propertyId,
+        name: part.name,
+        blockId: part.parentId,
+        parentBlockId: part.parentId,
+        ...(part.parentId !== contextId ? { parentPartId: part.parentId } : {}),
+        typeId: part.typeId,
+        typeBlockId: part.typeId,
+        aggregation: part.aggregation,
+        multiplicity: formatMultiplicityText(part.multiplicity),
+        satisfiedReqIds: satisfiedReqIdsBySource.get(part.propertyId) ?? [],
+        x: coords?.x ?? 0,
+        y: coords?.y ?? 0,
+        width: coords?.width ?? 150,
+        height: coords?.height ?? 100,
+      });
+    }
   }
 
   return { packages, blocks, relationships, parts, connectors };

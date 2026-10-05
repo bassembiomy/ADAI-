@@ -8,11 +8,12 @@ import {
   createEmptyRepository,
 } from '../model';
 import {
+  normalizeDiagramPresentations,
   type PresentationCoordinates,
   type DiagramPresentationInput,
 } from '../presentationState';
 import { ensureDefaultSysmlDiagrams } from '../../../services/sysmlDiagramWorkspace';
-import { loadRepository, serializeRepository } from '../persistence';
+import { loadRepository, rekeyPresentationState, serializeRepository, type V5UpgradeReport } from '../persistence';
 
 export const CURRENT_CONTEXTUAL_SCHEMA_VERSION = 4;
 
@@ -32,6 +33,8 @@ export interface PersistedSysmlPayload {
 export interface ContextualMigrationResult {
   migrated: boolean;
   payload: PersistedSysmlPayload;
+  /** Set when loading the old repository upgraded it to format 5; the payload already follows the new keys. */
+  upgradeReport?: V5UpgradeReport;
   diagnostics: Array<{
     code: string;
     message: string;
@@ -63,6 +66,7 @@ export function migrateContextualEditingPayload(
 
   // 1. Resolve repository object
   let repo: SysmlRepository;
+  let upgradeReport: V5UpgradeReport | undefined;
   if (rawInput.sysmlRepository) {
     if (typeof rawInput.sysmlRepository === 'string') {
       try {
@@ -80,6 +84,7 @@ export function migrateContextualEditingPayload(
           };
         }
         repo = loaded.repository;
+        upgradeReport = loaded.upgradeReport;
       } catch (err: any) {
         diagnostics.push({
           code: 'CORRUPT_REPOSITORY_ENVELOPE',
@@ -104,10 +109,11 @@ export function migrateContextualEditingPayload(
         };
       }
       repo = loaded.repository;
+      upgradeReport = loaded.upgradeReport;
     }
   } else {
     // Legacy flat payload migration
-    const loaded = loadRepository(rawInput, context);
+    const loaded = loadRepository(rawInput, context, { upgrade: 'always' });
     if (!loaded.valid) {
       return {
         migrated: false,
@@ -121,6 +127,7 @@ export function migrateContextualEditingPayload(
       };
     }
     repo = loaded.repository;
+    upgradeReport = loaded.upgradeReport;
     migrated = true;
   }
 
@@ -216,8 +223,21 @@ export function migrateContextualEditingPayload(
   }
 
   // 6. Coordinates and Presentations normalization
-  const coordinates: Record<string, PresentationCoordinates> = { ...(rawInput.sysmlCoordinates ?? {}) };
-  const presentations: Record<string, DiagramPresentationInput> = { ...(rawInput.diagramPresentations ?? {}) };
+  let coordinates: Record<string, PresentationCoordinates> = { ...(rawInput.sysmlCoordinates ?? {}) };
+  let presentations: Record<string, DiagramPresentationInput> = { ...(rawInput.diagramPresentations ?? {}) };
+  // Presentations keyed by part/port records follow the property paths that replaced them.
+  if (upgradeReport && Object.keys(upgradeReport.keyMap).length > 0) {
+    const rekeyed = rekeyPresentationState(
+      normalizeDiagramPresentations(presentations, coordinates),
+      coordinates,
+      upgradeReport.keyMap,
+      id => repo.diagrams[id]?.name ?? repo.definitions[id]?.name ?? id,
+    );
+    presentations = rekeyed.presentations;
+    coordinates = rekeyed.coordinates;
+    upgradeReport.changes.push(...rekeyed.changes);
+    upgradeReport.changed = upgradeReport.changes.length > 0;
+  }
 
   // Ensure every diagram in repository has an entry in presentations
   for (const diagId of Object.keys(repo.diagrams ?? {})) {
@@ -244,5 +264,6 @@ export function migrateContextualEditingPayload(
     migrated: true,
     payload: updatedPayload,
     diagnostics,
+    ...(upgradeReport ? { upgradeReport } : {}),
   };
 }

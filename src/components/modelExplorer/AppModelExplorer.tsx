@@ -474,11 +474,14 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
       };
     }
+    // Format 5: a part is a part property of its Block, not a usage record.
     for (const part of parts) {
-      repository.usages[part.id] = {
-        id: part.id, name: part.name, ownerId: part.blockId || 'model', kind: 'part', typeId: part.typeId || '',
-        aggregation: 'composite', multiplicity: parseMultiplicity(part.multiplicity || '1'),
-      };
+      const owner = repository.definitions[part.blockId || 'model'];
+      if (owner?.kind !== 'block') continue;
+      owner.properties.push({
+        id: part.id, name: part.name, kind: 'part', typeId: part.typeId || '',
+        multiplicity: parseMultiplicity(part.multiplicity || '1'),
+      });
     }
     return repository;
   }, [canonicalSysmlRepository, blocks, parts]);

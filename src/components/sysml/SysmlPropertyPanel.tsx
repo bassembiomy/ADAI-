@@ -106,7 +106,9 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
     }
   };
 
-  const readOnlyValue = field.valueType === 'multiSelect' && Array.isArray(field.value)
+  const readOnlyValue = field.valueType === 'stringList' && Array.isArray(field.value)
+    ? field.value.join(', ')
+    : field.valueType === 'multiSelect' && Array.isArray(field.value)
     ? field.value.map(value => field.options?.find(option => option.value === value)?.label ?? '').join(', ')
     : field.valueType === 'select'
       ? field.options?.find(option => option.value === field.value)?.label ?? ''
@@ -161,6 +163,52 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
             </option>
           ))}
         </select>
+      ) : field.valueType === 'multiSelect' && field.options ? (
+        <div
+          id={`field-${field.key}`}
+          role="group"
+          aria-label={field.label}
+          aria-describedby={warningId}
+          className="flex flex-col gap-1 px-2 py-1 bg-[var(--surface-canvas)] rounded border border-[var(--border-default)] max-h-32 overflow-y-auto"
+        >
+          {field.options.length === 0 && <span className="text-[10px] text-[var(--text-muted)] italic">Nothing available to choose.</span>}
+          {field.options.map((opt) => {
+            const selected = Array.isArray(localVal) ? (localVal as unknown[]).map(String) : [];
+            return (
+              <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt.value)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...selected, opt.value]
+                      : selected.filter(value => value !== opt.value);
+                    setLocalVal(next);
+                    onCommit(next);
+                  }}
+                  className="rounded border-[var(--border-default)] text-[var(--brand-primary)]"
+                />
+                <span className="text-xs text-[var(--text-primary)]">{opt.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : field.valueType === 'stringList' ? (
+        <textarea
+          id={`field-${field.key}`}
+          aria-label={field.label}
+          rows={3}
+          placeholder="One entry per line"
+          value={Array.isArray(localVal) ? (localVal as unknown[]).join('\n') : String(localVal ?? '')}
+          onChange={(e) => setLocalVal(e.target.value)}
+          onBlur={() => {
+            const lines = (typeof localVal === 'string' ? localVal : (Array.isArray(localVal) ? (localVal as unknown[]).join('\n') : ''))
+              .split('\n').map(line => line.trim()).filter(Boolean);
+            const original = (Array.isArray(field.value) ? (field.value as unknown[]).map(String) : []);
+            if (lines.join('\n') !== original.join('\n')) onCommit(lines);
+          }}
+          className="px-2 py-1 bg-[var(--surface-canvas)] rounded border border-[var(--border-default)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[var(--brand-primary)]"
+        />
       ) : field.valueType === 'boolean' ? (
         <label className="flex items-center gap-2 cursor-pointer">
           <input

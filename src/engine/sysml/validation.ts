@@ -7,8 +7,14 @@ import {
   isUseCaseRelationshipKind,
 } from './useCases';
 import { validateRepositoryPorts } from './validation/portRules';
-import { resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
+import { validateDefinitionRules } from './validation/definitionRules';
+import { activityNestedIds, validateActivities } from './activity';
+import { interactionNestedIds, validateInteractions } from './interaction';
+import { isParametricBinding, validateParametricBinding } from './parametric';
+import { connectorEndOf, resolveConnectorEnd } from './connectorEnds';
+import { resolveRepositoryEndpoint, resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
 import { validateAssociationEnds } from './bdd';
+import { effectiveSupertypeIds } from './services/supertypes';
 
 export { validateRequirementContainment };
 
@@ -40,7 +46,11 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
     repo.actors ?? {}, repo.subjects ?? {}, repo.useCases ?? {},
     repo.extensionPoints ?? {}, repo.diagramReferences ?? {},
   ] as const;
-  const nestedFeatures = Object.values(repo.definitions).flatMap(definition => definition.kind === 'block' ? [...definition.properties, ...definition.ports] : []);
+  const nestedFeatures = Object.values(repo.definitions).flatMap(definition =>
+    definition.kind === 'block' ? [...definition.properties, ...definition.ports]
+      : definition.kind === 'constraintBlock' ? definition.parameters
+      : definition.kind === 'activity' ? activityNestedIds(definition).map(id => ({ id }))
+      : definition.kind === 'interaction' ? interactionNestedIds(definition).map(id => ({ id })) : []);
   const all = [...collections.flatMap(collection => Object.values(collection)), ...nestedFeatures] as Array<{ id: string }>;
   const ids = new Set<string>();
   const duplicateIds = new Set<string>();
@@ -99,18 +109,54 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
 
   for (const definition of Object.values(repo.definitions)) {
     if (definition.kind !== 'block') continue;
-    for (const supertypeId of definition.supertypeIds ?? []) {
+    for (const supertypeId of effectiveSupertypeIds(repo, definition.id)) {
       if (!blockIds.has(supertypeId)) error('MISSING_SUPERTYPE', definition.id, 'supertypeIds', `Supertype ${supertypeId} does not exist`);
     }
-    for (const property of definition.properties) validateMultiplicity(property.id, property.multiplicity.lower, property.multiplicity.upper, error);
+    for (const property of definition.properties) {
+      validateMultiplicity(property.id, property.multiplicity.lower, property.multiplicity.upper, error);
+      // Format 5: a part is only its Block property, so the property carries the typing a PartUsage record used to.
+      if ((property.kind === 'part' || property.kind === 'reference') && property.typeId && !blockIds.has(property.typeId)) {
+        error('MISSING_PROPERTY_TYPE', property.id, 'typeId', `Block type ${property.typeId} of part ${property.name} does not exist`);
+      }
+    }
     for (const port of definition.ports) validateMultiplicity(port.id, port.multiplicity.lower, port.multiplicity.upper, error);
+    for (const signalId of definition.receptions ?? []) {
+      if (repo.definitions[signalId]?.kind !== 'signal') {
+        error('MISSING_RECEPTION_SIGNAL', definition.id, 'receptions', `Block ${definition.name} receives a Signal that does not exist`);
+      }
+    }
+  }
+
+  // A test case may name the Activity or Interaction that is its procedure. A missing one
+  // is a warning: deleting the behavior clears the field, so only legacy data lands here.
+  for (const verificationCase of Object.values(repo.verificationCases)) {
+    const behavior = verificationCase.behaviorId ? repo.definitions[verificationCase.behaviorId] : undefined;
+    if (verificationCase.behaviorId && behavior?.kind !== 'activity' && behavior?.kind !== 'interaction') {
+      diagnostics.push({
+        code: 'VERIFICATION_BEHAVIOR_MISSING', severity: 'warning', elementId: verificationCase.id, propertyPath: 'behaviorId',
+        message: `Verification case ${verificationCase.name} names a test procedure that is not an Activity or Interaction`,
+      });
+    }
   }
 
   diagnostics.push(...validateRepositoryPorts(repo));
+  diagnostics.push(...validateDefinitionRules(repo));
+  diagnostics.push(...validateActivities(repo));
+  diagnostics.push(...validateInteractions(repo, context));
+  for (const connector of Object.values(repo.connectors)) {
+    if (isParametricBinding(connector)) diagnostics.push(...validateParametricBinding(repo, connector));
+    else {
+      // Format 5: a connector end is a property path plus a port; both must still resolve (a retyped or deleted part would leave it dangling).
+      for (const side of ['source', 'target'] as const) {
+        const end = connectorEndOf(connector, side);
+        if (end) diagnostics.push(...resolveConnectorEnd(repo, connector.ownerId, end, side, connector.id).diagnostics);
+      }
+    }
+  }
 
   detectCycles(
     Object.values(repo.definitions).filter((d): d is BlockDefinition => d.kind === 'block'),
-    d => d.supertypeIds ?? [], 'INHERITANCE_CYCLE', 'supertypeIds', error,
+    d => effectiveSupertypeIds(repo, d.id), 'INHERITANCE_CYCLE', 'supertypeIds', error,
   );
   const compositeParts = Object.values(repo.usages).filter(u => u.kind === 'part' && u.aggregation === 'composite');
   detectCycles(compositeParts, p => [p.ownerId], 'COMPOSITE_CONTAINMENT_CYCLE', 'ownerId', error);
@@ -152,7 +198,10 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
       validateMultiplicity(relationship.id, relationship.targetMultiplicity.lower, relationship.targetMultiplicity.upper, error);
     }
 
-    if (relationship.kind === 'composition') {
+    // SysML composition limits the owners of a part *instance*. A composition
+    // drawn between Blocks only types a part, so one Block (e.g. a Bolt) may be
+    // the part type of many wholes; only a single usage can't have two owners.
+    if (relationship.kind === 'composition' && !repo.definitions[relationship.targetId]) {
       const previous = compositionOwners.get(relationship.targetId);
       if (previous && previous !== relationship.sourceId) {
         error('MULTIPLE_COMPOSITE_OWNERS', relationship.targetId, 'ownerId', `Composite usage is owned by both ${previous} and ${relationship.sourceId}`);
@@ -278,9 +327,9 @@ function checkRelationshipDirection(
     case 'satisfy': return !sourceRequirement && targetRequirement
       ? { valid: true, reason: '' }
       : { valid: false, reason: 'Satisfy requires a non-Requirement source and a Requirement target.' };
-    case 'verify': return Boolean(repo.verificationCases[relationship.sourceId]) && targetRequirement
+    case 'verify': return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction') && targetRequirement
       ? { valid: true, reason: '' }
-      : { valid: false, reason: 'Verify requires a Verification Case source and a Requirement target.' };
+      : { valid: false, reason: 'Verify requires a Verification Case or Interaction source and a Requirement target.' };
     case 'refine': return !sourceRequirement && targetRequirement
       ? { valid: true, reason: '' }
       : { valid: false, reason: 'Refine requires a non-Requirement source and a Requirement target.' };

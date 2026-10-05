@@ -23,7 +23,14 @@ export function validatePackageImport(repo: SysmlRepository, importingNamespaceI
   if (!exists(repo, importedPackageId)) return deny('ELEMENT_NOT_FOUND', `Package ${importedPackageId} does not exist.`);
   if (!repo.packages[importedPackageId]) return deny('PACKAGE_IMPORT_TARGET_NOT_PACKAGE', `Element ${importedPackageId} is not a Package.`);
   if (visibility !== 'public' && visibility !== 'private') return deny('INVALID_VISIBILITY', `Visibility ${visibility} is invalid.`);
-  if (matchingImport(repo, 'packageImport', importingNamespaceId, importedPackageId)) return deny('DUPLICATE_IMPORT', 'Package import already exists.');
+  const existing = Object.values(repo.relationships).find(r =>
+    r.kind === 'packageImport' && r.sourceId === importingNamespaceId && r.targetId === importedPackageId);
+  if (existing) {
+    const existingVisibility = existing.visibility ?? 'public';
+    return deny('DUPLICATE_IMPORT', existingVisibility === visibility
+      ? 'Package import already exists.'
+      : `This Package already ${existingVisibility === 'public' ? 'imports («import»)' : 'accesses («access»)'} that Package; change the existing relationship's visibility instead of adding ${visibility === 'public' ? '«import»' : '«access»'}.`);
+  }
   return allow();
 }
 

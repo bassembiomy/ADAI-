@@ -1,7 +1,13 @@
 'use strict';
 
 const crypto = require('crypto');
-const { readProjectFile: defaultRead, writeProjectFile: defaultWrite } = require('./projectFileService.cjs');
+const {
+  readProjectFile: defaultRead,
+  writeProjectFile: defaultWrite,
+  detectSysmlRepositoryFormat,
+  ensureUpgradeBackup,
+  normalizeAdiaPath,
+} = require('./projectFileService.cjs');
 
 const path = require('path');
 const fs = require('fs');
@@ -79,10 +85,27 @@ function createProjectFileController(deps = {}) {
       const token = randomUUID();
       pendingTokens.set(token, filePath);
 
-      return { status: 'opened', token, filePath, data };
+      // A project written by an older model format is upgraded in the app, never
+      // silently: its original is kept first and the app shows the upgrade report.
+      const upgrade = ensureUpgradeBackup(filePath, data, { fsImpl });
+      return { status: 'opened', token, filePath, data, ...(upgrade ? { upgrade } : {}) };
     } catch (err) {
       return { status: 'error', message: err.message };
     }
+  }
+
+  function backupBeforeUpgradingOverwrite(targetPath, nextData) {
+    let existing;
+    let target;
+    try {
+      target = normalizeAdiaPath(path.resolve(targetPath));
+      if (!fsImpl.existsSync(target)) return null;
+      existing = readProjectFile(target, { allowLegacyJson: true });
+    } catch {
+      return null;
+    }
+    if (detectSysmlRepositoryFormat(existing.data) === null || detectSysmlRepositoryFormat(nextData) !== null) return null;
+    return ensureUpgradeBackup(target, existing.data, { fsImpl });
   }
 
   async function save(data, saveAs) {
@@ -103,9 +126,15 @@ function createProjectFileController(deps = {}) {
     }
 
     try {
+      // Saving writes the current model format. If the file being replaced is an
+      // older one, its original is kept first; no backup means no overwrite.
+      const backup = backupBeforeUpgradingOverwrite(targetPath, data);
+      if (backup && backup.backupError) {
+        return { status: 'error', message: `The original project could not be backed up (${backup.backupError}); the file was not changed.` };
+      }
       const savedPath = writeProjectFile(targetPath, data);
       activeProjectPath = savedPath;
-      return { status: 'saved', filePath: savedPath };
+      return { status: 'saved', filePath: savedPath, ...(backup && backup.backupPath ? { upgradeBackupPath: backup.backupPath } : {}) };
     } catch (err) {
       return { status: 'error', message: err.message };
     }
@@ -221,10 +250,12 @@ function createProjectFileController(deps = {}) {
       const { filePath: resolved, data } = readProjectFile(filePath, { allowLegacyJson: true });
       const token = randomUUID();
       pendingTokens.set(token, resolved);
+      const upgrade = ensureUpgradeBackup(resolved, data, { fsImpl });
       windowToUse.webContents.send('project-open-requested', {
         token,
         filePath: resolved,
         data,
+        ...(upgrade ? { upgrade } : {}),
       });
       return true;
     } catch (err) {

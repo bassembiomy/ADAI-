@@ -32,6 +32,17 @@ import { generate1kModel, generate10kModel } from './largeModelGenerator';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
 import { createEmptyRepository, type BlockDefinition, type PartUsage, type SysmlRelationship, type RequirementDefinition } from './model';
 
+/**
+ * The generated model has no usage records (parts are Block properties). The store still indexes
+ * usage records, so a model read from an old file is stood in for by adding two to the generated one.
+ */
+function withLegacyUsages(model: ReturnType<typeof generate1kModel>) {
+  const multiplicity = { lower: 1, upper: 1 as const, ordered: false, unique: true };
+  model.repository.usages.legacy_part_1 = { id: 'legacy_part_1', kind: 'part', name: 'legacyPart1', ownerId: 'blk_1', typeId: 'blk_2', aggregation: 'composite', multiplicity };
+  model.repository.usages.legacy_part_2 = { id: 'legacy_part_2', kind: 'part', name: 'legacyPart2', ownerId: 'blk_1', typeId: 'blk_3', aggregation: 'composite', multiplicity };
+  return model;
+}
+
 describe('NormalizedSysmlStore', () => {
   it('creates an empty normalized store with initialized indexes', () => {
     const store = createEmptyNormalizedStore();
@@ -59,7 +70,7 @@ describe('NormalizedSysmlStore', () => {
   });
 
   it('maintains secondary indexes for ownerId, typeId, sourceId, targetId, and diagramId', () => {
-    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const { repository, coordinates, diagramPresentations } = withLegacyUsages(generate1kModel(42));
     const store = fromRepository(repository, coordinates, diagramPresentations);
 
     // Test getById O(1)
@@ -199,7 +210,7 @@ describe('NormalizedSysmlStore', () => {
   });
 
   it('provides indexed selectors for entities, usages, relationships, and evidence', () => {
-    const { repository, coordinates, diagramPresentations } = generate1kModel(42);
+    const { repository, coordinates, diagramPresentations } = withLegacyUsages(generate1kModel(42));
     const store = fromRepository(repository, coordinates, diagramPresentations);
 
     // selectEntityById

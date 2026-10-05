@@ -10,6 +10,12 @@ import { measureSync, formatBytes, formatDuration } from '../../services/sysmlPe
 import { projectLegacyDiagram, executeSysmlCommand, createSysmlGatewayState } from '../../services/sysmlCommandGateway';
 import { serializeRepository, loadRepository } from './persistence';
 import { analyzeMutation } from './mutations';
+import { validateSysmlRepository } from './validation';
+import {
+  generateScalabilityFixture,
+  type ScalabilityFixtureOptions,
+  type ScalabilityFixtureResult,
+} from './largeModelGenerator';
 
 describe('Synthetic Large Model Generator', () => {
   it('generates deterministic models with specified target element counts', () => {
@@ -20,7 +26,8 @@ describe('Synthetic Large Model Generator', () => {
     expect(m2.stats.totalElements).toBe(1000);
     expect(Object.keys(m1.repository.definitions)).toEqual(Object.keys(m2.repository.definitions));
     expect(m1.stats.definitionsCount).toBeGreaterThan(0);
-    expect(m1.stats.usagesCount).toBeGreaterThan(0);
+    expect(m1.stats.partsCount).toBeGreaterThan(0);
+    expect(m1.repository.usages).toEqual({}); // parts are Block properties; no usage records
     expect(m1.stats.relationshipsCount).toBeGreaterThan(0);
     expect(m1.stats.requirementsCount).toBeGreaterThan(0);
     expect(m1.stats.verificationCasesCount).toBeGreaterThan(0);
@@ -39,6 +46,119 @@ describe('Synthetic Large Model Generator', () => {
     const m100k = generate100kModel(789);
     expect(m100k.stats.totalElements).toBe(100000);
     expect(Object.keys(m100k.repository.definitions).length).toBe(m100k.stats.definitionsCount);
+  });
+});
+
+describe('Scalability Mixed-Model Benchmark Fixture', () => {
+  it('generates deterministic IDs, exact count accounting, valid references, and clean validation at 1k', () => {
+    const f1 = generateScalabilityFixture({ semanticCount: 1_000, seed: 42, topology: 'distributed' });
+    const f2 = generateScalabilityFixture({ semanticCount: 1_000, seed: 42, topology: 'distributed' });
+
+    // 1. Exact count accounting
+    expect(f1.counts.totalSemanticElements).toBe(1_000);
+    const sumCategories =
+      f1.counts.packages +
+      f1.counts.blocks +
+      f1.counts.valueTypes +
+      f1.counts.interfaces +
+      f1.counts.properties +
+      f1.counts.ports +
+      f1.counts.connectors +
+      f1.counts.relationships +
+      f1.counts.requirements +
+      f1.counts.verificationCases +
+      f1.counts.stateMachineEntities +
+      f1.counts.diagrams;
+    expect(sumCategories).toBe(1_000);
+
+    // Collect all semantic IDs across categories and verify uniqueness
+    const allIds = new Set<string>();
+    const duplicateIds: string[] = [];
+    const recordId = (id: string) => {
+      if (allIds.has(id)) duplicateIds.push(id);
+      allIds.add(id);
+    };
+
+    Object.keys(f1.repository.packages).forEach(recordId);
+    Object.keys(f1.repository.definitions).forEach(recordId);
+    Object.values(f1.repository.definitions).forEach(d => {
+      if (d.kind === 'block') {
+        d.properties.forEach(p => recordId(p.id));
+        d.ports.forEach(pt => recordId(pt.id));
+      }
+    });
+    Object.keys(f1.repository.connectors).forEach(recordId);
+    Object.keys(f1.repository.relationships).forEach(recordId);
+    Object.keys(f1.repository.requirements).forEach(recordId);
+    Object.keys(f1.repository.verificationCases).forEach(recordId);
+    Object.keys(f1.repository.diagrams).forEach(recordId);
+
+    // State machine entities
+    f1.stateMachine.states.forEach(s => recordId(s.id));
+    f1.stateMachine.transitions.forEach(t => recordId(t.id));
+    f1.stateMachine.junctions.forEach(j => recordId(j.id));
+    f1.stateMachine.layers.forEach(l => recordId(l.id));
+
+    expect(duplicateIds).toEqual([]);
+    expect(allIds.size).toBe(1_000);
+
+    // 2. Determinism
+    expect(f1.counts).toEqual(f2.counts);
+    expect(Object.keys(f1.repository.definitions)).toEqual(Object.keys(f2.repository.definitions));
+    expect(f1.stateMachine.states.map(s => s.id)).toEqual(f2.stateMachine.states.map(s => s.id));
+
+    // 3. Semantic validation of SysML repository
+    const validationReport = validateSysmlRepository(f1.repository);
+    const errors = validationReport.diagnostics.filter(d => d.severity === 'error');
+    expect(errors).toEqual([]);
+    expect(validationReport.valid).toBe(true);
+
+    // 4. Diagram membership and density
+    expect(f1.diagramPresentations['diagram-ordinary']).toBeDefined();
+    expect(f1.diagramPresentations['diagram-ordinary'].elementIds.length).toBeGreaterThanOrEqual(100);
+    expect(f1.diagramPresentations['diagram-ordinary'].elementIds.length).toBeLessThanOrEqual(500);
+    expect(f1.diagramPresentations['diagram-stress']).toBeDefined();
+    expect(f1.diagramPresentations['diagram-stress'].elementIds.length).toBeGreaterThan(
+      f1.diagramPresentations['diagram-ordinary'].elementIds.length
+    );
+  });
+
+  it('supports broad, deep, and dense topologies with valid semantic models', () => {
+    for (const topology of ['broad', 'deep', 'dense'] as const) {
+      const fix = generateScalabilityFixture({ semanticCount: 1_000, seed: 100, topology });
+      expect(fix.counts.totalSemanticElements).toBe(1_000);
+      const validation = validateSysmlRepository(fix.repository);
+      const errors = validation.diagnostics.filter(d => d.severity === 'error');
+      expect(errors).toEqual([]);
+      expect(validation.valid).toBe(true);
+    }
+  });
+
+  it('generates a valid 10k mixed-model fixture with exact counting', () => {
+    const f10k = generateScalabilityFixture({ semanticCount: 10_000, seed: 123, topology: 'distributed' });
+    expect(f10k.counts.totalSemanticElements).toBe(10_000);
+
+    const sumCategories =
+      f10k.counts.packages +
+      f10k.counts.blocks +
+      f10k.counts.valueTypes +
+      f10k.counts.interfaces +
+      f10k.counts.properties +
+      f10k.counts.ports +
+      f10k.counts.connectors +
+      f10k.counts.relationships +
+      f10k.counts.requirements +
+      f10k.counts.verificationCases +
+      f10k.counts.stateMachineEntities +
+      f10k.counts.diagrams;
+    expect(sumCategories).toBe(10_000);
+
+    const validation = validateSysmlRepository(f10k.repository);
+    const errors = validation.diagnostics.filter(d => d.severity === 'error');
+    expect(errors).toEqual([]);
+    expect(validation.valid).toBe(true);
+    expect(f10k.diagramPresentations['diagram-ordinary'].elementIds.length).toBeLessThanOrEqual(500);
+    expect(f10k.diagramPresentations['diagram-stress'].elementIds.length).toBeGreaterThan(1000);
   });
 });
 

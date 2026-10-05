@@ -5,7 +5,8 @@ import { sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 export type SysmlEndpointFamily =
   | 'block' | 'interfaceBlock' | 'interface' | 'valueType' | 'enumeration'
   | 'requirement' | 'verificationCase' | 'part' | 'port' | 'valueParameter'
-  | 'actor' | 'useCase' | 'subject' | 'state' | 'property' | 'unknown';
+  | 'actor' | 'useCase' | 'subject' | 'state' | 'property'
+  | 'activity' | 'interaction' | 'operation' | 'signal' | 'constraintBlock' | 'package' | 'unit' | 'quantityKind' | 'view' | 'viewpoint' | 'stakeholder' | 'unknown';
 
 export interface ConnectionEndpoint {
   id: string;
@@ -13,6 +14,8 @@ export interface ConnectionEndpoint {
   family: SysmlEndpointFamily;
   ownerId?: string;
   typeId?: string;
+  /** For a `property` endpoint: the property's kind. A part or reference property stands for the part the old PartUsage record was. */
+  propertyKind?: 'value' | 'part' | 'reference' | 'flow' | 'constraint';
 }
 
 export interface ConnectionPolicyDiagnostic {
@@ -30,12 +33,20 @@ export interface ConnectionPolicyInput {
   relationshipKind: string;
   source: ConnectionEndpoint;
   target: ConnectionEndpoint;
-  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' | 'statemachine';
+  diagram: 'bdd' | 'ibd' | 'requirements' | 'rtm' | 'useCase' | 'statemachine' | 'package' | 'activity';
 }
 
 const BLOCK_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock']);
 const CLASSIFIER_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration']);
-const ASSOCIATION_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration', 'property']);
+const ASSOCIATION_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'valueType', 'enumeration', 'property', 'signal', 'constraintBlock']);
+/**
+ * SysML 1.6 §16.3.2.7: the client of «satisfy» is any named design element, not
+ * only Blocks. Requirements, unresolved endpoints and Packages are excluded.
+ */
+const SATISFY_SOURCE_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'part', 'port', 'property', 'state', 'useCase', 'activity', 'interaction', 'operation']);
+/** «verify» clients are test cases or the behaviours/operations that realise them. */
+const VERIFY_SOURCE_FAMILY = new Set<SysmlEndpointFamily>(['verificationCase', 'state', 'activity', 'interaction', 'operation']);
+const SAME_FAMILY_GENERALIZATION = new Set<SysmlEndpointFamily>(['interface', 'valueType', 'enumeration', 'signal', 'constraintBlock']);
 const REQUIREMENT_KINDS = new Set(['requirementContainment', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace']);
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
 
@@ -58,11 +69,16 @@ function reject(input: ConnectionPolicyInput, code: string, reason: string, corr
 }
 
 function validDiagram(kind: string, diagram: ConnectionPolicyInput['diagram']): boolean {
-  if (['association', 'composition', 'sharedAggregation', 'aggregation', 'generalization', 'dependency', 'allocation'].includes(kind)) return diagram === 'bdd';
+  if (['association', 'composition', 'sharedAggregation', 'aggregation', 'generalization', 'dependency'].includes(kind)) return diagram === 'bdd';
+  // SysML 1.6 Clause 15: «allocate» relates any named element to any other, so it is valid wherever
+  // structure, behaviour or requirements are drawn.
+  if (kind === 'allocation') return ['bdd', 'ibd', 'requirements', 'package', 'activity', 'useCase'].includes(diagram);
   if (['binding', 'assembly', 'delegation'].includes(kind)) return diagram === 'ibd';
   if (REQUIREMENT_KINDS.has(kind)) return diagram === 'requirements' || diagram === 'rtm' || diagram === 'statemachine';
   if (USE_CASE_KINDS.has(kind)) return diagram === 'useCase';
   if (kind === 'transition') return diagram === 'statemachine';
+  // SysML 1.6 Clause 7: «conform» / «expose» are drawn on package diagrams (and BDDs, where views are classifiers).
+  if (kind === 'conform' || kind === 'expose') return diagram === 'package' || diagram === 'bdd';
   return false;
 }
 
@@ -86,7 +102,8 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'composition' || kind === 'sharedAggregation') {
-    const validTarget = BLOCK_FAMILY.has(target.family) || target.family === 'part';
+    const validTarget = BLOCK_FAMILY.has(target.family) || target.family === 'part'
+      || (target.family === 'property' && (target.propertyKind === 'part' || target.propertyKind === 'reference'));
     if (!BLOCK_FAMILY.has(source.family) || !validTarget) {
       const code = source.family === 'unknown' || target.family === 'unknown' ? 'UNKNOWN_STEREOTYPE_FAMILY' : 'INVALID_AGGREGATION_ENDPOINTS';
       return reject(normalized, code, `${kind} requires a Block-family whole and a Block-family or Part target.`, 'Declare a supported Block-family stereotype, or create a value property typed by the ValueType instead.');
@@ -94,7 +111,7 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'generalization') {
-    const compatible = (BLOCK_FAMILY.has(source.family) && BLOCK_FAMILY.has(target.family)) || source.family === target.family && ['interface', 'valueType', 'enumeration'].includes(source.family);
+    const compatible = (BLOCK_FAMILY.has(source.family) && BLOCK_FAMILY.has(target.family)) || source.family === target.family && SAME_FAMILY_GENERALIZATION.has(source.family);
     if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Generalization requires declared compatible endpoint families.', 'Declare a supported stereotype family before using generalization.');
     if (!compatible) return reject(normalized, 'CROSS_FAMILY_GENERALIZATION', 'Generalization requires compatible endpoint families.', 'Use the same classifier family, or model the relationship as a dependency.');
     return { allowed: true, diagnostics: [] };
@@ -108,16 +125,16 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'satisfy') {
-    if ((!BLOCK_FAMILY.has(source.family) && source.family !== 'part' && source.family !== 'state') || target.family !== 'requirement') {
+    if (!SATISFY_SOURCE_FAMILY.has(source.family) || target.family !== 'requirement') {
       const correctiveAction = (source.family === 'requirement' && target.family === 'state')
         ? 'Connect the State to the Requirement, not the Requirement to the State.'
         : 'Connect the design element, Part, or State to a Requirement.';
-      return reject(normalized, 'INVALID_SATISFY_DIRECTION', 'Satisfy requires a Block-family definition, Part usage, or State to a Requirement.', correctiveAction);
+      return reject(normalized, 'INVALID_SATISFY_DIRECTION', 'Satisfy requires a design element (Block, Part, Port, Property, State, Use Case, Interaction or behaviour) to a Requirement.', correctiveAction);
     }
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'verify') {
-    if ((source.family !== 'verificationCase' && source.family !== 'state') || target.family !== 'requirement') return reject(normalized, 'INVALID_VERIFY_DIRECTION', 'Verify requires a Verification Case or State to a Requirement.', 'Connect a Verification Case or State to the Requirement it verifies.');
+    if (!VERIFY_SOURCE_FAMILY.has(source.family) || target.family !== 'requirement') return reject(normalized, 'INVALID_VERIFY_DIRECTION', 'Verify requires a Verification Case, behaviour or State to a Requirement.', 'Connect a Verification Case or State to the Requirement it verifies.');
     return { allowed: true, diagnostics: [] };
   }
   if (kind === 'refine') {
@@ -181,6 +198,21 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
     }
     return { allowed: true, diagnostics: [] };
   }
+  if (kind === 'conform') {
+    if (source.family !== 'view' || target.family !== 'viewpoint') {
+      return reject(normalized, 'INVALID_CONFORM_ENDPOINTS', 'Conform requires a View (source) and a Viewpoint (target).', 'Connect a View to the Viewpoint it conforms to.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
+  if (kind === 'expose') {
+    if (source.family !== 'view') {
+      return reject(normalized, 'INVALID_EXPOSE_SOURCE', 'Expose must start at a View.', 'Connect a View to the element it exposes.');
+    }
+    if (target.family === 'unknown') {
+      return reject(normalized, 'MISSING_RELATIONSHIP_ENDPOINT', 'The exposed element must be a resolved model element.', 'Choose an existing model element to expose.');
+    }
+    return { allowed: true, diagnostics: [] };
+  }
   if (kind === 'transition') {
     return { allowed: true, diagnostics: [] };
   }
@@ -194,6 +226,7 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
     case 'interface': return 'interface';
     case 'valuetype': return 'valueType';
     case 'enumeration': case 'enum': return 'enumeration';
+    case 'constraintblock': return 'constraintBlock';
     case 'requirement': return 'requirement';
     case 'verificationcase': case 'verification case': case 'testcase': case 'test case': return 'verificationCase';
     case 'part': case 'usage': return 'part';
@@ -203,7 +236,51 @@ function fromLegacyKind(kind: string | undefined): SysmlEndpointFamily {
     case 'usecase': case 'use_case': return 'useCase';
     case 'subject': return 'subject';
     case 'state': return 'state';
+    case 'activity': return 'activity';
+    case 'interaction': return 'interaction';
+    case 'operation': return 'operation';
+    case 'signal': return 'signal';
+    case 'unit': return 'unit';
+    case 'quantitykind': return 'quantityKind';
+    case 'view': return 'view';
+    case 'viewpoint': return 'viewpoint';
+    case 'stakeholder': return 'stakeholder';
+    case 'package': case 'model': return 'package';
     case 'property': case 'partproperty': case 'referenceproperty': case 'valueproperty': case 'reference': case 'value': return 'property';
+    default: return 'unknown';
+  }
+}
+
+/**
+ * Maps a canonical (V4) metaclass to the endpoint family this policy reasons
+ * about, so every rule table answers through `evaluateSysmlConnection`.
+ * AssociationBlock is a Block specialisation; ConstraintBlock has its own family
+ * (it may only be specialised by another ConstraintBlock).
+ */
+export function familyOfMetaclass(metaclass: string): SysmlEndpointFamily {
+  switch (metaclass) {
+    case 'Block': case 'AssociationBlock': return 'block';
+    case 'ConstraintBlock': return 'constraintBlock';
+    case 'InterfaceBlock': return 'interfaceBlock';
+    case 'FlowSpecification': return 'interface';
+    case 'ValueType': case 'DataType': return 'valueType';
+    case 'Enumeration': return 'enumeration';
+    case 'Signal': return 'signal';
+    case 'Unit': return 'unit';
+    case 'QuantityKind': return 'quantityKind';
+    case 'View': return 'view';
+    case 'Viewpoint': return 'viewpoint';
+    case 'Stakeholder': return 'stakeholder';
+    case 'PartProperty': return 'part';
+    case 'ReferenceProperty': case 'ValueProperty': case 'FlowProperty': case 'ConstraintProperty': return 'property';
+    case 'Port': return 'port';
+    case 'Requirement': return 'requirement';
+    case 'TestCase': case 'VerificationCase': return 'verificationCase';
+    case 'UseCase': return 'useCase';
+    case 'Activity': return 'activity';
+    case 'Interaction': return 'interaction';
+    case 'Operation': return 'operation';
+    case 'Package': case 'Model': return 'package';
     default: return 'unknown';
   }
 }

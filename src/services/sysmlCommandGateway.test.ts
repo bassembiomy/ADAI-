@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, onTestFinished } from 'vitest';
 import {
+  setRejectOnlyIntroducedErrors,
   executeSysmlCommand,
   projectLegacyDiagram,
   createSysmlGatewayState,
@@ -109,7 +110,7 @@ describe('sysmlCommandGateway', () => {
       .toContainEqual(expect.objectContaining({ id: relationship.id }));
   });
 
-  it('presents a newly created IBD Part usage immediately with the supplied canvas bounds', () => {
+  it('presents a newly created IBD part (a Block property) immediately with the supplied canvas bounds', () => {
     const repository = createEmptyRepository();
     const vehicle: BlockDefinition = {
       id: 'ibd-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
@@ -127,7 +128,7 @@ describe('sysmlCommandGateway', () => {
       type: 'createOwnedFeature',
       intent: {
         featureKind: 'property', ownerBlockId: vehicle.id, propertyKind: 'part',
-        typeId: motor.id, name: 'leftMotor', featureId: 'property-left-motor', usageId: 'part-left-motor',
+        typeId: motor.id, name: 'leftMotor', featureId: 'property-left-motor',
       },
       diagramId: vehicle.id,
       presentation: { x: 260, y: 180, width: 150, height: 100 },
@@ -135,10 +136,11 @@ describe('sysmlCommandGateway', () => {
 
     expect(result.committed).toBe(true);
     expect(result.view.parts).toContainEqual(expect.objectContaining({
-      id: 'part-left-motor', blockId: vehicle.id, typeId: motor.id, x: 260, y: 180,
+      id: 'property-left-motor', propertyId: 'property-left-motor', blockId: vehicle.id, typeId: motor.id, x: 260, y: 180,
     }));
-    expect(result.diagramPresentations[vehicle.id].elementIds).toContain('part-left-motor');
-    expect(result.diagramPresentations[vehicle.id].presentations['part-left-motor']?.bounds).toMatchObject({ x: 260, y: 180 });
+    expect(result.repository.usages).toEqual({});
+    expect(result.diagramPresentations[vehicle.id].elementIds).toContain('property-left-motor');
+    expect(result.diagramPresentations[vehicle.id].presentations['property-left-motor']?.bounds).toMatchObject({ x: 260, y: 180 });
   });
 
   it('rejects creating an IBD Part under a Block other than the active IBD context', () => {
@@ -155,7 +157,7 @@ describe('sysmlCommandGateway', () => {
       type: 'createOwnedFeature',
       intent: {
         featureKind: 'property', ownerBlockId: 'ibd-airframe', propertyKind: 'part',
-        typeId: 'ibd-motor', name: 'motor', featureId: 'property-airframe-motor', usageId: 'part-airframe-motor',
+        typeId: 'ibd-motor', name: 'motor', featureId: 'property-airframe-motor',
       },
       diagramId: 'ibd-vehicle',
       presentation: { x: 200, y: 150 },
@@ -164,7 +166,58 @@ describe('sysmlCommandGateway', () => {
     expect(result.committed).toBe(false);
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'OWNER_CONTEXT_MISMATCH' }));
     expect(result.repository.definitions['ibd-airframe']?.kind === 'block' && result.repository.definitions['ibd-airframe'].properties).toHaveLength(0);
-    expect(result.repository.usages['part-airframe-motor']).toBeUndefined();
+    expect(result.repository.usages).toEqual({});
+  });
+
+  it('creates an untyped IBD Part with its own new Block type as one undoable transaction', () => {
+    const repository = createEmptyRepository();
+    repository.definitions['ibd-vehicle'] = {
+      id: 'ibd-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const state = createSysmlGatewayState(repository);
+
+    const result = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property', ownerBlockId: 'ibd-vehicle', propertyKind: 'part',
+        name: 'engine', featureId: 'property-engine',
+      },
+      diagramId: 'ibd-vehicle',
+      presentation: { x: 200, y: 150, width: 150, height: 100 },
+    });
+
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect(result.repository.usages).toEqual({});
+    const owner = result.repository.definitions['ibd-vehicle'] as BlockDefinition;
+    const createdTypeId = owner.properties.find(property => property.id === 'property-engine')!.typeId;
+    const createdType = result.repository.definitions[createdTypeId];
+    expect(createdType).toMatchObject({ kind: 'block', name: 'Engine', ownerId: 'model' });
+    expect(result.diagramPresentations['ibd-vehicle'].elementIds).toContain('property-engine');
+
+    const undone = executeSysmlCommand(result, { type: 'undo' });
+    expect(undone.repository.usages).toEqual({});
+    expect(undone.repository.definitions[createdTypeId]).toBeUndefined();
+    expect((undone.repository.definitions['ibd-vehicle'] as BlockDefinition).properties).toHaveLength(0);
+  });
+
+  it.each(['proxyPort', 'fullPort', 'flowPort', 'umlPort'] as const)('creates an untyped %s directly on the owner Block', portKind => {
+    const repository = createEmptyRepository();
+    repository.definitions['blk-vehicle'] = {
+      id: 'blk-vehicle', name: 'Vehicle', kind: 'block', namespace: [], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    const state = createSysmlGatewayState(repository);
+
+    const result = executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: { featureKind: 'port', ownerBlockId: 'blk-vehicle', portKind, featureId: 'port-new' },
+    });
+
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect((result.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toContainEqual(
+      expect.objectContaining({ id: 'port-new', portKind, typeId: '' }),
+    );
   });
 
   it('accepts a BDD Association from a typed Block property to its target Block', () => {
@@ -217,17 +270,12 @@ describe('sysmlCommandGateway', () => {
       id: 'blk-motor', name: 'Motor', kind: 'block', namespace: ['model'], ownerId: 'model',
       isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
     };
-    const part: PartUsage = {
-      id: 'part-left-motor', propertyId: 'property-left-motor', kind: 'part', name: 'leftMotor',
-      ownerId: vehicle.id, typeId: motor.id, aggregation: 'composite',
-      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
-    };
     repository.definitions[vehicle.id] = vehicle;
     repository.definitions[motor.id] = motor;
-    repository.usages[part.id] = part;
 
+    // The part is the Block property: addressing it by its property id presents its owning Block.
     const result = executeSysmlCommand(createSysmlGatewayState(repository), {
-      type: 'addToDiagram', diagramId: 'bdd', elementIds: [part.id],
+      type: 'addToDiagram', diagramId: 'bdd', elementIds: ['property-left-motor'],
     });
 
     expect(result.committed).toBe(true);
@@ -690,44 +738,45 @@ describe('sysmlCommandGateway', () => {
       operations: [],
       constraints: [],
     };
-    const childUsage: PartUsage = {
-      id: 'part-child',
-      name: 'childUsage',
-      kind: 'part',
-      ownerId: 'block-parent',
-      typeId: 'block-parent',
-      aggregation: 'composite',
-      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
-    };
+    const childBlock: BlockDefinition = { ...parentBlock, id: 'block-child', name: 'ChildBlock' };
+    // Format 5: the parts are properties of the parent Block; the connector ends in them by path.
+    const partProperty = (id: string) => ({ id, name: id, kind: 'part' as const, typeId: 'block-child', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } });
+    const parentWithParts: BlockDefinition = { ...parentBlock, properties: [partProperty('part-child'), partProperty('part-other')] };
 
-    let r = executeSysmlCommand(state, { type: 'createElement', element: parentBlock });
+    let r = executeSysmlCommand(state, { type: 'createElement', element: childBlock });
     state = { ...state, repository: r.repository, history: r.history };
-    r = executeSysmlCommand(state, { type: 'createElement', element: childUsage });
+    r = executeSysmlCommand(state, { type: 'createElement', element: parentWithParts });
+    state = { ...state, repository: r.repository, history: r.history };
+    r = executeSysmlCommand(state, {
+      type: 'createElement',
+      element: { id: 'conn', kind: 'assembly', ownerId: 'block-parent', sourcePortId: 'part-child', targetPortId: 'part-other', sourceEnd: { path: ['part-child'] }, targetEnd: { path: ['part-other'] } },
+    });
+    expect(r.committed, JSON.stringify(r.diagnostics)).toBe(true);
     state = { ...state, repository: r.repository, history: r.history };
 
-    // Deleting parent block cascades to composite childUsage, so it requires confirmation
+    // Deleting a part cascades to the connector that ends in it, so it requires confirmation
     const unconfirmed = executeSysmlCommand(state, {
       type: 'deleteElements',
-      elementIds: ['block-parent'],
+      elementIds: ['part-child'],
     });
 
     expect(unconfirmed.committed).toBe(false);
     expect(unconfirmed.impact).toBeDefined();
-    expect(unconfirmed.impact?.deletedElementIds).toContain('part-child');
+    expect(unconfirmed.impact?.deletedElementIds).toEqual(expect.arrayContaining(['part-child', 'conn']));
 
     // Confirm with hash
     const impactHash = computeImpactHash(unconfirmed.impact!);
     const confirmed = executeSysmlCommand(state, {
       type: 'deleteElements',
-      elementIds: ['block-parent'],
+      elementIds: ['part-child'],
       confirmedImpactHash: impactHash,
     });
 
     expect(confirmed.committed).toBe(true);
-    expect(confirmed.repository.definitions['block-parent']).toBeUndefined();
-    expect(confirmed.repository.usages['part-child']).toBeUndefined();
-    expect(confirmed.view.blocks).toHaveLength(0);
-    expect(confirmed.view.parts).toHaveLength(0);
+    expect((confirmed.repository.definitions['block-parent'] as BlockDefinition).properties.map(property => property.id)).toEqual(['part-other']);
+    expect(confirmed.repository.connectors.conn).toBeUndefined();
+    expect(confirmed.repository.usages).toEqual({});
+    expect(confirmed.view.parts.map(part => part.id)).toEqual(['part-other']);
   });
 
   it('supports atomic undo and redo across mutations', () => {
@@ -1476,19 +1525,22 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     const ifDef = { id: 'if', name: 'IF', namespace: [], kind: 'interface' as const, features: ['signal'] };
     return commitAll([
       ifDef as unknown as SysmlElement,
-      defBlock('sys', { ports: [portDef('boundary-def', 'out')] }),
       defBlock('compA', { ports: [portDef('out-def', 'out')] }),
       defBlock('compB', { ports: [portDef('in-def', 'in'), portDef('out-def-b', 'out')] }),
-      { id: 'partA', name: 'partA', kind: 'part', ownerId: 'sys', typeId: 'compA', aggregation: 'composite', multiplicity: one } as unknown as SysmlElement,
-      { id: 'partB', name: 'partB', kind: 'part', ownerId: 'sys', typeId: 'compB', aggregation: 'composite', multiplicity: one } as unknown as SysmlElement,
-      { id: 'aOut', name: 'out', kind: 'port', ownerId: 'partA', definitionId: 'out-def' } as unknown as SysmlElement,
-      { id: 'bIn', name: 'in', kind: 'port', ownerId: 'partB', definitionId: 'in-def' } as unknown as SysmlElement,
-      { id: 'bOut', name: 'out', kind: 'port', ownerId: 'partB', definitionId: 'out-def-b' } as unknown as SysmlElement,
+      // Format 5: the parts of `sys` are its Block properties; there are no usage records.
+      defBlock('sys', {
+        ports: [portDef('boundary-def', 'out')],
+        properties: [
+          { id: 'partA', name: 'partA', kind: 'part', typeId: 'compA', multiplicity: one },
+          { id: 'partB', name: 'partB', kind: 'part', typeId: 'compB', multiplicity: one },
+        ],
+      }),
     ]);
   }
 
   const connector = (id: string, extra: Partial<ConnectorUsage> = {}): ConnectorUsage => ({
-    id, kind: 'assembly', ownerId: 'sys', sourcePortId: 'aOut', targetPortId: 'bIn', ...extra,
+    id, kind: 'assembly', ownerId: 'sys', sourcePortId: 'partA#out-def', targetPortId: 'partB#in-def',
+    sourceEnd: { path: ['partA'], portId: 'out-def' }, targetEnd: { path: ['partB'], portId: 'in-def' }, ...extra,
   });
 
   it('gates connector creation (connect path) through the IBD policy', () => {
@@ -1498,7 +1550,7 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
     expect(ok.repository.connectors['conn-ok']).toBeDefined();
 
     const badDirection = executeSysmlCommand(state, {
-      type: 'createElement', element: connector('conn-dir', { targetPortId: 'bOut' }),
+      type: 'createElement', element: connector('conn-dir', { targetPortId: 'partB#out-def-b', targetEnd: { path: ['partB'], portId: 'out-def-b' } }),
     });
     expect(badDirection.committed).toBe(false);
     expect(codesOf(badDirection)).toContain('INCOMPATIBLE_PORT_DIRECTION');
@@ -1507,7 +1559,7 @@ describe('sysmlCommandGateway semantic policy gating (Task 2)', () => {
       type: 'createElement', element: connector('conn-ctx', { ownerId: 'compA' }),
     });
     expect(badContext.committed).toBe(false);
-    expect(codesOf(badContext)).toContain('INVALID_CONNECTOR_CONTEXT');
+    expect(codesOf(badContext)).toContain('MISSING_CONNECTOR_ENDPOINT');
 
     const afterOk = {
       ...state, repository: ok.repository, history: ok.history, store: ok.store,
@@ -2004,32 +2056,24 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect(JSON.stringify(result.diagramPresentations)).toBe(before.diagrams);
   }
 
-  it('rejects property creation when caller usageId collides with repo.usages', () => {
-    let state = seedVehicleWithMotor();
-    const taken: PartUsage = {
+  it('rejects creating a PartUsage or PortUsage record: parts and ports are Block properties and ports', () => {
+    const state = seedVehicleWithMotor();
+    const before = snapshot(state);
+    const part: PartUsage = {
       id: 'usage-taken', name: 'taken', kind: 'part', ownerId: 'blk-vehicle', typeId: 'blk-motor',
       aggregation: 'composite', multiplicity: { ...one },
     };
-    const created = executeSysmlCommand(state, { type: 'createElement', element: taken });
-    expect(created.committed).toBe(true);
-    state = advance(state, created);
+    const refusedPart = executeSysmlCommand(state, { type: 'createElement', element: part });
+    expect(refusedPart.committed).toBe(false);
+    expect(refusedPart.diagnostics.some(d => d.code === 'USAGE_RECORD_NOT_SUPPORTED')).toBe(true);
+    expectNoMutation(refusedPart, state, before);
 
-    const before = snapshot(state);
-    const res = executeSysmlCommand(state, {
-      type: 'createOwnedFeature',
-      intent: {
-        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
-        typeId: 'blk-motor', name: 'fresh', featureId: 'prop-fresh-1', usageId: 'usage-taken',
-      },
-    } as any);
-
-    expect(res.committed).toBe(false);
-    expect(res.diagnostics.some(d => d.code === 'DUPLICATE_USAGE_ID')).toBe(true);
-    expectNoMutation(res, state, before);
-    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties).toHaveLength(0);
-    expect(res.repository.usages['prop-fresh-1']).toBeUndefined();
+    const port: PortUsage = { id: 'usage-port', name: 'p', kind: 'port', ownerId: 'blk-vehicle', definitionId: 'p' };
+    const refusedPort = executeSysmlCommand(state, { type: 'createAndPresent', diagramId: 'bdd', element: port, presentation: {} });
+    expect(refusedPort.committed).toBe(false);
+    expect(refusedPort.diagnostics.some(d => d.code === 'USAGE_RECORD_NOT_SUPPORTED')).toBe(true);
+    expectNoMutation(refusedPort, state, before);
   });
-
   it('rejects feature IDs colliding with a different repo namespace', () => {
     let state = seedVehicleWithMotor();
     const req: RequirementDefinition = {
@@ -2063,41 +2107,23 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect((definitionNamespace.repository.definitions['blk-vehicle'] as BlockDefinition).ports).toHaveLength(0);
   });
 
-  it('rejects staged usage/feature self-collision and generated usage collisions', () => {
-    const state = seedVehicleWithMotor();
+  it('rejects a part whose feature ID is already used by a sibling property, without mutation', () => {
+    let state = seedVehicleWithMotor();
+    state = advance(state, executeSysmlCommand(state, {
+      type: 'createOwnedFeature',
+      intent: { featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part', typeId: 'blk-motor', name: 'first', featureId: 'dup-self' },
+    } as any));
     const before = snapshot(state);
 
-    const selfCollision = executeSysmlCommand(state, {
+    const collision = executeSysmlCommand(state, {
       type: 'createOwnedFeature',
-      intent: {
-        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
-        typeId: 'blk-motor', name: 'self', featureId: 'dup-self', usageId: 'dup-self',
-      },
+      intent: { featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part', typeId: 'blk-motor', name: 'second', featureId: 'dup-self' },
     } as any);
-    expect(selfCollision.committed).toBe(false);
-    expect(selfCollision.diagnostics.some(d => d.code === 'DUPLICATE_USAGE_ID')).toBe(true);
-    expectNoMutation(selfCollision, state, before);
-
-    let staged = seedVehicleWithMotor();
-    const occupant: PartUsage = {
-      id: 'part-auto-feat', name: 'occupant', kind: 'part', ownerId: 'blk-vehicle', typeId: 'blk-motor',
-      aggregation: 'composite', multiplicity: { ...one },
-    };
-    staged = advance(staged, executeSysmlCommand(staged, { type: 'createElement', element: occupant }));
-    const stagedBefore = snapshot(staged);
-    const generatedCollision = executeSysmlCommand(staged, {
-      type: 'createOwnedFeature',
-      intent: {
-        featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
-        typeId: 'blk-motor', name: 'auto', featureId: 'auto-feat',
-      },
-    } as any);
-    expect(generatedCollision.committed).toBe(false);
-    expect(generatedCollision.diagnostics.some(d => d.code === 'DUPLICATE_USAGE_ID')).toBe(true);
-    expectNoMutation(generatedCollision, staged, stagedBefore);
+    expect(collision.committed).toBe(false);
+    expect(collision.diagnostics.some(d => d.code === 'DUPLICATE_SEMANTIC_ID')).toBe(true);
+    expectNoMutation(collision, state, before);
   });
-
-  it('rolls back a staged usage colliding with a nested feature namespace without mutation', () => {
+  it('rolls back a part whose feature ID collides with a nested port without mutation', () => {
     let state = seedVehicleWithMotor();
     state = advance(state, executeSysmlCommand(state, {
       type: 'createOwnedFeature',
@@ -2112,7 +2138,7 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
       type: 'createOwnedFeature',
       intent: {
         featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
-        typeId: 'blk-motor', name: 'clash', featureId: 'prop-clash-1', usageId: 'port-nested-1',
+        typeId: 'blk-motor', name: 'clash', featureId: 'port-nested-1',
       },
       diagramId: 'bdd',
       presentation: { x: 5, y: 5 },
@@ -2122,9 +2148,8 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect(res.diagnostics.some(d => d.severity === 'error')).toBe(true);
     expectNoMutation(res, state, before);
     expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties).toHaveLength(0);
-    expect(res.coordinates['prop-clash-1']).toBeUndefined();
+    expect(res.coordinates['port-nested-1']).toBeUndefined();
   });
-
   it('rolls back a staged-validation failure (duplicate port name) after passing admission without mutation', () => {
     let state = seedVehicleWithMotor();
     const first = executeSysmlCommand(state, {
@@ -2165,7 +2190,7 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
       type: 'createOwnedFeature',
       intent: {
         featureKind: 'property', ownerBlockId: 'blk-vehicle', propertyKind: 'part',
-        typeId: 'blk-motor', name: 'engine', featureId: 'prop-engine', usageId: 'usage-engine',
+        typeId: 'blk-motor', name: 'engine', featureId: 'prop-engine',
       },
     } as any);
 
@@ -2178,14 +2203,15 @@ describe('sysmlCommandGateway Task 3: atomic owned-feature IDs and staged valida
     expect(res.actionStack?.length ?? 0).toBe(before.actions + 1);
     expect(res.redoStack?.length ?? 0).toBe(0);
     expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties.map(p => p.id)).toEqual(['prop-engine']);
-    expect(res.repository.usages['usage-engine']).toMatchObject({ propertyId: 'prop-engine', ownerId: 'blk-vehicle', typeId: 'blk-motor' });
+    expect(res.repository.usages).toEqual({});
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties[0]).toMatchObject({ id: 'prop-engine', typeId: 'blk-motor', kind: 'part' });
 
     const undone = executeSysmlCommand(res, { type: 'undo' });
     expect((undone.repository.definitions['blk-vehicle'] as BlockDefinition).properties).toHaveLength(0);
-    expect(undone.repository.usages['usage-engine']).toBeUndefined();
+    expect(undone.repository.usages).toEqual({});
     const redone = executeSysmlCommand(undone, { type: 'redo' });
     expect((redone.repository.definitions['blk-vehicle'] as BlockDefinition).properties.map(p => p.id)).toEqual(['prop-engine']);
-    expect(redone.repository.usages['usage-engine']).toBeDefined();
+    expect(redone.repository.usages).toEqual({});
   });
 
   it('Task 4: preserves a valid State-to-Requirement link across mutation, undo, redo, and hydration with context', () => {
@@ -2383,33 +2409,34 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
     expect(res.store?.coordinates.has('blk-motor-copy')).toBe(false);
   });
 
-  it('updateElement rolls back a staged-validation failure (missing usage type) admitted by the gate', () => {
+  it('updateElement rolls back a staged-validation failure (missing part type) admitted by the gate', () => {
     let state = createSysmlGatewayState();
     state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-vehicle', 'Vehicle') }));
     state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: block('blk-motor', 'Motor') }));
-    const part: PartUsage = {
-      id: 'part-engine', propertyId: 'prop-engine', kind: 'part', name: 'engine',
-      ownerId: 'blk-vehicle', typeId: 'blk-motor', aggregation: 'composite',
-      multiplicity: { ...one },
-    };
-    state = advance(state, executeSysmlCommand(state, { type: 'createElement', element: part }));
+    const vehicle = state.repository.definitions['blk-vehicle'] as BlockDefinition;
+    const withPart = { ...vehicle, properties: [{ id: 'prop-engine', name: 'engine', kind: 'part' as const, typeId: 'blk-motor', multiplicity: { ...one } }] };
+    state = advance(state, executeSysmlCommand(state, { type: 'updateElement', elementId: 'blk-vehicle', patch: { properties: withPart.properties } }));
     const before = snapshot(state);
 
     // The update gate only covers block/relationship/connector candidates, so
     // retargeting a part usage at a ghost type is admitted and caught only by
-    // full staged validation (MISSING_USAGE_TYPE).
+    // full staged validation (MISSING_PROPERTY_TYPE).
     const res = executeSysmlCommand(state, {
-      type: 'updateElement', elementId: 'part-engine', patch: { typeId: 'ghost-type' },
+      type: 'updateElement', elementId: 'blk-vehicle',
+      patch: { properties: [{ id: 'prop-engine', name: 'engine', kind: 'part', typeId: 'ghost-type', multiplicity: { ...one } }] },
     });
 
     expect(res.committed).toBe(false);
-    expect(res.diagnostics.some(d => d.code === 'MISSING_USAGE_TYPE' && d.severity === 'error')).toBe(true);
+    expect(res.diagnostics.some(d => d.severity === 'error')).toBe(true);
     expectNoMutation(res, state, before);
-    expect(res.repository.usages['part-engine']).toMatchObject({ typeId: 'blk-motor' });
-    expect(res.store?.usages.get('part-engine')).toMatchObject({ typeId: 'blk-motor' });
+    expect((res.repository.definitions['blk-vehicle'] as BlockDefinition).properties[0]).toMatchObject({ typeId: 'blk-motor' });
   });
 
   it('moveElements rolls back a staged-validation failure (duplicate qualified name) admitted by the gate', () => {
+    // These two rollback tests use an error the repository already had to
+    // reach the staged-validation path, so they exercise the strict contract.
+    setRejectOnlyIntroducedErrors(false);
+    onTestFinished(() => setRejectOnlyIntroducedErrors(true));
     const repository = createEmptyRepository();
     repository.packages['pkg-target'] = {
       id: 'pkg-target', kind: 'package', name: 'Target', namespace: ['model'], ownerId: 'model',
@@ -2436,16 +2463,19 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
   });
 
   it('createDiagram rolls back a staged-validation failure (proxy port typing) admitted by the gate', () => {
+    setRejectOnlyIntroducedErrors(false);
+    onTestFinished(() => setRejectOnlyIntroducedErrors(true));
     const repository = createEmptyRepository();
     // Pre-existing repo-level validity error the diagram gate does not
-    // cover: a proxy port with no InterfaceBlock type. The diagram gate only
-    // checks the diagram id, owner existence, and package-diagram ownership,
-    // so the intent is admitted and only full staged validation
-    // (PROXY_PORT_TYPE_REQUIRED) rejects it.
+    // cover: a proxy port typed by a Block instead of an InterfaceBlock. The
+    // diagram gate only checks the diagram id, owner existence, and
+    // package-diagram ownership, so the intent is admitted and only full
+    // staged validation (INVALID_PROXY_PORT_TYPE) rejects it.
+    repository.definitions['blk-motor'] = block('blk-motor', 'Motor');
     repository.definitions['blk-vehicle'] = {
       ...block('blk-vehicle', 'Vehicle'),
       ports: [{
-        id: 'port-orphan', name: 'orphan', kind: 'proxy', portKind: 'proxyPort', typeId: '',
+        id: 'port-orphan', name: 'orphan', kind: 'proxy', portKind: 'proxyPort', typeId: 'blk-motor',
         direction: 'in', isConjugated: false, multiplicity: { ...one },
       }],
     };
@@ -2458,7 +2488,7 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
     });
 
     expect(res.committed).toBe(false);
-    expect(res.diagnostics.some(d => d.code === 'PROXY_PORT_TYPE_REQUIRED' && d.severity === 'error')).toBe(true);
+    expect(res.diagnostics.some(d => d.code === 'INVALID_PROXY_PORT_TYPE' && d.severity === 'error')).toBe(true);
     expect(res.diagnostics.some(d => d.code === 'INVALID_DIAGRAM_ID' || d.code === 'DUPLICATE_ELEMENT_ID' || d.code === 'OWNER_NOT_FOUND' || d.code === 'INVALID_DIAGRAM_OWNER')).toBe(false);
     expectNoMutation(res, state, before);
     expect(res.repository.diagrams['diag-bdd']).toBeUndefined();

@@ -73,16 +73,23 @@ test('BDD names, unnamed association fallback, and endpoint labels survive renam
   await first.click({ position: { x: 30, y: 40 } });
   const inspector = page.getByLabel('SysML Property Inspector');
   await expect(inspector).toBeVisible();
-  await expect(inspector.locator('h3')).toHaveText('Block');
-  await expectNoVisibleId(inspector, [firstId]);
-
   const name = inspector.getByRole('textbox', { name: 'Element Name' });
+  await name.fill('');
+  await name.press('Enter');
+  await expect.poll(() => page.evaluate(id => (window as any).__sysmlRepository.definitions[id]?.name, firstId)).toBe('');
+  await expect(inspector.locator('h3')).toHaveText('Block');
+  await expect(first.getByText('Block', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Expand All' }).click();
+  const firstTreeRow = page.locator(`.model-tree-row[data-semantic-id="${firstId}"]`);
+  await expect(firstTreeRow).toContainText('Block');
+  await expectNoVisibleId(inspector, [firstId]);
+  await expectNoVisibleId(first, [firstId]);
+  await expectNoVisibleId(firstTreeRow, [firstId]);
+
   await name.fill('Flight Computer');
   await name.press('Enter');
   await expect(first.getByText('Flight Computer', { exact: true })).toBeVisible();
   await expect(inspector.locator('h3')).toHaveText('Block: Flight Computer');
-  await page.getByRole('button', { name: 'Expand All' }).click();
-  const firstTreeRow = page.locator(`.model-tree-row[data-semantic-id="${firstId}"]`);
   await expect(firstTreeRow).toContainText('Flight Computer');
   await expectNoVisibleId(firstTreeRow, [firstId]);
   await expectNoVisibleId(first, [firstId]);
@@ -92,6 +99,11 @@ test('BDD names, unnamed association fallback, and endpoint labels survive renam
   await expect(second).toBeVisible();
   await moveBlock(page, second, 260);
   await second.click({ position: { x: 30, y: 40 } });
+  const authoredUuidName = '12345678-1234-4123-8123-123456789abc';
+  await inspector.getByRole('textbox', { name: 'Element Name' }).fill(authoredUuidName);
+  await inspector.getByRole('textbox', { name: 'Element Name' }).press('Enter');
+  await expect(second.getByText(authoredUuidName, { exact: true })).toBeVisible();
+  await expectNoVisibleId(second, [firstId, secondId]);
   await inspector.getByRole('textbox', { name: 'Element Name' }).fill('Telemetry Bus');
   await inspector.getByRole('textbox', { name: 'Element Name' }).press('Enter');
   await expect(second.getByText('Telemetry Bus', { exact: true })).toBeVisible();

@@ -77,7 +77,7 @@ export function handleCreateElement(
 }
 
 export const DIAGRAM_ALLOWED_METACLASSES: Record<DiagramKind, readonly MetaclassKind[]> = {
-  package: ['Model', 'Package', 'Block', 'InterfaceBlock', 'ValueType', 'Requirement', 'TestCase', 'UseCase', 'Comment', 'Rationale', 'Constraint'],
+  package: ['Model', 'Package', 'Block', 'InterfaceBlock', 'ValueType', 'Requirement', 'TestCase', 'UseCase', 'View', 'Viewpoint', 'Stakeholder', 'Comment', 'Rationale', 'Constraint'],
   bdd: [
     'Model',
     'Package',
@@ -90,6 +90,9 @@ export const DIAGRAM_ALLOWED_METACLASSES: Record<DiagramKind, readonly Metaclass
     'ValueType',
     'QuantityKind',
     'Unit',
+    'View',
+    'Viewpoint',
+    'Stakeholder',
     'Enumeration',
     'Signal',
     'Comment',
@@ -118,6 +121,9 @@ export const DIAGRAM_ALLOWED_METACLASSES: Record<DiagramKind, readonly Metaclass
     'Rationale',
     'Constraint',
   ],
+  useCase: ['Actor', 'UseCase', 'Requirement', 'Comment', 'Rationale', 'Constraint'],
+  activity: ['ActivityPartition', 'Parameter', 'Comment', 'Rationale', 'Constraint'],
+  sequence: ['Comment', 'Rationale', 'Constraint'],
   parametric: [
     'ConstraintBlock',
     'ConstraintProperty',

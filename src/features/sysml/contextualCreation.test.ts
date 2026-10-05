@@ -79,14 +79,33 @@ describe('planContextualCreation', () => {
     });
   });
 
-  it('requests type selection for typed port when typeId is missing', () => {
+  it('creates a port of any kind directly on the selected block when typeId is missing', () => {
     const plan = planContextualCreation({
       repository,
       source: 'propertyPanel',
       selectedId: 'controller',
       intent: { metaclass: 'Port', portKind: 'proxyPort' },
     });
-    expect(plan.kind).toBe('typeSelection');
+    expect(plan).toEqual({
+      kind: 'command',
+      command: { type: 'createOwnedPort', ownerBlockId: 'controller', portKind: 'proxyPort' },
+    });
+  });
+
+  it('creates a part property directly on the selected block when typeId is missing', () => {
+    const plan = planContextualCreation({
+      repository,
+      source: 'canvas',
+      selectedId: 'controller',
+      intent: { metaclass: 'PartProperty', name: 'engine' },
+    });
+    expect(plan).toEqual({
+      kind: 'command',
+      command: {
+        type: 'createOwnedFeature',
+        intent: { featureKind: 'property', ownerBlockId: 'controller', propertyKind: 'part', name: 'engine' },
+      },
+    });
   });
 
   it('creates valid Block, Package, Requirement, and ValueType accepted by executeSysmlCommand', () => {

@@ -1,4 +1,5 @@
 import type { SysmlRepository, SysmlRelationship } from './model';
+import { listInteractions, messageLabel, orderedMessages } from './interaction';
 
 export interface TraceabilityDiagnostic {
   code: 'UNRESOLVED_ENDPOINT' | 'DUPLICATE_ID' | 'REQUIREMENT_CYCLE';
@@ -63,6 +64,21 @@ export function buildTraceabilityIndex(repo: SysmlRepository, externalElements: 
       }
       index.elementsById.set(id, entity);
     }
+  }
+
+  // Lifelines, messages and fragments are nested in their Interaction but may be the client of
+  // «satisfy», «verify», «refine», «trace» and «allocate»: they must resolve, with a readable name.
+  for (const interaction of listInteractions(repo)) {
+    const owner = interaction.name?.trim() || 'Interaction';
+    interaction.lifelines?.forEach(lifeline => {
+      if (!index.elementsById.has(lifeline.id)) index.elementsById.set(lifeline.id, { id: lifeline.id, name: `${owner} ▸ lifeline ${lifeline.name?.trim() || ''}`.trim(), kind: 'lifeline' });
+    });
+    orderedMessages(interaction).forEach((message, position) => {
+      if (!index.elementsById.has(message.id)) index.elementsById.set(message.id, { id: message.id, name: `${owner} ▸ message ${position + 1}: ${messageLabel(message)}`, kind: 'message' });
+    });
+    interaction.fragments?.forEach(fragment => {
+      if (!index.elementsById.has(fragment.id)) index.elementsById.set(fragment.id, { id: fragment.id, name: `${owner} ▸ ${fragment.operator} fragment`, kind: 'fragment' });
+    });
   }
 
   // Some legacy-owned semantic elements (notably State Machine states) are

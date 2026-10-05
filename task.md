@@ -1,68 +1,28 @@
-# SysML Package Diagram and Contextual Editing Implementation Plan
+# ADIA Large-Model Edit Freeze Remediation Implementation Plan
 
-- [x] Task 1: Shared Semantic Interaction Context and Capability Guardrails
-  - [x] Step 1: Write failing precedence and legality tests (`src/features/sysml/interactionContext.test.ts`, `src/engine/sysml/capabilities/ownershipPolicy.test.ts`)
-  - [x] Step 2: Run the focused tests and verify failure
-  - [x] Step 3: Implement the resolver as a pure domain-facing service (`src/features/sysml/interactionContext.ts`, `src/engine/sysml/capabilities/ownershipPolicy.ts`)
-  - [x] Step 4: Replace explorer-only owner calculations with the shared resolver (`src/components/modelExplorer/AppModelExplorer.tsx`)
-  - [x] Step 5: Run focused and architecture tests (`src/features/sysml/interactionContext.test.ts`, `src/components/modelExplorer/AppModelExplorer.test.tsx`, `src/engine/sysml/architectureGuards.test.ts`)
-  - [x] Step 6: Commit Task 1 changes
-- [x] Task 2: Complete Package Diagram Creation and Exact Navigation
-  - [x] Step 1: Add failing tests for the complete package-diagram lifecycle
-  - [x] Step 2: Run focused tests and verify missing behavior
-  - [x] Step 3: Centralize package-diagram eligibility and command construction
-  - [x] Step 4: Make creation one repository transaction and open by returned ID
-  - [x] Step 5: Implement deterministic navigation target selection
-  - [x] Step 6: Add Playwright coverage
-  - [x] Step 7: Run package/navigation verification
-  - [x] Step 8: Commit Task 2 changes
-- [x] Task 3: Context-Aware Creation Without Redundant Parent Prompts
-  - [x] Step 1: Write command-parity and no-parent-dialog tests
-  - [x] Step 2: Run tests and verify failure
-  - [x] Step 3: Implement one creation planner
-  - [x] Step 4: Route BDD toolbar/canvas and block inspector buttons through the planner
-  - [x] Step 5: Extend the path to all supported owned elements
-  - [x] Step 6: Add end-to-end parity assertions
-  - [x] Step 7: Run verification
-  - [x] Step 8: Commit Task 3 changes
-- [x] Task 4: Repository-Complete Model Explorer Projection and Selection Alignment
-  - [x] Step 1: Write a complete projection contract test
-  - [x] Step 2: Run projection tests and capture missing collections
-  - [x] Step 3: Add focused projector functions
-  - [x] Step 4: Unify selection synchronization
-  - [x] Step 5: Add navigation tests for relationship endpoints
-  - [x] Step 6: Run verification
-  - [x] Step 7: Commit Task 4 changes
-- [x] Task 5: Typed, Schema-Driven Property Panel With Real Commands
-  - [x] Step 1: Write schema completeness tests
-  - [x] Step 2: Write atomic update tests
-  - [x] Step 3: Run tests and verify failure
-  - [x] Step 4: Define metaclass field/action schemas
-  - [x] Step 5: Implement debounced/coalesced canonical updates
-  - [x] Step 6: Replace conditional `App.tsx` SysML editor branches
-  - [x] Step 7: Verify field round trips
-  - [x] Step 8: Commit Task 5 changes
-- [x] Task 6: First-Class Relationships, Connections, and Behavioral Elements
-  - [x] Step 1: Write failing relationship round-trip tests
-  - [x] Step 2: Run relationship tests and verify failure
-  - [x] Step 3: Add explicit endpoint and item-flow command payloads
-  - [x] Step 4: Route relationship wizards and canvas connectors through the same commands
-  - [x] Step 5: Project behavioral relationships and enable inspector editing
-  - [x] Step 6: Run cross-diagram verification
-  - [x] Step 7: Commit Task 6 changes
-- [x] Task 7: Retire Parallel Writable UI State and Migrate Persistence
-  - [x] Step 1: Strengthen the single-writable-model guard before deleting code
-  - [x] Step 2: Run release gates and verify failure
-  - [x] Step 3: Convert legacy arrays to memoized projections
-  - [x] Step 4: Add a versioned migration
-  - [x] Step 5: Prove save/load/undo identity
-  - [x] Step 6: Run full repository and persistence verification
-  - [x] Step 7: Commit Task 7 changes
-- [x] Task 8: End-to-End Release Certification and Documentation
-  - [x] Step 1: Add a single user-journey certification test
-  - [x] Step 2: Add negative and accessibility scenarios
-  - [x] Step 3: Run the focused certification matrix
-  - [x] Step 4: Run static and release gates
-  - [x] Step 5: Update conformance evidence and architecture documentation
-  - [x] Step 6: Verify the final diff contains no placeholders or UI-only controls
-  - [x] Step 7: Commit Task 8 changes
+- [x] Task 0: Repair the measurement gate before optimizing
+  - [x] Step 0.1: Write failing benchmark-harness test (`scripts/scalability/benchWorker.test.ts`) that rejects a stale-state edit sequence and an undo that does not restore the expected name.
+  - [x] Step 0.2: Update `scripts/scalability/benchWorker.ts` to advance gateway state after each command (`{ ...state, ...result }`), use distinct valid names, assert committed revision/name and undo/redo effects, and emit streaming phase results to sidecar JSONL.
+  - [x] Step 0.3: Update `scripts/scalability/metrics.ts` and `scripts/scalability/runBaseline.ts` to separate timeout per model size from per-phase timeout, classify 250k as `timedOut` (not OOM), and mark unattempted sizes (500k, 1M) as `notRun`.
+  - [x] Step 0.4: Configure production-browser qualification workflow to run against an explicit fresh Vite production build/preview, keeping dev-server Playwright tests distinctly labeled as functional tests.
+  - [x] Step 0.5: Capture missing operation baseline rows (save/reopen, expansion, pan/zoom, startup, create/delete, search, 50k browser load) with 5+ samples for p95, preserve original raw baseline as historical evidence, and publish corrected baseline.
+  - [x] Step 0.6: Run verification (`vitest`, `tsc --noEmit`, production browser workflow) and verify Task 0 review gate.
+- [x] Task 1: Cache diagram membership during Model Browser projection
+  - [x] Step 1.1: Add regression and equivalence tests in [diagramTreeContext.test.ts](file:///g:/adia%20project/src/features/modelExplorer/diagramTreeContext.test.ts) covering explicit presentation, inference from endpoints, hidden elements, diagram precedence, and State Machine references.
+  - [x] Step 1.2: Profile and confirm the repeated membership allocation hotspot in `buildDiagramVisualParentIndex`.
+  - [x] Step 1.3: Move diagram presented-ID and hidden-ID `Set` construction outside the relationship loop in [diagramTreeContext.ts](file:///g:/adia%20project/src/features/modelExplorer/diagramTreeContext.ts).
+  - [x] Step 1.4: Run tests (`diagramTreeContext.test.ts`, unified projection tests, `tsc`), repeat 10k/50k stage profiles (10k: 660ms -> 12ms; 50k: 1,938ms -> 17ms), and verify Task 1 gate.
+- [x] Task 2: Make V4 owner indexing linear
+  - [x] Step 2.1: Add a golden test with duplicate registration opportunities and several owners, plus a wide-owner test (10k siblings) in [migrateV3ToV4.test.ts](file:///g:/adia%20project/src/engine/sysml/persistence/migrateV3ToV4.test.ts) verifying uniqueness, exact child order, and a bounded build-time budget (fails before fix: ~2852ms > 250ms).
+  - [x] Step 2.2: Replace `owned.includes(id)` plus `[...owned, id]` in `registerElement` in [migrateV3ToV4.ts](file:///g:/adia%20project/src/engine/sysml/persistence/migrateV3ToV4.ts) with push plus per-owner `Set` deduplication (drops wide-owner test to 73ms).
+  - [x] Step 2.3: Compare `migrateV3ToV4` results before/after across BDD, IBD, Requirements, Use Case, Package, State Machine-adjacent references, and diagrams (all 42 persistence tests pass).
+  - [x] Step 2.4: Repeat 10k/50k stage profiles and verify Task 2 gate: 50k V4 inspector projection dropped from 5,191ms to 584ms (8.9x faster); peak heap dropped from 336MB to 267MB.
+- [ ] Task 3: Remove unnecessary whole-model views from ordinary edits
+  - [ ] Step 3.1: Inventory every `sysmlCanvasProjection` and `inspectorRepoV4` consumer in `App.tsx` and write regression tests for active diagram scoping and lazy V4 inspector conversion.
+  - [ ] Step 3.2: Prove gateway-store consistency against `fromRepository` to eliminate the redundant store rebuild in `App.tsx`.
+  - [ ] Step 3.3: Introduce active-diagram canvas projection behind a checked adapter while preserving whole-project export/reports.
+  - [ ] Step 3.4: Gate V4 inspector conversion on actual panel visibility and selected IDs.
+  - [ ] Step 3.5: Run tests, 10k/50k stage profiles, and verify Task 3 gate.
+- [ ] Task 4: Dependency-scoped interactive validation
+- [ ] Task 5: Lazy Browser projection only if profiling still requires it
+- [ ] Task 6: Qualification of this remediation slice

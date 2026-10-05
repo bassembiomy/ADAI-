@@ -7,7 +7,8 @@ import type {
   SysmlRepository,
 } from './model';
 import type { SysmlDiagnostic } from './validation';
-import { resolveInheritance as resolveInheritancePolicy, policyDiagnosticsToSysml } from './policy';
+import { effectiveSupertypeIds } from './services/supertypes';
+import { resolveInheritance as resolveInheritancePolicy, policyDiagnosticsToSysml, isSameOrSubtype } from './policy';
 
 export interface ResolvedBlockFeatures {
   properties: PropertyDefinition[];
@@ -87,7 +88,7 @@ export function resolveInheritedFeatures(repo: SysmlRepository, blockId: string)
     }
     visiting.add(current.id);
     const isInherited = current.id !== block.id;
-    for (const parentId of current.supertypeIds ?? []) {
+    for (const parentId of effectiveSupertypeIds(repo, current.id)) {
       const parent = asBlock(repo.definitions[parentId]);
       if (parent) merge(parent);
       else diagnostics.push(diagnostic('MISSING_SUPERTYPE', current.id, 'supertypeIds', `Supertype ${parentId} does not exist`));
@@ -166,7 +167,7 @@ export function validateBlockDefinition(repo: SysmlRepository, blockId: string):
   const diagnostics = [...resolveInheritedFeatures(repo, blockId).diagnostics];
   const featureNames = new Set<string>();
 
-  for (const parentId of block.supertypeIds ?? []) {
+  for (const parentId of effectiveSupertypeIds(repo, block.id)) {
     const parent = asBlock(repo.definitions[parentId]);
     if (parent?.isLeaf) diagnostics.push(diagnostic('LEAF_SPECIALIZATION', block.id, 'supertypeIds', `Leaf block ${parentId} cannot be specialized`));
   }
@@ -182,13 +183,13 @@ export function validateBlockDefinition(repo: SysmlRepository, blockId: string):
     }
     if (property.redefinesId) {
       const original = inherited.find(candidate => candidate.id === property.redefinesId);
-      if (!original || original.kind !== property.kind || original.typeId !== property.typeId || !multiplicityConforms(property, original)) {
+      if (!original || original.kind !== property.kind || !isSameOrSubtype(repo, property.typeId, original.typeId) || !multiplicityConforms(property, original)) {
         diagnostics.push(diagnostic('INCOMPATIBLE_REDEFINITION', property.id, 'redefinesId', `Property does not conform to redefined feature ${property.redefinesId}`));
       }
     }
     if (property.subsetsId) {
       const original = inherited.find(candidate => candidate.id === property.subsetsId);
-      if (!original || original.kind !== property.kind || original.typeId !== property.typeId || !multiplicityIsSubset(property, original)) {
+      if (!original || original.kind !== property.kind || !isSameOrSubtype(repo, property.typeId, original.typeId) || !multiplicityIsSubset(property, original)) {
         diagnostics.push(diagnostic('INVALID_SUBSETTING_MULTIPLICITY', property.id, 'subsetsId', `Property is not a valid subset of ${property.subsetsId}`));
       }
     }
@@ -279,16 +280,21 @@ function inheritedProperties(repo: SysmlRepository, block: BlockDefinition): Pro
     visited.add(id);
     const parent = asBlock(repo.definitions[id]);
     if (!parent) return;
-    for (const supertypeId of parent.supertypeIds ?? []) collect(supertypeId);
+    for (const supertypeId of effectiveSupertypeIds(repo, parent.id)) collect(supertypeId);
     result.push(...parent.properties);
   };
-  for (const parentId of block.supertypeIds ?? []) collect(parentId);
+  for (const parentId of effectiveSupertypeIds(repo, block.id)) collect(parentId);
   return result;
 }
 
 function validPropertyType(kind: PropertyDefinition['kind'], type: SysmlDefinition): boolean {
   if (kind === 'part') return type.kind === 'block';
-  if (kind === 'value') return type.kind === 'valueType';
+  // SysML 1.6: a value property is typed by a ValueType (or an Enumeration, a kind of value type).
+  if (kind === 'value') return type.kind === 'valueType' || type.kind === 'enumeration';
+  // A constraint property is the usage of a ConstraintBlock (SysML 1.6 §10.3.2.1).
+  if (kind === 'constraint') return type.kind === 'constraintBlock';
+  // A flow property conveys a value, a Signal or a Block (§9.3.2.4).
+  if (kind === 'flow') return type.kind === 'valueType' || type.kind === 'enumeration' || type.kind === 'signal' || type.kind === 'block';
   return true;
 }
 

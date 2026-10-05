@@ -16,7 +16,7 @@ import { AppModelExplorer, capabilityToAction, explorerAdapterDomain, filterNonC
 
 afterEach(cleanup);
 
-it('tree Proxy Port waits for a selected Interface Block and cancellation creates nothing', () => {
+it('tree Proxy Port is created directly on the selected block with no type dialog', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const repo = createEmptyRepository();
   const owner: BlockDefinition = { id: 'block-owner', name: 'Owner', kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
@@ -33,74 +33,36 @@ it('tree Proxy Port waits for a selected Interface Block and cancellation create
   expect(row).not.toBeNull();
   fireEvent.contextMenu(row!);
   fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
-  expect(screen.getByRole('dialog', { name: /Select Type for Proxy Port/i })).toBeTruthy();
-  expect(onExecute).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByRole('dialog', { name: /Select Type/i })).toBeNull();
-  expect(onExecute).not.toHaveBeenCalled();
-  fireEvent.contextMenu(row!);
-  fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
-  fireEvent.click(screen.getByRole('button', { name: /Signal/ }));
-  fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
-  expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ type: 'createOwnedFeature', intent: expect.objectContaining({ ownerBlockId: owner.id, portKind: 'proxyPort', typeId: 'if-signal' }) }));
+  expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ type: 'createOwnedFeature', intent: expect.objectContaining({ ownerBlockId: owner.id, portKind: 'proxyPort' }) }));
+  const ports = (gateway.repository.definitions[owner.id] as BlockDefinition).ports;
+  expect(ports).toHaveLength(1);
+  expect(ports[0]).toMatchObject({ kind: 'proxy', typeId: '' });
+  expect(Object.values(gateway.repository.definitions).filter(definition => definition.kind === 'interface')).toHaveLength(1);
 }, 15000);
 
-it('tree Create New Type commits a canonical Interface Block before resuming Proxy Port creation', async () => {
+it('tree Part Property is created directly on the selected block with its own new Block type', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  const initial = createEmptyRepository();
-  initial.definitions.owner = { id: 'owner', name: 'Owner', kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
-  const calls: SysmlEditorCommand[] = [];
-  function Harness() {
-    const [repo, setRepo] = React.useState(initial);
-    const gateway = React.useRef(createSysmlGatewayState(initial));
-    return <AppModelExplorer diagramMode="bdd" states={[]} layers={[]} transitions={[]} junctions={[]} blocks={[]} parts={[]} selectedIds={[]} canonicalSysmlRepository={repo} onSelect={vi.fn()} onDoubleClick={vi.fn()} onExecuteSysmlCommand={(cmd) => {
-      calls.push(cmd);
-      const result = executeSysmlCommand(gateway.current, cmd);
-      if (result.committed) {
-        gateway.current = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
-        setRepo(result.repository);
-      }
-      return result;
-    }} />;
-  }
-  const { container } = render(<Harness />);
-  const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:owner"]');
-  expect(row).not.toBeNull();
-  fireEvent.contextMenu(row!);
-  fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
-  expect(screen.getByText(/No compatible existing types/i)).toBeTruthy();
-  expect(calls).toHaveLength(0);
-  fireEvent.click(screen.getByRole('button', { name: /Create New Type/i }));
-  await waitFor(() => expect(calls).toHaveLength(2));
-  expect(calls[0]).toMatchObject({ type: 'createElement', element: { kind: 'interface' } });
-  expect(calls[1]).toMatchObject({ type: 'createOwnedFeature', intent: { portKind: 'proxyPort', typeId: expect.any(String) } });
-});
-
-it('Create New Type resumes a pending Proxy Port without a canonical repository prop', async () => {
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  const initial = createEmptyRepository();
-  const owner: BlockDefinition = { id: 'owner', name: 'Owner', kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
-  initial.definitions[owner.id] = owner;
-  let gateway = createSysmlGatewayState(initial);
-  const calls: SysmlEditorCommand[] = [];
-  const { container } = render(<AppModelExplorer diagramMode="bdd" states={[]} layers={[]} transitions={[]} junctions={[]} blocks={[{ id: owner.id, name: owner.name } as any]} parts={[]} selectedIds={[]} onSelect={vi.fn()} onDoubleClick={vi.fn()} onExecuteSysmlCommand={(cmd) => {
-    calls.push(cmd);
+  const repo = createEmptyRepository();
+  const owner: BlockDefinition = { id: 'block-owner', name: 'Owner', kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
+  repo.definitions[owner.id] = owner;
+  let gateway = createSysmlGatewayState(repo);
+  const onExecute = vi.fn((cmd: SysmlEditorCommand) => {
     const result = executeSysmlCommand(gateway, cmd);
     if (result.committed) gateway = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
     return result;
-  }} />);
-  const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:owner"]');
+  });
+  const { container } = render(<AppModelExplorer diagramMode="bdd" states={[]} layers={[]} transitions={[]} junctions={[]} blocks={[]} parts={[]} selectedIds={[]} canonicalSysmlRepository={repo} onSelect={vi.fn()} onDoubleClick={vi.fn()} onExecuteSysmlCommand={onExecute} />);
+  const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:block-owner"]');
   expect(row).not.toBeNull();
   fireEvent.contextMenu(row!);
-  fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
-  fireEvent.click(screen.getByRole('button', { name: /Create New Type/i }));
-  await waitFor(() => expect(calls).toHaveLength(2));
-  const interfaces = Object.values(gateway.repository.definitions).filter(definition => definition.kind === 'interface');
-  expect(interfaces).toHaveLength(1);
-  const ports = (gateway.repository.definitions[owner.id] as BlockDefinition).ports;
-  expect(ports).toHaveLength(1);
-  expect(ports[0]).toMatchObject({ kind: 'proxy', typeId: interfaces[0].id });
-});
+  fireEvent.click(screen.getAllByRole('menuitem', { name: /^Part( Property)?$/ })[0]);
+  expect(screen.queryByRole('dialog', { name: /Select Type/i })).toBeNull();
+  expect(onExecute).toHaveBeenCalledTimes(1);
+  const properties = (gateway.repository.definitions[owner.id] as BlockDefinition).properties;
+  expect(properties).toHaveLength(1);
+  expect(gateway.repository.definitions[properties[0].typeId]).toMatchObject({ kind: 'block' });
+}, 15000);
 
 describe('AppModelExplorer Capability Coverage', () => {
   it('routes a State Machine node by its domain even in a SysML editor', () => {
@@ -642,12 +604,9 @@ describe('AppModelExplorer diagram-context creation', () => {
     expect(onExecute).not.toHaveBeenCalled();
   });
 
-  it('adds type-selected items created from a diagram row to that diagram', () => {
+  it('adds items created directly from a diagram row to that diagram', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     const repository = repositoryWithDiagrams();
-    repository.definitions['if-signal'] = {
-      id: 'if-signal', name: 'Signal', kind: 'interface', namespace: [], ownerId: 'model', features: [],
-    };
     const calls: SysmlEditorCommand[] = [];
     let gateway = createSysmlGatewayState(repository);
     const { container } = render(
@@ -679,15 +638,12 @@ describe('AppModelExplorer diagram-context creation', () => {
     expect(row).not.toBeNull();
     fireEvent.contextMenu(row!);
     fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
-    expect(screen.getByRole('dialog', { name: /Select Type for Proxy Port/i })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /Signal/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    expect(screen.queryByRole('dialog', { name: /Select Type/i })).toBeNull();
 
     expect(calls).toHaveLength(2);
     expect(calls[0]).toMatchObject({
       type: 'createOwnedFeature',
-      intent: { ownerBlockId: 'block-1', portKind: 'proxyPort', typeId: 'if-signal' },
+      intent: { ownerBlockId: 'block-1', portKind: 'proxyPort' },
     });
     expect(calls[1]).toMatchObject({
       type: 'addToDiagram',
@@ -696,55 +652,6 @@ describe('AppModelExplorer diagram-context creation', () => {
     });
     const createdPortId = (calls[1] as Extract<SysmlEditorCommand, { type: 'addToDiagram' }>).elementIds[0];
     expect(gateway.diagramPresentations?.['parametric-1']?.elementIds ?? []).toContain(createdPortId);
-  });
-
-  it('adds items created via Create New Type from a diagram row to that diagram', async () => {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-    const initial = repositoryWithDiagrams();
-    const calls: SysmlEditorCommand[] = [];
-    function Harness() {
-      const [repo, setRepo] = React.useState(initial);
-      const gateway = React.useRef(createSysmlGatewayState(initial));
-      return (
-        <AppModelExplorer
-          diagramMode="parametric"
-          states={[]}
-          layers={[]}
-          transitions={[]}
-          junctions={[]}
-          blocks={[]}
-          parts={[]}
-          selectedIds={[]}
-          canonicalSysmlRepository={repo}
-          onSelect={vi.fn()}
-          onDoubleClick={vi.fn()}
-          onExecuteSysmlCommand={(cmd) => {
-            calls.push(cmd);
-            const result = executeSysmlCommand(gateway.current, cmd);
-            if (result.committed) {
-              gateway.current = createSysmlGatewayState(result.repository, result.coordinates, result.diagramPresentations);
-              setRepo(result.repository);
-            }
-            return result;
-          }}
-        />
-      );
-    }
-    const { container } = render(<Harness />);
-    fireEvent.doubleClick(container.querySelector('.model-tree-row[data-node-id="sysml:element:block-1"]')!);
-    const row = container.querySelector('.model-tree-row[data-node-id="sysml:element:parametric-1"]');
-    expect(row).not.toBeNull();
-    fireEvent.contextMenu(row!);
-    fireEvent.click(screen.getByRole('menuitem', { name: /^Proxy Port$/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Create New Type/i }));
-    await waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls[0]).toMatchObject({ type: 'createElement', element: { kind: 'interface' } });
-    expect(calls[1]).toMatchObject({ type: 'createOwnedFeature', intent: { portKind: 'proxyPort', typeId: expect.any(String) } });
-    expect(calls[2]).toMatchObject({
-      type: 'addToDiagram',
-      diagramId: 'parametric-1',
-      elementIds: [expect.any(String)],
-    });
   });
 });
 

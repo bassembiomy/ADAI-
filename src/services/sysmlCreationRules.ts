@@ -21,6 +21,7 @@ import {
   type ConnectionEndpoint,
 } from '../engine/sysml/connectionPolicy';
 import { resolveSemanticEndpoint, type SemanticEndpointContext } from '../engine/sysml/semanticEndpointIndex';
+import { effectiveSupertypeIds } from '../engine/sysml/services/supertypes';
 
 export interface CreationValidationResult {
   valid: boolean;
@@ -318,7 +319,7 @@ export function validateCanonicalBlockUpdate(
   const codes: string[] = [];
   if (patch.isLeaf === true) {
     const specializedBy = Object.values(repo.definitions).filter(definition =>
-      definition.kind === 'block' && (definition.supertypeIds ?? []).includes(elementId),
+      definition.kind === 'block' && effectiveSupertypeIds(repo, definition.id).includes(elementId),
     );
     if (specializedBy.length > 0) codes.push('LEAF_SPECIALIZATION');
   }

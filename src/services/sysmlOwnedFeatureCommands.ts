@@ -40,7 +40,6 @@ export interface CreateOwnedPropertyIntent {
   diagramId?: string;
   presentation?: PresentationCoordinates;
   featureId?: string;
-  usageId?: string;
 }
 
 export type OwnedFeatureIntent =
@@ -58,10 +57,10 @@ export type OwnedFeatureIntent =
       featureKind: 'property';
       ownerBlockId: string;
       propertyKind: 'part' | 'reference' | 'value' | 'flow';
-      typeId: string;
+      /** Omitted: value/flow stay untyped; part/reference get a new Block type. */
+      typeId?: string;
       name?: string;
       featureId?: string;
-      usageId?: string;
     };
 
 export interface CreateOwnedFeatureCommand {
@@ -118,7 +117,7 @@ export function createPropertyDefinitionFromIntent(
     id: propId,
     name: propName,
     kind: intent.propertyKind,
-    typeId: intent.typeId,
+    typeId: intent.typeId ?? '',
     multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
   };
 }
@@ -283,26 +282,9 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
 
   const candidates = getCompatiblePortCandidates(repo, intent.portKind);
 
-  if (!intent.typeId && intent.portKind !== 'umlPort') {
-    return {
-      ok: false,
-      diagnostics: [
-        {
-          code: 'TYPE_NOT_FOUND',
-          message: `A compatible type is required for ${intent.portKind}.`,
-          elementId: intent.ownerBlockId,
-        },
-      ],
-      candidates,
-      action: {
-        kind: 'CreateNewType',
-        payload: {
-          suggestedMetaclass: suggestedMetaclassForPortKind(intent.portKind),
-        },
-      },
-    };
-  }
-
+  // Direct creation: a port of any kind may be created untyped on the
+  // selected block (SysML 1.6 constrains a port's type only once one is
+  // set). The type is assigned later from the inspector.
   const typeDef = intent.typeId ? repo.definitions[intent.typeId] : undefined;
   if (intent.typeId && !typeDef) {
     return {
@@ -319,7 +301,7 @@ export function buildCreateOwnedPortCommand(repo: SysmlRepository, intent: Creat
     };
   }
 
-  if (intent.portKind === 'proxyPort') {
+  if (intent.portKind === 'proxyPort' && typeDef) {
     // Same InterfaceBlock check as the domain `validatePort` rule.
     if (!isInterfaceBlockDefinition(typeDef)) {
       return {
@@ -391,22 +373,27 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
 
   const candidates = getCompatiblePropertyCandidates(repo, intent.propertyKind);
 
+  const propId = intent.featureId || `prop-${Math.random().toString(36).slice(2, 9)}`;
+  const propName = intent.name || `prop${(owner.properties?.length ?? 0) + 1}`;
+
+  // Direct creation without a type: the gateway creates the feature in the
+  // owner block and, for part/reference properties, a dedicated Block type
+  // in the same atomic transaction. The type can be changed in the inspector.
   if (!intent.typeId) {
     return {
-      ok: false,
-      diagnostics: [
-        {
-          code: 'TYPE_NOT_FOUND',
-          message: `A compatible type is required for ${intent.propertyKind} property.`,
-          elementId: resolvedOwnerId,
+      ok: true,
+      diagnostics: [],
+      command: {
+        type: 'createOwnedFeature',
+        intent: {
+          featureKind: 'property',
+          ownerBlockId: resolvedOwnerId,
+          propertyKind: intent.propertyKind,
+          name: propName,
+          featureId: propId,
         },
-      ],
-      candidates,
-      action: {
-        kind: 'CreateNewType',
-        payload: {
-          suggestedMetaclass: suggestedMetaclassForPropertyKind(intent.propertyKind),
-        },
+        ...(intent.diagramId ? { diagramId: intent.diagramId } : {}),
+        ...(intent.presentation ? { presentation: intent.presentation } : {}),
       },
     };
   }
@@ -455,10 +442,6 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
     };
   }
 
-  const propId = intent.featureId || `prop-${Math.random().toString(36).slice(2, 9)}`;
-  const propName = intent.name || `prop${(owner.properties?.length ?? 0) + 1}`;
-  const canonicalUsageId = intent.usageId || (intent.propertyKind === 'part' || intent.propertyKind === 'reference' ? `part-${propId}` : undefined);
-
   const command: CreateOwnedFeatureCommand = {
     type: 'createOwnedFeature',
     intent: {
@@ -468,7 +451,6 @@ export function buildCreateOwnedPropertyCommand(repo: SysmlRepository, intent: C
       typeId: typeDef.id,
       name: propName,
       featureId: propId,
-      ...(canonicalUsageId ? { usageId: canonicalUsageId } : {}),
     },
     ...(intent.diagramId ? { diagramId: intent.diagramId } : {}),
     ...(intent.presentation ? { presentation: intent.presentation } : {}),
@@ -525,12 +507,11 @@ export function createOwnedPort(repo: SysmlRepository, intent: CreateOwnedPortIn
  * produce the same pending type-selection request
  * (`TypeSelectionRequest`: owner identity, feature kind, compatible
  * candidate IDs, explicit `CreateNewType` action) and the same canonical
- * `createOwnedFeature` gateway command. Standard UML Port is the explicit
- * no-type exception: it plans an immediate untyped command on both
- * surfaces and is never converted into a SysML stereotype. Every other
- * kind without an explicit `typeId` plans type-selection — never a silent
- * first-candidate or implicit type creation. Planning is pure: it never
- * mutates the repository, so cancelling selection leaves no trace.
+ * `createOwnedFeature` gateway command. Creation is direct: without an
+ * explicit `typeId`, ports are created untyped and part/reference
+ * properties get a dedicated new Block type from the gateway — never a
+ * silently picked existing candidate. Planning is pure: it never mutates
+ * the repository.
  */
 const PORT_KIND_TO_TYPED_FEATURE_KIND: Record<CanonicalPortKind, TypedFeatureKind> = {
   umlPort: 'standardPort',

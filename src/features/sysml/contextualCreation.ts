@@ -1,4 +1,4 @@
-import type { MetaclassKind, SemanticElement } from '../../engine/sysml/domain/base';
+import type { MetaclassKind } from '../../engine/sysml/domain/base';
 import type { SysmlRepositoryV4 } from '../../engine/sysml/domain';
 import type { CanonicalPortKind } from '../../services/sysmlOwnedFeatureCommands';
 import type { TypeSelectionRequest } from '../../components/sysml/typeSelectionTypes';
@@ -69,72 +69,6 @@ function toResolverInput(input: ContextualCreationInput): InteractionContextInpu
   };
 }
 
-function getCompatibleCandidates(
-  repo: any,
-  metaclass: string,
-  subKind?: string
-): Array<{ id: string; name: string; kind?: string }> {
-  const result: Array<{ id: string; name: string; kind?: string }> = [];
-
-  if (repo.elements) {
-    for (const el of Object.values(repo.elements) as SemanticElement[]) {
-      if (metaclass === 'Port' && subKind === 'proxyPort') {
-        if (el.metaclass === 'InterfaceBlock') {
-          result.push({ id: el.id, name: el.name, kind: 'interface' });
-        }
-      } else if (metaclass === 'Port' && subKind === 'fullPort') {
-        if (el.metaclass === 'Block' || el.metaclass === 'ValueType') {
-          result.push({ id: el.id, name: el.name, kind: el.metaclass.toLowerCase() });
-        }
-      } else if (metaclass === 'Port' && subKind === 'flowPort') {
-        if (
-          el.metaclass === 'InterfaceBlock' ||
-          el.metaclass === 'ValueType' ||
-          el.metaclass === 'Signal'
-        ) {
-          result.push({ id: el.id, name: el.name, kind: el.metaclass.toLowerCase() });
-        }
-      } else if (metaclass === 'PartProperty') {
-        if (el.metaclass === 'Block') {
-          result.push({ id: el.id, name: el.name, kind: 'block' });
-        }
-      } else if (metaclass === 'ValueProperty') {
-        if (el.metaclass === 'ValueType') {
-          result.push({ id: el.id, name: el.name, kind: 'valueType' });
-        }
-      }
-    }
-  }
-
-  if (repo.definitions) {
-    for (const def of Object.values(repo.definitions) as any[]) {
-      if (metaclass === 'Port' && subKind === 'proxyPort') {
-        if (def.kind === 'interface') {
-          result.push({ id: def.id, name: def.name, kind: def.kind });
-        }
-      } else if (metaclass === 'Port' && subKind === 'fullPort') {
-        if (def.kind === 'block' || def.kind === 'valueType') {
-          result.push({ id: def.id, name: def.name, kind: def.kind });
-        }
-      } else if (metaclass === 'Port' && subKind === 'flowPort') {
-        if (def.kind === 'interface' || def.kind === 'valueType') {
-          result.push({ id: def.id, name: def.name, kind: def.kind });
-        }
-      } else if (metaclass === 'PartProperty') {
-        if (def.kind === 'block') {
-          result.push({ id: def.id, name: def.name, kind: def.kind });
-        }
-      } else if (metaclass === 'ValueProperty') {
-        if (def.kind === 'valueType') {
-          result.push({ id: def.id, name: def.name, kind: def.kind });
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
 export function buildOwnedElementPlan(
   repository: any,
   ownerId: string,
@@ -142,29 +76,8 @@ export function buildOwnedElementPlan(
   diagramId?: string
 ): ContextualCreationPlan {
   if (intent.metaclass === 'Port') {
-    const isUntyped =
-      intent.portKind === 'standardPort' ||
-      intent.portKind === 'umlPort' ||
-      intent.portKind === 'standard';
-
-    if (!isUntyped && !intent.typeId) {
-      const candidates = getCompatibleCandidates(repository, 'Port', intent.portKind);
-      return {
-        kind: 'typeSelection',
-        request: {
-          ownerId,
-          featureKind: (intent.portKind === 'proxyPort' ? 'proxyPort' : intent.portKind) as any,
-          candidates,
-          action: {
-            kind: 'CreateNewType',
-            payload: {
-              suggestedMetaclass: intent.portKind === 'proxyPort' ? 'InterfaceBlock' : 'Block',
-            },
-          },
-        },
-      };
-    }
-
+    // Ports of every kind are created directly on the owner block; without
+    // an explicit type they stay untyped until set from the inspector.
     return {
       kind: 'command',
       command: {
@@ -185,28 +98,8 @@ export function buildOwnedElementPlan(
     intent.metaclass === 'FlowProperty' ||
     intent.metaclass === 'ConstraintProperty'
   ) {
-    if (!intent.typeId) {
-      const candidates = getCompatibleCandidates(repository, intent.metaclass);
-      return {
-        kind: 'typeSelection',
-        request: {
-          ownerId,
-          featureKind: (intent.metaclass === 'PartProperty'
-            ? 'part'
-            : intent.metaclass === 'ReferenceProperty'
-            ? 'reference'
-            : 'value') as any,
-          candidates,
-          action: {
-            kind: 'CreateNewType',
-            payload: {
-              suggestedMetaclass: intent.metaclass === 'ValueProperty' ? 'ValueType' : 'Block',
-            },
-          },
-        },
-      };
-    }
-
+    // Without an explicit type the gateway creates the property directly
+    // (part/reference properties get a new Block type in the same command).
     const propKind =
       intent.metaclass === 'PartProperty'
         ? 'part'
@@ -226,7 +119,7 @@ export function buildOwnedElementPlan(
           featureKind: 'property',
           ownerBlockId: ownerId,
           propertyKind: propKind,
-          typeId: intent.typeId,
+          ...(intent.typeId ? { typeId: intent.typeId } : {}),
           ...(intent.name ? { name: intent.name } : {}),
         },
         ...(diagramId ? { diagramId } : {}),

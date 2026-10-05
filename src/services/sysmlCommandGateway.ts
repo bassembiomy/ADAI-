@@ -23,8 +23,21 @@ import type {
   SysmlEntity,
   PackageDefinition,
   ModelDiagramDefinition,
+  EnumerationDefinition,
+  SignalDefinition,
+  QuantityKindDefinition,
+  UnitDefinition,
+  ViewDefinition,
+  ViewpointDefinition,
+  StakeholderDefinition,
+  ConstraintBlockDefinition,
+  ActivityDefinition,
+  InteractionDefinition,
 } from '../engine/sysml/model';
-import { createEmptyRepository } from '../engine/sysml/model';
+import { createEmptyRepository, isDefinitionKind } from '../engine/sysml/model';
+import { resolvedPropertyUnitSymbol } from '../engine/sysml/units';
+import { allocationNamesByElement } from '../engine/sysml/allocation';
+import { stakeholdersOf, viewpointConcernTexts } from '../engine/sysml/views';
 import {
   analyzeMutation,
   applyCommand,
@@ -36,7 +49,11 @@ import {
   type MutationHistory,
 } from '../engine/sysml/mutations';
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
-import { serializeRepository, loadRepository } from '../engine/sysml/persistence';
+import { activityNestedIds, findInActivity } from '../engine/sysml/activity';
+import { interactionNestedIds, planOperationRenames } from '../engine/sysml/interaction';
+import { serializeRepository, loadRepository, rekeyPresentationState, serializeSysmlProjectState, type V5UpgradeReport } from '../engine/sysml/persistence';
+import { isOccurrenceInContext, resolveOccurrenceKey, resolvePartLike } from '../engine/sysml/partOccurrences';
+import { buildFeatureUpdateCommand } from './sysmlPropertyCommands';
 import {
   assessLegacyProjectionLoss,
   assessOpmInterchangeLoss,
@@ -55,6 +72,14 @@ import type { SemanticEndpointContext } from '../engine/sysml/semanticEndpointIn
 import { resolveSemanticEndpoint } from '../engine/sysml/semanticEndpointIndex';
 import { classifyRelationship, parsePolicyDiagnostic, policyDiagnosticsToSysml } from '../engine/sysml/policy';
 import type { BlockData, ConnectorData, PackageData, PartData, RelationshipData, PortData } from '../types/sysml_types';
+import { packageRelationshipKeyword } from '../features/sysml/packageRelationshipNotation';
+import {
+  collectDerivedParts,
+  pathEndpointOf,
+  type DerivedPathPart,
+} from '../features/sysml/pathConnectorProjection';
+import { fitPackageAroundMembers, layoutMembersInside } from '../features/sysml/packageNestingLayout';
+import { containmentRelationshipId } from '../engine/sysml/services/requirementOwnership';
 
 import { resolveType } from '../engine/sysml/services/typeResolution';
 import {
@@ -188,6 +213,16 @@ export type SysmlElement =
   | BlockDefinition
   | ValueTypeDefinition
   | InterfaceDefinition
+  | EnumerationDefinition
+  | SignalDefinition
+  | ConstraintBlockDefinition
+  | QuantityKindDefinition
+  | UnitDefinition
+  | ViewDefinition
+  | ViewpointDefinition
+  | StakeholderDefinition
+  | ActivityDefinition
+  | InteractionDefinition
   | PartUsage
   | PortUsage
   | ConnectorUsage
@@ -220,7 +255,11 @@ export type SysmlMutationCommand =
   | { type: 'moveElements'; elementIds: string[]; targetOwnerId: string; confirmedImpactHash?: string }
   | { type: 'createDiagram'; diagram: ModelDiagramDefinition }
   | { type: 'showPackageContents'; diagramId: string; packageId: string; mode: 'direct' | 'packages' | 'packageable' | 'recursive' }
-  | { type: 'addToDiagram'; diagramId: string; elementIds: string[]; coordinates?: Record<string, PresentationCoordinates> };
+  | {
+      type: 'addToDiagram'; diagramId: string; elementIds: string[]; coordinates?: Record<string, PresentationCoordinates>;
+      /** Bounds for elements already on the diagram (e.g. a Package grown to fit shown contents), applied in the same transaction. */
+      updateBounds?: Record<string, PresentationCoordinates>;
+    };
 
 export type SysmlEditorCommand =
   | SysmlMutationCommand
@@ -309,6 +348,44 @@ export function cloneGatewayStateForTransaction(state: SysmlGatewayState): Sysml
   };
 }
 
+/**
+ * When true, a command is rejected only for errors it *introduces*. Errors the
+ * repository already had before the command (a file saved with a dangling
+ * reference, a rule tightened since) are still reported in the result but no
+ * longer make every unrelated edit fail. Switch it off with
+ * `setRejectOnlyIntroducedErrors(false)` to restore the old "any error in the
+ * staged repository rejects the command" contract.
+ */
+let rejectOnlyIntroducedErrors = true;
+export function setRejectOnlyIntroducedErrors(enabled: boolean): void { rejectOnlyIntroducedErrors = enabled; }
+export function isRejectingOnlyIntroducedErrors(): boolean { return rejectOnlyIntroducedErrors; }
+
+const baselineErrorKeys = new WeakMap<SysmlRepository, Set<string>>();
+// Array indices are dropped from the path (`messages.2.signatureId` -> `messages.signatureId`) so an
+// error that already existed is not mistaken for a new one when an earlier item is removed.
+const diagnosticKey = (d: SysmlDiagnostic) => `${d.code}|${d.elementId ?? ''}|${(d.propertyPath ?? '').replace(/(^|\.)\d+(?=\.|$)/g, '')}`;
+
+/** Remembers the errors of a repository that was just validated so the next command need not re-validate it. */
+function seedBaselineErrors(repository: SysmlRepository, diagnostics: SysmlDiagnostic[]): void {
+  baselineErrorKeys.set(repository, new Set(diagnostics.filter(d => d.severity === 'error').map(diagnosticKey)));
+}
+
+/** The staged errors that the repository did not already have before the command. */
+function introducedErrors(
+  before: SysmlRepository,
+  stagedDiagnostics: SysmlDiagnostic[],
+  context: Parameters<typeof validateSysmlRepository>[1],
+): SysmlDiagnostic[] {
+  const errors = stagedDiagnostics.filter(d => d.severity === 'error');
+  if (!rejectOnlyIntroducedErrors || errors.length === 0) return errors;
+  let known = baselineErrorKeys.get(before);
+  if (!known) {
+    known = new Set(validateSysmlRepository(before, context).diagnostics.filter(d => d.severity === 'error').map(diagnosticKey));
+    baselineErrorKeys.set(before, known);
+  }
+  return errors.filter(d => !known!.has(diagnosticKey(d)));
+}
+
 export function computeImpactHash(impact: MutationImpact): string {
   const key = JSON.stringify({
     req: [...impact.requestedElementIds].sort(),
@@ -318,6 +395,7 @@ export function computeImpactHash(impact: MutationImpact): string {
     affReq: [...impact.affectedRequirementIds].sort(),
     affBase: [...impact.affectedBaselineIds].sort(),
     affPres: [...(impact.affectedPresentationIds ?? [])].sort(),
+    affInt: [...(impact.affectedBehaviorElementIds ?? [])].sort(),
     blocked: [...(impact.blockedBaselineIds ?? [])].sort(),
     severity: (impact as { severity?: string }).severity ?? 'review',
   });
@@ -368,6 +446,7 @@ export function projectLegacyDiagram(
   const parts: PartData[] = [];
   const relationships: RelationshipData[] = [];
   const connectors: ConnectorData[] = [];
+  const allocationNames = allocationNamesByElement(repository);
   const satisfiedReqIdsBySource = new Map<string, string[]>();
   for (const relationship of Object.values(repository.relationships)) {
     if (relationship.kind !== 'satisfy') continue;
@@ -399,6 +478,7 @@ export function projectLegacyDiagram(
       name: pkg.name,
       ownerId: pkg.ownerId,
       namespace: pkg.namespace,
+      ...(pkg.stereotype ? { stereotype: pkg.stereotype } : {}),
       x: coords.x ?? 0,
       y: coords.y ?? 0,
       width: coords.width ?? 220,
@@ -439,7 +519,7 @@ export function projectLegacyDiagram(
           type: repository.definitions[prop.typeId]?.name ?? prop.typeId,
           typeId: prop.typeId,
           multiplicity: formatMultiplicityText(prop.multiplicity),
-          unit: (prop as any).unit,
+          unit: resolvedPropertyUnitSymbol(repository, prop.typeId) ?? (prop as any).unit,
           dimension: (prop as any).dimension,
           isDerived: prop.isDerived,
           redefinesId: prop.redefinesId,
@@ -450,6 +530,33 @@ export function projectLegacyDiagram(
         classes: [],
         ports: legacyPorts,
         satisfiedReqIds: satisfiedReqIdsBySource.get(b.id) ?? [],
+        ...(allocationNames.get(b.id)?.allocatedFrom.length ? { allocatedFrom: allocationNames.get(b.id)!.allocatedFrom } : {}),
+        ...(allocationNames.get(b.id)?.allocatedTo.length ? { allocatedTo: allocationNames.get(b.id)!.allocatedTo } : {}),
+      });
+    } else if (def.kind === 'view' || def.kind === 'viewpoint' || def.kind === 'stakeholder') {
+      // SysML 1.6 §7.3.2: View / Viewpoint / Stakeholder are Class-based; drawn as
+      // classifier boxes with a «keyword» header. A Viewpoint adds a compartment.
+      const viewpointText = def.kind === 'viewpoint'
+        ? {
+            viewpointPurpose: def.purpose,
+            viewpointStakeholders: stakeholdersOf(repository, def.id).map(stakeholder => stakeholder.name),
+            viewpointConcerns: viewpointConcernTexts(repository, def.id),
+          }
+        : {};
+      blocks.push({
+        id: def.id,
+        name: def.name,
+        stereotype: def.kind,
+        ...viewpointText,
+        x: coords.x ?? 0,
+        y: coords.y ?? 0,
+        width: coords.width ?? (def.kind === 'viewpoint' ? 200 : 150),
+        height: coords.height ?? (def.kind === 'viewpoint' ? 120 : 70),
+        properties: [],
+        operations: [],
+        constraints: [],
+        classes: [],
+        ports: [],
       });
     } else {
       blocks.push({
@@ -544,6 +651,35 @@ export function projectLegacyDiagram(
     }
   }
 
+  // Parts that no PartUsage record represents (format 5) are derived from Block properties (id = path string).
+  const pushDerivedPart = (part: DerivedPathPart, contextId: string) => {
+    const coords = coordinatesFor(part.id);
+    parts.push({
+      id: part.id,
+      propertyId: part.propertyId,
+      name: part.name,
+      blockId: part.parentId,
+      parentBlockId: part.parentId,
+      ...(part.parentId !== contextId ? { parentPartId: part.parentId } : {}),
+      typeId: part.typeId,
+      typeBlockId: part.typeId,
+      aggregation: part.aggregation,
+      multiplicity: formatMultiplicityText(part.multiplicity),
+      satisfiedReqIds: satisfiedReqIdsBySource.get(part.propertyId) ?? [],
+      x: coords.x ?? 0,
+      y: coords.y ?? 0,
+      width: coords.width ?? 150,
+      height: coords.height ?? 100,
+    });
+  };
+  for (const { part, contextId } of collectDerivedParts(repository, {
+    isVisible,
+    visibleIds: visibleFilter,
+    diagramContextId: diagramId
+      ? (repository.diagrams[diagramId]?.contextElementId ?? (repository.definitions[diagramId] ? diagramId : undefined))
+      : undefined,
+  })) pushDerivedPart(part, contextId);
+
   // Project connectors
   for (const conn of Object.values(repository.connectors)) {
     const parseEndpoint = (portUsageId: string) => {
@@ -551,14 +687,18 @@ export function projectLegacyDiagram(
       if (usage && usage.kind === 'port') {
         return { partId: usage.ownerId, portId: usage.definitionId };
       }
+      // A part end: the connector attaches to the part itself (empty port).
+      if (usage && usage.kind === 'part') {
+        return { partId: usage.id, portId: '' };
+      }
       if (portUsageId.includes('::')) {
         const [partId, portId] = portUsageId.split('::');
         return { partId, portId };
       }
       return { partId: conn.ownerId, portId: portUsageId };
     };
-    const src = parseEndpoint(conn.sourcePortId);
-    const tgt = parseEndpoint(conn.targetPortId);
+    const src = pathEndpointOf(repository, conn, 'source') ?? parseEndpoint(conn.sourcePortId);
+    const tgt = pathEndpointOf(repository, conn, 'target') ?? parseEndpoint(conn.targetPortId);
 
     if (!isVisible(conn.id)) {
       if (!isVisible(src.partId) || !isVisible(tgt.partId)) continue;
@@ -598,7 +738,9 @@ export function projectLegacyDiagram(
       rel.kind === 'refine' ||
       rel.kind === 'trace' ||
       rel.kind === 'copy' ||
-      rel.kind === 'requirementContainment'
+      rel.kind === 'requirementContainment' ||
+      rel.kind === 'conform' ||
+      rel.kind === 'expose'
     ) {
       legacyType = rel.kind;
     }
@@ -608,141 +750,29 @@ export function projectLegacyDiagram(
       sourceId: rel.sourceId,
       targetId: rel.targetId,
       type: legacyType,
-      label: rel.kind === 'packageImport' ? (rel.visibility === 'private' ? '«access»' : '«import»')
-        : rel.kind === 'elementImport' ? `«elementImport»${rel.alias ? ` ${rel.alias}` : ''}`
-        : rel.kind === 'packageMerge' ? '«merge»' : rel.name ?? '',
+      label: packageRelationshipKeyword(rel) ?? rel.name ?? '',
+      name: rel.name,
       sourceMultiplicity: rel.sourceMultiplicity ? formatMultiplicityText(rel.sourceMultiplicity) : undefined,
       targetMultiplicity: rel.targetMultiplicity ? formatMultiplicityText(rel.targetMultiplicity) : undefined,
+      // The property panel's controlled inputs read these back from this
+      // projection; omitting them makes every edit snap back to empty.
+      sourceRole: rel.sourceRole,
+      targetRole: rel.targetRole,
+      sourceNavigable: rel.sourceNavigable,
+      targetNavigable: rel.targetNavigable,
+      sourceAggregation: rel.sourceAggregation,
+      targetAggregation: rel.targetAggregation,
     });
   }
 
   return { packages, blocks, relationships, parts, connectors };
 }
 
-function storeElementInRepository(repo: SysmlRepository, element: SysmlElement): void {
-  if ('kind' in element) {
-    if (element.kind === 'block' || element.kind === 'valueType' || element.kind === 'interface') {
-      repo.definitions[element.id] = element as BlockDefinition | ValueTypeDefinition | InterfaceDefinition;
-      return;
-    }
-    if (element.kind === 'part' || element.kind === 'port') {
-      repo.usages[element.id] = element as PartUsage | PortUsage;
-      return;
-    }
-    if (element.kind === 'assembly' || element.kind === 'delegation' || element.kind === 'binding') {
-      repo.connectors[element.id] = element as ConnectorUsage;
-      return;
-    }
-    if (element.kind === 'requirement') {
-      repo.requirements[element.id] = element as RequirementDefinition;
-      return;
-    }
-    if (element.kind === 'verificationCase') {
-      repo.verificationCases[element.id] = element as VerificationCase;
-      return;
-    }
-    if (element.kind === 'actor') {
-      repo.actors[element.id] = element as ActorDefinition;
-      return;
-    }
-    if (element.kind === 'subject') {
-      repo.subjects[element.id] = element as SubjectDefinition;
-      return;
-    }
-    if (element.kind === 'useCase') {
-      repo.useCases[element.id] = element as UseCaseDefinition;
-      return;
-    }
-    if (element.kind === 'extensionPoint') {
-      repo.extensionPoints[element.id] = element as ExtensionPoint;
-      return;
-    }
-  }
-  if ('sourceElementId' in element && 'diagramId' in element && 'role' in element) {
-    repo.diagramReferences[element.id] = element as DiagramReference;
-    return;
-  }
-  if ('sourceId' in element && 'targetId' in element) {
-    repo.relationships[element.id] = element as SysmlRelationship;
-    return;
-  }
-  if ('verificationCaseId' in element && 'status' in element) {
-    repo.evidence[element.id] = element as VerificationEvidence;
-    return;
-  }
-  if ('protected' in element && 'contentHash' in element) {
-    repo.baselines[element.id] = element as ModelBaseline;
-    return;
-  }
-  if ('sourcePortId' in element && 'targetPortId' in element) {
-    repo.connectors[element.id] = element as ConnectorUsage;
-    return;
-  }
-  // Fallback to definitions
-  repo.definitions[element.id] = element as any;
-}
-
-function findAndPatchElement(repo: SysmlRepository, elementId: string, patch: Record<string, unknown>): boolean {
-  if (repo.definitions[elementId]) {
-    repo.definitions[elementId] = { ...repo.definitions[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.usages[elementId]) {
-    repo.usages[elementId] = { ...repo.usages[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.connectors[elementId]) {
-    repo.connectors[elementId] = { ...repo.connectors[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.relationships[elementId]) {
-    repo.relationships[elementId] = { ...repo.relationships[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.requirements[elementId]) {
-    repo.requirements[elementId] = { ...repo.requirements[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.verificationCases[elementId]) {
-    repo.verificationCases[elementId] = { ...repo.verificationCases[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.evidence[elementId]) {
-    repo.evidence[elementId] = { ...repo.evidence[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.baselines[elementId]) {
-    repo.baselines[elementId] = { ...repo.baselines[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.actors?.[elementId]) {
-    repo.actors[elementId] = { ...repo.actors[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.subjects?.[elementId]) {
-    repo.subjects[elementId] = { ...repo.subjects[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.useCases?.[elementId]) {
-    repo.useCases[elementId] = { ...repo.useCases[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.extensionPoints?.[elementId]) {
-    repo.extensionPoints[elementId] = { ...repo.extensionPoints[elementId], ...patch } as any;
-    return true;
-  }
-  if (repo.diagramReferences?.[elementId]) {
-    repo.diagramReferences[elementId] = { ...repo.diagramReferences[elementId], ...patch } as any;
-    return true;
-  }
-  return false;
-}
-
 function getCollectionFromElement(element: SysmlElement): SysmlEntityCollection {
   if ('kind' in element) {
     if (element.kind === 'package') return 'packages';
     if (element.kind === 'diagram') return 'diagrams';
-    if (element.kind === 'block' || element.kind === 'valueType' || element.kind === 'interface') return 'definitions';
+    if (isDefinitionKind(element.kind)) return 'definitions';
     if (element.kind === 'part' || element.kind === 'port') return 'usages';
     if (element.kind === 'assembly' || element.kind === 'delegation' || element.kind === 'binding') return 'connectors';
     if (element.kind === 'requirement') return 'requirements';
@@ -819,10 +849,29 @@ function isLegacyDiagramId(id: string): boolean {
   return id === 'bdd' || id === 'requirements' || id === 'rtm' || id === 'ibd' || id === 'package';
 }
 
+/** Block name for a part's auto-created type: `engine` -> `Engine`. */
+function blockNameForPart(partName: string): string {
+  const trimmed = partName.trim() || 'Part';
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+function uniqueDefinitionName(repo: SysmlRepository, baseName: string): string {
+  const taken = new Set(Object.values(repo.definitions).map(definition => definition.name));
+  if (!taken.has(baseName)) return baseName;
+  let index = 2;
+  while (taken.has(`${baseName}_${index}`)) index += 1;
+  return `${baseName}_${index}`;
+}
+
 function repositoryHasSemanticId(repo: SysmlRepository, id: string): boolean {
   if (elementExistsInRepository(repo, id)) return true;
-  return Object.values(repo.definitions).some(definition => definition.kind === 'block'
-    && [...definition.properties, ...definition.ports].some(feature => feature.id === id));
+  // Format 5: a nested part is addressed by its property path.
+  if (id.includes('/') && resolveOccurrenceKey(repo, id)) return true;
+  return Object.values(repo.definitions).some(definition =>
+    (definition.kind === 'block' && [...definition.properties, ...definition.ports].some(feature => feature.id === id))
+    // Activity nodes and partitions carry diagram positions keyed by their own id.
+    || (definition.kind === 'activity' && activityNestedIds(definition).includes(id))
+    || (definition.kind === 'interaction' && interactionNestedIds(definition).includes(id)));
 }
 
 // ---------------------------------------------------------------------------
@@ -912,6 +961,15 @@ function enrichedRelationshipRejection(
 }
 
 function gateCreateElement(repo: SysmlRepository, element: SysmlElement, context?: SemanticEndpointContext): SysmlDiagnostic[] | null {
+  // Format 5: parts and ports are Block properties/ports; a session never holds PartUsage/PortUsage records.
+  if ('kind' in element && (element.kind === 'part' || element.kind === 'port')) {
+    return [{
+      code: 'USAGE_RECORD_NOT_SUPPORTED',
+      severity: 'error' as const,
+      elementId: element.id,
+      message: `A ${element.kind} is a ${element.kind === 'part' ? 'property' : 'port'} of its Block; create it with createOwnedFeature instead of a ${element.kind === 'part' ? 'PartUsage' : 'PortUsage'} record.`,
+    }];
+  }
   if (elementExistsInRepository(repo, element.id)) {
     return [{
       code: 'DUPLICATE_ELEMENT_ID',
@@ -1069,7 +1127,7 @@ export function validateOwnershipMove(
 
   if (targetOwnerId === 'model' || Boolean(targetPkg)) {
     // Model or package target
-    const allowed = ['package', 'diagram', 'block', 'valueType', 'interface', 'requirement', 'verificationCase', 'stateMachine'];
+    const allowed = ['package', 'diagram', 'block', 'valueType', 'interface', 'requirement', 'verificationCase', 'stateMachine', 'view', 'viewpoint', 'stakeholder', 'activity', 'interaction'];
     if (!allowed.includes(sourceKind)) {
       return {
         code: 'DISALLOWED_OWNERSHIP',
@@ -1083,7 +1141,7 @@ export function validateOwnershipMove(
 
   if (targetDef && targetDef.kind === 'block') {
     // Block target: can contain parts, ports, properties, constraints
-    const allowed = ['part', 'reference', 'shared', 'port', 'property', 'constraint'];
+    const allowed = ['part', 'reference', 'shared', 'port', 'property', 'constraint', 'activity', 'interaction'];
     if (!allowed.includes(sourceKind)) {
       return {
         code: 'DISALLOWED_OWNERSHIP',
@@ -1115,7 +1173,245 @@ export function validateOwnershipMove(
   };
 }
 
+const PACKAGE_SYMBOL_SIZE = { width: 220, height: 140 };
+const MEMBER_SYMBOL_SIZE = { width: 160, height: 100 };
+
+/**
+ * Show Contents with UML nesting: each shown member is placed inside the
+ * symbol of its owning Package (recursively), and the already-presented root
+ * Package grows to fit. One addToDiagram transaction, so one undo.
+ */
+function showContentsNestedInPackage(
+  state: SysmlGatewayState,
+  presentation: DiagramPresentation,
+  diagramId: string,
+  packageId: string,
+  newIds: string[],
+  endpointContext?: SemanticEndpointContext,
+): SysmlCommandResult {
+  const repo = state.repository;
+  const ownerOf = (id: string): string | undefined =>
+    repo.packages[id]?.ownerId ?? repo.definitions[id]?.ownerId ?? repo.requirements[id]?.ownerId ?? repo.verificationCases[id]?.ownerId;
+  const newSet = new Set(newIds);
+  const childrenOf = (ownerId: string) => newIds.filter(id => ownerOf(id) === ownerId);
+
+  const sizeCache = new Map<string, { width: number; height: number }>();
+  const measure = (id: string): { width: number; height: number } => {
+    const cached = sizeCache.get(id);
+    if (cached) return cached;
+    const base = repo.packages[id] ? PACKAGE_SYMBOL_SIZE : MEMBER_SYMBOL_SIZE;
+    const children = repo.packages[id] ? childrenOf(id) : [];
+    const origin = { x: 0, y: 0, ...base };
+    const placed = layoutMembersInside(origin, children.map(child => ({ id: child, ...measure(child) })));
+    const fitted = fitPackageAroundMembers(origin, Object.values(placed));
+    const size = { width: fitted.width, height: fitted.height };
+    sizeCache.set(id, size);
+    return size;
+  };
+
+  const coordinates: Record<string, PresentationCoordinates> = {};
+  const place = (ownerId: string, ownerRect: { x: number; y: number; width: number; height: number }, existingCount: number) => {
+    const children = childrenOf(ownerId);
+    const placed = layoutMembersInside(ownerRect, children.map(child => ({ id: child, ...measure(child) })), existingCount);
+    for (const child of children) {
+      coordinates[child] = placed[child];
+      if (repo.packages[child]) place(child, placed[child], 0);
+    }
+    return Object.values(placed);
+  };
+
+  const rootBounds = presentation.presentations[packageId].bounds;
+  const rootRect = {
+    x: rootBounds.x ?? 0,
+    y: rootBounds.y ?? 0,
+    width: rootBounds.width ?? PACKAGE_SYMBOL_SIZE.width,
+    height: rootBounds.height ?? PACKAGE_SYMBOL_SIZE.height,
+  };
+  // Leave room for members of this package that are already shown.
+  const existingMembers = presentation.elementIds.filter(id => !newSet.has(id) && ownerOf(id) === packageId).length;
+  const rootMembers = place(packageId, rootRect, existingMembers);
+  const grown = fitPackageAroundMembers(rootRect, rootMembers);
+  // Members whose owner was already shown (outside this placement chain)
+  // go inside that owner's existing symbol.
+  for (const id of newIds) {
+    if (coordinates[id]) continue;
+    const ownerBounds = presentation.presentations[ownerOf(id) ?? '']?.bounds;
+    if (ownerBounds?.x === undefined || ownerBounds.y === undefined) continue;
+    const ownerRect = { x: ownerBounds.x, y: ownerBounds.y, width: ownerBounds.width ?? PACKAGE_SYMBOL_SIZE.width, height: ownerBounds.height ?? PACKAGE_SYMBOL_SIZE.height };
+    coordinates[id] = layoutMembersInside(ownerRect, [{ id, ...measure(id) }])[id];
+  }
+
+  return executeSysmlCommand(state, {
+    type: 'addToDiagram', diagramId, elementIds: newIds, coordinates,
+    ...(grown.width !== rootRect.width || grown.height !== rootRect.height
+      ? { updateBounds: { [packageId]: { width: grown.width, height: grown.height } } }
+      : {}),
+  }, diagramId, endpointContext);
+}
+
+/**
+ * Requirement nesting is ownership (decision D3). A command that changes
+ * what a containment line or an ownership change means is completed with the
+ * matching follow-up, inside the same atomic transaction (one undo step):
+ *   - creating a containment line makes the child owned by the parent;
+ *   - deleting a containment line returns the child to the parent's owner;
+ *   - moving a requirement into/out of a requirement adds/removes its line.
+ * Commands that do not touch requirement nesting run unchanged.
+ */
+function requirementOwnershipFollowUps(
+  before: SysmlRepository,
+  after: SysmlRepository,
+  command: SysmlEditorCommand,
+): Array<{ command: SysmlEditorCommand; confirmDelete?: boolean }> {
+  const followUps: Array<{ command: SysmlEditorCommand; confirmDelete?: boolean }> = [];
+
+  if ((command.type === 'createElement' || command.type === 'createAndPresent')
+    && 'kind' in command.element && command.element.kind === 'requirementContainment') {
+    const relationship = command.element as SysmlRelationship;
+    const child = after.requirements[relationship.targetId];
+    if (child && after.requirements[relationship.sourceId] && child.ownerId !== relationship.sourceId) {
+      followUps.push({ command: { type: 'moveElements', elementIds: [child.id], targetOwnerId: relationship.sourceId } });
+    }
+  }
+
+  if (command.type === 'deleteElements') {
+    for (const id of command.elementIds) {
+      const relationship = before.relationships[id];
+      if (relationship?.kind !== 'requirementContainment' || after.relationships[id]) continue;
+      const child = after.requirements[relationship.targetId];
+      const parent = after.requirements[relationship.sourceId];
+      if (child && parent && child.ownerId === parent.id) {
+        followUps.push({ command: { type: 'moveElements', elementIds: [child.id], targetOwnerId: parent.ownerId || 'model' } });
+      }
+    }
+  }
+
+  if (command.type === 'moveElements') {
+    const staleLines: string[] = [];
+    for (const id of command.elementIds) {
+      const was = before.requirements[id];
+      const now = after.requirements[id];
+      if (!was || !now) continue;
+      if (was.ownerId && before.requirements[was.ownerId] && now.ownerId !== was.ownerId) {
+        staleLines.push(...Object.values(after.relationships)
+          .filter(r => r.kind === 'requirementContainment' && r.sourceId === was.ownerId && r.targetId === id)
+          .map(r => r.id));
+      }
+    }
+    if (staleLines.length > 0) followUps.push({ command: { type: 'deleteElements', elementIds: staleLines }, confirmDelete: true });
+    for (const id of command.elementIds) {
+      const now = after.requirements[id];
+      if (!now?.ownerId || !after.requirements[now.ownerId]) continue;
+      const hasLine = Object.values(after.relationships).some(r => r.kind === 'requirementContainment' && r.targetId === id);
+      if (!hasLine || staleLines.length > 0) {
+        followUps.push({ command: { type: 'createElement', element: {
+          id: containmentRelationshipId(now.ownerId, id), kind: 'requirementContainment', sourceId: now.ownerId, targetId: id,
+        } } });
+      }
+    }
+  }
+  return followUps;
+}
+
+function touchesRequirementNesting(repo: SysmlRepository, command: SysmlEditorCommand): boolean {
+  switch (command.type) {
+    case 'createElement':
+    case 'createAndPresent':
+      return 'kind' in command.element && command.element.kind === 'requirementContainment';
+    case 'deleteElements':
+      return command.elementIds.some(id => repo.relationships[id]?.kind === 'requirementContainment');
+    case 'moveElements':
+      return command.elementIds.some(id => repo.requirements[id])
+        || Boolean(repo.requirements[command.targetOwnerId]);
+    default:
+      return false;
+  }
+}
+
 export function executeSysmlCommand(
+  state: SysmlGatewayState,
+  command: SysmlEditorCommand,
+  activeDiagramId?: string,
+  context?: SemanticEndpointContext,
+): SysmlCommandResult {
+  if (!touchesRequirementNesting(state.repository, command)) {
+    return executeSysmlCommandCore(state, command, activeDiagramId, context);
+  }
+  // A dry run on a clone proves the whole chain succeeds (all-or-nothing); only
+  // then is it applied to the real state, which commands mutate in place.
+  const dry = runOwnershipChain(cloneGatewayStateForTransaction(state), state, command, activeDiagramId, context);
+  if (!dry.ok) {
+    return dry.passthrough ? executeSysmlCommandCore(state, command, activeDiagramId, context) : dry.failure!;
+  }
+  const real = runOwnershipChain(state, state, command, activeDiagramId, context);
+  return real.ok ? real.result : (real.failure ?? executeSysmlCommandCore(state, command, activeDiagramId, context));
+}
+
+type OwnershipChain =
+  | { ok: true; result: SysmlCommandResult }
+  | { ok: false; passthrough: boolean; failure?: SysmlCommandResult };
+
+/** Runs a command plus its ownership follow-ups against `base`, merged into one undo step. */
+function runOwnershipChain(
+  base: SysmlGatewayState,
+  original: SysmlGatewayState,
+  command: SysmlEditorCommand,
+  activeDiagramId?: string,
+  context?: SemanticEndpointContext,
+): OwnershipChain {
+  const initialPastLength = base.patchHistory?.past.length ?? 0;
+  const first = executeSysmlCommandCore(base, command, activeDiagramId, context);
+  if (!first.committed) return { ok: false, passthrough: true };
+  let current: SysmlCommandResult = first;
+  for (const followUp of requirementOwnershipFollowUps(original.repository, first.repository, command)) {
+    let result = executeSysmlCommandCore(current, followUp.command, activeDiagramId, context);
+    if (!result.committed && followUp.confirmDelete && result.impact) {
+      result = executeSysmlCommandCore(current, { ...followUp.command, confirmedImpactHash: computeImpactHash(result.impact) } as SysmlEditorCommand, activeDiagramId, context);
+    }
+    if (!result.committed) {
+      return {
+        ok: false, passthrough: false,
+        failure: {
+          repository: original.repository,
+          store: original.store ?? fromRepository(original.repository, original.coordinates, original.diagramPresentations ?? {}),
+          patchHistory: original.patchHistory ?? createPatchHistory(),
+          view: projectLegacyDiagram(original.repository, original.coordinates, original.diagramPresentations ?? {}),
+          diagnostics: result.diagnostics,
+          committed: false,
+          history: original.history,
+          coordinates: original.coordinates,
+          diagramPresentations: original.diagramPresentations ?? {},
+          presentationHistory: original.presentationHistory,
+          actionStack: original.actionStack,
+          redoStack: original.redoStack,
+        },
+      };
+    }
+    current = result;
+  }
+  // One undo step for the primary command plus its ownership follow-ups: the
+  // legacy history and action stack record only the primary command, exactly
+  // as if it had run alone.
+  if (current !== first) {
+    current = {
+      ...current,
+      history: { ...first.history, present: current.repository, future: [] },
+      actionStack: first.actionStack,
+    };
+  }
+  if (current.patchHistory && current.patchHistory.past.length > initialPastLength + 1) {
+    const added = current.patchHistory.past.splice(initialPastLength);
+    current.patchHistory.past.push(createSysmlPatch({
+      revision: current.repository.revision,
+      forward: added.flatMap(p => p.forward),
+      inverse: added.slice().reverse().flatMap(p => p.inverse),
+      description: `${command.type} + requirement ownership`,
+    }));
+  }
+  return { ok: true, result: current };
+}
+
+function executeSysmlCommandCore(
   state: SysmlGatewayState,
   command: SysmlEditorCommand,
   activeDiagramId?: string,
@@ -1605,33 +1901,25 @@ export function executeSysmlCommand(
       return reject('DUPLICATE_SEMANTIC_ID', `Feature ID '${featureId}' is already used in the repository.`, featureId);
     }
 
-    // The companion usage record for part/reference properties shares the
-    // global semantic ID namespace, so its generated (`part-<featureId>`)
-    // or caller-provided ID is admitted up front as well, including
-    // self-collision with the staged feature ID itself.
-    const pendingUsageId =
-      intent.featureKind === 'property' && (intent.propertyKind === 'part' || intent.propertyKind === 'reference')
-        ? intent.usageId || `part-${featureId}`
-        : undefined;
-    if (pendingUsageId) {
-      if (pendingUsageId === featureId || repositoryHasSemanticId(state.repository, pendingUsageId)) {
-        return reject('DUPLICATE_USAGE_ID', `Usage ID '${pendingUsageId}' is already used in the repository.`, pendingUsageId);
-      }
-    }
+    // Format 5: a part/reference property is the part. No PartUsage record is
+    // created; the IBD derives the part from the property (id = property id).
+    const isStructuralFeature =
+      intent.featureKind === 'property' && (intent.propertyKind === 'part' || intent.propertyKind === 'reference');
 
     let nextCandidateBlock: BlockDefinition;
 
-    let createdUsage: PartUsage | undefined;
+    // Block created on the fly as the type of an untyped part/reference
+    // property; committed in the same transaction as the feature.
+    let createdTypeBlock: BlockDefinition | undefined;
 
     if (intent.featureKind === 'port') {
-      if (!intent.typeId && intent.portKind !== 'umlPort') {
-        return reject('TYPE_NOT_FOUND', `A compatible type is required for ${intent.portKind}.`, intent.ownerBlockId);
-      }
+      // Ports of every kind may be created untyped; kind-specific type
+      // constraints apply only once a type is given.
       const typeDef = intent.typeId ? state.repository.definitions[intent.typeId] : undefined;
       if (intent.typeId && !typeDef) {
         return reject('TYPE_NOT_FOUND', `Type "${intent.typeId}" not found in repository.`, intent.ownerBlockId);
       }
-      if (intent.portKind === 'proxyPort') {
+      if (intent.portKind === 'proxyPort' && typeDef) {
         const isInterfaceBlock =
           typeDef &&
           (typeDef.kind === 'interface' ||
@@ -1645,7 +1933,7 @@ export function executeSysmlCommand(
           );
         }
       }
-      if (intent.portKind === 'fullPort') {
+      if (intent.portKind === 'fullPort' && typeDef) {
         const isBlockOrValue =
           typeDef &&
           (typeDef.kind === 'block' ||
@@ -1663,25 +1951,41 @@ export function executeSysmlCommand(
         ports: [...(owner.ports ?? []), port],
       };
     } else {
-      if (!intent.typeId) {
-        return reject(
-          'TYPE_NOT_FOUND',
-          `A compatible type is required for ${intent.propertyKind} property.`,
-          intent.ownerBlockId,
-        );
+      let typeId = intent.typeId;
+      if (!typeId && (intent.propertyKind === 'part' || intent.propertyKind === 'reference')) {
+        // A part needs a Block type: create a dedicated one next to the
+        // owner instead of asking the user to choose.
+        const blockId = `blk-${Math.random().toString(36).slice(2, 10)}`;
+        if (repositoryHasSemanticId(state.repository, blockId)) {
+          return reject('DUPLICATE_SEMANTIC_ID', `Type ID '${blockId}' is already used in the repository.`, blockId);
+        }
+        createdTypeBlock = {
+          id: blockId,
+          name: uniqueDefinitionName(state.repository, blockNameForPart(intent.name || featureId)),
+          kind: 'block',
+          isAbstract: false,
+          isLeaf: false,
+          properties: [],
+          ports: [],
+          operations: [],
+          constraints: [],
+          namespace: owner.namespace ?? [],
+          ...(owner.ownerId ? { ownerId: owner.ownerId } : {}),
+        };
+        typeId = blockId;
       }
-      const typeDef = state.repository.definitions[intent.typeId];
-      if (!typeDef) {
+      const typeDef = typeId ? createdTypeBlock ?? state.repository.definitions[typeId] : undefined;
+      if (typeId && !typeDef) {
         return reject('TYPE_NOT_FOUND', `Type "${intent.typeId}" not found in repository.`, intent.ownerBlockId);
       }
-      if ((intent.propertyKind === 'part' || intent.propertyKind === 'reference') && typeDef.kind !== 'block') {
+      if (typeDef && (intent.propertyKind === 'part' || intent.propertyKind === 'reference') && typeDef.kind !== 'block') {
         return reject(
           'INVALID_PROPERTY_TYPE',
           `${intent.propertyKind} property must be typed by a Block, but "${typeDef.name}" is a ${typeDef.kind}.`,
           intent.ownerBlockId,
         );
       }
-      if (intent.propertyKind === 'value' && typeDef.kind !== 'valueType') {
+      if (typeDef && intent.propertyKind === 'value' && typeDef.kind !== 'valueType') {
         return reject(
           'INVALID_PROPERTY_TYPE',
           `Value property must be typed by a ValueType, but "${typeDef.name}" is a ${typeDef.kind}.`,
@@ -1689,26 +1993,11 @@ export function executeSysmlCommand(
         );
       }
 
-      const property = createPropertyDefinitionFromIntent(owner, { ...intent, featureId });
+      const property = createPropertyDefinitionFromIntent(owner, { ...intent, typeId, featureId });
       nextCandidateBlock = {
         ...owner,
         properties: [...(owner.properties ?? []), property],
       };
-
-      if (intent.propertyKind === 'part' || intent.propertyKind === 'reference') {
-        // pendingUsageId was admitted against every repo namespace above.
-        const usageId = pendingUsageId ?? `part-${featureId}`;
-        createdUsage = {
-          id: usageId,
-          propertyId: featureId,
-          kind: 'part',
-          name: intent.name || featureId,
-          ownerId: owner.id,
-          typeId: intent.typeId,
-          aggregation: intent.propertyKind === 'reference' ? 'reference' : 'composite',
-          multiplicity: property.multiplicity ?? { lower: 1, upper: 1, ordered: false, unique: true },
-        };
-      }
     }
 
     const stagedRepo: SysmlRepository = {
@@ -1716,13 +2005,8 @@ export function executeSysmlCommand(
       definitions: {
         ...state.repository.definitions,
         [owner.id]: nextCandidateBlock,
+        ...(createdTypeBlock ? { [createdTypeBlock.id]: createdTypeBlock } : {}),
       },
-      usages: createdUsage
-        ? {
-            ...state.repository.usages,
-            [createdUsage.id]: createdUsage,
-          }
-        : state.repository.usages,
     };
     // -----------------------------------------------------------------------
     // Task 3 staged validation: the complete staged repository receives full
@@ -1735,7 +2019,7 @@ export function executeSysmlCommand(
     // diagnostics).
     // -----------------------------------------------------------------------
     const stagedValidation = validateSysmlRepository(stagedRepo, endpointContext);
-    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -1763,12 +2047,6 @@ export function executeSysmlCommand(
       const isIbdBlockContext = Boolean(
         command.diagramId && state.repository.definitions[command.diagramId]?.kind === 'block',
       );
-      if (createdUsage && isIbdBlockContext) {
-        // PartProperty is represented semantically by both its owned feature
-        // and a PartUsage projection. IBD renders the usage, so persist its
-        // own presentation record and bounds in the same atomic command.
-        nextCoordinates[createdUsage.id] = { ...command.presentation };
-      }
       if (command.diagramId) {
         const diagPres = nextDiagramPresentations[command.diagramId] ?? {
           elementIds: [owner.id],
@@ -1788,17 +2066,18 @@ export function executeSysmlCommand(
           },
         };
         const isIbdBlockContext = state.repository.definitions[command.diagramId]?.kind === 'block';
-        const nextElementIds = createdUsage && isIbdBlockContext
-          ? [...new Set([...diagPres.elementIds, createdUsage.id])]
+        // The IBD presents the part under its property id (the depth-1 path key).
+        const nextElementIds = isStructuralFeature && isIbdBlockContext
+          ? [...new Set([...diagPres.elementIds, featureId])]
           : diagPres.elementIds;
         const nextPresentations = {
           ...diagPres.presentations,
           [owner.id]: updatedOwnerPres,
-          ...(createdUsage && isIbdBlockContext ? {
-            [createdUsage.id]: {
-              id: stableDiagramPresentationId(command.diagramId, createdUsage.id),
+          ...(isStructuralFeature && isIbdBlockContext ? {
+            [featureId]: {
+              id: stableDiagramPresentationId(command.diagramId, featureId),
               diagramId: command.diagramId,
-              semanticElementId: createdUsage.id,
+              semanticElementId: featureId,
               bounds: { ...command.presentation },
             },
           } : {}),
@@ -1824,7 +2103,11 @@ export function executeSysmlCommand(
           revision: state.repository.revision + 1,
           timestamp: new Date().toISOString(),
           command: 'createOwnedFeature',
-          elementIds: [owner.id, featureId, ...(createdUsage ? [createdUsage.id] : [])],
+          elementIds: [
+            owner.id,
+            featureId,
+            ...(createdTypeBlock ? [createdTypeBlock.id] : []),
+          ],
         },
       ],
     };
@@ -1855,16 +2138,15 @@ export function executeSysmlCommand(
     // Single atomic transaction: repository, store projection, presentation,
     // persistence records, and exactly one undo entry.
     upsertEntity(store, 'definitions', nextCandidateBlock);
-    if (createdUsage) {
-      upsertEntity(store, 'usages', createdUsage);
+    if (createdTypeBlock) {
+      upsertEntity(store, 'definitions', createdTypeBlock);
     }
     if (command.presentation) {
       store.coordinates.set(featureId, { ...command.presentation });
       if (command.diagramId) {
         store.diagramPresentations.set(command.diagramId, nextDiagramPresentations[command.diagramId]);
         const isIbdBlockContext = state.repository.definitions[command.diagramId]?.kind === 'block';
-        if (createdUsage && isIbdBlockContext) {
-          store.coordinates.set(createdUsage.id, { ...command.presentation });
+        if (isStructuralFeature && isIbdBlockContext) {
           store.indexes.diagramId.set(command.diagramId, new Set(nextDiagramPresentations[command.diagramId].elementIds));
         }
       }
@@ -1876,20 +2158,13 @@ export function executeSysmlCommand(
     const inverseOps: import('../engine/sysml/patches').PatchOperation[] = [
       { op: 'replace', collection: 'definitions', id: owner.id, oldValue: nextCandidateBlock, value: owner },
     ];
-    if (createdUsage) {
-      forwardOps.push({ op: 'add', collection: 'usages', id: createdUsage.id, value: createdUsage });
-      inverseOps.push({ op: 'remove', collection: 'usages', id: createdUsage.id, oldValue: createdUsage });
+    if (createdTypeBlock) {
+      forwardOps.push({ op: 'add', collection: 'definitions', id: createdTypeBlock.id, value: createdTypeBlock });
+      inverseOps.push({ op: 'remove', collection: 'definitions', id: createdTypeBlock.id, oldValue: createdTypeBlock });
     }
     if (command.presentation) {
       forwardOps.push({ op: 'add', collection: 'coordinates', id: featureId, value: command.presentation });
       inverseOps.push({ op: 'remove', collection: 'coordinates', id: featureId, oldValue: command.presentation });
-      const isIbdBlockContext = Boolean(
-        command.diagramId && state.repository.definitions[command.diagramId]?.kind === 'block',
-      );
-      if (createdUsage && isIbdBlockContext) {
-        forwardOps.push({ op: 'add', collection: 'coordinates', id: createdUsage.id, value: command.presentation });
-        inverseOps.push({ op: 'remove', collection: 'coordinates', id: createdUsage.id, oldValue: command.presentation });
-      }
       if (command.diagramId) {
         const prevDiag = diagramPresentations[command.diagramId];
         const nextDiag = nextDiagramPresentations[command.diagramId];
@@ -2027,7 +2302,7 @@ export function executeSysmlCommand(
     // Any error aborts with the original repository/history/coordinates and
     // untouched store/patchHistory, so a success never carries errors.
     const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
-    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -2048,6 +2323,7 @@ export function executeSysmlCommand(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
     upsertEntity(store, collection, command.element as any);
     if (command.presentation) {
       store.coordinates.set(command.element.id, { ...command.presentation });
@@ -2095,6 +2371,11 @@ export function executeSysmlCommand(
       state.repository.evidence[command.elementId] ||
       state.repository.baselines[command.elementId]
     );
+    if (!existing) {
+      // Format 5: a part is a property of its Block, so updating it updates that Block.
+      const featureUpdate = buildFeatureUpdateCommand(state.repository, command.elementId, command.patch);
+      if (featureUpdate) return executeSysmlCommandCore(state, featureUpdate, activeDiagramId, context);
+    }
     if (!existing) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -2156,11 +2437,30 @@ export function executeSysmlCommand(
       ],
     };
 
+    // Renaming an operation of a Block rewrites the calls that name it, in the
+    // same atomic step, so no message is left calling an operation that is gone.
+    const operationRewrites = (existing as { kind?: string }).kind === 'block' && Array.isArray((command.patch as { operations?: unknown }).operations)
+      ? planOperationRenames(
+          state.repository,
+          command.elementId,
+          (existing as BlockDefinition).operations ?? [],
+          (command.patch as { operations: string[] }).operations,
+        )
+      : [];
+    const rewrittenInteractions: Array<{ before: SysmlDefinition; after: SysmlDefinition }> = [];
+    for (const rewrite of operationRewrites) {
+      const before = state.repository.definitions[rewrite.interactionId];
+      if (before?.kind !== 'interaction') continue;
+      const after = { ...before, messages: rewrite.messages };
+      nextRepo.definitions = { ...nextRepo.definitions, [before.id]: after };
+      rewrittenInteractions.push({ before, after });
+    }
+
     // Full semantic validation runs on the staged state BEFORE any mutation.
     // Any error aborts with the original repository/history and untouched
     // store/patchHistory, so a success never carries errors.
     const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
-    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -2181,12 +2481,20 @@ export function executeSysmlCommand(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
     upsertEntity(store, collection, nextElement);
+    for (const { after } of rewrittenInteractions) upsertEntity(store, 'definitions', after);
     const patch = createSysmlPatch({
       revision: nextRepo.revision,
       coalesceKey: command.coalesceKey,
-      forward: [{ op: 'replace', collection, id: command.elementId, oldValue: existing, value: nextElement }],
-      inverse: [{ op: 'replace', collection, id: command.elementId, oldValue: nextElement, value: existing }],
+      forward: [
+        { op: 'replace', collection, id: command.elementId, oldValue: existing, value: nextElement },
+        ...rewrittenInteractions.map(({ before, after }) => ({ op: 'replace' as const, collection: 'definitions' as const, id: before.id, oldValue: before, value: after })),
+      ],
+      inverse: [
+        ...rewrittenInteractions.slice().reverse().map(({ before, after }) => ({ op: 'replace' as const, collection: 'definitions' as const, id: before.id, oldValue: after, value: before })),
+        { op: 'replace', collection, id: command.elementId, oldValue: nextElement, value: existing },
+      ],
       description: 'updateElement',
     });
     pushPatch(patchHistory, patch, store);
@@ -2371,6 +2679,12 @@ export function executeSysmlCommand(
       }
       delete coordinates[delId];
       removeEntity(store, delId);
+    }
+    // A deleted part or port is removed from its Block, so the store copy of that Block changes too.
+    for (const op of mutationResult.forwardPatch?.forward ?? []) {
+      if (op.op === 'replace' && op.collection === 'definitions' && nextRepo.definitions[op.id]) {
+        upsertEntity(store, 'definitions', nextRepo.definitions[op.id]);
+      }
     }
     const nextDiagramPresentations: Record<string, DiagramPresentation> = {};
     for (const [dId, pres] of Object.entries(diagramPresentations)) {
@@ -2558,6 +2872,7 @@ export function executeSysmlCommand(
       packages: { ...(state.repository.packages || {}) },
       diagrams: { ...(state.repository.diagrams || {}) },
       requirements: { ...(state.repository.requirements || {}) },
+      verificationCases: { ...(state.repository.verificationCases || {}) },
       usages: { ...(state.repository.usages || {}) },
       auditTrail: [...(state.repository.auditTrail || [])],
     };
@@ -2586,10 +2901,18 @@ export function executeSysmlCommand(
         inverseOps.unshift({ op: 'replace', collection: 'diagrams', id: elemId, oldValue: updatedDiag, value: prevDiag });
       } else if (nextRepo.requirements[elemId]) {
         const prevReq = nextRepo.requirements[elemId];
-        const updatedReq = { ...prevReq, ownerId: targetOwnerId, owner: targetOwnerId };
+        // `owner` is the person responsible for the requirement, not its
+        // namespace owner; only `ownerId` changes when the element moves.
+        const updatedReq = { ...prevReq, ownerId: targetOwnerId };
         nextRepo.requirements[elemId] = updatedReq;
         forwardOps.push({ op: 'replace', collection: 'requirements', id: elemId, oldValue: prevReq, value: updatedReq });
         inverseOps.unshift({ op: 'replace', collection: 'requirements', id: elemId, oldValue: updatedReq, value: prevReq });
+      } else if (nextRepo.verificationCases[elemId]) {
+        const prevVc = nextRepo.verificationCases[elemId];
+        const updatedVc = { ...prevVc, ownerId: targetOwnerId };
+        nextRepo.verificationCases[elemId] = updatedVc;
+        forwardOps.push({ op: 'replace', collection: 'verificationCases', id: elemId, oldValue: prevVc, value: updatedVc });
+        inverseOps.unshift({ op: 'replace', collection: 'verificationCases', id: elemId, oldValue: updatedVc, value: prevVc });
       } else if (nextRepo.usages[elemId]) {
         const prevUsage = nextRepo.usages[elemId];
         const updatedUsage = { ...prevUsage, ownerId: targetOwnerId };
@@ -2611,7 +2934,7 @@ export function executeSysmlCommand(
     // history mutation. Any error aborts with the original state and untouched
     // store/patchHistory, so a success never carries errors.
     const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
-    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -2632,11 +2955,13 @@ export function executeSysmlCommand(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
     for (const elemId of command.elementIds) {
       if (nextRepo.definitions[elemId]) upsertEntity(store, 'definitions', nextRepo.definitions[elemId]);
       else if (nextRepo.packages[elemId]) upsertEntity(store, 'packages', nextRepo.packages[elemId]);
       else if (nextRepo.diagrams[elemId]) upsertEntity(store, 'diagrams', nextRepo.diagrams[elemId]);
       else if (nextRepo.requirements[elemId]) upsertEntity(store, 'requirements', nextRepo.requirements[elemId]);
+      else if (nextRepo.verificationCases[elemId]) upsertEntity(store, 'verificationCases', nextRepo.verificationCases[elemId]);
       else if (nextRepo.usages[elemId]) upsertEntity(store, 'usages', nextRepo.usages[elemId]);
     }
 
@@ -2673,6 +2998,10 @@ export function executeSysmlCommand(
 
   if (command.type === 'createDiagram') {
     const diagram = { ...command.diagram, ownerId: command.diagram.ownerId || 'model' };
+    // An Activity Diagram's context is always the Activity that owns it.
+    if (diagram.diagramKind === 'activity' && !diagram.contextElementId) diagram.contextElementId = diagram.ownerId;
+    // Likewise a Sequence Diagram's context is the Interaction that owns it.
+    if (diagram.diagramKind === 'sequence' && !diagram.contextElementId) diagram.contextElementId = diagram.ownerId;
     if (!diagram.id?.trim()) return reject('INVALID_DIAGRAM_ID', 'A diagram must have a stable semantic ID.');
     if (repositoryHasSemanticId(state.repository, diagram.id)) {
       return reject('DUPLICATE_ELEMENT_ID', `Diagram ID '${diagram.id}' is already used by a model element.`, diagram.id);
@@ -2683,6 +3012,15 @@ export function executeSysmlCommand(
     }
     if (diagram.diagramKind === 'package' && !state.repository.packages[ownerId]) {
       return reject('INVALID_DIAGRAM_OWNER', 'A Package Diagram must be owned by the Model or a Package.', ownerId);
+    }
+    if (diagram.diagramKind === 'useCase' && !state.repository.packages[ownerId]) {
+      return reject('INVALID_DIAGRAM_OWNER', 'A Use Case Diagram must be owned by the Model or a Package.', ownerId);
+    }
+    if (diagram.diagramKind === 'activity' && state.repository.definitions[ownerId]?.kind !== 'activity') {
+      return reject('INVALID_DIAGRAM_OWNER', 'An Activity Diagram must be owned by an Activity.', ownerId);
+    }
+    if (diagram.diagramKind === 'sequence' && state.repository.definitions[ownerId]?.kind !== 'interaction') {
+      return reject('INVALID_DIAGRAM_OWNER', 'A Sequence Diagram must be owned by an Interaction.', ownerId);
     }
     // Stage-first atomicity (Finding 1 review fix): stage the diagram and its
     // presentation as pure values. Store and patch history stay untouched
@@ -2712,7 +3050,7 @@ export function executeSysmlCommand(
     // Any error aborts with the original state and untouched
     // store/patchHistory, so a success never carries errors.
     const stagedValidation = validateSysmlRepository(nextRepo, endpointContext);
-    const stagedErrors = stagedValidation.diagnostics.filter(d => d.severity === 'error');
+    const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
       return {
@@ -2733,6 +3071,7 @@ export function executeSysmlCommand(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
     upsertEntity(store, 'diagrams', diagram);
     store.diagramPresentations.set(diagram.id, { elementIds: [], presentations: {} });
     store.indexes.diagramId.set(diagram.id, new Set());
@@ -2792,17 +3131,25 @@ export function executeSysmlCommand(
       if (command.mode === 'recursive') ownedPackages.forEach(pkg => collect(pkg.id));
     };
     collect(command.packageId);
-    const alreadyShown = new Set(diagramPresentations[command.diagramId]?.elementIds ?? []);
+    const currentPresentation = diagramPresentations[command.diagramId];
+    const alreadyShown = new Set(currentPresentation?.elementIds ?? []);
     const newIds = memberIds.filter(id => !alreadyShown.has(id));
     if (newIds.length === 0) return reject('NO_CONTENTS_TO_SHOW', 'All matching Package contents are already shown.', command.packageId);
-    const start = alreadyShown.size;
-    return executeSysmlCommand(state, {
-      type: 'addToDiagram', diagramId: command.diagramId, elementIds: newIds,
-      coordinates: Object.fromEntries(newIds.map((id, index) => [id, {
-        x: 80 + ((start + index) % 4) * 260,
-        y: 80 + Math.floor((start + index) / 4) * 170,
-      }])),
-    }, command.diagramId);
+    const packageBounds = currentPresentation?.presentations?.[command.packageId]?.bounds;
+    if (!alreadyShown.has(command.packageId) || packageBounds?.x === undefined || packageBounds.y === undefined) {
+      // Package symbol not on the diagram: lay members out as a free grid.
+      const start = alreadyShown.size;
+      return executeSysmlCommand(state, {
+        type: 'addToDiagram', diagramId: command.diagramId, elementIds: newIds,
+        coordinates: Object.fromEntries(newIds.map((id, index) => [id, {
+          x: 80 + ((start + index) % 4) * 260,
+          y: 80 + Math.floor((start + index) / 4) * 170,
+        }])),
+      }, command.diagramId);
+    }
+    // UML notation: members shown inside their owning Package symbol, which
+    // grows to fit. Nested packages (recursive mode) nest inside their owners.
+    return showContentsNestedInPackage(state, currentPresentation!, command.diagramId, command.packageId, newIds, endpointContext);
   }
 
   if (command.type === 'addToDiagram') {
@@ -2821,14 +3168,12 @@ export function executeSysmlCommand(
       if (!repositoryHasSemanticId(state.repository, elementId)) {
         return reject('ELEMENT_NOT_FOUND', `Element '${elementId}' does not exist and cannot be presented.`, elementId);
       }
-      const packageRelationship = state.repository.relationships[elementId];
-      const isPackageRelationship = packageRelationship && (
-        packageRelationship.kind === 'packageImport' || packageRelationship.kind === 'elementImport' ||
-        packageRelationship.kind === 'packageMerge' || packageRelationship.kind === 'dependency' ||
-        packageRelationship.kind === 'generalization'
-      );
-      if (diagramKind === 'package' && isPackageRelationship &&
-        (!presentedIds.has(packageRelationship.sourceId) || !presentedIds.has(packageRelationship.targetId))) {
+      // Any relationship path renders on a Package Diagram once both ends are
+      // shown (the canvas draws every path between shown elements; this lets
+      // Display Paths re-show one that was removed from the diagram).
+      const relationship = state.repository.relationships[elementId];
+      if (diagramKind === 'package' && relationship &&
+        (!presentedIds.has(relationship.sourceId) || !presentedIds.has(relationship.targetId))) {
         return reject('RELATIONSHIP_ENDPOINT_NOT_PRESENTED', 'Both relationship endpoints must be shown on the Package Diagram first.', elementId);
       }
       if (diagramKind === 'package' && !(
@@ -2836,9 +3181,37 @@ export function executeSysmlCommand(
         state.repository.definitions[elementId] ||
         state.repository.requirements[elementId] ||
         state.repository.verificationCases[elementId] ||
-        isPackageRelationship
+        // Diagram shortcut symbol (navigation map); never a shortcut to itself.
+        (state.repository.diagrams[elementId] && elementId !== command.diagramId) ||
+        relationship
       )) {
         return reject('INVALID_DIAGRAM_ELEMENT', `Element '${elementId}' cannot be rendered on a Package Diagram.`, elementId);
+      }
+      if (diagramKind === 'useCase' && !(
+        state.repository.actors?.[elementId] ||
+        state.repository.subjects?.[elementId] ||
+        state.repository.useCases?.[elementId] ||
+        state.repository.requirements[elementId] ||
+        relationship
+      )) {
+        return reject('INVALID_DIAGRAM_ELEMENT', `Element '${elementId}' cannot be rendered on a Use Case Diagram.`, elementId);
+      }
+      if (diagramKind === 'activity') {
+        // An Activity Diagram presents the nodes and swimlanes of the one
+        // Activity that owns it; their positions are keyed by the nested id.
+        const owner = state.repository.diagrams[command.diagramId]?.ownerId;
+        const activity = owner ? state.repository.definitions[owner] : undefined;
+        const nested = activity?.kind === 'activity'
+          ? findInActivity(activity, elementId)
+          : undefined;
+        if (!nested || (nested.elementKind !== 'node' && nested.elementKind !== 'partition')) {
+          return reject('INVALID_DIAGRAM_ELEMENT', `Element '${elementId}' cannot be rendered on this Activity Diagram.`, elementId);
+        }
+      }
+      if (diagramKind === 'sequence') {
+        // A Sequence Diagram always shows the whole Interaction that owns it;
+        // lifelines and messages are laid out from the model, not placed.
+        return reject('INVALID_DIAGRAM_ELEMENT', 'A Sequence Diagram shows every lifeline and message of its Interaction; elements are not added one by one.', elementId);
       }
       const isPackage = Boolean(state.repository.packages[elementId]);
       if (isPackage && !['bdd', 'requirements', 'package'].includes(diagramKind ?? '')) {
@@ -2856,14 +3229,18 @@ export function executeSysmlCommand(
       const usage = state.repository.usages[elementId];
       const connector = state.repository.connectors[elementId];
       const isConnectorInContext = connector && connector.ownerId === command.diagramId;
-      const isPartInContext = usage?.kind === 'part' && usage.ownerId === command.diagramId;
+      // Format 5: a part with no usage record is a Block property (or property path) of the context.
+      const derivedPart = !usage && isBlockIbdContext && isOccurrenceInContext(state.repository, command.diagramId, elementId);
+      const isPartInContext = (usage?.kind === 'part' && usage.ownerId === command.diagramId) || derivedPart;
       const isPortInContext = usage?.kind === 'port' && (usage.ownerId === command.diagramId || state.repository.usages[usage.ownerId]?.ownerId === command.diagramId);
 
       if (isBlockIbdContext && !isPartInContext && !isConnectorInContext && !isPortInContext) {
         return reject('INVALID_DIAGRAM_ELEMENT', `Only PartProperties and Connectors owned by Block '${command.diagramId}' can be presented on its IBD.`, elementId);
       }
-      if ((diagramKind === 'bdd' || diagramKind === 'requirements' || diagramKind === 'rtm') && usage?.kind === 'part') {
-        if (!requestedElementIds.includes(usage.ownerId)) requestedElementIds.push(usage.ownerId);
+      const propertyPart = !usage && !elementId.includes('/') ? resolvePartLike(state.repository, elementId) : undefined;
+      if ((diagramKind === 'bdd' || diagramKind === 'requirements' || diagramKind === 'rtm') && (usage?.kind === 'part' || propertyPart?.kind === 'part')) {
+        const ownerBlockId = (usage ?? propertyPart!).ownerId;
+        if (!requestedElementIds.includes(ownerBlockId)) requestedElementIds.push(ownerBlockId);
       } else if (!requestedElementIds.includes(elementId)) {
         requestedElementIds.push(elementId);
       }
@@ -2906,9 +3283,15 @@ export function executeSysmlCommand(
         bounds,
       }];
     }));
+    const updatedRecords = Object.fromEntries(Object.entries(command.updateBounds ?? {})
+      .filter(([semanticElementId]) => Boolean(currentPres.presentations[semanticElementId]))
+      .map(([semanticElementId, bounds]) => {
+        const record = currentPres.presentations[semanticElementId];
+        return [semanticElementId, { ...record, bounds: { ...record.bounds, ...bounds } }];
+      }));
     const nextPres: DiagramPresentation = {
       elementIds: [...currentPres.elementIds, ...addedIds],
-      presentations: { ...currentPres.presentations, ...newRecords },
+      presentations: { ...currentPres.presentations, ...updatedRecords, ...newRecords },
       ...(() => {
         const hiddenElementIds = (currentPres.hiddenElementIds ?? []).filter(id => !requestedElementIds.includes(id));
         return hiddenElementIds.length > 0 ? { hiddenElementIds } : {};
@@ -2977,7 +3360,7 @@ export function executeSysmlCommand(
 
     for (const subCmd of command.commands) {
       const res = executeSysmlCommand(currentState, subCmd, undefined, endpointContext);
-      if (!res.committed || res.diagnostics.some(d => d.severity === 'error')) {
+      if (!res.committed || introducedErrors(currentState.repository, res.diagnostics, endpointContext).length > 0) {
         const view = getView(state.repository, coordinates, diagramPresentations);
         return {
           repository: state.repository,
@@ -3026,13 +3409,15 @@ export function buildCanonicalSysmlProjectPayload(
   state: SysmlGatewayState,
   metadata: { version: string; projectName: string; [key: string]: unknown },
 ): Record<string, unknown> {
-  const serializedRepo = serializeRepository(state.repository);
+  // Format 5 stores parts only as Block properties; presentations keyed by part
+  // records follow the new keys so what the diagrams show survives the save.
+  const saved = serializeSysmlProjectState(state.repository, (state.diagramPresentations ?? {}) as Record<string, DiagramPresentation>, state.coordinates);
   return {
     ...metadata,
     schemaVersion: 4,
-    sysmlRepository: serializedRepo,
-    sysmlCoordinates: state.coordinates,
-    diagramPresentations: state.diagramPresentations ?? {},
+    sysmlRepository: saved.sysmlRepository,
+    sysmlCoordinates: saved.sysmlCoordinates,
+    diagramPresentations: saved.diagramPresentations,
     timestamp: new Date().toISOString(),
   };
 }
@@ -3051,6 +3436,8 @@ export function loadCanonicalSysmlProject(
   interchangeReport: InterchangeReport;
   quarantinedRelationshipIds: string[];
   quarantinedConnectorIds: string[];
+  /** Present when the file was written by an older format and has been upgraded in memory; the caller must show it. */
+  upgradeReport?: V5UpgradeReport;
 } {
   const migration = migrateContextualEditingPayload(payload as PersistedSysmlPayload, context);
   const activePayload = (migration.migrated ? migration.payload : payload) as Record<string, unknown>;
@@ -3062,16 +3449,37 @@ export function loadCanonicalSysmlProject(
     elementId: d.elementId,
   }));
 
-  const coordinates = (activePayload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
-  const diagramPresentations = normalizeDiagramPresentations(
+  let coordinates = (activePayload.sysmlCoordinates as Record<string, PresentationCoordinates>) ?? {};
+  let diagramPresentations = normalizeDiagramPresentations(
     (activePayload.diagramPresentations as Record<string, DiagramPresentationInput>) ?? {},
     coordinates,
   );
   const rawRepo = activePayload.sysmlRepository;
 
+  // The report of the upgrade that happened while loading this payload: either
+  // the contextual migration's (it already re-keyed the presentations) or this load's own.
+  const withUpgrade = (loadRes: ReturnType<typeof loadRepository>) => {
+    let upgradeReport = migration.upgradeReport ?? loadRes.upgradeReport;
+    if (!migration.upgradeReport && loadRes.upgradeReport && Object.keys(loadRes.upgradeReport.keyMap).length > 0) {
+      const rekeyed = rekeyPresentationState(
+        diagramPresentations,
+        coordinates,
+        loadRes.upgradeReport.keyMap,
+        id => loadRes.repository.diagrams[id]?.name ?? loadRes.repository.definitions[id]?.name ?? id,
+      );
+      diagramPresentations = rekeyed.presentations;
+      coordinates = rekeyed.coordinates;
+      loadRes.upgradeReport.changes.push(...rekeyed.changes);
+      loadRes.upgradeReport.changed = loadRes.upgradeReport.changes.length > 0;
+      upgradeReport = loadRes.upgradeReport;
+    }
+    return upgradeReport;
+  };
+
   if (!rawRepo) {
     // Fallback: migrate legacy payload
-    const loadRes = loadRepository(activePayload, context);
+    const loadRes = loadRepository(activePayload, context, { upgrade: 'always' });
+    const upgradeReport = withUpgrade(loadRes);
     const store = fromRepository(loadRes.repository, coordinates, diagramPresentations);
     const view = getCachedLegacyView(store);
     return {
@@ -3085,10 +3493,12 @@ export function loadCanonicalSysmlProject(
       interchangeReport: loadRes.interchangeReport,
       quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
       quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
+      ...(upgradeReport ? { upgradeReport } : {}),
     };
   }
 
   const loadRes = loadRepository(rawRepo, context);
+  const upgradeReport = withUpgrade(loadRes);
   const store = fromRepository(loadRes.repository, coordinates, diagramPresentations);
   const view = getCachedLegacyView(store);
 
@@ -3103,6 +3513,7 @@ export function loadCanonicalSysmlProject(
     interchangeReport: loadRes.interchangeReport,
     quarantinedRelationshipIds: loadRes.interchangeReport.quarantinedRelationshipIds,
     quarantinedConnectorIds: loadRes.interchangeReport.quarantinedConnectorIds,
+    ...(upgradeReport ? { upgradeReport } : {}),
   };
 }
 
@@ -3169,19 +3580,19 @@ export function createTypedUsageCommand(
     };
   }
 
-  const part: PartUsage = {
-    id: `part-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name: input.name,
-    ownerId: input.ownerId,
-    typeId: outcome.element.id,
-    kind: 'part',
-    aggregation: input.kind === 'reference' ? 'reference' : input.kind === 'sharedPart' ? 'shared' : 'composite',
-    multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
-  };
-
+  // Format 5: a typed part is a part/reference property of its owner Block, not a PartUsage record.
   return {
     ok: true,
-    command: { type: 'createElement', element: part },
+    command: {
+      type: 'createOwnedFeature',
+      intent: {
+        featureKind: 'property',
+        ownerBlockId: input.ownerId,
+        propertyKind: input.kind === 'reference' ? 'reference' : 'part',
+        typeId: outcome.element.id,
+        name: input.name,
+      },
+    },
     type: outcome.element,
   };
 }

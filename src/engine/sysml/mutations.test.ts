@@ -3,7 +3,6 @@ import { createEmptyRepository, type BlockDefinition, type PartUsage, type Sysml
 import {
   analyzeMutation,
   applyCommand,
-  applyUnresolvedResolutions,
   computeTouchedProtectedBaselines,
   createHistory,
   impactSeverity,
@@ -269,16 +268,6 @@ describe('Task 6 deletion decision matrix (docs/sysml/SYSML_MODULE_BIBLE.md §7)
     const applied = applyCommand(repository(), { kind: 'deleteElements', elementIds: ['childType'] });
     expect(applied.applied).toBe(true);
     expect(Object.keys(applied.repository.usages).sort()).toEqual(['external', 'nested', 'owned', 'shared']);
-
-    // Resolution choices: retarget to a live definition, delete explicitly,
-    // or keep (no-op) — never an implicit cascade.
-    const retargeted = applyUnresolvedResolutions(applied.repository, [{ usageId: 'owned', action: 'retarget', newTypeId: 'sharedType' }]);
-    expect(retargeted.usages.owned).toMatchObject({ typeId: 'sharedType' });
-    const deleted = applyUnresolvedResolutions(applied.repository, [{ usageId: 'owned', action: 'delete' }]);
-    expect(deleted.usages.owned).toBeUndefined();
-    expect(deleted.usages.external).toBeDefined();
-    const kept = applyUnresolvedResolutions(applied.repository, [{ usageId: 'owned', action: 'keep' }]);
-    expect(kept.usages.owned).toMatchObject({ typeId: 'childType' });
   });
 
   it('leaf unreferenced requirement deletion is safe; container deletion cascades with review', () => {

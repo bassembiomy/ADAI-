@@ -84,7 +84,10 @@ export function rejectBlockConnectionChange(model: UiModel, candidate: BlockData
 const CANVAS_KINDS: RelationshipData['type'][] = ['association', 'generalization', 'composition', 'aggregation', 'dependency', 'allocation', 'requirementContainment', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace', 'binding'];
 
 export function getCanvasRelationshipKinds(model: UiModel, sourceId: string, targetId: string, diagram: Diagram): RelationshipData['type'][] {
-  return CANVAS_KINDS.filter(type => !rejectUiRelationship(model, { id: '', sourceId, targetId, type, label: '' }, diagram));
+  // «allocate» is legal on more diagrams (connectionPolicy), but only the BDD canvas draws it today;
+  // elsewhere it is created from the Allocation Matrix, so the canvas picker must not offer it.
+  return CANVAS_KINDS.filter(type => (type !== 'allocation' || diagram === 'bdd')
+    && !rejectUiRelationship(model, { id: '', sourceId, targetId, type, label: '' }, diagram));
 }
 
 /**

@@ -70,10 +70,10 @@ const INSPECTOR_PROPERTY_KIND_LABELS: Record<InspectorPropertyKind, string> = {
   flow: 'Flow Property',
 };
 const INSPECTOR_PORT_KINDS: Array<{ kind: CanonicalPortKind; label: string; description: string }> = [
-  { kind: 'umlPort', label: 'Standard UML Port', description: 'Generic UML Port; explicitly untyped' },
-  { kind: 'proxyPort', label: 'ProxyPort', description: 'Requires an explicitly selected InterfaceBlock' },
-  { kind: 'fullPort', label: 'FullPort', description: 'Requires an explicitly selected Block or ValueType' },
-  { kind: 'flowPort', label: 'Legacy FlowPort', description: 'Requires an explicitly selected compatible type' },
+  { kind: 'umlPort', label: 'Standard UML Port', description: 'Generic UML Port' },
+  { kind: 'proxyPort', label: 'ProxyPort', description: 'Typed by an InterfaceBlock (set in the inspector)' },
+  { kind: 'fullPort', label: 'FullPort', description: 'Typed by a Block or ValueType (set in the inspector)' },
+  { kind: 'flowPort', label: 'Legacy FlowPort', description: 'Typed by a compatible type (set in the inspector)' },
 ];
 const INSPECTOR_PORT_TYPE_LABELS: Record<CanonicalPortKind, string> = {
   umlPort: 'Standard Port',
@@ -142,6 +142,11 @@ export function BlockFeatureEditor({
       ownerBlockId: block.id,
       propertyKind,
     });
+    if (plan.outcome === 'command') {
+      setPropertyPrompt(null);
+      dispatchOrApplyProperty(plan.command, propertyKind, '');
+      return;
+    }
     if (plan.outcome === 'typeSelection') {
       setPropertyPrompt({
         propertyKind,
@@ -783,7 +788,7 @@ export function BlockFeatureEditor({
           <div className="w-[420px] max-w-[90vw] space-y-2 rounded-lg border border-gray-700 bg-[var(--surface-sunken)] p-5 text-xs text-gray-200 shadow-2xl">
             <h3 className="text-sm font-semibold text-gray-100">Select Port kind</h3>
             <p className="text-gray-400">
-              Choose the port stereotype before choosing a compatible type. Standard UML Port stays untyped.
+              Choose the port kind. The port is added to this block; set its type in the port's Type field.
             </p>
             <div className="flex flex-col gap-2">
               {INSPECTOR_PORT_KINDS.map(({ kind, label, description }) => (

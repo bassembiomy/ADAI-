@@ -48,6 +48,7 @@ export function resolveRepositoryEndpoint(
           family: 'property',
           ownerId: def.id,
           typeId: prop.typeId,
+          ...(prop.kind === 'part' || prop.kind === 'reference' ? { propertyKind: prop.kind } : {}),
         };
       }
       const port = def.ports?.find(p => p.id === id);
@@ -56,6 +57,39 @@ export function resolveRepositoryEndpoint(
           id: port.id,
           name: port.name,
           family: 'port',
+          ownerId: def.id,
+        };
+      }
+    }
+    // Activity nodes, pins, partitions and parameters are relationship ends too
+    // (e.g. «allocate» from an action or swimlane). They behave as behaviours.
+    if (def.kind === 'activity') {
+      const node = def.nodes?.find(candidate => candidate.id === id
+        || candidate.pins?.some(pin => pin.id === id));
+      const partition = def.partitions?.find(candidate => candidate.id === id);
+      const parameter = def.parameters?.find(candidate => candidate.id === id);
+      const nested = node ?? partition ?? parameter;
+      if (nested) {
+        const pin = node?.pins?.find(candidate => candidate.id === id);
+        return {
+          id,
+          name: pin?.name || nested.name || '',
+          family: 'activity',
+          ownerId: def.id,
+        };
+      }
+    }
+    // Lifelines, messages and combined fragments are relationship ends too;
+    // they behave as the interaction that owns them.
+    if (def.kind === 'interaction') {
+      const nested = def.lifelines?.find(candidate => candidate.id === id)
+        ?? def.messages?.find(candidate => candidate.id === id)
+        ?? def.fragments?.find(candidate => candidate.id === id);
+      if (nested) {
+        return {
+          id,
+          name: 'name' in nested ? nested.name || '' : '',
+          family: 'interaction',
           ownerId: def.id,
         };
       }

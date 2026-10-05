@@ -1,4 +1,5 @@
 import type { SysmlRepositoryV4, SemanticRelationship } from '../domain';
+import { evaluateSysmlConnection, familyOfMetaclass } from '../connectionPolicy';
 
 export interface RelationshipEndpointValidationResult {
   valid: boolean;
@@ -39,9 +40,16 @@ export function validateRelationshipEndpoints(
   }
 
   if (rel.metaclass === 'Association') {
-    // Association connects Classifiers (Blocks, InterfaceBlocks, etc.)
-    const classifierMetaclasses = ['Block', 'InterfaceBlock', 'ConstraintBlock', 'AssociationBlock', 'DataType'];
-    if (!classifierMetaclasses.includes(source.metaclass) || !classifierMetaclasses.includes(target.metaclass)) {
+    // Association connects classifiers; the shared connection policy decides
+    // which families count, so this check cannot drift from the other tables.
+    const decision = evaluateSysmlConnection({
+      relationshipKind: 'association',
+      diagram: 'bdd',
+      // Placeholder ids: only the endpoint families are judged here.
+      source: { id: 'source', name: source.name, family: familyOfMetaclass(source.metaclass) },
+      target: { id: 'target', name: target.name, family: familyOfMetaclass(target.metaclass) },
+    });
+    if (!decision.allowed) {
       diagnostics.push('ASSOCIATION_ENDPOINTS_MUST_BE_CLASSIFIERS');
     }
   }

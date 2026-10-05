@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
+import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
 
 function diagramNode(id: string, domain: 'sysml' | 'stateMachine'): ModelTreeNode {
   return {
@@ -137,6 +137,70 @@ describe('buildDiagramVisualParentIndex', () => {
 
     expect(index.get('block-1')).toBe('sysml:element:req-diagram-1');
   });
+
+  it('correctly maps relationships when explicitly presented, inferred from endpoints, or hidden', () => {
+    const repo = repositoryWithDiagrams();
+    repo.definitions['block-2'] = {
+      id: 'block-2', name: 'Gearbox', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repo.relationships['rel-explicit'] = {
+      id: 'rel-explicit', kind: 'association', sourceId: 'block-1', targetId: 'block-2',
+    } as any;
+    repo.relationships['rel-inferred'] = {
+      id: 'rel-inferred', kind: 'dependency', sourceId: 'block-1', targetId: 'block-2',
+    } as any;
+    repo.relationships['rel-hidden'] = {
+      id: 'rel-hidden', kind: 'generalization', sourceId: 'block-1', targetId: 'block-2',
+    } as any;
+    repo.relationships['rel-stale-endpoint'] = {
+      id: 'rel-stale-endpoint', kind: 'association', sourceId: 'block-1', targetId: 'missing-block',
+    } as any;
+
+    const index = buildDiagramVisualParentIndex({
+      sysml: repo,
+      stateMachine: stateMachineWithNestedDiagram(),
+      diagramPresentations: {
+        'bdd-1': {
+          elementIds: ['block-1', 'block-2', 'rel-explicit'],
+          hiddenElementIds: ['rel-hidden'],
+        },
+      },
+    });
+
+    // rel-explicit is explicitly presented
+    expect(index.get('rel-explicit')).toBe('sysml:element:bdd-1');
+    // rel-inferred has both endpoints presented and is not hidden
+    expect(index.get('rel-inferred')).toBe('sysml:element:bdd-1');
+    // rel-hidden is hidden despite both endpoints presented
+    expect(index.get('rel-hidden')).toBeUndefined();
+    // rel-stale-endpoint does not have both endpoints presented
+    expect(index.get('rel-stale-endpoint')).toBeUndefined();
+  });
+
+  it('handles multiple diagrams with later precedence for relationships and ignores missing diagrams', () => {
+    const repo = repositoryWithDiagrams();
+    repo.definitions['block-2'] = {
+      id: 'block-2', name: 'Gearbox', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+    repo.relationships['rel-shared'] = {
+      id: 'rel-shared', kind: 'association', sourceId: 'block-1', targetId: 'block-2',
+    } as any;
+
+    const index = buildDiagramVisualParentIndex({
+      sysml: repo,
+      stateMachine: stateMachineWithNestedDiagram(),
+      diagramPresentations: {
+        'bdd-1': { elementIds: ['block-1', 'block-2'] },
+        'missing-diagram': { elementIds: ['block-1', 'block-2', 'rel-shared'] },
+        'req-diagram-1': { elementIds: ['block-1', 'block-2'] },
+      },
+    });
+
+    // req-diagram-1 comes after bdd-1; missing-diagram is ignored because it does not exist in repo.diagrams
+    expect(index.get('rel-shared')).toBe('sysml:element:req-diagram-1');
+  });
 });
 
 describe('resolveCanvasSymbolDiagramTarget', () => {
@@ -160,6 +224,15 @@ describe('resolveCanvasSymbolDiagramTarget', () => {
       id: 'another-owned', name: 'Engine IBD', namespace: [], ownerId: 'block-1', kind: 'diagram', diagramKind: 'ibd',
     };
     expect(resolveCanvasSymbolDiagramTarget('block-1', repository)).toBeNull();
+  });
+
+  it('lists every owned diagram so the canvas can offer a chooser', () => {
+    const repository = repositoryWithDiagrams();
+    repository.diagrams['another-owned'] = {
+      id: 'another-owned', name: 'Engine IBD', namespace: [], ownerId: 'block-1', kind: 'diagram', diagramKind: 'ibd',
+    };
+    expect(resolveCanvasSymbolDiagramTargets('block-1', repository).sort()).toEqual(['another-owned', 'parametric-1']);
+    expect(resolveCanvasSymbolDiagramTargets('missing-block', repository)).toEqual([]);
   });
 
   it('does not navigate unknown symbols, stale references, or conflicting explicit references', () => {

@@ -7,7 +7,9 @@ import type {
 import type { SysmlDiagnostic } from './validation';
 import { classifyCanonicalEndpoint, evaluateSysmlConnection, type ConnectionEndpoint } from './connectionPolicy';
 import { validateElementImport, validatePackageImport, validatePackageMerge } from './capabilities/packagePolicy';
-import { resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
+import { resolveRepositoryEndpoint, resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
+import { effectiveSupertypeIds } from './services/supertypes';
+import { findPortOwner, findPropertyOwner, isPartProperty, linkedPropertyIds, PATH_SEPARATOR, resolveOccurrenceKey } from './partOccurrences';
 
 export interface InheritedFeature {
   featureId: string;
@@ -105,7 +107,7 @@ export function resolveInheritance(repo: SysmlRepository, definitionId: string):
     }
     if (visited.has(id)) return;
     visiting.add(id);
-    for (const parentId of current.supertypeIds ?? []) visit(parentId);
+    for (const parentId of effectiveSupertypeIds(repo, current.id)) visit(parentId);
     visiting.delete(id);
     visited.add(id);
     if (id !== definitionId) {
@@ -117,7 +119,7 @@ export function resolveInheritance(repo: SysmlRepository, definitionId: string):
   visit(definitionId);
 
   // Leaf specialization: a leaf block cannot be specialized (OMG SysML 1.6 / UML).
-  for (const parentId of definition.supertypeIds ?? []) {
+  for (const parentId of effectiveSupertypeIds(repo, definition.id)) {
     const parent = block(repo, parentId);
     if (parent?.isLeaf) {
       diagnostics.push(`LEAF_SPECIALIZATION: Leaf block ${parentId} cannot be specialized by ${definitionId}`);
@@ -136,13 +138,13 @@ export function resolveInheritance(repo: SysmlRepository, definitionId: string):
   for (const property of definition.properties) {
     if (property.redefinesId) {
       const original = inherited.find(candidate => candidate.id === property.redefinesId);
-      if (!original || original.kind !== property.kind || original.typeId !== property.typeId || !multiplicityConforms(property, original)) {
+      if (!original || original.kind !== property.kind || !isSameOrSubtype(repo, property.typeId, original.typeId) || !multiplicityConforms(property, original)) {
         diagnostics.push(`INCOMPATIBLE_REDEFINITION: Property ${property.id} does not conform to redefined feature ${property.redefinesId}`);
       }
     }
     if (property.subsetsId) {
       const original = inherited.find(candidate => candidate.id === property.subsetsId);
-      if (!original || original.kind !== property.kind || original.typeId !== property.typeId || !multiplicityIsSubset(property, original)) {
+      if (!original || original.kind !== property.kind || !isSameOrSubtype(repo, property.typeId, original.typeId) || !multiplicityIsSubset(property, original)) {
         diagnostics.push(`INVALID_SUBSETTING_MULTIPLICITY: Property ${property.id} is not a valid subset of ${property.subsetsId}`);
       }
     }
@@ -156,6 +158,28 @@ export function resolveInheritance(repo: SysmlRepository, definitionId: string):
   return { valid: errors.length === 0, features, diagnostics };
 }
 
+/**
+ * True when `candidateTypeId` is `originalTypeId` or a (transitive) Block
+ * specialization of it. A redefining or subsetting property may narrow its
+ * type to a subtype (UML 2.5 §9.9.17 redefinition consistency), not only
+ * repeat it.
+ */
+export function isSameOrSubtype(repo: SysmlRepository, candidateTypeId: string, originalTypeId: string): boolean {
+  if (candidateTypeId === originalTypeId) return true;
+  const visited = new Set<string>();
+  const queue = [candidateTypeId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const supertypeId of effectiveSupertypeIds(repo, current)) {
+      if (supertypeId === originalTypeId) return true;
+      queue.push(supertypeId);
+    }
+  }
+  return false;
+}
+
 function collectInheritedProperties(repo: SysmlRepository, definition: BlockDefinition): PropertyDefinition[] {
   const result: PropertyDefinition[] = [];
   const visited = new Set<string>();
@@ -164,10 +188,10 @@ function collectInheritedProperties(repo: SysmlRepository, definition: BlockDefi
     visited.add(id);
     const parent = block(repo, id);
     if (!parent) return;
-    for (const supertypeId of parent.supertypeIds ?? []) collect(supertypeId);
+    for (const supertypeId of effectiveSupertypeIds(repo, parent.id)) collect(supertypeId);
     result.push(...parent.properties);
   };
-  for (const parentId of definition.supertypeIds ?? []) collect(parentId);
+  for (const parentId of effectiveSupertypeIds(repo, definition.id)) collect(parentId);
   return result;
 }
 
@@ -212,7 +236,7 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
         ? { valid: true, code: '' }
         : { valid: false, code: 'INVALID_REQUIREMENT_RELATION_DIRECTION' };
     case 'verify':
-      return Boolean(repo.verificationCases[relationship.sourceId]) && targetReq
+      return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction') && targetReq
         ? { valid: true, code: '' }
         : { valid: false, code: 'INVALID_REQUIREMENT_RELATION_DIRECTION' };
     case 'trace':
@@ -264,6 +288,21 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
     const diagnostics = [relationship.sourceId === relationship.targetId ? 'SELF_RELATIONSHIP: Dependency cannot target itself' : '',
       !elementExists(repo, relationship.sourceId, context) || !elementExists(repo, relationship.targetId, context)
         ? 'MISSING_RELATIONSHIP_ENDPOINT: Dependency endpoint does not exist' : ''].filter(Boolean);
+    return { allowed: diagnostics.length === 0, diagram: 'package', diagnostics };
+  }
+
+  if (relationship.kind === 'conform' || relationship.kind === 'expose') {
+    const diagnostics: string[] = [];
+    if (!elementExists(repo, relationship.sourceId, context)) diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Source ${relationship.sourceId} does not exist`);
+    if (!elementExists(repo, relationship.targetId, context)) diagnostics.push(`MISSING_RELATIONSHIP_ENDPOINT: Target ${relationship.targetId} does not exist`);
+    const decision = evaluateSysmlConnection({
+      relationshipKind: relationship.kind,
+      source: canonicalConnectionEndpoint(repo, relationship.sourceId, context),
+      target: canonicalConnectionEndpoint(repo, relationship.targetId, context),
+      diagram: 'package',
+    });
+    diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
+    diagnostics.sort();
     return { allowed: diagnostics.length === 0, diagram: 'package', diagnostics };
   }
 
@@ -347,6 +386,14 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   return { allowed: diagnostics.length === 0, diagram: 'rtm', diagnostics };
 }
 
+/** A part property id, a property path of a part, or a Block port id. */
+export function isFeatureReference(repo: SysmlRepository, id: string): boolean {
+  if (id.includes(PATH_SEPARATOR)) return Boolean(resolveOccurrenceKey(repo, id));
+  const property = findPropertyOwner(repo, id);
+  if (property) return isPartProperty(repo, property.feature);
+  return Boolean(findPortOwner(repo, id));
+}
+
 function collectOwnedPortIds(repo: SysmlRepository, ownerIds: ReadonlySet<string>): string[] {
   const owners = new Set(ownerIds);
   const ports = new Set<string>();
@@ -379,12 +426,35 @@ export function classifyDeletionTarget(repo: SysmlRepository, elementId: string)
       .map(usage => usage.id)
       .sort();
     const ownedPortIds = collectOwnedPortIds(repo, new Set([elementId]));
-    const cascadeIds = [...compositeChildren, ...ownedPortIds].sort();
+    // Activities live and die with their owner, and an Activity's own diagrams
+    // die with it.
+    const ownedActivityIds = Object.values(repo.definitions)
+      .filter(candidate => (candidate.kind === 'activity' || candidate.kind === 'interaction') && candidate.ownerId === elementId)
+      .map(candidate => candidate.id);
+    const activityDiagramIds = definition.kind === 'activity' || definition.kind === 'interaction'
+      ? Object.values(repo.diagrams)
+        .filter(diagram => diagram.diagramKind === (definition.kind === 'activity' ? 'activity' : 'sequence')
+          && (diagram.contextElementId === elementId || diagram.ownerId === elementId))
+        .map(diagram => diagram.id)
+      : [];
+    const cascadeIds = [...compositeChildren, ...ownedPortIds, ...ownedActivityIds, ...activityDiagramIds].sort();
     const cascadeSet = new Set(cascadeIds);
     const unresolvedUsageIds = Object.values(repo.usages)
       .filter(usage => usage.kind === 'part' && usage.typeId === elementId && !cascadeSet.has(usage.id))
       .map(usage => usage.id)
       .sort();
+    // Format 5: a part is only a property, so the properties typed by this
+    // definition (in other Blocks, not covered by a part usage) are the unresolved impacts.
+    if (definition.kind === 'block') {
+      const linked = linkedPropertyIds(repo);
+      for (const other of Object.values(repo.definitions)) {
+        if (other.kind !== 'block' || other.id === elementId) continue;
+        for (const property of other.properties) {
+          if (property.typeId === elementId && isPartProperty(repo, property) && !linked.has(property.id)) unresolvedUsageIds.push(property.id);
+        }
+      }
+      unresolvedUsageIds.sort();
+    }
     return { targetKind: 'definition', cascadeIds, unresolvedUsageIds, diagnostics: [] };
   }
   const usage = repo.usages[elementId];
@@ -419,15 +489,22 @@ export function classifyDeletionTarget(repo: SysmlRepository, elementId: string)
   if (repo.requirements[elementId]) return { targetKind: 'requirement', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.verificationCases?.[elementId]) return { targetKind: 'verificationCase', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.useCases?.[elementId]) {
-    const cascadeIds = Object.values(repo.extensionPoints ?? {})
-      .filter(ep => ep.useCaseId === elementId)
-      .map(ep => ep.id)
-      .sort();
+    // Extension points and the scenarios (Interactions/Activities) the use case
+    // owns live and die with it; their own diagrams follow through the closure.
+    const ownedScenarios = Object.values(repo.definitions)
+      .filter(candidate => (candidate.kind === 'activity' || candidate.kind === 'interaction') && candidate.ownerId === elementId)
+      .map(candidate => candidate.id);
+    const cascadeIds = [
+      ...Object.values(repo.extensionPoints ?? {}).filter(ep => ep.useCaseId === elementId).map(ep => ep.id),
+      ...ownedScenarios,
+    ].sort();
     return { targetKind: 'useCase', cascadeIds, unresolvedUsageIds: [], diagnostics: [] };
   }
   if (repo.actors?.[elementId]) return { targetKind: 'actor', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.subjects?.[elementId]) return { targetKind: 'subject', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.extensionPoints?.[elementId]) return { targetKind: 'extensionPoint', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
   if (repo.diagramReferences?.[elementId]) return { targetKind: 'diagramReference', cascadeIds: [elementId], unresolvedUsageIds: [], diagnostics: [] };
+  // Format 5: a part (property id or property path) or a Block port is deleted by removing the feature from its Block.
+  if (isFeatureReference(repo, elementId)) return { targetKind: 'usage', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [] };
   return { targetKind: 'unknown', cascadeIds: [], unresolvedUsageIds: [], diagnostics: [`UNKNOWN_ELEMENT: Unknown element: ${elementId}`] };
 }

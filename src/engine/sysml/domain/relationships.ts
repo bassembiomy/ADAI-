@@ -30,7 +30,10 @@ export type RelationshipMetaclass =
   | 'Transition'
   | 'ActivityEdge'
   | 'ControlFlow'
-  | 'ObjectFlow';
+  | 'ObjectFlow'
+  // Use case relationships (UML 2.5 §18.1)
+  | 'Include'
+  | 'Extend';
 
 export interface AssociationEnd {
   id: string;

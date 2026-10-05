@@ -11,6 +11,7 @@ import { classifyBddRelationshipPresentation } from '../../services/sysmlConnect
 import { calculateBddParallelRoute, resolveBddPropertyRelationshipGeometry } from '../../services/sysmlBddRelationshipGeometry';
 import { calculateSeparatedRelationshipPath } from '../../utils/sysmlConnectionRouting';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
+import { edgeBadgeLabel } from '../../features/sysml/edgeNotation';
 import { computeBlockDisplayBounds } from './blockLayout';
 
 // Exercise the actual legacy render callback without booting unrelated editors,
@@ -47,7 +48,7 @@ function renderRelationship(type = 'association', property = false, label = '') 
     React, computeBlockDisplayBounds, classifyBddRelationshipPresentation,
     calculateBddParallelRoute, resolveBddPropertyRelationshipGeometry, calculateSeparatedRelationshipPath,
     elementPresentationColor, isValidPresentationColor, validateRequirementContainment,
-    sysmlObjectLabel, resolveSysmlReferenceLabel,
+    sysmlObjectLabel, resolveSysmlReferenceLabel, edgeBadgeLabel,
     diagramMode: type === 'requirementContainment' ? 'requirements' : 'bdd',
     culledDiagram: undefined, isDragging: false, isPanning: false,
     sysmlCanvasView: { blocks: [source, target], packages: [], parts: [], relationships: [rel] },
@@ -61,6 +62,21 @@ function renderRelationship(type = 'association', property = false, label = '') 
 
 describe('legacy App SysML labels', () => {
   afterEach(cleanup);
+  it.each([
+    ['', 'Block'],
+    ['   ', 'Block'],
+    [' Cooling ', 'Cooling'],
+  ])('renders a visible BDD block name for %j', (name, expected) => {
+    const block = { id: uuid(4), name, stereotype: 'block', isAbstract: false, isLeaf: false };
+    const label = evaluateNode(node => ts.isJsxElement(node)
+      && node.openingElement.tagName.getText(sourceFile) === 'text'
+      && node.children.some(child => ts.isJsxExpression(child) && child.expression?.getText(sourceFile) === "sysmlObjectLabel(block, block.stereotype || 'Block')")
+      && node.children.some(child => ts.isJsxExpression(child) && child.expression?.getText(sourceFile).includes('block.isLeaf')),
+    { React, block, displayWidth: 160, sysmlObjectLabel });
+    const { container } = render(<svg>{label}</svg>);
+    expect(container.querySelector('text')?.textContent).toBe(expected);
+    expect(container.textContent).not.toContain(block.id);
+  });
   it.each(['stateMachineDiagram', 'sysmlDiagram'])('labels unnamed diagram tabs without IDs (%s)', kind => {
     const id = uuid(4);
     const label = evaluateNode(node => ts.isVariableDeclaration(node)
@@ -185,7 +201,8 @@ describe('legacy App SysML labels', () => {
   it('renders names and metaclasses in relationship titles while selecting by semantic ID', () => {
     const { container, select } = renderRelationship();
     expect(screen.getByText('Association: Controller -> Block')).toBeTruthy();
-    expect(screen.getByText('Association')).toBeTruthy();
+    // SysML notation: a plain association carries no keyword badge; the title keeps its name.
+    expect(screen.queryByText('Association')).toBeNull();
     for (const n of [0, 1, 2]) expect(container.textContent).not.toContain(uuid(n));
     const relationship = container.querySelector(`[data-semantic-id="${uuid(2)}"]`)!;
     fireEvent.click(relationship);

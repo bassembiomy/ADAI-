@@ -32,6 +32,9 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'ValueType',
     'QuantityKind',
     'Unit',
+    'View',
+    'Viewpoint',
+    'Stakeholder',
     'Enumeration',
     'Signal',
     'Requirement',
@@ -39,6 +42,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'VerificationCase',
     'UseCase',
     'Activity',
+    'Interaction',
     'Comment',
     'Rationale',
     'Constraint',
@@ -55,6 +59,9 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'ValueType',
     'QuantityKind',
     'Unit',
+    'View',
+    'Viewpoint',
+    'Stakeholder',
     'Enumeration',
     'Signal',
     'Requirement',
@@ -62,6 +69,7 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'VerificationCase',
     'UseCase',
     'Activity',
+    'Interaction',
     'Comment',
     'Rationale',
     'Constraint',
@@ -76,6 +84,8 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
     'Port',
     'Operation',
     'Reception',
+    'Activity',
+    'Interaction',
     'Constraint',
     'Comment',
     'Rationale',
@@ -143,6 +153,9 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
   ],
   UseCase: [
     'Diagram',
+    // A scenario that elaborates the use case (SysML 1.6 Clause 12 / Cameo).
+    'Interaction',
+    'Activity',
     'Comment',
     'Rationale',
     'Constraint',
@@ -157,6 +170,12 @@ export const OWNERSHIP_MATRIX: Record<string, readonly MetaclassKind[]> = {
   ],
   ActivityPartition: [
     'ActivityPartition',
+    'Comment',
+    'Rationale',
+    'Constraint',
+  ],
+  Interaction: [
+    'Diagram',
     'Comment',
     'Rationale',
     'Constraint',
@@ -215,7 +234,8 @@ export function getLegalOwnerGuidance(childKind: MetaclassKind): string {
     childKind === 'Requirement' ||
     childKind === 'TestCase' ||
     childKind === 'UseCase' ||
-    childKind === 'Activity'
+    childKind === 'Activity' ||
+    childKind === 'Interaction'
   ) {
     return `Select a Package to add a ${childKind}.`;
   }
@@ -260,6 +280,28 @@ export function resolveSemanticElement(
           ? 'Requirement'
           : def.kind === 'interface'
           ? 'InterfaceBlock'
+          : def.kind === 'valueType'
+          ? 'ValueType'
+          : def.kind === 'enumeration'
+          ? 'Enumeration'
+          : def.kind === 'signal'
+          ? 'Signal'
+          : def.kind === 'unit'
+          ? 'Unit'
+          : def.kind === 'quantityKind'
+          ? 'QuantityKind'
+          : def.kind === 'view'
+          ? 'View'
+          : def.kind === 'viewpoint'
+          ? 'Viewpoint'
+          : def.kind === 'stakeholder'
+          ? 'Stakeholder'
+          : def.kind === 'constraintBlock'
+          ? 'ConstraintBlock'
+          : def.kind === 'activity'
+          ? 'Activity'
+          : def.kind === 'interaction'
+          ? 'Interaction'
           : 'Block',
       namespace: def.namespace ?? [],
       ownerId: def.ownerId ?? null,
@@ -283,6 +325,16 @@ export function resolveSemanticElement(
       metaclass: 'Requirement',
       namespace: req.namespace ?? [],
       ownerId: req.ownerId ?? null,
+    } as SemanticElement;
+  }
+  if (repository.useCases && repository.useCases[id]) {
+    const useCase = repository.useCases[id];
+    return {
+      id: useCase.id,
+      name: useCase.name,
+      metaclass: 'UseCase',
+      namespace: useCase.namespace ?? [],
+      ownerId: useCase.ownerId ?? null,
     } as SemanticElement;
   }
   if (repository.definitions && (id === 'model' || id === 'root')) {

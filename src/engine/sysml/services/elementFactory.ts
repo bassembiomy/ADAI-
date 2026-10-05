@@ -22,6 +22,7 @@ import type {
   Port,
   UseCase,
   Activity,
+  Interaction,
   Operation,
   Package,
 } from '../domain';
@@ -255,6 +256,19 @@ export function createSemanticElement(
       return { ok: true, element: u };
     }
 
+    case 'View':
+    case 'Viewpoint':
+    case 'Stakeholder': {
+      const viewElement: SemanticElement = {
+        id: elementId,
+        name: finalName,
+        metaclass: input.metaclass,
+        namespace,
+        ownerId,
+      };
+      return { ok: true, element: viewElement };
+    }
+
     case 'Enumeration': {
       const en: Enumeration = {
         id: elementId,
@@ -422,6 +436,20 @@ export function createSemanticElement(
         partitionIds: [],
       };
       return { ok: true, element: act };
+    }
+
+    case 'Interaction': {
+      const interaction: Interaction = {
+        id: elementId,
+        name: finalName,
+        metaclass: 'Interaction',
+        namespace,
+        ownerId,
+        lifelineIds: [],
+        messageIds: [],
+        fragmentIds: [],
+      };
+      return { ok: true, element: interaction };
     }
 
     case 'Operation': {

@@ -224,15 +224,17 @@ describe('SysML Large Model Benchmark Gates', () => {
     const model = generate10kModel(702);
 
     // Recorded generator proportions (seed-independent): 45% definitions
-    // (3500 blocks + 500 value types + 500 interfaces), 25% usages,
-    // 10% relationships, 5% connectors, 12% requirements, 3% verification cases.
+    // (3500 blocks + 500 value types + 500 interfaces), 20% parts (Block properties, no usage records),
+    // 15% relationships, 5% connectors, 12% requirements, 3% verification cases.
     const definitionCount = Object.keys(model.repository.definitions).length;
     const usageCount = Object.keys(model.repository.usages).length;
+    const partCount = Object.values(model.repository.definitions).reduce((sum, definition) => sum + (definition.kind === 'block' ? definition.properties.filter(property => property.kind === 'part' || property.kind === 'reference').length : 0), 0);
     const relationshipCount = Object.keys(model.repository.relationships).length;
     const connectorCount = Object.keys(model.repository.connectors).length;
     expect(definitionCount).toBe(4500);
-    expect(usageCount).toBe(2500);
-    expect(relationshipCount).toBe(1000);
+    expect(usageCount).toBe(0);
+    expect(partCount).toBe(2000);
+    expect(relationshipCount).toBe(1500); // includes the 5% that were port usage records before format 5
     expect(connectorCount).toBe(500);
     expect(model.stats.totalElements).toBe(10000);
 

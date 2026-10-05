@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyRepository, type SysmlRepository } from './model';
+import { createEmptyRepository, type BlockDefinition, type SysmlRepository } from './model';
+import { connectorEndOf } from './connectorEnds';
 import { loadRepository, serializeRepository, createBaseline } from './persistence';
 import { fromRepository, toRepository } from './normalizedStore';
+import { effectiveSupertypeIds } from './services/supertypes';
 import {
   assessLegacyProjectionLoss,
   assessOpmInterchangeLoss,
@@ -77,24 +79,30 @@ describe('sysml persistence + interchange qualification (Task 7)', () => {
 
     const loaded = loadRepository(first);
     expect(loaded.valid).toBe(true);
-    expect(loaded.migrated).toBe(false);
+    // The fixture nests a requirement via a containment line only, so loading
+    // aligns it with ownership (a representation migration); a re-save is stable.
+    expect(loaded.migrated).toBe(true);
+    expect(loadRepository(serializeRepository(loaded.repository)).migrated).toBe(false);
     expect(loaded.repository.schemaVersion).toBe(3);
     expect(loaded.repository.profileId).toBe('OMG-SysML-1.6-ADIA');
     // Semantic IDs preserved across every collection.
     for (const id of ['blk-base', 'blk-child', 'IF']) expect(loaded.repository.definitions[id]?.id).toBe(id);
-    for (const id of ['part-composite', 'part-shared', 'part-ref', 'port-use-out', 'port-use-in']) expect(loaded.repository.usages[id]?.id).toBe(id);
+    // Format 5 keeps parts only as Block properties: the fixture's part usages (saved here from a live
+    // session that still holds them) are written as the properties that stand for them.
+    expect(loaded.repository.usages).toEqual({});
+    const base = loaded.repository.definitions['blk-base'] as BlockDefinition;
+    const partProperties = ['part-composite', 'part-shared', 'part-ref'].map(id => base.properties.find(p => p.id === `property:${id}`));
+    expect(partProperties.map(p => p?.name)).toEqual(['c', 's', 'r']);
+    expect(partProperties.map(p => p?.kind)).toEqual(['part', 'reference', 'reference']);
     for (const id of ['rel-gen', 'rel-comp', 'rel-contain', 'rel-sat', 'rel-verify']) {
       expect(loaded.repository.relationships[id]?.id).toBe(id);
     }
-    expect(loaded.repository.usages['part-shared'].kind).toBe('part');
-    if (loaded.repository.usages['part-shared'].kind === 'part') {
-      expect(loaded.repository.usages['part-shared'].aggregation).toBe('shared');
-    }
-    if (loaded.repository.usages['part-ref'].kind === 'part') {
-      expect(loaded.repository.usages['part-ref'].aggregation).toBe('reference');
-    }
-    expect((loaded.repository.definitions['blk-child'] as { supertypeIds?: string[] }).supertypeIds).toEqual(['blk-base']);
-    expect(loaded.repository.connectors['conn-asm']).toMatchObject({ sourcePortId: 'port-use-out', targetPortId: 'port-use-in' });
+    // Inheritance lives in a Generalization relationship; the legacy field is converted on load.
+    expect(effectiveSupertypeIds(loaded.repository, 'blk-child')).toEqual(['blk-base']);
+    expect(Object.values(loaded.repository.relationships).filter(r =>
+      r.kind === 'generalization' && r.sourceId === 'blk-child' && r.targetId === 'blk-base')).toHaveLength(1);
+    expect(connectorEndOf(loaded.repository.connectors['conn-asm'], 'source')).toEqual({ path: ['property:part-composite'], portId: 'port-def-out' });
+    expect(connectorEndOf(loaded.repository.connectors['conn-asm'], 'target')).toEqual({ path: ['property:part-shared'], portId: 'port-def-in' });
     expect(loaded.repository.evidence['ev-1']).toMatchObject({ verificationCaseId: 'vc-1', requirementId: 'req-child' });
     expect(loaded.repository.baselines['bl-1']?.protected).toBe(true);
     expect(loaded.repository.auditTrail.length).toBeGreaterThanOrEqual(withBaseline.auditTrail.length);

@@ -1,5 +1,7 @@
-import type { SysmlRepository } from '../model';
+import type { SysmlRepository, SysmlRelationship } from '../model';
 import type {
+  RelationshipMetaclass,
+  SemanticElement,
   SysmlRepositoryV4,
   Block,
   Requirement,
@@ -8,6 +10,47 @@ import type {
   DiagramPresentation,
 } from '../domain';
 import { createEmptyRepositoryV4 } from '../domain';
+import { effectiveSupertypeIds } from '../services/supertypes';
+import { connectorEndOf } from '../connectorEnds';
+
+/**
+ * Every V3 relationship kind and the V4 metaclass it becomes. Composition and
+ * shared aggregation are UML Associations whose end carries the aggregation
+ * kind, so they map to 'Association' with that end set (see below).
+ * Exhaustive over `SysmlRelationship['kind']`: adding a V3 kind without a V4
+ * mapping is a compile error, and a test checks no kind is lost.
+ */
+export const V4_RELATIONSHIP_METACLASS: Record<SysmlRelationship['kind'], RelationshipMetaclass> = {
+  association: 'Association',
+  sharedAggregation: 'Association',
+  composition: 'Association',
+  generalization: 'Generalization',
+  dependency: 'Dependency',
+  packageImport: 'PackageImport',
+  elementImport: 'ElementImport',
+  packageMerge: 'PackageMerge',
+  allocation: 'Allocate',
+  binding: 'BindingConnector',
+  itemFlow: 'ItemFlow',
+  requirementContainment: 'Containment',
+  deriveReqt: 'DeriveReqt',
+  satisfy: 'Satisfy',
+  verify: 'Verify',
+  refine: 'Refine',
+  trace: 'Trace',
+  copy: 'Copy',
+  useCaseAssociation: 'Association',
+  include: 'Include',
+  extend: 'Extend',
+  useCaseGeneralization: 'Generalization',
+  useCaseRefine: 'Refine',
+  useCaseSatisfy: 'Satisfy',
+  useCaseTrace: 'Trace',
+  // SysML 1.6 makes «conform» a Generalization; «expose» is a Dependency.
+  // The V3 kind is kept in customProperties.sourceKind.
+  conform: 'Generalization',
+  expose: 'Dependency',
+};
 
 export function migrateV3ToV4(
   v3: SysmlRepository,
@@ -18,11 +61,20 @@ export function migrateV3ToV4(
   v4.revision = v3.revision;
   const canonicalOwnerId = (ownerId?: string | null): string =>
     !ownerId || ownerId === 'model' ? 'pkg-root' : ownerId;
+  const ownerSets = new Map<string, Set<string>>();
   const registerElement = (element: SysmlRepositoryV4['elements'][string]): void => {
     v4.elements[element.id] = element;
     if (element.ownerId) {
-      const owned = v4.indexes.byOwner[element.ownerId] ?? [];
-      if (!owned.includes(element.id)) v4.indexes.byOwner[element.ownerId] = [...owned, element.id];
+      let set = ownerSets.get(element.ownerId);
+      if (!set) {
+        set = new Set<string>();
+        ownerSets.set(element.ownerId, set);
+        v4.indexes.byOwner[element.ownerId] = [];
+      }
+      if (!set.has(element.id)) {
+        set.add(element.id);
+        v4.indexes.byOwner[element.ownerId].push(element.id);
+      }
     }
   };
 
@@ -54,7 +106,8 @@ export function migrateV3ToV4(
         ownerId: canonicalOwnerId(def.ownerId),
         isAbstract: def.isAbstract,
         isLeaf: def.isLeaf,
-        generalIds: def.supertypeIds,
+        // Inheritance is the union of stored supertypes and drawn Generalizations.
+        generalIds: effectiveSupertypeIds(v3, def.id),
       };
       registerElement(block);
 
@@ -67,6 +120,8 @@ export function migrateV3ToV4(
             ? 'ReferenceProperty'
             : prop.kind === 'flow'
             ? 'FlowProperty'
+            : prop.kind === 'constraint'
+            ? 'ConstraintProperty'
             : 'ValueProperty';
         registerElement({
           id: prop.id,
@@ -109,6 +164,82 @@ export function migrateV3ToV4(
         ownerId: canonicalOwnerId(def.ownerId),
         flowPropertyIds: [],
       } as any);
+    } else if (def.kind === 'enumeration') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Enumeration', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId), literalIds: [], customProperties: { literals: def.literals },
+      } as SemanticElement);
+    } else if (def.kind === 'signal') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Signal', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+      } as SemanticElement);
+    } else if (def.kind === 'unit') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Unit', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId), symbol: def.symbol, quantityKindId: def.quantityKindId,
+      } as SemanticElement);
+    } else if (def.kind === 'quantityKind') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'QuantityKind', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId), symbol: def.symbol, description: def.description,
+      } as SemanticElement);
+    } else if (def.kind === 'view') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'View', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+      } as SemanticElement);
+    } else if (def.kind === 'viewpoint') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Viewpoint', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+        stakeholderIds: def.stakeholderIds, concernIds: def.concernIds, concerns: def.concerns ?? [],
+        purpose: def.purpose, languages: def.languages, presentation: def.presentation,
+        methodText: def.methodText,
+      } as SemanticElement);
+    } else if (def.kind === 'stakeholder') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Stakeholder', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId), concerns: def.concerns,
+      } as SemanticElement);
+    } else if (def.kind === 'activity') {
+      // Nodes and edges stay on the Activity (ids only); partitions and
+      // parameters are canonical owned elements.
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Activity', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+        parameterIds: (def.parameters ?? []).map(parameter => parameter.id),
+        nodeIds: (def.nodes ?? []).map(node => node.id),
+        edgeIds: (def.edges ?? []).map(edge => edge.id),
+        partitionIds: (def.partitions ?? []).map(partition => partition.id),
+      } as SemanticElement);
+      for (const partition of def.partitions ?? []) {
+        registerElement({
+          id: partition.id, name: partition.name, metaclass: 'ActivityPartition', namespace: def.namespace || [],
+          ownerId: def.id, representsElementId: partition.representsId, nodeIds: [...(partition.nodeIds ?? [])],
+        } as SemanticElement);
+      }
+      for (const parameter of def.parameters ?? []) {
+        registerElement({
+          id: parameter.id, name: parameter.name, metaclass: 'Parameter', namespace: def.namespace || [],
+          ownerId: def.id, typeId: parameter.typeId, direction: parameter.direction,
+        } as SemanticElement);
+      }
+    } else if (def.kind === 'interaction') {
+      // Lifelines, messages and fragments stay on the Interaction (ids only).
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'Interaction', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId),
+        lifelineIds: (def.lifelines ?? []).map(lifeline => lifeline.id),
+        messageIds: (def.messages ?? []).map(message => message.id),
+        fragmentIds: (def.fragments ?? []).map(fragment => fragment.id),
+      } as SemanticElement);
+    } else if (def.kind === 'constraintBlock') {
+      registerElement({
+        id: def.id, name: def.name, metaclass: 'ConstraintBlock', namespace: def.namespace || [],
+        ownerId: canonicalOwnerId(def.ownerId), constraintIds: [],
+        customProperties: { parameters: def.parameters, constraints: def.constraints },
+      } as SemanticElement);
     } else if (def.kind === 'valueType') {
       registerElement({
         id: def.id,
@@ -116,8 +247,8 @@ export function migrateV3ToV4(
         metaclass: 'ValueType',
         namespace: def.namespace || [],
         ownerId: canonicalOwnerId(def.ownerId),
-        unitId: (def as any).unit,
-        quantityKindId: (def as any).quantityKind,
+        unitId: def.unitId,
+        quantityKindId: def.quantityKindId,
         unit: (def as any).unit,
         quantityKind: (def as any).quantityKind,
         customProperties: {
@@ -195,29 +326,69 @@ export function migrateV3ToV4(
     registerElement(testCase);
   }
 
+  // 3.1 Migrate use-case elements. They were previously dropped, so a use
+  // case could never be the endpoint of a V4 relationship.
+  for (const actor of Object.values(v3.actors || {})) {
+    registerElement({
+      id: actor.id,
+      name: actor.name,
+      metaclass: 'Actor',
+      namespace: actor.namespace || [],
+      ownerId: canonicalOwnerId(actor.ownerId),
+      customProperties: { isExternal: actor.isExternal, generalizationIds: actor.generalizationIds ?? [] },
+    });
+  }
+  for (const useCase of Object.values(v3.useCases || {})) {
+    registerElement({
+      id: useCase.id,
+      name: useCase.name,
+      metaclass: 'UseCase',
+      namespace: useCase.namespace || [],
+      ownerId: canonicalOwnerId(useCase.ownerId),
+      subjectIds: useCase.subjectId ? [useCase.subjectId] : [],
+      extensionPointIds: useCase.extensionPointIds ?? [],
+    } as SemanticElement);
+  }
+
   // 4. Migrate Relationships
   for (const [id, rel] of Object.entries(v3.relationships || {})) {
-    const kindMap: Record<string, any> = {
-      satisfy: 'Satisfy',
-      verify: 'Verify',
-      deriveReqt: 'DeriveReqt',
-      refine: 'Refine',
-      trace: 'Trace',
-      copy: 'Copy',
-      requirementContainment: 'Containment',
-      association: 'Association',
-      generalization: 'Generalization',
-      composition: 'Association',
-      aggregation: 'Association',
-    };
-    const metaclass = kindMap[rel.kind] || 'Association';
+    const metaclass = V4_RELATIONSHIP_METACLASS[rel.kind];
+    const aggregation = rel.kind === 'composition' ? 'composite' : rel.kind === 'sharedAggregation' ? 'shared' : undefined;
     const relationship: SemanticRelationship = {
       id: rel.id,
       name: rel.name,
-      metaclass,
+      metaclass: metaclass ?? 'Association',
       sourceId: rel.sourceId,
       targetId: rel.targetId,
       suspect: rel.suspect,
+      lastValidatedRevision: rel.lastValidatedRevision,
+      // Association ends carry what V4 has no dedicated metaclass for:
+      // composite/shared aggregation (diamond at the whole = source end), role
+      // names, multiplicities and navigability.
+      ...(aggregation || rel.sourceRole || rel.targetRole || rel.sourceMultiplicity || rel.targetMultiplicity
+        ? {
+            sourceEnd: {
+              id: `${rel.id}:source`,
+              role: rel.sourceRole,
+              multiplicity: rel.sourceMultiplicity,
+              aggregation: aggregation ?? rel.sourceAggregation ?? 'none',
+              isNavigable: rel.sourceNavigable ?? false,
+            },
+            targetEnd: {
+              id: `${rel.id}:target`,
+              role: rel.targetRole,
+              multiplicity: rel.targetMultiplicity,
+              aggregation: rel.targetAggregation ?? 'none',
+              isNavigable: rel.targetNavigable ?? true,
+            },
+          }
+        : {}),
+      customProperties: {
+        sourceKind: rel.kind,
+        ...(rel.visibility ? { visibility: rel.visibility } : {}),
+        ...(rel.alias ? { alias: rel.alias } : {}),
+        ...(rel.extensionPointId ? { extensionPointId: rel.extensionPointId } : {}),
+      },
     };
     v4.relationships[relationship.id] = relationship;
 
@@ -226,6 +397,32 @@ export function migrateV3ToV4(
 
     if (!v4.indexes.byTargetEndpoint[rel.targetId]) v4.indexes.byTargetEndpoint[rel.targetId] = [];
     v4.indexes.byTargetEndpoint[rel.targetId].push(relationship.id);
+  }
+
+  // 4.0 Connectors: IBD connectors were not part of the V4 view at all.
+  for (const connector of Object.values(v3.connectors || {})) {
+    // Format 5: a path-based end is the port it names, or the last part of its property path.
+    const endpointId = (side: 'source' | 'target'): string => {
+      const end = connectorEndOf(connector, side);
+      if (!end) return side === 'source' ? connector.sourcePortId : connector.targetPortId;
+      return end.portId ?? end.path[end.path.length - 1] ?? (side === 'source' ? connector.sourcePortId : connector.targetPortId);
+    };
+    const relationship: SemanticRelationship = {
+      id: connector.id,
+      metaclass: connector.kind === 'binding' ? 'BindingConnector' : 'Connector',
+      ownerId: canonicalOwnerId(connector.ownerId),
+      sourceId: endpointId('source'),
+      targetId: endpointId('target'),
+      customProperties: {
+        sourceKind: connector.kind,
+        ...(connector.itemFlowId ? { itemFlowId: connector.itemFlowId } : {}),
+        ...(connectorEndOf(connector, 'source') ? { sourceEnd: connectorEndOf(connector, 'source') } : {}),
+        ...(connectorEndOf(connector, 'target') ? { targetEnd: connectorEndOf(connector, 'target') } : {}),
+      },
+    };
+    v4.relationships[relationship.id] = relationship;
+    (v4.indexes.bySourceEndpoint[relationship.sourceId] ??= []).push(relationship.id);
+    (v4.indexes.byTargetEndpoint[relationship.targetId] ??= []).push(relationship.id);
   }
 
   // 4.1 Preserve repository diagram identity and kind independently of presentations.

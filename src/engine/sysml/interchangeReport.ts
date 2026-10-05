@@ -1,6 +1,9 @@
 import type { SysmlRepository } from './model';
 import type { SysmlDiagnostic } from './validation';
 import { projectSysmlToOpm } from './opmAdapter';
+import { activityNestedIds } from './activity';
+import { interactionNestedIds } from './interaction';
+import { connectorEndOf, resolveConnectorEnd } from './connectorEnds';
 
 /**
  * Task 7: qualified persistence + interchange loss reporting.
@@ -173,6 +176,19 @@ export function findUnresolvedEndpoints(repo: SysmlRepository): UnresolvedEndpoi
         known.add(feature.id);
       }
     }
+    // Constraint parameters are addressable ends of parametric bindings.
+    if (definition.kind === 'constraintBlock') {
+      for (const parameter of definition.parameters ?? []) known.add(parameter.id);
+    }
+    // Activity nodes, pins, edges, partitions and parameters are addressable
+    // (e.g. «allocate» from an action to a Block).
+    if (definition.kind === 'activity') {
+      for (const id of activityNestedIds(definition)) known.add(id);
+    }
+    // Lifelines, messages and combined fragments are addressable the same way.
+    if (definition.kind === 'interaction') {
+      for (const id of interactionNestedIds(definition)) known.add(id);
+    }
   }
 
   for (const rel of Object.values(repo.relationships ?? {})) {
@@ -200,6 +216,16 @@ export function findUnresolvedEndpoints(repo: SysmlRepository): UnresolvedEndpoi
     // `partId::portId` pairs synthesized by legacy migration.
     for (const endpoint of ['sourcePortId', 'targetPortId'] as const) {
       const raw = conn[endpoint] ?? '';
+      // A path-based end (format 5) resolves through the property path, not through a record id.
+      const pathEnd = connectorEndOf(conn, endpoint === 'sourcePortId' ? 'source' : 'target');
+      if (pathEnd) {
+        if (resolveConnectorEnd(repo, conn.ownerId, pathEnd, endpoint === 'sourcePortId' ? 'source' : 'target', conn.id).resolved) continue;
+        records.push({
+          kind: 'connector', id: conn.id, endpoint, missingId: raw,
+          code: 'UNRESOLVED_ENDPOINT', message: `Connector ${conn.id} endpoint ${endpoint} (${raw}) does not resolve through its property path`,
+        });
+        continue;
+      }
       if (!raw) {
         records.push({
           kind: 'connector', id: conn.id, endpoint, missingId: raw,

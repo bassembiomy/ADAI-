@@ -15,6 +15,7 @@ import {
   getLegalRelationshipTargets,
 } from '../../../engine/sysml/capabilities';
 import { migrateV3ToV4 } from '../../../engine/sysml/persistence/migrateV3ToV4';
+import { derivedDepthOneParts, isPartProperty, linkedPropertyIds, resolvePartLike } from '../../../engine/sysml/partOccurrences';
 import type { SysmlRepositoryV4 } from '../../../engine/sysml/domain';
 import {
   SYSML_CHILDREN,
@@ -34,6 +35,7 @@ import {
 } from '../../../services/sysmlOwnedFeatureCommands';
 import type { TypeSelectionPayload } from '../../../components/sysml/typeSelectionTypes';
 import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../sysml/sysmlDisplayLabel';
+import { buildPackageRelationship } from '../../sysml/packageRelationshipNotation';
 
 function explorerKindToMetaclass(kind: string): MetaclassKind {
   switch (kind) {
@@ -65,6 +67,22 @@ function explorerKindToMetaclass(kind: string): MetaclassKind {
       return 'InterfaceBlock';
     case 'valueType':
       return 'ValueType';
+    case 'enumeration':
+      return 'Enumeration';
+    case 'signal':
+      return 'Signal';
+    case 'unit':
+      return 'Unit';
+    case 'quantityKind':
+      return 'QuantityKind';
+    case 'view':
+      return 'View';
+    case 'viewpoint':
+      return 'Viewpoint';
+    case 'stakeholder':
+      return 'Stakeholder';
+    case 'constraintBlock':
+      return 'ConstraintBlock';
     case 'requirement':
       return 'Requirement';
     case 'testCase':
@@ -75,6 +93,8 @@ function explorerKindToMetaclass(kind: string): MetaclassKind {
       return 'UseCase';
     case 'activity':
       return 'Activity';
+    case 'interaction':
+      return 'Interaction';
     default:
       return kind as MetaclassKind;
   }
@@ -86,11 +106,20 @@ function canonicalKindToExplorerKind(kind: string): string {
     case 'Block': return 'block';
     case 'InterfaceBlock': return 'interface';
     case 'ValueType': return 'valueType';
+    case 'Enumeration': return 'enumeration';
+    case 'Signal': return 'signal';
+    case 'Unit': return 'unit';
+    case 'QuantityKind': return 'quantityKind';
+    case 'View': return 'view';
+    case 'Viewpoint': return 'viewpoint';
+    case 'Stakeholder': return 'stakeholder';
+    case 'ConstraintBlock': return 'constraintBlock';
     case 'Requirement': return 'requirement';
     case 'TestCase': return 'testCase';
     case 'VerificationCase': return 'verificationCase';
     case 'UseCase': return 'useCase';
     case 'Activity': return 'activity';
+    case 'Interaction': return 'interaction';
     case 'PartProperty': return 'part';
     case 'ReferenceProperty': return 'reference';
     case 'ValueProperty': return 'valueProperty';
@@ -109,10 +138,20 @@ const EXECUTABLE_EXPLORER_KINDS = new Set([
   'block',
   'interface',
   'valueType',
+  'enumeration',
+  'signal',
+  'unit',
+  'quantityKind',
+  'view',
+  'viewpoint',
+  'stakeholder',
+  'constraintBlock',
   'requirement',
   'testCase',
   'verificationCase',
   'useCase',
+  'activity',
+  'interaction',
   'part',
   'sharedPart',
   'reference',
@@ -130,11 +169,20 @@ import {
   createPackage,
   createBlock,
   createValueType,
+  createEnumeration,
+  createSignal,
+  createUnit,
+  createQuantityKind,
+  createView,
+  createViewpoint,
+  createStakeholder,
+  createActivity,
+  createInteraction,
+  createConstraintBlock,
   createInterface,
   createRequirement,
   createVerificationCase,
   createUseCase,
-  createPartUsage,
   createPortDefinition,
   createValueProperty,
   createDiagramDefinition,
@@ -149,7 +197,19 @@ import type {
   SysmlMutationCommand,
 } from '../../../services/sysmlCommandGateway';
 import { computeImpactHash, executeSysmlCommand } from '../../../services/sysmlCommandGateway';
-import { buildCreatePartUsageCommand } from '../../../services/sysmlPropertyCommands';
+import { buildCreatePartPropertyCommand } from '../../../services/sysmlPropertyCommands';
+import {
+  buildCreateInteractionFromContextCommand,
+  buildRemoveFragmentCommand,
+  buildRemoveInteractionConstraintCommand,
+  buildRemoveInteractionMessageCommand,
+  buildRemoveInteractionUseCommand,
+  buildRemoveLifelineCommand,
+  buildRemoveStateInvariantCommand,
+  buildRenameInteractionElementCommand,
+  type InteractionCommandPlan,
+} from '../../../services/sysmlInteractionCommands';
+import { findInteractionElement, lifelineBlock, messageLabel, orderedMessages } from '../../../engine/sysml/interaction';
 import type {
   SysmlRepository,
   SysmlRelationship,
@@ -165,6 +225,15 @@ import type {
  * usage source resolves to nothing and the Allocate/Satisfy tree wizards
  * offer zero targets.
  */
+/** The explorer node of a part property that no PartUsage record represents (format 5); its id is the property id. */
+function occurrenceFreePart(blockId: string, property: BlockDefinition['properties'][number]): PartUsage {
+  return {
+    id: property.id, kind: 'part', name: property.name, ownerId: blockId, typeId: property.typeId,
+    aggregation: property.kind === 'reference' ? 'reference' : 'composite', multiplicity: property.multiplicity,
+    propertyId: property.id,
+  };
+}
+
 function usageToSemanticElement(id: string, usage: SysmlUsage | undefined): SemanticElement | undefined {
   if (!usage) return undefined;
   const metaclass = usage.kind === 'part' ? 'PartProperty' : usage.kind === 'port' ? 'Port' : undefined;
@@ -195,24 +264,36 @@ export type SysmlExplorerAdapterHarness = {
   state?: SysmlGatewayState;
 };
 
-function appendPartUsageCreationPlan(
+/**
+ * Copied/pasted parts are Block properties (format 5): a part whose copied owner
+ * already carries the property needs nothing; otherwise the property is added to
+ * its copied owner, or to the existing owner Block through an update command.
+ */
+function appendPartPropertyCreationPlan(
   commands: SysmlMutationCommand[],
   planningRepository: SysmlRepository,
   part: PartUsage,
+  copiedOwner: { kind?: string; properties?: BlockDefinition['properties'] } | undefined,
 ): void {
-  const plan = buildCreatePartUsageCommand(planningRepository, part);
-  const plannedCommands = plan.type === 'batch' ? plan.commands : [plan];
-  commands.push(...plannedCommands);
+  const propertyId = part.propertyId ?? part.id;
+  if (copiedOwner?.kind === 'block') {
+    if (!copiedOwner.properties?.some(property => property.id === propertyId)) {
+      copiedOwner.properties = [...(copiedOwner.properties ?? []), {
+        id: propertyId, name: part.name, kind: part.aggregation === 'reference' ? 'reference' : 'part',
+        typeId: part.typeId, multiplicity: part.multiplicity,
+      }];
+    }
+    return;
+  }
+  const command = buildCreatePartPropertyCommand(planningRepository, part);
+  if (!command) return;
+  commands.push(command);
   // Keep planning state in step with the still-atomic outer batch so multiple
   // standalone PartProperties pasted into one owner accumulate safely.
-  for (const command of plannedCommands) {
-    if (command.type === 'createElement' && 'kind' in command.element && command.element.kind === 'part') {
-      planningRepository.usages[command.element.id] = command.element as PartUsage;
-    } else if (command.type === 'updateElement') {
-      const owner = planningRepository.definitions[command.elementId];
-      if (owner?.kind === 'block' && Array.isArray(command.patch.properties)) {
-        planningRepository.definitions[owner.id] = { ...owner, properties: command.patch.properties as BlockDefinition['properties'] };
-      }
+  if (command.type === 'updateElement') {
+    const owner = planningRepository.definitions[command.elementId];
+    if (owner?.kind === 'block' && Array.isArray(command.patch.properties)) {
+      planningRepository.definitions[owner.id] = { ...owner, properties: command.patch.properties as BlockDefinition['properties'] };
     }
   }
 }
@@ -289,6 +370,18 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
     return result;
   };
 
+  /** Runs a pure interaction plan; a refused plan never reaches the gateway. */
+  const runInteractionPlan = (plan: InteractionCommandPlan, selectedIds?: string[]): ExplorerCommandResult => {
+    if (!plan.ok) {
+      return {
+        committed: false,
+        revision: getState().repository.revision,
+        diagnostics: plan.diagnostics.map(d => ({ code: d.code, severity: 'error' as const, message: d.message })),
+      };
+    }
+    return toExplorerResult(dispatchCommand(plan.command as SysmlEditorCommand), selectedIds);
+  };
+
   const getElementById = (id: string, repo: SysmlRepository) => {
     if (id === 'model' || id === '') {
       return repo.packages.model ?? { id: 'model', name: 'Model', kind: 'package' as const, ownerId: '' };
@@ -302,7 +395,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       repo.verificationCases[id] ??
       repo.useCases?.[id] ??
       repo.connectors[id] ??
-      repo.relationships[id]
+      repo.relationships[id] ??
+      // Format 5: a part is a Block property, found by its property id.
+      resolvePartLike(repo, id)
     );
   };
   const getSysmlDescendants = (id: string, repo: SysmlRepository): any[] => {
@@ -411,6 +506,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
       }
 
       // 3. Definitions (Blocks, ValueTypes, Interfaces)
+      const linkedPartPropertyIds = linkedPropertyIds(repo);
       for (const def of Object.values(repo.definitions)) {
         const parentOwnerId = def.ownerId || 'model';
         const parentId = nodes[`sysml:element:${parentOwnerId}`] ? `sysml:element:${parentOwnerId}` : modelNodeId;
@@ -427,10 +523,74 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           hasChildren: false,
         });
 
+        if (def.kind === 'interaction') {
+          // Nested content sits under its Interaction (not moved, copied or related from the tree);
+          // rename and delete go through the interaction command builders.
+          const group = (key: string, label: string) => {
+            const nodeId = `sysml:group:${def.id}:${key}`;
+            registerNode({ nodeId, semanticId: def.id, domain: 'sysml', kind: 'group', label, parentNodeId: defNodeId, childNodeIds: [], hasChildren: true });
+            return nodeId;
+          };
+          const leaf = (parent: string, id: string, kind: string, label: string, secondaryLabel?: string) => registerNode({
+            nodeId: `sysml:element:${id}`, semanticId: id, domain: 'sysml', kind, label, secondaryLabel,
+            parentNodeId: parent, childNodeIds: [], hasChildren: false, readOnly: true, ownerSemanticId: def.id,
+          });
+          const lifelines = def.lifelines ?? [];
+          if (lifelines.length > 0) {
+            const parent = group('lifelines', 'Lifelines');
+            for (const lifeline of lifelines) {
+              const block = lifelineBlock(repo, lifeline);
+              leaf(parent, lifeline.id, 'lifeline', lifeline.name?.trim() || (block ? sysmlObjectLabel(block, 'Block') : 'Lifeline'),
+                block && lifeline.name?.trim() ? `: ${sysmlObjectLabel(block, 'Block')}` : undefined);
+            }
+          }
+          const messages = orderedMessages(def);
+          if (messages.length > 0) {
+            const parent = group('messages', 'Messages');
+            messages.forEach((message, index) => leaf(parent, message.id, 'message', `${index + 1}: ${messageLabel(message)}`));
+          }
+          const fragments = def.fragments ?? [];
+          if (fragments.length > 0) {
+            const parent = group('fragments', 'Fragments');
+            for (const fragment of fragments) {
+              const guard = fragment.operands[0]?.guard?.trim();
+              leaf(parent, fragment.id, 'fragment', guard ? `${fragment.operator} [${guard}]` : fragment.operator);
+            }
+          }
+          const uses = def.uses ?? [];
+          if (uses.length > 0) {
+            const parent = group('uses', 'Ref frames');
+            for (const use of uses) leaf(parent, use.id, 'interactionUse', `ref ${sysmlObjectLabel(repo.definitions[use.refersToId], 'Interaction')}`);
+          }
+          const constraints = def.constraints ?? [];
+          if (constraints.length > 0) {
+            const parent = group('constraints', 'Constraints');
+            for (const constraint of constraints) {
+              leaf(parent, constraint.id, 'interactionConstraint', constraint.kind === 'duration' ? 'Duration constraint' : 'Time constraint', constraint.expression.trim() ? `{${constraint.expression.trim()}}` : undefined);
+            }
+          }
+          const invariants = def.stateInvariants ?? [];
+          if (invariants.length > 0) {
+            const parent = group('invariants', 'State invariants');
+            for (const invariant of invariants) {
+              const lifeline = lifelines.find(candidate => candidate.id === invariant.lifelineId);
+              leaf(parent, invariant.id, 'stateInvariant', 'State invariant', lifeline ? `on ${lifeline.name?.trim() || 'lifeline'}` : undefined);
+            }
+          }
+        }
+
         // If it's a block, add feature branches
         if (def.kind === 'block') {
           // Parts group
-          const parts = Object.values(repo.usages).filter((u): u is PartUsage => u.kind === 'part' && u.ownerId === def.id);
+          // Format 5: a part is only a Block property. Part properties that no PartUsage
+          // record represents are listed here (and not again under Properties).
+          const linkedProperties = linkedPartPropertyIds;
+          const derivedPartProperties = (def.properties ?? []).filter(property => isPartProperty(repo, property) && !linkedProperties.has(property.id));
+          const derivedPartIds = new Set(derivedPartProperties.map(property => property.id));
+          const parts = [
+            ...Object.values(repo.usages).filter((u): u is PartUsage => u.kind === 'part' && u.ownerId === def.id),
+            ...derivedPartProperties.map(property => occurrenceFreePart(def.id, property)),
+          ];
           if (parts.length > 0) {
             const partsGroupId = `sysml:group:${def.id}:parts`;
             registerNode({
@@ -498,7 +658,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
 
           // Properties group
-          const props = def.properties ?? [];
+          const props = (def.properties ?? []).filter(property => !derivedPartIds.has(property.id));
           if (props.length > 0) {
             const propsGroupId = `sysml:group:${def.id}:properties`;
             registerNode({
@@ -669,6 +829,16 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
       if (elementIds.length === 1) {
         const id = elementIds[0];
+        // A lifeline, message, fragment, ref frame or state invariant: only rename (not ref frames or
+        // invariants, which have no name) and delete.
+        const nested = findInteractionElement(repo, id);
+        if (nested) {
+          const nameable = nested.elementKind === 'lifeline' || nested.elementKind === 'message';
+          return [
+            ...(nameable ? [{ id: 'rename', kind: 'rename' as const, label: 'Rename', enabled: true }] : []),
+            { id: 'delete', kind: 'delete' as const, label: 'Delete from Model', enabled: true },
+          ];
+        }
         const el = getElementById(id, repo);
         const kind = el?.kind ?? (id === 'model' ? 'model' : 'unknown');
 
@@ -821,7 +991,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           const unsupportedPackageView = kind === 'package' && !['bdd', 'requirements', 'package'].includes(diagramKind ?? '');
           const unsupportedPackageElement = diagramKind === 'package'
             && !repo.packages[id] && !repo.definitions[id]
-            && !repo.requirements[id] && !repo.verificationCases[id];
+            && !repo.requirements[id] && !repo.verificationCases[id]
+            // Diagram shortcut symbols navigate to other diagrams.
+            && !(repo.diagrams[id] && id !== activeDiagramId);
           if (kind === 'package' && diagramKind === 'package') {
             for (const [mode, label] of [
               ['direct', 'Show Contents'],
@@ -1045,7 +1217,8 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           }
           if (diagramKind === 'package') {
             const unrenderableId = command.elementIds.find(id => !repo.packages[id]
-              && !repo.definitions[id] && !repo.requirements[id] && !repo.verificationCases[id]);
+              && !repo.definitions[id] && !repo.requirements[id] && !repo.verificationCases[id]
+              && !(repo.diagrams[id] && id !== command.diagramId));
             if (unrenderableId) {
               diagnostics.push({ code: 'INVALID_DIAGRAM_ELEMENT', severity: 'error',
                 message: `Element '${unrenderableId}' has no Package Diagram presentation.` });
@@ -1142,6 +1315,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             ...Object.values(repo.verificationCases).map(x => x.name),
             ...Object.values(repo.useCases ?? {}).map(x => x.name),
             ...Object.values(repo.usages).map(x => x.name),
+            ...derivedDepthOneParts(repo).map(x => x.name),
           ];
 
           if (requestedKind === 'package') {
@@ -1160,6 +1334,65 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             const vt = createValueType({ name: command.name, ownerId, existingNames });
             const result = dispatchCommand({ type: 'createElement', element: vt });
             return toExplorerResult(result, [vt.id]);
+          }
+
+          if (requestedKind === 'enumeration') {
+            const enumeration = createEnumeration({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: enumeration }), [enumeration.id]);
+          }
+
+          if (requestedKind === 'signal') {
+            const signal = createSignal({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: signal }), [signal.id]);
+          }
+
+          if (requestedKind === 'unit') {
+            const unit = createUnit({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: unit }), [unit.id]);
+          }
+
+          if (requestedKind === 'quantityKind') {
+            const quantityKind = createQuantityKind({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: quantityKind }), [quantityKind.id]);
+          }
+
+          if (requestedKind === 'view') {
+            const view = createView({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: view }), [view.id]);
+          }
+
+          if (requestedKind === 'viewpoint') {
+            const viewpoint = createViewpoint({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: viewpoint }), [viewpoint.id]);
+          }
+
+          if (requestedKind === 'stakeholder') {
+            const stakeholder = createStakeholder({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: stakeholder }), [stakeholder.id]);
+          }
+
+          if (requestedKind === 'activity') {
+            const activity = createActivity({ name: command.name, ownerId, existingNames });
+            // A classifier-owned Activity (behavior) is qualified by its owning Block.
+            const ownerBlock = repo.definitions[ownerId];
+            if (ownerBlock) activity.namespace = [...ownerBlock.namespace, ownerBlock.name];
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: activity }), [activity.id]);
+          }
+
+          if (requestedKind === 'interaction') {
+            const interaction = createInteraction({ name: command.name, ownerId, existingNames });
+            // A classifier-owned Interaction (behavior) is qualified by its owning Block.
+            const ownerBlock = repo.definitions[ownerId];
+            if (ownerBlock) interaction.namespace = [...ownerBlock.namespace, ownerBlock.name];
+            // A scenario of a Use Case is qualified by that use case.
+            const ownerUseCase = repo.useCases?.[ownerId];
+            if (ownerUseCase) interaction.namespace = [...(ownerUseCase.namespace ?? []), ownerUseCase.name];
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: interaction }), [interaction.id]);
+          }
+
+          if (requestedKind === 'constraintBlock') {
+            const constraintBlock = createConstraintBlock({ name: command.name, ownerId, existingNames });
+            return toExplorerResult(dispatchCommand({ type: 'createElement', element: constraintBlock }), [constraintBlock.id]);
           }
 
           if (requestedKind === 'interface') {
@@ -1198,13 +1431,6 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
           if (['part', 'reference', 'sharedPart'].includes(requestedKind)) {
             const propKind: 'part' | 'reference' = requestedKind === 'reference' ? 'reference' : 'part';
             const typeId = command.typeId;
-            if (!typeId) {
-              return {
-                committed: false,
-                revision: repo.revision,
-                diagnostics: [{ code: 'TYPE_NOT_FOUND', severity: 'error', message: 'A valid block type is required.' }],
-              };
-            }
             const plan = buildCreateOwnedPropertyCommand(repo, {
               ownerBlockId: ownerId,
               propertyKind: propKind,
@@ -1225,10 +1451,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             const result = dispatchCommand(plan.command as SysmlEditorCommand);
             const updatedBlock = result.repository.definitions[ownerId] as BlockDefinition | undefined;
             const createdProp = updatedBlock?.properties?.[(updatedBlock.properties?.length ?? 1) - 1];
-            const matchingUsage = Object.values(result.repository.usages).find(
-              u => u.kind === 'part' && (u as PartUsage).propertyId === createdProp?.id
-            );
-            return toExplorerResult(result, matchingUsage ? [matchingUsage.id] : createdProp ? [createdProp.id] : []);
+            return toExplorerResult(result, createdProp ? [createdProp.id] : []);
           }
 
           if (['port', 'fullPort', 'proxyPort', 'flowPort'].includes(requestedKind)) {
@@ -1271,13 +1494,6 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
           if (requestedKind === 'valueProperty' || requestedKind === 'value') {
             const typeId = command.typeId;
-            if (!typeId) {
-              return {
-                committed: false,
-                revision: repo.revision,
-                diagnostics: [{ code: 'TYPE_NOT_FOUND', severity: 'error', message: 'A valid value type is required.' }],
-              };
-            }
             const plan = buildCreateOwnedPropertyCommand(repo, {
               ownerBlockId: ownerId,
               propertyKind: 'value',
@@ -1303,13 +1519,6 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
 
           if (requestedKind === 'flowProperty' || requestedKind === 'flow') {
             const typeId = command.typeId;
-            if (!typeId) {
-              return {
-                committed: false,
-                revision: repo.revision,
-                diagnostics: [{ code: 'TYPE_NOT_FOUND', severity: 'error', message: 'A valid type is required for flow property.' }],
-              };
-            }
             const plan = buildCreateOwnedPropertyCommand(repo, {
               ownerBlockId: ownerId,
               propertyKind: 'flow',
@@ -1341,6 +1550,17 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         }
 
         case 'createDiagram': {
+          // A Sequence Diagram is always owned by an Interaction. Asking for one
+          // on a Block creates the Interaction (lifelines = the Block's parts)
+          // and the diagram together, as one undo step.
+          if (command.diagramKind === 'sequence' && repo.definitions[command.ownerId]?.kind === 'block') {
+            const plan = buildCreateInteractionFromContextCommand(repo, { blockId: command.ownerId, name: command.name });
+            if (!plan.ok) {
+              return { committed: false, revision: repo.revision, diagnostics: plan.diagnostics.map(d => ({ code: d.code, severity: 'error' as const, message: d.message })) };
+            }
+            const created = dispatchCommand(plan.command as SysmlEditorCommand);
+            return toExplorerResult(created, [plan.createdIds[1]]);
+          }
           const diag = createDiagramDefinition({
             name: command.name,
             ownerId: command.ownerId,
@@ -1352,6 +1572,13 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         }
 
         case 'rename': {
+          const nested = findInteractionElement(repo, command.elementId);
+          if (nested) {
+            return runInteractionPlan(
+              buildRenameInteractionElementCommand(repo, { interactionId: nested.interaction.id, elementId: nested.id, name: command.name }),
+              [nested.id],
+            );
+          }
           const result = dispatchCommand({
             type: 'updateElement',
             elementId: command.elementId,
@@ -1371,6 +1598,28 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         }
 
         case 'delete': {
+          const nestedRefs = command.elementIds.map(id => findInteractionElement(repo, id));
+          if (nestedRefs.some(Boolean)) {
+            // Each nested element is one command, so a refusal names what blocks it. Deleting one
+            // changes the interaction, so the next plan is built from the state after the previous one.
+            let last: ExplorerCommandResult | undefined;
+            for (const ref of nestedRefs) {
+              if (!ref) continue;
+              const current = getState().repository;
+              const interactionId = ref.interaction.id;
+              const plan = ref.elementKind === 'lifeline' ? buildRemoveLifelineCommand(current, { interactionId, lifelineId: ref.id })
+                : ref.elementKind === 'message' ? buildRemoveInteractionMessageCommand(current, { interactionId, messageId: ref.id })
+                : ref.elementKind === 'fragment' ? buildRemoveFragmentCommand(current, { interactionId, fragmentId: ref.id })
+                : ref.elementKind === 'use' ? buildRemoveInteractionUseCommand(current, { interactionId, useId: ref.id })
+                : ref.elementKind === 'constraint' ? buildRemoveInteractionConstraintCommand(current, { interactionId, constraintId: ref.id })
+                : buildRemoveStateInvariantCommand(current, { interactionId, invariantId: ref.id });
+              last = runInteractionPlan(plan);
+              if (!last.committed) return last;
+            }
+            const others = command.elementIds.filter((_, index) => !nestedRefs[index]);
+            if (others.length === 0 && last) return last;
+            return toExplorerResult(dispatchCommand({ type: 'deleteElements', elementIds: others, confirmedImpactHash: command.confirmedImpactHash }));
+          }
           const result = dispatchCommand({
             type: 'deleteElements',
             elementIds: command.elementIds,
@@ -1380,12 +1629,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         }
 
         case 'createRelationship': {
-          const rel: SysmlRelationship = {
-            id: generateId('rel'),
-            kind: command.relationshipKind as any,
-            sourceId: command.sourceId,
-            targetId: command.targetId,
-          };
+          const rel: SysmlRelationship = buildPackageRelationship(
+            generateId('rel'), command.relationshipKind as SysmlRelationship['kind'], command.sourceId, command.targetId,
+          );
           const result = dispatchCommand({
             type: 'createElement',
             element: rel,
@@ -1437,6 +1683,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             ...Object.values(repo.requirements).map(x => x.name),
             ...Object.values(repo.verificationCases).map(x => x.name),
             ...Object.values(repo.usages).map(x => x.name),
+            ...derivedDepthOneParts(repo).map(x => x.name),
           ];
           const payload = copyOwnershipForest(
             'sysml',
@@ -1465,14 +1712,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               commands.push({ type: 'createDiagram', diagram: snapshot as any });
             } else if ((snapshot as any).kind === 'part') {
               const part = snapshot as PartUsage;
-              const copiedOwner = remapped.snapshots[part.ownerId] as any;
-              const ownerAlreadyCarriesProperty = copiedOwner?.kind === 'block'
-                && copiedOwner.properties?.some((property: { id: string }) => property.id === part.propertyId);
-              if (ownerAlreadyCarriesProperty) {
-                commands.push({ type: 'createElement', element: part });
-              } else {
-                appendPartUsageCreationPlan(commands, planningRepository, part);
-              }
+              appendPartPropertyCreationPlan(commands, planningRepository, part, remapped.snapshots[part.ownerId] as any);
             } else {
               commands.push({ type: 'createElement', element: snapshot as any });
             }
@@ -1489,6 +1729,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
             ...Object.values(repo.requirements).map(x => x.name),
             ...Object.values(repo.verificationCases).map(x => x.name),
             ...Object.values(repo.usages).map(x => x.name),
+            ...derivedDepthOneParts(repo).map(x => x.name),
           ];
           const remapped = remapClipboardPayload(command.payload, oldId => generateId(oldId.split('-')[0] || 'paste'));
           const commands: SysmlMutationCommand[] = [];
@@ -1510,14 +1751,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               commands.push({ type: 'createDiagram', diagram: snapshot as any });
             } else if ((snapshot as any).kind === 'part') {
               const part = snapshot as PartUsage;
-              const copiedOwner = remapped.snapshots[part.ownerId] as any;
-              const ownerAlreadyCarriesProperty = copiedOwner?.kind === 'block'
-                && copiedOwner.properties?.some((property: { id: string }) => property.id === part.propertyId);
-              if (ownerAlreadyCarriesProperty) {
-                commands.push({ type: 'createElement', element: part });
-              } else {
-                appendPartUsageCreationPlan(commands, planningRepository, part);
-              }
+              appendPartPropertyCreationPlan(commands, planningRepository, part, remapped.snapshots[part.ownerId] as any);
             } else {
               commands.push({ type: 'createElement', element: snapshot as any });
             }

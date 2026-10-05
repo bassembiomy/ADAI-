@@ -7,6 +7,7 @@ import type {
 } from '../../engine/sysml/domain/relationships';
 import type { BehaviorElement } from '../../engine/sysml/domain/behaviors';
 import { resolvePortUsage } from '../../engine/sysml/ibd';
+import { lifelineBlock, messageLabel, orderedMessages } from '../../engine/sysml/interaction';
 import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 import { buildDiagramVisualParentIndex } from './diagramTreeContext';
@@ -157,6 +158,7 @@ const pillarOrder: Array<[ModelPillar, string]> = [
 
 const pillarForSysmlKind = (kind: string): ModelPillar => {
   if (kind === 'requirement' || kind === 'verificationCase') return 'requirements';
+  if (kind === 'activity' || kind === 'interaction') return 'behavior';
   return 'structural';
 };
 
@@ -171,25 +173,21 @@ const pillarForDiagramKind = (diagramKind: string): ModelPillar => {
   return 'structural';
 };
 
-const addChild = (nodes: Record<string, ModelTreeNode>, parentId: string, childId: string) => {
-  const parent = nodes[parentId];
-  if (!parent || parent.childNodeIds.includes(childId)) return;
-  parent.childNodeIds.push(childId);
-  parent.hasChildren = true;
-};
-
 const register = (nodes: Record<string, ModelTreeNode>, node: ModelTreeNode) => {
   nodes[node.nodeId] = node;
-  if (node.parentNodeId) addChild(nodes, node.parentNodeId, node.nodeId);
 };
 
 const rebuildChildren = (nodes: Record<string, ModelTreeNode>) => {
-  for (const node of Object.values(nodes)) {
+  const allNodes = Object.values(nodes);
+  for (const node of allNodes) {
     node.childNodeIds = [];
     node.hasChildren = false;
   }
-  for (const node of Object.values(nodes)) {
-    if (node.parentNodeId) addChild(nodes, node.parentNodeId, node.nodeId);
+  for (const node of allNodes) {
+    const parent = node.parentNodeId ? nodes[node.parentNodeId] : undefined;
+    if (!parent) continue;
+    parent.childNodeIds.push(node.nodeId);
+    parent.hasChildren = true;
   }
 };
 
@@ -264,6 +262,11 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     ...Object.values(input.sysml.usages),
     ...Object.values(input.sysml.requirements),
     ...Object.values(input.sysml.verificationCases),
+    // Use Case diagram elements. They were never projected, so a Use Case
+    // diagram had nothing to group beneath it.
+    ...Object.values(input.sysml.actors ?? {}),
+    ...Object.values(input.sysml.subjects ?? {}),
+    ...Object.values(input.sysml.useCases ?? {}),
   ];
   for (const item of sysmlEntries) {
     const pillar = pillarForSysmlKind(item.kind);
@@ -292,6 +295,25 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       hasChildren: false,
     });
   }
+  // Extension points belong to their Use Case (never to a diagram), so they
+  // nest below it whether or not that Use Case is presented anywhere.
+  for (const extensionPoint of Object.values(input.sysml.extensionPoints ?? {})) {
+    const owner = input.sysml.useCases?.[extensionPoint.useCaseId];
+    if (!owner) continue;
+    register(nodes, {
+      nodeId: sysmlNodeId(extensionPoint.id),
+      semanticId: extensionPoint.id,
+      domain: 'sysml',
+      kind: extensionPoint.kind,
+      label: sysmlObjectLabel(extensionPoint, 'Extension Point'),
+      secondaryLabel: extensionPoint.location ? `@ ${extensionPoint.location}` : undefined,
+      parentNodeId: sysmlNodeId(owner.id),
+      ownerSemanticId: owner.id,
+      childNodeIds: [],
+      hasChildren: false,
+    });
+  }
+
   // Block ports, properties, and operations are classifier features stored on the BlockDefinition, not
   // top-level repository usages. Project them into the same containment tree
   // so tree navigation and canvas/inspector creation expose one semantic feature.
@@ -338,6 +360,68 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     }
   }
 
+  // Interaction content (lifelines, messages, fragments, ...) nests under its Interaction. It is
+  // read-only in the tree: rename and delete go through the interaction command builders.
+  for (const def of Object.values(input.sysml.definitions ?? {})) {
+    if (def.kind !== 'interaction') continue;
+    const defNodeId = sysmlNodeId(def.id);
+    if (!nodes[defNodeId]) continue;
+    const group = (key: string, label: string) => {
+      const nodeId = `sysml:group:${def.id}:${key}`;
+      register(nodes, { nodeId, semanticId: def.id, domain: 'sysml', kind: 'group', label, parentNodeId: defNodeId, childNodeIds: [], hasChildren: true });
+      return nodeId;
+    };
+    const leaf = (parent: string, id: string, kind: string, label: string, secondaryLabel?: string) => {
+      if (nodes[sysmlNodeId(id)]) return;
+      register(nodes, {
+        nodeId: sysmlNodeId(id), semanticId: id, domain: 'sysml', kind, label, secondaryLabel,
+        parentNodeId: parent, childNodeIds: [], hasChildren: false, readOnly: true, ownerSemanticId: def.id,
+      });
+    };
+    const lifelines = def.lifelines ?? [];
+    if (lifelines.length > 0) {
+      const parent = group('lifelines', 'Lifelines');
+      for (const lifeline of lifelines) {
+        const block = lifelineBlock(input.sysml, lifeline);
+        leaf(parent, lifeline.id, 'lifeline', lifeline.name?.trim() || (block ? sysmlObjectLabel(block, 'Block') : 'Lifeline'),
+          block && lifeline.name?.trim() ? `: ${sysmlObjectLabel(block, 'Block')}` : undefined);
+      }
+    }
+    const messages = orderedMessages(def);
+    if (messages.length > 0) {
+      const parent = group('messages', 'Messages');
+      messages.forEach((message, index) => leaf(parent, message.id, 'message', `${index + 1}: ${messageLabel(message)}`));
+    }
+    const fragments = def.fragments ?? [];
+    if (fragments.length > 0) {
+      const parent = group('fragments', 'Fragments');
+      for (const fragment of fragments) {
+        const guard = fragment.operands[0]?.guard?.trim();
+        leaf(parent, fragment.id, 'fragment', guard ? `${fragment.operator} [${guard}]` : fragment.operator);
+      }
+    }
+    const uses = def.uses ?? [];
+    if (uses.length > 0) {
+      const parent = group('uses', 'Ref frames');
+      for (const use of uses) leaf(parent, use.id, 'interactionUse', `ref ${sysmlObjectLabel(input.sysml.definitions[use.refersToId], 'Interaction')}`);
+    }
+    const constraints = def.constraints ?? [];
+    if (constraints.length > 0) {
+      const parent = group('constraints', 'Constraints');
+      for (const constraint of constraints) {
+        leaf(parent, constraint.id, 'interactionConstraint', constraint.kind === 'duration' ? 'Duration constraint' : 'Time constraint', constraint.expression.trim() ? `{${constraint.expression.trim()}}` : undefined);
+      }
+    }
+    const invariants = def.stateInvariants ?? [];
+    if (invariants.length > 0) {
+      const parent = group('invariants', 'State invariants');
+      for (const invariant of invariants) {
+        const lifeline = lifelines.find(candidate => candidate.id === invariant.lifelineId);
+        leaf(parent, invariant.id, 'stateInvariant', 'State invariant', lifeline ? `on ${lifeline.name?.trim() || 'lifeline'}` : undefined);
+      }
+    }
+  }
+
   // Canonical elements collection (V4 or unified inputs)
   if ((input.sysml as any).elements) {
     for (const el of Object.values((input.sysml as any).elements) as SemanticElement[]) {
@@ -348,7 +432,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
         'FlowProperty', 'Port', 'Operation', 'Constraint', 'Parameter',
       ].includes(el.metaclass);
       const isBehavior = [
-        'UseCase', 'Activity', 'ActivityPartition', 'Transition', 'ControlFlow',
+        'UseCase', 'Activity', 'ActivityPartition', 'Interaction', 'Transition', 'ControlFlow',
         'ObjectFlow', 'Action', 'State',
       ].includes(el.metaclass) || el.metaclass.endsWith('Flow');
 
@@ -552,6 +636,8 @@ function applyDiagramVisualParents(
     && !node.kind.endsWith('Property')
     && node.kind !== 'connectorEnd'
     && node.kind !== 'Operation'
+    // Interaction content always stays under its Interaction.
+    && !(node.readOnly && node.ownerSemanticId && node.parentNodeId?.startsWith('sysml:group:'))
     && nodes[node.nodeId] === node;
 
   const wouldCreateCycle = (childId: string, parentId: string): boolean => {

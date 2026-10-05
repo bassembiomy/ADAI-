@@ -305,23 +305,18 @@ describe('Task 2 tree/canvas creation parity', () => {
     ['part', 'part'],
     ['reference', 'reference'],
     ['valueProperty', 'value'],
-  ] as const)('tree and canvas %s share candidate IDs and equivalent intents', (elementKind, propertyKind) => {
+  ] as const)('tree and canvas %s create directly with equivalent intents', (elementKind, propertyKind) => {
     const repository = createParityFixture();
     const { adapter, gatewayCommands } = createTreeHarness(repository);
     const typeId = propertyKind === 'value' ? 'vt-voltage' : 'block-motor';
 
+    // Without a type neither surface prompts.
     const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind });
-    expect(treePreflight.committed).toBe(false);
-    expect(treePreflight.typeSelection).toBeDefined();
-
+    expect(treePreflight.typeSelection).toBeUndefined();
     const canvasPlan = planOwnedPropertyCreation(repository, {
       ownerBlockId: 'block-vehicle', propertyKind, diagramId: 'bdd-1', presentation: { x: 10, y: 20 },
     });
-    expect(canvasPlan.outcome).toBe('typeSelection');
-    if (canvasPlan.outcome !== 'typeSelection') return;
-    expect(canvasPlan.request.candidates.map(c => c.id).sort())
-      .toEqual((treePreflight.typeSelection?.candidates ?? []).map(c => c.id).sort());
-    expect(canvasPlan.request.action).toEqual(treePreflight.typeSelection?.action);
+    expect(canvasPlan.outcome).toBe('command');
 
     const treeResult = adapter.execute({ type: 'createElement', ownerId: 'block-vehicle', elementKind, typeId } as ModelExplorerCommand);
     expect(treeResult.committed).toBe(true);
@@ -354,22 +349,17 @@ describe('Task 2 tree/canvas creation parity', () => {
     ['proxyPort', 'proxyPort', 'iface-can'],
     ['fullPort', 'fullPort', 'block-motor'],
     ['flowPort', 'flowPort', 'vt-voltage'],
-  ] as const)('tree and canvas %s share candidate IDs and equivalent intents', (elementKind, portKind, typeId) => {
+  ] as const)('tree and canvas %s create directly with equivalent intents', (elementKind, portKind, typeId) => {
     const repository = createParityFixture();
     const { adapter, gatewayCommands } = createTreeHarness(repository);
 
+    // Without a type neither surface prompts.
     const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind });
-    expect(treePreflight.committed).toBe(false);
-    expect(treePreflight.typeSelection).toBeDefined();
-
+    expect(treePreflight.typeSelection).toBeUndefined();
     const canvasPlan = planOwnedPortCreation(repository, {
       ownerBlockId: 'block-vehicle', portKind, diagramId: 'bdd-1', presentation: { x: 7, y: 8 },
     });
-    expect(canvasPlan.outcome).toBe('typeSelection');
-    if (canvasPlan.outcome !== 'typeSelection') return;
-    expect(canvasPlan.request.candidates.map(c => c.id).sort())
-      .toEqual((treePreflight.typeSelection?.candidates ?? []).map(c => c.id).sort());
-    expect(canvasPlan.request.action).toEqual(treePreflight.typeSelection?.action);
+    expect(canvasPlan.outcome).toBe('command');
 
     const treeResult = adapter.execute({ type: 'createElement', ownerId: 'block-vehicle', elementKind, typeId } as ModelExplorerCommand);
     expect(treeResult.committed).toBe(true);
@@ -422,19 +412,20 @@ describe('Task 2 tree/canvas creation parity', () => {
     expect(canvasPlan.command.intent.typeId).toBeUndefined();
   });
 
-  it('cancelling type selection on either surface leaves the repository unchanged', () => {
+  it('tree and canvas untyped Proxy Port produce the same owner and kind, and planning does not mutate', () => {
     const repository = createParityFixture();
     const before = JSON.stringify(repository);
-    const { adapter } = createTreeHarness(repository);
-
-    const treePreflight = adapter.preflight({ type: 'createElement', ownerId: 'block-vehicle', elementKind: 'proxyPort' });
-    expect(treePreflight.committed).toBe(false);
-    expect(treePreflight.typeSelection).toBeDefined();
+    const { adapter, gatewayCommands } = createTreeHarness(repository);
 
     const canvasPlan = planOwnedPortCreation(repository, { ownerBlockId: 'block-vehicle', portKind: 'proxyPort' });
-    expect(canvasPlan.outcome).toBe('typeSelection');
-
-    // Cancel on both surfaces: no command dispatched.
+    expect(canvasPlan.outcome).toBe('command');
     expect(JSON.stringify(repository)).toBe(before);
+
+    const treeResult = adapter.execute({ type: 'createElement', ownerId: 'block-vehicle', elementKind: 'proxyPort' });
+    expect(treeResult.committed).toBe(true);
+    const treeCommand = gatewayCommands.find(cmd => cmd.type === 'createOwnedFeature');
+    if (canvasPlan.outcome !== 'command' || treeCommand?.type !== 'createOwnedFeature') throw new Error('expected commands');
+    expect(treeCommand.intent).toMatchObject({ featureKind: 'port', ownerBlockId: 'block-vehicle', portKind: 'proxyPort' });
+    expect(canvasPlan.command.intent).toMatchObject({ featureKind: 'port', ownerBlockId: 'block-vehicle', portKind: 'proxyPort' });
   });
 });

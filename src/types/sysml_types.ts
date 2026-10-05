@@ -18,7 +18,7 @@ export interface ValuePropertyData {
   name: string;
   type: string;
   defaultValue?: string;
-  kind?: 'value' | 'part' | 'reference' | 'flow';
+  kind?: 'value' | 'part' | 'reference' | 'flow' | 'constraint';
   typeId?: string;
   multiplicity?: string;
   unit?: string;
@@ -43,6 +43,9 @@ export interface BlockData {
   constraints: string[];
   classes: string[]; // Nested classes/parts definitions
   ports: PortData[];
+  /** Names of elements allocated to / from this one («allocate», SysML 1.6 Clause 15); compartments draw only when non-empty. */
+  allocatedFrom?: string[];
+  allocatedTo?: string[];
   reqId?: string;
   description?: string;
   status?: string;
@@ -50,6 +53,10 @@ export interface BlockData {
   satisfiedReqIds?: string[];
   risk?: string;
   verificationMethod?: string;
+  /** Viewpoint (SysML 1.6 §7.3.2.2) compartment text: purpose, stakeholders and concerns. */
+  viewpointPurpose?: string;
+  viewpointStakeholders?: string[];
+  viewpointConcerns?: string[];
   source?: string;
   ibdX?: number;
   ibdY?: number;
@@ -74,7 +81,7 @@ export interface RelationshipData {
   id: string;
   sourceId: string;
   targetId: string;
-  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'packageImport' | 'elementImport' | 'packageMerge' | 'requirementContainment';
+  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy' | 'binding' | 'dependency' | 'packageImport' | 'elementImport' | 'packageMerge' | 'requirementContainment' | 'conform' | 'expose';
   label: string;
   name?: string;
   sourceRole?: string;
@@ -93,6 +100,8 @@ export interface PackageData {
   name: string;
   ownerId?: string;
   namespace?: string[];
+  /** Applied Package stereotype keyword, e.g. 'modelLibrary'. */
+  stereotype?: string;
   x: number;
   y: number;
   width: number;

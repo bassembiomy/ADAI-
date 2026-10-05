@@ -17,6 +17,15 @@ import {
   FileCode,
   FlaskConical,
   Workflow,
+  Ruler,
+  Scale,
+  Eye,
+  Telescope,
+  User,
+  ArrowLeftRight,
+  Frame,
+  MessageSquare,
+  Rows3,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
@@ -139,6 +148,30 @@ export function getNodeKindIcon(kind: string, _domain: string): React.ReactEleme
       if (kind === 'pseudostate') return <Disc {...iconProps} />;
       if (kind === 'junction') return <GitCommit {...iconProps} />;
       if (kind === 'transition') return <ArrowRight {...iconProps} />;
+      return <Square {...iconProps} />;
+    case 'unit':
+      return <Ruler {...iconProps} />;
+    case 'quantityKind':
+      return <Scale {...iconProps} />;
+    case 'view':
+      return <Eye {...iconProps} />;
+    case 'viewpoint':
+      return <Telescope {...iconProps} />;
+    case 'stakeholder':
+      return <User {...iconProps} />;
+    case 'activity':
+      return <Workflow {...iconProps} />;
+    case 'interaction':
+      return <ArrowLeftRight {...iconProps} />;
+    case 'lifeline':
+      return <Rows3 {...iconProps} />;
+    case 'message':
+      return <MessageSquare {...iconProps} />;
+    case 'fragment':
+    case 'interactionUse':
+      return <Frame {...iconProps} />;
+    case 'interactionConstraint':
+    case 'stateInvariant':
       return <Square {...iconProps} />;
     case 'xbridgesModel':
       return <Workflow {...iconProps} />;

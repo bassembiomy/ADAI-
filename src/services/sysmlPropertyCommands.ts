@@ -1,4 +1,5 @@
 import { parseMultiplicity, type BlockDefinition, type PartUsage, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
+import { findPortOwner, findPropertyOwner, isPartProperty, PATH_SEPARATOR, resolveOccurrenceKey, resolvePartLike } from '../engine/sysml/partOccurrences';
 import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
 
 type SysmlMutationPlan = SysmlMutationCommand | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string };
@@ -24,19 +25,6 @@ function normalizeProperty(property: Record<string, unknown>): PropertyDefinitio
   };
 }
 
-function usageForProperty(ownerId: string, property: PropertyDefinition): PartUsage {
-  return {
-    id: `part-property:${ownerId}:${property.id}`,
-    propertyId: property.id,
-    kind: 'part',
-    name: property.name,
-    ownerId,
-    typeId: property.typeId,
-    aggregation: property.kind === 'reference' ? 'reference' : 'composite',
-    multiplicity: property.multiplicity,
-  };
-}
-
 function createUniquePropertyId(repository: SysmlRepository, ownerId: string, usageId: string, requested?: string): string {
   const nestedIds = Object.values(repository.definitions).flatMap(definition => definition.kind === 'block'
     ? [...definition.properties.map(property => property.id), ...definition.ports.map(port => port.id)]
@@ -57,34 +45,34 @@ function createUniquePropertyId(repository: SysmlRepository, ownerId: string, us
   return candidate;
 }
 
-export function buildCreatePartUsageCommand(
+/** The description of a part to add to a Block: only the fields a part property needs. */
+export type PartPropertyInput = Pick<PartUsage, 'name' | 'ownerId' | 'typeId' | 'multiplicity'> & Partial<Pick<PartUsage, 'id' | 'propertyId' | 'aggregation'>>;
+
+/**
+ * Format 5: a part is a part/reference property of its owner Block. This plans
+ * adding it (no PartUsage record is created). Returns undefined when the owner
+ * is not a Block known to the repository.
+ */
+export function buildCreatePartPropertyCommand(
   repository: SysmlRepository,
-  usage: PartUsage,
-  presentation?: { x?: number; y?: number; width?: number; height?: number },
-  diagramId?: string,
-): SysmlMutationPlan {
-  const propertyId = createUniquePropertyId(repository, usage.ownerId, usage.id, usage.propertyId);
-  const partUsage: PartUsage = { ...usage, propertyId };
-  const commands: SysmlMutationCommand[] = [diagramId
-    ? { type: 'createAndPresent', element: partUsage, diagramId, presentation: presentation ?? {} }
-    : { type: 'createElement', element: partUsage, presentation }];
-  const owner = repository.definitions[usage.ownerId];
-  if (owner?.kind === 'block') {
-    commands.push({
-      type: 'updateElement',
-      elementId: owner.id,
-      patch: {
-        properties: [...owner.properties, {
-          id: propertyId,
-          name: usage.name,
-          kind: usage.aggregation === 'reference' ? 'reference' : 'part',
-          typeId: usage.typeId,
-          multiplicity: usage.multiplicity,
-        }],
-      },
-    });
-  }
-  return { type: 'batch', commands };
+  part: PartPropertyInput,
+): SysmlMutationCommand | undefined {
+  const owner = repository.definitions[part.ownerId];
+  if (owner?.kind !== 'block') return undefined;
+  const propertyId = createUniquePropertyId(repository, part.ownerId, part.id ?? part.name, part.propertyId);
+  return {
+    type: 'updateElement',
+    elementId: owner.id,
+    patch: {
+      properties: [...owner.properties, {
+        id: propertyId,
+        name: part.name,
+        kind: part.aggregation === 'reference' ? 'reference' : 'part',
+        typeId: part.typeId,
+        multiplicity: part.multiplicity,
+      }],
+    },
+  };
 }
 
 export function buildBlockPropertyUpdateCommand(
@@ -104,26 +92,15 @@ export function buildBlockPropertyUpdateCommand(
     : undefined;
   if (properties) semanticPatch.properties = properties;
   const commands: SysmlMutationCommand[] = [];
-  if (Object.keys(semanticPatch).length > 0) commands.push({ type: 'updateElement', elementId, patch: semanticPatch });
-
   if (properties) {
-    const desired = new Map(properties.filter(property => property.kind === 'part' || property.kind === 'reference').map(property => [property.id, usageForProperty(elementId, property)]));
-    const retainedUsageIds = new Set<string>();
-    for (const [usageId, usage] of Object.entries(repository.usages)) {
-      if (usage.kind !== 'part' || usage.ownerId !== elementId) continue;
-      const [propertyId, next] = [...desired.entries()].find(([id, candidate]) => id === usage.propertyId || (!usage.propertyId && candidate.id === usageId)) ?? [];
-      if (!next || propertyId === undefined) commands.push({ type: 'deleteElements', elementIds: [usageId] });
-      else {
-        desired.delete(propertyId);
-        retainedUsageIds.add(usageId);
-        const updatedUsage = { ...next, id: usageId };
-        if (JSON.stringify(usage) !== JSON.stringify(updatedUsage)) commands.push({ type: 'updateElement', elementId: usageId, patch: updatedUsage as unknown as Record<string, unknown> });
-      }
-    }
-    for (const usage of desired.values()) {
-      if (!retainedUsageIds.has(usage.id)) commands.push({ type: 'createElement', element: usage });
-    }
+    // Removing a part from the list deletes that part, with the connectors that end in it.
+    const keptIds = new Set(properties.map(property => property.id));
+    const removedPartIds = definition.properties
+      .filter(property => isPartProperty(repository, property) && !keptIds.has(property.id))
+      .map(property => property.id);
+    if (removedPartIds.length > 0) commands.push({ type: 'deleteElements', elementIds: removedPartIds });
   }
+  if (Object.keys(semanticPatch).length > 0) commands.push({ type: 'updateElement', elementId, patch: semanticPatch });
 
   if (hasSatisfactionPatch) {
     const desiredRequirementIds = new Set((patch.satisfiedReqIds as unknown[]).filter((id): id is string => typeof id === 'string' && Boolean(id)));
@@ -162,34 +139,61 @@ export function buildBlockPropertyUpdateCommand(
   return { type: 'batch', commands };
 }
 
-export function buildPartUsageUpdateCommand(
+/**
+ * Format 5: a part has no usage record, so an update addressed to a part (its
+ * property id or its property path) or to a Block port is an update of the Block
+ * that declares it. Returns undefined when the id is neither.
+ */
+export function buildFeatureUpdateCommand(
+  repository: SysmlRepository,
+  elementId: string,
+  patch: Record<string, unknown>,
+): SysmlMutationCommand | undefined {
+  const occurrence = elementId.includes(PATH_SEPARATOR) ? resolveOccurrenceKey(repository, elementId) : undefined;
+  const propertyId = occurrence?.propertyId ?? elementId;
+  const propertyOwner = occurrence
+    ? findPropertyOwner(repository, occurrence.propertyId)
+    : findPropertyOwner(repository, elementId);
+  const owner = occurrence
+    ? repository.definitions[occurrence.declaringBlockId]
+    : propertyOwner?.block;
+  if (owner?.kind === 'block' && owner.properties.some(property => property.id === propertyId && isPartProperty(repository, property))) {
+    const properties = owner.properties.map(property => {
+      if (property.id !== propertyId) return property;
+      const next: PropertyDefinition = { ...property };
+      if (typeof patch.name === 'string') next.name = patch.name;
+      if (typeof patch.typeId === 'string') next.typeId = patch.typeId;
+      if (typeof patch.aggregation === 'string') next.kind = patch.aggregation === 'reference' ? 'reference' : 'part';
+      if (patch.kind === 'part' || patch.kind === 'reference') next.kind = patch.kind;
+      if (typeof patch.multiplicity === 'string') next.multiplicity = parseMultiplicity(patch.multiplicity || '1');
+      else if (patch.multiplicity && typeof patch.multiplicity === 'object') next.multiplicity = patch.multiplicity as PropertyDefinition['multiplicity'];
+      return next;
+    });
+    return { type: 'updateElement', elementId: owner.id, patch: { properties } };
+  }
+  const portOwner = findPortOwner(repository, elementId);
+  if (portOwner) {
+    const ports = portOwner.block.ports.map(port => {
+      if (port.id !== elementId) return port;
+      const next = { ...port };
+      if (typeof patch.name === 'string') next.name = patch.name;
+      if (typeof patch.typeId === 'string') next.typeId = patch.typeId;
+      if (patch.direction === 'in' || patch.direction === 'out' || patch.direction === 'inout') next.direction = patch.direction;
+      if (typeof patch.isConjugated === 'boolean') next.isConjugated = patch.isConjugated;
+      return next;
+    });
+    return { type: 'updateElement', elementId: portOwner.block.id, patch: { ports } };
+  }
+  return undefined;
+}
+
+/** An update addressed to a part or port: it edits the Block property/port that declares it. */
+export function buildPartUpdateCommand(
   repository: SysmlRepository,
   elementId: string,
   patch: Record<string, unknown>,
 ): SysmlMutationPlan {
-  const usage = repository.usages[elementId];
-  if (!usage || usage.kind !== 'part') return { type: 'updateElement', elementId, patch };
-  const canonicalPatch: Record<string, unknown> = { ...patch };
-  if (typeof patch.multiplicity === 'string') canonicalPatch.multiplicity = parseMultiplicity(patch.multiplicity || '1');
-  const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = [
-    { type: 'updateElement', elementId, patch: canonicalPatch },
-  ];
-  const owner = repository.definitions[usage.ownerId];
-  if (owner?.kind === 'block') {
-    const propertyId = usage.propertyId ?? elementId;
-    const property = owner.properties.find(item => item.id === propertyId);
-    if (property) {
-      const nextProperties = owner.properties.map(item => item.id !== propertyId ? item : {
-        ...item,
-        ...(typeof patch.name === 'string' ? { name: patch.name } : {}),
-        ...(typeof patch.typeId === 'string' ? { typeId: patch.typeId } : {}),
-        ...(typeof patch.aggregation === 'string' ? { kind: patch.aggregation === 'reference' ? 'reference' : 'part' as const } : {}),
-        ...(typeof canonicalPatch.multiplicity === 'object' ? { multiplicity: canonicalPatch.multiplicity as PropertyDefinition['multiplicity'] } : {}),
-      });
-      commands.push({ type: 'updateElement', elementId: owner.id, patch: { properties: nextProperties } });
-    }
-  }
-  return { type: 'batch', commands };
+  return buildFeatureUpdateCommand(repository, elementId, patch) ?? { type: 'updateElement', elementId, patch };
 }
 
 export function buildCreatePartDefinitionCommand(input: {
@@ -216,31 +220,19 @@ export function buildCreatePartDefinitionCommand(input: {
   const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = [
       { type: 'createElement', element: definition },
     ];
-  const part = input.repository?.usages[input.partId];
-  const owner = part?.kind === 'part' ? input.repository?.definitions[part.ownerId] : undefined;
-  let propertyId = part?.kind === 'part' ? part.propertyId : undefined;
-  if (part?.kind === 'part' && input.repository) {
-    const existingProperty = owner?.kind === 'block'
-      ? owner.properties.find(property => property.id === part.propertyId)
-      : undefined;
-    propertyId = existingProperty?.id ?? createUniquePropertyId(input.repository, part.ownerId, part.id, propertyId);
-    commands.push({ type: 'updateElement', elementId: part.id, patch: { typeId: definition.id, propertyId } });
-  }
-  if (part?.kind === 'part' && owner?.kind === 'block' && input.repository) {
-    const existing = owner.properties.find(property => property.id === part.propertyId);
-    const newProperty: PropertyDefinition = existing
-      ? { ...existing, typeId: definition.id }
-      : {
-        id: propertyId!,
-        name: part.name,
-        kind: part.aggregation === 'reference' ? 'reference' : 'part',
-        typeId: definition.id,
-        multiplicity: part.multiplicity,
-      };
-    if (existing || newProperty) commands.push({
+  // Format 5: the part is the Block property itself (addressed by property id or property path); retyping edits that property.
+  const resolved = input.repository ? resolvePartLike(input.repository, input.partId) : undefined;
+  const partProperty = resolved?.kind === 'part' && resolved.propertyId && input.repository
+    ? findPropertyOwner(input.repository, resolved.propertyId)
+    : undefined;
+  if (partProperty) {
+    commands.push({
       type: 'updateElement',
-      elementId: owner.id,
-      patch: { properties: [...owner.properties.filter(property => property.id !== newProperty.id), newProperty] },
+      elementId: partProperty.block.id,
+      patch: {
+        properties: partProperty.block.properties.map(property =>
+          property.id === partProperty.feature.id ? { ...property, typeId: definition.id } : property),
+      },
     });
   }
   return {

@@ -66,11 +66,24 @@ describe('canonical IBD semantics', () => {
 
   it('permits delegation only between a boundary port and an internal part port', () => {
     const repo = model();
-    repo.connectors.good = { id: 'good', kind: 'delegation', ownerId: 'system', sourcePortId: 'boundary', targetPortId: 'bIn' };
+    // A delegation passes the SAME direction through the boundary (SysML 1.6 §9.3.2.2).
+    (repo.definitions.system as BlockDefinition).ports.push(port('boundary-in-def', 'in'));
+    repo.usages.boundaryIn = { id: 'boundaryIn', name: 'boundaryIn', kind: 'port', ownerId: 'system', definitionId: 'boundary-in-def' };
+    repo.connectors.good = { id: 'good', kind: 'delegation', ownerId: 'system', sourcePortId: 'boundaryIn', targetPortId: 'bIn' };
     repo.connectors.bad = { id: 'bad', kind: 'delegation', ownerId: 'system', sourcePortId: 'aOut', targetPortId: 'bIn' };
 
     expect(validateConnector(repo, 'good')).toEqual([]);
     expect(validateConnector(repo, 'bad').map(d => d.code)).toContain('INVALID_DELEGATION_ENDPOINTS');
+  });
+
+  it('requires a delegation to keep direction, unlike an assembly', () => {
+    const repo = model();
+    // boundary is 'out', bIn is 'in': fine for an assembly, wrong for a delegation.
+    repo.connectors.opposite = { id: 'opposite', kind: 'delegation', ownerId: 'system', sourcePortId: 'boundary', targetPortId: 'bIn' };
+    expect(validateConnector(repo, 'opposite').map(d => d.code)).toContain('INCOMPATIBLE_PORT_DIRECTION');
+    // boundary 'out' → internal 'out' keeps direction.
+    repo.connectors.same = { id: 'same', kind: 'delegation', ownerId: 'system', sourcePortId: 'boundary', targetPortId: 'aOut' };
+    expect(validateConnector(repo, 'same').map(d => d.code)).not.toContain('INCOMPATIBLE_PORT_DIRECTION');
   });
 
   it('validates item flow existence, direction, and conveyed type', () => {

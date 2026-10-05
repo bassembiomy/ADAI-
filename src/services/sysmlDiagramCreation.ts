@@ -13,7 +13,7 @@ import {
  * Public normative creation kinds for SysML diagrams.
  * Note: 'TestCase' maps to persisted 'verificationCase' in SysmlRepository (ADIA_EXTENSION).
  */
-export type DiagramCreationKind = 'Package' | 'Block' | 'Requirement' | 'TestCase' | 'UseCase';
+export type DiagramCreationKind = 'Package' | 'ModelLibrary' | 'Block' | 'Requirement' | 'TestCase' | 'UseCase';
 
 export interface DiagramCreationInput {
   repository: SysmlRepository;
@@ -23,6 +23,11 @@ export interface DiagramCreationInput {
   position: { x: number; y: number };
   diagramKind?: 'bdd' | 'ibd' | 'requirements' | 'package' | string;
   contextElementId?: string;
+  /**
+   * Package Diagram only: the Package symbol the new element is created
+   * inside. UML nesting means that Package owns the element.
+   */
+  nestedOwnerId?: string;
 }
 
 export interface DiagramCreationDiagnostic {
@@ -111,7 +116,13 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
       `Requested owner '${input.ownerId}' does not match the active diagram context owner '${ownerResolution.ownerId}'.`,
     );
   }
-  const effectiveOwnerId = ownerResolution.ownerId;
+  const nestedOwner = effectiveDiagramKind === 'package' && input.nestedOwnerId && input.nestedOwnerId !== 'model'
+    ? input.repository.packages?.[input.nestedOwnerId]
+    : undefined;
+  if (effectiveDiagramKind === 'package' && input.nestedOwnerId && input.nestedOwnerId !== 'model' && !nestedOwner) {
+    return failure('OWNER_NOT_FOUND', `Package '${input.nestedOwnerId}' does not exist.`);
+  }
+  const effectiveOwnerId = nestedOwner?.id ?? ownerResolution.ownerId;
 
   const ownerExists = effectiveOwnerId === 'model'
     || Boolean(input.repository.packages?.[effectiveOwnerId])
@@ -121,13 +132,17 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
 
   if (input.diagramId !== 'bdd' && input.diagramId !== 'requirements' && input.diagramId !== 'ibd' && input.diagramId !== 'rtm' && input.diagramId !== 'package') {
     if (!diagram) return failure('DIAGRAM_NOT_FOUND', `Diagram '${input.diagramId}' does not exist.`);
-    if (diagram.diagramKind === 'package' && input.kind !== 'Package' && input.kind !== 'Block' && input.kind !== 'Requirement' && input.kind !== 'TestCase' && input.kind !== 'UseCase') {
+    // Must match the gateway's Package Diagram addToDiagram allowlist: a Use
+    // Case has no Package Diagram presentation, so creating one here would
+    // leave an invisible element.
+    if (diagram.diagramKind === 'package' && input.kind !== 'Package' && input.kind !== 'ModelLibrary' && input.kind !== 'Block' && input.kind !== 'Requirement' && input.kind !== 'TestCase') {
       return failure('INVALID_DIAGRAM_ELEMENT', `${input.kind} is not supported on Package Diagrams.`);
     }
   }
 
   const names = collectRepositoryNames(input.repository);
   const element = input.kind === 'Package' ? createPackage({ ownerId: effectiveOwnerId, existingNames: names })
+    : input.kind === 'ModelLibrary' ? createPackage({ ownerId: effectiveOwnerId, existingNames: names, stereotype: 'modelLibrary' })
     : input.kind === 'Block' ? createBlock({ ownerId: effectiveOwnerId, existingNames: names })
     : input.kind === 'Requirement' ? createRequirement({ ownerId: effectiveOwnerId, existingNames: names })
     : input.kind === 'TestCase' ? createVerificationCase({ ownerId: effectiveOwnerId, existingNames: names })
@@ -143,8 +158,8 @@ export function buildDiagramCreationCommand(input: DiagramCreationInput): Diagra
       presentation: {
         x: input.position.x,
         y: input.position.y,
-        width: input.kind === 'Package' ? 220 : 150,
-        height: input.kind === 'Package' ? 140 : 100,
+        width: input.kind === 'Package' || input.kind === 'ModelLibrary' ? 220 : 150,
+        height: input.kind === 'Package' || input.kind === 'ModelLibrary' ? 140 : 100,
       },
     },
   };

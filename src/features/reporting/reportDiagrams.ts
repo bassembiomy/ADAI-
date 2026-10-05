@@ -63,6 +63,7 @@ export function drawLabeledNode(
 const DASHED_REL_TYPES = new Set([
   'derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency',
   'allocation', 'binding', 'copy', 'include', 'extend',
+  'packageImport', 'elementImport', 'packageMerge',
 ]);
 
 export function drawStyledEdge(edge: DiagramEdgeInput, path: string): string {
@@ -150,20 +151,20 @@ export function renderBddDiagram(source: ReportBlockSource): string {
     .filter(r => (bddBlockIds.has(r.sourceId) || bddBlockIds.has(r.targetId)) && nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
     .map(r => ({
       id: r.id, sourceId: r.sourceId, targetId: r.targetId,
-      label: DASHED_REL_TYPES.has(r.type) ? `«${r.type}»` : (r.label ?? ''), kind: r.type,
+      label: DASHED_REL_TYPES.has(r.type) ? (r.label?.startsWith('«') ? r.label : `«${r.type}»`) : (r.label ?? ''), kind: r.type,
     }));
   const pages = connectionPages(allNodes, edges);
   return pages.map((page, pageIndex) => {
     const sized = new Map(page.map(b => {
       const isReq = b.stereotype === 'requirement';
       const hasIbd = !isReq && (source.parts ?? []).some(p => p.blockId === b.id);
-      const stereotypePrefix = b.isAbstract ? '«block, abstract»' : `«${b.stereotype ?? 'block'}»`;
+      const stereotypePrefix = `«${b.stereotype ?? 'block'}»`;
       const stereotypeLabel = isReq
         ? '«requirement»'
         : hasIbd
           ? `${stereotypePrefix} ⤓ [IBD]`
           : stereotypePrefix;
-      const nameLabel = b.isLeaf ? `${b.name ?? ''} {leaf}` : (b.name ?? '');
+      const nameLabel = `${b.name ?? ''}${b.isAbstract ? ' {abstract}' : ''}${b.isLeaf ? ' {leaf}' : ''}`;
       return [b.id, measureNode(b.id, [
         stereotypeLabel,
         nameLabel,

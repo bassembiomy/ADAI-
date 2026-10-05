@@ -1,7 +1,7 @@
 {
   "formatVersion": "1.0.0",
-  "manifestHash": "9f65e743b568882e5174e5aac9cd60da0eaab66ad9088d215c6b06038764064f",
-  "updatedAt": 1789836066758,
+  "manifestHash": "2763eb84d3d5f7da3ef3a17129a09c9ffa0c7ebc7dd2948063413054446335ab",
+  "updatedAt": 1791135601653,
   "patterns": {
     "pat_three_phase_inverter_bridge_61924689c8269959": {
       "id": "pat_three_phase_inverter_bridge_61924689c8269959",

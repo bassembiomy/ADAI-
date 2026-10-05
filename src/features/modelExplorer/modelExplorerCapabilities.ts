@@ -50,19 +50,26 @@ export const SYSML_RELATIONSHIPS: Record<string, readonly string[]> = {
   block: ['association', 'sharedAggregation', 'composition', 'generalization', 'dependency', 'allocation', 'satisfy', 'verify', 'refine', 'trace'],
   requirement: ['requirementContainment', 'deriveReqt', 'refine', 'trace', 'copy'],
   part: ['connector', 'binding', 'itemFlow', 'allocation', 'satisfy'],
+  package: ['packageImport', 'elementImport', 'packageMerge', 'dependency'],
+  view: ['conform', 'expose'],
 };
 
 export const SYSML_DIAGRAM_KINDS: Record<string, readonly string[]> = {
-  model: ['bdd', 'requirements', 'rtm', 'package'],
-  package: ['bdd', 'requirements', 'rtm', 'package'],
-  block: ['ibd', 'bdd', 'stateMachine'],
+  model: ['bdd', 'requirements', 'rtm', 'package', 'useCase'],
+  package: ['bdd', 'requirements', 'rtm', 'package', 'useCase'],
+  // 'sequence' on a Block creates an Interaction owned by it plus its diagram.
+  block: ['ibd', 'bdd', 'stateMachine', 'sequence'],
+  activity: ['activity'],
+  interaction: ['sequence'],
 };
 
 export function allowedDiagramKinds(owner: SemanticElement): DiagramKind[] {
   if (owner.metaclass === 'Model' || owner.metaclass === 'Package') {
-    return ['bdd', 'requirements', 'rtm', 'package'];
+    return ['bdd', 'requirements', 'rtm', 'package', 'useCase'];
   }
-  if (owner.metaclass === 'Block') return ['ibd', 'bdd', 'stateMachine'];
+  if (owner.metaclass === 'Block') return ['ibd', 'bdd', 'stateMachine', 'sequence'];
+  if (owner.metaclass === 'Activity') return ['activity'];
+  if (owner.metaclass === 'Interaction') return ['sequence'];
   return [];
 }
 
@@ -145,6 +152,13 @@ export const RELATIONSHIP_KIND_LABELS: Record<string, string> = {
   binding: 'Binding',
   itemFlow: 'Item Flow',
   transition: 'Transition',
+  packageImport: 'Package Import',
+  access: 'Access',
+  elementImport: 'Element Import',
+  packageMerge: 'Package Merge',
+  conform: 'Conform',
+  expose: 'Expose',
+  containment: 'Containment',
 };
 
 export const DIAGRAM_KIND_LABELS: Record<string, string> = {
@@ -153,7 +167,10 @@ export const DIAGRAM_KIND_LABELS: Record<string, string> = {
   requirements: 'Requirements Diagram',
   rtm: 'Requirements Traceability Matrix (RTM)',
   package: 'Package Diagram',
+  useCase: 'Use Case Diagram',
   stateMachine: 'State Machine Diagram',
+  activity: 'Activity Diagram',
+  sequence: 'Sequence Diagram',
   parametric: 'Parametric Diagram',
 };
 

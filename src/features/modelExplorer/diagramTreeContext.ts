@@ -1,5 +1,6 @@
 import type { SysmlRepository } from '../../engine/sysml/model';
 import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
+import { resolvePartLike } from '../../engine/sysml/partOccurrences';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 
@@ -47,7 +48,11 @@ function sysmlHasSemanticId(repository: SysmlRepository, semanticId: string): bo
     || repository.usages[semanticId]
     || repository.requirements[semanticId]
     || repository.verificationCases[semanticId]
-    || repository.useCases?.[semanticId],
+    || repository.useCases?.[semanticId]
+    || repository.actors?.[semanticId]
+    || repository.subjects?.[semanticId]
+    // Format 5: a part presented on an IBD is a Block property, addressed by id or property path.
+    || resolvePartLike(repository, semanticId),
   );
 }
 
@@ -57,30 +62,55 @@ export function resolveCanvasSymbolDiagramTarget(
   repository: SysmlRepository,
   stateMachine?: StateMachineExplorerSnapshot,
 ): string | null {
+  const ids = resolveCanvasSymbolDiagramTargets(semanticId, repository, stateMachine);
+  return ids.length === 1 && (repository.diagrams[ids[0]] || !sysmlHasSemanticId(repository, semanticId)) ? ids[0] : null;
+}
+
+/**
+ * Every diagram a canvas symbol can navigate to: its explicit diagram
+ * references when it has any, otherwise the diagrams it owns. Several
+ * results mean the caller should let the user choose (Cameo behaviour).
+ */
+export function resolveCanvasSymbolDiagramTargets(
+  semanticId: string,
+  repository: SysmlRepository,
+  stateMachine?: StateMachineExplorerSnapshot,
+): string[] {
   const isSysmlSymbol = semanticId === 'model' || sysmlHasSemanticId(repository, semanticId);
   const isState = stateMachine?.states.some(state => state.id === semanticId) ?? false;
-  if (!isSysmlSymbol && !isState) return null;
+  if (!isSysmlSymbol && !isState) return [];
 
   const explicitReferences = isSysmlSymbol
     ? Object.values(repository.diagramReferences ?? {}).filter(reference => reference.sourceElementId === semanticId)
     : [];
   if (explicitReferences.length > 0) {
-    const ids = new Set(explicitReferences.map(reference => reference.diagramId));
-    const [onlyId] = ids;
-    return ids.size === 1 && repository.diagrams[onlyId] ? onlyId : null;
+    // Stale references stay in the result so a stale/valid conflict is not
+    // silently resolved; callers navigate only when every target exists.
+    return [...new Set(explicitReferences.map(reference => reference.diagramId))];
   }
 
   const owned = isSysmlSymbol
     ? Object.values(repository.diagrams).filter(diagram => diagram.ownerId === semanticId).map(diagram => diagram.id)
     : [];
+  // A Use Case is elaborated by the scenarios (Interactions/Activities) it owns,
+  // so their diagrams are the use case's diagrams too.
+  if (isSysmlSymbol && repository.useCases?.[semanticId]) {
+    const scenarioIds = new Set(Object.values(repository.definitions)
+      .filter(definition => (definition.kind === 'interaction' || definition.kind === 'activity') && definition.ownerId === semanticId)
+      .map(definition => definition.id));
+    if (scenarioIds.size > 0) {
+      owned.push(...Object.values(repository.diagrams)
+        .filter(diagram => scenarioIds.has(diagram.contextElementId ?? '') || scenarioIds.has(diagram.ownerId ?? ''))
+        .map(diagram => diagram.id));
+    }
+  }
   if (isState && stateMachine) {
     const regions = new Set(stateMachine.layers.filter(layer => layer.parentStateId === semanticId).map(layer => layer.id));
     owned.push(...(stateMachine.diagrams ?? [])
       .filter(diagram => diagram.ownerId === semanticId || regions.has(diagram.contextRegionId))
       .map(diagram => diagram.id));
   }
-  const ids = new Set(owned);
-  return ids.size === 1 ? [...ids][0] : null;
+  return [...new Set(owned)];
 }
 
 export interface ExactDiagramCanvasContext {
@@ -141,6 +171,39 @@ export function buildDiagramVisualParentIndex(input: DiagramTreeContextInput): M
     for (const semanticId of presentation.elementIds ?? []) {
       if (!semanticId || !sysmlHasSemanticId(input.sysml, semanticId)) continue;
       result.set(semanticId, sysmlElementNodeId(diagramId));
+    }
+  }
+
+  // Pre-calculate presented and hidden sets once per valid diagram in insertion order.
+  // This preserves deterministic "later diagram wins" behavior while eliminating
+  // repeated O(R * D) Set allocations and linear hiddenElementIds lookups.
+  const validDiagramSets: Array<{
+    diagramId: string;
+    presented: Set<string>;
+    hidden: Set<string>;
+    nodeId: string;
+  }> = [];
+
+  for (const [diagramId, presentation] of Object.entries(input.diagramPresentations ?? {})) {
+    if (!input.sysml.diagrams[diagramId]) continue;
+    validDiagramSets.push({
+      diagramId,
+      presented: new Set(presentation.elementIds ?? []),
+      hidden: new Set(presentation.hiddenElementIds ?? []),
+      nodeId: sysmlElementNodeId(diagramId),
+    });
+  }
+
+  // A relationship is shown by a diagram when it is presented itself, or when
+  // both of its ends are presented there and it is not explicitly hidden
+  // (the canvas draws connecting edges implicitly, so they are rarely listed
+  // in `elementIds`). It is grouped under that diagram like any other symbol.
+  for (const relationship of Object.values(input.sysml.relationships ?? {})) {
+    for (const diag of validDiagramSets) {
+      if (diag.hidden.has(relationship.id)) continue;
+      if (diag.presented.has(relationship.id) || (diag.presented.has(relationship.sourceId) && diag.presented.has(relationship.targetId))) {
+        result.set(relationship.id, diag.nodeId);
+      }
     }
   }
 

@@ -15,6 +15,12 @@ import {
   type UseCaseRelationshipKind,
 } from './model';
 import { validateSysmlRepository, type SysmlDiagnostic } from './validation';
+import { activityNestedIds } from './activity';
+import { interactionNestedIds } from './interaction';
+import { materializeSupertypes } from './services/supertypes';
+import { alignRequirementOwnership } from './services/requirementOwnership';
+import { reconcilePartUsages } from './services/partUsageSync';
+import { linkValueTypeUnits } from './services/valueTypeUnits';
 import type { SemanticEndpointContext } from './semanticEndpointIndex';
 import {
   createEmptyInterchangeReport,
@@ -23,12 +29,20 @@ import {
   type InterchangeReport,
 } from './interchangeReport';
 import { elementsOfKind, presentationsForElement, serializeRepositoryV4 } from './persistence/migrateV3ToV4';
-import { normalizeDiagramPresentations, type DiagramPresentation, type DiagramPresentationInput } from './presentationState';
+import {
+  V5_SCHEMA_VERSION,
+  migrateRepositoryToV5,
+  rekeyPresentationState,
+  type V5UpgradeReport,
+} from './persistence/migrateV3ToV5';
+import { normalizeDiagramPresentations, type DiagramPresentation, type DiagramPresentationInput, type PresentationCoordinates } from './presentationState';
 export { elementsOfKind, presentationsForElement };
+export { V5_SCHEMA_VERSION, rekeyPresentationState };
+export type { V5UpgradeReport };
 
 interface PersistenceEnvelope {
   format: 'ADIA-SysML';
-  schemaVersion: 2 | 3;
+  schemaVersion: 2 | 3 | 5;
   checksum: string;
   repository: SysmlRepository;
 }
@@ -39,6 +53,21 @@ export interface LoadRepositoryResult {
   valid: boolean;
   migrated: boolean;
   interchangeReport: InterchangeReport;
+  /**
+   * Present when the loaded file was written by an older format (2 or 3) and has
+   * been upgraded to format 5 in memory. Never absent for such a load: callers
+   * must show it to the user instead of upgrading silently.
+   */
+  upgradeReport?: V5UpgradeReport;
+}
+
+export interface LoadRepositoryOptions {
+  /**
+   * 'auto' (default) upgrades persisted repositories of format 2 and 3 to format 5.
+   * 'never' keeps usage records (transient projections of the legacy editor).
+   * 'always' also upgrades flat legacy payloads.
+   */
+  upgrade?: 'auto' | 'never' | 'always';
 }
 
 export interface BaselineDiff { added: string[]; removed: string[]; changed: string[]; }
@@ -48,7 +77,7 @@ export interface BaselineDiff { added: string[]; removed: string[]; changed: str
  * collection by element id and keep envelope metadata fixed. Semantic IDs
  * are never rewritten; only key order is normalized.
  */
-export function canonicalizeRepository(repository: SysmlRepository): SysmlRepository {
+export function canonicalizeRepository(repository: SysmlRepository, fileSchemaVersion: 3 | 5 = V5_SCHEMA_VERSION): SysmlRepository {
   const sorted = <T extends { id: string }>(record: Record<string, T>): Record<string, T> =>
     Object.fromEntries(
       Object.values(record ?? {}).sort((a, b) => a.id.localeCompare(b.id)).map(element => [element.id, element]),
@@ -78,7 +107,11 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
     : { model: { id: 'model', kind: 'package' as const, name: 'Model', namespace: [], ownerId: '' } };
   return {
     ...repository,
-    schemaVersion: 3,
+    // The persisted file format. A session no longer creates usage records, but the in-memory
+    // repository still carries `schemaVersion: 3`: the worker snapshot (2 | 3), the normalized
+    // store and loadRepository (which reads an in-memory repository's version as a file version
+    // to decide on an upgrade) all key on it. See migrateV3ToV5.ts.
+    schemaVersion: fileSchemaVersion as unknown as SysmlRepository['schemaVersion'],
     profileId: 'OMG-SysML-1.6-ADIA',
     packages,
     diagrams: sorted(repository.diagrams ?? {}),
@@ -100,16 +133,73 @@ export function canonicalizeRepository(repository: SysmlRepository): SysmlReposi
   };
 }
 
+/** True when the repository still carries part/port usage records or usage-id connector ends. */
+export function needsV5Upgrade(repository: SysmlRepository): boolean {
+  if (Object.keys(repository.usages ?? {}).length > 0) return true;
+  return Object.values(repository.connectors ?? {}).some(connector => {
+    const parametric = (end: unknown) => typeof end === 'object' && end !== null && 'propertyId' in (end as object);
+    const pathEnd = (end: unknown) => typeof end === 'object' && end !== null && Array.isArray((end as { path?: unknown }).path);
+    if (connector.kind === 'binding' && (parametric(connector.sourceEnd) || parametric(connector.targetEnd))) return false;
+    return !(pathEnd(connector.sourceEnd) && pathEnd(connector.targetEnd));
+  });
+}
+
+export interface SavedSysmlState {
+  repository: SysmlRepository;
+  presentations: Record<string, DiagramPresentation>;
+  coordinates: Record<string, PresentationCoordinates>;
+  /** Present only when records had to be converted for this save. */
+  report?: V5UpgradeReport;
+}
+
+/**
+ * The state that is written to a format 5 file. A session can still hold part
+ * usage records until they are removed from the editing code, so the repository
+ * is converted here (on a copy; the live repository is untouched) and the
+ * presentations that were keyed by those records follow the new keys.
+ */
+export function prepareSysmlStateForSave(
+  repository: SysmlRepository,
+  presentations: Record<string, DiagramPresentation> = {},
+  coordinates: Record<string, PresentationCoordinates> = {},
+): SavedSysmlState {
+  if (!needsV5Upgrade(repository)) return { repository, presentations, coordinates };
+  const copy = structuredClone(repository);
+  const hashBefore = new Map<string, string>();
+  const rememberHash = (id: string) => {
+    if (hashBefore.has(id)) return;
+    const element = copy.definitions[id] ?? copy.requirements[id] ?? copy.connectors[id] ?? copy.relationships[id] ?? copy.usages[id];
+    if (element) hashBefore.set(id, hash(stableStringify(element)));
+  };
+  const migration = migrateRepositoryToV5(copy, { fromVersion: 3, willChange: rememberHash });
+  carryBaselinesThroughMigration(copy, hashBefore, [...migration.createdIds.filter(id => copy.relationships[id])], migration.removedUsageIds);
+  const rekeyed = rekeyPresentationState(presentations, coordinates, migration.report.keyMap, id => copy.diagrams[id]?.name ?? copy.definitions[id]?.name ?? id);
+  return { repository: copy, presentations: rekeyed.presentations, coordinates: rekeyed.coordinates, report: migration.report };
+}
+
 export function serializeRepository(repository: SysmlRepository | any): string {
   if (repository && (repository as any).schemaVersion === 4) {
     return serializeRepositoryV4(repository);
   }
-  const canonicalRepo = canonicalizeRepository(repository);
+  const canonicalRepo = canonicalizeRepository(prepareSysmlStateForSave(repository).repository);
   const canonical = stableStringify(canonicalRepo);
   const envelope: PersistenceEnvelope = {
-    format: 'ADIA-SysML', schemaVersion: 3, checksum: hash(canonical), repository: canonicalRepo,
+    format: 'ADIA-SysML', schemaVersion: V5_SCHEMA_VERSION, checksum: hash(canonical), repository: canonicalRepo,
   };
   return stableStringify(envelope);
+}
+
+/** Serialized repository plus the presentations that go with it, consistent for one save. */
+export function serializeSysmlProjectState(
+  repository: SysmlRepository,
+  presentations: Record<string, DiagramPresentation> = {},
+  coordinates: Record<string, PresentationCoordinates> = {},
+): { sysmlRepository: string; diagramPresentations: Record<string, DiagramPresentation>; sysmlCoordinates: Record<string, PresentationCoordinates> } {
+  if ((repository as { schemaVersion?: number }).schemaVersion === 4) {
+    return { sysmlRepository: serializeRepository(repository), diagramPresentations: presentations, sysmlCoordinates: coordinates };
+  }
+  const saved = prepareSysmlStateForSave(repository, presentations, coordinates);
+  return { sysmlRepository: serializeRepository(saved.repository), diagramPresentations: saved.presentations, sysmlCoordinates: saved.coordinates };
 }
 
 export function deserializeSysmlRepository(input: string | unknown): SysmlRepository {
@@ -143,7 +233,7 @@ function canonicalizeRepositoryForChecksum(repository: any): any {
       auditTrail: [...(repository.auditTrail ?? [])],
     };
   }
-  return canonicalizeRepository(repository);
+  return canonicalizeRepository(repository, (repository.schemaVersion as number) === V5_SCHEMA_VERSION ? 5 : 3);
 }
 
 /**
@@ -180,6 +270,12 @@ function collectHydratedEndpointIds(repository: SysmlRepository): Set<string> {
       for (const feature of [...(definition.properties ?? []), ...(definition.ports ?? [])]) {
         ids.add(feature.id);
       }
+    }
+    if (definition.kind === 'activity') {
+      for (const nestedId of activityNestedIds(definition)) ids.add(nestedId);
+    }
+    if (definition.kind === 'interaction') {
+      for (const nestedId of interactionNestedIds(definition)) ids.add(nestedId);
     }
   }
   return ids;
@@ -224,7 +320,55 @@ function restoreContextResolvedRelationships(
   return { repository, report: restoredReport };
 }
 
-export function loadRepository(input: string | unknown, context?: SemanticEndpointContext): LoadRepositoryResult {
+/**
+ * A representation migration changes how an element is stored, not what it
+ * says. A baseline that matched the element before the change keeps matching
+ * it after: its stored hash moves to the new representation, and a relationship
+ * created from an already-baselined element is recorded in the baseline too.
+ */
+function carryBaselinesThroughMigration(
+  repo: SysmlRepository,
+  hashBefore: ReadonlyMap<string, string>,
+  createdRelationshipIds: readonly string[],
+  retiredIds: readonly string[] = [],
+): Array<{ baselineName: string; carried: number; retired: number }> {
+  const touched: Array<{ baselineName: string; carried: number; retired: number }> = [];
+  if (hashBefore.size === 0 && createdRelationshipIds.length === 0 && retiredIds.length === 0) return touched;
+  for (const baseline of Object.values(repo.baselines)) {
+    if (!baseline.elementHashes) continue;
+    const hashes = { ...baseline.elementHashes };
+    let changed = false;
+    let carried = 0;
+    let retired = 0;
+    // Records the new format no longer has (part and port usages) leave the
+    // snapshot; the Block that now holds the part carries the hash instead.
+    for (const retiredId of retiredIds) {
+      if (retiredId in hashes) { delete hashes[retiredId]; changed = true; retired += 1; }
+    }
+    for (const [id, oldHash] of hashBefore) {
+      const element = repo.definitions[id] ?? repo.requirements[id] ?? repo.connectors[id] ?? repo.relationships[id] ?? repo.usages[id];
+      if (element && hashes[id] === oldHash) { hashes[id] = hash(stableStringify(element)); changed = true; carried += 1; }
+    }
+    for (const createdId of createdRelationshipIds) {
+      // A record created from an already-baselined element belongs to that baseline too.
+      const relationship = repo.relationships[createdId];
+      const usage = repo.usages[createdId];
+      const record = relationship ?? usage;
+      const anchor = relationship ? relationship.sourceId : usage?.ownerId;
+      if (record && anchor !== undefined && anchor in hashes && !(createdId in hashes)) {
+        hashes[createdId] = hash(stableStringify(record));
+        changed = true;
+        carried += 1;
+      }
+    }
+    if (changed) {
+      repo.baselines[baseline.id] = { ...baseline, elementHashes: hashes, contentHash: hash(stableStringify(hashes)) };
+      touched.push({ baselineName: baseline.name, carried, retired });
+    }
+  }
+  return touched;
+}
+export function loadRepository(input: string | unknown, context?: SemanticEndpointContext, options: LoadRepositoryOptions = {}): LoadRepositoryResult {
   const diagnostics: SysmlDiagnostic[] = [];
   const migrationReport = createEmptyInterchangeReport();
   let raw: unknown;
@@ -272,7 +416,7 @@ export function loadRepository(input: string | unknown, context?: SemanticEndpoi
     const rawRepo = raw.repository;
     const checksumMatches =
       hash(stableStringify(rawRepo)) === raw.checksum ||
-      hash(stableStringify(canonicalizeRepository(rawRepo as SysmlRepository))) === raw.checksum ||
+      hash(stableStringify(canonicalizeRepository(rawRepo as SysmlRepository, (rawRepo.schemaVersion as number) === V5_SCHEMA_VERSION ? 5 : 3))) === raw.checksum ||
       hash(stableStringify(canonicalizeRepositoryForChecksum(rawRepo))) === raw.checksum;
     if (!checksumMatches) {
       diagnostics.push(diag('PERSISTENCE_CHECKSUM_MISMATCH', 'Saved repository content does not match its checksum'));
@@ -287,6 +431,95 @@ export function loadRepository(input: string | unknown, context?: SemanticEndpoi
   } else {
     repository = migrateLegacy(raw, diagnostics, migrationReport);
     migrated = true;
+  }
+  // Format 5 stores parts only as Block properties. A file that is already
+  // format 5 is loaded as it is; anything older is upgraded after the other
+  // normalisations below and reported, never silently.
+  const fileVersion = persistedFormatVersion(raw);
+  const upgradeMode = options.upgrade ?? 'auto';
+  const upgrading = upgradeMode !== 'never'
+    && (fileVersion !== undefined ? fileVersion < V5_SCHEMA_VERSION : upgradeMode === 'always');
+  // Representation migrations: inheritance lives in Generalization relationships
+  // (older files used `supertypeIds`) and requirement nesting is ownership
+  // (older files only had containment lines). Both are idempotent. Baselines
+  // hash element content, so they are carried through the change instead of
+  // making every legacy requirement/Block look modified.
+  const hashBeforeMigration = new Map<string, string>();
+  const rememberHash = (id: string) => {
+    if (hashBeforeMigration.has(id)) return;
+    const element = repository.definitions[id] ?? repository.requirements[id] ?? repository.connectors[id]
+      ?? repository.relationships[id] ?? repository.usages[id];
+    if (element) hashBeforeMigration.set(id, hash(stableStringify(element)));
+  };
+  const materialized = materializeSupertypes(repository, rememberHash);
+  if (materialized.length > 0) {
+    migrated = true;
+    diagnostics.push({
+      code: 'SUPERTYPES_MATERIALIZED', severity: 'info',
+      message: `${materialized.length} stored supertype link(s) were converted to Generalization relationships.`,
+    });
+  }
+  const alignedRequirements = alignRequirementOwnership(repository, rememberHash);
+  if (alignedRequirements.length > 0) {
+    migrated = true;
+    diagnostics.push({
+      code: 'REQUIREMENT_OWNERSHIP_ALIGNED', severity: 'info',
+      message: `${alignedRequirements.length} requirement nesting link(s) were aligned with requirement ownership.`,
+    });
+  }
+  // A part is a property of its Block; its occurrence (PartUsage) is derived.
+  // Complete whichever side is missing so the two can no longer disagree.
+  const reconciledParts = fileVersion === V5_SCHEMA_VERSION ? [] : reconcilePartUsages(repository, rememberHash);
+  if (reconciledParts.length > 0) {
+    migrated = true;
+    diagnostics.push({
+      code: 'PART_USAGES_RECONCILED', severity: 'info',
+      message: `${reconciledParts.length} part property/usage record(s) were created so every part has both its Block property and its occurrence.`,
+    });
+  }
+  // Free-text ValueType units become references to an existing Unit element.
+  const linkedUnits = linkValueTypeUnits(repository, rememberHash);
+  if (linkedUnits.length > 0) {
+    migrated = true;
+    diagnostics.push({
+      code: 'VALUE_TYPE_UNITS_LINKED', severity: 'info',
+      message: `${linkedUnits.length} value type unit(s) given as text were linked to the matching Unit element.`,
+    });
+  }
+  let upgradeReport: V5UpgradeReport | undefined;
+  let retiredUsageIds: string[] = [];
+  let upgradeCreated: string[] = [];
+  if (upgrading) {
+    const upgrade = migrateRepositoryToV5(repository, { fromVersion: fileVersion ?? 1, willChange: rememberHash });
+    upgradeReport = upgrade.report;
+    retiredUsageIds = upgrade.removedUsageIds;
+    upgradeCreated = upgrade.createdIds.filter(id => repository.relationships[id]);
+    if (upgrade.report.changes.length > 0) {
+      migrated = true;
+      diagnostics.push({
+        code: 'FORMAT_UPGRADED_TO_V5', severity: 'info',
+        message: `The model was upgraded from format ${upgrade.report.fromVersion} to format ${V5_SCHEMA_VERSION}: ${upgrade.report.changes.length} change(s) are listed in the upgrade report.`,
+      });
+      for (const change of upgrade.report.changes) {
+        if (change.code) diagnostics.push({ code: change.code, severity: 'warning', message: change.message });
+      }
+    }
+  }
+  const carriedBaselines = carryBaselinesThroughMigration(repository, hashBeforeMigration, [
+    ...materialized,
+    ...alignedRequirements.filter(id => repository.relationships[id]),
+    ...reconciledParts.filter(id => repository.usages[id]),
+    ...upgradeCreated,
+  ], retiredUsageIds);
+  if (upgradeReport) {
+    for (const entry of carriedBaselines) {
+      upgradeReport.changes.push({
+        kind: 'baseline-carried', severity: 'info', names: [entry.baselineName],
+        message: `Baseline ${entry.baselineName} still matches the model: ${entry.carried} entr${entry.carried === 1 ? 'y was' : 'ies were'} carried to the new format`
+          + `${entry.retired > 0 ? ` and ${entry.retired} part or port record${entry.retired === 1 ? ' was' : 's were'} retired from the snapshot` : ''}.`,
+      });
+    }
+    upgradeReport.changed = upgradeReport.changes.length > 0;
   }
   // Reject-or-quarantine: strip edges with dangling endpoints into an
   // explicit quarantine list. Never synthesize a generic association.
@@ -308,7 +541,17 @@ export function loadRepository(input: string | unknown, context?: SemanticEndpoi
   freezeBaselines(repository);
   const validation = validateSysmlRepository(repository, context);
   diagnostics.push(...validation.diagnostics);
-  return { repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated, interchangeReport };
+  return {
+    repository, diagnostics, valid: !diagnostics.some(item => item.severity === 'error'), migrated, interchangeReport,
+    ...(upgradeReport ? { upgradeReport } : {}),
+  };
+}
+
+/** Format version a persisted payload declares; undefined for flat legacy payloads. */
+function persistedFormatVersion(raw: unknown): number | undefined {
+  if (isEnvelope(raw)) return Number((raw.repository as { schemaVersion?: number })?.schemaVersion ?? raw.schemaVersion);
+  if (isCanonical(raw)) return Number(raw.schemaVersion);
+  return undefined;
 }
 
 export function createBaseline(
@@ -802,7 +1045,9 @@ function deepFreeze<T>(value: T): T {
 }
 function isRecord(value: unknown): value is Record<string, any> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
 function isEnvelope(value: unknown): value is PersistenceEnvelope { return isRecord(value) && value.format === 'ADIA-SysML' && isRecord(value.repository) && typeof value.checksum === 'string'; }
-function isCanonical(value: unknown): value is SysmlRepository { return isRecord(value) && (value.schemaVersion === 2 || value.schemaVersion === 3) && value.profileId === 'OMG-SysML-1.6-ADIA'; }
+function isCanonical(value: unknown): value is SysmlRepository {
+  return isRecord(value) && (value.schemaVersion === 2 || value.schemaVersion === 3 || value.schemaVersion === V5_SCHEMA_VERSION) && value.profileId === 'OMG-SysML-1.6-ADIA';
+}
 function arrayOfRecords(value: unknown): Record<string, any>[] { return Array.isArray(value) ? value.filter(isRecord) : []; }
 function text(value: unknown): string { return typeof value === 'string' ? value : value == null ? '' : String(value); }
 function optionalText(value: unknown): string | undefined { const result = text(value).trim(); return result || undefined; }
@@ -1096,6 +1341,14 @@ export function hydrateRepositoryFromChunks(
     repo.diagrams = {};
   }
   repo.schemaVersion = 3;
+
+  // Chunks written before format 5 carry part and port usage records. They are upgraded
+  // through the same single path as a whole-file load, so a session never holds usage records.
+  if (Object.keys(repo.usages).length > 0) {
+    const upgraded = loadRepository(repo, context);
+    const merged = [...diagnostics, ...upgraded.diagnostics];
+    return { ...upgraded, diagnostics: merged, valid: !merged.some(d => d.severity === 'error'), migrated: true };
+  }
 
   freezeBaselines(repo);
   const quarantined = quarantineUnresolvedEndpoints(repo);

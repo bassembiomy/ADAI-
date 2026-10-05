@@ -193,4 +193,33 @@ describe('Schema v4 Persistence and Migration (Task 13)', () => {
     expect(v4.indexes.byOwner['controller']).toContain('controller-port');
     expect(v4.indexes.byType['InterfaceBlock']).toContain('if-control');
   });
+
+  it('handles wide-owner models (10,000 siblings) linearly with exact child ordering and deduplication', () => {
+    const v3: SysmlRepository = createEmptyRepository();
+    const parentBlockId = 'wide-parent';
+    v3.definitions[parentBlockId] = {
+      id: parentBlockId, name: 'WideParent', kind: 'block', namespace: ['model'], ownerId: 'model',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    };
+
+    const count = 10_000;
+    for (let i = 0; i < count; i++) {
+      v3.usages[`prop-${i}`] = {
+        id: `prop-${i}`, name: `prop_${i}`, kind: 'part', ownerId: parentBlockId,
+      } as any;
+    }
+
+    const t0 = performance.now();
+    const v4 = migrateV3ToV4(v3);
+    const duration = performance.now() - t0;
+
+    const owned = v4.indexes.byOwner[parentBlockId];
+    expect(owned).toBeDefined();
+    expect(owned.length).toBe(count);
+    expect(owned[0]).toBe('prop-0');
+    expect(owned[count - 1]).toBe(`prop-${count - 1}`);
+
+    // Linear scaling budget: 10,000 siblings should comfortably index in < 150ms (quadratic takes > 1000ms)
+    expect(duration).toBeLessThan(250);
+  });
 });

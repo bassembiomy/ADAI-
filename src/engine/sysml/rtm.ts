@@ -2,6 +2,7 @@ import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from '
 import { deriveEvidenceStatus } from './evidence';
 import { hash, stableStringify } from './requirements';
 import { buildTraceabilityIndex, type TraceabilityExternalElement, type TraceabilityIndex } from './traceabilityIndex';
+import { resolvePartLike } from './partOccurrences';
 import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel, friendlySysmlKind } from '../../features/sysml/sysmlDisplayLabel';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
@@ -287,7 +288,7 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
 
     if (r.kind === 'satisfy' && isTarget) {
       const def = repo.definitions[otherId];
-      const usage = repo.usages[otherId];
+      const usage = resolvePartLike(repo, otherId);
       if (def?.kind === 'block') {
         const item: RtmCoveringElement = { id: def.id, name: def.name, kind: r.kind, type: 'block' };
         coveringBlocks.push(item);
@@ -319,7 +320,7 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
 
   for (const id of relatedIds) {
     const definition = repo.definitions[id];
-    const usage = repo.usages[id];
+    const usage = resolvePartLike(repo, id);
     const artifact = repo.artifacts[id];
     if (definition?.kind === 'block') blocks.push(id);
     else if (definition) blocks.push(id);
@@ -457,7 +458,7 @@ function resolveRef(repo: SysmlRepository, id: string, index?: TraceabilityIndex
   if (req) return { id, name: req.name || req.requirementId, kind: 'requirement', type: 'requirement' };
   const def = repo.definitions[id];
   if (def) return { id, name: def.name, kind: def.kind, type: def.kind };
-  const usage = repo.usages[id];
+  const usage = resolvePartLike(repo, id);
   if (usage) return { id, name: usage.name, kind: usage.kind, type: usage.kind };
   const vc = repo.verificationCases[id];
   if (vc) return { id, name: vc.name, kind: 'verificationCase', type: 'verificationCase' };

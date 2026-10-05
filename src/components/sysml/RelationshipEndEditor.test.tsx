@@ -265,7 +265,9 @@ describe('RelationshipEndEditor', () => {
     });
     const multInput = findElementByAriaLabel(editor, 'Target multiplicity');
     expect(multInput).toBeDefined();
-    multInput!.props.onChange({ target: { value: '0..*' } });
+    // Multiplicity commits on blur/Enter (a per-keystroke parse made "0..*"
+    // impossible to type), so drive the committed value directly.
+    multInput!.props.onCommit('0..*');
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       targetMultiplicity: { lower: 0, upper: '*', ordered: false, unique: true },

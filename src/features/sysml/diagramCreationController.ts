@@ -69,6 +69,7 @@ function normalizeMetaclass(raw: string): MetaclassKind {
     usecase: 'UseCase',
     testcase: 'TestCase',
     activity: 'Activity',
+    interaction: 'Interaction',
     package: 'Package',
     part: 'PartProperty',
     partproperty: 'PartProperty',

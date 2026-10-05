@@ -133,16 +133,6 @@ function createWindow() {
       });
     });
 
-    // Certificate pinning check / dynamic cert verification
-    session.defaultSession.setCertificateVerifyProc((request, callback) => {
-      const { hostname } = request;
-      if (hostname.includes('3dexperience.3ds.com')) {
-        // Production validation - accept secure connection
-        callback(0); // 0 = accept certificate
-      } else {
-        callback(-2); // Use default validation
-      }
-    });
   }
 
   const appIconPath = (process.platform === 'win32' && fs.existsSync(path.join(__dirname, '../icon.ico')))

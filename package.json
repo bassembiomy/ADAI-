@@ -31,7 +31,7 @@
     "test:hil:flash-suite": "node scripts/run_hil_flash_suite.cjs",
     "test:hil:vector-suite": "node scripts/run_hil_vector_suite.cjs",
     "test:hil:all": "npm run test:hil:env && npm run test:security && npm run test:hil:build-matrix && npm run test:hil:opt && npm run test:hil:flash-suite && npm run test:hil:vector-suite",
-    "test:project-files": "node src/projectFiles/projectFileService.test.cjs && node src/projectFiles/windowsFileAssociation.test.cjs && node src/projectFiles/squirrelLifecycle.test.cjs && node src/projectFiles/projectFileController.test.cjs",
+    "test:project-files": "node src/projectFiles/projectFileService.test.cjs && node src/projectFiles/windowsFileAssociation.test.cjs && node src/projectFiles/squirrelLifecycle.test.cjs && node src/projectFiles/projectFileController.test.cjs && node src/projectFiles/projectFileUpgradeBackup.test.cjs",
     "register-associations": "node scripts/register_file_association.cjs",
     "test:vlab": "vitest run src/engine/vlab/vlab_validation.test.ts src/engine/vlab/vlab.test.ts src/engine/vlab/labs_sim.test.ts src/engine/vlab/check_missing_math.test.ts",
     "test:vlab:full": "vitest run src/engine/vlab/vlab_full_certification.test.ts --reporter=verbose",

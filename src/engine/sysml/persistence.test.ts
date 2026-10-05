@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type BlockDefinition } from './model';
+import { connectorEndOf } from './connectorEnds';
+import { flatModel } from './fixtures/formatV3Models';
 import {
   compareBaselines,
   createBaseline,
@@ -466,7 +468,7 @@ describe('versioned SysML persistence and baselines', () => {
         ],
         parts: [
           { id: 'part_c', name: 'c1', blockId: 'controller', typeId: 'controller', multiplicity: '1' },
-          { id: 'part_m', name: 'm1', blockId: 'motor', typeId: 'motor', multiplicity: '1' },
+          { id: 'part_m', name: 'm1', blockId: 'controller', typeId: 'motor', multiplicity: '1' },
         ],
         relationships: [
           { id: 'rel1', sourceId: 'controller', targetId: 'motor', type: 'dependency', label: 'depends' },
@@ -492,7 +494,11 @@ describe('versioned SysML persistence and baselines', () => {
       const reloaded = loadRepository(serialized);
       expect(reloaded.valid).toBe(true);
       expect(reloaded.repository.definitions.controller).toEqual(repo.definitions.controller);
-      expect(reloaded.repository.connectors.conn1).toEqual(repo.connectors.conn1);
+      // Format 5: the connector is stored on property paths and the part usage records are gone.
+      expect(reloaded.repository.connectors.conn1).toMatchObject({ kind: 'assembly', ownerId: 'controller' });
+      expect(connectorEndOf(reloaded.repository.connectors.conn1, 'source')).toEqual({ path: ['property:part_c'], portId: 'p_in' });
+      expect(connectorEndOf(reloaded.repository.connectors.conn1, 'target')).toEqual({ path: ['property:part_m'], portId: 'p_out' });
+      expect(reloaded.repository.usages).toEqual({});
     });
 
     it('cancels save via AbortSignal without committing partial revisions or leaving temp files', async () => {
@@ -581,6 +587,17 @@ describe('versioned SysML persistence and baselines', () => {
       expect(rehydrated.repository.packages.model.name).toBe('Model');
     });
 
+    it('upgrades chunks written with part and port usage records, so the loaded model has none', () => {
+      const old = flatModel();
+      const chunked = serializeToChunks(old);
+      expect(Object.keys(chunked.chunks).some(key => key.startsWith('usages/'))).toBe(true);
+
+      const rehydrated = hydrateRepositoryFromChunks(chunked.manifest, key => chunked.chunks[key]?.json);
+      expect(rehydrated.repository.usages).toEqual({});
+      expect(rehydrated.migrated).toBe(true);
+      expect(rehydrated.repository.connectors['c-asm']).toBeDefined();
+      expect(connectorEndOf(rehydrated.repository.connectors['c-asm'], 'source')).toEqual({ path: ['pr-engine'], portId: 'po-eng-torque' });
+    });
     it('validates persisted nested ports and rejects non-ProxyPort inside ProxyPort upon loading', () => {
       const repo = createEmptyRepository();
       repo.definitions.iface = {

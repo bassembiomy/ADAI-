@@ -99,15 +99,16 @@ describe('UML and SysML Port Semantics and Rules', () => {
     expect(validDiag.filter(d => d.severity === 'error')).toHaveLength(0);
   });
 
-  it('rejects ProxyPorts typed by every non-InterfaceBlock and missing types', () => {
+  it('rejects ProxyPorts typed by every non-InterfaceBlock and warns on missing types', () => {
     const valueTyped: Port = {
       id: 'port-proxy-value', name: 'valueProxy', metaclass: 'Port', portKind: 'proxyPort',
       namespace: [], ownerId: 'blk-controller', typeId: 'value-voltage', direction: 'in',
       isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
     };
     expect(validatePort(valueTyped, context).some(d => d.code === PORT_DIAGNOSTICS.PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK)).toBe(true);
-    expect(validatePort({ ...valueTyped, id: 'port-proxy-missing', name: 'missingProxy', typeId: '' }, context)
-      .some(d => d.code === PORT_DIAGNOSTICS.PROXY_PORT_TYPE_NOT_INTERFACE_BLOCK)).toBe(true);
+    const untyped = validatePort({ ...valueTyped, id: 'port-proxy-missing', name: 'missingProxy', typeId: '' }, context);
+    expect(untyped.some(d => d.code === PORT_DIAGNOSTICS.PROXY_PORT_TYPE_REQUIRED && d.severity === 'warning')).toBe(true);
+    expect(untyped.some(d => d.severity === 'error')).toBe(false);
   });
 
   it('validates port names within the semantic owner', () => {

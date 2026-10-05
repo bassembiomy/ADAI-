@@ -24,6 +24,9 @@ const ELEMENT_CATALOG: readonly ElementCapabilityDefinition[] = [
   { metaclass: 'DataType', label: 'Data Type', authority: 'UML_FOUNDATION', category: 'element' },
   { metaclass: 'QuantityKind', label: 'Quantity Kind', authority: 'OMG_SYSML_1_6', category: 'element' },
   { metaclass: 'Unit', label: 'Unit', authority: 'OMG_SYSML_1_6', category: 'element' },
+  { metaclass: 'View', label: 'View', authority: 'OMG_SYSML_1_6', category: 'element' },
+  { metaclass: 'Viewpoint', label: 'Viewpoint', authority: 'OMG_SYSML_1_6', category: 'element' },
+  { metaclass: 'Stakeholder', label: 'Stakeholder', authority: 'OMG_SYSML_1_6', category: 'element' },
   { metaclass: 'Enumeration', label: 'Enumeration', authority: 'UML_FOUNDATION', category: 'element' },
   { metaclass: 'Signal', label: 'Signal', authority: 'UML_FOUNDATION', category: 'element' },
 
@@ -36,6 +39,7 @@ const ELEMENT_CATALOG: readonly ElementCapabilityDefinition[] = [
   { metaclass: 'UseCase', label: 'Use Case', authority: 'UML_FOUNDATION', category: 'element' },
   { metaclass: 'Activity', label: 'Activity', authority: 'UML_FOUNDATION', category: 'element' },
   { metaclass: 'ActivityPartition', label: 'Activity Partition', authority: 'UML_FOUNDATION', category: 'element' },
+  { metaclass: 'Interaction', label: 'Interaction', authority: 'UML_FOUNDATION', category: 'element' },
 
   // Annotations & Constraints
   { metaclass: 'Comment', label: 'Comment', authority: 'UML_FOUNDATION', category: 'element' },

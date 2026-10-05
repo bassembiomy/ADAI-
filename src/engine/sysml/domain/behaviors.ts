@@ -35,5 +35,16 @@ export interface ActivityPartition extends SemanticElement {
   subPartitionIds?: string[];
 }
 
-export type BehaviorElement = UseCase | Activity | ActivityPartition | SemanticElement;
+/**
+ * Normative SysML v1.6 / UML Interaction (SysML Clause 12). Lifelines, messages
+ * and combined fragments stay on the stored definition (ids only here).
+ */
+export interface Interaction extends SemanticElement {
+  metaclass: 'Interaction';
+  lifelineIds: string[];
+  messageIds: string[];
+  fragmentIds: string[];
+}
+
+export type BehaviorElement = UseCase | Activity | ActivityPartition | Interaction | SemanticElement;
 
