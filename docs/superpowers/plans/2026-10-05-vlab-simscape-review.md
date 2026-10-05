@@ -6,6 +6,38 @@
 
 ---
 
+## 0. Revision 2 — user mandate (2026-10-05, supersedes conflicting items below)
+
+MATLAB on this machine is a partial install with no `matlab.exe` and no Simscape (F-021). The user decided:
+- **The reference is now the published governing equations.** That means the Simscape documentation equations, standard textbooks and analytical solutions, computed independently of the code under test. Simscape goldens stay optional: the harness (WP-02) enables them automatically if `golden/*.csv` ever appears. The `simscape` matrix column becomes `reference` (published-equation check). `simscape` stays `pending`.
+- **This is an implementation repair, not an audit.** Every live block needs a consistent contract across catalog, UI params, ports/domains, connection validation, parameter parsing, equations, DAE allocation, scope routing, `.adia` round-trip, direct solve vs `VLabPhysicsEngine.simulateStep`, and independent reference tests. "Doesn't throw" is not "implemented".
+- **Constraints:**
+  - Only V-Lab code and tests may change.
+  - Never edit external `.adia` model files.
+  - Never delete blocks to reduce the count.
+  - No second catalog or simulation architecture.
+  - Never loosen tolerances or iteration limits to hide failures.
+  - Physical blocks with no defensible spec get an explicit *unsupported* diagnostic listing the missing spec. This is not allowed when the UI, comments or definitions already state the equation.
+- **Mandatory work order** (WP ids in the ledger):
+
+| # | User § | WP | Content |
+|---|---|---|---|
+| 1 | 13.1 | WP-00 ✔ | baseline |
+| 2 | 1, 12 | WP-03 | Canonical contract certification, run in both directions: catalog↔equation↔DAE↔ports↔params↔scope. Utility allow-list with reasons. Explain 246 vs 248. |
+| 3 | 2, 3 | WP-06a/b, WP-07 | Explicit physically correct domain on every connectable port (no bulk assignment). Deterministic connection validation in both drag directions, fan-out rules, diagnostics naming block/port/domain. Scope accepts only measurable outputs. |
+| 4 | 4 | WP-08 | Numeric params: replace `\|\| fallback` (≈153) with a canonical nullish/`numericParam` parse. Zero, negatives, fractions and scientific notation accepted. `{value,unit}` unwrap. One canonical key per alias with backward compatibility. Boundary tests. |
+| 5 | 8, 9 | WP-09 | DAE structural mapping: across/branch/state/residual dimensions match each equation, no free multipliers, structural-rank check, early topology diagnostics. Scope routing by exact port id with quantity and unit; vectors/frames never silently become scalars. |
+| 6 | 6 | WP-19a | Multibody joints: revolute, prismatic, spherical, universal and weld, with exact DOFs, typed Frame ports, reactions, outputs and reference tests. Keep the dist/angle constraint fixes. |
+| 7 | 7 | WP-13b | Gears and converters: common_gear, rack_pinion, electromechanical converters, belt/cable, multibody interfaces (sign, velocity/torque, power, no scalar↔Frame). |
+| 8 | 5 | WP-10..18, 19b, 20a–d, 21 | Remaining domains: governing equations, conservation, signs, units. Replace the 103 generic "governing physical equation" labels. Independent reference tests and one connected model per behaviour group. |
+| 9 | 10 + serialization | WP-41 | UI numeric editor (zero, decimals, negatives, sci-notation, invalid-text diagnostic, unit shown) and `.adia` save/open round-trip of types, params, units, handles, connections and scope channels. |
+| 10 | 11 | WP-31 | Engine: structural errors caught before the solver, no repeated identical failed attempts, solver diagnostics surfaced in the UI, direct-solve vs simulateStep agreement, and an e2e perf regression on a small Frame model. |
+| 11 | 13.11, 14, 15 | WP-50 | Full certification, `tsc --noEmit`, production build, and the final report with the §15 before/after statistics. |
+
+The §4 sections below remain as reference detail. Where they mention Simscape goldens as an acceptance gate, read "published-equation reference".
+
+---
+
 ## 1. Current state (facts gathered 2026-10-05)
 
 | Layer | Source of truth | Size |

@@ -20,6 +20,14 @@ You are the V-Lab review executor. The planner (Opus) gives you one work package
 4. Run ONLY the WP's acceptance command plus any directly affected test files, with `--reporter=dot`. Run `npx tsc --noEmit` if you changed `.ts`/`.tsx` types.
 5. Do not commit. The planner commits after review.
 
+## Mandate (plan §0, user decision 2026-10-05)
+- Reference = **published governing equations**: Simscape docs, textbooks and analytical solutions. Expected values must be computed independently, never by calling the code under test. Simscape goldens are optional (none exist yet).
+- This is a repair: implement and verify. Do not just audit. "Doesn't throw" is not "implemented". Exercise blocks through `VLabPhysicsEngine.simulateStep`, not only direct equation or ImplicitSolver calls.
+- Never edit external `.adia` files. Never delete blocks. Never create a second catalog or engine. Touch no non-V-Lab feature (SysML, state machine, entropy, HMI).
+- Port domains are derived from block physics. Never bulk-assign them, and never infer them from color, position or label.
+- Numeric params: zero, negatives and fractions are valid where physical. Never use `||` fallbacks on numbers.
+- A block with no defensible spec gets an explicit *unsupported* diagnostic listing the missing spec. This is never allowed when its equation is already stated in the UI, comments or definitions.
+
 ## Hard rules
 - Change an equation only with a citation in your report, either a Simscape doc equation or a derivation.
 - Never loosen tolerances, never hand-edit `benchmarks/simscape/golden/*`, and never delete or skip tests. Use `it.fails` plus a finding ID for out-of-scope failures.
