@@ -65,7 +65,7 @@ describe('VLab Mathematical Model & Precision Suite', () => {
     ];
 
     const edges: Edge[] = [
-      makeEdge('e1', 'mass', 'gnd', 'p', 'a_t')
+      makeEdge('e1', 'mass', 'ref', 'p_s', 'p_t')
     ];
 
     let state: any = null;
@@ -85,7 +85,7 @@ describe('VLab Mathematical Model & Precision Suite', () => {
     ];
 
     const edges: Edge[] = [
-      makeEdge('e1', 'heat', 'gnd', 'a', 'a_t')
+      makeEdge('e1', 'heat', 'ref', 'a_s', 'a_t')
     ];
 
     let state: any = null;

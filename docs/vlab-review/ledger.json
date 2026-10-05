@@ -129,10 +129,13 @@
         "WP-03"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "contract.test port-domain checks green for these groups",
-      "evidence": [],
+      "evidence": [
+        "296 ports given explicit domains (Electrical 59, Magnetic 21, Physical 216); planner verified there are no id/label changes",
+        "all-blocks 241 + 5 expected-fail; only remaining failure is vlabSymbols (pre-existing, F-006)"
+      ],
       "findings": []
     },
     {
@@ -143,7 +146,7 @@
         "WP-06a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "contract.test port-domain checks green for all blocks",
       "evidence": [],
@@ -760,6 +763,38 @@
       "layer": "port",
       "summary": "Output ports named g/ctrl/p match the isPhysicalOutputPort input-name list, so no signal branch is allocated and the scope reads a silent 0.",
       "wp": "WP-09"
+    },
+    {
+      "id": "F-027",
+      "severity": "med",
+      "block": "vlabConnectionValidation.test.ts",
+      "layer": "ui",
+      "summary": "The test carries its own copy of validateConnection, so the real VLabWorkspace.onConnect is untested.",
+      "wp": "WP-07"
+    },
+    {
+      "id": "F-028",
+      "severity": "med",
+      "block": "vlabValidationHarness",
+      "layer": "integration",
+      "summary": "The default topology wires dc_voltage.p to every DUT p handle, giving cross-domain edges that bypass validation. It also uses the type thermal_reference, but the library id is thermal_ref (also in vlab_connected_benchmarks).",
+      "wp": "WP-07"
+    },
+    {
+      "id": "F-029",
+      "severity": "low",
+      "block": "busbar",
+      "layer": "port",
+      "summary": "Param nodes=4 but only 2 ports.",
+      "wp": "WP-09"
+    },
+    {
+      "id": "F-030",
+      "severity": "low",
+      "block": "physical-signal ports",
+      "layer": "port",
+      "summary": "VLabPort has no direction field. Signal in/out is not declared.",
+      "wp": "WP-07"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

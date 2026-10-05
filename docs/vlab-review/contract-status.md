@@ -8,34 +8,33 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 | Live blocks | 248 |
 | Classification | physical 110, signal 73, measurement 20, source 33, utility 12 |
 | Total ports | 751 |
-| Ports without explicit domain | 386 |
-| Blocks with at least one port lacking a domain | 145 |
+| Ports without explicit domain | 90 |
+| Blocks with at least one port lacking a domain | 46 |
 | Blocks with generic "governing ... equation" label (equation or description) | 101 |
 | Blocks with no equation text | 0 |
 | Unsafe numeric `params.X ||` fallbacks in vlabEquations.ts | 169 |
-| Fully certified blocks (all checks pass, no expected failure) | 45 of 248 |
-| Expected failures (ratchet entries) | 404 across 203 blocks |
+| Fully certified blocks (all checks pass, no expected failure) | 83 of 248 |
+| Expected failures (ratchet entries) | 306 across 165 blocks |
 
 ## Per check (blocks)
 | Check | Meaning | Pass | Fail | Expected failure |
 |---|---|---|---|---|
 | unique-ids | unique block id and unique port ids | 248 | 0 | 0 |
 | classification | explicit class; utility has reason and no conserving ports | 248 | 0 | 0 |
-| port-domains | every port has an explicit, known domain (no fallback) | 103 | 145 | 145 |
+| port-domains | every port has an explicit, known domain (no fallback) | 202 | 46 | 46 |
 | equation-factory | exactly one equation factory (and at most one DAE case) | 248 | 0 | 0 |
 | params-hidden | every param the equation reads is exposed or a documented alias | 208 | 40 | 40 |
 | params-dead | every exposed param is read by the equation | 184 | 64 | 64 |
 | dae-allocation | DAE branches/states allocated == consumed; residual length == allocated unknowns | 202 | 46 | 46 |
-| scope-routing | every signal output port is reachable by a scope through the real routing path | 240 | 8 | 8 |
+| scope-routing | every signal output port is reachable by a scope through the real routing path | 239 | 9 | 9 |
 | equation-doc | library equation text is specific (not generic or missing) | 147 | 101 | 101 |
 
 ## Expected failures per owning WP
 | WP | Total | Breakdown by check |
 |---|---|---|
-| WP-06a | 99 | port-domains 99 |
 | WP-06b | 46 | port-domains 46 |
 | WP-08 | 104 | params-hidden 40, params-dead 64 |
-| WP-09 | 54 | dae-allocation 46, scope-routing 8 |
+| WP-09 | 55 | dae-allocation 46, scope-routing 9 |
 | WP-19a | 3 | equation-doc 3 |
 | WP-12 | 1 | equation-doc 1 |
 | WP-13 | 1 | equation-doc 1 |

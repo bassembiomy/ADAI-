@@ -44,12 +44,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
         "equation": "V = I * R",
@@ -102,12 +104,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
         "equation": "I = 0 (R -> ∞)",
@@ -130,12 +134,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
         "equation": "I = C * dV/dt",
@@ -158,12 +164,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
         "equation": "V = L * dI/dt",
@@ -186,12 +194,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
         "equation": "V(t) = M(q) * I(t)\ndM/dt = f(I, M)",
@@ -214,22 +224,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p1",
             "pos": "left",
-            "label": "1+"
+            "label": "1+",
+            "domain": "Electrical"
           },
           {
             "id": "n1",
             "pos": "left",
-            "label": "1-"
+            "label": "1-",
+            "domain": "Electrical"
           },
           {
             "id": "p2",
             "pos": "right",
-            "label": "2+"
+            "label": "2+",
+            "domain": "Electrical"
           },
           {
             "id": "n2",
             "pos": "right",
-            "label": "2-"
+            "label": "2-",
+            "domain": "Electrical"
           }
         ],
         "equation": "i1 = g * v2\ni2 = -g * v1",
@@ -252,22 +266,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p1",
             "pos": "left",
-            "label": "1+"
+            "label": "1+",
+            "domain": "Electrical"
           },
           {
             "id": "n1",
             "pos": "left",
-            "label": "1-"
+            "label": "1-",
+            "domain": "Electrical"
           },
           {
             "id": "p2",
             "pos": "right",
-            "label": "2+"
+            "label": "2+",
+            "domain": "Electrical"
           },
           {
             "id": "n2",
             "pos": "right",
-            "label": "2-"
+            "label": "2-",
+            "domain": "Electrical"
           }
         ],
         "equation": "V2 = N * V1\\nI1 = N * I2",
@@ -290,17 +308,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in_p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "in_n",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Electrical"
           }
         ],
         "equation": "Vout = A * (V+ - V-)\\n(Ideal: V+ = V-)",
@@ -379,12 +400,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "K"
+            "label": "K",
+            "domain": "Electrical"
           }
         ],
         "equation": "Forward: V = Vf + I * Ron\\nReverse: V = I * Roff",
@@ -417,12 +440,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "d",
             "pos": "top",
-            "label": "D"
+            "label": "D",
+            "domain": "Electrical"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Electrical"
           },
           {
             "id": "g",
@@ -461,12 +486,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "c",
             "pos": "top",
-            "label": "C"
+            "label": "C",
+            "domain": "Electrical"
           },
           {
             "id": "e",
             "pos": "bottom",
-            "label": "E"
+            "label": "E",
+            "domain": "Electrical"
           },
           {
             "id": "g",
@@ -1131,17 +1158,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Electrical"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Electrical"
           }
         ],
         "equation": "Va = Vpk*sin(ωt)\nVb = Vpk*sin(ωt - 2π/3)\nVc = Vpk*sin(ωt + 2π/3)",
@@ -1194,12 +1224,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
         "equation": "I = I_source",
@@ -1222,22 +1254,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
         "equation": "V_out = Gain * (V_cp - V_cn)",
@@ -1260,22 +1296,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
         "equation": "I_out = Gm * (V_cp - V_cn)",
@@ -1298,22 +1338,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
         "equation": "I_out = Gain * I_control",
@@ -1336,22 +1380,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
         "equation": "V_out = Rm * I_control",
@@ -1368,7 +1416,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           }
         ],
         "equation": "V = 0",
@@ -1391,12 +1440,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Electrical"
           },
           {
             "id": "2",
             "pos": "right",
-            "label": "2"
+            "label": "2",
+            "domain": "Electrical"
           }
         ],
         "equation": "V_1 = V_2 = ... = V_n\nΣ I_k = 0",
@@ -1413,22 +1464,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "abc",
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Electrical"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "a"
+            "label": "a",
+            "domain": "Electrical"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "b"
+            "label": "b",
+            "domain": "Electrical"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "c"
+            "label": "c",
+            "domain": "Electrical"
           }
         ],
         "equation": "Va = Vabc[0], Vb = Vabc[1], Vc = Vabc[2]",
@@ -1445,7 +1500,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           }
         ],
         "equation": "Va + Vb + Vc = 0",
@@ -1462,7 +1518,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           }
         ],
         "equation": "I = 0 A",
@@ -1479,22 +1536,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "a"
+            "label": "a",
+            "domain": "Physical"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "b"
+            "label": "b",
+            "domain": "Physical"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "c"
+            "label": "c",
+            "domain": "Physical"
           }
         ],
         "equation": "y1 = u[0], y2 = u[1], y3 = u[2]",
@@ -1943,7 +2004,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "bottom",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = 0 A-t",
@@ -1966,12 +2028,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = Φ * R",
@@ -1994,12 +2058,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = Φ * (l / (μ * A))",
@@ -2022,12 +2088,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "ctrl",
@@ -2066,12 +2134,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = Hc * Lm - Φ * Rm",
@@ -2094,22 +2164,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "mag_n",
             "pos": "right",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "mag_s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = N * I\nV = N * dΦ/dt",
@@ -2173,12 +2247,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "phi",
@@ -2201,12 +2277,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "f",
@@ -2235,12 +2313,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = N * I",
@@ -2263,12 +2343,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "Φ = Φ_source",
@@ -2285,12 +2367,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "src",
@@ -3565,12 +3649,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Constant Delay governing physical equation",
@@ -3587,17 +3673,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Add governing physical equation",
@@ -3614,17 +3703,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "y = u1 - u2",
@@ -3647,12 +3739,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "Y = Gain * U",
@@ -3669,17 +3763,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "*"
+            "label": "*",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "*"
+            "label": "*",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "y = u1 * u2",
@@ -3696,17 +3793,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "num"
+            "label": "num",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "den"
+            "label": "den",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "y = u1 / (u2 != 0 ? u2 : ε)",
@@ -3729,12 +3829,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Math Function governing physical equation",
@@ -3751,12 +3853,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Σ"
+            "label": "Σ",
+            "domain": "Physical"
           }
         ],
         "equation": "y = u1 + u2",
@@ -3779,12 +3883,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "y(t) = ∫u(τ)dτ + y(0)",
@@ -3807,12 +3913,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Transfer Function governing physical equation",
@@ -3829,12 +3937,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Lookup Table (1D) governing physical equation",
@@ -3851,17 +3961,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "U1"
+            "label": "U1",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "U2"
+            "label": "U2",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Lookup Table (2D) governing physical equation",
@@ -3878,12 +3991,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "y = |u|",
@@ -3911,12 +4026,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "y = min(upper, max(lower, u))",
@@ -3944,12 +4061,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Dead Zone governing physical equation",
@@ -3972,22 +4091,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Physical"
           },
           {
             "id": "ctrl",
             "pos": "left",
-            "label": "C"
+            "label": "C",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "2"
+            "label": "2",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Switch governing physical equation",
@@ -4010,17 +4133,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "2"
+            "label": "2",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "MIN"
+            "label": "MIN",
+            "domain": "Physical"
           }
         ],
         "equation": "y = min(u1, u2)",
@@ -4043,17 +4169,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Physical"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "2"
+            "label": "2",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "MAX"
+            "label": "MAX",
+            "domain": "Physical"
           }
         ],
         "equation": "y = max(u1, u2)",
@@ -4076,12 +4205,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "RMS"
+            "label": "RMS",
+            "domain": "Physical"
           }
         ],
         "equation": "PS RMS Estimator governing physical equation",
@@ -4098,17 +4229,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "hall",
             "pos": "left",
-            "label": "Hall"
+            "label": "Hall",
+            "domain": "Physical"
           },
           {
             "id": "dir",
             "pos": "left",
-            "label": "Direction"
+            "label": "Direction",
+            "domain": "Physical"
           },
           {
             "id": "abc",
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           }
         ],
         "equation": "BLDC Commutation Logic governing physical equation",
@@ -4136,32 +4270,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "is_ref",
             "pos": "left",
-            "label": "IsRef"
+            "label": "IsRef",
+            "domain": "Physical"
           },
           {
             "id": "is",
             "pos": "left",
-            "label": "Is"
+            "label": "Is",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "hall",
             "pos": "left",
-            "label": "Hall"
+            "label": "Hall",
+            "domain": "Physical"
           },
           {
             "id": "dir",
             "pos": "left",
-            "label": "Direction"
+            "label": "Direction",
+            "domain": "Physical"
           },
           {
             "id": "vabc",
             "pos": "right",
-            "label": "vabcRef"
+            "label": "vabcRef",
+            "domain": "Physical"
           }
         ],
         "equation": "BLDC Current Controller governing physical equation",
@@ -4184,32 +4324,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "is_ref",
             "pos": "left",
-            "label": "IsRef"
+            "label": "IsRef",
+            "domain": "Physical"
           },
           {
             "id": "is",
             "pos": "left",
-            "label": "Is"
+            "label": "Is",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "hall",
             "pos": "left",
-            "label": "Hall"
+            "label": "Hall",
+            "domain": "Physical"
           },
           {
             "id": "dir",
             "pos": "left",
-            "label": "Direction"
+            "label": "Direction",
+            "domain": "Physical"
           },
           {
             "id": "g",
             "pos": "right",
-            "label": "G"
+            "label": "G",
+            "domain": "Physical"
           }
         ],
         "equation": "BLDC Current Controller with PWM governing physical equation",
@@ -4232,27 +4378,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "v_ref",
             "pos": "left",
-            "label": "vRef"
+            "label": "vRef",
+            "domain": "Physical"
           },
           {
             "id": "v",
             "pos": "left",
-            "label": "v"
+            "label": "v",
+            "domain": "Physical"
           },
           {
             "id": "ff",
             "pos": "left",
-            "label": "FF"
+            "label": "FF",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "ctrl",
             "pos": "right",
-            "label": "Control"
+            "label": "Control",
+            "domain": "Physical"
           }
         ],
         "equation": "DC-DC Voltage Controller governing physical equation",
@@ -4285,37 +4436,44 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "vdc_ref",
             "pos": "left",
-            "label": "VdcRef (V)"
+            "label": "VdcRef (V)",
+            "domain": "Physical"
           },
           {
             "id": "q_ref",
             "pos": "left",
-            "label": "QRef (pu)"
+            "label": "QRef (pu)",
+            "domain": "Physical"
           },
           {
             "id": "vdc_sens",
             "pos": "left",
-            "label": "VdcSens (V)"
+            "label": "VdcSens (V)",
+            "domain": "Physical"
           },
           {
             "id": "vabc_sens",
             "pos": "left",
-            "label": "VabcSens (pu)"
+            "label": "VabcSens (pu)",
+            "domain": "Physical"
           },
           {
             "id": "iabc_sens",
             "pos": "left",
-            "label": "IabcSens (pu)"
+            "label": "IabcSens (pu)",
+            "domain": "Physical"
           },
           {
             "id": "vabc_ref",
             "pos": "right",
-            "label": "VabcRef (pu)"
+            "label": "VabcRef (pu)",
+            "domain": "Physical"
           },
           {
             "id": "vis",
             "pos": "right",
-            "label": "Visualization"
+            "label": "Visualization",
+            "domain": "Physical"
           }
         ],
         "equation": "PFC Rectifier Controller governing physical equation",
@@ -4343,37 +4501,44 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "v_ref",
             "pos": "left",
-            "label": "VRef"
+            "label": "VRef",
+            "domain": "Physical"
           },
           {
             "id": "f_ref",
             "pos": "left",
-            "label": "fRef"
+            "label": "fRef",
+            "domain": "Physical"
           },
           {
             "id": "vabc",
             "pos": "left",
-            "label": "vabc"
+            "label": "vabc",
+            "domain": "Physical"
           },
           {
             "id": "vcyc",
             "pos": "left",
-            "label": "Vcyc"
+            "label": "Vcyc",
+            "domain": "Physical"
           },
           {
             "id": "icyc",
             "pos": "left",
-            "label": "Icyc"
+            "label": "Icyc",
+            "domain": "Physical"
           },
           {
             "id": "p",
             "pos": "right",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical"
           },
           {
             "id": "vis",
             "pos": "right",
-            "label": "Visualization"
+            "label": "Visualization",
+            "domain": "Physical"
           }
         ],
         "equation": "Cycloconverter Controller governing physical equation",
@@ -4406,17 +4571,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "e",
             "pos": "left",
-            "label": "e"
+            "label": "e",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           }
         ],
         "equation": "Discrete PI Controller governing physical equation",
@@ -4459,17 +4627,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "e",
             "pos": "left",
-            "label": "e"
+            "label": "e",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           }
         ],
         "equation": "u = PI + D",
@@ -4492,12 +4663,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "Low-Pass Filter governing physical equation",
@@ -4520,17 +4693,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "Integrator governing physical equation",
@@ -4553,12 +4729,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Mean"
+            "label": "Mean",
+            "domain": "Physical"
           }
         ],
         "equation": "Moving Average governing physical equation",
@@ -4575,22 +4753,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "s",
             "pos": "left",
-            "label": "Set"
+            "label": "Set",
+            "domain": "Physical"
           },
           {
             "id": "r",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "q",
             "pos": "right",
-            "label": "Q"
+            "label": "Q",
+            "domain": "Physical"
           },
           {
             "id": "nq",
             "pos": "right",
-            "label": "!Q"
+            "label": "!Q",
+            "domain": "Physical"
           }
         ],
         "equation": "SR Flip-Flop governing physical equation",
@@ -4607,17 +4789,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "s",
             "pos": "left",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "Sample and Hold governing physical equation",
@@ -4640,17 +4825,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "left",
-            "label": "r"
+            "label": "r",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "left",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           }
         ],
         "equation": "Smith Predictor governing physical equation",
@@ -4678,22 +4866,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "m",
             "pos": "left",
-            "label": "m"
+            "label": "m",
+            "domain": "Physical"
           },
           {
             "id": "ang",
             "pos": "left",
-            "label": "ang"
+            "label": "ang",
+            "domain": "Physical"
           },
           {
             "id": "abc",
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           },
           {
             "id": "wt",
             "pos": "right",
-            "label": "wt"
+            "label": "wt",
+            "domain": "Physical"
           }
         ],
         "equation": "Sine Generator (3-Phase) governing physical equation",
@@ -4721,12 +4913,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "d²y/dt² + 2*ζ*ωn*dy/dt + ωn²*y = ωn²*u",
@@ -4749,22 +4943,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "left",
-            "label": "r"
+            "label": "r",
+            "domain": "Physical"
           },
           {
             "id": "x",
             "pos": "left",
-            "label": "x"
+            "label": "x",
+            "domain": "Physical"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           }
         ],
         "equation": "State-Feedback Controller governing physical equation",
@@ -4792,17 +4990,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "left",
-            "label": "r"
+            "label": "r",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "left",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           }
         ],
         "equation": "Sliding Mode Controller governing physical equation",
@@ -4830,7 +5031,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "Stair Generator governing physical equation",
@@ -4853,12 +5055,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "Washout Filter governing physical equation",
@@ -4891,27 +5095,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "i_ref",
             "pos": "left",
-            "label": "iRef"
+            "label": "iRef",
+            "domain": "Physical"
           },
           {
             "id": "i",
             "pos": "left",
-            "label": "i"
+            "label": "i",
+            "domain": "Physical"
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "vMax"
+            "label": "vMax",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "v_ref",
             "pos": "right",
-            "label": "vRef"
+            "label": "vRef",
+            "domain": "Physical"
           }
         ],
         "equation": "DC Current Controller governing physical equation",
@@ -4939,22 +5148,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "v_ref",
             "pos": "left",
-            "label": "vRef"
+            "label": "vRef",
+            "domain": "Physical"
           },
           {
             "id": "v",
             "pos": "left",
-            "label": "v"
+            "label": "v",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "ctrl",
             "pos": "right",
-            "label": "Control"
+            "label": "Control",
+            "domain": "Physical"
           }
         ],
         "equation": "DC Voltage Controller governing physical equation",
@@ -4977,17 +5190,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "iabc_ref",
             "pos": "left",
-            "label": "iabc*"
+            "label": "iabc*",
+            "domain": "Physical"
           },
           {
             "id": "iabc",
             "pos": "left",
-            "label": "iabc"
+            "label": "iabc",
+            "domain": "Physical"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical"
           }
         ],
         "equation": "Hysteresis Current Controller (3-Ph) governing physical equation",
@@ -5015,27 +5231,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "w_ref",
             "pos": "left",
-            "label": "wRef"
+            "label": "wRef",
+            "domain": "Physical"
           },
           {
             "id": "w_mech",
             "pos": "left",
-            "label": "wMechanical"
+            "label": "wMechanical",
+            "domain": "Physical"
           },
           {
             "id": "tq_sat",
             "pos": "left",
-            "label": "TqRefSat"
+            "label": "TqRefSat",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "tq_unsat",
             "pos": "right",
-            "label": "TqRefUnsat"
+            "label": "TqRefUnsat",
+            "domain": "Physical"
           }
         ],
         "equation": "Velocity Controller governing physical equation",
@@ -5058,12 +5279,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "f_ref",
             "pos": "left",
-            "label": "fRef"
+            "label": "fRef",
+            "domain": "Physical"
           },
           {
             "id": "vabc",
             "pos": "right",
-            "label": "Vabc"
+            "label": "Vabc",
+            "domain": "Physical"
           }
         ],
         "equation": "Induction Machine Scalar Control governing physical equation",
@@ -5172,27 +5395,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "flux_ref",
             "pos": "left",
-            "label": "FluxRef"
+            "label": "FluxRef",
+            "domain": "Physical"
           },
           {
             "id": "tq_ref",
             "pos": "left",
-            "label": "TqRef"
+            "label": "TqRef",
+            "domain": "Physical"
           },
           {
             "id": "vabc",
             "pos": "left",
-            "label": "vabc"
+            "label": "vabc",
+            "domain": "Physical"
           },
           {
             "id": "iabc",
             "pos": "left",
-            "label": "iabc"
+            "label": "iabc",
+            "domain": "Physical"
           },
           {
             "id": "g",
             "pos": "right",
-            "label": "G"
+            "label": "G",
+            "domain": "Physical"
           }
         ],
         "equation": "Induction Machine DTC governing physical equation",
@@ -5215,32 +5443,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "idq_ref",
             "pos": "left",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical"
           },
           {
             "id": "idq",
             "pos": "left",
-            "label": "idq"
+            "label": "idq",
+            "domain": "Physical"
           },
           {
             "id": "vdq_ff",
             "pos": "left",
-            "label": "vdqFF"
+            "label": "vdqFF",
+            "domain": "Physical"
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "VphMax"
+            "label": "VphMax",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "vdq_ref",
             "pos": "right",
-            "label": "vdqRef"
+            "label": "vdqRef",
+            "domain": "Physical"
           }
         ],
         "equation": "Induction Machine Current Controller governing physical equation",
@@ -5263,12 +5497,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "abc",
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           },
           {
             "id": "ab0",
             "pos": "right",
-            "label": "ab0"
+            "label": "ab0",
+            "domain": "Physical"
           }
         ],
         "equation": "I_alpha = I_a\nI_beta = (I_a + 2*I_b) / √3",
@@ -5291,12 +5527,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "ab0",
             "pos": "left",
-            "label": "ab0"
+            "label": "ab0",
+            "domain": "Physical"
           },
           {
             "id": "abc",
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           }
         ],
         "equation": "I_a = I_alpha\nI_b = -0.5*I_alpha + (√3/2)*I_beta\nI_c = -0.5*I_alpha - (√3/2)*I_beta",
@@ -5319,17 +5557,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "abc",
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           },
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "dq0",
             "pos": "right",
-            "label": "dq0"
+            "label": "dq0",
+            "domain": "Physical"
           }
         ],
         "equation": "I_d = I_alpha*cos(θ) + I_beta*sin(θ)\nI_q = -I_alpha*sin(θ) + I_beta*cos(θ)",
@@ -5352,17 +5593,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "dq0",
             "pos": "left",
-            "label": "dq0"
+            "label": "dq0",
+            "domain": "Physical"
           },
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "abc",
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           }
         ],
         "equation": "I_alpha = I_d*cos(θ) - I_q*sin(θ)\nI_beta = I_d*sin(θ) + I_q*cos(θ)",
@@ -5385,12 +5629,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "abc",
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           },
           {
             "id": "seq",
             "pos": "right",
-            "label": "+-0"
+            "label": "+-0",
+            "domain": "Physical"
           }
         ],
         "equation": "Symmetrical-Components governing physical equation",
@@ -5413,12 +5659,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "seq",
             "pos": "left",
-            "label": "+-0"
+            "label": "+-0",
+            "domain": "Physical"
           },
           {
             "id": "abc",
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical"
           }
         ],
         "equation": "Inverse Symmetrical-Components governing physical equation",
@@ -5446,32 +5694,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "iabc",
             "pos": "left",
-            "label": "iabc"
+            "label": "iabc",
+            "domain": "Physical"
           },
           {
             "id": "wr",
             "pos": "left",
-            "label": "wr"
+            "label": "wr",
+            "domain": "Physical"
           },
           {
             "id": "idqsef",
             "pos": "right",
-            "label": "idqseF"
+            "label": "idqseF",
+            "domain": "Physical"
           },
           {
             "id": "imr",
             "pos": "right",
-            "label": "imr"
+            "label": "imr",
+            "domain": "Physical"
           },
           {
             "id": "theta",
             "pos": "right",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical"
           },
           {
             "id": "we",
             "pos": "right",
-            "label": "we"
+            "label": "we",
+            "domain": "Physical"
           }
         ],
         "equation": "Induction Machine Flux Observer governing physical equation",
@@ -5499,17 +5753,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical"
           },
           {
             "id": "y",
             "pos": "left",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           },
           {
             "id": "xhat",
             "pos": "right",
-            "label": "xhat"
+            "label": "xhat",
+            "domain": "Physical"
           }
         ],
         "equation": "Luenberger Observer governing physical equation",
@@ -5532,27 +5789,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           },
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Physical"
           },
           {
             "id": "z",
             "pos": "left",
-            "label": "Z"
+            "label": "Z",
+            "domain": "Physical"
           },
           {
             "id": "vel",
             "pos": "right",
-            "label": "Velocity"
+            "label": "Velocity",
+            "domain": "Physical"
           },
           {
             "id": "pos",
             "pos": "right",
-            "label": "Position"
+            "label": "Position",
+            "domain": "Physical"
           }
         ],
         "equation": "Quadrature Shaft Decoder governing physical equation",
@@ -5575,27 +5837,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "vp",
             "pos": "left",
-            "label": "Vp"
+            "label": "Vp",
+            "domain": "Physical"
           },
           {
             "id": "vx",
             "pos": "left",
-            "label": "Vx"
+            "label": "Vx",
+            "domain": "Physical"
           },
           {
             "id": "vy",
             "pos": "left",
-            "label": "Vy"
+            "label": "Vy",
+            "domain": "Physical"
           },
           {
             "id": "vel",
             "pos": "right",
-            "label": "Velocity"
+            "label": "Velocity",
+            "domain": "Physical"
           },
           {
             "id": "ang",
             "pos": "right",
-            "label": "Angle"
+            "label": "Angle",
+            "domain": "Physical"
           }
         ],
         "equation": "Resolver-to-Digital Converter governing physical equation",
@@ -5618,32 +5885,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "idq_ref",
             "pos": "left",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical"
           },
           {
             "id": "idq",
             "pos": "left",
-            "label": "idq"
+            "label": "idq",
+            "domain": "Physical"
           },
           {
             "id": "vdq_ff",
             "pos": "left",
-            "label": "vdqFF"
+            "label": "vdqFF",
+            "domain": "Physical"
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "VphMax"
+            "label": "VphMax",
+            "domain": "Physical"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical"
           },
           {
             "id": "vdq_ref",
             "pos": "right",
-            "label": "vdqRef"
+            "label": "vdqRef",
+            "domain": "Physical"
           }
         ],
         "equation": "PMSM Current Controller governing physical equation",
@@ -5676,32 +5949,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "tq_ref",
             "pos": "left",
-            "label": "TqRef"
+            "label": "TqRef",
+            "domain": "Physical"
           },
           {
             "id": "w_mech",
             "pos": "left",
-            "label": "wMechanical"
+            "label": "wMechanical",
+            "domain": "Physical"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical"
           },
           {
             "id": "idq_ref",
             "pos": "right",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical"
           },
           {
             "id": "tq_ref_sat",
             "pos": "right",
-            "label": "TqRefSat"
+            "label": "TqRefSat",
+            "domain": "Physical"
           },
           {
             "id": "tq_lim",
             "pos": "right",
-            "label": "TqLim"
+            "label": "TqLim",
+            "domain": "Physical"
           }
         ],
         "equation": "PMSM Current Reference Generator governing physical equation",
@@ -5734,37 +6013,44 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "ref",
             "pos": "left",
-            "label": "Reference"
+            "label": "Reference",
+            "domain": "Physical"
           },
           {
             "id": "iabc_s",
             "pos": "left",
-            "label": "iabcSens"
+            "label": "iabcSens",
+            "domain": "Physical"
           },
           {
             "id": "w_s",
             "pos": "left",
-            "label": "wSens"
+            "label": "wSens",
+            "domain": "Physical"
           },
           {
             "id": "th_s",
             "pos": "left",
-            "label": "thSens"
+            "label": "thSens",
+            "domain": "Physical"
           },
           {
             "id": "vdc_s",
             "pos": "left",
-            "label": "vdcSens"
+            "label": "vdcSens",
+            "domain": "Physical"
           },
           {
             "id": "g",
             "pos": "right",
-            "label": "G"
+            "label": "G",
+            "domain": "Physical"
           },
           {
             "id": "vis",
             "pos": "right",
-            "label": "Visualization"
+            "label": "Visualization",
+            "domain": "Physical"
           }
         ],
         "equation": "Id_ref = 0 (or MTPA)\\nIq_ref = τ_ref / (1.5 * P * Ψf)",
@@ -5787,22 +6073,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "idq_ref",
             "pos": "left",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical"
           },
           {
             "id": "vdq",
             "pos": "left",
-            "label": "vdq"
+            "label": "vdq",
+            "domain": "Physical"
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "VphMax"
+            "label": "VphMax",
+            "domain": "Physical"
           },
           {
             "id": "idq_ref_fw",
             "pos": "right",
-            "label": "idqRefFW"
+            "label": "idqRefFW",
+            "domain": "Physical"
           }
         ],
         "equation": "PMSM Field-Weakening Controller governing physical equation",
@@ -5825,12 +6115,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "idq",
             "pos": "left",
-            "label": "idq"
+            "label": "idq",
+            "domain": "Physical"
           },
           {
             "id": "tq_est",
             "pos": "right",
-            "label": "TqEst"
+            "label": "TqEst",
+            "domain": "Physical"
           }
         ],
         "equation": "PMSM Torque Estimator governing physical equation",
@@ -7238,7 +7530,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical"
           }
         ],
         "equation": "Terminal unconnected (sink)",
@@ -7314,7 +7607,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "PS Sine Wave governing physical equation",
@@ -7347,7 +7641,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "y(t) = (t >= StepTime) ? (InitialValue + StepSize) : InitialValue",
@@ -7375,7 +7670,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical"
           }
         ],
         "equation": "y(t) = (t >= StartTime) ? Slope * (t - StartTime) + Offset : Offset",
