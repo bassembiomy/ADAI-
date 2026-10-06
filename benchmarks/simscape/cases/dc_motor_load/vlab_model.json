@@ -1,0 +1,24 @@
+{
+  "name": "dc_motor_load",
+  "nodes": [
+    { "id": "src", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "dc_voltage", "params": { "V": 24, "R_int": 0 } } },
+    { "id": "motor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "dc_motor", "params": { "Ra": 1, "La": 0.01, "Ke": 0.1, "J": 0.001, "B": 0.001 } } },
+    { "id": "load", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "inertia", "params": { "J": 0.01, "B": 0 } } },
+    { "id": "damper", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "rot_damper", "params": { "b": 0.02 } } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "rot_motion_sensor", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } },
+    { "id": "gnd", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ground", "params": {} } },
+    { "id": "rref", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "rot_ref", "params": {} } }
+  ],
+  "edges": [
+    { "id": "src-motor", "source": "src", "sourceHandle": "p_s", "target": "motor", "targetHandle": "p_t" },
+    { "id": "motor-gnd", "source": "motor", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "src-gnd", "source": "src", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "motor-load", "source": "motor", "sourceHandle": "r_s", "target": "load", "targetHandle": "r_t" },
+    { "id": "motor-damper", "source": "motor", "sourceHandle": "r_s", "target": "damper", "targetHandle": "r_t" },
+    { "id": "damper-rref", "source": "damper", "sourceHandle": "c_s", "target": "rref", "targetHandle": "r_t" },
+    { "id": "motor-sensor", "source": "motor", "sourceHandle": "r_s", "target": "sensor", "targetHandle": "r_t" },
+    { "id": "sensor-rref", "source": "sensor", "sourceHandle": "c_s", "target": "rref", "targetHandle": "r_t" },
+    { "id": "sensor-scope", "source": "sensor", "sourceHandle": "w_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

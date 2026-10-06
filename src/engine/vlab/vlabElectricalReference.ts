@@ -24,9 +24,9 @@ export const ELECTRICAL_REFERENCE_BLOCKS: ReadonlySet<string> = new Set(['ground
  * (an internal reference declared by the block's model, e.g. an implicit star point of a machine model).
  */
 export const INTERNAL_REFERENCE_PORTS: Readonly<Record<string, readonly string[]>> = {
-  // Empty by design (WP-10): the full V-Lab suite needs no internal reference. A machine neutral without a through variable
-  // (ac_motor.n, pmsm.n) is an isolated node held at 0 V by the node row itself, not by a name rule. Add `type: ['port']`
-  // here, with a comment naming the model reason, when a block really needs one.
+  // Empty by design (WP-10): the full V-Lab suite needs no internal reference. The machine star points (ac_motor.n, pmsm.n,
+  // bldc_motor.g) are real terminals with a through current (WP-12a): an open star point is open (i_a + i_b + i_c = 0), never
+  // grounded. Add `type: ['port']` here, with a comment naming the model reason, when a block really needs one.
 };
 
 /**
@@ -34,8 +34,24 @@ export const INTERNAL_REFERENCE_PORTS: Readonly<Record<string, readonly string[]
  * terminal). A network containing one of them is determined and therefore not floating.
  */
 export const IMPLICIT_ABSOLUTE_POTENTIAL_BLOCKS: ReadonlySet<string> = new Set([
-  'opamp', 'three_phase_source',
+  // three_phase_source was removed (WP-12a, F-068): it is a Simscape-style wye source with a star-point terminal n, so a
+  // network it sits in needs an Electrical Reference like any other.
+  'opamp',
 ]);
+
+/**
+ * Mechanical reference of the electrical machines (WP-12a, F-064): block type -> the Rotational port whose speed is measured
+ * against the INERTIAL FRAME. The machine case is fixed to that frame by the block's own model (the reaction torque on the
+ * case is absorbed by the frame); the block has no case / return port, so nothing here depends on a port NAME. This is the
+ * library-declared internal reference the rotational name rule used to stand in for; the assembler never grounds a machine
+ * port by name (a machine has no port named c / b / n / ref / gnd in the Rotational domain).
+ */
+export const INTERNAL_MECHANICAL_REFERENCE: Readonly<Record<string, { port: string; reason: string }>> = {
+  dc_motor: { port: 'r', reason: 'rotor shaft speed relative to the inertial frame; the case is fixed to it' },
+  ac_motor: { port: 'r', reason: 'rotor shaft speed relative to the inertial frame; the case is fixed to it' },
+  bldc_motor: { port: 'r', reason: 'rotor shaft speed relative to the inertial frame; the case is fixed to it' },
+  pmsm: { port: 'r', reason: 'rotor shaft speed relative to the inertial frame; the case is fixed to it' },
+};
 
 export function isInternalReferencePort(blockType: string, portId: string): boolean {
   return (INTERNAL_REFERENCE_PORTS[blockType] ?? []).includes(portId);

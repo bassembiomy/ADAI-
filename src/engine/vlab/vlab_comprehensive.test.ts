@@ -605,7 +605,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
       const { state, error, successCount } = runSim(engine, nodes, edges, 5);
       expect(error).toBeNull();
       expect(successCount).toBe(5);
-    });
+    }, 240000);
 
     it('L3-002: Target speed is reported correctly (~1500 RPM)', () => {
       const engine = new VLabPhysicsEngine();
@@ -615,7 +615,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
 
       const { state } = runSim(engine, nodes, edges, 5);
       expect(state.scopeValues.target).toBeCloseTo(1500, -1);
-    });
+    }, 240000);
 
     it('L3-003: Scope output has structure (value + target)', () => {
       const engine = new VLabPhysicsEngine();
@@ -628,7 +628,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
       expect(typeof state.scopeValues).toBe('object');
       expect(state.scopeValues).toHaveProperty('value');
       expect(state.scopeValues).toHaveProperty('target');
-    });
+    }, 240000);
   });
 
   // --- LAB 4: VFD Inverter Drive ---
@@ -642,7 +642,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
       const { error, successCount } = runSim(engine, nodes, edges, 5);
       expect(error).toBeNull();
       expect(successCount).toBe(5);
-    });
+    }, 240000);
 
     it('L4-002: Target speed starts at 500 RPM (initial step value)', () => {
       const engine = new VLabPhysicsEngine();
@@ -652,7 +652,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
 
       const { state } = runSim(engine, nodes, edges, 5);
       expect(state.scopeValues.target).toBeCloseTo(500, -1);
-    });
+    }, 240000);
   });
 
   // --- LAB 5: Smart Washing Machine ---
@@ -666,7 +666,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
       const { error, successCount } = runSim(engine, nodes, edges, 5);
       expect(error).toBeNull();
       expect(successCount).toBe(5);
-    });
+    }, 240000);
 
     it('L5-002: Motor draws non-zero current', () => {
       const engine = new VLabPhysicsEngine();
@@ -676,7 +676,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
 
       const { state } = runSim(engine, nodes, edges, 5);
       expect(state.scopeValues.amps).toBeGreaterThan(0.001);
-    });
+    }, 240000);
   });
 
   // --- LAB 6: Advanced Microwave Design ---

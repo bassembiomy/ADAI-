@@ -51,11 +51,13 @@ describe('VLab Library Search & Scoring', () => {
   it('exposes every DC Motor parameter used by the simulation equation', () => {
     const dcMotor = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(block => block.id === 'dc_motor');
 
-    expect(dcMotor?.equation).toContain('T = Kt*I');
-    expect(dcMotor?.params.Kt).toMatchObject({
+    // WP-12a (F-059): one back-EMF / torque constant k [V*s/rad = N*m/A]; the separate Kt parameter is gone
+    expect(dcMotor?.equation).toContain('τ_e = k·I');
+    expect(dcMotor?.params.Kt).toBeUndefined();
+    expect(dcMotor?.params.Ke).toMatchObject({
       value: 0.05,
-      unit: 'N-m/A',
-      label: 'Torque Const'
+      unit: 'V*s/rad',
+      label: 'Back-EMF / Torque Constant k'
     });
     expect(dcMotor?.params.B).toMatchObject({
       value: 0.001,
@@ -72,10 +74,12 @@ describe('VLab Library Search & Scoring', () => {
       unit: 'H',
       label: 'Phase Ind'
     });
-    expect(bldcMotor?.params.Kt).toMatchObject({
+    // WP-12a (F-059): one back-EMF / torque constant Ke [V*s/rad = N*m/A]
+    expect(bldcMotor?.params.Kt).toBeUndefined();
+    expect(bldcMotor?.params.Ke).toMatchObject({
       value: 0.1,
-      unit: 'N-m/A',
-      label: 'Torque Const'
+      unit: 'V*s/rad',
+      label: 'Back-EMF / Torque Constant'
     });
     expect(bldcMotor?.params.J).toMatchObject({
       value: 0.02,

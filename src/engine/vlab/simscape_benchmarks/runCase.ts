@@ -24,7 +24,12 @@ export interface CaseSpec {
     /** series RLC driven by a DC step V through R, L into C (underdamped): the closed form of the capacitor voltage */
     | { type: 'rlc_series_underdamped'; V: number; R: number; L: number; C: number }
     /** half-wave rectifier, ideal source Vpk sin(2 pi f t) -> piecewise-linear diode (Vf, Ron, Roff) -> load R: load voltage */
-    | { type: 'halfwave_rectifier_pwl'; Vpk: number; f: number; Vf: number; Ron: number; Roff: number; R: number };
+    | { type: 'halfwave_rectifier_pwl'; Vpk: number; f: number; Vf: number; Ron: number; Roff: number; R: number }
+    /**
+     * DC motor driven by a voltage step V into a rotor of total inertia J and total viscous damping B (motor + load + damper):
+     * La di/dt = V - Ra i - k w,  J dw/dt = k i - B w,  i(0) = w(0) = 0 -> closed form of the shaft speed w(t) (WP-12a).
+     */
+    | { type: 'dc_motor_load_step'; V: number; Ra: number; La: number; k: number; J: number; B: number };
 }
 
 /** Closed-form reference of `spec.analytic` at time t. */
@@ -37,6 +42,19 @@ export function analyticValue(a: NonNullable<CaseSpec['analytic']>, t: number): 
     const vdOn = vs - iOn * a.R;
     if (vdOn > a.Vf) return iOn * a.R;
     return (vs / (a.R + a.Roff)) * a.R; // off-branch loop solution
+  }
+  if (a.type === 'dc_motor_load_step') {
+    // s^2 + (Ra/La + B/J) s + (Ra B + k^2)/(La J) = 0, w(0) = 0, w'(0) = k i(0)/J = 0, w(inf) = k V/(Ra B + k^2)
+    const wss = (a.k * a.V) / (a.Ra * a.B + a.k * a.k);
+    const sum = a.Ra / a.La + a.B / a.J;
+    const prod = (a.Ra * a.B + a.k * a.k) / (a.La * a.J);
+    const disc = sum * sum - 4 * prod;
+    if (disc >= 0) {
+      const s1 = (-sum + Math.sqrt(disc)) / 2, s2 = (-sum - Math.sqrt(disc)) / 2;
+      return wss * (1 - (s2 * Math.exp(s1 * t) - s1 * Math.exp(s2 * t)) / (s2 - s1));
+    }
+    const al = sum / 2, bw = Math.sqrt(-disc) / 2;
+    return wss * (1 - Math.exp(-al * t) * (Math.cos(bw * t) + (al / bw) * Math.sin(bw * t)));
   }
   // vC(t) = V [1 - e^(-alpha t) (cos wd t + (alpha/wd) sin wd t)], alpha = R/2L, wd = sqrt(1/LC - alpha^2)
   const alpha = a.R / (2 * a.L);

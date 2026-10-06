@@ -90,6 +90,7 @@ describe('library metadata: width / channelNames / composite', () => {
     'clarke_transform.abc', 'clarke_transform.ab0', 'inv_clarke_transform.ab0', 'inv_clarke_transform.abc',
     'park_transform.abc', 'park_transform.dq0', 'inv_park_transform.dq0', 'inv_park_transform.abc',
     'sym_comp_transform.abc', 'sym_comp_transform.seq', 'inv_sym_comp_transform.seq', 'inv_sym_comp_transform.abc',
+    'three_phase_source.abc', // WP-12a (F-068): composite three-phase source port
   ];
   const marked = blocks.flatMap(b => b.ports.filter(p => p.width !== undefined || p.composite !== undefined).map(p => `${b.id}.${p.id}`));
 

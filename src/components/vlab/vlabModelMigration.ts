@@ -73,6 +73,9 @@ export const LEGACY_PARAM_DROPS: Record<string, string[]> = {
   ps_sine_3phase: ['amp', 'freq'],
   // WP-19a: the ideal weld has no stiffness (the old value was never read by any equation; the constraint is exact)
   weld_joint: ['stiffness'],
+  // WP-12a (F-059): one back-EMF / torque constant k = Ke (SI: Kt = Ke). A Kt that differed from Ke is reported by
+  // machineConstantNotice and dropped; Ke is kept as k.
+  dc_motor: ['Kt'], bldc_motor: ['Kt'],
 };
 
 /** Library parameters exposed by WP-08 (previously hidden): backfilled into saved nodes so the inspector shows them. */
@@ -86,6 +89,9 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
   upper_heater: ['efficiency'], mag_controlled_mmf: ['MMF'], washing_basket: ['damping'], doe_custom: ['deploymentModel'],
   ps_dead_zone: ['upper', 'lower'], ps_sine_3phase: ['Vpk', 'f'],
+  // WP-12a: machine leakage inductances (the old induction model hard-coded Lr = 0.06 H), PMSM zero-sequence inductance,
+  // three-phase source phase angle of phase A (the old source had a hidden +45 deg shift; Simscape default is 0)
+  ac_motor: ['Lls', 'Llr'], pmsm: ['L0'], three_phase_source: ['phase'],
   // WP-19a: joint parameters of the shared multibody joint core (axis defaults to Z like Simscape; weld reference pose)
   revolute_joint: ['axis'], prismatic_joint: ['axis'], weld_joint: ['offset', 'rotation'],
 };
@@ -170,17 +176,86 @@ export const canonicalizeLegacyParams = (
   return next ?? params;
 };
 
+/**
+ * WP-12a (F-059): a saved dc_motor / bldc_motor with a torque constant Kt different from its back-EMF constant Ke. In SI the
+ * two are one constant (Kt [N m/A] = Ke [V s/rad], otherwise the machine creates or destroys energy). Ke is kept as k and
+ * the discarded Kt is reported here (stored in `data.migrationNotices`). Returns undefined when nothing was lost.
+ */
+export const machineConstantNotice = (type: string, params: Record<string, any>): string | undefined => {
+  if (type !== 'dc_motor' && type !== 'bldc_motor') return undefined;
+  if (!('Kt' in params)) return undefined;
+  const lib = VLAB_LIBRARY.flatMap((d) => d.blocks).find((b) => b.id === type);
+  const kt = asNumber(params.Kt);
+  const ke = params.Ke === undefined || params.Ke === null ? Number(lib?.params?.Ke?.value) : asNumber(params.Ke);
+  if (!Number.isFinite(kt) || !Number.isFinite(ke) || kt === ke) return undefined;
+  return `${type}: the torque constant Kt = ${kt} N m/A differed from the back-EMF constant Ke = ${ke} V s/rad. In SI they are one constant k ` +
+    `(otherwise energy is created or destroyed), so k = Ke = ${ke} is used and Kt was removed.`;
+};
+
 const canonicalizeNodeParams = (node: VLabNode): VLabNode => {
   const params = node.data?.params;
   if (!params || typeof params !== 'object') return node;
-  const next = canonicalizeLegacyParams(effectiveBlockType(node), params);
-  return next === params ? node : { ...node, data: { ...node.data, params: next } };
+  const type = effectiveBlockType(node);
+  const notice = machineConstantNotice(type, params);
+  const next = canonicalizeLegacyParams(type, params);
+  if (next === params && !notice) return node;
+  const notices = notice ? [...new Set([...(Array.isArray(node.data.migrationNotices) ? node.data.migrationNotices : []), notice])] : undefined;
+  return { ...node, data: { ...node.data, params: next, ...(notices ? { migrationNotices: notices } : {}) } };
+};
+
+/**
+ * WP-12a (F-068): a saved three_phase_source has scalar ports a, b, c with absolute potentials to the model ground. The
+ * block is now a wye source with the composite port abc and a star-point terminal n. The migration keeps the circuit:
+ *  - a Phase Splitter (abc -> a, b, c) is inserted and the old a / b / c edges are re-pointed to its scalar ports;
+ *  - an Electrical Reference is wired to the new star point n (the old source was referenced to ground).
+ * Nodes without a saved `ports` list (they take the library ports) and already migrated nodes are untouched.
+ */
+const migrateThreePhaseSources = (nodes: VLabNode[], edges: VLabEdge[]): { nodes: VLabNode[]; edges: VLabEdge[] } => {
+  const legacy = nodes.filter((n) => effectiveBlockType(n) === 'three_phase_source'
+    && Array.isArray(n.data?.ports) && n.data.ports.some((p: any) => p?.id === 'a') && !n.data.ports.some((p: any) => p?.id === 'abc'));
+  if (legacy.length === 0) return { nodes, edges };
+  const blocks = VLAB_LIBRARY.flatMap((d) => d.blocks);
+  const libPorts = (id: string) => blocks.find((b) => b.id === id)!.ports.map((p) => ({ ...p }));
+  const taken = new Set(nodes.map((n) => n.id));
+  const fresh = (base: string) => { let id = base; for (let i = 2; taken.has(id); i++) id = `${base}_${i}`; taken.add(id); return id; };
+  const addedNodes: VLabNode[] = [];
+  const addedEdges: VLabEdge[] = [];
+  const legacyIds = new Map<string, { splitter: string }>();
+  const migratedNodes = nodes.map((node) => {
+    if (!legacy.includes(node)) return node;
+    const splitter = fresh(`${node.id}_phase_split`);
+    const reference = fresh(`${node.id}_ref`);
+    legacyIds.set(node.id, { splitter });
+    const at = node.position ?? { x: 0, y: 0 };
+    addedNodes.push(
+      { id: splitter, type: node.type, position: { x: at.x + 120, y: at.y }, data: { type: 'phase_splitter', label: 'Phase Splitter', params: {}, ports: libPorts('phase_splitter') } } as VLabNode,
+      { id: reference, type: node.type, position: { x: at.x, y: at.y + 120 }, data: { type: 'ground', label: 'Electrical Reference', params: {}, ports: libPorts('ground') } } as VLabNode,
+    );
+    addedEdges.push(
+      { id: `${node.id}_abc_to_split`, source: node.id, sourceHandle: 'abc_s', target: splitter, targetHandle: 'abc_t' } as VLabEdge,
+      { id: `${node.id}_n_to_ref`, source: node.id, sourceHandle: 'n_s', target: reference, targetHandle: libPorts('ground')[0].id + '_t' } as VLabEdge,
+    );
+    return { ...node, data: { ...node.data, ports: libPorts('three_phase_source') } } as VLabNode;
+  });
+  const phase = /^([abc])_[st]$/;
+  const migratedEdges = edges.map((edge) => {
+    let next = edge;
+    if (legacyIds.has(edge.source) && phase.test(edge.sourceHandle ?? '')) {
+      next = { ...next, source: legacyIds.get(edge.source)!.splitter };
+    }
+    if (legacyIds.has(edge.target) && phase.test(edge.targetHandle ?? '')) {
+      next = { ...next, target: legacyIds.get(edge.target)!.splitter };
+    }
+    return next;
+  });
+  return { nodes: [...migratedNodes, ...addedNodes], edges: [...migratedEdges, ...addedEdges] };
 };
 
 export const normalizeLegacyVLabGraph = (
-  nodes: VLabNode[],
-  edges: VLabEdge[],
+  inputNodes: VLabNode[],
+  inputEdges: VLabEdge[],
 ): { nodes: VLabNode[]; edges: VLabEdge[] } => {
+  const { nodes, edges } = migrateThreePhaseSources(inputNodes, inputEdges);
   const removedNodeIds = new Set(
     nodes
       .filter((node) => LEGACY_REMOVED_BLOCKS.has(effectiveBlockType(node)))

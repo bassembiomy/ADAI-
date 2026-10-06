@@ -736,6 +736,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "min": 0,
             "exclusiveMin": true
           },
+          "L0": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "Zero-Sequence Inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
           "flux": {
             "value": 0.1,
             "unit": "Wb",
@@ -787,8 +794,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Vdq = Rs*Idq + Ldq*dIdq/dt + ω*Ψdq\\nτ_e = 1.5*P*(Ψf*Iq + (Ld-Lq)*Id*Iq)",
-        "description": "Permanent Magnet Synchronous Motor model with sinusoidal back-EMF and d-q coordinate equations."
+        "equation": "v_d = Rs·i_d + Ld·di_d/dt − ω_e·Lq·i_q [V]\nv_q = Rs·i_q + Lq·di_q/dt + ω_e·(Ld·i_d + λm) [V]\nv_0 = Rs·i_0 + L0·di_0/dt [V]\nτ_e = (3/2)·p·(λm·i_q + (Ld − Lq)·i_d·i_q) [N·m],  ω_e = p·ω [rad/s]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
+        "description": "Permanent Magnet Synchronous Motor in the rotor-fixed dq frame (amplitude-invariant Clarke/Park transform, d axis on phase a at θ = 0). Wye stator: the phase currents flow from A, B, C through the windings to the star point N, so an open N forces i_a + i_b + i_c = 0 and a connected N carries the zero-sequence current (inductance L0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it); the torque delivered at R is τ_e − J·dω/dt − B·ω. Phase back-EMF amplitude is λm·ω_e."
       },
       {
         "id": "dc_motor",
@@ -812,13 +819,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           "Ke": {
             "value": 0.05,
-            "unit": "V/rad/s",
-            "label": "Back EMF Const"
-          },
-          "Kt": {
-            "value": 0.05,
-            "unit": "N-m/A",
-            "label": "Torque Const"
+            "unit": "V*s/rad",
+            "label": "Back-EMF / Torque Constant k"
           },
           "J": {
             "value": 0.001,
@@ -854,8 +856,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = Ra·I + La·dI/dt + Ke·ω [V]\nT = Kt*I = J·dω/dt + B·ω + τ_shaft [N·m]   (τ_shaft = torque delivered to the load)\nV·I = Ra·I² + d(½La·I²)/dt + B·ω² + d(½J·ω²)/dt + τ_shaft·ω   (Kt = Ke)",
-        "description": "Permanent-magnet DC motor: armature circuit (Ra, La, back-EMF constant Ke) coupled to a rotor with inertia J and viscous damping B. The rotor shaft is the scalar Rotational port R (referenced to the inertial frame); the torque delivered to the load is Kt·I minus the rotor inertia and damping terms. In SI the torque constant equals the back-EMF constant (Kt = Ke), which makes the conversion lossless apart from Ra·I² and B·ω²; unequal Kt and Ke would create or destroy energy."
+        "equation": "V = Ra·I + La·dI/dt + k·ω [V]\nτ_e = k·I = J·dω/dt + B·ω + τ_shaft [N·m]   (τ_shaft = torque delivered to the load)\nV·I = Ra·I² + d(½La·I²)/dt + B·ω² + d(½J·ω²)/dt + τ_shaft·ω",
+        "description": "Permanent-magnet DC motor (Simscape DC Motor): armature circuit (Ra, La) and one electromechanical constant k [V·s/rad = N·m/A] coupled to a rotor with inertia J and viscous damping B. In SI the torque constant equals the back-EMF constant, so the conversion is lossless apart from Ra·I² and B·ω²: there is a single constant (parameter Ke). A saved model with a different Kt keeps its Ke as k and gets a migration notice. The rotor shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it); the torque delivered to the load is k·I minus the rotor inertia and damping terms."
       },
       {
         "id": "ac_motor",
@@ -879,9 +881,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Lm": {
             "value": 0.05,
             "unit": "H",
-            "label": "Mutual Ind",
+            "label": "Magnetizing Inductance",
             "min": 0,
             "exclusiveMin": true
+          },
+          "Lls": {
+            "value": 0.01,
+            "unit": "H",
+            "label": "Stator Leakage Inductance",
+            "min": 0
+          },
+          "Llr": {
+            "value": 0.01,
+            "unit": "H",
+            "label": "Rotor Leakage Inductance (stator referred)",
+            "min": 0
           },
           "P": {
             "value": 2,
@@ -935,8 +949,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Vs = Rs*Is + dΨs/dt\\n0 = Rr*Ir + dΨr/dt - j*ω*Ψr\\nτ = 1.5*P*Im(Ψs* · Is)",
-        "description": "Three-phase induction motor modeled with stator/rotor flux linkages and slip torque generation."
+        "equation": "v_s = Rs·i_s + dψ_s/dt [V]\n0 = Rr·i_r + dψ_r/dt − j·P·ω·ψ_r [V]\nψ_s = (Lls + Lm)·i_s + Lm·i_r,  ψ_r = (Llr + Lm)·i_r + Lm·i_s [Wb]\nτ_e = (3/2)·P·(ψ_sα·i_sβ − ψ_sβ·i_sα) [N·m]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
+        "description": "Three-phase squirrel-cage induction motor (Krause dq0 model in the stationary αβ frame, amplitude-invariant Clarke transform, rotor referred to the stator; same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Parameters: stator/rotor resistance Rs, Rr, leakage Lls, Llr, magnetizing Lm, pole pairs P. Wye stator: the phase currents flow from A, B, C through the windings to the star point N (an open N forces i_a + i_b + i_c = 0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
       },
       {
         "id": "bldc_motor",
@@ -960,13 +974,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           },
           "Ke": {
             "value": 0.1,
-            "unit": "V/rad/s",
-            "label": "Back EMF Const"
-          },
-          "Kt": {
-            "value": 0.1,
-            "unit": "N-m/A",
-            "label": "Torque Const"
+            "unit": "V*s/rad",
+            "label": "Back-EMF / Torque Constant"
           },
           "P": {
             "value": 4,
@@ -1020,8 +1029,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V_ph = Rs*I_ph + Ls*dI_ph/dt + e_ph(θ)\\nτ = (e_a*i_a + e_b*i_b + e_c*i_c) / ω",
-        "description": "Brushless DC motor with trapezoidal back-EMF profile and electronic rotor commutation."
+        "equation": "v_x − v_g = Rs·i_x + Ls·di_x/dt + e_x [V],  e_x = Ke·ω·f(P·θ − φ_x),  φ = 0, 2π/3, −2π/3\nτ_e = (e_a·i_a + e_b·i_b + e_c·i_c)/ω = Ke·(f_a·i_a + f_b·i_b + f_c·i_c) [N·m]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
+        "description": "Brushless DC motor with trapezoidal back-EMF (unit trapezoid f: ±1 over 120°, 60° ramps; Pillay and Krishnan, IEEE Trans. Ind. Appl. 1989). Wye stator: the phase currents flow from A, B, C through the windings to the star point G (an open G forces i_a + i_b + i_c = 0). One constant Ke [V·s/rad = N·m/A] is both the back-EMF and the torque constant, so the conversion is lossless apart from Rs·i² and B·ω². Needs an external commutation bridge. The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
       },
       {
         "id": "thermal_resistor",
@@ -1303,30 +1312,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "Hz",
             "label": "Frequency",
             "min": 0
+          },
+          "phase": {
+            "value": 0,
+            "unit": "deg",
+            "label": "Phase Angle of Phase A"
           }
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "right",
-            "label": "A",
+            "label": "abc",
             "domain": "Electrical"
           },
           {
-            "id": "b",
-            "pos": "right",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "right",
-            "label": "C",
+            "id": "n",
+            "pos": "bottom",
+            "label": "N",
             "domain": "Electrical"
           }
         ],
-        "equation": "Va = Vpk*sin(ωt)\nVb = Vpk*sin(ωt - 2π/3)\nVc = Vpk*sin(ωt + 2π/3)",
-        "description": "Balanced 3-phase AC voltage source with 120-degree phase separation."
+        "equation": "v_a = √(2/3)·V_LL·sin(2π·f·t + φ)\nv_b = √(2/3)·V_LL·sin(2π·f·t + φ − 2π/3)\nv_c = √(2/3)·V_LL·sin(2π·f·t + φ + 2π/3)   [V], phase to neutral n\ni_n = −(i_a + i_b + i_c)   [A]",
+        "description": "Balanced wye three-phase voltage source (Simscape Three-Phase Source): V_LL = phase-to-phase RMS voltage, frequency f, phase angle φ of phase A (default 0 deg), positive a-b-c sequence. The composite port abc carries the three phase terminals (connect a Phase Splitter for the scalar phases) and the star point N is a real terminal: reference it with an Electrical Reference block. A balanced load returns zero current in N."
       },
       {
         "id": "controlled_voltage",

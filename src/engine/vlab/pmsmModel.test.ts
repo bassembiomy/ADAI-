@@ -106,8 +106,8 @@ describe('PMSM rotor-fixed dq model', () => {
   it('responds to source frequency through the generated phase voltages', () => {
     const sourceVoltages = (frequency: number) => {
       const sourceResiduals = blockEquations.three_phase_source({
-        across: [0, 0, 0],
-        dAcross: [0, 0, 0],
+        across: [[0, 0, 0], 0],
+        dAcross: [[0, 0, 0], 0],
         branch: [0, 0, 0],
         dBranch: [0, 0, 0],
         state: [],
@@ -121,7 +121,7 @@ describe('PMSM rotor-fixed dq model', () => {
           states: [],
           stateDerivatives: []
         },
-        ports: ['a', 'b', 'c'],
+        ports: ['abc', 'n'],
         nodeId: 'source'
       });
       return sourceResiduals.map(value => -value);

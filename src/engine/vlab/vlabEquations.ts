@@ -188,6 +188,10 @@ const trapezoidalBackEmf =(angle: number): number => {
   return -1 + 6 * (normalized - 11 * Math.PI / 6) / Math.PI;
 };
 
+/** Amplitude-invariant Clarke transform of three phase quantities: [alpha, beta, zero] = [(2a-b-c)/3, (b-c)/sqrt(3), (a+b+c)/3]. */
+const clarkeAmplitudeInvariant = (a: number, b: number, c: number): [number, number, number] =>
+  [(2 * a - b - c) / 3, (b - c) / Math.sqrt(3), (a + b + c) / 3];
+
 // ── Shared belt/cable helpers ──────────────────────────────────────────────
 const numParam = (v: unknown, fallback: number): number => {
   const n = Number(v);
@@ -491,21 +495,24 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [Vout - targetV];
   },
 
-  three_phase_source: ({ across, branch, params, ctx }) => {
-    // Va, Vb, Vc relative to ground
-    // Shifting by pi/4 to avoid zero-sampling aliasing at dt=0.05s steps
-    const Vrms = numericParam(params, 'Vrms', 400);
+  three_phase_source: (args) => {
+    // Simscape Electrical > Sources > Three-Phase Source (wye connection): the phase-to-neutral voltages of a balanced,
+    // positive-sequence (a-b-c) source, v_k = v_abc,k - v_n:
+    //   v_a = sqrt(2/3) V_LL sin(w t + phi),  v_b = sqrt(2/3) V_LL sin(w t + phi - 2 pi/3),  v_c = sqrt(2/3) V_LL sin(w t + phi + 2 pi/3)
+    // V_LL = phase-to-phase RMS voltage [V] (param Vrms), f = frequency [Hz], phi = phase angle of phase A [deg] (Simscape
+    // default 0). The star point n is a real terminal (reference it with an Electrical Reference block); the three phase
+    // currents are the through variables (positive from abc,k through the source to n, Simscape convention), so a balanced
+    // load returns zero current in n. No hidden phase shift and no absolute potentials to ground (F-068).
+    // Residuals: (v_abc,k - v_n) - v_k = 0   [V], k = a, b, c
+    const { params, ctx } = args;
+    const abc = vectorInput(args, 'abc', 3);
+    const n = scalarInput(args, 'n');
+    const Vll = numericParam(params, 'Vrms', 400);
     const f = numericParam(params, 'f', 50);
-    const Vpk = Vrms * Math.sqrt(2 / 3);
+    const phi = numericParam(params, 'phase', 0) * Math.PI / 180;
+    const Vpk = Vll * Math.sqrt(2 / 3);
     const w = 2 * Math.PI * f;
-    const Va = Vpk * Math.sin(w * ctx.time + Math.PI / 4);
-    const Vb = Vpk * Math.sin(w * ctx.time - 2 * Math.PI / 3 + Math.PI / 4);
-    const Vc = Vpk * Math.sin(w * ctx.time + 2 * Math.PI / 3 + Math.PI / 4);
-    return [
-      across[0] - Va,
-      across[1] - Vb,
-      across[2] - Vc
-    ];
+    return [0, 1, 2].map(k => (abc[k] - n) - Vpk * Math.sin(w * ctx.time + phi - k * 2 * Math.PI / 3));
   },
 
   busbar: ({ across, branch }) => {
@@ -1261,104 +1268,112 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
 
   // ── MACHINES DOMAIN ────────────────────────────────────────────────────────
+  // Mechanical reference of every machine below (F-064, explicit): the single Rotational port R is the rotor shaft, its
+  // across variable is the ROTOR SPEED RELATIVE TO THE INERTIAL FRAME and the machine case is fixed to that frame. This is a
+  // library-declared internal reference (INTERNAL_MECHANICAL_REFERENCE in vlabElectricalReference.ts), not a name rule: the
+  // block has no case / return port whose name could be mistaken for a reference. The reaction torque on the case is absorbed
+  // by the inertial frame. Electrical star points (ac_motor.n, pmsm.n, bldc_motor.g) are real terminals with a through
+  // current and are never grounded by name.
   dc_motor: ({ across, dAcross, branch, dBranch, state, dState, params }) => {
-    // across[0,1]: electrical terminals p, n
-    // across[2]: mechanical speed omega
-    // state[0]: rotor angle theta
-    // state[1]: mechanical speed omega (true state)
+    // Permanent-magnet DC machine (Simscape DC Motor; Krause, Analysis of Electric Machinery, ch. 2 / Ogata, Modern Control
+    // Engineering, DC servomotor):
+    //   v = Ra i + La di/dt + k w            [V]   (back-EMF constant k = Ke, V s/rad)
+    //   tau_e = k i                           [N m] (torque constant = back-EMF constant in SI, so no energy is created)
+    //   J dw/dt = tau_e - B w - tau_shaft     [N m] (tau_shaft = torque delivered to the load at R)
+    // Power balance: v i = Ra i^2 + d(La i^2/2)/dt + B w^2 + d(J w^2/2)/dt + tau_shaft w   (F-059: one constant k).
+    // across[0,1]: electrical terminals p, n; across[2]: shaft speed w; state[0]: rotor angle theta, state[1]: speed w
     const Ra = numericParam(params, 'Ra', 2.0);
     const La = numericParam(params, 'La', 0.01);
-    const Ke = numericParam(params, 'Ke', 0.05);
-    const Kt = numericParam(params, 'Kt', Ke);
+    const k = numericParam(params, 'Ke', 0.05);
     const J = numericParam(params, 'J', 0.01);
     const B = numericParam(params, 'B', 0.001);
-    
+
     const V = across[0] - across[1];
     const Ia = branch[0];
     const dIa = dBranch[0];
     const torque = branch[1];
-    
+
     return [
-      V - Ia * Ra - La * dIa - Ke * state[1],            // branch[0]: current
+      V - Ia * Ra - La * dIa - k * state[1],             // branch[0]: current
       across[2] - state[1],                              // branch[1]: torque (link port across to speed state)
       dState[0] - state[1],                              // state[0]: theta
-      torque - (Kt * Ia - J * dState[1] - B * state[1])  // state[1]: omega
+      torque - (k * Ia - J * dState[1] - B * state[1])   // state[1]: omega
     ];
   },
 
-  ac_motor: ({ across, branch, state, dState, params, ctx }) => {
-    // 3-phase induction motor stationary alpha-beta rotor-flux model
-    // state[0]: theta, state[1]: omega
-    // state[2]: rotor flux alpha, state[3]: rotor flux beta
+  ac_motor: (args) => {
+    // Squirrel-cage induction machine, stationary (alpha-beta) reference frame, amplitude-invariant Clarke transform,
+    // rotor quantities referred to the stator (Krause, Wasynczuk, Sudhoff, Analysis of Electric Machinery, ch. 4-5; Simscape
+    // Electrical "Asynchronous Machine Squirrel Cage" uses the same T-equivalent):
+    //   v_s = Rs i_s + d psi_s/dt,   0 = Rr i_r + d psi_r/dt - j w_e psi_r,   w_e = P w (rotor electrical speed)
+    //   psi_s = Ls i_s + Lm i_r,     psi_r = Lr i_r + Lm i_s,                  Ls = Lls + Lm, Lr = Llr + Lm
+    //   tau_e = (3/2) P (psi_s_alpha i_s_beta - psi_s_beta i_s_alpha) = (3/2) P (Lm/Lr)(psi_r_alpha i_beta - psi_r_beta i_alpha)
+    //   J dw/dt = tau_e - B w - tau_shaft
+    // Eliminating i_r = (psi_r - Lm i_s)/Lr (states: rotor flux psi_r) gives the implemented residuals
+    //   v_s = Rs i_s + sigma Ls d i_s/dt + (Lm/Lr) d psi_r/dt,   sigma Ls = Ls - Lm^2/Lr
+    //   d psi_r/dt = -(Rr/Lr)(psi_r - Lm i_s) + j w_e psi_r
+    //   zero sequence: v_0 = Rs i_0 + Lls d i_0/dt (the rotor cage carries no zero-sequence current)
+    // The stator is wye connected: i_k flows from phase terminal k through the winding to the star point n (n is a terminal;
+    // an open n forces i_a + i_b + i_c = 0). state: theta, w, psi_r_alpha, psi_r_beta.
+    const { branch, dBranch, state, dState, params } = args;
     const Rs = numericParam(params, 'Rs', 0.1);
     const Rr = numericParam(params, 'Rr', 0.08);
-    const P = numericParam(params, 'P', 2);
     const Lm = numericParam(params, 'Lm', 0.05);
-    const Lr = 0.06;
-    const Tr = Lr / Math.max(Rr, 1e-9);
+    const Lls = numericParam(params, 'Lls', 0.01);
+    const Llr = numericParam(params, 'Llr', 0.01);
+    const P = numericParam(params, 'P', 2);
     const J = numericParam(params, 'J', 0.05);
     const B = numericParam(params, 'B', 0.005);
-    
-    const Va = across[0] - across[3];
-    const Vb = across[1] - across[3];
-    const Vc = across[2] - across[3];
-    
-    const ia = branch[0];
-    const ib = branch[1];
-    const ic = branch[2];
-    const torque = branch[3];
-    const iAlpha = (2 * ia - ib - ic) / 3;
-    const iBeta = (ib - ic) / Math.sqrt(3);
-    const ratedCurrent = 10;
-    const normalizedIAlpha = Math.tanh(iAlpha / ratedCurrent);
-    const normalizedIBeta = Math.tanh(iBeta / ratedCurrent);
-    const psiRAlpha = state[2];
-    const psiRBeta = state[3];
-    const dPsiRAlpha = (Lm * normalizedIAlpha - psiRAlpha) / Tr;
-    const dPsiRBeta = (Lm * normalizedIBeta - psiRBeta) / Tr;
+    const Lr = Llr + Lm;
+    const Ls = Lls + Lm;
+    const sigmaLs = Ls - (Lm * Lm) / Lr;
 
-    const vAlpha = (2 * Va - Vb - Vc) / 3;
-    const vBeta = (Vb - Vc) / Math.sqrt(3);
-    const voltageMagnitude = Math.sqrt(vAlpha * vAlpha + vBeta * vBeta);
-    const synchronousElectricalSpeed = ctx.parameters['grid_freq'] ?? 314.159;
-    const synchronousSpeed = synchronousElectricalSpeed / P;
-    const slipSpeed = synchronousSpeed - state[1];
-    const torqueConstant = 1.5 * P * Lm / Lr;
-    const rotorFluxMagnitude = Math.sqrt(psiRAlpha * psiRAlpha + psiRBeta * psiRBeta);
-    const fluxUtilization = Math.max(0.05, Math.min(1, rotorFluxMagnitude / Math.max(Lm, 1e-9)));
-    const slipTorque = torqueConstant * 0.15 * voltageMagnitude * slipSpeed * fluxUtilization;
-    const fluxTorque = torqueConstant * ratedCurrent * (
-      (psiRAlpha / Math.max(Lm, 1e-9)) * normalizedIBeta
-      - (psiRBeta / Math.max(Lm, 1e-9)) * normalizedIAlpha
-    );
-    const Te = slipTorque + fluxTorque;
-    
+    const vn = scalarInput(args, 'n');
+    const [vAlpha, vBeta, vZero] = clarkeAmplitudeInvariant(scalarInput(args, 'a') - vn, scalarInput(args, 'b') - vn, scalarInput(args, 'c') - vn);
+    const [iAlpha, iBeta, iZero] = clarkeAmplitudeInvariant(branch[0], branch[1], branch[2]);
+    const [dIAlpha, dIBeta, dIZero] = clarkeAmplitudeInvariant(dBranch[0], dBranch[1], dBranch[2]);
+    const torque = branch[3];
+    const omega = state[1];
+    const wE = P * omega;
+    const psiAlpha = state[2];
+    const psiBeta = state[3];
+    const Te = 1.5 * P * (Lm / Lr) * (psiAlpha * iBeta - psiBeta * iAlpha);
+
     return [
-      Va - ia * Rs,                                      // branch[0]: ia
-      Vb - ib * Rs,                                      // branch[1]: ib
-      Vc - ic * Rs,                                      // branch[2]: ic
-      across[4] - state[1],                              // branch[3]: torque (link port across to speed state)
-      dState[0] - state[1],                              // state[0]: theta
-      torque - (Te - J * dState[1] - B * state[1]),      // state[1]: omega (torque equation)
-      dState[2] - dPsiRAlpha,                            // state[2]: rotor flux alpha
-      dState[3] - dPsiRBeta                              // state[3]: rotor flux beta
+      vAlpha - Rs * iAlpha - sigmaLs * dIAlpha - (Lm / Lr) * dState[2],   // branch[0]: alpha-axis stator voltage
+      vBeta - Rs * iBeta - sigmaLs * dIBeta - (Lm / Lr) * dState[3],      // branch[1]: beta-axis stator voltage
+      vZero - Rs * iZero - Lls * dIZero,                                  // branch[2]: zero sequence
+      scalarInput(args, 'r') - omega,                                     // branch[3]: torque (link port across to speed state)
+      dState[0] - omega,                                                  // state[0]: theta
+      torque - (Te - J * dState[1] - B * omega),                          // state[1]: omega (torque equation)
+      dState[2] + (Rr / Lr) * (psiAlpha - Lm * iAlpha) + wE * psiBeta,    // state[2]: rotor flux alpha
+      dState[3] + (Rr / Lr) * (psiBeta - Lm * iBeta) - wE * psiAlpha      // state[3]: rotor flux beta
     ];
   },
 
-  bldc_motor: ({ across, branch, dBranch, state, dState, params }) => {
-    // state[0]: mechanical rotor angle theta, state[1]: mechanical speed omega
+  bldc_motor: (args) => {
+    // Three-phase brushless DC machine with trapezoidal back-EMF (Pillay and Krishnan, "Modeling, simulation and analysis of
+    // permanent-magnet motor drives, part II: the brushless DC motor drive", IEEE Trans. Ind. Appl. 25(2), 1989; Simscape
+    // Electrical "Trapezoidal PMSM" form): per phase x in {a, b, c}, wye connected, star point g
+    //   v_x - v_g = Rs i_x + Ls d i_x/dt + e_x,    e_x = Ke w f(P theta - phi_x)       phi = 0, 2 pi/3, -2 pi/3
+    //   tau_e = (e_a i_a + e_b i_b + e_c i_c) / w = Ke (f_a i_a + f_b i_b + f_c i_c)
+    //   J dw/dt = tau_e - B w - tau_shaft
+    // f is the unit trapezoid (flat +-1 over 120 deg, 60 deg ramps). Ke [V s/rad] is the back-EMF constant (peak phase
+    // back-EMF per mechanical rad/s) and, in SI, the torque constant: tau_e w = sum(e_x i_x) holds exactly (no energy is
+    // created), so there is one constant, like the DC motor (F-059). state: theta (mechanical), w.
+    const { branch, dBranch, state, dState, params } = args;
     const Rs = numericParam(params, 'Rs', 0.2);
     const Ls = numericParam(params, 'Ls', 0.002);
     const Ke = numericParam(params, 'Ke', 0.1);
-    const Kt = numericParam(params, 'Kt', Ke);
     const P = numericParam(params, 'P', 4);
     const J = numericParam(params, 'J', 0.02);
     const B = numericParam(params, 'B', 0.002);
-    
-    const Va = across[0] - across[3];
-    const Vb = across[1] - across[3];
-    const Vc = across[2] - across[3];
-    
+
+    const vg = scalarInput(args, 'g');
+    const Va = scalarInput(args, 'a') - vg;
+    const Vb = scalarInput(args, 'b') - vg;
+    const Vc = scalarInput(args, 'c') - vg;
+
     const ia = branch[0];
     const ib = branch[1];
     const ic = branch[2];
@@ -1370,50 +1385,45 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const ea = Ke * state[1] * phaseA;
     const eb = Ke * state[1] * phaseB;
     const ec = Ke * state[1] * phaseC;
-    const shapedCurrent = phaseA * ia + phaseB * ib + phaseC * ic;
-    const backEmfPower = ea * ia + eb * ib + ec * ic;
-    const Te = Math.abs(state[1]) > 1e-9 && Math.abs(Ke) > 1e-9
-      ? (Kt / Ke) * backEmfPower / state[1]
-      : Kt * shapedCurrent;
-    
+    const Te = Ke * (phaseA * ia + phaseB * ib + phaseC * ic);
+
     return [
       Va - ia * Rs - Ls * dBranch[0] - ea,               // branch[0]: ia
       Vb - ib * Rs - Ls * dBranch[1] - eb,               // branch[1]: ib
       Vc - ic * Rs - Ls * dBranch[2] - ec,               // branch[2]: ic
-      across[4] - state[1],                              // branch[3]: torque
+      scalarInput(args, 'r') - state[1],                 // branch[3]: torque
       dState[0] - state[1],                              // state[0]: theta
       torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega
     ];
   },
 
-  pmsm: ({ across, branch, dBranch, state, dState, params }) => {
-    // state[0]: mechanical rotor angle theta, state[1]: mechanical speed omega
+  pmsm: (args) => {
+    // Permanent-magnet synchronous machine, rotor-fixed dq frame, amplitude-invariant Clarke / Park transforms (Krause et al.,
+    // ch. 5; Simscape Electrical "PMSM" / Mathworks dq equations):
+    //   v_d = Rs i_d + Ld d i_d/dt - w_e Lq i_q
+    //   v_q = Rs i_q + Lq d i_q/dt + w_e (Ld i_d + lambda_m),         w_e = p w (electrical speed), theta_e = p theta
+    //   v_0 = Rs i_0 + L0 d i_0/dt
+    //   tau_e = (3/2) p (lambda_m i_q + (Ld - Lq) i_d i_q)
+    //   J dw/dt = tau_e - B w - tau_shaft
+    // The d axis is aligned with phase a at theta = 0. The stator is wye connected: i_k flows from terminal k to the star point
+    // n (an open n forces i_a + i_b + i_c = 0, so i_0 = 0). Power into the stator = (3/2)(v_d i_d + v_q i_q) + 3 v_0 i_0.
+    // state: theta (mechanical), w.
+    const { branch, dBranch, state, dState, params } = args;
     const Rs = numericParam(params, 'Rs', 0.1);
     const P = numericParam(params, 'pole_pairs', 4);
     const Ld = numericParam(params, 'Ld', 0.005);
     const Lq = numericParam(params, 'Lq', 0.005);
+    const L0 = numericParam(params, 'L0', 0.005);
     const flux = numericParam(params, 'flux', 0.1);
     const J = numericParam(params, 'J', 0.02);
     const B = numericParam(params, 'B', 0.002);
 
-    const Va = across[0] - across[3];
-    const Vb = across[1] - across[3];
-    const Vc = across[2] - across[3];
-
-    const ia = branch[0];
-    const ib = branch[1];
-    const ic = branch[2];
+    const vn = scalarInput(args, 'n');
     const torque = branch[3];
 
-    const vAlpha = (2 * Va - Vb - Vc) / 3;
-    const vBeta = (Vb - Vc) / Math.sqrt(3);
-    const vZero = (Va + Vb + Vc) / 3;
-    const iAlpha = (2 * ia - ib - ic) / 3;
-    const iBeta = (ib - ic) / Math.sqrt(3);
-    const iZero = (ia + ib + ic) / 3;
-    const dIAlpha = (2 * dBranch[0] - dBranch[1] - dBranch[2]) / 3;
-    const dIBeta = (dBranch[1] - dBranch[2]) / Math.sqrt(3);
-    const dIZero = (dBranch[0] + dBranch[1] + dBranch[2]) / 3;
+    const [vAlpha, vBeta, vZero] = clarkeAmplitudeInvariant(scalarInput(args, 'a') - vn, scalarInput(args, 'b') - vn, scalarInput(args, 'c') - vn);
+    const [iAlpha, iBeta, iZero] = clarkeAmplitudeInvariant(branch[0], branch[1], branch[2]);
+    const [dIAlpha, dIBeta, dIZero] = clarkeAmplitudeInvariant(dBranch[0], dBranch[1], dBranch[2]);
 
     const electricalAngle = P * state[0];
     const electricalSpeed = P * state[1];
@@ -1423,17 +1433,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const vq = -sinTheta * vAlpha + cosTheta * vBeta;
     const id = cosTheta * iAlpha + sinTheta * iBeta;
     const iq = -sinTheta * iAlpha + cosTheta * iBeta;
+    // d(i_d)/dt = (rotated alpha-beta derivative) + w_e i_q ; d(i_q)/dt = (...) - w_e i_d  (the angle also moves)
     const dId = cosTheta * dIAlpha + sinTheta * dIBeta + electricalSpeed * iq;
     const dIq = -sinTheta * dIAlpha + cosTheta * dIBeta - electricalSpeed * id;
 
     const Te = 1.5 * P * (flux * iq + (Ld - Lq) * id * iq);
-    const zeroSequenceInductance = (Ld + Lq) / 2;
-    
+
     return [
       vd - Rs * id - Ld * dId + electricalSpeed * Lq * iq,
       vq - Rs * iq - Lq * dIq - electricalSpeed * (Ld * id + flux),
-      vZero - Rs * iZero - zeroSequenceInductance * dIZero,
-      across[4] - state[1],                              // branch[3]: torque
+      vZero - Rs * iZero - L0 * dIZero,
+      scalarInput(args, 'r') - state[1],                 // branch[3]: torque
       dState[0] - state[1],                              // state[0]: theta
       torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega
     ];

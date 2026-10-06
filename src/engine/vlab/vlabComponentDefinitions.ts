@@ -220,45 +220,46 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   three_phase_source: {
     equations: [
-      'Va = Vpk * sin(w*t)',
-      'Vb = Vpk * sin(w*t - 2*pi/3)',
-      'Vc = Vpk * sin(w*t + 2*pi/3)'
+      'v_a - v_n = sqrt(2/3) * V_LL * sin(2*pi*f*t + phi)   [V]',
+      'v_b - v_n = sqrt(2/3) * V_LL * sin(2*pi*f*t + phi - 2*pi/3)   [V]',
+      'v_c - v_n = sqrt(2/3) * V_LL * sin(2*pi*f*t + phi + 2*pi/3)   [V]',
+      'i_n = -(i_a + i_b + i_c)   [A]'
     ],
-    latex: ['V_{abc} = V_{pk} \\sin(\\omega t - \\phi_{abc})'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A balanced 3-phase AC voltage source. Essential for modeling industrial power systems and multi-phase machines.'
+    latex: ['v_k - v_n = \\sqrt{\\tfrac{2}{3}}\\, V_{LL} \\sin(2\\pi f t + \\phi - k\\,2\\pi/3)'],
+    across: 'Phase-to-neutral voltage v_k - v_n [V]', through: 'Phase current i_k, abc,k -> n [A]',
+    description: 'Balanced wye three-phase source (Simscape Three-Phase Source): phase-to-phase RMS voltage V_LL, frequency f, phase angle phi of phase A (default 0 deg), positive a-b-c sequence. Composite port abc plus a real star-point terminal n.'
   },
   dc_motor: {
     equations: [
-      'Va = Ra*Ia + La*d(Ia)/dt + Ke*omega',
-      'tau_shaft = Kt*Ia - J*d(omega)/dt - B*omega',
-      'J*d(omega)/dt = Kt*Ia - B*omega - T_load  (Kt = Ke)'
+      'Va = Ra*Ia + La*d(Ia)/dt + k*omega   [V]',
+      'tau_e = k*Ia   [N*m]',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
-    latex: ['V_a = R_a i_a + L_a \\frac{di_a}{dt} + K_e \\omega', 'T_e = K_t i_a'],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a standard Permanent Magnet DC Motor. Couples electrical power to mechanical rotation via Lorentz force.'
+    latex: ['V_a = R_a i_a + L_a \\frac{di_a}{dt} + k \\omega', '\\tau_e = k i_a'],
+    across: 'Voltage v_p - v_n [V], shaft speed omega [rad/s]', through: 'Current i, p -> n [A], shaft torque tau_shaft [N*m]',
+    description: 'Permanent-magnet DC motor (Simscape DC Motor). One electromechanical constant k [V*s/rad = N*m/A]: in SI the torque constant equals the back-EMF constant, so Va*Ia = Ra*Ia^2 + d(La*Ia^2/2)/dt + B*omega^2 + d(J*omega^2/2)/dt + tau_shaft*omega.'
   },
   ac_motor: {
     equations: [
-      'Valpha = (2*(Va-Vn) - (Vb-Vn) - (Vc-Vn)) / 3',
-      'Vbeta = ((Vb-Vn) - (Vc-Vn)) / 1.732',
-      'Vs = Valpha + j * Vbeta',
-      'Vs = Rs*Is + d(Psi_s)/dt',
-      '0 = Rr*Ir + d(Psi_r)/dt - j*w_slip*Psi_r',
-      'Te = 1.5 * P * Im(conj(Psi_s) * Is)'
+      'v_s = Rs*i_s + d(psi_s)/dt   [V]  (alpha-beta frame, amplitude-invariant Clarke)',
+      '0 = Rr*i_r + d(psi_r)/dt - j*P*omega*psi_r   [V]',
+      'psi_s = (Lls + Lm)*i_s + Lm*i_r,  psi_r = (Llr + Lm)*i_r + Lm*i_s   [Wb]',
+      'tau_e = 1.5*P*(psi_s_alpha*i_s_beta - psi_s_beta*i_s_alpha)   [N*m]',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
-    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', 'T_e = \\frac{3}{2} p \\, \\text{Im}(\\psi_s^* \\vec{i}_s)'],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a 3-phase Squirrel Cage Induction Motor in the stationary reference frame using complex space vectors. Internally performs Clarke transformation from A-B-C inputs.'
+    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', 'T_e = \\frac{3}{2} p (\\psi_{s\\alpha} i_{s\\beta} - \\psi_{s\\beta} i_{s\\alpha})'],
+    across: 'Phase voltage v_k - v_n [V], shaft speed omega [rad/s]', through: 'Phase current i_k, k -> n [A], shaft torque tau_shaft [N*m]',
+    description: 'Squirrel-cage induction motor, Krause dq0 model in the stationary alpha-beta frame with the rotor referred to the stator (same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Wye stator with a real star-point terminal n.'
   },
   bldc_motor: {
     equations: [
-      'V_abc = R*I_abc + L*d(I_abc)/dt + E_abc(theta)',
-      'Te = sum(E_i * I_i) / omega'
+      'v_x - v_g = Rs*i_x + Ls*d(i_x)/dt + e_x   [V],  e_x = Ke*omega*f(P*theta - phi_x)',
+      'tau_e = (e_a*i_a + e_b*i_b + e_c*i_c)/omega = Ke*(f_a*i_a + f_b*i_b + f_c*i_c)   [N*m]',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
-    latex: ['v_{ph} = R i_{ph} + L \\frac{di_{ph}}{dt} + e_{ph}(\\theta)'],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a Brushless DC Motor with trapezoidal back-EMF. Requires a 6-step commutation inverter for operation.'
+    latex: ['v_{x} - v_g = R_s i_{x} + L_s \\frac{di_x}{dt} + K_e \\omega f(P\\theta - \\phi_x)'],
+    across: 'Phase voltage v_x - v_g [V], shaft speed omega [rad/s]', through: 'Phase current i_x, x -> g [A], shaft torque tau_shaft [N*m]',
+    description: 'Brushless DC motor with trapezoidal back-EMF (unit trapezoid: +-1 over 120 deg, 60 deg ramps). Wye stator with a real star-point terminal g. One constant Ke is both the back-EMF and torque constant. Requires a 6-step commutation inverter for operation.'
   },
   controlled_voltage: {
     equations: ["Vp - Vn = S + I * R_int   [V]"],
@@ -1042,17 +1043,18 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   pmsm: {
     equations: [
-      'Vd = Rs*id + Ld*d(id)/dt - w_elec*Lq*iq',
-      'Vq = Rs*iq + Lq*d(iq)/dt + w_elec*(Ld*id + Flux)',
-      'Te = 1.5 * P * (Flux*iq + (Ld-Lq)*id*iq)',
-      'd(w_mech)/dt = (Te - T_load) / J'
+      'v_d = Rs*i_d + Ld*d(i_d)/dt - w_e*Lq*i_q   [V]',
+      'v_q = Rs*i_q + Lq*d(i_q)/dt + w_e*(Ld*i_d + lambda_m)   [V]',
+      'v_0 = Rs*i_0 + L0*d(i_0)/dt   [V]',
+      'tau_e = 1.5*p*(lambda_m*i_q + (Ld - Lq)*i_d*i_q)   [N*m],  w_e = p*omega',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
     latex: [
       '\\mathbf{V}_{dq} = R_s \\mathbf{i}_{dq} + \\mathbf{L}_{dq} \\frac{d\\mathbf{i}_{dq}}{dt} + \\omega_e \\mathbf{\\Psi}_{dq}',
-      'T_e = \\frac{3}{2} p [\\Psi_m i_q + (L_d - L_q) i_d i_q]'
+      'T_e = \\frac{3}{2} p [\\lambda_m i_q + (L_d - L_q) i_d i_q]'
     ],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a Permanent Magnet Synchronous Motor (PMSM) in the rotor-fixed dq-reference frame. Connect to an inverter for high-performance motion control.'
+    across: 'Phase voltage v_k - v_n [V], shaft speed omega [rad/s]', through: 'Phase current i_k, k -> n [A], shaft torque tau_shaft [N*m]',
+    description: 'Permanent Magnet Synchronous Motor in the rotor-fixed dq-reference frame (amplitude-invariant Clarke/Park). Wye stator with a real star-point terminal n. Phase back-EMF amplitude is lambda_m*w_e. Connect to an inverter for high-performance motion control.'
   },
   ps_pid_ctrl: {
     equations: ['u = Kp*e + Ki*integral(e) + Kd*de/dt'],

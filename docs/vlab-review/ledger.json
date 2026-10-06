@@ -338,18 +338,38 @@
       "findings": []
     },
     {
-      "id": "WP-12",
-      "title": "Machines & power electronics",
+      "id": "WP-12a",
+      "title": "Electrical machines (DC, induction, PMSM, BLDC) + three-phase source",
       "phase": "P2",
       "deps": [
         "WP-31a"
       ],
       "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "dc_motor single k (migration + notice if Kt != Ke); ac_motor Krause rotor-flux model (Lls, Llr), star point real; pmsm dq + L0, star point carries current; bldc single Ke (Pillay-Krishnan); three_phase_source composite abc + n, phase default 0, migration inserts a phase splitter + reference",
+        "35 analytic tests: DC exact, IM torque 0.09-2.3 % at default LTE, PMSM 0.1-0.8 %, source 1e-9; F-013 machine side: 0 convergence dumps (was 75)",
+        "planner re-run (30 s timeout): 4441 pass / 154 expected-fail / 1 known; test:vlab 20/20 but 64 s (was ~15 s)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-12b",
+      "title": "Power electronics: inverters (2/3-level, Vienna), PWM, rectifier bridges (6/12-pulse), DC-DC converters",
+      "phase": "R2",
+      "deps": [
+        "WP-12a"
+      ],
+      "blocks": [],
       "status": "in_progress",
       "attempts": 0,
-      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "acceptance": "npx vitest run src/engine/vlab/review/power_electronics.test.ts ...",
       "evidence": [],
-      "findings": []
+      "findings": [
+        "F-013"
+      ]
     },
     {
       "id": "WP-13",
@@ -484,7 +504,7 @@
       "deps": [
         "WP-10",
         "WP-11",
-        "WP-12",
+        "WP-12b",
         "WP-13",
         "WP-14",
         "WP-15",
@@ -606,7 +626,7 @@
         "WP-13b",
         "WP-10",
         "WP-11",
-        "WP-12",
+        "WP-12b",
         "WP-13",
         "WP-14",
         "WP-15",
@@ -742,7 +762,8 @@
       "block": "ac_motor/pwm_3ph_2level",
       "wp": "WP-12",
       "summary": "ImplicitSolver fails to converge on the induction motor + inverter, so steps keep halving. pid_ac_motor and vlab_comprehensive L3-001..003 can time out.",
-      "severity": "med"
+      "severity": "med",
+      "status": "resolved-WP-12a (F-013 machine side)"
     },
     {
       "layer": "integration",
@@ -1129,7 +1150,8 @@
       "block": "dc_motor",
       "layer": "eq",
       "summary": "Kt and Ke are separate params. Kt != Ke creates or destroys energy (documented). Consider tying them in SI or warning.",
-      "wp": "WP-12"
+      "wp": "WP-12",
+      "status": "resolved-WP-12a (F-013 machine side)"
     },
     {
       "id": "F-060",
@@ -1203,7 +1225,8 @@
       "block": "three_phase_source",
       "layer": "eq",
       "summary": "Hard-coded +pi/4 phase shift, absolute potentials to ground with no return; listed in IMPLICIT_ABSOLUTE_POTENTIAL_BLOCKS. Decide on a composite port.",
-      "wp": "WP-12"
+      "wp": "WP-12",
+      "status": "resolved-WP-12a (F-013 machine side)"
     },
     {
       "id": "F-069",
@@ -1285,6 +1308,38 @@
       "layer": "eq",
       "summary": "No anti-parallel diode and no switching times (ideal switching only).",
       "wp": "WP-11 dev"
+    },
+    {
+      "id": "F-079",
+      "severity": "high",
+      "block": "engine performance",
+      "layer": "solver",
+      "summary": "With real 50 Hz induction dynamics the labs take 16-22 s each (dense numeric Jacobian ~50 us/residual, h ~0.1 ms by LTE). test:vlab went from 15 s to 64 s; per-test 240 s timeouts were added to 8 lab tests. Needs a sparse/analytic Jacobian, Jacobian reuse, and checks on UI interactivity.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-080",
+      "severity": "high",
+      "block": "labs (pid_ac_motor, vfd_inverter_drive, smart_washing_machine) + pwm_3ph_2level",
+      "layer": "integration",
+      "summary": "The labs ground the motor star point while the inverter output has a 0.5 Vdc common mode, giving a non-physical kA DC zero-sequence current (pre-existing, now visible). Float the star point or reference the inverter midpoint.",
+      "wp": "WP-12b"
+    },
+    {
+      "id": "F-081",
+      "severity": "low",
+      "block": "machines",
+      "layer": "port",
+      "summary": "DEVIATION: machine shafts have only R with a library-declared internal mechanical reference (no Simscape-style C case port). Adding C needs an instance-port migration.",
+      "wp": "USER/WP-41"
+    },
+    {
+      "id": "F-082",
+      "severity": "low",
+      "block": "dc_motor/bldc_motor",
+      "layer": "ui",
+      "summary": "migrationNotices (Kt != Ke) are stored in node.data but not shown in the UI.",
+      "wp": "WP-41"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

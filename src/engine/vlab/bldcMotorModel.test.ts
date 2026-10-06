@@ -62,18 +62,18 @@ describe('BLDC Motor physical phase model', () => {
     expect(angleShifted.slice(0, 3).every(Number.isFinite)).toBe(true);
   });
 
-  it('uses Kt for torque independently from Ke', () => {
+  it('uses one constant Ke for back-EMF and torque (SI: Kt = Ke, no energy is created, F-059)', () => {
     const baseline = residuals();
-    const changedKt = residuals({
+    const changedKe = residuals({
+      params: { Rs: 0.2, Ls: 0.002, Ke: 0.2, P: 4, J: 0.02, B: 0.002 }
+    });
+    // a legacy Kt value is ignored by the equation: the torque constant IS Ke
+    const legacyKt = residuals({
       params: { Rs: 0.2, Ls: 0.002, Ke: 0.1, Kt: 0.2, P: 4, J: 0.02, B: 0.002 }
     });
-    const changedKe = residuals({
-      params: { Rs: 0.2, Ls: 0.002, Ke: 0.2, Kt: 0.1, P: 4, J: 0.02, B: 0.002 }
-    });
 
-    expect(changedKt.slice(0, 3)).toEqual(baseline.slice(0, 3));
-    expect(changedKt[5]).not.toBeCloseTo(baseline[5]);
+    expect(legacyKt).toEqual(baseline);
     expect(changedKe.slice(0, 3)).not.toEqual(baseline.slice(0, 3));
-    expect(changedKe[5]).toBeCloseTo(baseline[5]);
+    expect(changedKe[5]).not.toBeCloseTo(baseline[5]);
   });
 });

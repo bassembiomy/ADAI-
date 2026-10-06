@@ -7,7 +7,7 @@ Source of truth for block count: `VLAB_LIBRARY` (derived, never hard-coded). See
 |---|---|
 | Live blocks | 248 |
 | Classification | physical 111, signal 73, measurement 20, source 33, utility 11 |
-| Total ports | 789 |
+| Total ports | 788 |
 | Ports without explicit domain | 0 |
 | Blocks with at least one port lacking a domain | 0 |
 | Blocks with generic "governing ... equation" label (equation or description) | 87 |

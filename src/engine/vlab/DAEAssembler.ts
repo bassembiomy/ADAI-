@@ -410,9 +410,11 @@ export class DAEAssembler {
         branches.push({ name: 'current_c', ports: [{ id: 'abc', sign: -1, coord: 2 }, { id: 'c', sign: 1 }] });
         break;
       case 'three_phase_source':
-        branches.push({ name: 'phase_a', ports: [{ id: 'a', sign: -1 }] });
-        branches.push({ name: 'phase_b', ports: [{ id: 'b', sign: -1 }] });
-        branches.push({ name: 'phase_c', ports: [{ id: 'c', sign: -1 }] });
+        // Wye source (F-068): the phase current k runs from the composite phase abc,k through the source to the star point n
+        // (Simscape convention, positive from the + terminal to the - terminal), so n carries the sum of the phase currents.
+        branches.push({ name: 'phase_a', ports: [{ id: 'abc', sign: -1, coord: 0 }, { id: 'n', sign: 1 }] });
+        branches.push({ name: 'phase_b', ports: [{ id: 'abc', sign: -1, coord: 1 }, { id: 'n', sign: 1 }] });
+        branches.push({ name: 'phase_c', ports: [{ id: 'abc', sign: -1, coord: 2 }, { id: 'n', sign: 1 }] });
         break;
       case 'v_sensor':
       case 'i_sensor':
@@ -589,20 +591,20 @@ export class DAEAssembler {
           states.push('theta', 'omega');
           break;
         case 'ac_motor':
-          branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });
-          branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }] });
-          branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }] });
-          branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
-          states.push('theta', 'omega', 'psi_r_alpha', 'psi_r_beta');
-          break;
         case 'bldc_motor':
-        case 'pmsm':
-          branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });
-          branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }] });
-          branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }] });
+        case 'pmsm': {
+          // Wye stator: the phase current k runs from terminal k through the winding to the star point (n; g on the BLDC),
+          // so the star point carries i_a + i_b + i_c and an open star point forces the sum to zero. The shaft torque is
+          // delivered into the Rotational port R (the case is the inertial frame, see MACHINES DOMAIN in vlabEquations.ts).
+          const star = blockType === 'bldc_motor' ? 'g' : 'n';
+          branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }, { id: star, sign: 1 }] });
+          branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }, { id: star, sign: 1 }] });
+          branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }, { id: star, sign: 1 }] });
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
           states.push('theta', 'omega');
+          if (blockType === 'ac_motor') states.push('psi_r_alpha', 'psi_r_beta');
           break;
+        }
         case 'ma_chamber':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
           branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: 1 }] });
