@@ -4,6 +4,11 @@ import { scalarInput, vectorInput } from './vlabVectorPorts';
 import { interfaceResiduals, jointResiduals } from './vlabJointCore';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
+  R_GAS, R_WATER_VAPOUR, CP_WATER_LIQUID, STANDARD_ATMOSPHERE,
+  airViscosity, darcyFrictionFactor, gasOrificeMassFlow, moistAirState, orificeMassFlow, pipePressureDrop,
+  saturatedSteamAtPressure, saturatedVapourDensitySlope, waterLatentHeat,
+} from './vlabFluidProperties';
+import {
   parseVector3,
   eulerToRotationMatrix,
   transformPoint,
@@ -26,7 +31,7 @@ export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
   'capacitor', 'inductor', 'inertia', 'mass', 'thermal_mass', 'washing_basket',
   'dc_motor', 'bldc_motor', 'pmsm', 'gas_chamber', 'em_converter',
   'spring_damper_force', 'fluid_capacitance', 'fluid_inertance',
-  'steam_accumulator', 'belt_spool', 'pulley', 'ps_lpf',
+  'steam_accumulator', 'steam_generator', 'ma_rot_conv', 'ma_trans_conv', 'belt_spool', 'pulley', 'ps_lpf',
   'memristor', 'rot_spring', 'rot_hard_stop', 'rot_motion_sensor',
   'trans_motion_sensor', 'trans_spring', 'microwave_cavity', 'reluctance_force',
   'ps_integrator', 'ps_transfer_fcn', 'ps_pi_ctrl', 'ps_pid_ctrl',
@@ -305,6 +310,50 @@ export const beltEndStiffness = (params: Record<string, any> | undefined, ctx?: 
   return mat ? (mat.youngs * area) / len : numericParam(params, 'stiffness', 1e6);
 };
 
+/**
+ * Moist-air mechanical converter (Rotational / Translational Mechanical Converter (MA)), WP-17: a single-acting piston chamber.
+ * The chamber volume follows the mechanism, V = V0 + K x with K = D (m^3/rad) or A (m^2) and x = integral(v_R - v_C) dt.
+ *   across = [p_A, T_H, v_R, v_C, wd]; branch = [mdot into the chamber at A, Q into the gas from H, force/torque INTO the block at R, wd];
+ *   state = [x, m, T_g]  (m = gas mass, so the mass balance dm/dt = mdot_A is integrated exactly, not through a product-rule expansion).
+ * Ideal moist air (R, c_v from the state at (P0, T, phi), humidity ratio frozen):
+ *   p = m R T_g / V      (node pressure)
+ *   energy: m c_v dT/dt = mdot_A R T - p dV/dt + Q_H     (flow enters at the gas temperature: dU/dt = mdot cp T - p dV/dt + Q_H, U = m c_v T)
+ *   heat transfer: Q_H = (h0 + k |v|)(T_H - T_g)   (stationary + speed dependent coefficient)
+ *   force balance of the piston: F_delivered = K (p - p_env)  ->  through variable at R (INTO the block) = -K (p - p_env)
+ *   wd = K (p - p_env) v = mechanical power delivered by the gas [W]
+ */
+function movingWallChamber(
+  kind: 'rot' | 'trans',
+  { across, branch, state, dState, params }: Pick<BlockEquationArgs, 'across' | 'branch' | 'state' | 'dState' | 'params'>,
+): number[] {
+  const K = kind === 'rot' ? numericParam(params, 'D', 0.001) : numericParam(params, 'A', 0.01);
+  const V0 = numericParam(params, 'V0', 1e-3);
+  const h0 = numericParam(params, 'h0', 5);
+  const kHeat = numericParam(params, 'k', 0.1);
+  const T0 = numericParam(params, 'T', 293.15);
+  const P0 = numericParam(params, 'P0', STANDARD_ATMOSPHERE);
+  const pEnv = numericParam(params, 'p_env', STANDARD_ATMOSPHERE);
+  const phi = numericParam(params, 'phi', 0.5);
+  const gas = moistAirState(P0, T0, phi);
+  const v = across[2] - across[3];
+  const x = state[0];
+  const m = state[1];
+  const T = Math.max(state[2], 1);
+  const V = Math.max(V0 + K * x, 1e-9);
+  const dV = K * v;
+  const p = (m * gas.R * T) / V;
+  const Qh = (h0 + kHeat * Math.abs(v)) * (across[1] - T);
+  const pistonForce = K * (p - pEnv);
+  return [
+    across[0] - p,
+    branch[1] - Qh,
+    branch[2] + pistonForce,
+    branch[3] - pistonForce * v,
+    dState[0] - v,
+    dState[1] - branch[0],
+    m * gas.cv * dState[2] - (branch[0] * gas.R * T - p * dV + Qh),
+  ];
+}
 export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── ELECTRICAL DOMAIN ──────────────────────────────────────────────────────
   ground: () => [],
@@ -1066,14 +1115,39 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  steam_generator: ({ across, branch, params }) => {
-    // branch[0] is current, branch[1] is heat_flow
-    const P = numericParam(params, 'power', 800);
+  steam_generator: ({ across, branch, state, dState, params }) => {
+    // Electric boiler (immersion heater + water tank), WP-17.
+    //   across: [v_p, v_n, T_s]; branch[0] = current p -> n, branch[1] = heat injected into the steam port S (the latent heat of the steam produced);
+    //   state[0] = T_w (water temperature, K), state[1] = m_w (water inventory, kg).
+    // Resistive element rated `power` at `v_rated`: R = v_rated^2 / power, i = (v_p - v_n) / R, P_el = v i (Joule; Fitzgerald ch. 1).
+    // Tank energy balance (first law, lumped water, liquid c_w = 4182 J/(kg K)):
+    //   m_w c_w dT_w/dt = eta P_el - k_loss (T_w - T_amb) - Q_s
+    // Boiling at the saturation temperature T_b = boil_temp: once T_w reaches T_b the net heat produces steam, mdot_s = Q_s / h_fg with
+    // Q_s = max(0, eta P_el - k_loss (T_w - T_amb)) (zero below T_b, a smooth step of width 0.05 K), and the inventory falls dm_w/dt = -mdot_s.
+    // h_fg(T_b) is the Clausius-Clapeyron latent heat of the IF97 saturation line (vlabFluidProperties.waterLatentHeat).
+    const Prated = numericParam(params, 'power', 800);
+    const Vr = numericParam(params, 'v_rated', 230);
+    const eta = numericParam(params, 'eta', 0.95);
+    const kLoss = numericParam(params, 'k_loss', 1);
+    const Tamb = numericParam(params, 'ambient_temp', 25) + 273.15;
+    const Tb = numericParam(params, 'boil_temp', 100) + 273.15;
+    const R = Prated > 0 ? (Vr * Vr) / Prated : Infinity;
     const V = across[0] - across[1];
-    const I_target = P / 230;
+    const i = Number.isFinite(R) ? V / R : 0;
+    const Pel = V * i;
+    const Tw = state[0];
+    const mw = state[1];
+    const hfg = waterLatentHeat(Math.max(Tb, 274));
+    const net = Math.max(0, eta * Pel - kLoss * (Tw - Tamb));
+    const boiling = 0.5 * (1 + Math.tanh((Tw - Tb) / 0.05));
+    const wet = 0.5 * (1 + Math.tanh((mw - 3e-3) / 1e-3));
+    const Qs = boiling * wet * net;
+    const mdotSteam = Qs / hfg;
     return [
-      V - branch[0] * (230 / Math.max(1, I_target)),
-      branch[1] - P
+      branch[0] - i,
+      branch[1] - Qs,
+      Math.max(mw, 1e-3) * CP_WATER_LIQUID * dState[0] - (eta * Pel - kLoss * (Tw - Tamb) - Qs),
+      dState[1] + mdotSteam,
     ];
   },
 
@@ -1627,16 +1701,27 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   ma_ref: () => [],
 
   ma_chamber: ({ across, branch, state, dState, params }) => {
-    // across[0]: P_a (Fluid), across[1]: P_b (Fluid), across[2]: T_h (Thermal)
-    // branch[0]: mass_flow at port a, branch[1]: heat_flow at port h
+    // Constant Volume Chamber (MA), WP-17.
+    //   across[0]: P_a, across[1]: P_b (both ports are the chamber node), across[2]: T_h (Thermal)
+    //   branch[0]: mass flow INTO the chamber at a, branch[1]: heat_flow at h (injection = -heat entering), branch[2]: mass flow INTO the chamber at b
+    //   state[0]: chamber temperature T (K), state[1]: chamber pressure p (Pa)
+    // Mass conservation of the ideal moist-air mixture in a rigid volume, m = p V / (R T) (Dalton + ideal gas, ASHRAE ch. 1):
+    //   dm/dt = mdot_a + mdot_b  ->  dp/dt = (R T / V) (mdot_a + mdot_b) + (p / T) dT/dt
+    // R = (R_a + w R_v) / (1 + w) with the humidity ratio w frozen at the initial state (p = P0, T = ambient_temp, relative humidity phi): no
+    // moisture exchange or condensation is modelled. The ports carry pressure and mass flow only, so a flow convects no enthalpy: the
+    // chamber exchanges energy through H only (lumped air + wall + load heat capacity, loss to ambient, safety cutout as before).
     const V = numericParam(params, 'V', 0.005);
     const T_amb = numericParam(params, 'ambient_temp', 25) + 273.15;
-    const rho = 1.2, Cp = 1005;
-    const airCapacity = rho * Cp * V;
+    const P0 = numericParam(params, 'P0', STANDARD_ATMOSPHERE);
+    const phi = numericParam(params, 'phi', 0.5);
+    const air0 = moistAirState(P0, T_amb, phi);
+    const temp = state[0] > 1.0 ? state[0] : T_amb;
+    const P = state[1];
+    // air heat capacity at constant volume: m c_v with m = p V / (R T)
+    const airCapacity = (Math.max(P, 1) * V / (air0.R * temp)) * air0.cv;
     const wallCapacity = numericParam(params, 'wall_mass', 2.0) * numericParam(params, 'wall_cp', 460);
     const loadCapacity = numericParam(params, 'food_mass', 0.5) * numericParam(params, 'food_cp', 4184);
     const C = Math.max(1e-6, airCapacity + wallCapacity + loadCapacity);
-    const temp = state[0] > 1.0 ? state[0] : T_amb;
 
     // Physical heat loss to the ambient environment (convection/conduction through basket walls)
     const k_loss = numericParam(params, 'k_loss', 8.5); // W/K, realistic overall heat loss coefficient
@@ -1647,9 +1732,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const heat_input = branch[1] * cutoff;
     
     return [
-      branch[0] - 0.0,
+      across[0] - P,                                           // port a is the chamber node
       heat_input + C * dState[0] + heat_loss, /* heat entering chamber = C * dT/dt + heat_loss */
-      across[2] - temp
+      across[1] - P,                                           // port b is the chamber node
+      across[2] - temp,                                        // the thermal port sits at the chamber temperature
+      // mass balance of the rigid volume, d(pV/(R T))/dt = mdot_a + mdot_b, solved for dp/dt and divided by 1 atm (O(1) row)
+      (dState[1] - (air0.R * temp / V) * (branch[0] + branch[2]) - (P / temp) * dState[0]) / STANDARD_ATMOSPHERE,
     ];
   },
 
@@ -1890,7 +1978,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [
       across[0] - P,
       across[1] - P,
-      dP - (R * T / V) * (mdot_a + mdot_b)
+      // mass conservation dm/dt = mdot_a + mdot_b with m = p V / (R T):  dp/dt = (R T / V)(mdot_a + mdot_b), divided by 1 atm so the row is O(1)
+      // for any volume (the structural-rank probe is blind to couplings below 1e-10 of the row scale)
+      (dP - (R * T / V) * (mdot_a + mdot_b)) / STANDARD_ATMOSPHERE
     ];
   },
   gas_reservoir: ({ across, branch, params, ports, connectedPorts }) => {
@@ -1902,18 +1992,25 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - k * (across[0] - across[1])];
   },
   gas_restriction: ({ across, branch, params, ports, connectedPorts }) => {
+    // Compressible orifice (Simscape Gas "Local Restriction (G)"): isentropic Saint-Venant & Wantzel flow of an ideal gas from the
+    // upstream state (p_up, T) with choking at r* = (2/(gamma+1))^(gamma/(gamma-1)); see vlabFluidProperties.gasOrificeMassFlow.
     const Cd = numericParam(params, 'Cd', 0.62);
     const A = inputOrParam({ across, ports, connectedPorts }, 'ar', numericParam(params, 'area', 1e-4), 2);
     const T = numericParam(params, 'T', 293.15);
-    const k = Cd * A / Math.sqrt(T);
-    return [branch[0] - k * (across[0] - across[1])];
+    const gamma = numericParam(params, 'gamma', 1.4);
+    return [branch[0] - gasOrificeMassFlow(across[0], across[1], Cd, A, T, R_GAS, gamma)];
   },
   gas_pipe: ({ across, branch, params }) => {
+    // Darcy-Weisbach friction in a straight pipe, dp = f (L/D) rho v^2 / 2 with rho = p_mean / (R T) (isothermal ideal gas, i.e.
+    // p_a^2 - p_b^2 = f (L/D) R T G^2, G = mdot / S). f is the (turbulent) friction factor; at low Reynolds number the laminar
+    // Hagen-Poiseuille law f = 64 / Re takes over (f_eff = max(64/Re, f)), which keeps the flow-pressure law linear at zero flow.
     const L = numericParam(params, 'L', 1);
     const D = numericParam(params, 'D', 0.05);
     const f = numericParam(params, 'f', 0.02);
-    const R_f = (f * L / D) * 10;
-    return [(across[0] - across[1]) - R_f * branch[0]];
+    const T = numericParam(params, 'T', 293.15);
+    const mu = numericParam(params, 'mu', 1.81e-5);
+    const rho = Math.max(0.5 * (across[0] + across[1]), 1) / (R_GAS * T);
+    return [(across[0] - across[1]) - pipePressureDrop(branch[0], L, D, rho, mu, () => f)];
   },
   gas_fixed_res: ({ across, params }) => {
     const P = numericParam(params, 'P', 101325);
@@ -1964,7 +2061,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [(across[1] - across[0]) - P];
   },
   gas_pressure_sensor: ({ across, branch }) => [branch[0], branch[1] - across[0]],
-  gas_flow_sensor: ({ across, branch }) => [across[0] - across[1], branch[1] + branch[0]],
+  // out = mdot positive p -> n (branch[0] is the flow entering the block at p). WP-17 re-verification: the old row ranch[1] + branch[0] reported
+  // the NEGATIVE of the p -> n flow (found by a flow-source loop through the sensor).
+  gas_flow_sensor: ({ across, branch }) => [across[0] - across[1], branch[1] - branch[0]],
 
   // ── MAGNETIC DOMAIN ────────────────────────────────────────────────────────
   mag_ref: () => [],
@@ -2378,12 +2477,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   orifice: ({ across, branch, params }) => {
+    // Bernoulli orifice mdot = Cd A sqrt(2 rho |dp|) sign(dp) with the Simscape smooth laminar transition (vlabFluidProperties.orificeMassFlow)
     const Cd = numericParam(params, 'Cd', 0.6);
     const A = numericParam(params, 'A', 1e-4);
     const rho = numericParam(params, 'rho', 1.2);
-    const dP = across[0] - across[1];
-    const mdot = Cd * A * Math.sqrt(2 * rho * Math.abs(dP)) * Math.sign(dP);
-    return [branch[0] - mdot];
+    const mu = numericParam(params, 'mu', 1.81e-5);
+    const ReCrit = numericParam(params, 'Re_crit', 12);
+    return [branch[0] - orificeMassFlow(across[0] - across[1], Cd, A, rho, mu, ReCrit)];
   },
 
   fluid_capacitance: ({ across, dAcross, branch, params }) => {
@@ -2407,56 +2507,66 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   mass_flow_source: ({ branch, params }) => {
+    // Single-ended source: `p` is its OUT port, so a positive mdot is delivered INTO the network. branch[0] is the flow entering the block
+    // at p (Simscape A -> B convention with B on the absolute reference), hence branch = -mdot.
     const mdot = numericParam(params, 'mdot', 0.01);
-    return [branch[0] - mdot];
+    return [branch[0] + mdot];
   },
 
   check_valve: ({ across, branch, params }) => {
+    // One-way valve: conducts (dp - P_crack)/Rf above the cracking pressure differential, nothing below it (smooth gate of width 1 mPa).
     const Rf = numericParam(params, 'Rf', 1e3);
-    const dP = across[0] - across[1];
-    const g = 0.5 * (1 + Math.tanh(dP * 1000));
-    return [branch[0] - g * dP / Rf];
+    const Pcrack = numericParam(params, 'P_crack', 0);
+    const x = across[0] - across[1] - Pcrack;
+    const g = 0.5 * (1 + Math.tanh(x * 1000));
+    return [branch[0] - g * x / Rf];
   },
 
   relief_valve: ({ across, branch, params }) => {
+    // Pressure relief valve (Simscape Pressure Relief Valve): the valve opens when the pressure DIFFERENCE p_A - p_B exceeds the set
+    // pressure; the flow path resistance blends from Rf_closed to Rf_open over a 10 kPa-wide smooth step.
     const P_set = numericParam(params, 'P_set', 5e5);
     const Rf_open = numericParam(params, 'Rf_open', 1e2);
     const Rf_closed = numericParam(params, 'Rf_closed', 1e10);
     const dP = across[0] - across[1];
-    const open = 0.5 * (1 + Math.tanh((across[0] - P_set) * 1e-4));
+    const open = 0.5 * (1 + Math.tanh((dP - P_set) * 1e-4));
     const R = Rf_open * open + Rf_closed * (1 - open);
     return [dP - branch[0] * R];
   },
 
   steam_generator_fluid: ({ across, branch, params, ports, connectedPorts }) => {
-    const P = across[0];
-    const T_sat = 100 + (P - 101325) / 3600;
-    const h_fg = (2257 - 2.175 * Math.max(0, T_sat - 100)) * 1000;
+    // Ideal steam generator: the heat input Q evaporates water at the saturation state of the port pressure, mdot_steam = Q / h_fg(p_sat)
+    // (first law of steady evaporation; h_fg from the IF97 saturation line by Clausius-Clapeyron). The steam leaves through the Steam port p,
+    // the feed water returns through n: the flow p -> n through the block is -mdot_steam.
+    const { hfg } = saturatedSteamAtPressure(across[0]);
     const Q_in = inputOrParam({ across, ports, connectedPorts }, 'q_in', numericParam(params, 'Q', 1000), 2);
-    const mdot_steam = Math.max(0, Q_in / h_fg);
-    return [branch[0] - mdot_steam];
+    const mdot_steam = Math.max(0, Q_in) / hfg;
+    return [branch[0] + mdot_steam];
   },
 
   steam_accumulator: ({ across, dAcross, branch, params }) => {
+    // Dry saturated-steam vessel: m = V rho_g(p), so dm/dt = V (d rho_g / dp) dp/dt = mdot_in - mdot_out (the saturation line closes the
+    // density-pressure relation; flash storage of a liquid inventory is not modelled). Both ports are the vessel node.
     const V = numericParam(params, 'V', 0.5);
-    const P = across[0];
-    const rho_steam = 0.6 + (P - 101325) * 4e-6;
-    const Cf = V * 1e-3 * rho_steam / 1e5;
+    const storage = V * saturatedVapourDensitySlope(across[0]);
     return [
       across[0] - across[1],
-      branch[0] - branch[1] - Cf * dAcross[0]
+      branch[0] - branch[1] - storage * dAcross[0]
     ];
   },
 
   steam_nozzle: ({ across, branch, params }) => {
+    // Converging nozzle for saturated steam from the upstream state p_p (T_0 = T_sat(p_p), R_v = 461.52 J/(kg K)) to p_n: isentropic
+    // Saint-Venant & Wantzel flow with choking at r* = (2/(gamma+1))^(gamma/(gamma-1)) (vlabFluidProperties.gasOrificeMassFlow); no reverse flow.
     const Cd = numericParam(params, 'Cd', 0.5);
     const d = numericParam(params, 'd', 0.5e-3);
+    const gamma = numericParam(params, 'gamma', 1.3);
     const A = Math.PI * d * d / 4;
     const P_upstream = across[0];
     const P_downstream = across[1];
-    const rho = 0.6;
-    const dP = Math.max(0, P_upstream - P_downstream);
-    const mdot = Cd * A * Math.sqrt(2 * rho * dP);
+    const mdot = P_upstream > P_downstream
+      ? gasOrificeMassFlow(P_upstream, P_downstream, Cd, A, saturatedSteamAtPressure(P_upstream).T, R_WATER_VAPOUR, gamma)
+      : 0;
     return [branch[0] - mdot];
   },
 
@@ -2488,12 +2598,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   restriction_il: ({ across, branch, params }) => {
+    // Simscape Isothermal Liquid Local Restriction: Bernoulli orifice with the smooth laminar / turbulent transition
     const Cd = numericParam(params, 'Cd', 0.6);
     const A = numericParam(params, 'area', 1e-4);
     const rho = numericParam(params, 'rho', 1000);
-    const dp = across[0] - across[1];
-    const mdot = Cd * A * Math.sqrt(2 * rho * Math.max(1e-9, Math.abs(dp))) * Math.sign(dp);
-    return [branch[0] - mdot];
+    const mu = numericParam(params, 'mu', 1.0e-3);
+    const ReCrit = numericParam(params, 'Re_crit', 12);
+    return [branch[0] - orificeMassFlow(across[0] - across[1], Cd, A, rho, mu, ReCrit)];
   },
 
   // ── SIMULATION & UTILITIES ──────────────────────────────────────────────────
@@ -3164,10 +3275,27 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   gas_inf_resistance: ({ branch }) => [branch[0]],
 
   ma_pipe: ({ across, branch, params }) => {
-    const f = numericParam(params, 'resistance', 1.0);
-    const Pa = across[0];
-    const Pb = across[1];
-    return [Pb - Pa - f * branch[0]];
+    // Pipe (MA), WP-17. across = [p_a, p_b, T_h, wd]; branch = [mdot a -> b, Q into the gas from H, wd].
+    // Pressure loss: Darcy-Weisbach  dp = f (L / D) rho v^2 / 2  (+ the lumped local resistance `resistance` * mdot), laminar f = 64/Re,
+    // turbulent f from Haaland's explicit Colebrook fit with the relative roughness e / D, Re = 4 |mdot| / (pi D mu), mu = Sutherland(T).
+    // rho = p_mean / (R T) from the moist-air state (p_mean, T, phi). Heat exchange with the wall at H: Q = UA (T_H - T).
+    // wd = friction power dissipated in the pipe, dp * mdot / rho [W] (>= 0).
+    const L = numericParam(params, 'L', 2);
+    const D = numericParam(params, 'D', 0.05);
+    const rough = numericParam(params, 'roughness', 1.5e-6);
+    const Rloc = numericParam(params, 'resistance', 1.0);
+    const T = numericParam(params, 'T', 293.15);
+    const phi = numericParam(params, 'phi', 0.5);
+    const UA = numericParam(params, 'UA', 5);
+    const air = moistAirState(0.5 * (across[0] + across[1]), T, phi);
+    const dp = pipePressureDrop(branch[0], L, D, air.rho, airViscosity(T), Re => darcyFrictionFactor(Re, rough / D)) + Rloc * branch[0];
+    return [
+      (across[0] - across[1]) - dp,
+      branch[1] - UA * (across[2] - T),
+      // wd = (p_a - p_b) mdot / rho: the pressure difference of the pipe row above is used (not dp again), multiplied by rho, so the row is
+      // well scaled at any state
+      air.rho * branch[2] - (across[0] - across[1]) * branch[0],
+    ];
   },
 
   ma_separator: ({ across, branch }) => {
@@ -3177,27 +3305,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ma_rot_conv: ({ across, branch, params }) => {
-    const h0 = numericParam(params, 'h0', 5.0);
-    const k = numericParam(params, 'k', 0.1);
-    const w = across[0];
-    const Ta = across[1];
-    const Tb = across[2];
-    const Q = branch[0];
-    const h = h0 + k * Math.abs(w);
-    return [Q - h * (Ta - Tb)];
-  },
+  ma_rot_conv: ({ across, branch, state, dState, params }) => movingWallChamber('rot', { across, branch, state, dState, params }),
 
-  ma_trans_conv: ({ across, branch, params }) => {
-    const h0 = numericParam(params, 'h0', 5.0);
-    const k = numericParam(params, 'k', 0.1);
-    const v = across[0];
-    const Ta = across[1];
-    const Tb = across[2];
-    const Q = branch[0];
-    const h = h0 + k * Math.abs(v);
-    return [Q - h * (Ta - Tb)];
-  },
+  ma_trans_conv: ({ across, branch, state, dState, params }) => movingWallChamber('trans', { across, branch, state, dState, params }),
 
   ma_flow_sensor: ({ across, branch }) => {
     return [
@@ -3213,28 +3323,34 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ma_moisture_sensor: ({ branch }) => {
-    return [branch[0] - 0.5];
+  // The Moist Air ports carry total pressure and mass flow only; the psychrometric state of a node is the block's own (T, phi) parameters.
+  ma_moisture_sensor: ({ across, branch, params }) => {
+    // water-vapour mass fraction w / (1 + w) of moist air at (p, T, phi)
+    return [branch[0] - moistAirState(across[0], numericParam(params, 'T', 293.15), numericParam(params, 'phi', 0.5)).massFraction];
   },
 
-  ma_pt_sensor: ({ across, branch }) => {
+  ma_pt_sensor: ({ across, branch, params }) => {
+    // ports [a, p, t]: p = total pressure of node a, t = the temperature of the (isothermal) network, the T parameter
     return [
-      branch[0] - (across[0] || 101325),
-      branch[1] - (across[1] || 293.15)
+      branch[0] - across[0],
+      branch[1] - numericParam(params, 'T', 293.15),
     ];
   },
 
-  ma_thermo_sensor: ({ branch }) => {
-    return [branch[0] - 1000];
+  ma_thermo_sensor: ({ across, branch, params }) => {
+    // mixture density rho = p / (R T) = (p - p_v) / (R_a T) + p_v / (R_v T) at (p, T, phi)
+    return [branch[0] - moistAirState(across[0], numericParam(params, 'T', 293.15), numericParam(params, 'phi', 0.5)).rho];
   },
 
-  ma_moisture_source: ({ branch, params }) => {
-    const S = numericParam(params, 'rate', 0.01);
-    return [branch[0] - S];
+  ma_moisture_source: ({ across, branch, params, ports, connectedPorts }) => {
+    // adds water vapour at `rate` kg/s (scaled by the S input when wired) INTO the node: the flow entering the block at a is -rate
+    const S = numericParam(params, 'rate', 0.01) * inputOrParam({ across, ports, connectedPorts }, 's', 1.0, 1);
+    return [branch[0] + S];
   },
 
-  ma_flow_source: ({ branch, params }) => {
-    const S = numericParam(params, 'rate', 0.01);
+  ma_flow_source: ({ across, branch, params, ports, connectedPorts }) => {
+    // ideal mass flow source, mdot = rate * S (S = 1 when unwired), positive from A through the block to B
+    const S = numericParam(params, 'rate', 0.01) * inputOrParam({ across, ports, connectedPorts }, 's', 1.0, 2);
     return [branch[0] - S];
   },
 

@@ -162,7 +162,7 @@ describe('fixed blocks (allocation == equation)', () => {
     expect(alloc('clarke_transform')).toEqual(['branch_signal_ab0[0]', 'branch_signal_ab0[1]', 'branch_signal_ab0[2]']);
     expect(alloc('ps_smith_predictor')).toEqual(['branch_signal_u', 'state_y']);
     expect(alloc('hysteresis_ctrl_3ph')).toEqual(['branch_signal_s']);
-    expect(alloc('ma_pt_sensor')).toEqual(['branch_signal_p']);
+    expect(alloc('ma_pt_sensor')).toEqual(['branch_signal_p', 'branch_signal_t']);
     expect(alloc('ps_demux_3')).toEqual(['branch_signal_a', 'branch_signal_b', 'branch_signal_c']);
     expect(alloc('im_foc_ctrl')).toEqual(['branch_signal_g', 'branch_signal_vabc', 'branch_signal_vis']);
   });
@@ -178,7 +178,9 @@ describe('fixed blocks (allocation == equation)', () => {
     expect(alloc('ps_moving_avg')).toEqual(['branch_signal_y', 'state_y']);
   });
   it('unsupported blocks name their missing spec and owner', () => {
-    for (const id of ['ma_pipe', 'ma_separator', 'ma_rot_conv', 'ma_trans_conv', 'ma_selector']) {
+    // WP-17 implemented ma_pipe / ma_rot_conv / ma_trans_conv / ma_pt_sensor; what is still unsupported names its owner and spec
+    expect(Object.keys(UNSUPPORTED_BLOCKS)).toEqual(expect.arrayContaining(['ma_separator', 'ma_selector']));
+    for (const id of ['ma_separator', 'ma_selector']) {
       expect(UNSUPPORTED_BLOCKS[id].wp).toBe('WP-17');
       expect(UNSUPPORTED_BLOCKS[id].missingSpec.length).toBeGreaterThan(30);
     }

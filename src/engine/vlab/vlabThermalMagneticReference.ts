@@ -67,7 +67,7 @@ export interface FloatingDomainNetwork {
   blocks: { blockId: string; blockType: string }[];
 }
 
-function findFloating(
+export function findFloating(
   blocks: DomainBlockNets[],
   referenceRoots: ReadonlySet<string>,
   isReferencing: (blockType: string) => boolean,

@@ -1,0 +1,20 @@
+{
+  "name": "tank_drain",
+  "nodes": [
+    { "id": "tank", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "fluid_capacitance", "params": { "Cf": 1e-5, "P0": 151325 } } },
+    { "id": "pipe", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "fluid_resistance", "params": { "Rf": 1e6 } } },
+    { "id": "ref", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "fluid_ref", "params": {} } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "pressure_sensor", "params": {} } },
+    { "id": "p0", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ps_constant", "params": { "value": 151325 } } },
+    { "id": "diff", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ps_subtract", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } }
+  ],
+  "edges": [
+    { "id": "tank-pipe", "source": "tank", "sourceHandle": "p_s", "target": "pipe", "targetHandle": "p_t" },
+    { "id": "pipe-ref", "source": "pipe", "sourceHandle": "n_s", "target": "ref", "targetHandle": "p_t" },
+    { "id": "tank-sensor", "source": "tank", "sourceHandle": "p_s", "target": "sensor", "targetHandle": "p_t" },
+    { "id": "p0-diff", "source": "p0", "sourceHandle": "y_s", "target": "diff", "targetHandle": "u1_t" },
+    { "id": "sensor-diff", "source": "sensor", "sourceHandle": "out_s", "target": "diff", "targetHandle": "u2_t" },
+    { "id": "diff-scope", "source": "diff", "sourceHandle": "y_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

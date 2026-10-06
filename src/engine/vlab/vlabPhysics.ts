@@ -14,6 +14,7 @@ import { scopeTraceKey } from './vlabVectorPorts';
 import { numericParam, stringParam } from './vlabParams';
 import { twoLevelReferences, triangularCarrier, beltEndStiffness } from './vlabEquations';
 import { ddtVector } from './vlabDiscretization';
+import { RHO_WATER_LIQUID, STANDARD_ATMOSPHERE, moistAirState } from './vlabFluidProperties';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -168,6 +169,53 @@ export class VLabPhysicsEngine {
     }
   }
 
+  /**
+   * Initial conditions of the fluid blocks (WP-17), seeded like the capacitor voltage / thermal mass temperature: the first step
+   * differentiates against them.
+   *  - gas_chamber, ma_chamber: chamber pressure P0 (default 1 atm); the piston chambers start at T_g = T with the gas mass m = P0 V0 / (R T)
+   *  - fluid_capacitance: the pressure of its node starts at P0 (default 1 atm)
+   *  - steam_generator: water at the ambient temperature, tank full: m_w = rho_w * tank_vol (L -> m^3)
+   */
+  private seedFluidStates(system: AssembledSystem, nodes: Node[], x: number[]): void {
+    const set = (name: string, value: number) => {
+      const i = system.variableNames.indexOf(name);
+      if (i >= 0) x[i] = value;
+    };
+    for (const c of system.components) {
+      const node = nodes.find(n => n.id === c.blockId);
+      if (!node) continue;
+      const params = (node.data as any)?.params;
+      const id = node.id;
+      switch (c.blockType) {
+        case 'gas_chamber':
+        case 'ma_chamber':
+          set(`${id}_state_pressure`, numericParam(params, 'P0', STANDARD_ATMOSPHERE, id));
+          break;
+        case 'ma_rot_conv':
+        case 'ma_trans_conv':
+          {
+            const T0 = numericParam(params, 'T', 293.15, id);
+            const P0 = numericParam(params, 'P0', STANDARD_ATMOSPHERE, id);
+            const gas = moistAirState(P0, T0, numericParam(params, 'phi', 0.5, id));
+            set(`${id}_state_m`, (P0 * numericParam(params, 'V0', 1e-3, id)) / (gas.R * T0));
+            set(`${id}_state_Tg`, T0);
+          }
+          break;
+        case 'fluid_capacitance': {
+          const root = c.portNodeMap.get('p');
+          if (root) set(`Across_${root}_(fluid)`, numericParam(params, 'P0', STANDARD_ATMOSPHERE, id));
+          break;
+        }
+        case 'steam_generator':
+          set(`${id}_state_T_w`, numericParam(params, 'ambient_temp', 25, id) + 273.15);
+          set(`${id}_state_m_w`, (RHO_WATER_LIQUID * numericParam(params, 'tank_vol', 0.5, id)) / 1000);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {
     const topoHash = this.getTopologyHash(nodes, edges);
     
@@ -272,6 +320,7 @@ export class VLabPhysicsEngine {
       if (joints.length > 0) initializeJointFrames(system, x);
       this.seedCapacitorVoltages(system, nodes, x);
       this.seedThermalMassTemperatures(system, nodes, x);
+      this.seedFluidStates(system, nodes, x);
     }
 
     const config = this.solverConfiguration;

@@ -447,10 +447,14 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "fluid/IL/steam/gas/moist-air certified: smooth laminar-turbulent orifice, isentropic choked gas restriction, Darcy-Weisbach gas pipe, IF97 steam h_fg, choked steam nozzle, cracking-pressure valves, steam generator energy balance (tank_vol, boil_temp), moist-air chamber/pipe/converters/sensors",
+        "sign fixes: gas_flow_sensor, mass_flow_source, ma_moisture_source; open fluid ports capped (Simscape) + floating-fluid diagnostic; vlabSymbols finally passes (2 gas sensor glyphs)",
+        "planner re-run: 4577 pass / 110 expected-fail / 0 failed (vlabSymbols green); ma_separator/ma_selector explicitly unsupported (no spec)"
+      ],
       "findings": []
     },
     {
@@ -491,7 +495,7 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
       "evidence": [],
@@ -708,7 +712,8 @@
       "block": "gas resistance",
       "layer": "eq",
       "summary": "Fluid whitebox F-01 gas flow resistance fails the oracle judge.",
-      "wp": "WP-18"
+      "wp": "WP-18",
+      "status": "resolved/decided-WP-17"
     },
     {
       "id": "F-006",
@@ -716,7 +721,8 @@
       "block": "unknown (at least one library icon)",
       "layer": "ui",
       "summary": "gas_flow_sensor and gas_pressure_sensor have no symbol (fall back to UnknownSymbolGlyph)",
-      "wp": "WP-18"
+      "wp": "WP-18",
+      "status": "resolved/decided-WP-17"
     },
     {
       "id": "F-007",
@@ -851,7 +857,8 @@
       "block": "gas_reservoir, ma_pressure_source, mass_flow_source, dist_constraint, luenberger_observer",
       "layer": "integration",
       "summary": "Expected failures (it.fails) in all-blocks: gas_reservoir stalls at P/2 -> WP-18; ma_pressure_source floating -> WP-17; mass_flow_source needs a sink -> WP-17; dist_constraint frames unconnected -> WP-19a; luenberger_observer ignores matrix A -> WP-20",
-      "wp": "WP-17/18/19a/20"
+      "wp": "WP-17/18/19a/20",
+      "status": "resolved/decided-WP-17"
     },
     {
       "id": "F-023",
@@ -957,7 +964,8 @@
       "block": "Fluid / Steam group",
       "layer": "port",
       "summary": "There is no distinct steam/two-phase domain, so the whole group is Fluid. Steam and liquid can be wired together without an error.",
-      "wp": "WP-17"
+      "wp": "WP-17",
+      "status": "decided WP-17: option (b) deviation, steam shares the Fluid domain"
     },
     {
       "id": "F-035",
@@ -966,7 +974,7 @@
       "layer": "eq",
       "summary": "Explicit Physical ports allocate signal branches that the stub MA equations never drive.",
       "wp": "WP-09",
-      "status": "resolved-WP-09a (unsupported remainder routed)"
+      "status": "resolved/decided-WP-17"
     },
     {
       "id": "F-036",
@@ -1175,7 +1183,8 @@
       "block": "hydraulic converters",
       "layer": "eq",
       "summary": "No hydraulic pump/motor/cylinder with a shaft or rod port exists (pump_il is an ideal pressure source).",
-      "wp": "WP-17"
+      "wp": "WP-17",
+      "status": "resolved/decided-WP-17"
     },
     {
       "id": "F-061",
@@ -1439,7 +1448,8 @@
       "block": "steam_generator, microwave_cavity, ma_chamber",
       "layer": "eq",
       "summary": "Internal ambient params; microwave_cavity uses the old 5.67e-8.",
-      "wp": "WP-17/WP-21"
+      "wp": "WP-17/WP-21",
+      "status": "resolved/decided-WP-17"
     },
     {
       "id": "F-093",
@@ -1455,6 +1465,46 @@
       "block": "thermal migration",
       "layer": "ui",
       "summary": "Old models: scope temperature readings shift +293.15 K (correct physics); a migration notice is stored but not shown in the UI.",
+      "wp": "WP-40"
+    },
+    {
+      "id": "F-095",
+      "severity": "high",
+      "block": "ma_chamber H wired to thermal_ref (and any similar case)",
+      "layer": "solver",
+      "summary": "The solver loops forever (synchronous, no timeout) despite the WP-04 rejected-step budget: accepted tiny steps or an inner loop are not bounded. In the app this freezes the worker. Needs a total step/wall-clock guard.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-096",
+      "severity": "med",
+      "block": "ma_separator, ma_selector",
+      "layer": "eq",
+      "summary": "Remain explicitly unsupported: no stated meaning/units for the separator w/d outputs, and the selector composite layout is undefined.",
+      "wp": "USER (spec needed)"
+    },
+    {
+      "id": "F-097",
+      "severity": "med",
+      "block": "all ma_*",
+      "layer": "port",
+      "summary": "Moist air carries only p and mdot; T and phi are block params, so ma_pt_sensor.t reports its param, not a measured value (deviation).",
+      "wp": "dev"
+    },
+    {
+      "id": "F-098",
+      "severity": "med",
+      "block": "vlabStructure.detectJacobianPattern",
+      "layer": "solver",
+      "summary": "The structural probe uses non-physical points (p ~ 1 Pa); the dependence threshold lowered to 1e-13 to see stiff gas rows. Consider physically scaled probe points.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-099",
+      "severity": "low",
+      "block": "VLabNode/VLabSimulinkScope/VLabWorkspace",
+      "layer": "ui",
+      "summary": "The other session is adding data-help-feature attributes to V-Lab UI files (uncommitted, not ours). WP-40 must coordinate to avoid conflicts.",
       "wp": "WP-40"
     }
   ],

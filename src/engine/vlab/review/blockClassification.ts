@@ -160,6 +160,10 @@ export const ENGINE_CONSUMED_PARAMS: Record<string, { file: string; params: stri
   inductor: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['i0'] }],
   // WP-15: Simscape Thermal Mass "Initial temperature" seeds the node temperature of the solution vector
   thermal_mass: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['T0'] }],
+  // WP-17: initial pressure / initial water inventory seed the solution vector (vlabPhysics.seedFluidStates)
+  fluid_capacitance: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['P0'] }],
+  gas_chamber: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['P0'] }],
+  steam_generator: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['tank_vol'] }],
   hydraulic_reference_il: [
     { file: 'src/engine/vlab/DAEAssembler.ts', params: ['referencePressure', 'pressureType', 'atmosphericPressure', 'elevationCorrection', 'referenceElevation'] },
     { file: 'src/components/vlab/VLabWorkspace.tsx', params: ['initializationPriority'] },

@@ -55,12 +55,13 @@ export const PORT_QUANTITIES: Record<string, PortQuantity> = {
   'ma_selector.w': q('moisture mass fraction', '1'),
   'ma_moisture_sensor.w': q('moisture mass fraction', '1'),
   'ma_pt_sensor.p': q('pressure', 'Pa'),
+  'ma_pt_sensor.t': q('temperature', 'K'),
   'ma_thermo_sensor.rho': q('density', 'kg/m^3'),
-  'ma_pipe.wd': q(UNSPECIFIED, UNIT_INHERIT),
+  'ma_pipe.wd': q('friction power dissipated', 'W'),
   'ma_separator.w': q(UNSPECIFIED, UNIT_INHERIT),
   'ma_separator.d': q(UNSPECIFIED, UNIT_INHERIT),
-  'ma_rot_conv.wd': q(UNSPECIFIED, UNIT_INHERIT),
-  'ma_trans_conv.wd': q(UNSPECIFIED, UNIT_INHERIT),
+  'ma_rot_conv.wd': q('mechanical power delivered by the gas', 'W'),
+  'ma_trans_conv.wd': q('mechanical power delivered by the gas', 'W'),
 
   // ── multibody ──
   'belt_end.f': q('belt tension', 'N'),

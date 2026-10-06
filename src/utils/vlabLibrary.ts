@@ -1782,6 +1782,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Gas Temperature",
             "min": 0,
             "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0
           }
         },
         "ports": [
@@ -1798,8 +1804,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Gas"
           }
         ],
-        "equation": "dP/dt = (R*T/V) * Σ(mdot_in)",
-        "description": "A rigid container that stores gas. The pressure changes according to the net mass flow rate into the chamber."
+        "equation": "dp/dt = (R*T/V) * (mdot_a + mdot_b),  p(0) = P0   (ideal gas p = rho*R*T, isothermal, R = 287 J/(kg K))",
+        "description": "A rigid container that stores gas at the fixed temperature T. Mass conservation dm/dt = mdot_a + mdot_b with m = p V / (R T) gives the pressure rise from the net mass flow into the two ports (both ports are the chamber node). An unconnected port is closed (no flow)."
       },
       {
         "id": "gas_reservoir",
@@ -1918,6 +1924,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Gas Temperature",
             "min": 0,
             "exclusiveMin": true
+          },
+          "gamma": {
+            "value": 1.4,
+            "unit": "1",
+            "label": "Specific Heat Ratio",
+            "min": 1,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1941,8 +1954,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "mdot = Cd * A * √(2*ρ*|ΔP|) * sign(ΔP)",
-        "description": "Orifice restriction calculating compressible gas flow from discharge coefficient and opening area."
+        "equation": "mdot = Cd*A*p_up*sqrt(2*gamma/((gamma-1)*R*T)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(p_dn/p_up, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1))  (choked: mdot = Cd*A*p_up*sqrt(gamma/(R*T))*(2/(gamma+1))^((gamma+1)/(2(gamma-1))))",
+        "description": "Compressible gas orifice (Simscape Local Restriction (G)): isentropic Saint-Venant & Wantzel flow of an ideal gas (R = 287 J/(kg K)) at the fixed upstream temperature T, from the higher-pressure port to the lower one. The flow chokes at the critical pressure ratio r* (0.528 for air) and stays constant below it; above the laminar pressure ratio 0.999 it is linear in the pressure difference, so it has a finite slope at zero. The area comes from the AR input when wired, else from the area parameter."
       },
       {
         "id": "gas_pipe",
@@ -1970,6 +1983,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1",
             "label": "Friction Factor",
             "min": 0
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "mu": {
+            "value": 0.0000181,
+            "unit": "Pa·s",
+            "label": "Dynamic Viscosity",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -1986,8 +2013,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Gas"
           },
         ],
-        "equation": "ΔP = f * (L/D) * (ρv²/2)",
-        "description": "Models gas flow through a cylindrical conduit with friction-induced pressure drop. Heat transfer is not represented."
+        "equation": "p_a - p_b = f_eff * (L/D) * rho * v^2/2,  rho = p_mean/(R*T),  v = mdot/(rho*S),  f_eff = max(f, 64/Re),  Re = 4*|mdot|/(pi*D*mu)",
+        "description": "Darcy-Weisbach friction in a straight circular pipe for an isothermal ideal gas (R = 287 J/(kg K)): f is the turbulent friction factor, and below it the laminar Hagen-Poiseuille law f = 64/Re applies so the pressure drop is linear in the flow near zero. mdot is positive from A to B. Heat transfer is not represented."
       },
       {
         "id": "gas_fixed_res",
@@ -3620,8 +3647,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Absolute Reference (MA) governing physical equation",
-        "description": "Physical component model for Absolute Reference (MA)."
+        "equation": "p = 0 Pa (absolute pressure zero)",
+        "description": "Absolute pressure reference of a Moist Air network (the analogue of the Thermal Reference at 0 K): pins the connected node at 0 Pa absolute and absorbs any mass flow. The Moist Air ports carry total pressure and mass flow only; the psychrometric state (temperature, relative humidity) is a parameter of each block."
       },
       {
         "id": "ma_chamber",
@@ -3682,6 +3709,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Safety Cutout Temperature",
             "min": -273.15,
             "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Initial Relative Humidity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -3704,8 +3744,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "dP/dt = (R*T/V) * (mdot_in - mdot_out)",
-        "description": "Represents a constant volume of moist air. Calculates pressure and temperature based on mass and energy balance."
+        "equation": "dm/dt = mdot_a + mdot_b, m = p*V/(R*T)  ->  dp/dt = (R*T/V)*(mdot_a + mdot_b) + (p/T)*dT/dt\nC dT/dt = Q_H - k_loss*(T - T_amb),  C = m*c_v + m_wall*c_wall + m_load*c_load,  R = (R_a + w*R_v)/(1 + w)",
+        "description": "Constant-volume chamber of moist air (ideal mixture, Dalton's law): mass conservation of the rigid volume gives the pressure from the net inflow at A and B and from the temperature change; the humidity ratio w is fixed by the initial relative humidity phi at P0 and the ambient temperature (no condensation). The ports carry no enthalpy, so the energy balance uses only the heat flow Q_H at port H, the loss to the ambient and the lumped air + wall + load heat capacity, with a safety cutout above max_temp. Unconnected A / B ports are closed."
       },
       {
         "id": "ma_pipe",
@@ -3722,7 +3762,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "resistance": {
             "value": 1,
             "unit": "Pa/(kg/s)",
-            "label": "Flow Resistance",
+            "label": "Local Resistance",
+            "min": 0
+          },
+          "D": {
+            "value": 0.05,
+            "unit": "m",
+            "label": "Diameter",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "roughness": {
+            "value": 0.0000015,
+            "unit": "m",
+            "label": "Surface Roughness",
+            "min": 0
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Relative Humidity",
+            "min": 0,
+            "max": 1
+          },
+          "UA": {
+            "value": 5,
+            "unit": "W/K",
+            "label": "Wall Heat Transfer Conductance",
             "min": 0
           }
         },
@@ -3751,12 +3824,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "WD",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "unspecified (block unsupported)",
-            "unit": "*"
+            "quantity": "friction power dissipated",
+            "unit": "W"
           }
         ],
-        "equation": "ΔP = f(L, D, Re) * (ρv²/2)",
-        "description": "Models the pressure drop and heat transfer of moist air flowing through a pipe."
+        "equation": "p_a - p_b = f*(L/D)*rho*v^2/2 + resistance*mdot,  rho = p_mean/(R*T),  v = mdot/(rho*S),  f = max(64/Re, Haaland(Re, e/D));  Q_H = UA*(T_H - T);  wd = (p_a - p_b)*mdot/rho",
+        "description": "Straight circular pipe for moist air: Darcy-Weisbach friction with laminar f = 64/Re and the explicit Haaland turbulent friction factor for the relative roughness e/D, plus an optional lumped local resistance. The mixture density comes from (p_mean, T, phi) by Dalton's law and the ideal gas law, the viscosity from Sutherland's law. The wall at port H exchanges heat Q = UA (T_H - T) with the gas; wd is the friction power dissipated. Condensation is not modelled."
       },
       {
         "id": "ma_separator",
@@ -3803,8 +3876,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Moisture Separator (MA) governing physical equation",
-        "description": "Physical component model for Moisture Separator (MA)."
+        "equation": "(not simulated) mdot_removed = efficiency * mdot_liquid  -  see the missing-specification diagnostic",
+        "description": "Moisture Separator (MA) is explicitly unsupported: the library defines only the efficiency parameter and the `w` and `d` outputs without meaning or unit, and the Moist Air ports carry no liquid-water fraction to separate. The solver rejects a model that contains it and names the missing specification."
       },
       {
         "id": "ma_rot_conv",
@@ -3829,6 +3902,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "W/K/(rad/s)",
             "label": "Speed-Dependent Heat Transfer",
             "min": 0
+          },
+          "V0": {
+            "value": 0.001,
+            "unit": "m^3",
+            "label": "Dead Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Initial Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "p_env": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Environment Pressure",
+            "min": 0
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Initial Relative Humidity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -3862,12 +3969,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "WD",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "unspecified (block unsupported)",
-            "unit": "*"
+            "quantity": "mechanical power delivered by the gas",
+            "unit": "W"
           }
         ],
-        "equation": "Rotational Mechanical Converter (MA) governing physical equation",
-        "description": "Physical component model for Rotational Mechanical Converter (MA)."
+        "equation": "V = V0 + D*theta, theta = integral(w_R - w_C) dt;  dm/dt = mdot_A, m = p*V/(R*T)\nm*c_v dT/dt = mdot_A*R*T - p*dV/dt + Q_H,  Q_H = (h0 + k*|w|)*(T_H - T)\ntau = D*(p - p_env) (delivered at R, reaction at C);  wd = tau*w",
+        "description": "Single-acting moist-air vane / piston chamber driven through the rotational ports R and C: the chamber volume follows the shaft angle, V = V0 + D theta (D in m^3/rad). Ideal-gas mass and energy balance of the closed chamber (flow through A enters at the gas temperature), heat exchange with the wall at H through a stationary plus speed-dependent conductance, and the shaft torque D (p - p_env) against the environment pressure. wd is the mechanical power delivered by the gas (W). Humidity ratio is frozen at the initial relative humidity; no condensation."
       },
       {
         "id": "ma_trans_conv",
@@ -3892,6 +3999,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "W/K/(m/s)",
             "label": "Speed-Dependent Heat Transfer",
             "min": 0
+          },
+          "V0": {
+            "value": 0.001,
+            "unit": "m^3",
+            "label": "Dead Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Initial Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "p_env": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Environment Pressure",
+            "min": 0
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Initial Relative Humidity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -3925,12 +4066,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "WD",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "unspecified (block unsupported)",
-            "unit": "*"
+            "quantity": "mechanical power delivered by the gas",
+            "unit": "W"
           }
         ],
-        "equation": "Translational Mechanical Converter (MA) governing physical equation",
-        "description": "Physical component model for Translational Mechanical Converter (MA)."
+        "equation": "V = V0 + A*x, x = integral(v_R - v_C) dt;  dm/dt = mdot_A, m = p*V/(R*T)\nm*c_v dT/dt = mdot_A*R*T - p*dV/dt + Q_H,  Q_H = (h0 + k*|v|)*(T_H - T)\nF = A*(p - p_env) (delivered at R, reaction at C);  wd = F*v",
+        "description": "Single-acting moist-air piston chamber driven through the translational ports R and C: the chamber volume follows the piston position, V = V0 + A x. Ideal-gas mass and energy balance of the closed chamber (flow through A enters at the gas temperature), heat exchange with the wall at H through a stationary plus speed-dependent conductance, and the piston force A (p - p_env) against the environment pressure. wd is the mechanical power delivered by the gas (W). Humidity ratio is frozen at the initial relative humidity; no condensation."
       },
       {
         "id": "ma_flow_sensor",
@@ -3962,8 +4103,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "kg/s"
           }
         ],
-        "equation": "Flow Rate Sensor (MA) governing physical equation",
-        "description": "Physical component model for Flow Rate Sensor (MA)."
+        "equation": "p_a = p_b,  m = mdot   [kg/s, positive from A to B]",
+        "description": "Ideal mass flow rate sensor in series with a Moist Air line: no pressure drop (p_a = p_b), the output is the total mass flow rate of the mixture through it, positive from A to B."
       },
       {
         "id": "ma_selector",
@@ -4008,8 +4149,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "Measurement Selector (MA) governing physical equation",
-        "description": "Physical component model for Measurement Selector (MA)."
+        "equation": "(not simulated) [t, p, w] = select(in)  -  see the missing-specification diagnostic",
+        "description": "Measurement Selector (MA) is explicitly unsupported: it selects temperature, pressure and humidity from a composite measurement vector whose layout and width are not defined, and no sensor in the library produces such a vector. The solver rejects a model that contains it and names the missing specification."
       },
       {
         "id": "ma_moisture_sensor",
@@ -4017,7 +4158,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#8b5cf6",
         "icon": "ma_moisture",
         "category": "Sensors",
-        "params": {},
+        "params": {
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Relative Humidity",
+            "min": 0,
+            "max": 1
+          }
+        },
         "ports": [
           {
             "id": "a",
@@ -4035,8 +4191,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "Moisture & Trace Gas Sensor (MA) governing physical equation",
-        "description": "Physical component model for Moisture & Trace Gas Sensor (MA)."
+        "equation": "w = x_v = w_h/(1 + w_h),  w_h = 0.622*p_v/(p - p_v),  p_v = phi*p_sat(T)   [kg water vapour / kg moist air]",
+        "description": "Ideal moisture sensor: outputs the water-vapour mass fraction of the moist air at the node pressure p for the block's gas temperature T and relative humidity phi (saturation pressure from the IAPWS-IF97 line, humidity ratio from Dalton's law, ASHRAE ch. 1). The Moist Air ports carry only total pressure and mass flow, so T and phi are parameters of the sensor, not measured. Draws no flow."
       },
       {
         "id": "ma_pt_sensor",
@@ -4044,7 +4200,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#8b5cf6",
         "icon": "ma_pt_sensor",
         "category": "Sensors",
-        "params": {},
+        "params": {
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          }
+        },
         "ports": [
           {
             "id": "a",
@@ -4060,10 +4224,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "out",
             "quantity": "pressure",
             "unit": "Pa"
+          },
+          {
+            "id": "t",
+            "pos": "right",
+            "label": "T",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "temperature",
+            "unit": "K"
           }
         ],
-        "equation": "Pressure & Temperature Sensor (MA) governing physical equation",
-        "description": "Physical component model for Pressure & Temperature Sensor (MA)."
+        "equation": "p_out = p_a   [Pa, total pressure of the node],  t_out = T   [K, gas temperature of the isothermal network]",
+        "description": "Ideal pressure and temperature sensor: p is the total pressure of the Moist Air node, t the temperature of the network. The Moist Air ports carry only total pressure and mass flow, so the temperature is the sensor's T parameter (set it to the temperature of the chamber or pipe it measures), not a measured node variable. Draws no flow."
       },
       {
         "id": "ma_thermo_sensor",
@@ -4071,7 +4244,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#8b5cf6",
         "icon": "ma_thermo",
         "category": "Sensors",
-        "params": {},
+        "params": {
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Relative Humidity",
+            "min": 0,
+            "max": 1
+          }
+        },
         "ports": [
           {
             "id": "a",
@@ -4089,8 +4277,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "kg/m^3"
           }
         ],
-        "equation": "Thermodynamic Properties Sensor (MA) governing physical equation",
-        "description": "Physical component model for Thermodynamic Properties Sensor (MA)."
+        "equation": "rho = (p - p_v)/(R_a*T) + p_v/(R_v*T) = p/(R*T),  p_v = phi*p_sat(T),  R = (R_a + w*R_v)/(1 + w)   [kg/m^3]",
+        "description": "Ideal thermodynamic properties sensor: outputs the mixture density of the moist air at the node pressure p for the block's gas temperature T and relative humidity phi (Dalton's law, ideal gas law, saturation pressure from the IAPWS-IF97 line; R_a = 287.058, R_v = 461.52 J/(kg K)). T and phi are parameters of the sensor because the ports carry only total pressure and mass flow. Draws no flow."
       },
       {
         "id": "ma_moisture_source",
@@ -4120,8 +4308,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Moisture Source (MA) governing physical equation",
-        "description": "Physical component model for Moisture Source (MA)."
+        "equation": "mdot_added = rate * S   [kg/s of water vapour delivered INTO the node; S = 1 when the S input is unwired]",
+        "description": "Ideal moisture source: delivers water vapour into the Moist Air node at `rate` kg/s, scaled by the S input signal when wired. A single-ended source: it needs a network that can take the flow (a chamber or a path to a pressure datum). The ports carry total mass flow, so the added vapour is counted in the total flow."
       },
       {
         "id": "ma_flow_source",
@@ -4157,8 +4345,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Flow Rate Source (MA) governing physical equation",
-        "description": "Physical component model for Flow Rate Source (MA)."
+        "equation": "mdot = rate * S   [kg/s from A through the source to B; S = 1 when the S input is unwired]",
+        "description": "Ideal mass flow rate source for the moist-air mixture (Simscape Mass Flow Rate Source): the flow rate is imposed whatever the pressure difference; positive flow runs from A through the block to B. It needs a path for the flow on both sides (a chamber or a connection to a pressure datum)."
       },
       {
         "id": "ma_pressure_source",
@@ -4194,8 +4382,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Pressure Source (MA) governing physical equation",
-        "description": "Physical component model for Pressure Source (MA)."
+        "equation": "p_b - p_a = P * S   [Pa; S = 1 when the S input is unwired]",
+        "description": "Ideal pressure difference source (fan / blower head): holds p_B - p_A at P times the S input signal (P when S is unwired) and passes whatever mass flow the network demands. It fixes only a difference, so its network needs a pressure datum (a chamber, a reference or an absolute source)."
       },
       {
         "id": "ma_properties",
@@ -10320,6 +10508,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Boiling Temp",
             "min": -273.15,
             "exclusiveMin": true
+          },
+          "v_rated": {
+            "value": 230,
+            "unit": "V",
+            "label": "Rated Voltage",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "eta": {
+            "value": 0.95,
+            "unit": "1",
+            "label": "Thermal Efficiency",
+            "min": 0,
+            "max": 1
+          },
+          "k_loss": {
+            "value": 1,
+            "unit": "W/K",
+            "label": "Tank Heat Loss Coefficient",
+            "min": 0
+          },
+          "ambient_temp": {
+            "value": 25,
+            "unit": "C",
+            "label": "Ambient Temperature",
+            "min": -273.15,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -10342,8 +10557,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "Q = P_elec * η_thermal\\nmdot_steam = Q / h_fg",
-        "description": "High-power electric boiler producing saturated steam at rate proportional to heating element power."
+        "equation": "R = v_rated^2/power, i = (v_p - v_n)/R, P_el = v*i\nm_w c_w dT_w/dt = eta*P_el - k_loss*(T_w - T_amb) - Q_s\nT_w >= T_boil: Q_s = max(0, eta*P_el - k_loss*(T_w - T_amb)), mdot_steam = Q_s/h_fg, dm_w/dt = -mdot_steam",
+        "description": "Electric boiler: a resistive element (rated power at the rated voltage) heats a water tank of tank_vol litres (initially full, at the ambient temperature). The water warms with the first-law balance above until it reaches the boiling temperature boil_temp; the net heat then evaporates water, mdot_steam = Q_s / h_fg (h_fg from the IF97 saturation line), the tank inventory falls, and the latent heat Q_s is delivered through the thermal port S (the steam condensing on the load). Below boil_temp no heat leaves through S. Dry-out stops steam production."
       },
       {
         "id": "microwave_inverter",
@@ -10800,8 +11015,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Ground (Atm) governing physical equation",
-        "description": "Physical component model for Fluid Ground (Atm)."
+        "equation": "p = 101325 Pa (1 atm, absolute)",
+        "description": "Pressure datum of a Fluid network (Simscape Reservoir / Hydraulic Reference): pins the connected node at the absolute pressure of 1 standard atmosphere and absorbs any mass flow. Unconnected Fluid ports are open (capped, no flow), never an implicit atmosphere: every connected Fluid network needs a datum (this block, an absolute Pressure Source, or a capacity with an initial pressure)."
       },
       {
         "id": "fluid_resistance",
@@ -10831,8 +11046,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Resistance governing physical equation",
-        "description": "Physical component model for Fluid Resistance."
+        "equation": "p_p - p_n = Rf * mdot   [Pa = (Pa s/kg) * (kg/s)]",
+        "description": "Linear (laminar) flow resistance: the pressure drop is proportional to the mass flow rate, as for Hagen-Poiseuille flow in a pipe. mdot is positive from p to n. Rf = 0 is an ideal short between the ports."
       },
       {
         "id": "orifice",
@@ -10861,6 +11076,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Density",
             "min": 0,
             "exclusiveMin": true
+          },
+          "mu": {
+            "value": 0.0000181,
+            "unit": "Pa·s",
+            "label": "Dynamic Viscosity",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Re_crit": {
+            "value": 12,
+            "unit": "1",
+            "label": "Critical Reynolds Number",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -10877,8 +11106,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "mdot = Cd * A * √(2*ρ*ΔP)",
-        "description": "Hydraulic restriction orifice calculating flow rate from cross-sectional area and pressure differential."
+        "equation": "mdot = Cd*A*sqrt(2*rho)*dP/(dP^2 + dP_crit^2)^(1/4),  dP = p_p - p_n,  dP_crit = pi*Re_crit^2*mu^2/(8*rho*Cd^2*A)  [kg/s]  (= Cd*A*sqrt(2*rho*|dP|)*sign(dP) for |dP| >> dP_crit)",
+        "description": "Bernoulli orifice (Simscape Local Restriction) with the smooth laminar / turbulent transition: turbulent mdot = Cd A sqrt(2 rho |dP|) for |dP| well above the critical pressure drop dP_crit (the pressure drop at the critical Reynolds number Re_crit), linear in dP below it, so the law has a finite slope at dP = 0. A = 0 closes the orifice. mdot is positive from p to n; rho and mu are those of the fluid (defaults: air at 20 degC)."
       },
       {
         "id": "fluid_capacitance",
@@ -10893,6 +11122,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Capacitance",
             "min": 0,
             "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0
           }
         },
         "ports": [
@@ -10903,8 +11138,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Capacitance governing physical equation",
-        "description": "Physical component model for Fluid Capacitance."
+        "equation": "mdot = Cf * dp/dt   [kg/s = (kg/Pa) * (Pa/s)],  p(0) = P0",
+        "description": "Constant-volume fluid chamber (tank): the mass flow into the port equals the compressibility capacitance Cf = V (d rho / d p) times the rate of change of the absolute pressure. The pressure starts at P0 (default 1 atm). The second terminal of the chamber is the absolute pressure zero, so the block also defines the absolute pressure level of its network."
       },
       {
         "id": "fluid_inertance",
@@ -10935,8 +11170,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Inertance governing physical equation",
-        "description": "Physical component model for Fluid Inertance."
+        "equation": "p_p - p_n = Li * d(mdot)/dt   [Pa = (Pa s^2/kg) * (kg/s^2)]",
+        "description": "Fluid inertance (momentum of a fluid column, Newton's second law on the column): the pressure difference accelerates the mass flow, Li = L / S for a column of length L and cross-section S. With a capacitance it forms an oscillator of period 2 pi sqrt(Li Cf). mdot is positive from p to n."
       },
       {
         "id": "pressure_source",
@@ -10961,8 +11196,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "P_out - P_in = P_param",
-        "description": "Ideal hydraulic pressure source establishing commanded pressure differential across ports."
+        "equation": "p_p = P   (absolute pressure, any mass flow)",
+        "description": "Ideal single-ended pressure source: holds its port at the absolute pressure P (the second terminal is the absolute pressure zero) and supplies whatever mass flow the network demands. It is itself a pressure datum for its network."
       },
       {
         "id": "ctrl_pressure_source",
@@ -10986,8 +11221,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Ctrl Pressure Source governing physical equation",
-        "description": "Physical component model for Ctrl Pressure Source."
+        "equation": "p_p = ctrl   (absolute pressure in Pa from the input signal)",
+        "description": "Controlled ideal single-ended pressure source: holds its port at the absolute pressure given by the ctrl input signal (the second terminal is the absolute pressure zero). It is itself a pressure datum for its network."
       },
       {
         "id": "mass_flow_source",
@@ -11010,8 +11245,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Mass Flow Source governing physical equation",
-        "description": "Physical component model for Mass Flow Source."
+        "equation": "mdot_out = mdot   [kg/s delivered into the network through the port, negative = withdrawn]",
+        "description": "Ideal single-ended mass flow source: delivers mdot (kg/s) INTO the network through its Out port, whatever the pressure. The network must be able to take the flow (a path to a pressure datum or a capacity), otherwise the mass accumulates without bound and the model is singular."
       },
       {
         "id": "check_valve",
@@ -11026,6 +11261,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "On Resistance",
             "min": 0,
             "exclusiveMin": true
+          },
+          "P_crack": {
+            "value": 0,
+            "unit": "Pa",
+            "label": "Cracking Pressure",
+            "min": 0
           }
         },
         "ports": [
@@ -11042,8 +11283,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Q = (ΔP > P_crack) ? Cd*A*√(2*ΔP/ρ) : 0",
-        "description": "One-way hydraulic check valve allowing forward flow only when pressure exceeds cracking pressure."
+        "equation": "mdot = (dP - P_crack) / Rf  for dP = p_p - p_n > P_crack,  mdot = 0 otherwise  (smooth gate, width 1 mPa)",
+        "description": "One-way valve with a linear open-state resistance (Simscape Check Valve, linear region): it conducts from p to n once the pressure difference exceeds the cracking pressure P_crack, with flow proportional to the excess pressure, and blocks reverse flow."
       },
       {
         "id": "relief_valve",
@@ -11088,8 +11329,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Q = (ΔP > P_set) ? Cd*A*√(2*(ΔP - P_set)/ρ) : 0",
-        "description": "Pressure relief safety valve opening to discharge fluid when system pressure exceeds setpoint."
+        "equation": "dP = p_p - p_n = mdot * R(dP),  R = Rf_open*s + Rf_closed*(1 - s),  s = (1 + tanh((dP - P_set)/10 kPa))/2",
+        "description": "Pressure relief valve (Simscape Pressure Relief Valve): the valve opens when the pressure DIFFERENCE between its ports exceeds the set pressure P_set, so the flow path resistance falls smoothly from Rf_closed (leakage) to Rf_open and the excess pressure is vented from p to n."
       },
       {
         "id": "steam_generator_fluid",
@@ -11125,8 +11366,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Steam Generator governing physical equation",
-        "description": "Physical component model for Steam Generator."
+        "equation": "mdot_steam = max(0, Q) / h_fg(T_sat(p_p))   [kg/s],  steam leaves through p, feed water returns through n",
+        "description": "Ideal steam generator: the heat input Q (parameter, or the q_in signal in W) evaporates water at the saturation state of the Steam port pressure, mdot = Q / h_fg. T_sat(p) and h_fg come from the IAPWS-IF97 saturation line (Clausius-Clapeyron latent heat). The steam is delivered into the network at p and the same mass flow is drawn from n."
       },
       {
         "id": "steam_accumulator",
@@ -11157,8 +11398,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "Steam Accumulator governing physical equation",
-        "description": "Physical component model for Steam Accumulator."
+        "equation": "p_in = p_out,  mdot_in - mdot_out = V * (d rho_g / d p)_sat * dp/dt   [kg/s]",
+        "description": "Dry saturated-steam vessel of volume V: the steam mass m = V rho_g(p) follows the saturation line (IAPWS-IF97), so a net inflow raises the pressure with the storage coefficient V d rho_g/dp. Both ports are the vessel node. Flash storage of a liquid inventory is not modelled."
       },
       {
         "id": "steam_nozzle",
@@ -11181,6 +11422,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Diameter",
             "min": 0,
             "exclusiveMin": true
+          },
+          "gamma": {
+            "value": 1.3,
+            "unit": "1",
+            "label": "Specific Heat Ratio",
+            "min": 1,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -11197,8 +11445,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Fluid"
           }
         ],
-        "equation": "mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))",
-        "description": "Two-port steam nozzle whose mass flow is driven by the nonnegative upstream-to-downstream pressure difference."
+        "equation": "mdot = Cd*A*Pp*sqrt(2*gamma/((gamma-1)*R*T0)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(Pn/Pp, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1)),  T0 = T_sat(Pp)",
+        "description": "Two-port converging steam nozzle: isentropic (Saint-Venant & Wantzel) flow of saturated steam from the upstream pressure Pp (T0 = T_sat(Pp), R = 461.52 J/(kg K)) to the downstream pressure Pn, choked at the critical pressure ratio r*, so the flow stays constant when the downstream pressure falls below r* Pp. No reverse flow."
       },
       {
         "id": "pressure_sensor",
@@ -11224,8 +11472,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "Pa"
           }
         ],
-        "equation": "P_out = P_p - P_n",
-        "description": "Measures differential or gauge fluid pressure across two hydraulic ports."
+        "equation": "out = p_p   [Pa, absolute pressure of the node; no mass flow]",
+        "description": "Ideal single-ended pressure sensor: outputs the absolute pressure at its port and draws no mass flow. Use two sensors (or a Subtract block) for a differential reading."
       },
       {
         "id": "flow_sensor",
@@ -11257,8 +11505,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "kg/s"
           }
         ],
-        "equation": "Q_out = Q_branch",
-        "description": "Measures volumetric fluid flow rate flowing through a hydraulic pipeline branch."
+        "equation": "p_p = p_n,  out = mdot   [kg/s, positive from p to n]",
+        "description": "Ideal mass flow rate sensor in series with the line: no pressure drop (p_p = p_n), the output is the mass flow rate through it, positive from p to n."
       }
     ]
   },
@@ -11358,8 +11606,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
           { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
         ],
-        "equation": "p_B - p_A = dp",
-        "description": "Ideal pump maintaining a fixed pressure rise in an isothermal liquid network."
+        "equation": "p_B - p_A = pressure_rise   [Pa, any mass flow A -> B]",
+        "description": "Ideal pump in the sense of an ideal pressure source: it holds a fixed pressure rise between its ports and delivers whatever mass flow the network demands. It has no shaft port and no pump curve (no displacement relation Q = D w, tau = D dp): use it as the pressure head of a pump."
       },
       {
         "id": "pipe_il",
@@ -11409,14 +11657,28 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Fluid Density",
             "min": 0,
             "exclusiveMin": true
+          },
+          "mu": {
+            "value": 0.001,
+            "unit": "Pa·s",
+            "label": "Dynamic Viscosity",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Re_crit": {
+            "value": 12,
+            "unit": "1",
+            "label": "Critical Reynolds Number",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
           { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
         ],
-        "equation": "mdot = Cd * A * sqrt(2*rho*|dp|) * sign(dp)",
-        "description": "Hydraulic orifice restriction obeying Bernoulli flow."
+        "equation": "mdot = Cd*A*sqrt(2*rho)*dp/(dp^2 + dp_crit^2)^(1/4),  dp = p_A - p_B,  dp_crit = pi*Re_crit^2*mu^2/(8*rho*Cd^2*A)  (= Cd*A*sqrt(2*rho*|dp|)*sign(dp) for |dp| >> dp_crit)",
+        "description": "Hydraulic orifice (Simscape Isothermal Liquid Local Restriction): Bernoulli flow with the smooth laminar / turbulent transition at the critical Reynolds number, finite slope at dp = 0. A = 0 closes the restriction. mdot is positive from A to B; defaults are water at 20 degC."
       }
     ]
   }

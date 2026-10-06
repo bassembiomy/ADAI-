@@ -84,19 +84,24 @@ export const LEGACY_PARAM_DROPS: Record<string, string[]> = {
 /** Library parameters exposed by WP-08 (previously hidden): backfilled into saved nodes so the inspector shows them. */
 export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   igbt: ['Roff'], translational_electromechanical_converter: ['R'], controlled_voltage: ['R_int'],
-  cccs: ['R_in'], ccvs: ['R_in', 'R_out'], gas_chamber: ['T'], gas_restriction: ['Cd', 'T'], gas_pipe: ['f'],
+  cccs: ['R_in'], ccvs: ['R_in', 'R_out'], gas_chamber: ['T', 'P0'], gas_restriction: ['Cd', 'T', 'gamma'], gas_pipe: ['f', 'T', 'mu'],
   gas_rotational_conv: ['T'], gas_translational_conv: ['T'], rot_friction: ['Tv', 'cv', 'wthr'],
   rot_hard_stop: ['k', 'c', 'transition'], trans_friction: ['Fv', 'cv', 'vthr'], trans_hard_stop: ['k', 'transition'],
   // WP-13: Simscape Initial deformation of the springs, internal damping of the belt end (0 = the old lossless belt)
   rot_spring: ['theta0'], trans_spring: ['x0'], belt_end: ['damping'],
-  ma_chamber: ['ambient_temp', 'wall_mass', 'wall_cp', 'food_mass', 'food_cp', 'k_loss', 'max_temp'],
-  ma_pipe: ['resistance'], ma_rot_conv: ['h0', 'k'], ma_trans_conv: ['h0', 'k'], im_flux_observer: ['Lr', 'Rr'],
+  ma_chamber: ['ambient_temp', 'wall_mass', 'wall_cp', 'food_mass', 'food_cp', 'k_loss', 'max_temp', 'P0', 'phi'],
+  ma_pipe: ['resistance', 'D', 'roughness', 'T', 'phi', 'UA'],
+  ma_rot_conv: ['h0', 'k', 'V0', 'T', 'P0', 'p_env', 'phi'], ma_trans_conv: ['h0', 'k', 'V0', 'T', 'P0', 'p_env', 'phi'], im_flux_observer: ['Lr', 'Rr'],
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
   upper_heater: ['efficiency'], mag_controlled_mmf: ['MMF'], washing_basket: ['damping'], doe_custom: ['deploymentModel'],
   ps_dead_zone: ['upper', 'lower'], ps_sine_3phase: ['Vpk', 'f'],
   // WP-15: Thermal Mass Initial Temperature T0 (the old model always started at 293.15 K = the default); Variable Reluctance R
   // for the unwired control port (the old equation hard-coded 1e6 = the default); Fundamental Reluctance geometry
   thermal_mass: ['T0'], variable_reluctance: ['R'], fundamental_reluctance: ['A', 'mu_r', 'l'],
+  // WP-17: new physical parameters of the fluid / gas / moist-air / steam blocks (defaults = the previous effective behaviour where one existed)
+  orifice: ['mu', 'Re_crit'], restriction_il: ['mu', 'Re_crit'], fluid_capacitance: ['P0'], check_valve: ['P_crack'],
+  steam_nozzle: ['gamma'], steam_generator: ['v_rated', 'eta', 'k_loss', 'ambient_temp'],
+  ma_moisture_sensor: ['T', 'phi'], ma_thermo_sensor: ['T', 'phi'], ma_pt_sensor: ['T'],
   // WP-12a: machine leakage inductances (the old induction model hard-coded Lr = 0.06 H), PMSM zero-sequence inductance,
   // three-phase source phase angle of phase A (the old source had a hidden +45 deg shift; Simscape default is 0)
   ac_motor: ['Lls', 'Llr'], pmsm: ['L0'], three_phase_source: ['phase'],

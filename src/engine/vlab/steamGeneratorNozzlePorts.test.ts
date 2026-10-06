@@ -22,11 +22,12 @@ describe('steam generator and nozzle hydraulic ports', () => {
   });
 
   it('implements the ideal steam-generator heat-to-mass-flow equation', () => {
-    const hFg = (2257 - 2.175 * ((200000 - 101325) / 3600)) * 1000;
+    // Steam tables (Cengel & Boles, Table A-5): saturated steam at 200 kPa, h_fg = 2201.6 kJ/kg
+    const hFg = 2201.6e3;
     const residual = blockEquations.steam_generator_fluid({
       across: [200000, 101325, 1000],
       dAcross: [],
-      branch: [1000 / hFg],
+      branch: [-1000 / hFg], // steam leaves through p: the flow p -> n through the block is negative
       dBranch: [],
       state: [],
       dState: [],
@@ -36,7 +37,7 @@ describe('steam generator and nozzle hydraulic ports', () => {
       nodeId: 'generator'
     });
 
-    expect(residual[0]).toBeCloseTo(0, 12);
+    expect(Math.abs(residual[0]) / (1000 / hFg)).toBeLessThan(2e-3);
     expect(blockEquations.steam_generator_fluid({
       across: [200000, 101325, 1000],
       dAcross: [],
@@ -48,7 +49,7 @@ describe('steam generator and nozzle hydraulic ports', () => {
       params: { Q: 1000 },
       ports: ['p', 'n', 'q_in'],
       nodeId: 'generator'
-    })[0]).toBeLessThan(0);
+    })[0]).toBeGreaterThan(0);
   });
 
   it('assembles generator p and n into the signed mass-flow topology', () => {
@@ -107,7 +108,7 @@ describe('steam generator and nozzle hydraulic ports', () => {
   });
 
   it('displays the implemented two-port nozzle equation in both V-Lab definitions', () => {
-    const equation = 'mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))';
+    const equation = 'mdot = Cd*A*Pp*sqrt(2*gamma/((gamma-1)*R*T0)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(Pn/Pp, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1)),  T0 = T_sat(Pp)';
 
     expect(VLAB_COMPONENT_DEFINITIONS.steam_nozzle.equations).toContain(equation);
     expect(findBlock('steam_nozzle').equation).toBe(equation);

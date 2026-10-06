@@ -76,15 +76,24 @@ export const DERIVED_REQUIRED_CONSERVING_PORTS: Readonly<Record<string, readonly
   cccs: ['p', 'n'],
   ctrl_heat_src: ['a', 'b'],
   dc_current: ['p', 'n'],
-  gas_rotational_conv: ['r', 'c'],
-  gas_translational_conv: ['r', 'c'],
+  gas_cap: ['a'],
+  gas_flow_source: ['a', 'b'],
+  gas_inf_resistance: ['a', 'b'],
+  gas_pressure_sensor: ['p'],
   heat_src: ['a', 'b'],
   infinite_resistance: ['p', 'n'],
+  ma_flow_source: ['a', 'b'],
+  ma_moisture_source: ['a'],
+  ma_pipe: ['a', 'b'],
   mag_flux_source: ['n', 's'],
   mag_mmf_sensor: ['n', 's'],
   magnetron: ['h'],
+  mass_flow_source: ['p'],
+  pressure_sensor: ['p'],
   pwm_3ph_2level: ['p'],
   rot_motion_sensor: ['r', 'c'],
+  steam_generator: ['s'],
+  steam_generator_fluid: ['p', 'n'],
   temp_sensor: ['a'],
   thermal_resistor: ['h'],
   trans_motion_sensor: ['r', 'c'],
@@ -93,4 +102,4 @@ export const DERIVED_REQUIRED_CONSERVING_PORTS: Readonly<Record<string, readonly
 };
 
 /** Blocks already singular with every conserving port tied to a reference: not judged per port. */
-export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'pressure_source', 'steam_accumulator'];
+export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ma_separator'];

@@ -45,13 +45,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models laminar flow resistance in a fluid pipe where pressure drop is proportional to mass flow.'
   },
   orifice: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*|dP|)*sign(dP)'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho |\\Delta P|} \\text{sign}(\\Delta P)'],
+    equations: ['mdot = Cd*A*sqrt(2*rho)*dP/(dP^2 + dP_crit^2)^(1/4)', 'dP_crit = pi*Re_crit^2*mu^2/(8*rho*Cd^2*A)'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho} \\frac{\\Delta P}{(\\Delta P^2 + \\Delta P_{crit}^2)^{1/4}}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models turbulent restriction or nozzle orifice flow according to Bernoulli\'s equation.'
+    description: 'Bernoulli orifice (Simscape Local Restriction) with the smooth laminar / turbulent transition at the critical Reynolds number; turbulent mdot = Cd A sqrt(2 rho |dP|), linear near dP = 0.'
   },
   fluid_capacitance: {
-    equations: ['mdot = Cf * dP/dt'],
+    equations: ['mdot = Cf * dp/dt', 'p(0) = P0'],
     latex: ['\\dot{m} = C_f \\frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models fluid compressibility storage in a constant volume chamber.'
@@ -75,49 +75,49 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Maintains pressure potential equal to an input physical signal.'
   },
   mass_flow_source: {
-    equations: ['mdot = mdot_const'],
+    equations: ['mdot delivered into the network = mdot_const'],
     latex: ['\\dot{m} = \\dot{m}_0'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Injects a constant mass flow rate into the network.'
   },
   check_valve: {
-    equations: ['mdot = dP / Rf when dP > 0', 'mdot = 0 when dP <= 0'],
+    equations: ['mdot = (dP - P_crack) / Rf when dP > P_crack', 'mdot = 0 otherwise'],
     latex: ['\\dot{m} = \\frac{\\Delta P}{R_f} \\cdot H(\\Delta P)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'A one-way valve that only permits fluid flow in the positive direction.'
   },
   relief_valve: {
-    equations: ['dP = mdot * Rf_open when P1 > P_set', 'dP = mdot * Rf_closed when P1 <= P_set'],
+    equations: ['dP = mdot * R(dP), dP = p_p - p_n', 'R = Rf_open*s + Rf_closed*(1 - s), s = smooth step of (dP - P_set)'],
     latex: ['\\Delta P = \\dot{m} \\cdot R_{valve}(P)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Safety valve that opens to vent pressure when the inlet pressure exceeds a set threshold.'
   },
   steam_generator_fluid: {
-    equations: ['mdot = Q / h_fg'],
+    equations: ['mdot_steam = Q / h_fg(T_sat(p))', 'steam leaves through p'],
     latex: ['\\dot{m} = \\frac{Q}{h_{fg}}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Converts heating power (W) into steam mass flow rate using latent heat of vaporization.'
   },
   steam_accumulator: {
-    equations: ['P1 = P2', 'mdot_in - mdot_out = Cf * dP/dt'],
+    equations: ['P1 = P2', 'mdot_in - mdot_out = V * (d rho_g/dp)_sat * dp/dt'],
     latex: ['P_{in} = P_{out}', '\\dot{m}_{in} - \\dot{m}_{out} = C_f \\frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
   },
   steam_nozzle: {
-    equations: ['mdot = Cd*A*sqrt(2*rho*max(Pp-Pn,0))'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho \\max(P_p-P_n,0)}'],
+    equations: ['mdot = Cd*A*Pp*sqrt(2*gamma/((gamma-1)*R*T0)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(Pn/Pp, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1)),  T0 = T_sat(Pp)'],
+    latex: ['\\dot{m} = C_d A P_p \\sqrt{\\frac{2\\gamma}{(\\gamma-1) R T_0}} \\sqrt{r^{2/\\gamma} - r^{(\\gamma+1)/\\gamma}}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models steam flow from upstream pressure Pp to downstream pressure Pn through a throttled two-port nozzle.'
+    description: 'Isentropic flow of saturated steam from upstream pressure Pp to downstream pressure Pn through a converging two-port nozzle, choked at the critical pressure ratio.'
   },
   pressure_sensor: {
-    equations: ['S = P'],
+    equations: ['out = p (absolute pressure of the node)'],
     latex: ['S = P'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Measures fluid pressure at its input and outputs it as a physical signal.'
   },
   flow_sensor: {
-    equations: ['P1 = P2', 'S = mdot'],
+    equations: ['P1 = P2', 'out = mdot (p -> n)'],
     latex: ['P_{in} = P_{out}', 'S = \\dot{m}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Ideal flow meter with zero pressure drop that measures mass flow rate.'
@@ -352,7 +352,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a gas-tight seal or cap. Prevents mass flow through the terminal.'
   },
   gas_chamber: {
-    equations: ['dm/dt = (V / (R*T)) * dP/dt'],
+    equations: ['dm/dt = (V / (R*T)) * dp/dt = mdot_a + mdot_b', 'p(0) = P0'],
     latex: ['\dot{m} = \frac{V}{RT} \frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a fixed-volume gas container. It accumulates mass based on pressure changes under isothermal conditions.'
@@ -370,16 +370,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models linear pressure drop in a gas flow path, similar to a pipe or valve with low flow.'
   },
   gas_restriction: {
-    equations: ['mdot = Cd * A * P / sqrt(T)'],
+    equations: ['mdot = Cd*A*p_up*sqrt(2*gamma/((gamma-1)*R*T))*sqrt(r^(2/gamma) - r^((gamma+1)/gamma)), r = max(p_dn/p_up, r*)', 'choked: mdot = Cd*A*p_up*sqrt(gamma/(R*T))*(2/(gamma+1))^((gamma+1)/(2(gamma-1)))'],
     latex: ['\dot{m} = f(A, P, T)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models an orifice or nozzle where flow is restricted based on geometry and gas state.'
+    description: 'Compressible ideal-gas orifice (isentropic Saint-Venant & Wantzel flow) that chokes at the critical pressure ratio.'
   },
   gas_pipe: {
-    equations: ['Pa - Pb = f(L, D, mdot)', 'Q_heat = h * A * (T_gas - T_wall)'],
+    equations: ['Pa - Pb = f_eff*(L/D)*rho*v^2/2, rho = p_mean/(R*T)', 'f_eff = max(f, 64/Re)'],
     latex: ['\Delta P = f(\dot{m})', 'Q = h A \Delta T'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models a cylindrical pipe with friction losses and optional heat exchange with the environment.'
+    description: 'Darcy-Weisbach friction in a straight pipe for an isothermal ideal gas, laminar Hagen-Poiseuille at low Reynolds number. No heat exchange.'
   },
   gas_fixed_res: {
     equations: ['P = P_const'],
@@ -406,7 +406,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An ideal mass flow source that maintains a fixed flow rate regardless of back-pressure.'
   },
   gas_pressure_source: {
-    equations: ['Pa - Pb = S_p'],
+    equations: ['Pb - Pa = P*S'],
     latex: ['\Delta P = P_{src}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a pump or compressor that maintains a constant pressure difference between ports.'
@@ -628,25 +628,25 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Restricts linear travel distance using mechanical stop physics.'
   },
   ma_ref: {
-    equations: ['P = 0', 'T = 0', 'phi = 0'],
+    equations: ['p = 0 Pa (absolute pressure zero)'],
     latex: ['P, T, \phi = 0'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'The reference point for moist air networks, representing zero pressure, temperature, and humidity.'
   },
   ma_chamber: {
-    equations: ['dm/dt = f(V, P, T)', 'dQ/dt = f(T, P)'],
+    equations: ['dm/dt = mdot_a + mdot_b, m = p*V/(R*T)', 'dp/dt = (R*T/V)*(mdot_a + mdot_b) + (p/T)*dT/dt', 'C dT/dt = Q_H - k_loss*(T - T_amb)'],
     latex: ['\dot{m}, \dot{Q} = f(V, P, T)'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Models a fixed-volume moist air chamber. Tracks temperature in Kelvin with configurable ambient_temp (°C), heat_capacity (J/K), wall/food thermal mass, k_loss (W/K), and max_temp (°C).'
   },
   ma_pipe: {
-    equations: ['Delta P = f(L, m)', 'Delta T = f(h, Q)'],
+    equations: ['Pa - Pb = f*(L/D)*rho*v^2/2 + resistance*mdot', 'Q_H = UA*(T_H - T)', 'wd = dP*mdot/rho'],
     latex: ['\Delta P, \Delta T = f(\dot{m}, \dot{Q})'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a cylindrical pipe for moist air flow. Accounts for pressure drop and heat transfer.'
+    description: 'Darcy-Weisbach pipe for moist air (laminar + Haaland turbulent friction) with wall heat exchange at H; wd is the friction power dissipated.'
   },
   ma_separator: {
-    equations: ['mw_removed = eff * mw_in'],
+    equations: ['(unsupported) mw_removed = efficiency * m_liquid'],
     latex: ['\dot{m}_{w,rem} = \eta \dot{m}_{w,in}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Models a moisture separator. Removes water vapor from the air stream based on efficiency.'
@@ -658,31 +658,31 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Measures the total mass flow rate of the moist air mixture.'
   },
   ma_pt_sensor: {
-    equations: ['P_out = P', 'T_out = T'],
+    equations: ['p_out = p_a', 't_out = T (sensor parameter)'],
     latex: ['P_{out} = P, T_{out} = T'],
     across: 'P, T, H', through: 'None',
     description: 'Measures the pressure and temperature at a moist air node.'
   },
   ma_thermo_sensor: {
-    equations: ['rho_out = rho(P, T, H)'],
+    equations: ['rho = p/(R*T), R = (R_a + w*R_v)/(1 + w), p_v = phi*p_sat(T)'],
     latex: ['\rho_{out} = \rho(P, T, \phi)'],
     across: 'P, T, H', through: 'None',
     description: 'Calculates and outputs secondary thermodynamic properties like density or humidity ratio.'
   },
   ma_moisture_source: {
-    equations: ['mw = S_w'],
+    equations: ['mdot_added = rate*S into the node'],
     latex: ['\dot{m}_w = \dot{m}_{w,src}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Injects water vapor or liquid moisture into the moist air stream.'
   },
   ma_flow_src: {
-    equations: ['m = S_m'],
+    equations: ['mdot = rate*S, A -> B'],
     latex: ['\dot{m} = \dot{m}_{src}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'An ideal mass flow source for the air-vapor mixture.'
   },
   ma_pres_src: {
-    equations: ['Pa - Pb = S_p'],
+    equations: ['Pb - Pa = P*S'],
     latex: ['\Delta P = P_{src}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Models a pump or fan that maintains a pressure difference in a moist air network.'
@@ -1387,10 +1387,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Model for a radiant/resistive heating element. Injects thermal energy (negative through-flow) based on dissipated electrical power.'
   },
   steam_generator: {
-    equations: ['Qs = -power'],
+    equations: ['m_w*c_w*dT_w/dt = eta*P_el - k_loss*(T_w - T_amb) - Q_s', 'T_w >= T_boil: Q_s = max(0, eta*P_el - k_loss*(T_w - T_amb)), mdot_steam = Q_s/h_fg'],
     latex: ['Q = -P'],
     across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Models electrical heating of water and subsequent phase change to steam.'
+    description: 'Electric boiler: heats a water tank to the boiling temperature, then evaporates water at mdot = (Q - losses)/h_fg and delivers the latent heat through port S.'
   },
   microwave_inverter: {
     equations: [
@@ -1523,9 +1523,9 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Hydraulic pipe with laminar flow resistance in an isothermal liquid network.'
   },
   restriction_il: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*|dp|) * sign(dp)'],
+    equations: ['mdot = Cd*A*sqrt(2*rho)*dp/(dp^2 + dp_crit^2)^(1/4)'],
     latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho |\\Delta p|} \\operatorname{sign}(\\Delta p)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Hydraulic restriction or orifice obeying Bernoulli flow.'
+    description: 'Hydraulic orifice (Local Restriction): Bernoulli flow with the smooth laminar / turbulent transition.'
   }
 };

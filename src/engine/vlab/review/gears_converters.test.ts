@@ -621,8 +621,8 @@ describe('WP-13b gas rotational / translational converters (ideal displacement m
     const blocks = VLAB_LIBRARY.flatMap((d) => d.blocks);
     const mechanicalFluid = blocks.filter((b) =>
       b.ports.some((p) => /fluid|isothermal/i.test(p.domain ?? '')) && b.ports.some((p) => /^(rotational|translational)$/i.test(p.domain ?? '')));
-    // the moist-air converters (ma_rot_conv / ma_trans_conv) are explicitly unsupported and owned by WP-17
-    expect(mechanicalFluid.map((b) => b.id).filter((id) => !UNSUPPORTED_BLOCKS[id])).toEqual([]);
+    // the only fluid + shaft blocks are the moist-air piston chambers (WP-17); no hydraulic / pneumatic pump, motor or cylinder exists (F-060)
+    expect(mechanicalFluid.map((b) => b.id).filter((id) => !UNSUPPORTED_BLOCKS[id])).toEqual(['ma_rot_conv', 'ma_trans_conv']);
     expect(block('pump_il').ports.map((p) => p.domain)).not.toContain('Rotational');
   });
 });

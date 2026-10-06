@@ -39,7 +39,7 @@ export const CONFLICT_IS_INPUT: string[] = [];
 export const CONFLICT_IS_OUTPUT = [
   'ma_selector.t', 'pmsm_tq_est.tq_est',
   // outputs the old name vocabulary called conserving (s, p): the equation still reads them back as across
-  'hysteresis_ctrl_3ph.s', 'ma_pt_sensor.p',
+  'hysteresis_ctrl_3ph.s',
 ];
 
 /**
@@ -66,7 +66,7 @@ export const SILENT_IS_INPUT = [
   'quad_decoder.b', 'quad_decoder.z', 'resolver_to_digital.vy', 'pmsm_curr_ctrl.reset',
   'pmsm_ref_gen.tq_ref', 'pmsm_ref_gen.vdc', 'pmsm_foc.vdc_s', 'pmsm_field_weakening.vdq', 'pmsm_field_weakening.v_max',
   'pmsm_tq_est.idq', 'pwm_3ph_2level.amp', 'pwm_3ph_2level.ma', 'pwm_3ph_2level.mb', 'pwm_3ph_2level.mc',
-  'ps_terminator.u', 'outport.in', 'ma_moisture_source.s', 'ma_flow_source.s',
+  'ps_terminator.u', 'outport.in',
 ];
 
 /** not read and not driven (the block has no equation / no branch): decided from the block physics, output. */

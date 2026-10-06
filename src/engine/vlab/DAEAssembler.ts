@@ -26,6 +26,10 @@ import {
   THERMAL_REFERENCE_TEMPERATURE, findFloatingMagneticNetworks, findFloatingThermalNetworks,
   isInternalThermalReferencePort, isMagneticDomain, isThermalDomain,
 } from './vlabThermalMagneticReference';
+import {
+  ABSOLUTE_PRESSURE_BLOCKS, FLUID_REFERENCE_BLOCKS, isFluidLikeDomain, isInternalFluidReferencePort,
+} from './vlabFluidReference';
+import { findFloating } from './vlabThermalMagneticReference';
 import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
@@ -616,9 +620,21 @@ export class DAEAssembler {
           break;
         }
         case 'ma_chamber':
+          // WP-17: both fluid ports are the chamber node (mass flow INTO the chamber at a and at b), H carries the heat; states: T and p
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
           branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: 1 }] });
-          states.push('temp');
+          branches.push({ name: 'mass_flow_b', ports: [{ id: 'b', sign: -1 }] });
+          states.push('temp', 'pressure');
+          break;
+        case 'ma_rot_conv':
+        case 'ma_trans_conv':
+          // WP-17: single-acting piston chamber. Through variables INTO the block: mass flow at A, heat from H, torque / force at R (reaction at C).
+          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: -1 }] });
+          branches.push(blockType === 'ma_rot_conv'
+            ? { name: 'torque', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] }
+            : { name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          states.push('x', 'm', 'Tg');
           break;
         case 'inertia':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
@@ -749,9 +765,15 @@ export class DAEAssembler {
           break;
         case 'magnetron':
         case 'upper_heater':
-        case 'steam_generator':
           branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: 1 }] });
+          break;
+        case 'steam_generator':
+          // WP-17: the steam heat is delivered through the thermal port S (the library port; the old allocation named the non-existent
+          // port `h`, so the heat never reached the node wired to S). States: water temperature T_w and inventory m_w.
+          branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'heat_flow', ports: [{ id: 's', sign: 1 }] });
+          states.push('T_w', 'm_w');
           break;
         case 'microwave_inverter':
           branches.push({ name: 'current_in', ports: [{ id: 'ac_in', sign: -1 }] });
@@ -801,7 +823,9 @@ export class DAEAssembler {
           }
           break;
         case 'ma_pipe':
+          // mass flow a -> b, heat INTO the gas from the wall node H (wd is the auto-allocated signal output)
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: -1 }] });
           break;
         case 'ma_flow_source':
         case 'ma_pressure_source':
@@ -1302,8 +1326,12 @@ export class DAEAssembler {
                 ? isInternalThermalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
                 : isMagneticDomain(domain)
                   ? false
-                  : nameRule;
-          if (!nodePortShapes.has(key) && (groundedByDesign || domain === 'fluid' || domain === 'gas')) {
+                  : isFluidLikeDomain(domain)
+                    // F-064 (WP-17): the same for the Fluid / Gas / Isothermal Liquid / Moist Air domains (vlabFluidReference.ts): an
+                    // unconnected port is open (capped, no flow), never an atmosphere and never grounded by its name
+                    ? isInternalFluidReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
+                    : nameRule;
+          if (!nodePortShapes.has(key) && groundedByDesign) {
             referenceNodeIds.add(root);
           }
         }
@@ -1890,12 +1918,17 @@ export class DAEAssembler {
     }));
     const floatingThermalNetworks = findFloatingThermalNetworks(domainBlockNets(isThermalDomain), referenceNodeIds);
     const floatingMagneticNetworks = findFloatingMagneticNetworks(domainBlockNets(isMagneticDomain), referenceNodeIds);
+    // F-064 (WP-17): Fluid / Gas / Isothermal Liquid / Moist Air networks that nothing defines a pressure datum for.
+    const floatingFluidNetworks = findFloating(
+      domainBlockNets(isFluidLikeDomain), referenceNodeIds,
+      t => FLUID_REFERENCE_BLOCKS.has(t) || ABSOLUTE_PRESSURE_BLOCKS.has(t),
+    );
 
     return {
       structure: {
         variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices,
         floatingElectricalNetworks, floatingMechanicalNetworks, openSourcePorts,
-        floatingThermalNetworks, floatingMagneticNetworks,
+        floatingThermalNetworks, floatingMagneticNetworks, floatingFluidNetworks,
       },
       systemSize: varCount,
       variableNames,

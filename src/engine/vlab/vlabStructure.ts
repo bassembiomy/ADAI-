@@ -18,6 +18,7 @@ import { withStatefulEquationCaches } from './vlabEquations';
 import { floatingNetworkReason } from './vlabElectricalReference';
 import { floatingMechanicalReason, openSourcePortReason } from './vlabMechanicalReference';
 import { floatingMagneticReason, floatingThermalReason } from './vlabThermalMagneticReference';
+import { floatingFluidReason } from './vlabFluidReference';
 
 export type StructuralCode =
   | 'row-count-mismatch'
@@ -89,29 +90,15 @@ export const UNSUPPORTED_BLOCKS: Record<string, UnsupportedBlockSpec> = {
   // on width-3 vector ports in WP-09c)
   // (lever: implemented in WP-13b with the pivot reaction F_C = -(F_A + F_B) and v_A/v_B = -L1/L2 at a fixed pivot)
   // ── WP-17 (moist air, F-035: allocated outputs that were never driven) ──
-  ma_pipe: {
-    wp: 'WP-17',
-    missingSpec: 'Pipe (MA) pressure-loss law dP = f(L, D, Re) rho v^2/2 with moist-air density, heat exchange through port H, and the `wd` output; only a linear placeholder Pb - Pa = resistance*mdot exists and `wd` is never driven',
-  },
+  // (ma_pipe, ma_rot_conv, ma_trans_conv and ma_pt_sensor: implemented in WP-17 from Darcy-Weisbach friction, the ideal moist-air piston
+  // chamber and the psychrometric relations, see vlabEquations.ts / vlabFluidProperties.ts)
   ma_separator: {
     wp: 'WP-17',
-    missingSpec: 'Moisture Separator (MA) mass/energy balance with condensation and separation efficiency; the outputs `w` and `d` have no equation and the A-B relation is a placeholder (equal pressure, equal flow)',
-  },
-  ma_rot_conv: {
-    wp: 'WP-17',
-    missingSpec: 'Rotational Mechanical Converter (MA) displacement relation (mdot = rho D w, torque = D dp) and the `wd` output; the equation is a heat-transfer placeholder that reads speed and temperatures from the wrong ports and never drives `wd`',
-  },
-  ma_trans_conv: {
-    wp: 'WP-17',
-    missingSpec: 'Translational Mechanical Converter (MA) displacement relation (mdot = rho A v, force = A dp) and the `wd` output; the equation is a heat-transfer placeholder that reads velocity and temperatures from the wrong ports and never drives `wd`',
+    missingSpec: 'Moisture Separator (MA): the library states only an `efficiency` parameter and the outputs `w` and `d` without meaning or unit. Missing: the quantity that is separated (the V-Lab Moist Air ports carry total pressure and mass flow only, there is no liquid-water or condensate fraction on A), the separation relation (mdot_removed = efficiency * mdot_liquid or a saturation criterion), the condensation energy balance, and the definition and unit of the `w` and `d` outputs',
   },
   ma_selector: {
     wp: 'WP-17',
-    missingSpec: 'Measurement Selector (MA) takes a composite moist-air measurement on `in` (vector signal) and routes temperature, pressure and humidity to t, p, w; the equation only equates two scalars and the `p` output is never driven',
-  },
-  ma_pt_sensor: {
-    wp: 'WP-17',
-    missingSpec: 'Pressure & Temperature Sensor (MA) must report both pressure and temperature of the moist-air node, but the library exposes one scalar output `p`; the equation returns two rows for it and reads `p` itself as the fluid node',
+    missingSpec: 'Measurement Selector (MA) selects temperature, pressure and humidity (t, p, w) from a composite moist-air measurement vector on `in`. Missing: the channel layout and width of that vector (for example [T, p, w]) and a sensor that produces it (ma_pt_sensor, ma_thermo_sensor and ma_moisture_sensor output scalars), so the input has no source to select from',
   },
   // ── WP-20 (signal processing, controls, estimators) ──
   bldc_commutation: {
@@ -195,7 +182,8 @@ export function detectJacobianPattern(system: AssembledSystem, points = 2): numb
         for (let i = 0; i < n; i++) {
           const d = Math.abs(fp[i] - f0[i]);
           const scale = Math.max(1, Math.abs(f0[i]), Math.abs(fp[i]));
-          if (!(d <= 1e-10 * scale)) rows[i].add(j); // NaN counts as a dependency (never reject on missing information)
+          // 1e-13 (was 1e-10): a stiff row (gas chamber: dp - (R T / V) mdot, coefficients 1 and 8e6) must still show its small coupling
+          if (!(d <= 1e-13 * scale)) rows[i].add(j); // NaN counts as a dependency (never reject on missing information)
         }
       }
     } catch {
@@ -302,6 +290,14 @@ export function assertStructurallyWellPosed(system: AssembledSystem): void {
         expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId), reason: floatingMagneticReason(net),
       })),
     ]);
+  }
+  // WP-17 (F-064): Fluid / Gas / Isothermal Liquid / Moist Air networks with no pressure datum.
+  const floatingFluid = system.structure?.floatingFluidNetworks ?? [];
+  if (floatingFluid.length) {
+    throw new DAEStructureError(floatingFluid.map(net => ({
+      code: 'floating-network' as const, blockId: net.blocks[0].blockId, blockType: net.blocks[0].blockType,
+      expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId), reason: floatingFluidReason(net.blocks),
+    })));
   }
   const full = withStatefulEquationCaches(() => detectJacobianPattern(system));
   if (!full) return;

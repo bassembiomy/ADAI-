@@ -105,5 +105,8 @@ export interface AssembledSystem {
     /** connected Thermal networks without a Thermal Reference, Thermal Mass or Temperature Source (WP-15, F-011/F-064) */
     floatingThermalNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
     /** connected Magnetic networks without a Magnetic Reference (WP-15, F-064) */
-    floatingMagneticNetworks?: { blocks: { blockId: string; blockType: string }[] }[];  };
+    floatingMagneticNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
+    /** connected Fluid / Gas / Isothermal Liquid / Moist Air networks without a pressure reference or absolute-pressure block (WP-17, F-064) */
+    floatingFluidNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
+  };
 }
