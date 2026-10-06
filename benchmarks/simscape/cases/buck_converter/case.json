@@ -1,0 +1,12 @@
+{
+  "id": "buck_converter",
+  "class": "switching",
+  "stopTime": 0.03,
+  "dt": 4.9e-5,
+  "signals": [
+    { "name": "v_out", "unit": "V", "vlabProbe": { "nodeId": "sensor", "handle": "v_s", "variableName": "v_out" } }
+  ],
+  "analytic": { "type": "buck_converter_averaged", "Vin": 24, "D": 0.5, "L": 0.002, "C": 0.002, "R": 1, "Rs": 0.001 }
+}
+
+

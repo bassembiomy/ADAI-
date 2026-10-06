@@ -32,9 +32,11 @@ describe('VLab Library Search & Scoring', () => {
   it('defines the PMSM with three-phase electrical and rotational ports', () => {
     const pmsm = VLAB_LIBRARY.flatMap(d => d.blocks).find(b => b.id === 'pmsm');
 
-    expect(pmsm?.ports.map(port => port.id)).toEqual(['a', 'b', 'c', 'n', 'r']);
-    expect(pmsm?.ports.slice(0, 4).every(port => port.domain === 'Electrical')).toBe(true);
-    expect(pmsm?.ports[4]?.domain).toBe('Rotational');
+    // WP-12b: the stator terminals are one composite three-phase port (like the three-phase source)
+    expect(pmsm?.ports.map(port => port.id)).toEqual(['abc', 'n', 'r']);
+    expect(pmsm?.ports[0]?.composite).toBe('three_phase');
+    expect(pmsm?.ports.slice(0, 2).every(port => port.domain === 'Electrical')).toBe(true);
+    expect(pmsm?.ports[2]?.domain).toBe('Rotational');
   });
 
   it('exposes the PMSM dq and mechanical parameters used by its equation', () => {
@@ -136,14 +138,20 @@ describe('VLab Library Search & Scoring', () => {
     expect(inverter?.params.control_mode).toMatchObject({ value: 'three_phase_modulation', unit: '', label: 'Control Mode' });
     expect(inverter?.params.output_frequency_hz).toMatchObject({ value: 50, unit: 'Hz', label: 'Output Frequency' });
     expect(inverter?.params.output_resistance_ohm).toMatchObject({ value: 0.001, unit: 'ohm', label: 'Output Resistance' });
-    expect(inverter?.ports.map(p => p.id)).toEqual(['vabc', 'ma', 'mb', 'mc', 'p', 'n', 'a', 'b', 'c']);
+    expect(inverter?.params.modulation_index).toMatchObject({ value: 0.8, unit: '', min: 0, max: 1 });
+    // WP-12b: m_abc is a width-3 reference vector, the AC side is the composite three-phase port abc
+    expect(inverter?.ports.map(p => p.id)).toEqual(['vabc', 'amp', 'ma', 'mb', 'mc', 'p', 'n', 'abc']);
+    expect(inverter?.ports.find(p => p.id === 'vabc')).toMatchObject({ width: 3, channelNames: ['a', 'b', 'c'], domain: 'Physical', direction: 'in' });
+    expect(inverter?.ports.find(p => p.id === 'abc')).toMatchObject({ composite: 'three_phase', domain: 'Electrical' });
   });
 
   it('exposes physical three-level PWM inputs and scalar outputs', () => {
     const block = VLAB_LIBRARY.flatMap(domain => domain.blocks).find(item => item.id === 'pwm_3ph_3level');
     expect(block?.ports.map(port => port.id)).toEqual(['vabc', 'vdc', 'vneut', 'ga', 'gb', 'gc', 'ma', 'mb', 'mc']);
     expect(block?.ports.every(port => port.domain === 'Physical')).toBe(true);
-    expect(block?.params.output_frequency_hz).toMatchObject({ value: 50, unit: 'Hz', label: 'Output Frequency' });
+    // WP-12b: vabc is the width-3 reference vector; the internal reference oscillator (output_frequency_hz) is gone
+    expect(block?.ports.find(port => port.id === 'vabc')).toMatchObject({ width: 3, channelNames: ['a', 'b', 'c'] });
+    expect(block?.params.output_frequency_hz).toBeUndefined();
     expect(block?.params.neutral_balance_gain).toMatchObject({ value: 0.1, unit: '1/V', label: 'Neutral Balance Gain' });
   });
 

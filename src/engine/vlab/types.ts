@@ -48,6 +48,8 @@ export interface ComponentEquation {
   residual: (x: number[], dx: number[], ctx: EquationContext) => number[];
   // Number of equations this component contributes
   equationCount: number;
+  /** Port ids wired to another block (the same list the equation receives as `connectedPorts`); used by the event detector (WP-12b) */
+  connectedPorts?: string[];
 }
 
 /** One scope input channel: the solver variable of every component of the wired signal. */

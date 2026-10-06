@@ -14,15 +14,15 @@ const context: EquationContext = {
 };
 
 const acMotorResiduals = (params: Record<string, number>) => blockEquations.ac_motor({
-  across: [230, -115, -115, 0, 10],
-  dAcross: [0, 0, 0, 0, 0],
+  across: [[230, -115, -115], 0, 10], // WP-12b: composite abc, star point n, shaft r
+  dAcross: [[0, 0, 0], 0, 0],
   branch: [3, -1, -2, 1],
   dBranch: [0, 0, 0, 0],
   state: [0, 10, 0.2, 0.1],
   dState: [10, 2, 0.03, -0.02],
   params,
   ctx: context,
-  ports: ['a', 'b', 'c', 'n', 'r'],
+  ports: ['abc', 'n', 'r'],
   nodeId: 'motor'
 });
 

@@ -21,15 +21,15 @@ interface BldcOverrides {
 }
 
 const residuals = (overrides: BldcOverrides = {}) => blockEquations.bldc_motor({
-  across: overrides.across ?? [24, -12, -12, 0, 100],
-  dAcross: [0, 0, 0, 0, 0],
+  across: (([a, b, c, g, r]) => [[a, b, c], g, r])(overrides.across ?? [24, -12, -12, 0, 100]), // WP-12b: composite abc
+  dAcross: [[0, 0, 0], 0, 0],
   branch: overrides.branch ?? [2, -1, -1, 0],
   dBranch: overrides.dBranch ?? [10, -5, -5, 0],
   state: overrides.state ?? [Math.PI / 8, 100],
   dState: overrides.dState ?? [100, 3],
   params: overrides.params ?? { Rs: 0.2, Ls: 0.002, Ke: 0.1, Kt: 0.1, P: 4, J: 0.02, B: 0.002 },
   ctx: context,
-  ports: ['a', 'b', 'c', 'g', 'r'],
+  ports: ['abc', 'g', 'r'],
   nodeId: 'bldc'
 });
 

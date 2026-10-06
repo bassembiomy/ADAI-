@@ -25,9 +25,7 @@ const gates = (owner: PlannedVectorPort['owner']): PlannedVectorPort => ({
 
 /** `<block id>.<port id>` -> plan */
 export const VECTOR_PORT_BACKLOG: Record<string, PlannedVectorPort> = {
-  // inverter / PWM stages
-  'pwm_3ph_2level.vabc': abc('WP-12', 'reference input of the two-level bridge (the ma/mb/mc scalar inputs are the legacy form)'),
-  'pwm_3ph_3level.vabc': abc('WP-12'),
+  // inverter / PWM stages: pwm_3ph_2level.vabc and pwm_3ph_3level.vabc are width-3 since WP-12b (no entry left)
   // three-phase controllers
   'bldc_commutation.abc': abc('WP-20', 'hall-decoded phase pattern'),
   'bldc_current_ctrl.vabc': abc('WP-20'),

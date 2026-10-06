@@ -37,13 +37,13 @@ export type TopologyDiagnostic = EdgeSetDiagnostic;
  * Inputs whose unwired 0 is the documented, tested "inactive" state rather than a silent wrong value:
  *  - external_force in_*: an unwired load component means no applied force/torque
  *    (vlab_multibody_forces.test.ts: "external_force applies no hidden force when inputs are unconnected").
- *  - pwm_3ph_2level ma/mb/mc: consumed only when control_mode != sinusoidal_modulation; in the sinusoidal mode (used
- *    by the shipped pid_ac_motor / vfd labs) the block generates its own references and ignores them.
+ *  (pwm_3ph_2level vabc / ma / mb / mc / amp are no longer listed since WP-12b: the equation reads them through connectedPorts,
+ *  an unwired reference is the documented zero-voltage state d = 0 and amp falls back to modulation_index, so none is a derived
+ *  required input.)
  */
 export const SEMANTIC_OPTIONAL_INPUTS: ReadonlySet<string> = new Set([
   'external_force.in_fx', 'external_force.in_fy', 'external_force.in_fz',
   'external_force.in_tx', 'external_force.in_ty', 'external_force.in_tz',
-  'pwm_3ph_2level.ma', 'pwm_3ph_2level.mb', 'pwm_3ph_2level.mc',
 ]);
 
 /**

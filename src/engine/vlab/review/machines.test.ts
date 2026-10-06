@@ -87,12 +87,14 @@ describe('WP-12a catalog: ports, parameters, equation text, explicit references'
   it('port domains follow the block physics (stator terminals Electrical, shaft Rotational, three-phase source composite)', () => {
     const E = 'Electrical', R = 'Rotational';
     expect(portDomains('dc_motor')).toEqual({ p: E, n: E, r: R });
-    expect(portDomains('ac_motor')).toEqual({ a: E, b: E, c: E, n: E, r: R });
-    expect(portDomains('pmsm')).toEqual({ a: E, b: E, c: E, n: E, r: R });
-    expect(portDomains('bldc_motor')).toEqual({ a: E, b: E, c: E, g: E, r: R });
+    expect(portDomains('ac_motor')).toEqual({ abc: E, n: E, r: R });
+    expect(portDomains('pmsm')).toEqual({ abc: E, n: E, r: R });
+    expect(portDomains('bldc_motor')).toEqual({ abc: E, g: E, r: R });
     expect(portDomains('three_phase_source')).toEqual({ abc: E, n: E });
     const abc = block('three_phase_source').ports.find((p) => p.id === 'abc')!;
     expect(abc.composite).toBe('three_phase');
+    // WP-12b: the machine stator terminals are the same composite port as the source
+    for (const id of ['ac_motor', 'pmsm', 'bldc_motor']) expect(block(id).ports.find((p) => p.id === 'abc')!.composite, id).toBe('three_phase');
   });
 
   it('one back-EMF / torque constant (F-059): dc_motor and bldc_motor expose Ke and no Kt', () => {
@@ -160,8 +162,8 @@ describe('WP-12a catalog: ports, parameters, equation text, explicit references'
     // the unconnected rotor port of a motor is not a reference: an unwired star point is OPEN, not 0 V
     const m: Model = {
       nodes: [node('vs', 'dc_voltage', { V: 10, R_int: 0 }), GND, node('m', 'pmsm', { Rs: 1 }), node('w', 'ang_vel_source', { omega: 0 }), RREF,
-        node('ra', 'resistor', { R: 1 }), node('rb', 'resistor', { R: 1 }), node('rc', 'resistor', { R: 1 })],
-      edges: [wire('vs.p', 'ra.p'), wire('vs.p', 'rb.p'), wire('vs.p', 'rc.p'), wire('vs.n', 'gnd.a'), wire('ra.n', 'm.a'), wire('rb.n', 'm.b'), wire('rc.n', 'm.c'),
+        node('ra', 'resistor', { R: 1 }), node('rb', 'resistor', { R: 1 }), node('rc', 'resistor', { R: 1 }), node('spm', 'phase_splitter')],
+      edges: [wire('vs.p', 'ra.p'), wire('vs.p', 'rb.p'), wire('vs.p', 'rc.p'), wire('vs.n', 'gnd.a'), wire('ra.n', 'spm.a'), wire('rb.n', 'spm.b'), wire('rc.n', 'spm.c'), wire('spm.abc', 'm.abc'),
         wire('m.r', 'w.r'), wire('w.c', 'rref.r')],
     };
     const sim = simulate(m, 60, 0.001);
@@ -400,9 +402,9 @@ describe('WP-12a ac_motor: squirrel-cage induction machine vs the per-phase equi
   const MP = { Rs: 0.5, Rr: 0.4, Lls: 0.0004, Llr: 0.0004, Lm: 0.004, P: 2 };
   const f = 20, Vll = 60;
   const gridModel = (extra: Record<string, any>, shaft: 'speed' | 'free', omega = 0): Model => {
-    const nodes = [node('src', 'three_phase_source', { Vrms: Vll, f, phase: 0 }), node('sp', 'phase_splitter'), GND,
+    const nodes = [node('src', 'three_phase_source', { Vrms: Vll, f, phase: 0 }), GND,
       node('m', 'ac_motor', { ...MP, ...extra })];
-    const edges = [wire('src.abc', 'sp.abc'), wire('src.n', 'gnd.a'), wire('sp.a', 'm.a'), wire('sp.b', 'm.b'), wire('sp.c', 'm.c')];
+    const edges = [wire('src.abc', 'm.abc'), wire('src.n', 'gnd.a')];
     if (shaft === 'speed') { nodes.push(node('w', 'ang_vel_source', { omega }), RREF); edges.push(wire('m.r', 'w.r'), wire('w.c', 'rref.r')); }
     else { nodes.push(node('load', 'inertia', { J: 1e-9, B: 0 })); edges.push(wire('m.r', 'load.r')); }
     return { nodes, edges };
@@ -515,9 +517,9 @@ describe('WP-12a pmsm: dq model vs the closed-form steady state', () => {
   const wE = PP.pole_pairs * omegaM;
   const fE = wE / (2 * Math.PI);
   const supplied = (Vll: number, phaseDeg: number): Model => ({
-    nodes: [node('src', 'three_phase_source', { Vrms: Vll, f: fE, phase: phaseDeg }), node('sp', 'phase_splitter'), GND, node('m', 'pmsm', { ...PP, J: 0.02, B: 0 }),
+    nodes: [node('src', 'three_phase_source', { Vrms: Vll, f: fE, phase: phaseDeg }), GND, node('m', 'pmsm', { ...PP, J: 0.02, B: 0 }),
       node('w', 'ang_vel_source', { omega: omegaM }), RREF],
-    edges: [wire('src.abc', 'sp.abc'), wire('src.n', 'gnd.a'), wire('sp.a', 'm.a'), wire('sp.b', 'm.b'), wire('sp.c', 'm.c'), wire('m.r', 'w.r'), wire('w.c', 'rref.r')],
+    edges: [wire('src.abc', 'm.abc'), wire('src.n', 'gnd.a'), wire('m.r', 'w.r'), wire('w.c', 'rref.r')],
   });
 
   for (const phaseDeg of [200, 150, 330]) {
@@ -582,8 +584,8 @@ describe('WP-12a pmsm: dq model vs the closed-form steady state', () => {
     const R = 1e6;
     const m: Model = {
       nodes: [GND, node('m', 'pmsm', { ...PP, J: 0.02, B: 0 }), node('w', 'ang_vel_source', { omega: omegaM }), RREF,
-        node('ra', 'resistor', { R }), node('rb', 'resistor', { R }), node('rc', 'resistor', { R })],
-      edges: [wire('m.a', 'ra.p'), wire('m.b', 'rb.p'), wire('m.c', 'rc.p'), wire('ra.n', 'gnd.a'), wire('rb.n', 'gnd.a'), wire('rc.n', 'gnd.a'), wire('m.n', 'gnd.a'),
+        node('ra', 'resistor', { R }), node('rb', 'resistor', { R }), node('rc', 'resistor', { R }), node('spm', 'phase_splitter')],
+      edges: [wire('m.abc', 'spm.abc'), wire('spm.a', 'ra.p'), wire('spm.b', 'rb.p'), wire('spm.c', 'rc.p'), wire('ra.n', 'gnd.a'), wire('rb.n', 'gnd.a'), wire('rc.n', 'gnd.a'), wire('m.n', 'gnd.a'),
         wire('m.r', 'w.r'), wire('w.c', 'rref.r')],
     };
     const dt = (1 / fE) / 100;
@@ -628,8 +630,8 @@ describe('WP-12a bldc_motor: trapezoidal back-EMF and torque (e_x = Ke w f(P the
   const omegaM = 60;
   const generator = (RL: number): Model => ({
     nodes: [GND, node('m', 'bldc_motor', { ...BP, J: 0.02, B: 0.003 }), node('w', 'ang_vel_source', { omega: omegaM }), RREF,
-      node('ra', 'resistor', { R: RL }), node('rb', 'resistor', { R: RL }), node('rc', 'resistor', { R: RL })],
-    edges: [wire('m.a', 'ra.p'), wire('m.b', 'rb.p'), wire('m.c', 'rc.p'), wire('ra.n', 'gnd.a'), wire('rb.n', 'gnd.a'), wire('rc.n', 'gnd.a'), wire('m.g', 'gnd.a'),
+      node('ra', 'resistor', { R: RL }), node('rb', 'resistor', { R: RL }), node('rc', 'resistor', { R: RL }), node('spm', 'phase_splitter')],
+    edges: [wire('m.abc', 'spm.abc'), wire('spm.a', 'ra.p'), wire('spm.b', 'rb.p'), wire('spm.c', 'rc.p'), wire('ra.n', 'gnd.a'), wire('rb.n', 'gnd.a'), wire('rc.n', 'gnd.a'), wire('m.g', 'gnd.a'),
       wire('m.r', 'w.r'), wire('w.c', 'rref.r')],
   });
   const phases = [0, 2 * Math.PI / 3, -2 * Math.PI / 3];

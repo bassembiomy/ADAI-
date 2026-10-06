@@ -91,6 +91,39 @@ export function inputOrParam(
   return wired ? across[idx] : fallback;
 }
 
+// ── Power-electronics helpers (WP-12b): shared by the equations below and by the switching-event detector (vlabPhysics) ─────
+/** Unit triangular carrier at f_sw: 0 at t = 0, rising to 1 at half a period (Mohan, "Power Electronics", fig. 8-7). Mean value 1/2. */
+export const triangularCarrier = (time: number, fSw: number): number => {
+  const phase = (time * fSw) % 1;
+  return phase < 0.5 ? 2 * phase : 2 - 2 * phase;
+};
+
+/**
+ * Duty references d_k in [0, 1] of the upper switch of the three legs of pwm_3ph_2level, before the carrier comparison.
+ *  - sinusoidal_modulation: internal V/f generator m_k = M sin(2 pi f t - k 2 pi/3), M = amp input (or modulation_index), d = (1 + m)/2
+ *  - three_phase_modulation: the vabc vector m_abc in [-1, 1] when it is wired (d = (1 + m)/2); otherwise the scalar duty inputs
+ *    ma, mb, mc in [0, 1] (the legacy form); an unwired duty input is 0 (lower switch on: the safe zero-voltage state).
+ * Over-modulation (|m| > 1) saturates at the rails (clamped), it never extrapolates.
+ */
+export function twoLevelReferences(
+  args: { across: any[]; ports: string[]; connectedPorts?: string[]; params: Record<string, any> },
+  time: number,
+): number[] {
+  const { params, ports, connectedPorts } = args;
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  const wired = (id: string) => ports.includes(id) && (!connectedPorts || connectedPorts.includes(id));
+  // every parameter is read in every mode (a mode only selects which of them the equation uses)
+  const f = numericParam(params, 'output_frequency_hz', 50);
+  const modulationIndex = numericParam(params, 'modulation_index', 0.8);
+  if (stringParam(params, 'control_mode', 'three_phase_modulation') === 'sinusoidal_modulation') {
+    const M = clamp(inputOrParam(args, 'amp', modulationIndex), 0, 1);
+    const angle = 2 * Math.PI * ((time * f) % 1);
+    return [0, -2 * Math.PI / 3, 2 * Math.PI / 3].map(offset => 0.5 + 0.5 * M * Math.sin(angle + offset));
+  }
+  if (wired('vabc')) return vectorInput(args, 'vabc', 3).map(m => 0.5 + 0.5 * clamp(m, -1, 1));
+  return ['ma', 'mb', 'mc'].map(id => (wired(id) ? clamp(scalarInput(args, id), 0, 1) : 0));
+}
+
 // ── Three-phase transforms (WP-09c): pure helpers shared by the vector blocks below ─────────────────────────────────────────
 const SQRT3 = Math.sqrt(3);
 
@@ -922,16 +955,23 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   microwave_inverter: ({ across, branch, params, ports, connectedPorts }) => {
     // branch[0] is current_in, branch[1] is current_out
+    // Ideal, loss-free high-voltage supply with unity-power-factor input (loss-free resistor, Erickson and Maksimovic,
+    // "Fundamentals of Power Electronics", ch. 18; averaged model, no energy storage):
+    //   V_hv = ctrl * v_out                                  [V]   regulated HV output, measured against the model ground
+    //   i_in = G_e v_ac,   G_e = V_hv i_out / v_in^2         [S]   input conductance (resistor emulation, in phase with v_ac)
+    // so the instantaneous input power is v_ac i_in = (V_hv i_out) v_ac^2 / v_in^2 and its cycle average is exactly the output
+    // power V_hv i_out when the supply rms equals the nominal v_in (the dividing-by-v_ac form of P_in = P_out is singular at the
+    // zero crossings, so the nominal v_in^2 is used). i_in is the current INTO the block at ac_in, i_out the current OUT of the
+    // block at hv_out; both terminals are measured against the model ground (single-ended ports, no return terminal).
+    // branch[0] = i_in, branch[1] = i_out. Residuals: [V_hv - ctrl v_out,  i_in - (V_hv i_out / v_in^2) v_ac]
     const ctrl_val = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 1.0, 2);
     const v_out_target = (numericParam(params, 'v_out', 4000)) * ctrl_val;
     const v_in_nom = numericParam(params, 'v_in', 230);
-    const V_out = across[1];
-    // Use the nominal input voltage for the ideal power-balance relation.
-    // Dividing by the instantaneous AC voltage caused runaway input current
-    // near zero-crossings and made the microwave temperature unstable.
+    const V_ac = across[ports.indexOf('ac_in')];
+    const V_out = across[ports.indexOf('hv_out')];
     return [
       V_out - v_out_target,
-      branch[0] + (v_out_target / v_in_nom) * branch[1]
+      branch[0] - ((V_out * branch[1]) / (v_in_nom * v_in_nom)) * V_ac
     ];
   },
 
@@ -1328,8 +1368,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Ls = Lls + Lm;
     const sigmaLs = Ls - (Lm * Lm) / Lr;
 
+    const abc = vectorInput(args, 'abc', 3);
     const vn = scalarInput(args, 'n');
-    const [vAlpha, vBeta, vZero] = clarkeAmplitudeInvariant(scalarInput(args, 'a') - vn, scalarInput(args, 'b') - vn, scalarInput(args, 'c') - vn);
+    const [vAlpha, vBeta, vZero] = clarkeAmplitudeInvariant(abc[0] - vn, abc[1] - vn, abc[2] - vn);
     const [iAlpha, iBeta, iZero] = clarkeAmplitudeInvariant(branch[0], branch[1], branch[2]);
     const [dIAlpha, dIBeta, dIZero] = clarkeAmplitudeInvariant(dBranch[0], dBranch[1], dBranch[2]);
     const torque = branch[3];
@@ -1369,10 +1410,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const J = numericParam(params, 'J', 0.02);
     const B = numericParam(params, 'B', 0.002);
 
+    const abc = vectorInput(args, 'abc', 3);
     const vg = scalarInput(args, 'g');
-    const Va = scalarInput(args, 'a') - vg;
-    const Vb = scalarInput(args, 'b') - vg;
-    const Vc = scalarInput(args, 'c') - vg;
+    const Va = abc[0] - vg;
+    const Vb = abc[1] - vg;
+    const Vc = abc[2] - vg;
 
     const ia = branch[0];
     const ib = branch[1];
@@ -1418,10 +1460,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const J = numericParam(params, 'J', 0.02);
     const B = numericParam(params, 'B', 0.002);
 
+    const abc = vectorInput(args, 'abc', 3);
     const vn = scalarInput(args, 'n');
     const torque = branch[3];
 
-    const [vAlpha, vBeta, vZero] = clarkeAmplitudeInvariant(scalarInput(args, 'a') - vn, scalarInput(args, 'b') - vn, scalarInput(args, 'c') - vn);
+    const [vAlpha, vBeta, vZero] = clarkeAmplitudeInvariant(abc[0] - vn, abc[1] - vn, abc[2] - vn);
     const [iAlpha, iBeta, iZero] = clarkeAmplitudeInvariant(branch[0], branch[1], branch[2]);
     const [dIAlpha, dIBeta, dIZero] = clarkeAmplitudeInvariant(dBranch[0], dBranch[1], dBranch[2]);
 
@@ -1450,27 +1493,33 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── INVERTERS & CONTROL BLOCKS ─────────────────────────────────────────────
-  pwm_3ph_2level: ({ across, branch, params, ctx }) => {
-    const clamp = (value: number) => Math.min(1, Math.max(0, value ?? 0));
-    const f_out = numericParam(params, 'output_frequency_hz', 50);
-    const refs = stringParam(params, 'control_mode', '') === 'sinusoidal_modulation'
-      ? [0, -2 * Math.PI / 3, 2 * Math.PI / 3].map(offset => 0.5 + 0.4 * clamp(across[0]) * Math.sin(2 * Math.PI * ((ctx.time * f_out) % 1) + offset))
-      : [clamp(across[1]), clamp(across[2]), clamp(across[3])];
-
-    const carrierPhase = (ctx.time * Math.max(1, numericParam(params, 'f_sw', 5000))) % 1;
-    const carrier = carrierPhase < 0.5 ? 2 * carrierPhase : 2 - 2 * carrierPhase;
-    const duties = stringParam(params, 'model_mode', '') === 'switching' ? refs.map(ref => ref >= carrier ? 1 : 0) : refs;
-
-    const [ma, mb, mc] = duties;
-    const Vdc = across[4] - across[5];
+  pwm_3ph_2level: (args) => {
+    // Two-level three-phase voltage-source inverter (Mohan, Undeland, Robbins, "Power Electronics", ch. 8; Simscape Electrical
+    // "Average-Value Inverter (Three-Phase)" for the averaged model, "Converter (Three-Phase)" with ideal switches for the
+    // switching model). Leg k has an upper and a lower ideal switch with duty d_k in [0, 1] of the upper one; v_n is the DC- rail:
+    //   v_k - v_n = d_k Vdc - R_out i_k,out          (k = a, b, c; i_k,out = -i_k, the current flowing OUT of terminal k)
+    //   i_dc,in   = sum_k d_k i_k,out                 (power balance: Vdc i_dc = sum (v_k - v_n + R_out i_k,out) i_k,out)
+    // averaged: d_k is the continuous reference; switching: d_k = 1 when the reference >= the triangular carrier at f_sw,
+    // else 0 (ideal legs with anti-parallel diodes, no dead time). Reference: m_k in [-1, 1] -> d_k = (1 + m_k) / 2, so the
+    // fundamental pole voltage amplitude is m Vdc / 2 (linear range, m <= 1). Internal V/f generator (sinusoidal_modulation):
+    // m_k = M sin(2 pi f t - k 2 pi/3), M = input amp (or param modulation_index).
+    // branch: [i_dc (p -> block), i_a, i_b, i_c (abc,k -> block)]. Residuals: [i_dc + sum d_k i_k, (v_k - v_n) - d_k Vdc - R_out i_k]
+    const { branch, params, ctx } = args;
+    const abc = vectorInput(args, 'abc', 3);
+    const vn = scalarInput(args, 'n');
+    const Vdc = scalarInput(args, 'p') - vn;
     const Rout = numericParam(params, 'output_resistance_ohm', 0.001);
-    const [Idc = 0, Ia = 0, Ib = 0, Ic = 0] = branch ?? [];
-
+    const refs = twoLevelReferences(args, ctx.time);
+    const carrier = triangularCarrier(ctx.time, numericParam(params, 'f_sw', 5000));
+    const duties = stringParam(params, 'model_mode', 'averaged') === 'switching'
+      ? refs.map(ref => ref >= carrier ? 1 : 0)
+      : refs;
+    const [Idc, Ia, Ib, Ic] = branch;
     return [
-      Idc + ma * Ia + mb * Ib + mc * Ic,
-      across[6] - (across[5] + Vdc * ma) - Ia * Rout,
-      across[7] - (across[5] + Vdc * mb) - Ib * Rout,
-      across[8] - (across[5] + Vdc * mc) - Ic * Rout
+      Idc + duties[0] * Ia + duties[1] * Ib + duties[2] * Ic,
+      (abc[0] - vn) - duties[0] * Vdc - Ia * Rout,
+      (abc[1] - vn) - duties[1] * Vdc - Ib * Rout,
+      (abc[2] - vn) - duties[2] * Vdc - Ic * Rout
     ];
   },
 
@@ -2661,35 +2710,36 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - firing_angle];
   },
 
-  pwm_3ph_3level: ({ across, branch, params, ctx }) => {
-    const amplitude = Math.max(0, Math.min(1, across[0] ?? 0.5));
-    const vdc = Math.abs(across[1] ?? 0);
-    const vneut = across[2] ?? 0;
-    const fOut = numericParam(params, 'output_frequency_hz', 50);
-    const fSw = Math.max(1, numericParam(params, 'f_sw', 2000));
+  pwm_3ph_3level: (args) => {
+    // Three-level (NPC) phase-disposition PWM (Holmes and Lipo, "Pulse Width Modulation for Power Converters", ch. 3 level-shifted
+    // carriers; Simscape Electrical "PWM Generator (Three-Level)"). Reference vector m_abc = vabc in [-1, 1] (unit = Vdc/2), two
+    // in-phase triangular carriers c_u = tri(f_sw t) in [0, 1] and c_l = c_u - 1 in [-1, 0]:
+    //   r_k = clamp(m_k + Delta_neut, -1, 1),   Delta_neut = clamp(k_neut v_neut / max(|v_dc|, 1), -0.15, 0.15)
+    //   g_k = +1 if r_k >= c_u,  -1 if r_k <= c_l,  0 otherwise     (phase voltage v_k = g_k Vdc/2 in {-Vdc/2, 0, +Vdc/2})
+    // The carrier average of g_k is exactly r_k for every |r_k| <= 1 (P(c_u <= r) = r), so the fundamental phase voltage is
+    // m Vdc/2 and the line-to-line rms fundamental is (sqrt(3)/(2 sqrt(2))) m Vdc, as for the two-level inverter.
+    // Outputs: ga, gb, gc (levels) and ma, mb, mc = clamp(m_k, -1, 1) (the references). Residuals: [branch_ga..gc - g, branch_ma..mc - m]
+    const { branch, params, ctx } = args;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const m = vectorInput(args, 'vabc', 3).map(v => clamp(v, -1, 1));
+    const vdc = Math.abs(scalarInput(args, 'vdc'));
+    const vneut = scalarInput(args, 'vneut');
+    const fSw = numericParam(params, 'f_sw', 2000);
     const neutralGain = numericParam(params, 'neutral_balance_gain', 0.1);
-    const neutralCorrection = Math.max(-0.15, Math.min(0.15, neutralGain * vneut / Math.max(vdc, 1)));
-    const phase = 2 * Math.PI * fOut * ctx.time;
-    const refs = [
-      0.8 * amplitude * Math.sin(phase),
-      0.8 * amplitude * Math.sin(phase - 2 * Math.PI / 3),
-      0.8 * amplitude * Math.sin(phase + 2 * Math.PI / 3)
-    ];
-    const carrierPhase = (ctx.time * fSw) % 1;
-    const carrier = carrierPhase < 0.5 ? 4 * carrierPhase - 1 : 3 - 4 * carrierPhase;
-    const upper = carrier + 0.5;
-    const lower = carrier - 0.5;
-    const gates = refs.map(ref => {
-      const corrected = ref + neutralCorrection;
+    const neutralCorrection = clamp(neutralGain * vneut / Math.max(vdc, 1), -0.15, 0.15);
+    const upper = triangularCarrier(ctx.time, fSw);
+    const lower = upper - 1;
+    const gates = m.map(ref => {
+      const corrected = clamp(ref + neutralCorrection, -1, 1);
       return corrected >= upper ? 1 : corrected <= lower ? -1 : 0;
     });
     return [
       branch[0] - gates[0],
       branch[1] - gates[1],
       branch[2] - gates[2],
-      branch[3] - refs[0],
-      branch[4] - refs[1],
-      branch[5] - refs[2]
+      branch[3] - m[0],
+      branch[4] - m[1],
+      branch[5] - m[2]
     ];
   },
 
@@ -2753,24 +2803,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  thyristor_6pulse: ({ across, branch, params, ctx, ports }) => {
-    const findPort = (name: string, fallback: number) => {
-      const idx = (ports || []).findIndex(p => (p || '').toLowerCase() === name);
-      return idx !== -1 ? idx : fallback;
-    };
-    const thetaIdx = findPort('theta', 0);
-    const alphaIdx = findPort('alpha', 1);
+  thyristor_6pulse: (args) => {
+    // Six-pulse thyristor-bridge firing generator (Simscape Electrical "Synchronized 6-Pulse Generator", Mohan ch. 6): the
+    // gate of thyristor k = 1..6 is high while the synchronisation angle theta [deg] is within pulse_width_deg of the firing
+    // angle alpha + 60 (k - 1) [deg], alpha counted from the natural commutation point of thyristor 1:
+    //   g_k = 1 if wrap360(theta - (alpha + 60 (k - 1))) < pulse_width_deg, else 0
+    // When the theta port is not wired the angle is the internal ramp theta = 360 freq t (freq [Hz]). An exact 0 deg theta is a
+    // legitimate value (it is not mistaken for an unwired port).
+    // Residuals: [branch_gk - g_k], k = 1..6
+    const { branch, params, ctx, ports, connectedPorts } = args;
     const freq = numericParam(params, 'freq', 50);
-    const pulseWidth = Math.max(1, Math.min(60, numericParam(params, 'pulse_width_deg', 20)));
-    const alphaRaw = across[alphaIdx];
-    const alpha = (alphaRaw === undefined || alphaRaw === null || !Number.isFinite(alphaRaw)) ? 30 : alphaRaw;
+    const pulseWidth = numericParam(params, 'pulse_width_deg', 20);
     const wrap360 = (deg: number) => ((deg % 360) + 360) % 360;
-    const thetaRaw = across[thetaIdx];
-    // Reference angle in degrees: prefer the driven theta port; fall back to
-    // the internal time-based ramp so freq is honoured when theta is floating.
-    const thetaDriven = (thetaRaw !== undefined && thetaRaw !== null && Number.isFinite(thetaRaw) && Math.abs(thetaRaw) > 1e-12);
-    const thetaDeg = thetaDriven ? wrap360(thetaRaw as number) : wrap360(ctx.time * freq * 360);
-    const alphaDeg = wrap360(alpha);
+    const thetaWired = ports.includes('theta') && (!connectedPorts || connectedPorts.includes('theta'));
+    const thetaDeg = wrap360(thetaWired ? scalarInput(args, 'theta') : ctx.time * freq * 360);
+    const alphaDeg = wrap360(scalarInput(args, 'alpha'));
     const gates: number[] = [];
     for (let k = 0; k < 6; k++) {
       const fireAngle = wrap360(alphaDeg + k * 60);
@@ -2781,9 +2828,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   thyristor_12pulse: ({ across, branch, params, ctx, ports }) => {
+    // Twelve-pulse firing generator (Simscape Electrical "Synchronized 12-Pulse Generator", Mohan ch. 6 / Rashid ch. 10):
+    // two six-pulse sequences, the wye (star) bridge 30 deg behind the delta bridge,
+    //   delta_g_k = 1 if wrap2pi(phi - (alpha + 60 (k-1))) < pulse_width_deg,   wye_g_k = same with alpha + 30 + 60 (k-1)
+    //   phi = theta + 2 pi freq t   [rad]
     // theta is the electrical phase offset in radians (the convention used by
     // the other electrical angle blocks).  alpha is the firing angle in
     // degrees, while freq advances theta through the simulation time.
+    // (the six-pulse block takes theta as an absolute angle in degrees: the two conventions are documented in their help texts, F-083)
     const valueAtPort = (portId: string, fallbackIndex: number, fallback: number) => {
       const index = ports.indexOf(portId);
       const value = across[index >= 0 ? index : fallbackIndex];

@@ -211,7 +211,7 @@ export const LEARNING_LABS = [
       { id: 'error_calc', blockId: 'ps_subtract', position: { x: 200, y: 100 }, label: 'Error' },
       { id: 'speed_pid', blockId: 'ps_pid_ctrl', position: { x: 350, y: 100 }, label: 'Speed PID', params: { Kp: 2.5, Ki: 1.2 } },
       { id: 'dc_bus', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'ac_motor', blockId: 'ac_motor', position: { x: 700, y: 300 }, label: 'Induction Motor', params: { P: 2 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Encoder' },
       { id: 'scope', blockId: 'scope', position: { x: 1000, y: 150 }, label: 'PID Response', params: { time_range: 10 } },
@@ -221,14 +221,13 @@ export const LEARNING_LABS = [
       { id: 'pe1', source: 'ref_speed', target: 'error_calc', sourceHandle: 'y_s', targetHandle: 'u1_t' },
       { id: 'pe2', source: 'speed_sensor', target: 'error_calc', sourceHandle: 'w_s', targetHandle: 'u2_t' },
       { id: 'pe3', source: 'error_calc', target: 'speed_pid', sourceHandle: 'y_s', targetHandle: 'e_t' },
-      { id: 'pe4', source: 'speed_pid', target: 'inverter', sourceHandle: 'u_s', targetHandle: 'vabc_t' },
+      { id: 'pe4', source: 'speed_pid', target: 'inverter', sourceHandle: 'u_s', targetHandle: 'amp_t' },
       { id: 'pe5', source: 'dc_bus', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 'pe6', source: 'dc_bus', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'pe7', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 'pe9', source: 'inverter', target: 'ac_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 'pe10', source: 'inverter', target: 'ac_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 'pe11', source: 'ac_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      // F-080: the star point of the wye motor is left open (floating), like a Simscape wye machine fed by a two-level inverter;
+      // grounding it would put the inverter's Vdc/2 common mode across the zero-sequence path (a non-physical DC current)
+      { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' },
       { id: 'pe12', source: 'ac_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'pe13', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
@@ -241,7 +240,7 @@ export const LEARNING_LABS = [
     description: 'Compare Open-Loop V/f Control with High-Performance Sensorless FOC for Induction Motor speed and torque regulation.',
     nodes: [
       { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'vfd_controller', blockId: 'im_foc_ctrl', position: { x: 300, y: 100 }, label: 'VFD Controller', params: { mode: 1 } },
       { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
       { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
@@ -254,11 +253,9 @@ export const LEARNING_LABS = [
       { id: 've2', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 've2_ret', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 've2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
-      { id: 've4_a', source: 'inverter', target: 'im_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 've4_b', source: 'inverter', target: 'im_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 've4_c', source: 'inverter', target: 'im_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 've4_n', source: 'im_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
+      // F-080: open (floating) motor star point, see the PID lab
+      { id: 've4', source: 'inverter', target: 'im_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' },
       { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
@@ -272,7 +269,7 @@ export const LEARNING_LABS = [
     nodes: [
       { id: 'washing_ctrl', blockId: 'im_foc_ctrl', position: { x: 50, y: 100 }, label: 'Wash Cycle Controller', params: { target_rpm: 600 } },
       { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Bus (320V)', params: { V: 320 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'wash_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Direct Drive Motor' },
       { id: 'basket_load', blockId: 'washing_basket', position: { x: 750, y: 300 }, label: 'Washing Basket', params: { load_mass: 6 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Speed Sensor' },
@@ -280,14 +277,12 @@ export const LEARNING_LABS = [
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'System Ground' }
     ],
     edges: [
-      { id: 'we1', source: 'washing_ctrl', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
+      { id: 'we1', source: 'washing_ctrl', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
       { id: 'we2_dc', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 'we2_gnd', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'we2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 'we3_a', source: 'inverter', target: 'wash_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 'we3_b', source: 'inverter', target: 'wash_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 'we3_c', source: 'inverter', target: 'wash_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 'we3_n', source: 'wash_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      // F-080: open (floating) motor star point, see the PID lab
+      { id: 'we3', source: 'inverter', target: 'wash_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' },
       { id: 'we4', source: 'wash_motor', target: 'basket_load', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'we5', source: 'wash_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }

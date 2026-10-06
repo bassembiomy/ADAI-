@@ -91,6 +91,8 @@ describe('library metadata: width / channelNames / composite', () => {
     'park_transform.abc', 'park_transform.dq0', 'inv_park_transform.dq0', 'inv_park_transform.abc',
     'sym_comp_transform.abc', 'sym_comp_transform.seq', 'inv_sym_comp_transform.seq', 'inv_sym_comp_transform.abc',
     'three_phase_source.abc', // WP-12a (F-068): composite three-phase source port
+    // WP-12b: stator / AC terminals of the machines and the inverter are composite; the PWM reference vectors are width 3
+    'ac_motor.abc', 'pmsm.abc', 'bldc_motor.abc', 'pwm_3ph_2level.abc', 'pwm_3ph_2level.vabc', 'pwm_3ph_3level.vabc',
   ];
   const marked = blocks.flatMap(b => b.ports.filter(p => p.width !== undefined || p.composite !== undefined).map(p => `${b.id}.${p.id}`));
 

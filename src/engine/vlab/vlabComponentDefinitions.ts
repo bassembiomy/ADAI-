@@ -249,7 +249,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     ],
     latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', 'T_e = \\frac{3}{2} p (\\psi_{s\\alpha} i_{s\\beta} - \\psi_{s\\beta} i_{s\\alpha})'],
     across: 'Phase voltage v_k - v_n [V], shaft speed omega [rad/s]', through: 'Phase current i_k, k -> n [A], shaft torque tau_shaft [N*m]',
-    description: 'Squirrel-cage induction motor, Krause dq0 model in the stationary alpha-beta frame with the rotor referred to the stator (same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Wye stator with a real star-point terminal n.'
+    description: 'Squirrel-cage induction motor, Krause dq0 model in the stationary alpha-beta frame with the rotor referred to the stator (same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Wye stator with a real star-point terminal n (open = floating star point: no zero-sequence current). Stator terminals: composite three-phase port abc.'
   },
   bldc_motor: {
     equations: [
@@ -259,7 +259,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     ],
     latex: ['v_{x} - v_g = R_s i_{x} + L_s \\frac{di_x}{dt} + K_e \\omega f(P\\theta - \\phi_x)'],
     across: 'Phase voltage v_x - v_g [V], shaft speed omega [rad/s]', through: 'Phase current i_x, x -> g [A], shaft torque tau_shaft [N*m]',
-    description: 'Brushless DC motor with trapezoidal back-EMF (unit trapezoid: +-1 over 120 deg, 60 deg ramps). Wye stator with a real star-point terminal g. One constant Ke is both the back-EMF and torque constant. Requires a 6-step commutation inverter for operation.'
+    description: 'Brushless DC motor with trapezoidal back-EMF (unit trapezoid: +-1 over 120 deg, 60 deg ramps). Wye stator with a real star-point terminal g; stator terminals: composite three-phase port abc. One constant Ke is both the back-EMF and torque constant. Requires a 6-step commutation inverter for operation.'
   },
   controlled_voltage: {
     equations: ["Vp - Vn = S + I * R_int   [V]"],
@@ -1054,7 +1054,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       'T_e = \\frac{3}{2} p [\\lambda_m i_q + (L_d - L_q) i_d i_q]'
     ],
     across: 'Phase voltage v_k - v_n [V], shaft speed omega [rad/s]', through: 'Phase current i_k, k -> n [A], shaft torque tau_shaft [N*m]',
-    description: 'Permanent Magnet Synchronous Motor in the rotor-fixed dq-reference frame (amplitude-invariant Clarke/Park). Wye stator with a real star-point terminal n. Phase back-EMF amplitude is lambda_m*w_e. Connect to an inverter for high-performance motion control.'
+    description: 'Permanent Magnet Synchronous Motor in the rotor-fixed dq-reference frame (amplitude-invariant Clarke/Park). Wye stator with a real star-point terminal n; stator terminals: composite three-phase port abc. Phase back-EMF amplitude is lambda_m*w_e. Connect to an inverter for high-performance motion control.'
   },
   ps_pid_ctrl: {
     equations: ['u = Kp*e + Ki*integral(e) + Kd*de/dt'],
@@ -1103,25 +1103,25 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   pwm_3ph_2level: {
     equations: [
-      'Va = Vn + Vdc * ma',
-      'Vb = Vn + Vdc * mb',
-      'Vc = Vn + Vdc * mc',
-      'Idc + ma*Ia + mb*Ib + mc*Ic = 0'
+      'v_k - v_n = d_k * Vdc - R_out * i_k,out   [V],  k = a, b, c',
+      'i_dc = d_a*i_a,out + d_b*i_b,out + d_c*i_c,out   [A]',
+      'd_k = (1 + m_k) / 2,  m_k = M * sin(2*pi*f_out*t - k*2*pi/3)  or the vabc / duty inputs',
+      'switching mode: d_k = 1 if d_k,ref >= carrier(f_sw*t) else 0'
     ],
-    latex: ['V_x = V_n + V_{dc} \\cdot m_x', 'I_{dc} + \\sum m_x I_x = 0'],
-    across: 'Voltage (V)', through: 'Current (A)',
-    description: '3-Phase Inverter Bridge. In averaged mode (default), generates continuous phase voltages Vx = Vn + Vdc * mx with zero PWM ripple. In switching mode, compares modulation references against a triangular carrier at f_sw to produce two voltage levels and ripple.'
+    latex: ['v_k - v_n = d_k V_{dc} - R_{out} i_{k,out}', 'i_{dc} = \\sum_k d_k i_{k,out}', 'd_k = (1 + m_k)/2'],
+    across: 'Voltage v_k - v_n [V], DC link Vdc [V]', through: 'Phase current into the block i_k [A], DC link current i_dc [A]',
+    description: 'Two-level three-phase inverter. Averaged model (default, Simscape Average-Value Inverter): continuous duty d_k, no switching ripple. Switching model: ideal legs with anti-parallel diodes switch at f_sw when the duty reference crosses a triangular carrier; the crossings are located by the solver events. The fundamental pole voltage amplitude is M*Vdc/2 and the line-to-line rms fundamental (sqrt(3)/(2*sqrt(2)))*M*Vdc for M <= 1. AC terminals: composite three-phase port ABC. A floating wye load has no zero-sequence current.'
   },
   pwm_3ph_3level: {
     equations: [
-      'ma,mb,mc = 0.8*vabc*sin(2π*f_out*t + [0,-120,+120]°)',
-      'g_x = +1 if m_x + Δ_neut >= C_upper',
-      'g_x = -1 if m_x + Δ_neut <= C_lower',
-      'g_x = 0 otherwise'
+      'r_x = clamp(m_x + Δ_neut, -1, 1),  m = vabc in [-1, 1]',
+      'g_x = +1 if r_x >= C_upper (in [0, 1])',
+      'g_x = -1 if r_x <= C_lower = C_upper - 1',
+      'g_x = 0 otherwise  =>  <g_x> = r_x'
     ],
-    latex: ['g_x \\in \\{-1, 0, 1\\}', '\\Delta_{neut} = clamp(k_{neut} v_{neut}/max(|v_{dc}|,1))'],
+    latex: ['g_x \\in \\{-1, 0, 1\\}', '\\langle g_x \\rangle = r_x', '\\Delta_{neut} = clamp(k_{neut} v_{neut}/max(|v_{dc}|,1), -0.15, 0.15)'],
     across: 'Physical Inputs', through: 'Physical Outputs',
-    description: 'Three-level PWM generator with explicit ga/gb/gc and ma/mb/mc outputs. Uses two triangular carriers at f_sw and a bounded vneut-based neutral-point correction; vabc=0 remains zero modulation.'
+    description: 'Three-level phase-disposition PWM generator: input vabc is the width-3 reference vector m_abc in [-1, 1] (unit = Vdc/2); two in-phase triangular carriers at f_sw give the level commands ga/gb/gc in {-1, 0, +1} (phase voltage {-Vdc/2, 0, +Vdc/2}); ma/mb/mc echo the references. The carrier average of each level equals its reference, so the fundamental phase voltage is m*Vdc/2. vneut adds a bounded neutral-point correction. Signal generator, no power stage.'
   },
   pwm_vienna: {
     equations: [
@@ -1142,7 +1142,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['g_k = 1 if wrap(theta - (alpha + 60k)) < pulse_width else 0', 'k = 0..5'],
     latex: ['g_k = \\mathbf{1}_{[0, w_p)}(\\mathrm{wrap}(\\theta - (\\alpha + 60k)))'],
     across: 'Physical Inputs', through: 'Physical Outputs',
-    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port and the reference angle theta (deg) from the theta port (time-based ramp at freq when floating); each pulse has a defined width (pulse_width_deg) and fires 60° apart.'
+    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port, counted from the natural commutation point of thyristor 1, and the absolute synchronisation angle theta (deg) from the theta port (own ramp 360*freq*t when unwired); each pulse has a defined width (pulse_width_deg) and fires 60° apart. A bridge fired at alpha has the mean DC voltage (3*sqrt(2)/pi)*V_LL*cos(alpha). Signal generator only (no thyristor device in the library).'
   },
   thyristor_12pulse: {
     equations: [
@@ -1156,7 +1156,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       'G_{Y,k} = \\operatorname{pulse}(\\theta - (\\alpha + 30 + 60k))'
     ],
     across: 'Physical Inputs', through: 'Physical Gate Outputs',
-    description: 'Generates twelve independent, finite-width thyristor firing pulses: six delta gates and six wye gates. The wye bridge is shifted by 30 degrees and successive gates in each bridge are separated by 60 degrees.'
+    description: 'Generates twelve independent, finite-width thyristor firing pulses: six delta gates and six wye gates. The wye bridge is shifted by 30 degrees and successive gates in each bridge are separated by 60 degrees. theta is a phase offset in radians added to the internal ramp 2*pi*freq*t. Two six-pulse bridges 30 degrees apart in series give twice the six-pulse mean DC voltage with the ripple at 12 times the line frequency. Signal generator only.'
   },
   belt_properties: {
     equations: ['rho = density', 'E = youngs', 'publish(belt_density, belt_youngs)'],
@@ -1387,10 +1387,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models electrical heating of water and subsequent phase change to steam.'
   },
   microwave_inverter: {
-    equations: ['Vhv_out = Vac_in * (v_out / v_in)'],
-    latex: ['V_{hv} = V_{ac} \cdot \frac{V_{out}}{V_{in}}'],
+    equations: [
+      'V_hv = ctrl * v_out   [V]',
+      'i_in = (V_hv * i_out / v_in^2) * v_ac   [A]  (P_in = P_out on average, unity power factor)'
+    ],
+    latex: ['V_{hv} = \\mathrm{ctrl}\\, v_{out}', 'i_{in} = \\frac{V_{hv} i_{out}}{v_{in}^2} v_{ac}'],
     across: 'Voltage (V)', through: 'Current (A)',
-    description: 'High-frequency switching power supply for generating magnetron drive voltage.'
+    description: 'Averaged, loss-free high-voltage supply for the magnetron: regulated HV output and a unity-power-factor input (loss-free resistor). The cycle-averaged input power equals the output power when the supply rms equals the nominal v_in. Single-ended AC and HV terminals measured against the Electrical Reference.'
   },
   microwave_cavity: {
     equations: [

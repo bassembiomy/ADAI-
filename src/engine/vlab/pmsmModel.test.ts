@@ -23,8 +23,8 @@ const residuals = (overrides: PmsmOverrides = {}) => {
   };
 
   return blockEquations.pmsm({
-    across: overrides.across ?? [10, -5, -5, 0, 100],
-    dAcross: [0, 0, 0, 0, 0],
+    across: (([a, b, c, n, r]) => [[a, b, c], n, r])(overrides.across ?? [10, -5, -5, 0, 100]), // WP-12b: composite abc
+    dAcross: [[0, 0, 0], 0, 0],
     branch: overrides.branch ?? [1, 1.2320508075688772, -2.232050807568877, 0],
     dBranch: overrides.dBranch ?? [2, -1, -1, 0],
     state: overrides.state ?? [0, 100],
@@ -39,7 +39,7 @@ const residuals = (overrides: PmsmOverrides = {}) => {
       B: 0.002
     },
     ctx: context,
-    ports: ['a', 'b', 'c', 'n', 'r'],
+    ports: ['abc', 'n', 'r'],
     nodeId: 'pmsm'
   });
 };

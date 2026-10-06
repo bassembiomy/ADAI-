@@ -11,7 +11,8 @@ import { assertStructurallyWellPosed, DAEStructureError } from './vlabStructure'
 import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagnostics';
 import { readSolvedVariable } from './vlabScopeRead';
 import { scopeTraceKey } from './vlabVectorPorts';
-import { numericParam } from './vlabParams';
+import { numericParam, stringParam } from './vlabParams';
+import { twoLevelReferences, triangularCarrier } from './vlabEquations';
 import { ddtVector } from './vlabDiscretization';
 
 // SDIRK-3 Butcher tableau constants
@@ -417,7 +418,7 @@ export class VLabPhysicsEngine {
           // Treating that initialization (for example Vg: 0 -> 4 V) as a temporal
           // crossing repeatedly shrinks the step before the simulation can start.
           if (!isAlgebraicSystem && (prevState || acceptedSteps > 0)) {
-            const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
+            const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system, t, t + h);
             if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
               const hEvent = h * eventInfo.fraction;
               throw new EventTriggerError(hEvent);
@@ -807,17 +808,19 @@ export class VLabPhysicsEngine {
     edges: Edge[],
     xStart: number[],
     xEnd: number[],
-    system: AssembledSystem
+    system: AssembledSystem,
+    tStart = 0,
+    tEnd = 0
   ): { eventOccurred: boolean; fraction: number } {
     let earliestFraction = 1.0;
     let eventOccurred = false;
-    
+
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       const comp = system.components.find(c => c.blockId === node.id);
       if (!comp) return;
-      
-      const getIndicators = (xVec: number[]): number[] => {
+
+      const getIndicators = (xVec: number[], time: number): number[] => {
         const indicators: number[] = [];
         const ports = Array.from(comp.portNodeMap.keys());
         const acrossVals = ports.map(portId => {
@@ -892,12 +895,25 @@ export class VLabPhysicsEngine {
           indicators.push(Vge - Vge_th);
           indicators.push(Vce - Vce_sat);
         }
-        
+        else if (type === 'pwm_3ph_2level' && stringParam(params, 'model_mode', 'averaged') === 'switching') {
+          // WP-12b: the leg states of the switching inverter change when the duty reference crosses the triangular carrier
+          // (a function of time and of the wired reference). Indicator per leg: reference d_k - carrier(t).
+          const root = comp.portNodeMap.get('vabc');
+          const first = root === undefined ? -1 : system.variableNames.findIndex(name => name.startsWith(`Across_${root}_ch0_`));
+          const vabc = first >= 0 ? [0, 1, 2].map(k => xVec[first + k]) : [0, 0, 0];
+          const argsLike = {
+            across: ports.map(portId => (portId === 'vabc' ? vabc : getPortVal(portId))),
+            ports, connectedPorts: comp.connectedPorts, params,
+          };
+          const carrier = triangularCarrier(time, numericParam(params, 'f_sw', 5000));
+          twoLevelReferences(argsLike, time).forEach(ref => indicators.push(ref - carrier));
+        }
+
         return indicators;
       };
-      
-      const indStart = getIndicators(xStart);
-      const indEnd = getIndicators(xEnd);
+
+      const indStart = getIndicators(xStart, tStart);
+      const indEnd = getIndicators(xEnd, tEnd);
       
       indStart.forEach((valStart, i) => {
         const valEnd = indEnd[i];

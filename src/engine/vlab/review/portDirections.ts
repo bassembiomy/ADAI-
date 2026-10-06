@@ -65,7 +65,8 @@ export const SILENT_IS_INPUT = [
   'im_foc_ctrl.imr_ref', 'im_foc_ctrl.iabc', 'im_foc_ctrl.wr', 'im_foc_ctrl.vdc', 'im_curr_ctrl.reset',
   'quad_decoder.b', 'quad_decoder.z', 'resolver_to_digital.vy', 'pmsm_curr_ctrl.reset',
   'pmsm_ref_gen.tq_ref', 'pmsm_ref_gen.vdc', 'pmsm_foc.vdc_s', 'pmsm_field_weakening.vdq', 'pmsm_field_weakening.v_max',
-  'pmsm_tq_est.idq', 'pwm_3ph_2level.vabc', 'ps_terminator.u', 'outport.in', 'ma_moisture_source.s', 'ma_flow_source.s',
+  'pmsm_tq_est.idq', 'pwm_3ph_2level.amp', 'pwm_3ph_2level.ma', 'pwm_3ph_2level.mb', 'pwm_3ph_2level.mc',
+  'ps_terminator.u', 'outport.in', 'ma_moisture_source.s', 'ma_flow_source.s',
 ];
 
 /** not read and not driven (the block has no equation / no branch): decided from the block physics, output. */

@@ -76,6 +76,9 @@ export const LEGACY_PARAM_DROPS: Record<string, string[]> = {
   // WP-12a (F-059): one back-EMF / torque constant k = Ke (SI: Kt = Ke). A Kt that differed from Ke is reported by
   // machineConstantNotice and dropped; Ke is kept as k.
   dc_motor: ['Kt'], bldc_motor: ['Kt'],
+  // WP-12b: the three-level PWM takes its reference vector from the wired vabc (width 3); the internal reference oscillator
+  // (and its output frequency) is gone, so the saved value is never read
+  pwm_3ph_3level: ['output_frequency_hz'],
 };
 
 /** Library parameters exposed by WP-08 (previously hidden): backfilled into saved nodes so the inspector shows them. */
@@ -92,6 +95,8 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   // WP-12a: machine leakage inductances (the old induction model hard-coded Lr = 0.06 H), PMSM zero-sequence inductance,
   // three-phase source phase angle of phase A (the old source had a hidden +45 deg shift; Simscape default is 0)
   ac_motor: ['Lls', 'Llr'], pmsm: ['L0'], three_phase_source: ['phase'],
+  // WP-12b: amplitude of the inverter's internal V/f generator (the old equation took it from the scalar vabc input)
+  pwm_3ph_2level: ['modulation_index'],
   // WP-19a: joint parameters of the shared multibody joint core (axis defaults to Z like Simscape; weld reference pose)
   revolute_joint: ['axis'], prismatic_joint: ['axis'], weld_joint: ['offset', 'rotation'],
 };
@@ -251,11 +256,71 @@ const migrateThreePhaseSources = (nodes: VLabNode[], edges: VLabEdge[]): { nodes
   return { nodes: [...migratedNodes, ...addedNodes], edges: [...migratedEdges, ...addedEdges] };
 };
 
+/**
+ * WP-12b: the stator / AC terminals of the three-phase machines (ac_motor, pmsm, bldc_motor) and of the two-level inverter
+ * (pwm_3ph_2level) are the composite three-phase port `abc` (like the WP-12a three_phase_source) instead of the scalar ports
+ * a, b, c. A saved node with scalar a / b / c keeps its circuit: a Phase Splitter (abc -> a, b, c) is inserted between the
+ * composite port and the old scalar wires, and every edge that touched a / b / c is re-pointed to the splitter's scalar
+ * ports. A legacy inverter's scalar `vabc` input was the amplitude of its V/f generator (it is a width-3 reference now), so
+ * that wire is re-pointed to the new scalar `amp` input.
+ * A node is legacy when its saved `ports` list has `a` and no `abc`, or when it has no saved list but an edge uses a phase handle.
+ */
+const COMPOSITE_PHASE_BLOCKS: ReadonlySet<string> = new Set(['ac_motor', 'pmsm', 'bldc_motor', 'pwm_3ph_2level']);
+const PHASE_HANDLE = /^([abc])_[st]$/;
+
+const migrateScalarPhasePorts = (nodes: VLabNode[], edges: VLabEdge[]): { nodes: VLabNode[]; edges: VLabEdge[] } => {
+  const touchedByPhaseEdge = new Set<string>();
+  for (const e of edges) {
+    if (PHASE_HANDLE.test(e.sourceHandle ?? '')) touchedByPhaseEdge.add(e.source);
+    if (PHASE_HANDLE.test(e.targetHandle ?? '')) touchedByPhaseEdge.add(e.target);
+  }
+  const legacy = nodes.filter((n) => {
+    if (!COMPOSITE_PHASE_BLOCKS.has(effectiveBlockType(n))) return false;
+    const ports = n.data?.ports;
+    if (Array.isArray(ports)) return ports.some((p: any) => p?.id === 'a') && !ports.some((p: any) => p?.id === 'abc');
+    return touchedByPhaseEdge.has(n.id);
+  });
+  if (legacy.length === 0) return { nodes, edges };
+  const blocks = VLAB_LIBRARY.flatMap((d) => d.blocks);
+  const libPorts = (id: string) => blocks.find((b) => b.id === id)!.ports.map((p) => ({ ...p }));
+  const taken = new Set(nodes.map((n) => n.id));
+  const fresh = (base: string) => { let id = base; for (let i = 2; taken.has(id); i++) id = `${base}_${i}`; taken.add(id); return id; };
+  const addedNodes: VLabNode[] = [];
+  const addedEdges: VLabEdge[] = [];
+  const splitterOf = new Map<string, string>();
+  const migratedNodes = nodes.map((node) => {
+    if (!legacy.includes(node)) return node;
+    const splitter = fresh(`${node.id}_phase_split`);
+    splitterOf.set(node.id, splitter);
+    const at = node.position ?? { x: 0, y: 0 };
+    addedNodes.push(
+      { id: splitter, type: node.type, position: { x: at.x - 120, y: at.y }, data: { type: 'phase_splitter', label: 'Phase Splitter', params: {}, ports: libPorts('phase_splitter') } } as VLabNode,
+    );
+    addedEdges.push({ id: `${node.id}_abc_to_split`, source: node.id, sourceHandle: 'abc_s', target: splitter, targetHandle: 'abc_t' } as VLabEdge);
+    return Array.isArray(node.data?.ports)
+      ? { ...node, data: { ...node.data, ports: libPorts(effectiveBlockType(node)) } } as VLabNode
+      : node;
+  });
+  const migratedEdges = edges.map((edge) => {
+    let next = edge;
+    if (splitterOf.has(edge.source) && PHASE_HANDLE.test(edge.sourceHandle ?? '')) next = { ...next, source: splitterOf.get(edge.source)! };
+    if (splitterOf.has(edge.target)) {
+      if (PHASE_HANDLE.test(edge.targetHandle ?? '')) next = { ...next, target: splitterOf.get(edge.target)! };
+      else if (effectiveBlockType(nodes.find((n) => n.id === edge.target)!) === 'pwm_3ph_2level' && /^vabc_[st]$/.test(edge.targetHandle ?? '')) {
+        next = { ...next, targetHandle: 'amp_t' };
+      }
+    }
+    return next;
+  });
+  return { nodes: [...migratedNodes, ...addedNodes], edges: [...migratedEdges, ...addedEdges] };
+};
+
 export const normalizeLegacyVLabGraph = (
   inputNodes: VLabNode[],
   inputEdges: VLabEdge[],
 ): { nodes: VLabNode[]; edges: VLabEdge[] } => {
-  const { nodes, edges } = migrateThreePhaseSources(inputNodes, inputEdges);
+  const sources = migrateThreePhaseSources(inputNodes, inputEdges);
+  const { nodes, edges } = migrateScalarPhasePorts(sources.nodes, sources.edges);
   const removedNodeIds = new Set(
     nodes
       .filter((node) => LEGACY_REMOVED_BLOCKS.has(effectiveBlockType(node)))

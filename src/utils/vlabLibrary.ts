@@ -764,21 +764,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "left",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           },
           {
@@ -795,7 +784,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           }
         ],
         "equation": "v_d = Rs·i_d + Ld·di_d/dt − ω_e·Lq·i_q [V]\nv_q = Rs·i_q + Lq·di_q/dt + ω_e·(Ld·i_d + λm) [V]\nv_0 = Rs·i_0 + L0·di_0/dt [V]\nτ_e = (3/2)·p·(λm·i_q + (Ld − Lq)·i_d·i_q) [N·m],  ω_e = p·ω [rad/s]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
-        "description": "Permanent Magnet Synchronous Motor in the rotor-fixed dq frame (amplitude-invariant Clarke/Park transform, d axis on phase a at θ = 0). Wye stator: the phase currents flow from A, B, C through the windings to the star point N, so an open N forces i_a + i_b + i_c = 0 and a connected N carries the zero-sequence current (inductance L0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it); the torque delivered at R is τ_e − J·dω/dt − B·ω. Phase back-EMF amplitude is λm·ω_e."
+        "description": "Permanent Magnet Synchronous Motor in the rotor-fixed dq frame (amplitude-invariant Clarke/Park transform, d axis on phase a at θ = 0). The stator terminals are the composite three-phase port ABC (wire it to an inverter / source ABC port, or through a Phase Splitter to scalar phases). Wye stator: the phase currents flow from A, B, C through the windings to the star point N, so an open N forces i_a + i_b + i_c = 0 and a connected N carries the zero-sequence current (inductance L0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it); the torque delivered at R is τ_e − J·dω/dt − B·ω. Phase back-EMF amplitude is λm·ω_e."
       },
       {
         "id": "dc_motor",
@@ -919,21 +908,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "left",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           },
           {
@@ -950,7 +928,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           }
         ],
         "equation": "v_s = Rs·i_s + dψ_s/dt [V]\n0 = Rr·i_r + dψ_r/dt − j·P·ω·ψ_r [V]\nψ_s = (Lls + Lm)·i_s + Lm·i_r,  ψ_r = (Llr + Lm)·i_r + Lm·i_s [Wb]\nτ_e = (3/2)·P·(ψ_sα·i_sβ − ψ_sβ·i_sα) [N·m]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
-        "description": "Three-phase squirrel-cage induction motor (Krause dq0 model in the stationary αβ frame, amplitude-invariant Clarke transform, rotor referred to the stator; same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Parameters: stator/rotor resistance Rs, Rr, leakage Lls, Llr, magnetizing Lm, pole pairs P. Wye stator: the phase currents flow from A, B, C through the windings to the star point N (an open N forces i_a + i_b + i_c = 0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
+        "description": "Three-phase squirrel-cage induction motor (Krause dq0 model in the stationary αβ frame, amplitude-invariant Clarke transform, rotor referred to the stator; same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Parameters: stator/rotor resistance Rs, Rr, leakage Lls, Llr, magnetizing Lm, pole pairs P. The stator terminals are the composite three-phase port ABC (wire it to an inverter / source ABC port, or through a Phase Splitter to scalar phases). Wye stator: the phase currents flow from A, B, C through the windings to the star point N (an open N forces i_a + i_b + i_c = 0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
       },
       {
         "id": "bldc_motor",
@@ -999,21 +977,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "left",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           },
           {
@@ -1030,7 +997,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           }
         ],
         "equation": "v_x − v_g = Rs·i_x + Ls·di_x/dt + e_x [V],  e_x = Ke·ω·f(P·θ − φ_x),  φ = 0, 2π/3, −2π/3\nτ_e = (e_a·i_a + e_b·i_b + e_c·i_c)/ω = Ke·(f_a·i_a + f_b·i_b + f_c·i_c) [N·m]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
-        "description": "Brushless DC motor with trapezoidal back-EMF (unit trapezoid f: ±1 over 120°, 60° ramps; Pillay and Krishnan, IEEE Trans. Ind. Appl. 1989). Wye stator: the phase currents flow from A, B, C through the windings to the star point G (an open G forces i_a + i_b + i_c = 0). One constant Ke [V·s/rad = N·m/A] is both the back-EMF and the torque constant, so the conversion is lossless apart from Rs·i² and B·ω². Needs an external commutation bridge. The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
+        "description": "Brushless DC motor with trapezoidal back-EMF (unit trapezoid f: ±1 over 120°, 60° ramps; Pillay and Krishnan, IEEE Trans. Ind. Appl. 1989). The stator terminals are the composite three-phase port ABC (wire it to an inverter / source ABC port, or through a Phase Splitter to scalar phases). Wye stator: the phase currents flow from A, B, C through the windings to the star point G (an open G forces i_a + i_b + i_c = 0). One constant Ke [V·s/rad = N·m/A] is both the back-EMF and the torque constant, so the conversion is lossless apart from Rs·i² and B·ω². Needs an external commutation bridge. The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
       },
       {
         "id": "thermal_resistor",
@@ -7148,34 +7115,50 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "ohm",
             "label": "Output Resistance",
             "min": 0
+          },
+          "modulation_index": {
+            "value": 0.8,
+            "unit": "",
+            "label": "Modulation Index M (V/f generator)",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
           {
             "id": "vabc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "Vabc",
+            "label": "m_abc",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "amp",
+            "pos": "left",
+            "label": "M",
             "domain": "Physical",
             "direction": "in"
           },
           {
             "id": "ma",
             "pos": "left",
-            "label": "ma",
+            "label": "d_a",
             "domain": "Physical",
             "direction": "in"
           },
           {
             "id": "mb",
             "pos": "left",
-            "label": "mb",
+            "label": "d_b",
             "domain": "Physical",
             "direction": "in"
           },
           {
             "id": "mc",
             "pos": "left",
-            "label": "mc",
+            "label": "d_c",
             "domain": "Physical",
             "direction": "in"
           },
@@ -7192,26 +7175,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           },
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "right",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "right",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "right",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           }
         ],
-        "equation": "3-Phase Inverter Bridge governing physical equation",
-        "description": "Physical component model for 3-Phase Inverter Bridge."
+        "equation": "v_k − v_n = d_k·Vdc − R_out·i_k,out  [V],  k = a, b, c  (Vdc = v_DC+ − v_DC−)\ni_dc = Σ d_k·i_k,out  [A]  (P_dc = Σ v_k·i_k,out + R_out·Σ i_k,out²)\nd_k = (1 + m_k)/2,  m_k = M·sin(2π·f_out·t − k·2π/3)  or the vabc / duty inputs  → fundamental pole amplitude = M·Vdc/2",
+        "description": "Two-level three-phase voltage-source inverter. Model mode 'averaged' (default) is the Simscape Average-Value Inverter: continuous duty d_k, no switching ripple. Model mode 'switching' is the ideal-switch model: each leg switches at f_sw when the duty reference crosses a triangular carrier (anti-parallel diodes, no dead time), and the crossing instants are located by the solver's zero-crossing events. AC terminals are the composite three-phase port ABC (connect it to a machine ABC port directly, or through a Phase Splitter to scalar phases); DC+ / DC− are the DC link. References: input vabc = (m_a, m_b, m_c) in [−1, 1] (control mode three_phase_modulation; legacy scalar duties d_a, d_b, d_c in [0, 1] when vabc is unwired, an unwired duty means the lower switch is on), or, in control mode sinusoidal_modulation, an internal balanced V/f generator at the output frequency with amplitude M (input M, or the Modulation Index parameter). Linear range M ≤ 1: line-to-line fundamental rms = (√3/(2√2))·M·Vdc; over-modulation saturates at the rails. The AC side is a voltage source behind R_out, so a floating (wye, open star point) load sees no zero-sequence current."
       },
       {
         "id": "pwm_3ph_3level",
@@ -7227,12 +7199,6 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "min": 0,
             "exclusiveMin": true
           },
-          "output_frequency_hz": {
-            "value": 50,
-            "unit": "Hz",
-            "label": "Output Frequency",
-            "min": 0
-          },
           "neutral_balance_gain": {
             "value": 0.1,
             "unit": "1/V",
@@ -7242,8 +7208,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "vabc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "Vabc",
+            "label": "m_abc",
             "domain": "Physical",
             "direction": "in"
           },
@@ -7316,8 +7284,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "PWM Generator (3-Phase, 3-Level) governing physical equation",
-        "description": "Physical component model for PWM Generator (3-Phase, 3-Level)."
+        "equation": "r_k = clamp(m_k + Δ_neut, −1, 1),  Δ_neut = clamp(k_neut·v_neut/max(|v_dc|, 1), −0.15, 0.15)\nc_u = tri(f_sw·t) ∈ [0, 1],  c_l = c_u − 1\ng_k = +1 if r_k ≥ c_u,  −1 if r_k ≤ c_l,  0 otherwise  → v_k = g_k·Vdc/2 ∈ {−Vdc/2, 0, +Vdc/2}\n⟨g_k⟩ over a carrier period = r_k  (fundamental phase voltage = m·Vdc/2)",
+        "description": "Three-level (neutral-point-clamped) phase-disposition PWM generator (Simscape PWM Generator (Three-Level)). Input m_abc = (m_a, m_b, m_c) is the reference vector in [−1, 1] (unit = Vdc/2); two in-phase triangular carriers at f_sw (upper in [0, 1], lower in [−1, 0]) turn it into the level commands ga, gb, gc ∈ {−1, 0, +1} (+Vdc/2 / neutral / −Vdc/2 at the phase output of an NPC leg); ma, mb, mc echo the clamped references. The carrier average of the level equals the reference for every |m| ≤ 1, so the fundamental phase voltage is m·Vdc/2 and the line-to-line rms fundamental (√3/(2√2))·m·Vdc. vdc and vneut (DC-link total and neutral-point unbalance) add a bounded zero-sequence offset Δ_neut that steers the neutral point. This is a signal generator (it computes gate levels, not a power stage): connect the levels to switch / IGBT commands of an NPC leg."
       },
       {
         "id": "pwm_vienna",
@@ -7462,8 +7430,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "PWM Generator (Vienna Rectifier) governing physical equation",
-        "description": "Physical component model for PWM Generator (Vienna Rectifier)."
+        "equation": "I* = max(0, kp_v·(vdc_ref − vdc))  [A]\nΔ_neut = clamp(k_neut·v_neut/max(|vdc|, 1), −0.2, 0.2)\nm_x = clamp(2·v_x/max(|vdc|, 1) + 0.05·(I*·v_x/max(√(v_a²+v_b²+v_c²), 1) − i_x) + Δ_neut, −1, 1)\ng_x = 1 if C_tri(f_sw·t) < 1 − |m_x| else 0   (switch on = phase clamped to the neutral)",
+        "description": "Carrier-based PWM generator of a three-phase three-level Vienna rectifier (spec docs/superpowers/specs/2026-09-30-vienna-rectifier-pwm-design.md). The phase-switch duty is 1 − |m_x|, so with the diode legs the average pole voltage is sign(i_x)·|m_x|·Vdc/2 = v_x at unity power factor (m_x = 2·v_x/Vdc is the feed-forward term). An outer proportional DC-link loop (kp_v, vdc_ref) scales the in-phase current reference I*, a fixed 0.05 V/A current-error gain corrects the modulation, and vneut adds a bounded zero-sequence term that balances the neutral point. Outputs ga, gb, gc ∈ {0, 1} are the switch gates, ma, mb, mc the modulation indices. Signal generator only (no power stage): wire the gates to the bidirectional phase switches of a Vienna bridge built from diodes and IGBT / switch blocks. The scalar ports are kept as in the spec (one phase per port)."
       },
       {
         "id": "thyristor_6pulse",
@@ -7557,8 +7525,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "Thyristor 6-Pulse Generator governing physical equation",
-        "description": "Physical component model for Thyristor 6-Pulse Generator."
+        "equation": "g_k = 1 if wrap360(θ − (α + 60·(k − 1))) < pulse_width,  else 0   [θ, α in deg],  k = 1…6\nθ = 360·freq·t when the θ port is unwired\nDiode / thyristor bridge: Vdc,avg = (3√2/π)·V_LL·cos α  (ripple at 6·f)",
+        "description": "Six-pulse firing generator for a thyristor (Graetz) bridge (Simscape Synchronized 6-Pulse Generator). Gate k = 1…6 is high for pulse_width degrees starting at the firing angle α + 60·(k − 1), α counted from the natural commutation point of thyristor 1 (with v_a = V·sin ωt and positive a-b-c sequence that is θ = ωt − 30°). θ is the synchronisation angle in degrees (absolute); unwired, the block uses its own ramp 360·freq·t. A six-pulse bridge with firing angle α has the mean DC voltage (3√2/π)·V_LL·cos α. Signal generator only; the library has no thyristor device, so the gates drive controlled switches."
       },
       {
         "id": "thyristor_12pulse",
@@ -7706,8 +7674,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "Thyristor 12-Pulse Generator governing physical equation",
-        "description": "Physical component model for Thyristor 12-Pulse Generator."
+        "equation": "φ = θ + 2π·freq·t  [rad]\ndelta_g_k = 1 if wrap2π(φ − (α + 60·(k − 1))) < pulse_width,  else 0\nwye_g_k = 1 if wrap2π(φ − (α + 30 + 60·(k − 1))) < pulse_width,  else 0   [α, pulse_width in deg],  k = 1…6\n12-pulse bridge pair in series: Vdc,avg = 2·(3√2/π)·V_LL·cos α  (ripple at 12·f)",
+        "description": "Twelve-pulse firing generator (Simscape Synchronized 12-Pulse Generator): two six-pulse sequences, the wye (star) bridge 30° behind the delta bridge, each gate 60° after the previous one. θ is a phase offset in radians that is added to the internal ramp 2π·freq·t (the six-pulse block takes an absolute angle in degrees instead), α is the firing angle in degrees. Two six-pulse bridges fed 30° apart and connected in series give twice the six-pulse mean DC voltage with the ripple at 12 times the line frequency. Signal generator only; the library has no thyristor device, so the gates drive controlled switches."
       },
       {
         "id": "belt_properties",
@@ -10317,8 +10285,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "P_out = η * V_in * I_in * DutyCycle",
-        "description": "High-voltage inverter power supply for microwave magnetron with PWM duty cycle regulation."
+        "equation": "V_hv = ctrl·v_out  [V]  (regulated, measured against the model ground)\ni_in = G_e·v_ac,  G_e = V_hv·i_out/v_in²  [A]  (loss-free resistor: P_in = ⟨v_ac·i_in⟩ = V_hv·i_out when the supply rms = v_in)",
+        "description": "Averaged model of the high-voltage inverter power supply of a microwave oven: an ideal, loss-free converter with a regulated HV output V_hv = ctrl·v_out (ctrl = 1 when unwired) and a unity-power-factor input (loss-free resistor, Erickson, Fundamentals of Power Electronics ch. 18). The input current is in phase with the AC voltage, so the cycle-averaged input power equals the output power when the supply rms equals the nominal Input Voltage v_in (the model has no energy storage, so the 100 Hz power ripple appears at the input). AC and HV are single-ended terminals measured against the model's Electrical Reference (there is no return terminal). Averaged model: the switching of the inverter itself is not simulated."
       },
       {
         "id": "microwave_cavity",

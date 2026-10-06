@@ -419,14 +419,11 @@ const LEARNING_LABS = [
       { id: 'pe1', source: 'ref_speed', target: 'error_calc', sourceHandle: 'y_s', targetHandle: 'u1_t' },
       { id: 'pe2', source: 'speed_sensor', target: 'error_calc', sourceHandle: 'w_s', targetHandle: 'u2_t' },
       { id: 'pe3', source: 'error_calc', target: 'speed_pid', sourceHandle: 'y_s', targetHandle: 'e_t' },
-      { id: 'pe4', source: 'speed_pid', target: 'inverter', sourceHandle: 'u_s', targetHandle: 'vabc_t' },
+      { id: 'pe4', source: 'speed_pid', target: 'inverter', sourceHandle: 'u_s', targetHandle: 'amp_t' },
       { id: 'pe5', source: 'dc_bus', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 'pe6', source: 'dc_bus', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'pe7', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 'pe9', source: 'inverter', target: 'ac_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 'pe10', source: 'inverter', target: 'ac_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 'pe11', source: 'ac_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
       { id: 'pe12', source: 'ac_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'pe13', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
@@ -451,11 +448,8 @@ const LEARNING_LABS = [
       { id: 've2', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 've2_ret', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 've2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
-      { id: 've4_a', source: 'inverter', target: 'im_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 've4_b', source: 'inverter', target: 'im_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 've4_c', source: 'inverter', target: 'im_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 've4_n', source: 'im_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
+      { id: 've4', source: 'inverter', target: 'im_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
       { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
     ]
@@ -476,14 +470,11 @@ const LEARNING_LABS = [
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'System Ground' }
     ],
     edges: [
-      { id: 'we1', source: 'washing_ctrl', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
+      { id: 'we1', source: 'washing_ctrl', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
       { id: 'we2_dc', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 'we2_gnd', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'we2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 'we3_a', source: 'inverter', target: 'wash_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 'we3_b', source: 'inverter', target: 'wash_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 'we3_c', source: 'inverter', target: 'wash_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 'we3_n', source: 'wash_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 'we3', source: 'inverter', target: 'wash_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
       { id: 'we4', source: 'wash_motor', target: 'basket_load', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'we5', source: 'wash_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }

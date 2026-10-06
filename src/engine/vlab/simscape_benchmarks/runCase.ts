@@ -29,7 +29,12 @@ export interface CaseSpec {
      * DC motor driven by a voltage step V into a rotor of total inertia J and total viscous damping B (motor + load + damper):
      * La di/dt = V - Ra i - k w,  J dw/dt = k i - B w,  i(0) = w(0) = 0 -> closed form of the shaft speed w(t) (WP-12a).
      */
-    | { type: 'dc_motor_load_step'; V: number; Ra: number; La: number; k: number; J: number; B: number };
+    | { type: 'dc_motor_load_step'; V: number; Ra: number; La: number; k: number; J: number; B: number }
+    /**
+     * Buck converter in continuous conduction, state-space averaged (Erickson ch. 7): the cycle-average output voltage is the step response of
+     * D Vin / (L C s^2 + (L/R + C Rs) s + 1 + Rs/R) with Rs = D Ron_switch + (1 - D) Ron_diode, from v(0) = i(0) = 0 (WP-12b).
+     */
+    | { type: 'buck_converter_averaged'; Vin: number; D: number; L: number; C: number; R: number; Rs: number };
 }
 
 /** Closed-form reference of `spec.analytic` at time t. */
@@ -55,6 +60,16 @@ export function analyticValue(a: NonNullable<CaseSpec['analytic']>, t: number): 
     }
     const al = sum / 2, bw = Math.sqrt(-disc) / 2;
     return wss * (1 - Math.exp(-al * t) * (Math.cos(bw * t) + (al / bw) * Math.sin(bw * t)));
+  }
+  if (a.type === 'buck_converter_averaged') {
+    const a2 = a.L * a.C, a1 = a.L / a.R + a.C * a.Rs, a0 = 1 + a.Rs / a.R;
+    const vf = (a.D * a.Vin) / a0, al = a1 / (2 * a2), w02 = a0 / a2, disc = al * al - w02;
+    if (disc > 0) {
+      const r = Math.sqrt(disc), s1 = -al + r, s2 = -al - r;
+      return vf * (1 - (s2 * Math.exp(s1 * t) - s1 * Math.exp(s2 * t)) / (s2 - s1));
+    }
+    const wd = Math.sqrt(-disc);
+    return vf * (1 - Math.exp(-al * t) * (Math.cos(wd * t) + (al / wd) * Math.sin(wd * t)));
   }
   // vC(t) = V [1 - e^(-alpha t) (cos wd t + (alpha/wd) sin wd t)], alpha = R/2L, wd = sqrt(1/LC - alpha^2)
   const alpha = a.R / (2 * a.L);

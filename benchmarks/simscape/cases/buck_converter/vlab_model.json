@@ -1,0 +1,241 @@
+{
+  "name": "buck_converter",
+  "nodes": [
+    {
+      "id": "vs",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "dc_voltage",
+        "params": {
+          "R_int": 0,
+          "V": 24
+        }
+      }
+    },
+    {
+      "id": "car",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "ps_sine",
+        "params": {
+          "amp": 1,
+          "freq": 2000
+        }
+      }
+    },
+    {
+      "id": "sw",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "switch",
+        "params": {
+          "Roff": 1000000,
+          "threshold": 6.123233995736766E-17,
+          "Ron": 0.001
+        }
+      }
+    },
+    {
+      "id": "dio",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "diode",
+        "params": {
+          "Roff": 1000000,
+          "Vf": 0,
+          "Ron": 0.001
+        }
+      }
+    },
+    {
+      "id": "ind",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "inductor",
+        "params": {
+          "L": 0.002,
+          "i0": 0
+        }
+      }
+    },
+    {
+      "id": "cap",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "capacitor",
+        "params": {
+          "C": 0.002,
+          "v0": 0
+        }
+      }
+    },
+    {
+      "id": "load",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "resistor",
+        "params": {
+          "R": 1
+        }
+      }
+    },
+    {
+      "id": "sensor",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "v_sensor",
+        "params": {}
+      }
+    },
+    {
+      "id": "scope",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "scope",
+        "params": {}
+      }
+    },
+    {
+      "id": "gnd",
+      "type": "default",
+      "position": {
+        "y": 0,
+        "x": 0
+      },
+      "data": {
+        "type": "ground",
+        "params": {}
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "vs-sw-p_t",
+      "source": "vs",
+      "sourceHandle": "p_s",
+      "target": "sw",
+      "targetHandle": "p_t"
+    },
+    {
+      "id": "sw-dio-n_t",
+      "source": "sw",
+      "sourceHandle": "n_s",
+      "target": "dio",
+      "targetHandle": "n_t"
+    },
+    {
+      "id": "dio-gnd-a_t",
+      "source": "dio",
+      "sourceHandle": "p_s",
+      "target": "gnd",
+      "targetHandle": "a_t"
+    },
+    {
+      "id": "sw-ind-p_t",
+      "source": "sw",
+      "sourceHandle": "n_s",
+      "target": "ind",
+      "targetHandle": "p_t"
+    },
+    {
+      "id": "ind-load-p_t",
+      "source": "ind",
+      "sourceHandle": "n_s",
+      "target": "load",
+      "targetHandle": "p_t"
+    },
+    {
+      "id": "load-cap-p_t",
+      "source": "load",
+      "sourceHandle": "p_s",
+      "target": "cap",
+      "targetHandle": "p_t"
+    },
+    {
+      "id": "cap-gnd-a_t",
+      "source": "cap",
+      "sourceHandle": "n_s",
+      "target": "gnd",
+      "targetHandle": "a_t"
+    },
+    {
+      "id": "load-gnd-a_t",
+      "source": "load",
+      "sourceHandle": "n_s",
+      "target": "gnd",
+      "targetHandle": "a_t"
+    },
+    {
+      "id": "vs-gnd-a_t",
+      "source": "vs",
+      "sourceHandle": "n_s",
+      "target": "gnd",
+      "targetHandle": "a_t"
+    },
+    {
+      "id": "car-sw-v_t",
+      "source": "car",
+      "sourceHandle": "y_s",
+      "target": "sw",
+      "targetHandle": "v_t"
+    },
+    {
+      "id": "load-sensor-p_t",
+      "source": "load",
+      "sourceHandle": "p_s",
+      "target": "sensor",
+      "targetHandle": "p_t"
+    },
+    {
+      "id": "sensor-gnd-a_t",
+      "source": "sensor",
+      "sourceHandle": "n_s",
+      "target": "gnd",
+      "targetHandle": "a_t"
+    },
+    {
+      "id": "sensor-scope-in1_t",
+      "source": "sensor",
+      "sourceHandle": "v_s",
+      "target": "scope",
+      "targetHandle": "in1_t"
+    }
+  ]
+}
+

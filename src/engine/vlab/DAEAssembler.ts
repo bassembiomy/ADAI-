@@ -596,10 +596,11 @@ export class DAEAssembler {
           // Wye stator: the phase current k runs from terminal k through the winding to the star point (n; g on the BLDC),
           // so the star point carries i_a + i_b + i_c and an open star point forces the sum to zero. The shaft torque is
           // delivered into the Rotational port R (the case is the inertial frame, see MACHINES DOMAIN in vlabEquations.ts).
+          // The terminals are the composite three-phase port abc (WP-12b): phase k is the coordinate k of the composite port.
           const star = blockType === 'bldc_motor' ? 'g' : 'n';
-          branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }, { id: star, sign: 1 }] });
-          branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }, { id: star, sign: 1 }] });
-          branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }, { id: star, sign: 1 }] });
+          branches.push({ name: 'ia', ports: [{ id: 'abc', sign: -1, coord: 0 }, { id: star, sign: 1 }] });
+          branches.push({ name: 'ib', ports: [{ id: 'abc', sign: -1, coord: 1 }, { id: star, sign: 1 }] });
+          branches.push({ name: 'ic', ports: [{ id: 'abc', sign: -1, coord: 2 }, { id: star, sign: 1 }] });
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
           states.push('theta', 'omega');
           if (blockType === 'ac_motor') states.push('psi_r_alpha', 'psi_r_beta');
@@ -758,9 +759,10 @@ export class DAEAssembler {
           break;
         case 'pwm_3ph_2level':
           branches.push({ name: 'dc_link', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
-          branches.push({ name: 'current_a', ports: [{ id: 'a', sign: -1 }, { id: 'n', sign: 1 }] });
-          branches.push({ name: 'current_b', ports: [{ id: 'b', sign: -1 }, { id: 'n', sign: 1 }] });
-          branches.push({ name: 'current_c', ports: [{ id: 'c', sign: -1 }, { id: 'n', sign: 1 }] });
+          // AC side: the composite three-phase port abc (WP-12b), phase k = coordinate k; the DC- rail n carries the return.
+          branches.push({ name: 'current_a', ports: [{ id: 'abc', sign: -1, coord: 0 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'current_b', ports: [{ id: 'abc', sign: -1, coord: 1 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'current_c', ports: [{ id: 'abc', sign: -1, coord: 2 }, { id: 'n', sign: 1 }] });
           break;
         case 'pwm_3ph_3level':
         case 'pwm_vienna':
@@ -1195,7 +1197,8 @@ export class DAEAssembler {
         params,
         stateIndices,
         residual,
-        equationCount
+        equationCount,
+        connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
       });
     });
 
