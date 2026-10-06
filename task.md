@@ -18,8 +18,8 @@
   - [x] Step 3.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
   - [x] Step 3.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
   - [x] Step 3.5: Commit changes.
-- [ ] Task 4: Full Gate Verification & Documentation
-  - [ ] Step 4.1: Run complete help test suite `npm run test:help`.
-  - [ ] Step 4.2: Run help coverage audit `npm run help:coverage` (enforce 100%).
-  - [ ] Step 4.3: Run TypeScript compiler `npx tsc --noEmit`.
-  - [ ] Step 4.4: Commit and finalize.
+- [x] Task 4: Full Gate Verification & Documentation
+  - [x] Step 4.1: Run complete help test suite `npm run test:help`.
+  - [x] Step 4.2: Run help coverage audit `npm run help:coverage` (enforce 100%).
+  - [x] Step 4.3: Run TypeScript compiler `npx tsc --noEmit`.
+  - [x] Step 4.4: Commit and finalize.
