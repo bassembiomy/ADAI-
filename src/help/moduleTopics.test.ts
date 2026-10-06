@@ -78,4 +78,50 @@ describe('source verified Help chapters', () => {
       expect(errors!.body).toContain(code);
     }
   });
+  it('provides a complete Sequence item/symbol catalog and error causes reference', () => {
+    const topic = ADDITIONAL_HELP_TOPICS['sequence-diagrams'];
+    const symbols = topic.sections?.find(s => s.id === 'symbols');
+    expect(symbols).toBeDefined();
+    for (const item of [
+      'Lifeline',
+      'synchCall',
+      'asynchCall',
+      'asynchSignal',
+      'reply',
+      'createMessage',
+      'deleteMessage',
+      'Self Message',
+      'Combined Fragment',
+      'Interaction Use',
+      'State Invariant',
+    ]) {
+      expect(symbols!.body).toContain(item);
+    }
+    const errors = topic.sections?.find(s => s.id === 'errors');
+    expect(errors).toBeDefined();
+    for (const code of [
+      'MISSING_LIFELINE_REPRESENTS',
+      'DUPLICATE_LIFELINE_NAME',
+      'SCENARIO_ACTOR_NOT_ASSOCIATED',
+      'LIFELINE_OUTSIDE_CONTEXT',
+      'MESSAGE_ENDPOINT_MISSING',
+      'LOST_FOUND_INVALID',
+      'INVALID_MESSAGE_ORDER',
+      'DUPLICATE_MESSAGE_ORDER',
+      'MESSAGE_BEFORE_CREATE',
+      'MULTIPLE_CREATE_MESSAGES',
+      'MESSAGE_AFTER_DELETE',
+      'REPLY_WITHOUT_CALL',
+      'SIGNAL_MESSAGE_WITHOUT_SIGNAL',
+      'UNKNOWN_MESSAGE_OPERATION',
+      'MESSAGE_CONNECTOR_MISSING',
+      'MESSAGE_CONNECTOR_MISMATCH',
+      'UNKNOWN_FRAGMENT_OPERATOR',
+      'OPERAND_WITHOUT_GUARD',
+      'OPT_LOOP_SINGLE_OPERAND',
+      'USE_CYCLE',
+    ]) {
+      expect(errors!.body).toContain(code);
+    }
+  });
 });

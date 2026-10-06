@@ -12,12 +12,12 @@
   - [x] Step 2.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
   - [x] Step 2.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
   - [x] Step 2.5: Commit changes.
-- [ ] Task 3: Sequence Diagram Item/Symbol Catalog and 18-Validator Error Reference
-  - [ ] Step 3.1: Write failing test in `src/help/moduleTopics.test.ts` asserting sequence symbols and all 18 validator codes.
-  - [ ] Step 3.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
-  - [ ] Step 3.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
-  - [ ] Step 3.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
-  - [ ] Step 3.5: Commit changes.
+- [x] Task 3: Sequence Diagram Item/Symbol Catalog and 18-Validator Error Reference
+  - [x] Step 3.1: Write failing test in `src/help/moduleTopics.test.ts` asserting sequence symbols and all 18 validator codes.
+  - [x] Step 3.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
+  - [x] Step 3.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
+  - [x] Step 3.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
+  - [x] Step 3.5: Commit changes.
 - [ ] Task 4: Full Gate Verification & Documentation
   - [ ] Step 4.1: Run complete help test suite `npm run test:help`.
   - [ ] Step 4.2: Run help coverage audit `npm run help:coverage` (enforce 100%).
