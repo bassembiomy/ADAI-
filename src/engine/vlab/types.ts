@@ -72,6 +72,8 @@ export interface AssembledSystem {
   variableNames: string[];
   // Which variables are differential states vs algebraic
   isDifferentialState: boolean[];
+  /** Variables whose derivative always uses the BDF1 stencil (multibody frame poses: held coordinates and the joints' backward-difference rates assume it). */
+  firstOrderOnly?: boolean[];
   // True only for known equations with no internal or across/branch derivatives.
   isPurelyAlgebraic?: boolean;
   // The global residual function

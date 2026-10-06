@@ -1136,20 +1136,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ps_lpf: ({ across, branch, state, params, ctx }) => {
-    // Discrete LPF: y(k) = alpha*u + (1-alpha)*y(k-1)
+  ps_lpf: ({ across, branch, state, dState, params }) => {
     // First-order low-pass H(s) = 1/(1 + T s) has its -3 dB corner at w_c = 1/T, so T = 1/(2*pi*f_cut).
+    // T dy/dt + y = u; the derivative goes through the shared stencil (BDF1 reproduces y(k) = alpha u + (1-alpha) y(k-1)).
     const T = 1 / (2 * Math.PI * numericParam(params, 'f_cut', 100));
-    const alpha = ctx.dt / (T + ctx.dt);
     const u = across[0] || 0;
-    
-    // Find the state index's previous value
-    const prevY = ctx.prevStates[ctx.states.indexOf(state[0])] || 0;
-    const targetY = alpha * u + (1 - alpha) * prevY;
-    
     return [
       branch[0] - state[0],
-      state[0] - targetY
+      T * dState[0] + state[0] - u
     ];
   },
 

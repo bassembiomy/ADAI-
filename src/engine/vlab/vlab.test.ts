@@ -77,8 +77,9 @@ describe('VLab Physical DAE Engine Tests', () => {
     expect(capVarIdx).not.toBe(-1);
     const V_cap = state.x[capVarIdx];
     
-    // Expected V_cap = V_src * (1 - e^(-t/RC)) = 10 * (1 - e^(-1)) = 6.3212 V (discretized gives 6.3194)
-    expect(V_cap).toBeCloseTo(6.3194, 3);
+    // Expected V_cap = V_src * (1 - e^(-t/RC)) = 10 * (1 - e^(-1)) = 6.3212 V (analytic; the BDF2 stencil now applies to C d(v)/dt,
+    // the old first-order discretisation gave 6.3194)
+    expect(V_cap).toBeCloseTo(10 * (1 - Math.exp(-1)), 3);
   });
 
   it('solves mechanical mass-spring-damper response', () => {

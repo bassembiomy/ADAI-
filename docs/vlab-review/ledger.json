@@ -299,11 +299,32 @@
       "findings": []
     },
     {
+      "id": "WP-31a",
+      "title": "Integrator order: BDF2 stencil for all derivative terms (dAcross/dBranch), consistent SDIRK stage dt (F-067, F-058)",
+      "phase": "R2",
+      "deps": [
+        "WP-10"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "convergence-order test: halving h quarters the RC/RLC error under BDF2",
+      "evidence": [
+        "single stencil helper vlabDiscretization.ts for all dAcross/dBranch/dState; history for all variables; BDF1 restart after events",
+        "observed order RC/RL/RLC/MSD 1.0 -> 1.9-2.0; RC error at default dt 125x smaller; variable-step order 2",
+        "planner re-run: 4384 pass / 154 expected-fail; only failures are vlabSymbols + 5 s timeouts under load (M-01 1.8 s alone, pid_ac_motor)"
+      ],
+      "findings": [
+        "F-067",
+        "F-058"
+      ]
+    },
+    {
       "id": "WP-11",
       "title": "Semiconductors & switches",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "in_progress",
@@ -317,7 +338,7 @@
       "title": "Machines & power electronics",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -331,7 +352,7 @@
       "title": "Rotational mechanical",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -345,7 +366,7 @@
       "title": "Translational mechanical",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -359,7 +380,7 @@
       "title": "Thermal",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -373,7 +394,7 @@
       "title": "Magnetic",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -387,7 +408,7 @@
       "title": "Fluid / isothermal liquid / steam",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -401,7 +422,7 @@
       "title": "Gas",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -415,7 +436,7 @@
       "title": "WP-19b Multibody remainder (bodies, forces, sensors, frames) beyond joints",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -429,7 +450,7 @@
       "title": "Physical signal & control [98 blocks: split into WP-20a..d at dispatch]",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -443,7 +464,7 @@
       "title": "Composite / appliance / DOE / microwave / utilities",
       "phase": "P2",
       "deps": [
-        "WP-09c"
+        "WP-31a"
       ],
       "blocks": [],
       "status": "todo",
@@ -1019,10 +1040,10 @@
     },
     {
       "id": "F-049",
-      "severity": "low",
+      "severity": "med",
       "block": "test infra",
       "layer": "integration",
-      "summary": "labs_sim / vlab_comprehensive / airfryer time out at 5 s under full parallel load. Set per-file timeouts or speed them up.",
+      "summary": "labs_sim / vlab_comprehensive / airfryer time out at 5 s under full parallel load. Set per-file timeouts or speed them up. Now also whitebox M-01 and pid_ac_motor; it repeatedly pollutes the gates.",
       "wp": "WP-31"
     },
     {
@@ -1169,7 +1190,8 @@
       "block": "capacitor/inductor (all dAcross/dBranch derivatives)",
       "layer": "solver",
       "summary": "Backward Euler is used even with BDF2 on (only isDifferentialState vars get the BDF2 stencil, vlabPhysics ~l.376), so RC/RLC are first order (err ~ h/(2tau)). Hurts every Simscape comparison.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31a"
     },
     {
       "id": "F-068",
@@ -1202,6 +1224,38 @@
       "layer": "eq",
       "summary": "Memristor uses a simplified unvalidated drift model; the opamp clamp is C0 (consider smooth).",
       "wp": "WP-10 dev"
+    },
+    {
+      "id": "F-072",
+      "severity": "med",
+      "block": "multibody frames/joints",
+      "layer": "solver",
+      "summary": "Frame-pose variables are pinned to BDF1 (system.firstOrderOnly). Joint rates w = dangle/dt assume a backward difference, so mechanisms stay first order. BDF2 there gave spurious velocities on held DOFs.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-073",
+      "severity": "low",
+      "block": "lms_adaptive_filter",
+      "layer": "eq",
+      "summary": "Hard-coded (x - x_prev)/0.01 derivative ignores the step.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-074",
+      "severity": "low",
+      "block": "mass",
+      "layer": "params",
+      "summary": "Default b=0.1 adds viscous damping that F = m dv/dt does not state (Simscape Mass has none).",
+      "wp": "WP-14"
+    },
+    {
+      "id": "F-075",
+      "severity": "med",
+      "block": "rot_hard_stop",
+      "layer": "eq",
+      "summary": "The c*w term is discontinuous at the stop threshold. Fragile for Newton; passes only via the SDIRK fallback. Use the Simscape hard-stop formulation (smooth or event-based).",
+      "wp": "WP-13"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

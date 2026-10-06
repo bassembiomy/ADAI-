@@ -1,3 +1,4 @@
+import { ddtVector } from './vlabDiscretization';
 import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { interfaceBranchSpecs, jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
@@ -1623,6 +1624,7 @@ export class DAEAssembler {
     }
 
     // 7. Assemble global residuals function
+    const firstOrderOnlyMask = variableNames.map(n => /_\((frame|multibodyframe)\)$/.test(n));
     const residuals = (x: number[], arg2: number[] | EquationContext, arg3?: EquationContext): number[] => {
       let dx: number[];
       let ctx: EquationContext;
@@ -1631,7 +1633,7 @@ export class DAEAssembler {
         // Called with (x, ctx)
         ctx = arg2 as EquationContext;
         // A non-finite previous state propagates (and is reported by the block that reads it), never reads as 0.
-        dx = x.map((val, idx) => (val - ctx.prevStates[idx]) / ctx.dt);
+        dx = ddtVector(x, ctx, firstOrderOnlyMask);
       } else {
         // Called with (x, dx, ctx)
         dx = arg2 as number[];
@@ -1829,6 +1831,7 @@ export class DAEAssembler {
       systemSize: varCount,
       variableNames,
       isDifferentialState,
+      firstOrderOnly: variableNames.map(n => /_\((frame|multibodyframe)\)$/.test(n)),
       isPurelyAlgebraic: !isDifferentialState.some(Boolean) && componentsList.every(c =>
         !DERIVATIVE_DEPENDENT_BLOCK_TYPES.has(c.blockType)
         && (c.equationCount === 0 || Boolean(blockEquations[c.blockType]))),

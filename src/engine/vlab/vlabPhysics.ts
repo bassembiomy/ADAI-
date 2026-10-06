@@ -12,6 +12,7 @@ import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagno
 import { readSolvedVariable } from './vlabScopeRead';
 import { scopeTraceKey } from './vlabVectorPorts';
 import { numericParam } from './vlabParams';
+import { ddtVector } from './vlabDiscretization';
 
 // SDIRK-3 Butcher tableau constants
 const GAMMA = 0.4358665215;
@@ -256,7 +257,7 @@ export class VLabPhysicsEngine {
     const tTarget = t + dt;
     
     let xCurrent = [...x];
-    let prevX = sameMethod && prevState?.prevX ? [...prevState.prevX] : undefined;
+    let prevX = sameMethod && prevState?.prevX && prevState.prevX.length === system.systemSize ? [...prevState.prevX] : undefined;
     let lastDt = sameMethod ? prevState?.prevDt : undefined;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
     // Configured auto uses BDF for VLab DAEs. Legacy unconfigured runs retain SDIRK fallback.
@@ -345,17 +346,11 @@ export class VLabPhysicsEngine {
               order: 1
             };
             const solveResiduals1 = (solveX: number[], solveCtx: EquationContext) => {
-              const dx = solveX.map((val, idx) => {
-                if (system.isDifferentialState[idx]) {
-                  return (val - solveCtx.prevStates[idx]) / (h * GAMMA);
-                } else {
-                  return (val - solveCtx.prevStates[idx]) / h;
-                }
-              });
+              const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
             const X1 = this.solver.solve(solveResiduals1, xCurrent, ctx1);
-            const g1 = X1.map((val, idx) => system.isDifferentialState[idx] ? (val - xCurrent[idx]) / (h * GAMMA) : 0);
+            const g1 = X1.map((val, idx) => (val - xCurrent[idx]) / (h * GAMMA));
 
             // SDIRK-3 Solve Stage 2
             const z2 = xCurrent.map((val, idx) => system.isDifferentialState[idx] ? val + h * A21 * g1[idx] : val);
@@ -369,17 +364,11 @@ export class VLabPhysicsEngine {
               order: 1
             };
             const solveResiduals2 = (solveX: number[], solveCtx: EquationContext) => {
-              const dx = solveX.map((val, idx) => {
-                if (system.isDifferentialState[idx]) {
-                  return (val - solveCtx.prevStates[idx]) / (h * GAMMA);
-                } else {
-                  return (val - solveCtx.prevStates[idx]) / h;
-                }
-              });
+              const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
             const X2 = this.solver.solve(solveResiduals2, X1, ctx2);
-            const g2 = X2.map((val, idx) => system.isDifferentialState[idx] ? (val - z2[idx]) / (h * GAMMA) : 0);
+            const g2 = X2.map((val, idx) => (val - z2[idx]) / (h * GAMMA));
 
             // SDIRK-3 Solve Stage 3
             const z3 = xCurrent.map((val, idx) => system.isDifferentialState[idx] ? val + h * A31 * g1[idx] + h * A32 * g2[idx] : val);
@@ -393,13 +382,7 @@ export class VLabPhysicsEngine {
               order: 1
             };
             const solveResiduals3 = (solveX: number[], solveCtx: EquationContext) => {
-              const dx = solveX.map((val, idx) => {
-                if (system.isDifferentialState[idx]) {
-                  return (val - solveCtx.prevStates[idx]) / (h * GAMMA);
-                } else {
-                  return (val - solveCtx.prevStates[idx]) / h;
-                }
-              });
+              const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
             nextX = this.solver.solve(solveResiduals3, X2, ctx3);
@@ -412,30 +395,9 @@ export class VLabPhysicsEngine {
               ctx.order = 1;
             }
             
-            // Formulate derivative function depending on BDF order
-            let solveResiduals: (solveX: number[], solveCtx: EquationContext) => number[];
-            if (ctx.order === 2 && ctx.prevPrevStates && ctx.prevDt) {
-              const r = h / ctx.prevDt;
-              const a0 = (2 * r + 1) / (h * (r + 1));
-              const a1 = -(r + 1) / h;
-              const a2 = (r * r) / (h * (r + 1));
-              
-              solveResiduals = (solveX, solveCtx) => {
-                const dx = solveX.map((val, idx) => {
-                  if (system.isDifferentialState[idx]) {
-                    return a0 * val + a1 * solveCtx.prevStates[idx] + a2 * solveCtx.prevPrevStates![idx];
-                  } else {
-                    return (val - solveCtx.prevStates[idx]) / h;
-                  }
-                });
-                return system.residuals(solveX, dx, solveCtx);
-              };
-            } else {
-              solveResiduals = (solveX, solveCtx) => {
-                const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
-                return system.residuals(solveX, dx, solveCtx);
-              };
-            }
+            // One stencil for every unknown (see vlabDiscretization): BDF2 when history exists, else BDF1.
+            const solveResiduals = (solveX: number[], solveCtx: EquationContext) =>
+              system.residuals(solveX, ddtVector(solveX, solveCtx, system.firstOrderOnly), solveCtx);
             
             nextX = this.solver.solve(solveResiduals, xCurrent, ctx);
           }
@@ -458,15 +420,16 @@ export class VLabPhysicsEngine {
           // their explicit minimum-step boundary for adaptive control.
           if (!isAlgebraicSystem && !isExplicit && !useSdirk && (config || h > 1e-6)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
-              const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
+              const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
-            let comparison = this.solver.solve(bdf1Residuals, xCurrent, ctx);
+            const bdf1Ctx: EquationContext = { ...ctx, order: 1, prevPrevStates: undefined, prevDt: undefined };
+            let comparison = this.solver.solve(bdf1Residuals, xCurrent, bdf1Ctx);
             // BDF1 needs a startup estimate too: compare one full step to two half steps.
             if (config && ctx.order === 1) {
               const halfResiduals = (solveX: number[], solveCtx: EquationContext) =>
-                system.residuals(solveX, solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / (h / 2)), solveCtx);
-              const halfContext = { ...ctx, dt: h / 2, time: t + h / 2 };
+                system.residuals(solveX, ddtVector(solveX, solveCtx, system.firstOrderOnly), solveCtx);
+              const halfContext = { ...bdf1Ctx, dt: h / 2, time: t + h / 2 };
               const half = this.solver.solve(halfResiduals, xCurrent, halfContext);
               comparison = this.solver.solve(halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
             }
@@ -547,6 +510,7 @@ export class VLabPhysicsEngine {
               // forever. Explicit-state incompatibilities are still errors.
               stepAccepted = true;
               if (nextX.length > 0) xCurrent = [...nextX];
+              bdfOrder = 1; // best-effort state: no valid BDF2 history for the next step
               t += h;
               acceptedSteps++;
             } else {
@@ -803,7 +767,8 @@ export class VLabPhysicsEngine {
 
     return {
       x: xCurrent,
-      prevX: prevX,
+      // After an event/reset step the BDF2 history is not valid: the next call restarts with BDF1.
+      prevX: bdfOrder === 2 ? prevX : undefined,
       prevDt: lastDt,
       time: tTarget,
       systemSize: system.systemSize,
