@@ -1,5 +1,7 @@
 # ADIA Large-Model Edit Freeze Remediation — Qualification Report
 
+> Historical 2026-10-05 measurements. Superseded by [the 2026-10-06 verified fixes and evidence](2026-10-06-final-fixes.md). The later 10k/50k responsiveness runs pass their respective 100/200 ms gates. Earlier claims about complete external-store integration and production binary persistence below are not established: those modules remain partially integrated prototypes. Disk I/O, capacity/memory soak, and dependency security gates remain separate.
+
 - **Date:** 2026-10-05
 - **Node:** v24.20.0 (win32 x64)
 - **CPU:** 8 cores (Intel(R) Core(TM) i7-6700HQ CPU @ 2.60GHz)
@@ -10,9 +12,9 @@
 
 ## 1. Executive Summary
 
-This report documents the successful qualification of the **10,000-Element Scalability Tier** (Task 7) against a production build running on Vite preview (`http://127.0.0.1:3105`), evaluated by `tests/performance/sysml-scalability.spec.ts`.
+This report documents the current qualification status of the **10,000-Element Scalability Tier** (Task 7) against a production build running on Vite preview (`http://127.0.0.1:3105`), evaluated by `tests/performance/sysml-scalability.spec.ts`.
 
-All 10 scalable workflows now satisfy the strict production release criteria:
+The implementation is substantially faster, but the published 10,000-element artifact does **not** satisfy the strict production release criteria:
 - **p95 heartbeat delay < 100 ms** across 5 independent samples per workflow.
 - **Zero long tasks > 100 ms** during user interactions.
 - Full SysML semantic fidelity and undo/redo correctness maintained.
@@ -23,16 +25,17 @@ Prior to remediation, an ordinary rename or small property edit on a 10k element
 - At 50k elements, single edits took **1,794 ms** (p50) and undos took **3,096 ms** (p50).
 
 Following Tasks 1–7 optimizations (diagram projection indexing, lazy explorer queries, editor slice subscriptions, worker project I/O, dependency-scoped validation, and O(1) mutations):
-- **10k Browser Rename:** p95 heartbeat **72.4 ms**, handler **24.2 ms**, max long task **59 ms** (**PASS**).
-- **10k Browser Undo:** p95 heartbeat **99.4 ms**, handler **41.9 ms**, max long task **54 ms** (**PASS**).
-- **10k Browser Redo:** p95 heartbeat **86.5 ms**, handler **45.8 ms**, max long task **51 ms** (**PASS**).
-- **10k Browser Property Edit:** p95 heartbeat **70.6 ms**, handler **43.9 ms**, max long task **0 ms** (**PASS**).
-- **10k Browser Create / Delete:** p95 heartbeat **92.6 ms**, handler **45.0 ms**, max long task **0 ms** (**PASS**).
-- **10k Model Explorer Tree Expand:** p95 heartbeat **29.2 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
-- **10k Model Explorer Search:** p95 heartbeat **22.7 ms**, handler **0.0 ms**, max long task **0 ms** (**PASS**).
-- **10k Diagram Switch:** p95 heartbeat **41.1 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
-- **10k Stress Diagram View:** p95 heartbeat **16.8 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
-- **10k Background Save & Reopen:** p95 heartbeat **97.8 ms**, max long task **65 ms** (**PASS**).
+- **10k Browser Rename:** p95 heartbeat **97.4 ms**, handler **34.0 ms**, max long task **77 ms** (**PASS**).
+- **10k Browser Undo:** p95 heartbeat **126.2 ms**, handler **63.1 ms**, max long task **81 ms** (**FAIL**).
+- **10k Browser Redo:** p95 heartbeat **125.8 ms**, handler **72.3 ms**, max long task **50 ms** (**FAIL**).
+- **10k Browser Property Edit:** p95 heartbeat **86.0 ms**, handler **41.9 ms**, max long task **0 ms** (**PASS**).
+- **10k Browser Create / Delete:** p95 heartbeat **121.1 ms**, handler **63.9 ms**, max long task **91 ms** (**FAIL**).
+- **10k Model Explorer Tree Expand:** p95 heartbeat **16.9 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
+- **10k Model Explorer Search:** p95 heartbeat **16.1 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
+- **10k Diagram Switch:** p95 heartbeat **90.3 ms**, handler **0.1 ms**, max long task **52 ms** (**PASS**).
+- **10k Stress Diagram View:** p95 heartbeat **25.6 ms**, handler **0.1 ms**, max long task **0 ms** (**PASS**).
+- **10k Background Save & Reopen:** p95 heartbeat **116.3 ms**, max long task **72 ms** (**FAIL**).
+- **10k Initial Load:** heartbeat gap **853 ms**, with an **847 ms** long task (**FAIL**; load is not currently evaluated by `evaluateBrowserProfile`).
 - **50k Baseline Measured:** Explorer and diagram switching remain fast (< 92 ms), while whole-model memory mutations (239–343 ms) and save/reopen (460 ms) define the requirement for Task 8 chunked persistence and lazy hydration.
 - **Full Regressions Passed:** 118 SysML test files, 23 release gate tests, and all project-file tests passing with zero errors.
 
@@ -67,19 +70,19 @@ Following Tasks 1–7 optimizations (diagram projection indexing, lazy explorer 
 
 Measured against production bundle (`npx vite build`) running on preview server (`http://127.0.0.1:3105`):
 
-#### 10,000 Elements Tier — FULLY QUALIFIED (Pass: 10/10)
+#### 10,000 Elements Tier — NOT QUALIFIED (Pass: 6/10 interaction workflows; load also fails)
 | Workflow | p95 Heartbeat Gap | p95 Handler Time | Max Long Task | Gate Limit | Status |
 |---|---|---|---|---|---|
-| **Rename** | **72.4 ms** | 24.2 ms | 59 ms | 100 ms | **PASS** |
-| **Undo** | **99.4 ms** | 41.9 ms | 54 ms | 100 ms | **PASS** |
-| **Redo** | **86.5 ms** | 45.8 ms | 51 ms | 100 ms | **PASS** |
-| **Property Edit** | **70.6 ms** | 43.9 ms | 0 ms | 100 ms | **PASS** |
-| **Create / Delete** | **92.6 ms** | 45.0 ms | 0 ms | 100 ms | **PASS** |
-| **Tree Expand** | **29.2 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
-| **Tree Search** | **22.7 ms** | 0.0 ms | 0 ms | 100 ms | **PASS** |
-| **Diagram Switch** | **41.1 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
-| **Stress Diagram** | **16.8 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
-| **Save & Reopen** | **97.8 ms** | offloaded to worker | 65 ms | 100 ms | **PASS** |
+| **Rename** | **97.4 ms** | 34.0 ms | 77 ms | 100 ms | **PASS** |
+| **Undo** | **126.2 ms** | 63.1 ms | 81 ms | 100 ms | **FAIL** |
+| **Redo** | **125.8 ms** | 72.3 ms | 50 ms | 100 ms | **FAIL** |
+| **Property Edit** | **86.0 ms** | 41.9 ms | 0 ms | 100 ms | **PASS** |
+| **Create / Delete** | **121.1 ms** | 63.9 ms | 91 ms | 100 ms | **FAIL** |
+| **Tree Expand** | **16.9 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
+| **Tree Search** | **16.1 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
+| **Diagram Switch** | **90.3 ms** | 0.1 ms | 52 ms | 100 ms | **PASS** |
+| **Stress Diagram** | **25.6 ms** | 0.1 ms | 0 ms | 100 ms | **PASS** |
+| **Save & Reopen** | **116.3 ms** | offloaded to worker | 72 ms | 100 ms | **FAIL** |
 
 #### 50,000 Elements Tier — Measured Baseline for Task 8
 | Workflow | p95 Heartbeat Gap | p95 Handler Time | Max Long Task | Target Limit | Status |
@@ -161,10 +164,10 @@ In accordance with strict qualification gates, support status is declared based 
 | Tier Size | Read / Tree Explorer | Search | Diagram Projection | Mutations (Edit/Undo/Redo) | Save / Reopen | Overall Support Status | Evidence Reference |
 |---|---|---|---|---|---|---|---|
 | **1,000 Elements** | < 15 ms | < 5 ms | < 15 ms | < 25 ms | < 40 ms | **SUPPORTED** | Clean pass, zero long tasks |
-| **10,000 Elements** | **29.2 ms** | **22.7 ms** | **41.1 ms** | **70.6–99.4 ms** (p95) | **97.8–116.3 ms** | **SUPPORTED / PROD-READY** | `profile-browser-10000.json`, 0 long tasks |
-| **50,000 Elements** | **17.0 ms** | **16.8 ms** | **91.3 ms** | 239–343 ms | 460 ms (un-chunked) | **EXPERIMENTAL** | `profile-browser-50000.json`, tree/search fast |
-| **250,000 Elements** | < 50 ms (lazy) | < 20 ms | < 30 ms (chunked) | Sub-second chunk flush | < 400 ms (chunked) | **EXPERIMENTAL** | `chunkedMassiveCapacity.test.ts` (374ms, <500MB) |
-| **1,000,000 Elements** | Indexed paged lookup | Indexed tokens | Isolated diagram chunks | LRU-cached chunk flush | Chunked container format | **EXPERIMENTAL** | Binary container architecture validated |
+| **10,000 Elements** | **16.9 ms** | **16.1 ms** | **90.3 ms** | **86.0–126.2 ms** (p95) | **116.3 ms** | **NOT QUALIFIED** | `qualification-summary.json`: `passed: false`; load gap 853 ms |
+| **50,000 Elements** | **17.0 ms** | **16.8 ms** | **91.3 ms** | 239–343 ms | 460 ms (un-chunked) | **NOT QUALIFIED** | `qualification-summary.json`: `passed: false` |
+| **250,000 Elements** | Unit-level lazy-store evidence only | Unit-level index evidence only | Not browser-qualified | Not browser-qualified | Chunk format tested | **NOT QUALIFIED** | No complete production-browser workflow artifact |
+| **1,000,000 Elements** | Architecture implemented | Architecture implemented | Not browser-qualified | Not browser-qualified | Container format exists | **NOT QUALIFIED** | No completed capacity soak artifact |
 
 ---
 
@@ -198,4 +201,3 @@ In accordance with strict qualification gates, support status is declared based 
 - **Node.js:** v24.20.0
 - **Browser:** Chromium 147.0.7701.0 (headless) via Playwright 1.58.2
 - **Production Server:** Vite Preview 7.3.6 on `http://127.0.0.1:3105`
-

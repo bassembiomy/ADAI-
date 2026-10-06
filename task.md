@@ -34,12 +34,12 @@
   - [x] Step 4.6: Verify focused tests, existing model explorer tests, and `tsc --noEmit`.
   - [x] Step 4.7: Profile expand, collapse, search, clear-search, selection at 10k and 50k.
   - [x] Step 4.8: Commit Task 4 changes.
-- [x] Task 5: Isolate editor state updates from the monolithic App render
+- [ ] Task 5: Isolate editor state updates from the monolithic App render (external store modules exist; App integration is incomplete)
   - [x] Step 5.1: Write failing store tests in `src/features/sysml/runtime/sysmlEditorStore.test.ts`.
   - [x] Step 5.2: Run store tests; expect failure.
   - [x] Step 5.3: Implement external store (`sysmlEditorStore.ts`, `useSysmlEditorSelector.ts`) using immutable slice replacement and `useSyncExternalStore`.
-  - [x] Step 5.4: Extract `SysmlWorkspace` and subscribe canvas, explorer, inspector to minimal slices.
-  - [x] Step 5.5: Add render-count assertions ensuring isolated rerenders.
+  - [ ] Step 5.4: Extract `SysmlWorkspace` and subscribe canvas, explorer, inspector to minimal slices. App still retains repository/store React state.
+  - [ ] Step 5.5: Add render-count assertions ensuring isolated rerenders in the integrated App, not only isolated store tests.
   - [x] Step 5.6: Run store tests, `npm run test:sysml`, `tsc --noEmit`, and production browser profile.
   - [x] Step 5.7: Commit Task 5 changes.
 - [x] Task 6: Move project load and save preparation off the renderer thread
@@ -50,28 +50,28 @@
   - [x] Step 6.5: Integrate save preparation via worker serialization.
   - [x] Step 6.6: Run project-file tests, SysML tests, `tsc --noEmit`, and load/save profiles.
   - [x] Step 6.7: Commit Task 6 changes.
-- [x] Task 7: Turn all missing workflows into a release gate
+- [x] Task 7: Turn all missing workflows into a responsiveness gate (10k/50k measured; disk/memory/release readiness are separate)
   - [x] Step 7.1: Write Playwright cases in `tests/performance/sysml-scalability.spec.ts` for all workflows.
   - [x] Step 7.2: Run suite at 1,000 elements for functional assertions.
-  - [x] Step 7.3: Run production suite at 10,000 elements with 5 samples; enforce 100ms gate.
-  - [x] Step 7.4: Run suite at 50,000 elements and record limits.
+  - [x] Step 7.3: Run production suite at 10,000 elements with 5 samples; enforce 100ms gate. Integrated recheck passed: initial load 70.3ms, maximum interactive heartbeat p95 80.9ms. See 2026-10-06 evidence.
+  - [x] Step 7.4: Run suite at 50,000 elements and pass the recorded 200ms limit. Passed: load 121.1ms, maximum interactive heartbeat p95 151.5ms; save/reopen 149.1ms.
   - [x] Step 7.5: Update remediation report with raw artifact paths and SHA.
-  - [x] Step 7.6: Mark completed items with evidence.
+  - [x] Step 7.6: Mark completed responsiveness items with passing evidence in `docs/scalability/2026-10-06-final-fixes.md`.
   - [x] Step 7.7: Commit Task 7 changes.
-- [x] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
+- [ ] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
   - [x] Step 8.1: Write failing round-trip tests for chunked storage.
   - [x] Step 8.2: Run persistence tests; expect failure.
   - [x] Step 8.3: Implement manifest and fixed-size entity chunks.
   - [x] Step 8.4: Implement lazy hydration with LRU cache and dirty-chunk tracking.
-  - [x] Step 8.5: Connect worker load/save to lazy store for >50k elements.
+  - [ ] Step 8.5: Safely connect worker load/save to lazy store for >50k elements. Prototype binary loading drops collections, size selection occurs after JSON preparation, and desktop IPC still expects JSON.
   - [x] Step 8.6: Run round-trip, project-file, SysML tests, and `tsc --noEmit`.
-  - [x] Step 8.7: Run 250k element load/edit/save/reopen tests.
-  - [x] Step 8.8: Run 1,000,000 element capacity soak.
+  - [ ] Step 8.7: Run and pass the 250k element production load/edit/save/reopen qualification.
+  - [ ] Step 8.8: Run and pass the 1,000,000 element 30-minute capacity soak.
   - [x] Step 8.9: Commit Task 8 changes.
-- [x] Task 9: Final regression, evidence, and support statement
-  - [x] Step 9.1: Run `npm run test:sysml:release`, `npm run test:project-files`, `npm run test:sysml:scalability`, `tsc --noEmit`.
+- [ ] Task 9: Final regression, evidence, and support statement
+  - [x] Step 9.1: Verify SysML (125 files/1215 tests), reporting and focused regressions (27 files/108 tests), project files (five suites), TypeScript, Vite build, and production scalability. Integrated focused recheck: 115 tests; integrated TypeScript passed. Full release packaging remains blocked by dependency audit.
   - [x] Step 9.2: Verify clean `git diff --check`.
-  - [x] Step 9.3: Re-run highest claimed tier on clean production build with 5 samples.
-  - [x] Step 9.4: Update report support matrix.
+  - [x] Step 9.3: Re-run measured responsiveness tiers on production builds with five samples: 50k passed on isolated source, 10k passed again after local integration. Disk/memory/full capacity qualification remains open.
+  - [x] Step 9.4: Update the report measured-tier matrix after the raw gate passes; no 250k/1M or MATLAB/Cameo parity claim.
   - [x] Step 9.5: Review final diff against architectural guidelines.
-  - [x] Step 9.6: Commit Task 9 docs and qualification evidence.
+  - [ ] Step 9.6: Close full release qualification after dependency security audit, actual desktop disk I/O, and capacity/memory gates pass. Responsiveness evidence has been committed.

@@ -33,6 +33,8 @@ Source change: worktree commit `702530ec`, integrated locally as `3482033e` on `
 
 Initial load took 1494.7 ms in total; its longest task was 63 ms. Save/reopen's longest task was 50 ms. A passing responsiveness gate means the UI can service input during the operation, not that loading/saving finishes within 100 ms.
 
+The [integrated 10k recheck](evidence/2026-10-06/10k-integrated-qualified.json) also passed after the final desktop handoff change and local integration with concurrent V-Lab changes. Integrated build asset: `index-BvVaLiCW.js`, preview `127.0.0.1:3116`. Load took 1487.8 ms, heartbeat 70.3 ms, longest task 66 ms. Save/reopen heartbeat p95 was 80.9 ms; all other workflow p95 values were below 37 ms, with no recorded interaction long tasks. Integrated focused tests: five files / 115 tests passed; TypeScript also passed.
+
 The final [50k profile](evidence/2026-10-06/50k-qualified.json) passed its recorded 200 ms gate after separating desktop decode/parse/IPC tasks. Its earlier [failed save/reopen measurement](evidence/2026-10-06/50k-before-desktop-handoff-yields.json) is retained; p95 improved from 314.9 to 149.1 ms.
 
 | 50k workflow | Heartbeat median (ms) | Heartbeat p95/max (ms) |
@@ -56,13 +58,16 @@ The final [50k profile](evidence/2026-10-06/50k-qualified.json) passed its recor
 - Load timing begins at the FileReader `onload` handler. It excludes Playwright's file injection and file reading before that handler.
 - Save/reopen includes real payload preparation and completion bookkeeping, with desktop IPC intercepted in the test. It does not qualify physical disk writing, Electron packaging, or the actual desktop IPC memory cost.
 - Concurrent V-Lab work was present on this host. The saved profile is a measured run on this machine, not a portable latency guarantee.
-- 10k and 50k responsiveness runs pass their respective budgets. No 250k or 1M production support is established. A fresh 10k run on the integrated workspace is pending.
+- 10k and 50k responsiveness runs pass their respective budgets. 50k was measured on the isolated source snapshot; 10k was additionally rechecked after integration with the ongoing V-Lab workspace. Fixtures use seed 42 and distributed topology with ordinary/stress diagram workflows; this does not qualify every possible user model or every diagram kind at these sizes. No 250k or 1M production support is established.
 - The external editor store and slice-selector modules exist, but the main App has not completed migration to them. Repository/store state still coexists in App.
 - Binary persistence is a prototype: its worker loader does not preserve every collection, automatic size detection occurs after JSON preparation, and desktop IPC expects JSON. Do not enable or advertise it as a safe production large-model save format.
 - Full desktop release packaging and a 30-minute memory/capacity soak remain separate gates. These fixes do not establish MATLAB/Cameo feature completeness.
+- Application startup before the file-load workflow is outside this gate. The production main bundle remains large (about 10.6 MB before gzip).
 
 ## Verification
 
 Final SysML regression: 125 files / 1215 tests passed. Reporting, gate evaluator, virtual tree/history, X-Bridges worker/client/environment, and desktop JSON handoff: 27 files / 108 tests passed. All five project-file lifecycle suites passed. Incremental TypeScript check and Vite production build passed. Contextual load/helper and X-Bridges root-locus checks also passed earlier.
+
+The first integrated TypeScript run found an optional `equation` access in the concurrently developed, untracked `src/engine/vlab/review/power_electronics.test.ts`. Its length assertion now uses `equation?.length ?? 0`, preserving the requirement that documentation exceeds 60 characters. This single-line correction remains with that uncommitted V-Lab work; the subsequent integrated TypeScript run passed.
 
 `npm run audit:prebuild` failed with four reported production dependency vulnerabilities (one low, two high, one critical): `@capacitor/android`, nested `brace-expansion`, `dompurify`, and `source-map-js`. Dependency upgrades were not included in this renderer remediation. The desktop release build/security gate is **not qualified**; passing Vite build and responsiveness tests do not establish release readiness.
