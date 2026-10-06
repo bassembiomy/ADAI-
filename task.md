@@ -1,77 +1,25 @@
-# ADIA Remaining Scalability Fixes Implementation Plan
+# State Machine Execution Order, Use Case & Sequence Help Enhancements
 
-- [x] Task 1: Make the responsiveness gate truthful and reproducible
-  - [x] Step 1.1: Write failing evaluator tests (`scripts/scalability/assertBrowserProfile.test.ts`) covering exactly-at-limit failure, five-sample p95 calculation, a fast handler followed by a slow heartbeat, and a long task above 100 ms.
-  - [x] Step 1.2: Run `npx vitest run scripts/scalability/assertBrowserProfile.test.ts`; expect failure because evaluator does not exist.
-  - [x] Step 1.3: Implement workflow/result types and pure evaluator in `scripts/scalability/workflows.ts` and `scripts/scalability/assertBrowserProfile.ts`.
-  - [x] Step 1.4: Update runner `scripts/scalability/profileBrowser.ts` (default no-CPU-profile, 5 independent samples, input-to-next-paint + heartbeat delay).
-  - [x] Step 1.5: Add package scripts (`profile:sysml`, `gate:sysml-profile`) and verify all evaluator unit tests pass.
-  - [x] Step 1.6: Build and run 10k baseline against `vite preview`; save raw JSON in `artifacts/scalability/baseline/` and verify gate evaluation.
-  - [x] Step 1.7: Commit Task 1 changes.
-- [x] Task 2: Attribute post-command stalls to exact React work
-  - [x] Step 2.1: Write failing telemetry tests in `src/features/sysml/performance/renderTelemetry.test.ts`.
-  - [x] Step 2.2: Run `npx vitest run src/features/sysml/performance/renderTelemetry.test.ts`; expect failure.
-  - [x] Step 2.3: Implement bounded telemetry buffer in `src/features/sysml/performance/renderTelemetry.ts` with `window.__ADIA_PERF__` reader.
-  - [x] Step 2.4: Wrap boundaries (workspace, canvas, explorer, inspector) with React `Profiler` callbacks and performance marks.
-  - [x] Step 2.5: Verify tests and `tsc --noEmit` pass.
-  - [x] Step 2.6: Profile rename, undo, redo (5 samples) and record components responsible for >=80% commit duration in `artifacts/scalability/diagnosis-10000.json`.
-  - [x] Step 2.7: Commit Task 2 changes.
-- [x] Task 3: Project only the active diagram
-  - [x] Step 3.1: Write failing tests in `src/engine/sysml/projection/activeDiagramProjection.test.ts`.
-  - [x] Step 3.2: Run `npx vitest run src/engine/sysml/projection/activeDiagramProjection.test.ts`; expect failure.
-  - [x] Step 3.3: Add diagram-membership index to normalized store construction and incremental updates.
-  - [x] Step 3.4: Implement `projectActiveDiagram` with direct indexed lookups.
-  - [x] Step 3.5: Replace `projectLegacyDiagram` in `App.tsx` with active diagram selector.
-  - [x] Step 3.6: Verify tests, `npm run test:sysml`, and `tsc --noEmit`.
-  - [x] Step 3.7: Profile diagram switching across BDD, IBD, package, requirements, use-case at 10k.
-  - [x] Step 3.8: Commit Task 3 changes.
-- [x] Task 4: Replace full-tree rebuilding with paged explorer queries
-  - [x] Step 4.1: Write failing tests with 50,000 entities in `src/features/modelExplorer/modelExplorerQuery.test.ts`.
-  - [x] Step 4.2: Run `npx vitest run src/features/modelExplorer/modelExplorerQuery.test.ts`; expect failure.
-  - [x] Step 4.3: Add parent/child and lowercase-search-token indexes to normalized store.
-  - [x] Step 4.4: Implement paged queries with revision-keyed caches in `src/features/modelExplorer/modelExplorerQuery.ts`.
-  - [x] Step 4.5: Update `AppModelExplorer` to request roots and expanded children on demand.
-  - [x] Step 4.6: Verify focused tests, existing model explorer tests, and `tsc --noEmit`.
-  - [x] Step 4.7: Profile expand, collapse, search, clear-search, selection at 10k and 50k.
-  - [x] Step 4.8: Commit Task 4 changes.
-- [ ] Task 5: Isolate editor state updates from the monolithic App render (external store modules exist; App integration is incomplete)
-  - [x] Step 5.1: Write failing store tests in `src/features/sysml/runtime/sysmlEditorStore.test.ts`.
-  - [x] Step 5.2: Run store tests; expect failure.
-  - [x] Step 5.3: Implement external store (`sysmlEditorStore.ts`, `useSysmlEditorSelector.ts`) using immutable slice replacement and `useSyncExternalStore`.
-  - [ ] Step 5.4: Extract `SysmlWorkspace` and subscribe canvas, explorer, inspector to minimal slices. App still retains repository/store React state.
-  - [ ] Step 5.5: Add render-count assertions ensuring isolated rerenders in the integrated App, not only isolated store tests.
-  - [x] Step 5.6: Run store tests, `npm run test:sysml`, `tsc --noEmit`, and production browser profile.
-  - [x] Step 5.7: Commit Task 5 changes.
-- [x] Task 6: Move project load and save preparation off the renderer thread
-  - [x] Step 6.1: Write failing client tests in `src/engine/sysml/workers/projectIoClient.test.ts`.
-  - [x] Step 6.2: Run client test; expect failure.
-  - [x] Step 6.3: Implement typed worker protocol in `src/engine/sysml/workers/projectIo.worker.ts`.
-  - [x] Step 6.4: Integrate load with atomic store swap and progress.
-  - [x] Step 6.5: Integrate save preparation via worker serialization.
-  - [x] Step 6.6: Run project-file tests, SysML tests, `tsc --noEmit`, and load/save profiles.
-  - [x] Step 6.7: Commit Task 6 changes.
-- [x] Task 7: Turn all missing workflows into a responsiveness gate (10k/50k measured; disk/memory/release readiness are separate)
-  - [x] Step 7.1: Write Playwright cases in `tests/performance/sysml-scalability.spec.ts` for all workflows.
-  - [x] Step 7.2: Run suite at 1,000 elements for functional assertions.
-  - [x] Step 7.3: Run production suite at 10,000 elements with 5 samples; enforce 100ms gate. Integrated recheck passed: initial load 70.3ms, maximum interactive heartbeat p95 80.9ms. See 2026-10-06 evidence.
-  - [x] Step 7.4: Run suite at 50,000 elements and pass the recorded 200ms limit. Passed: load 121.1ms, maximum interactive heartbeat p95 151.5ms; save/reopen 149.1ms.
-  - [x] Step 7.5: Update remediation report with raw artifact paths and SHA.
-  - [x] Step 7.6: Mark completed responsiveness items with passing evidence in `docs/scalability/2026-10-06-final-fixes.md`.
-  - [x] Step 7.7: Commit Task 7 changes.
-- [ ] Task 8: Add chunked persistence and lazy hydration for 250,000–1,000,000 elements
-  - [x] Step 8.1: Write failing round-trip tests for chunked storage.
-  - [x] Step 8.2: Run persistence tests; expect failure.
-  - [x] Step 8.3: Implement manifest and fixed-size entity chunks.
-  - [x] Step 8.4: Implement lazy hydration with LRU cache and dirty-chunk tracking.
-  - [ ] Step 8.5: Safely connect worker load/save to lazy store for >50k elements. Prototype binary loading drops collections, size selection occurs after JSON preparation, and desktop IPC still expects JSON.
-  - [x] Step 8.6: Run round-trip, project-file, SysML tests, and `tsc --noEmit`.
-  - [ ] Step 8.7: Run and pass the 250k element production load/edit/save/reopen qualification.
-  - [ ] Step 8.8: Run and pass the 1,000,000 element 30-minute capacity soak.
-  - [x] Step 8.9: Commit Task 8 changes.
-- [ ] Task 9: Final regression, evidence, and support statement
-  - [x] Step 9.1: Verify SysML (125 files/1215 tests), reporting and focused regressions (27 files/108 tests), project files (five suites), TypeScript, Vite build, and production scalability. Integrated focused recheck: 115 tests; integrated TypeScript passed. Full release packaging remains blocked by dependency audit.
-  - [x] Step 9.2: Verify clean `git diff --check`.
-  - [x] Step 9.3: Re-run measured responsiveness tiers on production builds with five samples: 50k passed on isolated source, 10k passed again after local integration. Disk/memory/full capacity qualification remains open.
-  - [x] Step 9.4: Update the report measured-tier matrix after the raw gate passes; no 250k/1M or MATLAB/Cameo parity claim.
-  - [x] Step 9.5: Review final diff against architectural guidelines.
-  - [ ] Step 9.6: Close full release qualification after dependency security audit, actual desktop disk I/O, and capacity/memory gates pass. Responsiveness evidence has been committed.
+- [x] Task 1: State Machine Execution Order Diagram & Lifecycle Breakdown
+  - [x] Step 1.1: Write failing test in `src/help/moduleTopics.test.ts` asserting lifecycle order section & diagram.
+  - [x] Step 1.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
+  - [x] Step 1.3: Update `src/help/moduleTopics.ts` with detailed execution flow diagram and step-by-step evaluation order.
+  - [x] Step 1.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
+  - [x] Step 1.5: Commit changes.
+- [x] Task 2: Use Case Diagram Item/Symbol Catalog and Error Causes Reference
+  - [x] Step 2.1: Write failing test in `src/help/moduleTopics.test.ts` asserting use case symbols and error causes.
+  - [x] Step 2.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
+  - [x] Step 2.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
+  - [x] Step 2.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
+  - [x] Step 2.5: Commit changes.
+- [ ] Task 3: Sequence Diagram Item/Symbol Catalog and 18-Validator Error Reference
+  - [ ] Step 3.1: Write failing test in `src/help/moduleTopics.test.ts` asserting sequence symbols and all 18 validator codes.
+  - [ ] Step 3.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
+  - [ ] Step 3.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
+  - [ ] Step 3.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
+  - [ ] Step 3.5: Commit changes.
+- [ ] Task 4: Full Gate Verification & Documentation
+  - [ ] Step 4.1: Run complete help test suite `npm run test:help`.
+  - [ ] Step 4.2: Run help coverage audit `npm run help:coverage` (enforce 100%).
+  - [ ] Step 4.3: Run TypeScript compiler `npx tsc --noEmit`.
+  - [ ] Step 4.4: Commit and finalize.

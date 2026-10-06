@@ -65,4 +65,17 @@ describe('source verified Help chapters', () => {
     expect(section!.body).toContain('Entry Action');
     expect(section!.body).toContain('least common ancestor');
   });
+  it('provides a complete Use Case item/symbol catalog and error causes reference', () => {
+    const topic = ADDITIONAL_HELP_TOPICS['use-case-diagrams'];
+    const symbols = topic.sections?.find(s => s.id === 'symbols');
+    expect(symbols).toBeDefined();
+    for (const item of ['Actor', 'Subject', 'Use Case', 'Association', '«include»', '«extend»', 'Generalization', 'extension point']) {
+      expect(symbols!.body).toContain(item);
+    }
+    const errors = topic.sections?.find(s => s.id === 'errors');
+    expect(errors).toBeDefined();
+    for (const code of ['DUPLICATE_RELATIONSHIP', 'INVALID_ENDPOINT_KIND', 'INVALID_DIRECTION', 'MISSING_EXTENSION_POINT', 'GENERALIZATION_CYCLE', 'INCLUDE_CYCLE']) {
+      expect(errors!.body).toContain(code);
+    }
+  });
 });
