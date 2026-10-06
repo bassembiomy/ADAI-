@@ -383,10 +383,14 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "rot+trans certified: Simscape Stribeck friction, hard stops (damped rebound, transition region, events), belt_end tension-only + damping, mass/inertia hidden damping removed (migration keeps old behaviour), spring initial deformation",
+        "mechanical name-based grounding removed: explicit rot_ref/trans_ref, floating-network diagnostic; labs gained rot_ref",
+        "41 analytic tests (1e-10 % .. 0.5 %); mass_spring_damper case NRMSE 0.009 %; planner re-run: 4583 pass / 146 expected-fail / 1 known"
+      ],
       "findings": []
     },
     {
@@ -411,7 +415,7 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
       "evidence": [],
@@ -1173,7 +1177,8 @@
       "block": "belt_end",
       "layer": "eq",
       "summary": "No slack (tension-only) condition and no damping term c(dx_e - dx_r) as spec 2.4 requires.",
-      "wp": "WP-13"
+      "wp": "WP-13",
+      "status": "resolved-WP-13"
     },
     {
       "id": "F-062",
@@ -1198,7 +1203,7 @@
       "layer": "solver",
       "summary": "Unconnected electrical ports named b/c/n/ref/gnd are pinned to ground by NAME (only phase_splitter is exempt). Replace with explicit reference semantics. Check three_phase_source, machines and inverters.",
       "wp": "WP-10/WP-12",
-      "status": "electrical resolved WP-10; non-electrical name rule remains -> WP-13..18"
+      "status": "resolved-WP-13"
     },
     {
       "id": "F-065",
@@ -1280,7 +1285,8 @@
       "block": "mass",
       "layer": "params",
       "summary": "Default b=0.1 adds viscous damping that F = m dv/dt does not state (Simscape Mass has none).",
-      "wp": "WP-14"
+      "wp": "WP-14",
+      "status": "resolved-WP-13"
     },
     {
       "id": "F-075",
@@ -1289,7 +1295,8 @@
       "layer": "eq",
       "summary": "The c*w term is discontinuous at the stop threshold. Fragile for Newton; passes only via the SDIRK fallback. Use the Simscape hard-stop formulation (smooth or event-based).",
       "wp": "WP-13",
-      "note": "event handling improved in WP-11; hard-stop formulation still WP-13"
+      "note": "event handling improved in WP-11; hard-stop formulation still WP-13",
+      "status": "resolved-WP-13"
     },
     {
       "id": "F-076",
@@ -1387,6 +1394,30 @@
       "layer": "port",
       "summary": "No diode/thyristor bridge, DC-DC, NPC or Vienna POWER-stage blocks (only gate generators). They are built from discrete parts (same gap as F-076).",
       "wp": "USER"
+    },
+    {
+      "id": "F-088",
+      "severity": "low",
+      "block": "rot/trans_friction",
+      "layer": "eq",
+      "summary": "Stribeck smoothing constant 4 is from memory of the Simscape doc. Verify on the first licensed MATLAB run.",
+      "wp": "USER (golden)"
+    },
+    {
+      "id": "F-089",
+      "severity": "med",
+      "block": "library",
+      "layer": "port",
+      "summary": "There is no translational velocity source block (Simscape has an Ideal Translational Velocity Source).",
+      "wp": "USER"
+    },
+    {
+      "id": "F-090",
+      "severity": "low",
+      "block": "belt_properties / whitebox MechanicalFixtures",
+      "layer": "eq",
+      "summary": "belt_damping from belt_properties is not applied (belt_end has a local damping param). The whitebox MechanicalFixtures torque source wiring inverts the sign.",
+      "wp": "WP-30"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

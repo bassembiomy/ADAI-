@@ -12,7 +12,7 @@ import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagno
 import { readSolvedVariable } from './vlabScopeRead';
 import { scopeTraceKey } from './vlabVectorPorts';
 import { numericParam, stringParam } from './vlabParams';
-import { twoLevelReferences, triangularCarrier } from './vlabEquations';
+import { twoLevelReferences, triangularCarrier, beltEndStiffness } from './vlabEquations';
 import { ddtVector } from './vlabDiscretization';
 
 // SDIRK-3 Butcher tableau constants
@@ -849,13 +849,18 @@ export class VLabPhysicsEngine {
           indicators.push(ctrl - threshold);
         }
         else if (type === 'trans_hard_stop' || type === 'rot_hard_stop') {
-          const lower = numericParam(params, 'lower', type === 'rot_hard_stop' ? -1.57 : -0.1);
-          const upper = numericParam(params, 'upper', type === 'rot_hard_stop' ? 1.57 : 0.1);
-          const pos = type === 'rot_hard_stop'
-            ? xVec[comp.stateIndices[0]] || 0
-            : (acrossVals[0] || 0) * 0.01;
+          // WP-13 (F-075): contact entry / exit is a zero crossing of the relative position (state x / theta) against the bounds
+          const lower = numericParam(params, 'lower', type === 'rot_hard_stop' ? -1 : -0.1);
+          const upper = numericParam(params, 'upper', type === 'rot_hard_stop' ? 1 : 0.1);
+          const pos = xVec[comp.stateIndices[0]] || 0;
           indicators.push(pos - lower);
           indicators.push(pos - upper);
+        }
+        else if (type === 'belt_end') {
+          // WP-13 (F-061): taut <-> slack. The tension is T = max(0, k x + c v) with x the extension; the sign change of k x + c v is the event.
+          const x = xVec[comp.stateIndices[0]] || 0;
+          const v = getPortVal('e') - getPortVal('r');
+          indicators.push(beltEndStiffness(params) * x + numericParam(params, 'damping', 0) * v);
         }
         else if (type === 'ps_saturation') {
           const lower = numericParam(params, 'lower', -10);

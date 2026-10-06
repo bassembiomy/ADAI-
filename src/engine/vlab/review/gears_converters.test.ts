@@ -439,23 +439,24 @@ describe('WP-13b belt_spool / pulley / belt_end / belt_properties', () => {
     near(stiff.across('dut', 'e'), F / (100 * k * dt), 1e-6, 'stiffer belt');
   });
 
-  it('connected group: torque source -> spool -> belt end -> road damper reaches w = T / (R^2 c) with |tension| T / R', () => {
+  it('connected group: torque source -> spool -> belt end -> road damper reaches w = -T / (R^2 c) with tension T / R (the spool PULLS the belt)', () => {
     const R = 0.1, T = 4, c = 25;
     const m: Model = {
-      nodes: [node('bp', 'belt_properties', { density: 1.1, youngs: 1e8 }), node('ts', 'torque_source', { T }),
+      nodes: [node('bp', 'belt_properties', { density: 1.1, youngs: 1e8 }), node('ts', 'torque_source', { T: -T }),
         node('spool', 'belt_spool', { radius: R, inertia: 0.01 }), node('belt', 'belt_end', { length: 1, area: 1e-4 }),
         node('load', 'trans_damper', { b: c }), node('rref', 'rot_ref'), node('tref', 'trans_ref')],
       edges: [wire('bp.p', 'spool.p'), wire('bp.p', 'belt.p'), wire('ts.c', 'spool.r'), wire('ts.r', 'rref.r'), wire('spool.a', 'belt.r'),
         wire('belt.e', 'load.r'), wire('load.c', 'tref.p')],
     };
     const sim = simulate(m, 120, 0.02);
-    near(sim.across('spool', 'r'), T / (R * R * c), 1e-4, 'steady shaft speed');
-    // the spool pays the belt out (v_A = +R w) and so PUSHES the load: the belt is compressed, tension = -T / R
-    near(sim.at('belt_branch_signal_f'), -T / R, 1e-4, 'steady belt tension (negative: compression)');
-    near(sim.across('load', 'r'), T / (R * c), 1e-4, 'steady belt speed');
+    // WP-13 (F-061): a belt is tension-only, so the spool must pull (a pushing spool would leave the belt slack and run away).
+    // Reversing the driving torque of the original (mirror-symmetric, linear) group gives w = -T / (R^2 c), belt speed -T / (R c)
+    near(sim.across('spool', 'r'), -T / (R * R * c), 1e-4, 'steady shaft speed');
+    // the spool pays the belt out backwards (v_A = R w < 0) and so pulls the load: the belt is stretched, tension = +T / R
+    near(sim.at('belt_branch_signal_f'), T / R, 1e-4, 'steady belt tension (positive: stretched)');
+    near(sim.across('load', 'r'), -T / (R * c), 1e-4, 'steady belt speed');
   });
 });
-
 // ── 6. electromechanical converters ───────────────────────────────────────────────────────────────────────────────
 describe('WP-13b rotational / translational electromechanical converters (V = R I + K w, tau = K I)', () => {
   const rotational = (K: number, R: number, V: number, b: number): Model => ({

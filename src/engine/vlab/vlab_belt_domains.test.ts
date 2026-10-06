@@ -300,10 +300,12 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       const dx = Array(sys.systemSize).fill(0);
       const forceIdx = sys.variableNames.indexOf('be_branch_force');
       const stateIdx = sys.variableNames.indexOf('be_state_x');
-      x[forceIdx] = testForce;
+      // WP-13 (F-061): the state is the extension x = x_E - x_R (stretch positive) and the belt is tension-only, T = max(0, k x + c v).
+      // The force INTO the block at R is -T, so a taut belt of tension 	estForce has branch[0] = -testForce.
+      x[forceIdx] = -testForce;
       x[stateIdx] = 0.01; // 0.01 m elongation
       const r = sys.residuals(x, dx, ctx);
-      return r[forceIdx]; // residual = branch[0] - k * x
+      return r[forceIdx]; // residual = branch[0] + max(0, k * x)
     };
 
     // At correct force, residual must be 0

@@ -3138,9 +3138,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "exclusiveMin": true
           },
           "B": {
-            "value": 0.001,
+            "value": 0,
             "unit": "N-m-s/rad",
-            "label": "Viscous Damping",
+            "label": "Viscous Drag to Inertial Frame (extension, 0 = Simscape)",
             "min": 0
           }
         },
@@ -3152,8 +3152,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ = J * dω/dt",
-        "description": "Rotational flywheel inertia relating net torque to angular acceleration via moment of inertia J."
+        "equation": "τ = J * dω/dt  (ω = speed of port R relative to the inertial frame; optional drag τ += B ω, default B = 0)",
+        "description": "Rotational flywheel inertia relating net torque to angular acceleration via moment of inertia J (Simscape Inertia). B is an optional viscous drag against the inertial frame, 0 by default; add a Rotational Damper to a Rotational Reference for a physical drag."
       },
       {
         "id": "rot_ref",
@@ -3185,6 +3185,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N-m/rad",
             "label": "Spring Rate",
             "min": 0
+          },
+          "theta0": {
+            "value": 0,
+            "unit": "rad",
+            "label": "Initial Deformation"
           }
         },
         "ports": [
@@ -3201,8 +3206,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ = k * (θ - θ0)",
-        "description": "Torsional spring resisting angular twist with restoring torque proportional to relative angle."
+        "equation": "τ = k * φ,  φ = θ0 + ∫(ω_R − ω_C) dt",
+        "description": "Torsional spring (Simscape Rotational Spring) with restoring torque proportional to the relative angle φ; θ0 is the initial deformation."
       },
       {
         "id": "rot_damper",
@@ -3232,8 +3237,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ = c * (ω1 - ω2)",
-        "description": "Rotational viscous damper generating resistive torque proportional to relative angular velocity."
+        "equation": "τ = b * (ω_R − ω_C)",
+        "description": "Rotational viscous damper (Simscape Rotational Damper) generating resistive torque proportional to relative angular velocity; b in N-m-s/rad."
       },
       {
         "id": "rot_friction",
@@ -3242,10 +3247,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rot_friction",
         "category": "Rotational Elements",
         "params": {
-          "Ts": {
+          "Tbrk": {
+            "value": 0.6,
+            "unit": "N-m",
+            "label": "Breakaway Friction Torque (>= Coulomb)",
+            "min": 0
+          },
+          "Tc": {
             "value": 0.5,
             "unit": "N-m",
-            "label": "Static Friction",
+            "label": "Coulomb Friction Torque",
             "min": 0
           },
           "Tv": {
@@ -3253,6 +3264,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N-m-s/rad",
             "label": "Viscous Friction Coefficient",
             "min": 0
+          },
+          "cv": {
+            "value": 10,
+            "unit": "s/rad",
+            "label": "Transition Approximation Coefficient",
+            "min": 0
+          },
+          "wthr": {
+            "value": 0.01,
+            "unit": "rad/s",
+            "label": "Linear Region Velocity Threshold",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -3269,8 +3293,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Rotational Friction governing physical equation",
-        "description": "Physical component model for Rotational Friction."
+        "equation": "τ = [Tc + (Tbrk − Tc)·exp(−cv·|ω|)]·tanh(4ω/ω_thr) + Tv·ω,  ω = ω_R − ω_C",
+        "description": "Rotational friction (Simscape Rotational Friction): Stribeck + Coulomb + viscous torque between ports R and C. The sign of the velocity is smoothed by tanh(4ω/ω_thr), so below breakaway the shafts creep at a tiny speed instead of switching state."
       },
       {
         "id": "rot_hard_stop",
@@ -3301,6 +3325,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N-m-s/rad",
             "label": "Contact Damping",
             "min": 0
+          },
+          "transition": {
+            "value": 0.0001,
+            "unit": "rad",
+            "label": "Transition Region",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -3317,8 +3348,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ_stop = k_c * (θ - θ_limit) + c_c * ω",
-        "description": "Rotational mechanical stop limiting angular travel with contact stiffness and damping."
+        "equation": "θ = ∫(ω_R − ω_C) dt;  p = θ − upper (θ > upper) or lower − θ (θ < lower);  τ_stop = ±max(0, k·p + c·ω_out·S(p/w)),  S = cubic smooth step (0 → 1)",
+        "description": "Rotational hard stop (Simscape Rotational Hard Stop, continuous damped-rebound contact): zero torque inside [lower, upper]; outside, contact stiffness k plus contact damping c that fades in over the transition region w, so the torque is continuous at contact entry and the stop never pulls. Contact entry and exit are solver events."
       },
       {
         "id": "mass",
@@ -3335,9 +3366,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "exclusiveMin": true
           },
           "b": {
-            "value": 0.1,
+            "value": 0,
             "unit": "N-s/m",
-            "label": "Viscous Damping",
+            "label": "Viscous Drag to Inertial Frame (extension, 0 = Simscape)",
             "min": 0
           }
         },
@@ -3349,8 +3380,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F = m * dv/dt",
-        "description": "Translational rigid mass governed by Newton's second law relating net force to acceleration."
+        "equation": "F = m * dv/dt  (v = speed of port P relative to the inertial frame; optional drag F += b v, default b = 0)",
+        "description": "Translational rigid mass governed by Newton's second law relating net force to acceleration (Simscape Mass). b is an optional viscous drag against the inertial frame, 0 by default; add a Translational Damper to a Translational Reference for a physical drag."
       },
       {
         "id": "trans_ref",
@@ -3382,6 +3413,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N/m",
             "label": "Spring Rate",
             "min": 0
+          },
+          "x0": {
+            "value": 0,
+            "unit": "m",
+            "label": "Initial Deformation"
           }
         },
         "ports": [
@@ -3398,8 +3434,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F = k * (x_r - x_c)",
-        "description": "Physical component model for Translational Spring."
+        "equation": "F = k * x,  x = x0 + ∫(v_R − v_C) dt",
+        "description": "Translational spring (Simscape Translational Spring) with force proportional to the relative displacement x; x0 is the initial deformation."
       },
       {
         "id": "trans_damper",
@@ -3429,8 +3465,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "Translational Damper governing physical equation",
-        "description": "Physical component model for Translational Damper."
+        "equation": "F = b * (v_R − v_C)",
+        "description": "Translational viscous damper (Simscape Translational Damper): force proportional to the relative velocity of ports R and C; b in N-s/m."
       },
       {
         "id": "trans_friction",
@@ -3439,10 +3475,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "trans_friction",
         "category": "Translational Elements",
         "params": {
-          "Fs": {
+          "Fbrk": {
+            "value": 6,
+            "unit": "N",
+            "label": "Breakaway Friction Force (>= Coulomb)",
+            "min": 0
+          },
+          "Fc": {
             "value": 5,
             "unit": "N",
-            "label": "Static Friction",
+            "label": "Coulomb Friction Force",
             "min": 0
           },
           "Fv": {
@@ -3450,6 +3492,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N-s/m",
             "label": "Viscous Friction Coefficient",
             "min": 0
+          },
+          "cv": {
+            "value": 10,
+            "unit": "s/m",
+            "label": "Transition Approximation Coefficient",
+            "min": 0
+          },
+          "vthr": {
+            "value": 0.01,
+            "unit": "m/s",
+            "label": "Linear Region Velocity Threshold",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -3466,8 +3521,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "Translational Friction governing physical equation",
-        "description": "Physical component model for Translational Friction."
+        "equation": "F = [Fc + (Fbrk − Fc)·exp(−cv·|v|)]·tanh(4v/v_thr) + Fv·v,  v = v_R − v_C",
+        "description": "Translational friction (Simscape Translational Friction): Stribeck + Coulomb + viscous force between ports R and C. The sign of the velocity is smoothed by tanh(4v/v_thr), so below breakaway the bodies creep at a tiny speed instead of switching state."
       },
       {
         "id": "trans_hard_stop",
@@ -3492,6 +3547,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Contact Stiffness",
             "min": 0,
             "exclusiveMin": true
+          },
+          "c": {
+            "value": 10,
+            "unit": "N-s/m",
+            "label": "Contact Damping",
+            "min": 0
+          },
+          "transition": {
+            "value": 0.0001,
+            "unit": "m",
+            "label": "Transition Region",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -3508,8 +3576,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F_stop = k_c * (x - x_limit) + c_c * v",
-        "description": "Translational mechanical stop with contact stiffness and damping at stroke limits."
+        "equation": "x = ∫(v_R − v_C) dt;  p = x − upper (x > upper) or lower − x (x < lower);  F_stop = ±max(0, k·p + c·v_out·S(p/w)),  S = cubic smooth step (0 → 1)",
+        "description": "Translational hard stop (Simscape Translational Hard Stop, continuous damped-rebound contact): zero force inside [lower, upper]; outside, contact stiffness k plus contact damping c that fades in over the transition region w, so the force is continuous at contact entry and the stop never pulls. Contact entry and exit are solver events."
       }
     ]
   },
@@ -7736,6 +7804,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Section Area",
             "min": 0,
             "exclusiveMin": true
+          },
+          "damping": {
+            "value": 0,
+            "unit": "N-s/m",
+            "label": "Internal Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -7767,8 +7841,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N"
           }
         ],
-        "equation": "dx/dt = v_R − v_E [m/s]\nF_R→E = k·x [N],  k = E·A/L (linked Belt-Cable Properties) or stiffness [N/m]\nf = −F_R→E = k·(x_E − x_R)  (belt tension, N)",
-        "description": "Elastic (tension-carrying) end of a belt or cable between two Translational ports R and E, k = E·A/L from a wired Belt-Cable Properties block (Young modulus E, section A, length L), otherwise the stiffness parameter. The stored energy is ½·k·x² and no power is dissipated (no internal damping parameter is exposed). Output f is the belt tension, positive when the belt is stretched (E moves away from R)."
+        "equation": "dx/dt = v_E − v_R [m/s]  (x = x_E − x_R, extension)\nf = max(0, k·x + c·dx/dt) [N]  (belt tension, tension-only: a slack belt carries nothing)\nF_R→E = −f,  k = E·A/L (linked Belt-Cable Properties) or stiffness [N/m],  c = damping [N·s/m]",
+        "description": "Elastic, tension-only end of a belt or cable between two Translational ports R and E, k = E·A/L from a wired Belt-Cable Properties block (Young modulus E, section A, length L), otherwise the stiffness parameter, plus an internal damping c (default 0). The tension is k·(x_E − x_R) + c·(v_E − v_R) and is clipped at 0 when the belt goes slack; the taut / slack switch is a solver event. Output f is the belt tension, positive when the belt is stretched (E moves away from R)."
       },
       {
         "id": "belt_spool",

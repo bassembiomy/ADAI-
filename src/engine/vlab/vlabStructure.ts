@@ -16,6 +16,7 @@
 import type { AssembledSystem, EquationContext } from './types';
 import { withStatefulEquationCaches } from './vlabEquations';
 import { floatingNetworkReason } from './vlabElectricalReference';
+import { floatingMechanicalReason, openSourcePortReason } from './vlabMechanicalReference';
 
 export type StructuralCode =
   | 'row-count-mismatch'
@@ -269,6 +270,22 @@ export function assertStructurallyWellPosed(system: AssembledSystem): void {
       expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId),
       reason: floatingNetworkReason(net),
     })));
+  }
+  // WP-13 (F-064): the same for Rotational / Translational networks, and for an ideal torque / force source with an open port.
+  const openSources = system.structure?.openSourcePorts ?? [];
+  const floatingMech = system.structure?.floatingMechanicalNetworks ?? [];
+  if (openSources.length || floatingMech.length) {
+    throw new DAEStructureError([
+      ...openSources.map(p => ({
+        code: 'floating-network' as const, blockId: p.blockId, blockType: p.blockType,
+        expectedRows: 0, actualRows: 0, missingIndices: [p.blockId], reason: openSourcePortReason(p),
+      })),
+      ...floatingMech.map(net => ({
+        code: 'floating-network' as const, blockId: net.blocks[0].blockId, blockType: net.blocks[0].blockType,
+        expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId),
+        reason: floatingMechanicalReason(net),
+      })),
+    ]);
   }
   const full = withStatefulEquationCaches(() => detectJacobianPattern(system));
   if (!full) return;

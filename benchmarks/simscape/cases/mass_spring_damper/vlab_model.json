@@ -1,0 +1,23 @@
+{
+  "name": "mass_spring_damper",
+  "nodes": [
+    { "id": "fs", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "force_source", "params": { "F": 10 } } },
+    { "id": "mass", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "mass", "params": { "m": 2, "b": 0 } } },
+    { "id": "spring", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "trans_spring", "params": { "k": 800, "x0": 0 } } },
+    { "id": "damper", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "trans_damper", "params": { "b": 16 } } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "trans_motion_sensor", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } },
+    { "id": "tref", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "trans_ref", "params": {} } }
+  ],
+  "edges": [
+    { "id": "fs-mass", "source": "fs", "sourceHandle": "b_s", "target": "mass", "targetHandle": "p_t" },
+    { "id": "fs-tref", "source": "fs", "sourceHandle": "a_s", "target": "tref", "targetHandle": "p_t" },
+    { "id": "spring-mass", "source": "spring", "sourceHandle": "r_s", "target": "mass", "targetHandle": "p_t" },
+    { "id": "spring-tref", "source": "spring", "sourceHandle": "c_s", "target": "tref", "targetHandle": "p_t" },
+    { "id": "damper-mass", "source": "damper", "sourceHandle": "r_s", "target": "mass", "targetHandle": "p_t" },
+    { "id": "damper-tref", "source": "damper", "sourceHandle": "c_s", "target": "tref", "targetHandle": "p_t" },
+    { "id": "sensor-mass", "source": "sensor", "sourceHandle": "r_s", "target": "mass", "targetHandle": "p_t" },
+    { "id": "sensor-tref", "source": "sensor", "sourceHandle": "c_s", "target": "tref", "targetHandle": "p_t" },
+    { "id": "sensor-scope", "source": "sensor", "sourceHandle": "p_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

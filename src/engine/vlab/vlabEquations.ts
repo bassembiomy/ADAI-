@@ -261,6 +261,50 @@ const resolveBeltMaterial = (
   };
 };
 
+// ── Mechanical helpers (WP-13): shared by the equations below and by the contact-event detector (vlabPhysics) ──────────────
+
+/**
+ * Simscape Foundation > Mechanical > Rotational / Translational Friction (Stribeck + Coulomb + viscous):
+ *   F = [ Fc + (Fbrk - Fc) * exp(-cv * |v|) ] * sign(v) + f * v
+ * with the discontinuous sign(v) replaced by the continuous tanh(4 v / vThr) over the "linear region velocity threshold" vThr
+ * (the block reaches 99.9 % of the Coulomb level at |v| = vThr). Fbrk >= Fc >= 0 [N or N*m], f [N*s/m or N*m*s/rad],
+ * cv = transition approximation coefficient [s/m or s/rad], vThr [m/s or rad/s].
+ */
+export const stribeckFriction = (v: number, Fbrk: number, Fc: number, f: number, cv: number, vThr: number): number =>
+  (Fc + (Fbrk - Fc) * Math.exp(-cv * Math.abs(v))) * Math.tanh(4 * v / vThr) + f * v;
+
+/** cubic smooth step: 0 for u <= 0, 1 for u >= 1, C1 in between (the Simscape hard-stop transition-region blend) */
+const smoothStep01 = (u: number): number => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+
+/**
+ * Simscape Foundation > Mechanical > Rotational / Translational Hard Stop, "Full stiffness and damping applied at bounds,
+ * damped rebound" in its continuous (transition-region) form. x = relative position (integral of v_R - v_C), bounds
+ * lower < upper, contact stiffness k, contact damping c, transition region w:
+ *   penetration p = x - upper (x > upper) or lower - x (x < lower), outward speed vo = +v / -v
+ *   F_contact = max(0, k * p + c * vo * smoothstep(p / w))   (the stop only pushes; the damping acts only while in contact and
+ *                                                            fades in over p in [0, w], so F is continuous at contact entry)
+ * The through force follows the spring sign convention (positive for x > upper, negative for x < lower).
+ */
+export const hardStopForce = (x: number, v: number, lower: number, upper: number, k: number, c: number, w: number): number => {
+  if (x > upper) {
+    const p = x - upper;
+    return Math.max(0, k * p + c * v * (w > 0 ? smoothStep01(p / w) : 1));
+  }
+  if (x < lower) {
+    const p = lower - x;
+    return -Math.max(0, k * p - c * v * (w > 0 ? smoothStep01(p / w) : 1));
+  }
+  return 0;
+};
+
+/** Axial stiffness of a belt end [N/m]: k = E*A/L from the linked belt material, else the `stiffness` parameter. */
+export const beltEndStiffness = (params: Record<string, any> | undefined, ctx?: EquationContext): number => {
+  const mat = resolveBeltMaterial(params, ctx);
+  const len = numericParam(params, 'length', 1.0);
+  const area = numericParam(params, 'area', 1e-3);
+  return mat ? (mat.youngs * area) / len : numericParam(params, 'stiffness', 1e6);
+};
+
 export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── ELECTRICAL DOMAIN ──────────────────────────────────────────────────────
   ground: () => [],
@@ -623,51 +667,54 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   rot_ref: () => [],
   
   inertia: ({ across, dAcross, branch, params }) => {
-    // Torque = J * d(omega)/dt
-    const J = numericParam(params, 'J', 0.001);
-    const B = numericParam(params, 'B', 0.001);
+    // Simscape Foundation > Mechanical > Rotational Elements > Inertia: T = J * d(omega)/dt (omega = absolute speed of the
+    // node, relative to the inertial frame). B is NOT a Simscape inertia parameter: it is the optional viscous drag to the
+    // inertial frame kept (default 0 = Simscape) so that models saved with the old 0.001 default behave identically (WP-13, F-074).
+    const J = numericParam(params, 'J', 0.01);
+    const B = numericParam(params, 'B', 0);
     return [branch[0] - J * dAcross[0] - B * across[0]];
   },
-  
+
   rot_spring: ({ across, branch, state, dState, params }) => {
-    // Torque = k * theta
-    // d(theta)/dt = omega_r - omega_c
-    const k = numericParam(params, 'k', 10);
+    // Simscape Rotational Spring: T = K * phi,  phi = phi0 + integral(omega_R - omega_C) dt  (phi0 = initial deformation)
+    const k = numericParam(params, 'k', 100);
+    const theta0 = numericParam(params, 'theta0', 0);
     const theta = state[0];
     const omega = across[0] - (across[1] || 0);
     return [
-      branch[0] - k * theta,
+      branch[0] - k * (theta0 + theta),
       dState[0] - omega
     ];
   },
-  
+
   rot_damper: ({ across, branch, params }) => {
-    // Torque = b * (omega_r - omega_c)
+    // Simscape Rotational Damper: T = D * (omega_R - omega_C)
     const b = numericParam(params, 'b', 0.1);
     const omega = across[0] - (across[1] || 0);
     return [branch[0] - b * omega];
   },
-  
+
   rot_friction: ({ across, branch, params }) => {
-    // Static & kinetic friction
-    const Ts = numericParam(params, 'Ts', 1.0);
+    // Simscape Rotational Friction: T = [Tc + (Tbrk - Tc) exp(-cv |w|)] tanh(4 w / wThr) + f w   (see stribeckFriction)
+    const Tbrk = numericParam(params, 'Tbrk', 0.6);
+    const Tc = numericParam(params, 'Tc', 0.5);
     const Tv = numericParam(params, 'Tv', 0.1);
+    const cv = numericParam(params, 'cv', 10);
+    const wthr = numericParam(params, 'wthr', 0.01);
     const omega = across[0] - (across[1] || 0);
-    const torque = Ts * Math.tanh(10 * omega) + Tv * omega;
-    return [branch[0] - torque];
+    return [branch[0] - stribeckFriction(omega, Tbrk, Tc, Tv, cv, wthr)];
   },
-  
+
   rot_hard_stop: ({ across, branch, state, dState, params }) => {
-    const lower = numericParam(params, 'lower', -1.57);
-    const upper = numericParam(params, 'upper', 1.57);
+    // Simscape Rotational Hard Stop, continuous damped-rebound contact (see hardStopForce); theta = integral(w_R - w_C) dt.
+    // Contact entry / exit is a zero-crossing event of theta - lower / theta - upper (VLabPhysicsEngine.detectZeroCrossings).
+    const lower = numericParam(params, 'lower', -1);
+    const upper = numericParam(params, 'upper', 1);
     const k = numericParam(params, 'k', 1000);
     const c = numericParam(params, 'c', 0.1);
+    const w = numericParam(params, 'transition', 1e-4);
     const omega = across[0] - (across[1] || 0);
-    const theta = state[0];
-    let torque = 0;
-    if (theta > upper) torque = k * (theta - upper) + c * omega;
-    else if (theta < lower) torque = k * (theta - lower) + c * omega;
-    return [branch[0] - torque, dState[0] - omega];
+    return [branch[0] - hardStopForce(state[0], omega, lower, upper, k, c, w), dState[0] - omega];
   },
   
   torque_source: ({ across, branch, params, ports, connectedPorts }) => {
@@ -767,49 +814,54 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   trans_ref: () => [],
   
   mass: ({ across, dAcross, branch, params }) => {
-    // Force = m * d(v)/dt
+    // Simscape Foundation > Mechanical > Translational Elements > Mass: F = m * dv/dt (v = absolute speed of the node).
+    // b is NOT a Simscape mass parameter: it is the optional viscous drag to the inertial frame kept (default 0 = Simscape)
+    // so that models saved with the old 0.1 default behave identically (WP-13, F-074).
     const m = numericParam(params, 'm', 1.0);
-    const b = numericParam(params, 'b', 0.1);
+    const b = numericParam(params, 'b', 0);
     return [branch[0] - m * dAcross[0] - b * across[0]];
   },
-  
+
   trans_spring: ({ across, branch, state, dState, params }) => {
-    // Force = k * x
-    // d(x)/dt = v_r - v_c
-    const k = numericParam(params, 'k', 100);
+    // Simscape Translational Spring: F = K * x,  x = x0 + integral(v_R - v_C) dt  (x0 = initial deformation)
+    const k = numericParam(params, 'k', 1000);
+    const x0 = numericParam(params, 'x0', 0);
     const x = state[0];
     const v = across[0] - (across[1] || 0);
     return [
-      branch[0] - k * x,
+      branch[0] - k * (x0 + x),
       dState[0] - v
     ];
   },
-  
+
   trans_damper: ({ across, branch, params }) => {
-    // Force = b * (v_r - v_c)
-    const b = numericParam(params, 'b', 1.0);
+    // Simscape Translational Damper: F = D * (v_R - v_C)
+    const b = numericParam(params, 'b', 10);
     const v = across[0] - (across[1] || 0);
     return [branch[0] - b * v];
   },
-  
+
   trans_friction: ({ across, branch, params }) => {
-    const Fs = numericParam(params, 'Fs', 10.0);
-    const Fv = numericParam(params, 'Fv', 2.0);
+    // Simscape Translational Friction: F = [Fc + (Fbrk - Fc) exp(-cv |v|)] tanh(4 v / vThr) + f v   (see stribeckFriction)
+    const Fbrk = numericParam(params, 'Fbrk', 6);
+    const Fc = numericParam(params, 'Fc', 5);
+    const Fv = numericParam(params, 'Fv', 2);
+    const cv = numericParam(params, 'cv', 10);
+    const vthr = numericParam(params, 'vthr', 0.01);
     const v = across[0] - (across[1] || 0);
-    const force = Fs * Math.tanh(5 * v) + Fv * v;
-    return [branch[0] - force];
+    return [branch[0] - stribeckFriction(v, Fbrk, Fc, Fv, cv, vthr)];
   },
-  
-  trans_hard_stop: ({ across, branch, params }) => {
+
+  trans_hard_stop: ({ across, branch, state, dState, params }) => {
+    // Simscape Translational Hard Stop, continuous damped-rebound contact (see hardStopForce); x = integral(v_R - v_C) dt.
+    // The old equation read x = 0.01 * (absolute node speed) and always added 1.0 * v (F-075); both are gone.
     const lower = numericParam(params, 'lower', -0.1);
     const upper = numericParam(params, 'upper', 0.1);
     const k = numericParam(params, 'k', 10000);
+    const c = numericParam(params, 'c', 10);
+    const w = numericParam(params, 'transition', 1e-4);
     const v = across[0] - (across[1] || 0);
-    const x = (across[0] || 0) * 0.01;
-    let force = 0;
-    if (x > upper) force = k * (x - upper);
-    else if (x < lower) force = k * (x - lower);
-    return [branch[0] - force - 1.0 * v];
+    return [branch[0] - hardStopForce(state[0], v, lower, upper, k, c, w), dState[0] - v];
   },
   
   force_source: ({ across, branch, params, ports, connectedPorts }) => {
@@ -3009,22 +3061,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   belt_end: ({ across, branch, state, dState, params, ctx, ports = [] }) => {
-    const mat = resolveBeltMaterial(params, ctx);
-    const len = numericParam(params, 'length', 1.0);
-    const area = numericParam(params, 'area', 1e-3);
-    // Axial stiffness from material (k = E*A/L); legacy fixed stiffness param
-    // when no belt_properties material is available.
-    const k = mat ? (mat.youngs * area) / len : numericParam(params, 'stiffness', 1e6);
+    // Axial stiffness from material (k = E*A/L); legacy fixed stiffness param when no belt_properties material is available.
+    const k = beltEndStiffness(params, ctx);
     const rIdx = portIndex(ports, 'r', 0);
     const eIdx = portIndex(ports, 'e', 1);
-    const v = across[rIdx] - across[eIdx];
+    // extension x = x_E - x_R (stretch positive, the state of this block), v = dx/dt = v_E - v_R. Belt/cable spec
+    // (docs/superpowers/specs/2026-09-30-vlab-belt-pulley-domains-and-scope-outputs-design.md 2.4): the tension is
+    // T = k x + c v and the belt is tension-only (non-slack condition): a slack belt (T < 0) carries no force, T = max(0, k x + c v).
+    // F_R->E, the force INTO the block at R, is -T. The slack / taut switch is a zero-crossing event of k x + c v
+    // (detectZeroCrossings). The extension is the state so that a taut belt is the state the structural probe sees.
+    const v = across[eIdx] - across[rIdx];
     const x = state[0];
-    // x = x_R - x_E (compression positive), F_R->E = k*x is the force INTO the block at R, so the tension of a stretched
-    // belt is T = -F_R->E = k*(x_E - x_R)
+    const c = numericParam(params, 'damping', 0);
     const res = [
-      branch[0] - k * x,
-    ];
-    if (branch.length > 1) {
+      branch[0] + Math.max(0, k * x + c * v),
+    ];    if (branch.length > 1) {
       // Measurement signal f is the belt tension T = -F_R->E
       res.push(branch[1] + branch[0]);
     }

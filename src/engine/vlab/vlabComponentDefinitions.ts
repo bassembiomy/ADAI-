@@ -556,7 +556,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Scalar-to-Frame bridge for a Translational network: imposes the relative slide rate of F along the configured axis on R-C and applies the network force along that axis on F (reaction and lever-arm moment on B). Lossless.'
   },
   inertia: {
-    equations: ['T = J * d(omega)/dt'],
+    equations: ['T = J * d(omega)/dt  (+ B*omega drag to the inertial frame, default B = 0)'],
     latex: ['\\tau = J \\dot{\\omega}'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models rotational inertia. Opposes changes in angular velocity.'
@@ -568,7 +568,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'The rotational ground. Represents a stationary frame ($ \omega = 0 $).'
   },
   rot_spring: {
-    equations: ['T = k * (theta_r - theta_c)'],
+    equations: ['T = k * phi,  phi = theta0 + int(omega_R - omega_C) dt'],
     latex: ['\\tau = k \\Delta \\theta'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models a rotational torsion spring. Torque is proportional to angular displacement.'
@@ -580,19 +580,19 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models rotational viscous friction. Torque is proportional to relative angular velocity.'
   },
   rot_friction: {
-    equations: ['T = f(omega, Ts, Tv)'],
-    latex: ['\\tau = \\tau_f(\\omega)'],
+    equations: ['T = [Tc + (Tbrk - Tc)*exp(-cv*|w|)]*tanh(4*w/wthr) + Tv*w,  w = omega_R - omega_C'],
+    latex: ['\\tau = [T_c + (T_{brk}-T_c)e^{-c_v|\\omega|}]\\tanh(4\\omega/\\omega_{thr}) + T_v\\omega'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models non-linear rotational friction, including static and kinetic effects.'
   },
   rot_hard_stop: {
-    equations: ['T = T_stop if theta out of range'],
+    equations: ['theta = int(omega_R - omega_C) dt', 'T = +/-max(0, k*p + c*w_out*S(p/w)),  p = penetration beyond lower/upper'],
     latex: ['\\tau = \\tau_{stop}(\\theta)'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Restricts the range of motion of a rotational branch using spring-damper stop logic.'
   },
   mass: {
-    equations: ['F = m * dv/dt'],
+    equations: ['F = m * dv/dt  (+ b*v drag to the inertial frame, default b = 0)'],
     latex: ['f = m \\dot{v}'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Models translational mass. Opposes changes in linear velocity following Newton\'s second law.'
@@ -604,7 +604,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'The translational ground. Represents a stationary reference frame ($ v = 0 $).'
   },
   trans_spring: {
-    equations: ['F = k * (x_r - x_c)'],
+    equations: ['F = k * x,  x = x0 + int(v_R - v_C) dt'],
     latex: ['f = k \\Delta x'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Models a translational spring. Force is proportional to linear displacement.'
@@ -616,13 +616,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models linear viscous damping. Force is proportional to relative velocity.'
   },
   trans_friction: {
-    equations: ['F = f(v, Fs, Fv)'],
-    latex: ['f = f_f(v)'],
+    equations: ['F = [Fc + (Fbrk - Fc)*exp(-cv*|v|)]*tanh(4*v/vthr) + Fv*v,  v = v_R - v_C'],
+    latex: ['f = [F_c + (F_{brk}-F_c)e^{-c_v|v|}]\\tanh(4v/v_{thr}) + F_v v'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Models complex translational friction, including Stribeck and Coulomb effects.'
   },
   trans_hard_stop: {
-    equations: ['F = F_stop if x out of range'],
+    equations: ['x = int(v_R - v_C) dt', 'F = +/-max(0, k*p + c*v_out*S(p/w)),  p = penetration beyond lower/upper'],
     latex: ['f = f_{stop}(x)'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Restricts linear travel distance using mechanical stop physics.'
@@ -1165,7 +1165,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
   },
   belt_end: {
-    equations: ['F = k * x', 'dx/dt = v_r - v_e', 'k = E*A/L (material) or stiffness', 'f = -F (belt tension)'],
+    equations: ['dx/dt = v_e - v_r  (x = x_e - x_r)', 'f = max(0, k*x + c*dx/dt)  (tension-only)', 'k = E*A/L (material) or stiffness', 'F_r->e = -f'],
     latex: ['F = k \Delta x'],
     across: 'Translational Velocity (m/s)', through: 'Force (N)',
     description: 'Compliant termination of a belt/cable. Axial stiffness comes from the linked belt_properties material (k = youngs*area/length) and falls back to the fixed stiffness param when no material is available.'

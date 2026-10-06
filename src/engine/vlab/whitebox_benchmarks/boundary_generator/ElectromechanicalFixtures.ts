@@ -31,6 +31,7 @@ export class ElectromechanicalFixtures {
         node('speed_sensor', 'rot_motion_sensor'),
         node('blender_scope', 'scope'),
         node('gnd', 'ground'),
+        node('mech_ref', 'rot_ref'),
       ],
       edges: [
         edge('be1', 'dc_source', 'p_s', 'blender_motor', 'p_t'),
@@ -40,6 +41,10 @@ export class ElectromechanicalFixtures {
         edge('be3', 'mixture_drag', 'r_s', 'blade_inertia', 'r_t'),
         edge('be4', 'mixture_drag', 'r_s', 'speed_sensor', 'r_t'),
         edge('be5', 'speed_sensor', 'w_s', 'blender_scope', 'in1_t'),
+        // WP-13 (F-064): an open mechanical port is open, so the case / reference ports go to the Rotational Reference
+        edge('be_mref', 'blender_motor', 'c_s', 'mech_ref', 'r_t'),
+        edge('be_dref', 'mixture_drag', 'c_s', 'mech_ref', 'r_t'),
+        edge('be_sref', 'speed_sensor', 'c_s', 'mech_ref', 'r_t'),
       ],
       probes: [{ id: 'p1', sourceNodeId: 'speed_sensor', sourceHandle: 'w_s', variableName: 'speed', unit: 'rad/s' }],
     };

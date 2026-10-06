@@ -97,7 +97,7 @@ describe('physical bounds schema (vlabLibrary.ts)', () => {
     for (const [id, key] of [
       ['rot_damper', 'b'], ['trans_damper', 'b'], ['mass', 'b'], ['inertia', 'B'], ['revolute_joint', 'damping'], ['spring_damper_force', 'x0'],
       ['dc_voltage', 'V'], ['dc_voltage', 'R_int'], ['dc_current', 'I'], ['ps_step', 'initial'], ['ps_ramp', 'start'], ['heat_src', 'Q'],
-      ['force_source', 'F'], ['torque_source', 'T'], ['ang_vel_source', 'omega'], ['diode', 'Vf'], ['rot_friction', 'Ts'],
+      ['force_source', 'F'], ['torque_source', 'T'], ['ang_vel_source', 'omega'], ['diode', 'Vf'], ['rot_friction', 'Tc'], ['trans_friction', 'Fc'], ['rot_spring', 'theta0'], ['trans_spring', 'x0'], ['belt_end', 'damping'],
       ['neural_neuron_learning', 'initBias'], ['ac_voltage', 'phase'], ['variable_resistor', 'R_min'],
     ] as const) {
       expect(boundViolation(0, lib(id, key)), `${id}.${key}`).toBeNull();
@@ -290,10 +290,10 @@ describe('a parameter set to 0 produces a different residual than the default (p
   };
   // [block, param, probe scale]: scale moves the probe point so the block works in the region the parameter acts on
   const CASES: [string, string, number?][] = [
-    ['dc_voltage', 'R_int'], ['dc_voltage', 'V'], ['dc_current', 'I'], ['rot_damper', 'b'], ['trans_damper', 'b'], ['mass', 'b'],
-    ['inertia', 'B'], ['rot_spring', 'k'], ['trans_spring', 'k'], ['heat_src', 'Q'], ['force_source', 'F'],
-    ['torque_source', 'T'], ['ang_vel_source', 'omega'], ['diode', 'Vf', -10], ['rot_friction', 'Ts'], ['rot_friction', 'Tv'],
-    ['trans_friction', 'Fs'], ['trans_friction', 'Fv'], ['rot_hard_stop', 'c', 10], ['permanent_magnet', 'Hc'], ['mag_mmf_source', 'MMF'],
+    ['dc_voltage', 'R_int'], ['dc_voltage', 'V'], ['dc_current', 'I'], ['rot_damper', 'b'], ['trans_damper', 'b'],
+    ['rot_spring', 'k'], ['trans_spring', 'k'], ['heat_src', 'Q'], ['force_source', 'F'],
+    ['torque_source', 'T'], ['ang_vel_source', 'omega'], ['diode', 'Vf', -10], ['rot_friction', 'Tc'], ['rot_friction', 'Tbrk'], ['rot_friction', 'Tv'],
+    ['trans_friction', 'Fc'], ['trans_friction', 'Fbrk'], ['trans_friction', 'Fv'], ['rot_hard_stop', 'c', 10], ['permanent_magnet', 'Hc'], ['mag_mmf_source', 'MMF'],
     ['mag_flux_source', 'phi'], ['gas_flow_source', 'mdot'], ['mass_flow_source', 'mdot'], ['ma_flow_source', 'rate'],
     ['ma_moisture_source', 'rate'], ['ps_constant', 'value'], ['constant', 'value'], ['ps_step', 'time'], ['ps_sine', 'amp'],
     ['ps_ramp', 'slope'], ['dc_motor', 'Ra'], ['dc_motor', 'B'], ['bldc_motor', 'B'], ['ac_voltage', 'Vpk'], ['pmsm', 'B'],
@@ -313,6 +313,26 @@ describe('a parameter set to 0 produces a different residual than the default (p
       expect(zero.every(Number.isFinite)).toBe(true);
       const differs = def.some((v, i) => Math.abs(v - zero[i]) > 1e-12);
       expect(differs, `residual must change when ${id}.${key} goes from default to 0`).toBe(true);
+    });
+  }
+});
+
+// WP-13 (F-074): the Simscape Mass / Inertia have no damping, so the library default of the optional drag is 0. The proof that a
+// stored value is honoured is therefore the other way round: a non-zero drag changes the residual against the default 0.
+describe('mass.b and inertia.B: the optional drag defaults to 0 and a non-zero value is honoured', () => {
+  for (const [id, key] of [['mass', 'b'], ['inertia', 'B']] as const) {
+    it(`${id}.${key}: default 0 (Simscape), 0.5 changes the residual`, () => {
+      const b = BLOCKS.find(x => x.id === id)!;
+      expect(b.params[key].value).toBe(0);
+      const params0 = wrap(b, Object.keys(b.params)[0], b.params[Object.keys(b.params)[0]].value);
+      const run = (v: number) => {
+        const params = { ...params0, [key]: { value: v, unit: b.params[key].unit, label: b.params[key].label } };
+        const comp = quiet(() => assemble(dutNode(b, params)));
+        const n = (comp as any).__n as number;
+        return comp.residual(probeVector(n), probeVector(n), probeCtx(n) as any).map(Number);
+      };
+      const def = run(0), drag = run(0.5);
+      expect(def.some((v, i) => Math.abs(v - drag[i]) > 1e-12)).toBe(true);
     });
   }
 });

@@ -79,6 +79,7 @@ const LEARNING_LABS = [
       { id: 'mixture_drag', blockId: 'rot_damper', position: { x: 450, y: 200 }, label: 'Mixture Viscosity', params: { b: 0.001 } },
       { id: 'blade_inertia', blockId: 'inertia', position: { x: 450, y: 350 }, label: 'Blade Inertia', params: { J: 0.0002 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 650, y: 200 }, label: 'Speed Sensor' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'blender_scope', blockId: 'scope', position: { x: 850, y: 150 }, label: 'Performance Monitor', params: { time_range: 5 } },
       { id: 'gnd', blockId: 'ground', position: { x: 150, y: 400 }, label: 'Common' }
     ],
@@ -89,7 +90,10 @@ const LEARNING_LABS = [
       { id: 'be2', source: 'blender_motor', target: 'mixture_drag', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'be3', source: 'mixture_drag', target: 'blade_inertia', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'be4', source: 'mixture_drag', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+      { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 'be5_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+      { id: 'be_mref', source: 'blender_motor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+      { id: 'be_dref', source: 'mixture_drag', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -102,6 +106,7 @@ const LEARNING_LABS = [
       { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'ac_motor', blockId: 'ac_motor', position: { x: 700, y: 300 }, label: 'Induction Motor', params: { P: 2 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Encoder' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'scope', blockId: 'scope', position: { x: 1000, y: 150 }, label: 'PID Response', params: { time_range: 10 } },
       { id: 'gnd', blockId: 'ground', position: { x: 500, y: 500 }, label: 'GND' }
     ],
@@ -115,7 +120,8 @@ const LEARNING_LABS = [
       { id: 'pe7', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
       { id: 'pe12', source: 'ac_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'pe13', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+      { id: 'pe13', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 'pe13_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -127,6 +133,7 @@ const LEARNING_LABS = [
       { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
       { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 700, y: 300 }, label: 'Speed Sensor' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'vfd_scope', blockId: 'scope', position: { x: 800, y: 200 }, label: 'VFD Performance', params: { time_range: 5 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'Common Ground' }
     ],
@@ -138,7 +145,8 @@ const LEARNING_LABS = [
       { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
       { id: 've4', source: 'inverter', target: 'im_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
       { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+      { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 've6_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -150,6 +158,7 @@ const LEARNING_LABS = [
       { id: 'wash_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Direct Drive Motor' },
       { id: 'basket_load', blockId: 'washing_basket', position: { x: 750, y: 300 }, label: 'Washing Basket', params: { load_mass: 6 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Speed Sensor' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'wash_scope', blockId: 'scope', position: { x: 950, y: 200 }, label: 'Cycle Analysis', params: { time_range: 10 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'System Ground' }
     ],
@@ -161,7 +170,8 @@ const LEARNING_LABS = [
       { id: 'we3', source: 'inverter', target: 'wash_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
       { id: 'we4', source: 'wash_motor', target: 'basket_load', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'we5', source: 'wash_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+      { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 'we6_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {

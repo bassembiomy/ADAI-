@@ -98,5 +98,9 @@ export interface AssembledSystem {
     exemptVariables?: number[];
     /** connected Electrical networks without any reference (F-064); reported before the solve */
     floatingElectricalNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
+    /** connected Rotational / Translational networks without a reference, inertia or mass (WP-13, F-064); reported before the solve */
+    floatingMechanicalNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
+    /** ports of an ideal torque / force source that are open (WP-13); reported before the solve */
+    openSourcePorts?: { blockId: string; blockType: string; portId: string }[];
   };
 }

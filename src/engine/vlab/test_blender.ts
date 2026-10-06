@@ -27,6 +27,7 @@ const blenderLab = {
     { id: 'mixture_drag', blockId: 'rot_damper', position: { x: 450, y: 200 }, label: 'Mixture Viscosity', params: { b: 0.001 } },
     { id: 'blade_inertia', blockId: 'inertia', position: { x: 450, y: 350 }, label: 'Blade Inertia', params: { J: 0.0002 } },
     { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 650, y: 200 }, label: 'Speed Sensor' },
+    { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
     { id: 'blender_scope', blockId: 'scope', position: { x: 850, y: 150 }, label: 'Performance Monitor', params: { time_range: 5 } },
     { id: 'gnd', blockId: 'ground', position: { x: 150, y: 400 }, label: 'Common' }
   ],
@@ -37,7 +38,10 @@ const blenderLab = {
     { id: 'be2', source: 'blender_motor', target: 'mixture_drag', sourceHandle: 'r_s', targetHandle: 'r_t' },
     { id: 'be3', source: 'mixture_drag', target: 'blade_inertia', sourceHandle: 'r_s', targetHandle: 'r_t' },
     { id: 'be4', source: 'mixture_drag', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-    { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+    { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+    { id: 'be5_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+    { id: 'be_mref', source: 'blender_motor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+    { id: 'be_dref', source: 'mixture_drag', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
   ]
 };
 

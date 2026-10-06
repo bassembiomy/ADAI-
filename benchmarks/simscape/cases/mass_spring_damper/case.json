@@ -1,0 +1,10 @@
+{
+  "id": "mass_spring_damper",
+  "class": "linear_smooth",
+  "stopTime": 1.0,
+  "dt": 0.001,
+  "signals": [
+    { "name": "x", "unit": "m", "vlabProbe": { "nodeId": "sensor", "handle": "p_s", "variableName": "x" } }
+  ],
+  "analytic": { "type": "mass_spring_damper_step", "F": 10, "m": 2, "k": 800, "b": 16 }
+}

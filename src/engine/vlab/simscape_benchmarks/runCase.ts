@@ -34,7 +34,9 @@ export interface CaseSpec {
      * Buck converter in continuous conduction, state-space averaged (Erickson ch. 7): the cycle-average output voltage is the step response of
      * D Vin / (L C s^2 + (L/R + C Rs) s + 1 + Rs/R) with Rs = D Ron_switch + (1 - D) Ron_diode, from v(0) = i(0) = 0 (WP-12b).
      */
-    | { type: 'buck_converter_averaged'; Vin: number; D: number; L: number; C: number; R: number; Rs: number };
+    | { type: 'buck_converter_averaged'; Vin: number; D: number; L: number; C: number; R: number; Rs: number }
+    /** force step F on a mass m with a spring k and a damper b to the reference: position of m x'' + b x' + k x = F, x(0) = x'(0) = 0 (WP-13) */
+    | { type: 'mass_spring_damper_step'; F: number; m: number; k: number; b: number };
 }
 
 /** Closed-form reference of `spec.analytic` at time t. */
@@ -60,6 +62,16 @@ export function analyticValue(a: NonNullable<CaseSpec['analytic']>, t: number): 
     }
     const al = sum / 2, bw = Math.sqrt(-disc) / 2;
     return wss * (1 - Math.exp(-al * t) * (Math.cos(bw * t) + (al / bw) * Math.sin(bw * t)));
+  }
+  if (a.type === 'mass_spring_damper_step') {
+    // wn = sqrt(k/m), zeta = b / (2 sqrt(k m)); x(t) = (F/k) [1 - e^(-zeta wn t) (cos wd t + zeta / sqrt(1 - zeta^2) sin wd t)] (zeta < 1)
+    const wn = Math.sqrt(a.k / a.m), z = a.b / (2 * Math.sqrt(a.k * a.m)), xss = a.F / a.k;
+    if (z < 1) {
+      const wd = wn * Math.sqrt(1 - z * z);
+      return xss * (1 - Math.exp(-z * wn * t) * (Math.cos(wd * t) + (z / Math.sqrt(1 - z * z)) * Math.sin(wd * t)));
+    }
+    const r = wn * Math.sqrt(z * z - 1), s1 = -z * wn + r, s2 = -z * wn - r;
+    return xss * (1 - (s2 * Math.exp(s1 * t) - s1 * Math.exp(s2 * t)) / (s2 - s1));
   }
   if (a.type === 'buck_converter_averaged') {
     const a2 = a.L * a.C, a1 = a.L / a.R + a.C * a.Rs, a0 = 1 + a.Rs / a.R;

@@ -134,7 +134,7 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
         wire(`e_rot_src_${portId}`, srcId, 'r_s', 'dut', `${portId}_t`);
         wire(`e_rot_ref_${portId}`, srcId, 'c_s', 'ref_rot', 'r_t');
         // an ideal torque source needs an inertia to drive
-        addNode(`load_rot_${portId}`, 'inertia', 120, 100 * idx, { J: 0.01 });
+        addNode(`load_rot_${portId}`, 'inertia', 120, 100 * idx, { J: 0.01, B: 0 });
         wire(`e_rot_load_${portId}`, 'dut', `${portId}_s`, `load_rot_${portId}`, 'r_t');
       } else if (termination === 'load') {
         addNode(`term_rot_${portId}`, 'rot_damper', 120, 100 * idx, { b: 0.1 });
@@ -152,7 +152,7 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
         wire(`e_trans_src_${portId}`, srcId, 'a_s', 'dut', `${portId}_t`);
         wire(`e_trans_ref_${portId}`, srcId, 'b_s', 'ref_trans', 'p_t');
         // an ideal force source drives a mass
-        addNode(`load_trans_${portId}`, 'mass', 120, 100 * idx, { m: 1 });
+        addNode(`load_trans_${portId}`, 'mass', 120, 100 * idx, { m: 1, b: 0 });
         wire(`e_trans_load_${portId}`, 'dut', `${portId}_s`, `load_trans_${portId}`, 'p_t');
       } else if (termination === 'load') {
         addNode(`term_trans_${portId}`, 'trans_damper', 120, 100 * idx, { b: 10 });
@@ -298,6 +298,13 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
         // F-064: the sensor's reference terminal is open unless it is wired; return it to the electrical reference
         addNode('gnd', 'ground', 50, 400);
         wire('e_sensor_ref', s.id, 'n_s', 'gnd', 'a_t');
+      } else if (domain === 'rotational') {
+        // F-064 (WP-13): the same for the motion sensor's reference port C: an open mechanical port is open, not fixed to the frame
+        addNode('ref_rot', 'rot_ref', 50, 500);
+        wire('e_sensor_ref', s.id, 'c_s', 'ref_rot', 'r_t');
+      } else if (domain === 'translational') {
+        addNode('ref_trans', 'trans_ref', 50, 600);
+        wire('e_sensor_ref', s.id, 'c_s', 'ref_trans', 'p_t');
       }
       wire('e_sensor_to_scope', s.id, `${s.out}_s`, 'diag_scope', 'in1_t');
       scopeConnected = true;

@@ -19,6 +19,9 @@ import {
 import { BlockEquationError, NonFiniteResidualError, type ResidualDiagnostic } from './vlabResidualDiagnostics';
 import { ScopeReadError } from './vlabScopeRead';
 import { findFloatingElectricalNetworks, isInternalReferencePort } from './vlabElectricalReference';
+import {
+  findFloatingMechanicalNetworks, findOpenSourcePorts, isInternalMechanicalReferencePort, isMechanicalDomain,
+} from './vlabMechanicalReference';
 import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
@@ -705,8 +708,12 @@ export class DAEAssembler {
           break;
         case 'trans_damper':
         case 'trans_friction':
-        case 'trans_hard_stop':
           branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          break;
+        case 'trans_hard_stop':
+          // WP-13 (F-075): the relative position x = integral(v_R - v_C) is a state, like the rotational stop
+          branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+          states.push('x');
           break;
         case 'force_source':
           branches.push({ name: 'force', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
@@ -1272,11 +1279,16 @@ export class DAEAssembler {
           // define ground (scan above); a block that needs an internal reference declares the port in
           // INTERNAL_REFERENCE_PORTS (vlabElectricalReference.ts). The name rule below only remains for the non-electrical
           // case / return terminals owned by the other domain packages.
+          // F-064 (WP-13): the same for the Rotational / Translational domains (vlabMechanicalReference.ts): an unconnected
+          // mechanical port is open; only rot_ref / trans_ref (scan above) and a declared INTERNAL_MECHANICAL_REFERENCE_PORTS
+          // port define the inertial frame.
           const nameRule = ['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical'
             && nodeTypeOf(nodeById.get(node.id)!) !== 'phase_splitter';
           const groundedByDesign = domain === 'electrical'
             ? isInternalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
-            : nameRule;
+            : isMechanicalDomain(domain)
+              ? isInternalMechanicalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
+              : nameRule;
           if (!nodePortShapes.has(key) && (groundedByDesign || domain === 'fluid' || domain === 'gas' || domain === 'thermal')) {
             referenceNodeIds.add(root);
           }
@@ -1831,8 +1843,31 @@ export class DAEAssembler {
       referenceNodeIds,
     );
 
+    // F-064 (WP-13): Rotational / Translational networks that nothing defines a reference for, and open source ports.
+    const floatingMechanicalNetworks = findFloatingMechanicalNetworks(
+      nodes.map(node => ({
+        blockId: node.id,
+        blockType: nodeTypeOf(node),
+        roots: (nodePorts.get(node.id) || [])
+          .filter(portId => isMechanicalDomain(nodePortDomains.get(`${node.id}_${portId}`)))
+          .map(portId => uf.find(`${node.id}_${portId}`)),
+      })),
+      referenceNodeIds,
+    );
+    const openSourcePorts = findOpenSourcePorts(
+      nodes.flatMap(node => (nodePorts.get(node.id) || [])
+        .filter(portId => isMechanicalDomain(nodePortDomains.get(`${node.id}_${portId}`)))
+        .map(portId => {
+          const root = uf.find(`${node.id}_${portId}`);
+          return {
+            blockId: node.id, blockType: nodeTypeOf(node), portId,
+            netSize: (rootToPorts.get(root) || []).length, referenced: referenceNodeIds.has(root),
+          };
+        })),
+    );
+
     return {
-      structure: { variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices, floatingElectricalNetworks },
+      structure: { variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices, floatingElectricalNetworks, floatingMechanicalNetworks, openSourcePorts },
       systemSize: varCount,
       variableNames,
       isDifferentialState,

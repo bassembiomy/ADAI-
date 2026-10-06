@@ -85,8 +85,10 @@ export const LEGACY_PARAM_DROPS: Record<string, string[]> = {
 export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   igbt: ['Roff'], translational_electromechanical_converter: ['R'], controlled_voltage: ['R_int'],
   cccs: ['R_in'], ccvs: ['R_in', 'R_out'], gas_chamber: ['T'], gas_restriction: ['Cd', 'T'], gas_pipe: ['f'],
-  gas_rotational_conv: ['T'], gas_translational_conv: ['T'], inertia: ['B'], rot_friction: ['Tv'],
-  rot_hard_stop: ['k', 'c'], mass: ['b'], trans_friction: ['Fv'], trans_hard_stop: ['k'],
+  gas_rotational_conv: ['T'], gas_translational_conv: ['T'], rot_friction: ['Tv', 'cv', 'wthr'],
+  rot_hard_stop: ['k', 'c', 'transition'], trans_friction: ['Fv', 'cv', 'vthr'], trans_hard_stop: ['k', 'transition'],
+  // WP-13: Simscape Initial deformation of the springs, internal damping of the belt end (0 = the old lossless belt)
+  rot_spring: ['theta0'], trans_spring: ['x0'], belt_end: ['damping'],
   ma_chamber: ['ambient_temp', 'wall_mass', 'wall_cp', 'food_mass', 'food_cp', 'k_loss', 'max_temp'],
   ma_pipe: ['resistance'], ma_rot_conv: ['h0', 'k'], ma_trans_conv: ['h0', 'k'], im_flux_observer: ['Lr', 'Rr'],
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
@@ -99,6 +101,30 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   pwm_3ph_2level: ['modulation_index'],
   // WP-19a: joint parameters of the shared multibody joint core (axis defaults to Z like Simscape; weld reference pose)
   revolute_joint: ['axis'], prismatic_joint: ['axis'], weld_joint: ['offset', 'rotation'],
+};
+
+/**
+ * WP-13 (F-074, F-075): parameters whose OLD effective value (the equation's hidden default) differs from the new library
+ * default. A saved node that lacks the key keeps the value it used to run with, so its response does not change:
+ *  - inertia B = 0.001 and mass b = 0.1: the old equations added this viscous drag to the inertial frame by default; the
+ *    Simscape Inertia / Mass have none, so the library default is now 0 (an explicit saved value is never touched);
+ *  - trans_hard_stop c = 1: the old equation always added 1.0 * v.
+ */
+export const LEGACY_DEFAULT_BACKFILL: Record<string, Record<string, number>> = {
+  inertia: { B: 0.001 },
+  mass: { b: 0.1 },
+  trans_hard_stop: { c: 1 },
+};
+
+/**
+ * WP-13: the friction blocks used T = Ts * tanh(10 w) + Tv * w (rot) and F = Fs * tanh(5 v) + Fv * v (trans), i.e. a pure
+ * Coulomb friction. The Simscape form is [Tc + (Tbrk - Tc) exp(-cv |w|)] tanh(4 w / wthr) + Tv w, so Ts becomes
+ * Tbrk = Tc = Ts (no Stribeck dip) with the velocity threshold that reproduces the old smoothing exactly:
+ * tanh(4 w / wthr) = tanh(10 w) -> wthr = 0.4 rad/s; tanh(4 v / vthr) = tanh(5 v) -> vthr = 0.8 m/s.
+ */
+const FRICTION_MIGRATION: Record<string, { legacy: string; brk: string; coulomb: string; threshold: string; thresholdValue: number }> = {
+  rot_friction: { legacy: 'Ts', brk: 'Tbrk', coulomb: 'Tc', threshold: 'wthr', thresholdValue: 0.4 },
+  trans_friction: { legacy: 'Fs', brk: 'Fbrk', coulomb: 'Fc', threshold: 'vthr', thresholdValue: 0.8 },
 };
 
 const isWrapper = (v: unknown): v is { value: unknown } =>
@@ -169,6 +195,25 @@ export const canonicalizeLegacyParams = (
     const out = edit();
     if (out[canonical] === undefined || out[canonical] === null) out[canonical] = moved(canonical, out[legacy]);
     delete out[legacy];
+  }
+  const friction = FRICTION_MIGRATION[type];
+  if (friction && friction.legacy in params) {
+    const out = edit();
+    const legacy = out[friction.legacy];
+    for (const key of [friction.brk, friction.coulomb]) {
+      if (out[key] === undefined || out[key] === null) out[key] = moved(key, legacy);
+    }
+    if (out[friction.threshold] === undefined || out[friction.threshold] === null) {
+      out[friction.threshold] = isWrapper(legacy)
+        ? { value: friction.thresholdValue, unit: block.params[friction.threshold].unit, label: block.params[friction.threshold].label }
+        : friction.thresholdValue;
+    }
+    delete out[friction.legacy];
+  }
+  for (const [key, value] of Object.entries(LEGACY_DEFAULT_BACKFILL[type] ?? {})) {
+    if ((next ?? params)[key] === undefined && block.params[key]) {
+      edit()[key] = { value, unit: block.params[key].unit, label: block.params[key].label };
+    }
   }
   for (const key of LEGACY_PARAM_DROPS[type] ?? []) {
     if (key in (next ?? params)) delete edit()[key];
