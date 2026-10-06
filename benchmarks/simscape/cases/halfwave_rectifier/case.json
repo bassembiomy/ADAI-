@@ -1,0 +1,10 @@
+{
+  "id": "halfwave_rectifier",
+  "class": "switching",
+  "stopTime": 0.04,
+  "dt": 1e-4,
+  "signals": [
+    { "name": "v_load", "unit": "V", "vlabProbe": { "nodeId": "sensor", "handle": "v_s", "variableName": "v_load" } }
+  ],
+  "analytic": { "type": "halfwave_rectifier_pwl", "Vpk": 10, "f": 50, "Vf": 0.7, "Ron": 0.01, "Roff": 1000000, "R": 100 }
+}

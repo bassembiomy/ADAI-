@@ -452,8 +452,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "V = I * R_sw\\nR_sw = (v > threshold) ? Ron : Roff",
-        "description": "An ideal switch controlled by a physical signal. When the control signal exceeds threshold, the switch is closed with low resistance Ron; otherwise it opens with high resistance Roff."
+        "equation": "V = I * R_sw   [V]\nR_sw = (v > threshold) ? Ron : Roff   [Ω]",
+        "description": "An ideal switch controlled by a physical signal (Simscape Foundation Switch). When the control signal v exceeds threshold [V], the switch is closed with low resistance Ron [Ω]; otherwise it opens with high resistance Roff = 1/Gopen [Ω]."
       },
       {
         "id": "diode",
@@ -497,8 +497,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "Forward: V = Vf + I * Ron\\nReverse: V = I * Roff",
-        "description": "An ideal diode with piecewise-linear behavior and forward voltage drop."
+        "equation": "On (V > Vf): I = (V − Vf)/Ron + Vf/Roff   [A]\nOff (V ≤ Vf): I = V/Roff   [A]",
+        "description": "Piecewise-linear diode (Simscape Electrical Diode, piecewise linear model): forward voltage Vf [V], on resistance Ron [Ω], off resistance Roff = 1/Goff [Ω]. V = v_A − v_K, current positive A → K; I(V) is continuous at V = Vf."
       },
       {
         "id": "nmos",
@@ -547,8 +547,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Id = f(Vgs, Vds)",
-        "description": "N-channel MOSFET Level-1 model with physical signal gate input."
+        "equation": "Vov = Vgs − Vth   [V]\nCut-off (Vov ≤ 0): Id = 0\nLinear (0 < Vds < Vov): Id = kn·(Vov·Vds − Vds²/2)·(1 + λ·Vds)   [A]\nSaturation (Vds ≥ Vov > 0): Id = kn/2·Vov²·(1 + λ·Vds)   [A]",
+        "description": "N-channel MOSFET, Shichman–Hodges (SPICE level 1) model with a physical signal gate input (gate current 0). kn = μCox·W/L [A/V²], λ [1/V]. Symmetric: drain and source swap roles for Vds < 0."
       },
       {
         "id": "igbt",
@@ -604,8 +604,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "Ic = (Vce - Vce_sat)/Rd",
-        "description": "Insulated Gate Bipolar Transistor modeled as a voltage-controlled switch with Saturation Voltage."
+        "equation": "On (Vge ≥ Vge_th and Vce ≥ Vce_sat): Ic = (Vce − Vce_sat)/Rd + Vce_sat/Roff   [A]\nOtherwise: Ic = Vce/Roff   [A]",
+        "description": "Ideal switching IGBT (Simscape Electrical IGBT, Ideal Switching): voltage-controlled switch with gate threshold Vge_th [V], saturation voltage Vce_sat [V], on resistance Rd [Ω] and off resistance Roff [Ω]. Conducts C → E only."
       },
       {
         "id": "rotational_electromechanical_converter",

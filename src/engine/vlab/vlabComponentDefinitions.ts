@@ -14,22 +14,29 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: "Linear resistor (Simscape Foundation Resistor): v = i R, with R > 0. Models energy dissipation P = i^2 R in electrical networks."
   },
   diode: {
-    equations: ['Forward: V = Vf + I*Ron', 'Reverse: V = I*Roff'],
-    latex: ['V = V_f + I R_{on} \\; (V > V_f)', 'V = I R_{off} \\; (V \\le V_f)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Piecewise-linear diode. Forward: V = Vf + I*Ron. Reverse: V = I*Roff.'
+    equations: ['On (V > Vf): I = (V - Vf)/Ron + Vf/Roff   [A]', 'Off (V <= Vf): I = V/Roff   [A]'],
+    latex: ['I = \\frac{V - V_f}{R_{on}} + \\frac{V_f}{R_{off}} \\; (V > V_f)', 'I = \\frac{V}{R_{off}} \\; (V \\le V_f)'],
+    across: 'Voltage V = v_A - v_K [V]', through: 'Current I, anode -> cathode [A]',
+    description: 'Piecewise-linear diode (Simscape Electrical Diode, piecewise linear model): forward voltage Vf [V], on resistance Ron [ohm], off conductance 1/Roff [S]. I(V) is continuous at V = Vf. Conducts A -> K only.'
   },
   nmos: {
-    equations: ['Id = kn/2*(Vgs-Vth)² (sat)', 'Id = kn*(Vov*Vds - Vds²/2) (lin)'],
-    latex: ['I_D = \\frac{k_n}{2}(V_{GS}-V_{th})^2(1+\\lambda V_{DS})'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'SPICE Level-1 N-MOSFET. Three regions: cut-off, linear, saturation. Gate draws no current (infinite impedance).'
+    equations: [
+      'Cut-off (Vgs <= Vth): Id = 0   [A]',
+      'Linear (0 < Vds < Vgs-Vth): Id = kn*((Vgs-Vth)*Vds - Vds²/2)*(1 + lambda*Vds)   [A]',
+      'Saturation (Vds >= Vgs-Vth > 0): Id = kn/2*(Vgs-Vth)²*(1 + lambda*Vds)   [A]',
+    ],
+    latex: ['I_D = k_n\\left((V_{GS}-V_{th})V_{DS}-\\frac{V_{DS}^2}{2}\\right)(1+\\lambda V_{DS})', 'I_D = \\frac{k_n}{2}(V_{GS}-V_{th})^2(1+\\lambda V_{DS})'],
+    across: 'Vds = v_D - v_S, Vgs = v_G - v_S [V]', through: 'Drain current Id, D -> S [A]',
+    description: 'Shichman-Hodges (SPICE level 1) N-MOSFET: cut-off, linear and saturation with channel-length modulation lambda [1/V], kn = mu*Cox*W/L [A/V²]. Gate draws no current. Symmetric: drain and source swap roles for Vds < 0.'
   },
   igbt: {
-    equations: ['Ic = (Vce - Vce_sat)/Rd when Vge >= Vge_th', 'Ic = 0 when Vge < Vge_th'],
-    latex: ['I_C = \\frac{V_{CE} - V_{CE,sat}}{R_d} \\cdot g(V_{GE})'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'IGBT power switch. Modeled as MOSFET-gated BJT. Dominant in motor drives and inverter bridges.'
+    equations: [
+      'On (Vge >= Vge_th, Vce >= Vce_sat): Ic = (Vce - Vce_sat)/Rd + Vce_sat/Roff   [A]',
+      'Otherwise (off, or Vce < Vce_sat): Ic = Vce/Roff   [A]',
+    ],
+    latex: ['I_C = \\frac{V_{CE}-V_{CE,sat}}{R_d} + \\frac{V_{CE,sat}}{R_{off}} \\; (V_{GE} \\ge V_{GE,th},\\ V_{CE} \\ge V_{CE,sat})', 'I_C = \\frac{V_{CE}}{R_{off}} \\; (\\text{otherwise})'],
+    across: 'Vce = v_C - v_E, Vge = v_G - v_E [V]', through: 'Collector current Ic, C -> E [A]',
+    description: 'Ideal switching IGBT (Simscape Electrical IGBT Ideal Switching): gate threshold Vge_th [V], saturation (forward) voltage Vce_sat [V], on resistance Rd [ohm], off resistance Roff [ohm]. Unidirectional: no reverse conduction (no anti-parallel diode).'
   },
   fluid_resistance: {
     equations: ['P1 - P2 = Rf * mdot'],
@@ -164,10 +171,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: "Operational amplifier with open-loop gain A and symmetric output saturation +/-Vsat. The inputs draw no current. With negative feedback it drives V+ - V- to about 0."
   },
   switch: {
-    equations: ['V = I * (S ? Ron : Roff)'],
-    latex: ['V = I \\cdot R_{switch}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal controlled switch. Toggles between low (Ron) and high (Roff) resistance based on a control signal.'
+    equations: ['V = I * R_sw   [V]', 'R_sw = (v > threshold) ? Ron : Roff   [ohm]'],
+    latex: ['V = I \\cdot R_{sw}', 'R_{sw} = R_{on} \\; (v > \\mathrm{threshold}), \\; R_{off} \\; (\\text{otherwise})'],
+    across: 'Voltage V = v_p - v_n [V]', through: 'Current I, p -> n [A]',
+    description: 'Ideal controlled switch (Simscape Foundation Switch): closed with resistance Ron [ohm] while the control signal v [V] exceeds threshold [V], open with resistance Roff = 1/Gopen [ohm] otherwise. The toggle is a zero-crossing event of the solver.'
   },
   rotational_electromechanical_converter: {
     equations: ['V = R*I + K*omega', 'tau = K*I (delivered at R)', 'V*I = R*I^2 + tau*omega'],

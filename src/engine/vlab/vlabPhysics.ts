@@ -20,6 +20,13 @@ const A21 = 0.5 * (1 - GAMMA);
 const A31 = -0.25 * (6 * GAMMA * GAMMA - 16 * GAMMA + 1);
 const A32 = 0.25 * (6 * GAMMA * GAMMA - 20 * GAMMA + 5);
 
+/**
+ * Zero-crossing dead band (indicator units: V, A or rad). The indicator of a step that starts within this band of the
+ * event surface is ignored (the crossing was just localized by the previous cut step). Chosen well above the solver
+ * residual tolerance (1e-8) and far below any physical threshold.
+ */
+const EVENT_BAND = 1e-7;
+
 class EventTriggerError extends Error {
   hEvent: number;
   constructor(hEvent: number) {
@@ -264,6 +271,8 @@ export class VLabPhysicsEngine {
     let useSdirk = !isAlgebraicSystem && !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
     let acceptedSteps = 0;
     let rejectedSteps = 0;
+    let eventRetries = 0;
+    let eventsLocated = 0;
     let rejectedAttempts = 0;
     const budgetStart = Date.now();
     const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
@@ -286,6 +295,7 @@ export class VLabPhysicsEngine {
       
       let stepAccepted = false;
       let attemptsThisStep = 0;
+      let eventStepStart: number | undefined;
       let nextX: number[] = [];
       
       while (!stepAccepted) {
@@ -470,18 +480,24 @@ export class VLabPhysicsEngine {
           
         } catch (error: any) {
           if (error instanceof EventTriggerError) {
-            if (error.hEvent < h) {
+            // WP-11 switching approach: the crossing is localized by cutting the step to the interpolated event time
+            // (secant on the indicator, the Simscape zero-crossing behaviour). Once h has reached the step floor
+            // the crossing is localized to within minimumStep: accept the step in the new mode (a mode-locked
+            // continuation) instead of cutting again, which used to crawl at the floor and exhaust the attempt budget.
+            if (eventStepStart === undefined) eventStepStart = h;
+            eventRetries++;
+            if (error.hEvent < h && h > stepFloor * (1 + 1e-9)) {
               h = Math.max(stepFloor, error.hEvent);
               bdfOrder = 1; // resolve the crossing before switching algebraic modes
             } else {
-              // The threshold is now reached to solver precision. Accept the
-              // event-time state and start a fresh step in the new mode.
               stepAccepted = true;
               xCurrent = [...nextX];
               prevX = [...xCurrent];
               t += h;
               acceptedSteps++;
-              h = Math.max(stepFloor, Math.min(maxStep, Math.min(h, error.hEvent * 2)));
+              eventsLocated++;
+              // resume at the step size in force before the event cut, with a fresh BDF1 start in the new mode
+              h = Math.max(stepFloor, Math.min(maxStep, eventStepStart));
               bdfOrder = 1;
             }
           } else if (error instanceof BlockEquationError || error instanceof DAEStructureError) {
@@ -779,7 +795,10 @@ export class VLabPhysicsEngine {
       useSdirk,
       solverMethod: method,
       acceptedSteps,
-      rejectedSteps
+      rejectedSteps,
+      /** zero-crossing step cuts (retried solves) and located events during this call (WP-11 step-budget evidence) */
+      eventRetries,
+      eventsLocated
     };
   }
 
@@ -816,10 +835,11 @@ export class VLabPhysicsEngine {
         };
         
         if (type === 'switch') {
-          const ctrl = acrossVals[2] !== undefined ? acrossVals[2] : 0;
+          // WP-11: the control signal is read by port id (the port order of the node map is not part of the contract)
+          const ctrl = getPortVal('v');
           const threshold = numericParam(params, 'threshold', 0.5);
           indicators.push(ctrl - threshold);
-        } 
+        }
         else if (type === 'ps_switch') {
           const ctrl = acrossVals[1] !== undefined ? acrossVals[1] : 0;
           const threshold = numericParam(params, 'threshold', 0.5);
@@ -857,11 +877,12 @@ export class VLabPhysicsEngine {
           const Vd = getPortVal('d');
           const Vs = getPortVal('s');
           const Vg = getPortVal('g');
-          const Vgs = (Number.isFinite(Vg) ? Vg : 0) - (Number.isFinite(Vs) ? Vs : 0);
-          const Vds = (Number.isFinite(Vd) ? Vd : 0) - (Number.isFinite(Vs) ? Vs : 0);
+          // WP-11: Shichman-Hodges is C0 at Vgs = Vth (Id = 0 on both sides) and C1 at the saturation boundary
+          // Vds = Vgs - Vth, so only the threshold kink is a switching event. The device is symmetric (source and drain
+          // swap when Vds < 0), so the controlling gate-to-terminal voltage is Vg - min(Vs, Vd).
+          const lowTerminal = Math.min(Number.isFinite(Vs) ? Vs : 0, Number.isFinite(Vd) ? Vd : 0);
           const Vth = numericParam(params, 'Vth', 2.0);
-          indicators.push(Vgs - Vth);
-          indicators.push(Vds - (Vgs - Vth));
+          indicators.push((Number.isFinite(Vg) ? Vg : 0) - lowTerminal - Vth);
         }
         else if (type === 'igbt') {
           const Vge = getPortVal('g') - getPortVal('e');
@@ -880,6 +901,9 @@ export class VLabPhysicsEngine {
       
       indStart.forEach((valStart, i) => {
         const valEnd = indEnd[i];
+        // A step that starts on the event surface (the previous step was cut at this crossing) is not a new crossing:
+        // re-localizing it would shrink the step forever (the Newton-stall of F-075 style chatter).
+        if (Math.abs(valStart) <= EVENT_BAND) return;
         if (valStart * valEnd < 0) {
           const fraction = Math.abs(valStart) / (Math.abs(valStart) + Math.abs(valEnd));
           if (fraction < earliestFraction) {
@@ -890,7 +914,7 @@ export class VLabPhysicsEngine {
       });
     });
     
-    return { eventOccurred, fraction: Math.max(0.01, earliestFraction) };
+    return { eventOccurred, fraction: earliestFraction };
   }
 
   coSimulate(signalInputs: Record<string, number>, nodes: Node[], edges: Edge[]) {

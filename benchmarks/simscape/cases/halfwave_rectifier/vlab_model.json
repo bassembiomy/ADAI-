@@ -1,0 +1,20 @@
+{
+  "name": "halfwave_rectifier",
+  "nodes": [
+    { "id": "src", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ac_voltage", "params": { "Vpk": 10, "f": 50, "phase": 0, "R_int": 0 } } },
+    { "id": "dio", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "diode", "params": { "Vf": 0.7, "Ron": 0.01, "Roff": 1000000 } } },
+    { "id": "load", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "resistor", "params": { "R": 100 } } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "v_sensor", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } },
+    { "id": "gnd", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ground", "params": {} } }
+  ],
+  "edges": [
+    { "id": "src-dio", "source": "src", "sourceHandle": "p_s", "target": "dio", "targetHandle": "p_t" },
+    { "id": "dio-load", "source": "dio", "sourceHandle": "n_s", "target": "load", "targetHandle": "p_t" },
+    { "id": "load-gnd", "source": "load", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "src-gnd", "source": "src", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "load-sensor", "source": "load", "sourceHandle": "p_s", "target": "sensor", "targetHandle": "p_t" },
+    { "id": "sensor-gnd", "source": "sensor", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "sensor-scope", "source": "sensor", "sourceHandle": "v_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

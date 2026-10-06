@@ -16,7 +16,6 @@ export const DERIVED_REQUIRED_SIGNAL_INPUTS: Readonly<Record<string, readonly st
   dcdc_ctrl: ['v_ref', 'v'],
   external_force: ['in_fx', 'in_fy', 'in_fz', 'in_tx', 'in_ty', 'in_tz'],
   hysteresis_ctrl_3ph: ['iabc_ref'],
-  igbt: ['g'],
   im_curr_ctrl: ['idq_ref', 'idq'],
   im_dtc_ctrl: ['flux_ref', 'tq_ref'],
   im_flux_observer: ['iabc', 'wr'],

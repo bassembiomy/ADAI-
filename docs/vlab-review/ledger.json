@@ -327,10 +327,14 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "diode (Simscape PWL, continuous at Vf), nmos (exact Shichman-Hodges, C0/C1 boundaries, Vds<0 swap), igbt (ideal switching, hard gate + zero-crossing), switch; 55 analytic tests; halfwave_rectifier case (golden pending)",
+        "ENGINE: zero-crossing stall fixed (no 0.01 clamp, no re-trigger on the event surface, accept at the step floor in the new mode); <=12 cuts/event (was budget exhaustion)",
+        "planner re-run (30 s timeout): 4450 pass / 154 expected-fail / 1 known; test:vlab 20/20"
+      ],
       "findings": []
     },
     {
@@ -341,7 +345,7 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
       "evidence": [],
@@ -1255,7 +1259,32 @@
       "block": "rot_hard_stop",
       "layer": "eq",
       "summary": "The c*w term is discontinuous at the stop threshold. Fragile for Newton; passes only via the SDIRK fallback. Use the Simscape hard-stop formulation (smooth or event-based).",
-      "wp": "WP-13"
+      "wp": "WP-13",
+      "note": "event handling improved in WP-11; hard-stop formulation still WP-13"
+    },
+    {
+      "id": "F-076",
+      "severity": "med",
+      "block": "library",
+      "layer": "port",
+      "summary": "No zener, PMOS, BJT, thyristor/SCR, triac, GTO or relay blocks exist (only diode, nmos, igbt, switch). Coverage gap versus Simscape Electrical; user decision needed on whether to add them.",
+      "wp": "USER"
+    },
+    {
+      "id": "F-077",
+      "severity": "low",
+      "block": "ps_switch",
+      "layer": "eq",
+      "summary": "detectZeroCrossings defaults the threshold to 0.5 while the library default is 0.",
+      "wp": "WP-20"
+    },
+    {
+      "id": "F-078",
+      "severity": "low",
+      "block": "igbt",
+      "layer": "eq",
+      "summary": "No anti-parallel diode and no switching times (ideal switching only).",
+      "wp": "WP-11 dev"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

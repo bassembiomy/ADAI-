@@ -46,6 +46,14 @@ export const SEMANTIC_OPTIONAL_INPUTS: ReadonlySet<string> = new Set([
   'pwm_3ph_2level.ma', 'pwm_3ph_2level.mb', 'pwm_3ph_2level.mc',
 ]);
 
+/**
+ * Inputs that are required by semantics although the behavioural derivation cannot see the dependence (WP-11):
+ *  - igbt.g: the gate is the control input of the switch. For Vce < Vce_sat the collector current is the leakage
+ *    Vce/Roff whether the gate is on or off (Simscape ideal IGBT), so a perturbation of the gate at the derivation's sample
+ *    points (Vce in 0.5..1.5 V) never changes the residual. An unwired gate would silently read 0 V (always off).
+ */
+export const SEMANTIC_REQUIRED_INPUTS: ReadonlySet<string> = new Set(['igbt.g']);
+
 export class TopologyValidationError extends Error {
   readonly diagnostics: TopologyDiagnostic[];
   constructor(diagnostics: TopologyDiagnostic[]) {
@@ -69,7 +77,8 @@ export interface TopologyReport {
 
 /** Required ports of a block type after the semantic exemptions. */
 export function requiredPortsOf(type: string): { signal: string[]; conserving: string[] } {
-  const signal = (DERIVED_REQUIRED_SIGNAL_INPUTS[type] ?? []).filter(p => !SEMANTIC_OPTIONAL_INPUTS.has(`${type}.${p}`));
+  const derived = (DERIVED_REQUIRED_SIGNAL_INPUTS[type] ?? []).filter(p => !SEMANTIC_OPTIONAL_INPUTS.has(`${type}.${p}`));
+  const signal = [...new Set([...derived, ...[...SEMANTIC_REQUIRED_INPUTS].filter(k => k.startsWith(`${type}.`)).map(k => k.slice(type.length + 1))])];
   const conserving = [...(DERIVED_REQUIRED_CONSERVING_PORTS[type] ?? [])];
   return { signal, conserving };
 }

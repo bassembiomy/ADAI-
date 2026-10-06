@@ -287,7 +287,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   switch: ({ across, branch, params, ports, connectedPorts }) => {
-    // V = I * (ctrl > threshold ? Ron : Roff)
+    // Simscape Foundation Electrical > Switch: closed when the control signal exceeds the threshold, v = i*Ron (closed
+    // resistance Ron [ohm]); open otherwise, i = v*Gopen with Gopen = 1/Roff (Roff = 1/open conductance [ohm]).
+    // The control is the physical signal at port 'v' [V]; unwired reads 0 V. The change of mode is a zero-crossing
+    // event of (ctrl - threshold) handled in VLabPhysicsEngine.detectZeroCrossings (WP-11).
+    // Residual: (Vp - Vn) - I*R = 0   [V],  R = ctrl > threshold ? Ron : Roff
     const Ron = numericParam(params, 'Ron', 0.01);
     const Roff = numericParam(params, 'Roff', 1e6);
     const threshold = numericParam(params, 'threshold', 0.5);
@@ -301,7 +305,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Roff = numericParam(params, 'Roff', 1e6);
     const Vf = numericParam(params, 'Vf', 0.7);
     const V = across[0] - across[1];
-    if (V > Vf) return [V - Vf - branch[0] * Ron];
+    // Simscape Electrical > Semiconductors > Diode, "Piecewise linear" model (forward voltage Vf, on resistance Ron,
+    // off conductance Goff = 1/Roff), v = v_A - v_K, i positive A -> K:
+    //   v <  Vf :  i = v*Goff                       (off)
+    //   v >= Vf :  i = (v - Vf)/Ron + Vf*Goff       (on; equals Vf*Goff at v = Vf, so i(v) is continuous)
+    // Residuals in voltage form [V]:  off: v - i*Roff,  on: v - Vf - Ron*(i - Vf*Goff).
+    // The Vf*Goff offset is dropped only for the degenerate Roff = 0 (an always-closed device has no leakage term).
+    const Ioffset = Roff > 0 ? Vf / Roff : 0;
+    if (V > Vf) return [V - Vf - Ron * (branch[0] - Ioffset)];
     return [V - branch[0] * Roff];
   },
   
@@ -320,10 +331,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Vth = numericParam(params, 'Vth', 2.0);
     const lambda = numericParam(params, 'lambda', 0.01);
     
-    const Vgs = Vg - Vs;
-    const Vds = Vd - Vs;
+    // Shichman-Hodges (SPICE level 1) N-channel MOSFET, gate current 0, kn = mu*Cox*W/L [A/V^2], lambda [1/V]:
+    //   Vov = Vgs - Vth
+    //   cut-off    Vov <= 0       :  Id = 0
+    //   linear     0 < Vds < Vov  :  Id = kn*(Vov*Vds - Vds^2/2)*(1 + lambda*Vds)
+    //   saturation Vds >= Vov > 0 :  Id = kn/2*Vov^2*(1 + lambda*Vds)
+    // (Sedra & Smith, Microelectronic Circuits; SPICE level-1 model: the (1 + lambda*Vds) factor applies in the linear region
+    // too, so Id and dId/dVds are continuous at Vds = Vov; Id is C0 at Vov = 0.) Like SPICE the device is symmetric:
+    // for Vds < 0 drain and source swap roles, Vgs -> Vgd = Vg - Vd, Vds -> -Vds, and the current reverses.
+    // Residual: Id_branch - Id(Vgs, Vds) = 0   [A]
+    const reversed = Vd < Vs;
+    const Vlow = reversed ? Vd : Vs;
+    const Vgs = Vg - Vlow;
+    const Vds = reversed ? Vs - Vd : Vd - Vs;
     const Vov = Vgs - Vth;
-    
+
     let Id_target = 0;
     if (Vov > 0) {
       if (Vds < Vov) {
@@ -332,10 +354,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
         Id_target = 0.5 * kn * Vov * Vov * (1 + lambda * Vds);
       }
     }
-    
-    // Smooth transition at threshold Vgs = Vth
-    const smooth = 0.5 * (1 + Math.tanh(Vov * 5));
-    const Id = Id_target * smooth;
+
+    const Id = reversed ? -Id_target : Id_target;
     const residual = branch[0] - Id;
     // A non-finite residual is reported by the assembler (block, row), never turned into 0 (F-045).
     return [residual];
@@ -351,11 +371,20 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Vge = across[2] - across[1];
     const Vce = across[0] - across[1];
     
-    const gate = 0.5 * (1 + Math.tanh((Vge - Vge_th) * 2));
-    const Ic_on = Math.max(0, Vce - Vce_sat) / Rd;
-    const Ic_off = Vce / Roff;
-    
-    return [branch[0] - (gate * Ic_on + (1 - gate) * Ic_off)];
+    // Simscape Electrical > Semiconductors > IGBT (Ideal, Switching): gate on when Vge >= Vge_th (threshold), then a
+    // unidirectional piecewise-linear conduction path with forward voltage Vce_sat and on resistance Rd; off: leakage
+    // through the off conductance Goff = 1/Roff only (parameters: Vce_sat = Vf, Rd = Ron, Roff = 1/Goff):
+    //   off (Vge < Vge_th)           : Ic = Vce*Goff
+    //   on  (Vge >= Vge_th)          : Ic = (Vce - Vce_sat)/Rd + Vce_sat*Goff   if Vce >= Vce_sat,  else Vce*Goff
+    // (continuous in Vce at Vce_sat). The gate turn-on is a zero-crossing event of (Vge - Vge_th), handled in
+    // VLabPhysicsEngine.detectZeroCrossings, not a smoothed blend (WP-11: the old tanh blend changed Ic by up to
+    // 0.03 % two volts above threshold and moved the real threshold). Residual: Ic_branch - Ic = 0   [A]
+    const on = Vge >= Vge_th;
+    const Ic = on && Vce >= Vce_sat
+      ? (Vce - Vce_sat) / Rd + Vce_sat / Roff
+      : Vce / Roff;
+
+    return [branch[0] - Ic];
   },
   
   v_sensor: ({ across, branch, params }) => {

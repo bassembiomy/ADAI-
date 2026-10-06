@@ -22,12 +22,22 @@ export interface CaseSpec {
   analytic?:
     | { type: 'first_order_step'; final: number; tau: number }
     /** series RLC driven by a DC step V through R, L into C (underdamped): the closed form of the capacitor voltage */
-    | { type: 'rlc_series_underdamped'; V: number; R: number; L: number; C: number };
+    | { type: 'rlc_series_underdamped'; V: number; R: number; L: number; C: number }
+    /** half-wave rectifier, ideal source Vpk sin(2 pi f t) -> piecewise-linear diode (Vf, Ron, Roff) -> load R: load voltage */
+    | { type: 'halfwave_rectifier_pwl'; Vpk: number; f: number; Vf: number; Ron: number; Roff: number; R: number };
 }
 
 /** Closed-form reference of `spec.analytic` at time t. */
 export function analyticValue(a: NonNullable<CaseSpec['analytic']>, t: number): number {
   if (a.type === 'first_order_step') return a.final * (1 - Math.exp(-t / a.tau));
+  if (a.type === 'halfwave_rectifier_pwl') {
+    // Series loop vs = vD + i R with the Simscape piecewise-linear diode: off i = vD/Roff, on i = (vD - Vf)/Ron + Vf/Roff.
+    const vs = a.Vpk * Math.sin(2 * Math.PI * a.f * t);
+    const iOn = (vs - a.Vf + (a.Ron * a.Vf) / a.Roff) / (a.R + a.Ron); // on-branch loop solution
+    const vdOn = vs - iOn * a.R;
+    if (vdOn > a.Vf) return iOn * a.R;
+    return (vs / (a.R + a.Roff)) * a.R; // off-branch loop solution
+  }
   // vC(t) = V [1 - e^(-alpha t) (cos wd t + (alpha/wd) sin wd t)], alpha = R/2L, wd = sqrt(1/LC - alpha^2)
   const alpha = a.R / (2 * a.L);
   const wd = Math.sqrt(1 / (a.L * a.C) - alpha * alpha);
