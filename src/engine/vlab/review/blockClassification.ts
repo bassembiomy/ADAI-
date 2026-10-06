@@ -155,6 +155,8 @@ export const PARAM_ALIASES: Record<string, Record<string, string>> = {
  */
 export const ENGINE_CONSUMED_PARAMS: Record<string, { file: string; params: string[] }[]> = {
   neural_neuron_learning: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['initW1', 'initW2', 'initBias'] }],
+  // WP-20a: Integrator "Initial condition" seeds the integrator state y(0) (vlabPhysics.seedSignalStates)
+  ps_integrator: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['initial'] }],
   // WP-10: initial conditions seed the solution vector (the capacitor voltage state, the inductor branch current)
   capacitor: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['v0'] }],
   inductor: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['i0'] }],

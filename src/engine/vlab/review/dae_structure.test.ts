@@ -175,7 +175,13 @@ describe('fixed blocks (allocation == equation)', () => {
     expect(alloc('fluid_inertance')).toEqual(['branch_mass_flow']);
     expect(alloc('conn_label')).toEqual([]);
     expect(alloc('ps_integrator_gen')).toEqual(['branch_signal_y', 'state_y']);
-    expect(alloc('ps_moving_avg')).toEqual(['branch_signal_y', 'state_y']);
+    // WP-20a: the moving average is an N-sample mean of the committed input history, not a lag state; the RMS keeps Q = int u^2
+    expect(alloc('ps_moving_avg')).toEqual(['branch_signal_y']);
+    expect(alloc('ps_rms')).toEqual(['branch_signal_y', 'state_Q']);
+    expect(alloc('sym_comp_transform')).toEqual([
+      'branch_signal_seq[0]', 'branch_signal_seq[1]', 'branch_signal_seq[2]',
+      'state_re1', 'state_im1', 'state_re2', 'state_im2', 'state_re0', 'state_im0',
+    ]);
   });
   it('unsupported blocks name their missing spec and owner', () => {
     // WP-17 implemented ma_pipe / ma_rot_conv / ma_trans_conv / ma_pt_sensor; what is still unsupported names its owner and spec

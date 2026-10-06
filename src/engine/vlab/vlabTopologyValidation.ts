@@ -44,6 +44,9 @@ export type TopologyDiagnostic = EdgeSetDiagnostic;
 export const SEMANTIC_OPTIONAL_INPUTS: ReadonlySet<string> = new Set([
   'external_force.in_fx', 'external_force.in_fy', 'external_force.in_fz',
   'external_force.in_tx', 'external_force.in_ty', 'external_force.in_tz',
+  // WP-20a: the external reset of the integrator is level-sensitive and inactive at 0: an unwired reset never fires (the derivation
+  // sees it as required only because its random sample points sit above the 0.5 threshold, where u is not consumed)
+  'ps_integrator_gen.reset',
 ]);
 
 /**
@@ -51,8 +54,16 @@ export const SEMANTIC_OPTIONAL_INPUTS: ReadonlySet<string> = new Set([
  *  - igbt.g: the gate is the control input of the switch. For Vce < Vce_sat the collector current is the leakage
  *    Vce/Roff whether the gate is on or off (Simscape ideal IGBT), so a perturbation of the gate at the derivation's sample
  *    points (Vce in 0.5..1.5 V) never changes the residual. An unwired gate would silently read 0 V (always off).
+ *  WP-20a: inputs that a piecewise equation does not consume at the derivation's sample points (all inputs 0.5..1.5, i.e. every
+ *  logic input high and every control above its threshold) but that the block needs:
+ *  - ps_delay.u: the history of the input is read at t - delay, before any history exists the sample point sees only `initial`
+ *  - ps_integrator_gen.u: not consumed while reset is high
+ *  - ps_sr_flipflop.r: not consumed while S is high (set dominant); an unwired R would silently read 0 (never reset)
+ *  - ps_switch.u2: not consumed while ctrl is above the threshold
  */
-export const SEMANTIC_REQUIRED_INPUTS: ReadonlySet<string> = new Set(['igbt.g']);
+export const SEMANTIC_REQUIRED_INPUTS: ReadonlySet<string> = new Set([
+  'igbt.g', 'ps_delay.u', 'ps_integrator_gen.u', 'ps_sr_flipflop.r', 'ps_switch.u2',
+]);
 
 export class TopologyValidationError extends Error {
   readonly diagnostics: TopologyDiagnostic[];

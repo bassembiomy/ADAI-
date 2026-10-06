@@ -1,6 +1,7 @@
 import { EquationContext } from './types';
-import { numericParam, stringParam, vectorParam, unwrapParam, VLabParamError } from './vlabParams';
+import { numericParam, stringParam, vectorParam, unwrapParam, parseNumeric, VLabParamError } from './vlabParams';
 import { scalarInput, vectorInput } from './vlabVectorPorts';
+import { historyAt, movingAverageSpec } from './vlabHistory';
 import { interfaceResiduals, jointResiduals } from './vlabJointCore';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -40,9 +41,15 @@ export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
   'ps_integrator_gen', 'ps_moving_avg', 'ps_sr_flipflop', 'ps_sample_hold',
   'ps_smith_predictor', 'ps_second_order_filter', 'ps_washout',
   'quad_decoder', 'resolver_to_digital', 'belt_end',
-  // Fortescue phasors of the instantaneous signals use dx/dt (analytic signal)
-  'sym_comp_transform',
+  // WP-20a: blocks that look back in time through the committed history (vlabHistory.ts); the Sequence Analyzer keeps its
+  // running Fourier integrals as states
+  'ps_delay', 'ps_rms', 'sym_comp_transform',
 ]);
+
+/** Time resolution of the discontinuous sources (step, stair, sample grid): the jump is taken at t >= T - quantum / 2 [s]. */
+export const SIGNAL_TIME_QUANTUM = 1e-9;
+/** Logic threshold of the physical-signal logic inputs (SR flip-flop S / R, sample-and-hold S, integrator reset): high when > 0.5. */
+export const SIGNAL_LOGIC_THRESHOLD = 0.5;
 
 export interface BlockEquationArgs {
   across: any[];        // values of across variables at the ports (scalars, 6-DOF frame arrays, or N-element arrays for width-N / composite ports: read them by port id with vectorInput)
@@ -183,25 +190,71 @@ const parkRotateInverse = (d: number, q: number, theta: number, al: ParkAlignmen
   return al === 'Aligned with A' ? [d * c - q * s, d * s + q * c] : [d * s + q * c, -d * c + q * s];
 };
 
-/** Fortescue peak magnitudes [|V1|, |V2|, |V0|] of the analytic phasors A_k = x_k - j dx_k/dt / w. */
-const fortescueMagnitudes = (x: [number, number, number], dx: [number, number, number], w: number): [number, number, number] => {
-  const re = x; const im = dx.map(d => -d / w);
-  const ca = -0.5; const sa = SQRT3 / 2; // a = e^(j 2pi/3)
-  // a^2 = conj(a)
-  const mul = (zr: number, zi: number, k: 1 | 2): [number, number] => (k === 1 ? [zr * ca - zi * sa, zr * sa + zi * ca] : [zr * ca + zi * sa, -zr * sa + zi * ca]);
-  const [br1, bi1] = mul(re[1], im[1], 1); const [cr2, ci2] = mul(re[2], im[2], 2);
-  const [br2, bi2] = mul(re[1], im[1], 2); const [cr1, ci1] = mul(re[2], im[2], 1);
-  const v1 = [(re[0] + br1 + cr2) / 3, (im[0] + bi1 + ci2) / 3];
-  const v2 = [(re[0] + br2 + cr1) / 3, (im[0] + bi2 + ci1) / 3];
-  const v0 = [(re[0] + re[1] + re[2]) / 3, (im[0] + im[1] + im[2]) / 3];
-  return [Math.hypot(v1[0], v1[1]), Math.hypot(v2[0], v2[1]), Math.hypot(v0[0], v0[1])];
-};
-
 // Numeric parameters are read through numericParam (vlabParams.ts): a missing value takes the default, a user-supplied
 // 0 / negative / "1e-3" is honoured, and malformed text throws a structured VLabParamError (never a silent default).
 
-// Averaging time constant of ps_moving_avg's first-order approximation (s). The `window` parameter is not wired yet (WP-20).
-const MOVING_AVG_TAU = 0.1;
+/**
+ * Scalar input of a physical-signal port by id (WP-20a): an unwired port reads 0 (the assembler hands 0 for an unwired
+ * physical input). `legacyIdx` is only for direct unit-test calls that pass no `ports` array.
+ */
+const sigIn = (a: { across: any[]; ports?: string[] }, id: string, legacyIdx: number): number => {
+  const i = a.ports ? a.ports.indexOf(id) : legacyIdx;
+  const v = i >= 0 ? a.across[i] : undefined;
+  return typeof v === 'number' ? v : 0;
+};
+
+const tableError = (param: string, reason: string): never => {
+  throw new VLabParamError([{ blockId: '', param, raw: undefined, code: 'invalid-parameter', reason: `Parameter "${param}": ${reason}.` }]);
+};
+
+/** Lookup-table breakpoints: at least two, strictly increasing, one value per breakpoint. */
+const checkBreakpoints = (name: string, x: number[], valuesName: string, valuesLength: number): void => {
+  if (x.length < 2) tableError(name, 'needs at least two breakpoints');
+  if (x.length !== valuesLength) tableError(name, `has ${x.length} breakpoints but "${valuesName}" has ${valuesLength} values`);
+  for (let i = 1; i < x.length; i++) if (!(x[i] > x[i - 1])) tableError(name, 'breakpoints must be strictly increasing');
+};
+
+/** Piecewise-linear interpolation with nearest (clamped) extrapolation; x strictly increasing. */
+const interpolate1d = (x: number[], y: number[], u: number): number => {
+  if (u <= x[0]) return y[0];
+  if (u >= x[x.length - 1]) return y[y.length - 1];
+  let lo = 0; let hi = x.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (x[mid] <= u) lo = mid; else hi = mid; }
+  return y[lo] + ((u - x[lo]) / (x[hi] - x[lo])) * (y[hi] - y[lo]);
+};
+
+/** Numeric matrix parameter written as text ("[0 0; 0 1]", rows separated by ; or a newline) or as an array of rows. */
+const matrixParam = (params: Record<string, any> | undefined, key: string, fallback: number[][]): number[][] => {
+  const v = unwrapParam(params?.[key]);
+  if (v === undefined || v === null) return fallback;
+  let rows: unknown[][];
+  if (Array.isArray(v)) rows = v.map(r => (Array.isArray(r) ? r : [r]));
+  else {
+    const text = String(v).replace(/[[\]]/g, ' ').trim();
+    if (text === '') return fallback;
+    rows = text.split(/[;\n]+/).map(r => r.trim()).filter(Boolean).map(r => r.split(/[\s,]+/).filter(Boolean));
+  }
+  const out = rows.map(r => r.map(item => {
+    const parsed = parseNumeric(item);
+    if (parsed.kind !== 'ok') tableError(key, `matrix element ${JSON.stringify(item)} is not a number`);
+    return (parsed as { kind: 'ok'; value: number }).value;
+  }));
+  if (out.some(r => r.length !== out[0].length)) tableError(key, 'matrix rows must all have the same length');
+  return out;
+};
+
+/** `lower` / `upper` of a limiter or dead zone: a swapped pair is a parameter diagnostic, never silently reordered. */
+const orderedLimits = (params: Record<string, any> | undefined, lowerDefault: number, upperDefault: number): [number, number] => {
+  const lower = numericParam(params, 'lower', lowerDefault);
+  const upper = numericParam(params, 'upper', upperDefault);
+  if (lower > upper) {
+    throw new VLabParamError([{
+      blockId: '', param: 'lower', raw: lower, code: 'parameter-out-of-range',
+      reason: `Parameter "lower" = ${lower} must not exceed "upper" = ${upper}.`,
+    }]);
+  }
+  return [lower, upper];
+};
 
 const asFrame = (v: any): number[] =>
   Array.isArray(v) ? v : [Number(v) || 0, 0, 0, 0, 0, 0];
@@ -1218,77 +1271,85 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_step: ({ branch, params, ctx }) => {
+    // Simulink / Simscape Step: y = initial for t < T, y = final for t >= T. The jump is a time event: the solver cuts the step
+    // to end just before it (vlabPhysics.detectZeroCrossings), so the switch is taken at t >= T - SIGNAL_TIME_QUANTUM / 2.
     const step_time = numericParam(params, 'time', 1.0);
     const initial = numericParam(params, 'initial', 0.0);
     const final = numericParam(params, 'final', 1.0);
-    const val = ctx.time >= step_time ? final : initial;
+    const val = ctx.time >= step_time - SIGNAL_TIME_QUANTUM / 2 ? final : initial;
     return [branch[0] - val];
   },
-  
+
   ps_sine: ({ branch, params, ctx }) => {
     const A = numericParam(params, 'amp', 1.0);
     const f = numericParam(params, 'freq', 1.0);
     const val = A * Math.sin(2 * Math.PI * f * ctx.time);
     return [branch[0] - val];
   },
-  
+
   ps_ramp: ({ branch, params, ctx }) => {
+    // Simulink Ramp: y = 0 for t < start, y = slope (t - start) for t >= start
     const slope = numericParam(params, 'slope', 1.0);
     const start = numericParam(params, 'start', 0.0);
     const val = ctx.time > start ? slope * (ctx.time - start) : 0.0;
     return [branch[0] - val];
   },
-  
-  ps_add: ({ across, branch }) => {
-    return [branch[0] - ((across[0] || 0) + (across[1] || 0))];
+
+  ps_add: (a) => {
+    return [a.branch[0] - (sigIn(a, 'u1', 0) + sigIn(a, 'u2', 1))];
   },
-  
-  ps_subtract: ({ across, branch }) => {
-    return [branch[0] - ((across[0] || 0) - (across[1] || 0))];
+
+  ps_subtract: (a) => {
+    return [a.branch[0] - (sigIn(a, 'u1', 0) - sigIn(a, 'u2', 1))];
   },
-  
+
   ps_gain: ({ across, branch, params }) => {
     const gain = numericParam(params, 'gain', 1.0);
     return [branch[0] - gain * (across[0] || 0)];
   },
-  
-  ps_product: ({ across, branch }) => {
-    return [branch[0] - (across[0] || 0) * (across[1] || 0)];
+
+  ps_product: (a) => {
+    return [a.branch[0] - sigIn(a, 'u1', 0) * sigIn(a, 'u2', 1)];
   },
-  
-  ps_divide: ({ across, branch }) => {
-    const den = Math.abs(across[1] || 0) < 1e-12 ? 1e-12 : (across[1] || 0);
-    return [branch[0] - (across[0] || 0) / den];
+
+  ps_divide: (a) => {
+    // y = u1 / u2; a zero divisor is replaced by +1e-12 (documented regularisation, the Newton iterates start at 0)
+    const u2 = sigIn(a, 'u2', 1);
+    const den = Math.abs(u2) < 1e-12 ? 1e-12 : u2;
+    return [a.branch[0] - sigIn(a, 'u1', 0) / den];
   },
-  
+
   ps_abs: ({ across, branch }) => {
     return [branch[0] - Math.abs(across[0] || 0)];
   },
-  
+
   ps_saturation: ({ across, branch, params }) => {
-    const upper = numericParam(params, 'upper', 1.0);
-    const lower = numericParam(params, 'lower', -1.0);
+    // Simulink Saturation: y = upper (u > upper), lower (u < lower), u inside
+    const [lower, upper] = orderedLimits(params, -1.0, 1.0);
     const val = Math.max(lower, Math.min(upper, across[0] || 0));
     return [branch[0] - val];
   },
-  
+
   ps_dead_zone: ({ across, branch, params }) => {
-    const upper = numericParam(params, 'upper', 0.5);
-    const lower = numericParam(params, 'lower', -0.5);
+    // Simulink Dead Zone (start = lower, end = upper of the zone): y = u - upper (u > upper), 0 (lower <= u <= upper),
+    // u - lower (u < lower). The output is continuous in u (F-042); the old block returned u itself outside the band.
+    const [lower, upper] = orderedLimits(params, -0.5, 0.5);
     const u = across[0] || 0;
-    const val = u > lower && u < upper ? 0.0 : u;
+    const val = u > upper ? u - upper : u < lower ? u - lower : 0.0;
     return [branch[0] - val];
   },
-  
-  ps_switch: ({ across, branch, params }) => {
-    const threshold = numericParam(params, 'threshold', 0.5);
-    const ctrl = across[2] || 0;
-    const val = ctrl > threshold ? (across[0] || 0) : (across[1] || 0);
-    return [branch[0] - val];
+
+  ps_switch: (a) => {
+    // Simulink Switch with the criterion "u2 > threshold" (here the control port): y = u1 if ctrl > threshold, else u2.
+    // Ports are read by id (the old equation read the control from the u2 position, F-077); the library default threshold is 0.
+    const threshold = numericParam(a.params, 'threshold', 0);
+    const u1 = sigIn(a, 'u1', 0); const ctrl = sigIn(a, 'ctrl', 1); const u2 = sigIn(a, 'u2', 2);
+    return [a.branch[0] - (ctrl > threshold ? u1 : u2)];
   },
-  
+
   ps_math: ({ across, branch, params }) => {
-    const func = stringParam(params, 'func', 'sin');
+    // Simulink Math Function. Domain guards: log(max(u, 1e-15)), sqrt(max(u, 0)) (the Newton iterates start at u = 0).
+    const func = choiceParam(params, 'func', ['sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'square'], 'exp');
     const u = across[0] || 0;
     let val = 0;
     switch (func) {
@@ -1298,33 +1359,17 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       case 'exp': val = Math.exp(u); break;
       case 'log': val = Math.log(Math.max(1e-15, u)); break;
       case 'sqrt': val = Math.sqrt(Math.max(0.0, u)); break;
-      case 'square': val = u * u; break;
-      default: val = u; break;
+      default: val = u * u; break; // square
     }
     return [branch[0] - val];
   },
   
   ps_lookup_1d: ({ across, branch, params }) => {
+    // Simscape PS Lookup Table (1D): piecewise-linear interpolation of (table_x, table_y), nearest (clamped) extrapolation.
     const table_x = vectorParam(params, 'table_x', [0, 1, 2]);
     const table_y = vectorParam(params, 'table_y', [0, 1, 4]);
-    const u = across[0] || 0;
-    
-    // Linear interpolation
-    let val = table_y[0];
-    if (u <= table_x[0]) {
-      val = table_y[0];
-    } else if (u >= table_x[table_x.length - 1]) {
-      val = table_y[table_y.length - 1];
-    } else {
-      for (let i = 0; i < table_x.length - 1; i++) {
-        if (u >= table_x[i] && u <= table_x[i + 1]) {
-          const t = (u - table_x[i]) / (table_x[i + 1] - table_x[i]);
-          val = table_y[i] + t * (table_y[i + 1] - table_y[i]);
-          break;
-        }
-      }
-    }
-    return [branch[0] - val];
+    checkBreakpoints('table_x', table_x, 'table_y', table_y.length);
+    return [branch[0] - interpolate1d(table_x, table_y, across[0] || 0)];
   },
 
   ps_integrator: ({ across, branch, state, dState }) => {
@@ -2457,11 +2502,35 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── MISCELLANEOUS & SINKS & SOURCES ────────────────────────────────────────
-  ps_delay: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  ps_sum: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  ps_min: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  ps_max: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  ps_rms: ({ across, branch }) => [branch[0] - Math.abs(across[0] || 0)],
+  ps_delay: (a) => {
+    // Constant (transport) delay y(t) = u(t - delay) for t >= delay, y = `initial` before (Simulink Transport Delay "Initial output").
+    // The input history is the committed record of the accepted steps (vlabHistory.ts): a delay >= the step is explicit in u.
+    const delay = numericParam(a.params, 'delay', 1);
+    if (delay < 0) tableError('delay', 'a delay cannot be negative');
+    const initial = numericParam(a.params, 'initial', 0);
+    const u = sigIn(a, 'u', 0);
+    return [a.branch[0] - historyAt(a.ctx, a.nodeId, a.ctx.time - delay, [u], [initial])[0]];
+  },
+  // Sum of Elements of the input signal. The port is scalar (width 1), so the sum over its single element is the input itself.
+  ps_sum: (a) => [a.branch[0] - sigIn(a, 'u', 0)],
+  ps_min: (a) => {
+    // Simulink MinMax (min) with the output saturated at `limit` (library "Saturation"): y = min(u1, u2, limit)
+    return [a.branch[0] - Math.min(sigIn(a, 'u1', 0), sigIn(a, 'u2', 1), numericParam(a.params, 'limit', 100))];
+  },
+  ps_max: (a) => {
+    // Simulink MinMax (max) with the output saturated at `limit` (library "Saturation"): y = max(u1, u2, limit)
+    return [a.branch[0] - Math.max(sigIn(a, 'u1', 0), sigIn(a, 'u2', 1), numericParam(a.params, 'limit', -100))];
+  },
+  ps_rms: (a) => {
+    // Sliding-window RMS (Simscape RMS, Periodic Operators): y = sqrt( (1/W) int_{t-W}^{t} u^2 dtau ), W = `window` [s].
+    // State Q = int_0^t u^2 dtau (dQ/dt = u^2); the window integral is Q(t) - Q(t - W), the signal before t = 0 counts as 0.
+    const W = numericParam(a.params, 'window', 0.02);
+    if (!(W > 0)) tableError('window', 'must be greater than 0');
+    const u = sigIn(a, 'u', 0);
+    const Q = a.state[0];
+    const Qlag = historyAt(a.ctx, a.nodeId, a.ctx.time - W, [Q], [0])[0];
+    return [a.branch[0] - Math.sqrt(Math.max(0, (Q - Qlag) / W)), a.dState[0] - u * u];
+  },
   ps_terminator: () => [],
   heat_flow_sensor: ({ across, branch }) => [
     across[0] - across[1],
@@ -2678,46 +2747,66 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── MATH & SIGNAL PROCESSING ────────────────────────────────────────────────
-  ps_lookup_2d: ({ across, branch }) => {
-    const x = across[0] || 0;
-    const y = across[1] || 0;
-    return [branch[0] - x * y];
+  ps_lookup_2d: (a) => {
+    // Simscape PS Lookup Table (2D): bilinear interpolation of table_z (rows = table_x breakpoints of u1, columns = table_y
+    // breakpoints of u2), nearest (clamped) extrapolation. The default table [0 0; 0 1] on [0 1] x [0 1] is z = u1 u2 there.
+    const x = vectorParam(a.params, 'table_x', [0, 1]);
+    const y = vectorParam(a.params, 'table_y', [0, 1]);
+    const z = matrixParam(a.params, 'table_z', [[0, 0], [0, 1]]);
+    checkBreakpoints('table_x', x, 'table_z rows', z.length);
+    checkBreakpoints('table_y', y, 'table_z columns', z[0]?.length ?? 0);
+    // interpolate along u2 in every row, then along u1 between the rows
+    const u2 = sigIn(a, 'u2', 1);
+    const rowValues = z.map(row => interpolate1d(y, row, u2));
+    return [a.branch[0] - interpolate1d(x, rowValues, sigIn(a, 'u1', 0))];
   },
 
-  ps_integrator_gen: ({ across, branch, state, dState }) => {
+  ps_integrator_gen: (a) => {
+    // Integrator with external reset (Simulink Integrator, "level" reset): dy/dt = u, y(0) = initial; while the reset input is
+    // high (> 0.5) the state is held at `initial` (y = initial). An unwired reset never fires.
+    const initial = numericParam(a.params, 'initial', 0);
+    const u = sigIn(a, 'u', 0);
+    const resetting = sigIn(a, 'reset', 1) > SIGNAL_LOGIC_THRESHOLD;
     return [
-      dState[0] - (across[0] || 0),
-      branch[0] - state[0]
+      a.branch[0] - a.state[0],
+      resetting ? a.state[0] - initial : a.dState[0] - u,
     ];
   },
 
-  ps_moving_avg: ({ across, branch, state, dState, params }) => {
-    const T = MOVING_AVG_TAU;
+  ps_moving_avg: (a) => {
+    // Simulink Moving Average: y(k) = sum_{i=0}^{N-1} u(k-i) / N over samples u(k) = u(k ts), N = `window` samples, `ts` = sample time.
+    // y is held between the sample instants; samples before t = 0 are 0 (initial state). The samples come from the committed
+    // input history, so each is the exact signal value at its sample instant.
+    const { n, ts } = movingAverageSpec(a.params);
+    if (!(ts > 0)) tableError('ts', 'must be greater than 0');
+    const u = sigIn(a, 'u', 0);
+    const tk = Math.floor(a.ctx.time / ts + 1e-9) * ts;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += historyAt(a.ctx, a.nodeId, tk - i * ts, [u], [0])[0];
+    return [a.branch[0] - sum / n];
+  },
+
+  ps_sr_flipflop: (a) => {
+    // Set-Reset latch, set dominant: Q+ = S or (Q and not R), not-Q = 1 - Q; the inputs are high when > 0.5. The state holds Q:
+    // S high -> Q = 1; else R high -> Q = 0; else dQ/dt = 0 (Q is latched). The mode changes are events of S and R.
+    const S = sigIn(a, 's', 0) > SIGNAL_LOGIC_THRESHOLD;
+    const R = sigIn(a, 'r', 1) > SIGNAL_LOGIC_THRESHOLD;
+    const Q = a.state[0];
     return [
-      dState[0] - ((across[0] || 0) - state[0]) / T,
-      branch[0] - state[0]
+      a.branch[0] - Q,
+      a.branch[1] - (1 - Q),
+      S ? Q - 1 : R ? Q : a.dState[0],
     ];
   },
 
-  ps_sr_flipflop: ({ across, branch, state, dState }) => {
-    const S = across[0] || 0;
-    const R = across[1] || 0;
-    const Q = state[0] || 0;
+  ps_sample_hold: (a) => {
+    // Sample and hold (library equation y = u if S > 0.5 else y_prev): the state tracks u while S is high and holds its
+    // last value while S is low (dy/dt = 0). The falling edge of S is an event, so the held value is u at that instant.
+    const u = sigIn(a, 'u', 0);
+    const tracking = sigIn(a, 's', 1) > SIGNAL_LOGIC_THRESHOLD;
     return [
-      dState[0] - (S * (1 - Q) - R * Q),
-      branch[0] - Q,
-      branch[1] - (1 - Q)
-    ];
-  },
-
-  ps_sample_hold: ({ across, branch, state, dState }) => {
-    const u = across[0] || 0;
-    const trig = across[1] || 0;
-    const holdVal = state[0] || 0;
-    const dHold = trig > 0.5 ? (u - holdVal) * 1e3 : 0.0;
-    return [
-      dState[0] - dHold,
-      branch[0] - holdVal
+      a.branch[0] - a.state[0],
+      tracking ? a.state[0] - u : a.dState[0],
     ];
   },
 
@@ -2729,19 +2818,22 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ps_sine_3phase: ({ branch, params, ctx }) => {
+  ps_sine_3phase: (a) => {
     // Balanced positive-sequence set (Simscape "Sine Generator" convention, phase a reference):
-    //   a = Vpk sin(wt), b = Vpk sin(wt - 2pi/3), c = Vpk sin(wt + 2pi/3), and `wt` the instantaneous angle wt = 2*pi*f*t.
-    // `abc` is one width-3 vector output (branches 0..2), `wt` the scalar after it (branch 3). The `m` / `ang` inputs are
-    // not read yet (WP-20).
-    const Vpk = numericParam(params, 'Vpk', 325);
-    const f = numericParam(params, 'f', 50);
-    const wt = 2 * Math.PI * f * ctx.time;
+    //   a = m Vpk sin(wt), b = m Vpk sin(wt - 2pi/3), c = m Vpk sin(wt + 2pi/3),  wt = 2*pi*f*t + ang   [rad]
+    // m = amplitude modulation (input `m`, 1 when unwired), ang = phase offset of the set in rad (input `ang`, 0 when unwired);
+    // `wt` is the instantaneous angle of phase a (so park_transform with theta = wt gives d = m Vpk, q = 0).
+    // `abc` is one width-3 vector output (branches 0..2), `wt` the scalar after it (branch 3).
+    const Vpk = numericParam(a.params, 'Vpk', 325);
+    const f = numericParam(a.params, 'f', 50);
+    const m = inputOrParam(a, 'm', 1);
+    const ang = inputOrParam(a, 'ang', 0);
+    const wt = 2 * Math.PI * f * a.ctx.time + ang;
     return [
-      branch[0] - Vpk * Math.sin(wt),
-      branch[1] - Vpk * Math.sin(wt - 2 * Math.PI / 3),
-      branch[2] - Vpk * Math.sin(wt + 2 * Math.PI / 3),
-      branch[3] - wt,
+      a.branch[0] - m * Vpk * Math.sin(wt),
+      a.branch[1] - m * Vpk * Math.sin(wt - 2 * Math.PI / 3),
+      a.branch[2] - m * Vpk * Math.sin(wt + 2 * Math.PI / 3),
+      a.branch[3] - wt,
     ];
   },
 
@@ -2772,10 +2864,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ps_stair_gen: ({ branch, params, ctx }) => {
-    // Each sample period raises the output by one unit; the library `steps` level list is not used yet (WP-20).
-    const step_time = numericParam(params, 'ts', 0.1);
-    const steps = Math.floor(ctx.time / step_time);
-    return [branch[0] - steps];
+    // Periodic stair: y = steps[floor(t / ts) mod N] (library equation); a level change is a time event (detectZeroCrossings),
+    // taken at t >= k ts - SIGNAL_TIME_QUANTUM / 2.
+    const ts = numericParam(params, 'ts', 0.1);
+    if (!(ts > 0)) tableError('ts', 'must be greater than 0');
+    const levels = vectorParam(params, 'steps', [0, 1, 2, 1, 0]);
+    const k = Math.floor((ctx.time + SIGNAL_TIME_QUANTUM / 2) / ts);
+    return [branch[0] - levels[((k % levels.length) + levels.length) % levels.length]];
   },
 
   ps_washout: ({ across, branch, state, dState, params }) => {
@@ -2819,16 +2914,34 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   sym_comp_transform: (args) => {
-    // abc -> +/-/0 sequence (Fortescue 1918). With the operator a = e^(j 2pi/3):
-    //   V1 = (A + a B + a^2 C)/3,  V2 = (A + a^2 B + a C)/3,  V0 = (A + B + C)/3
-    // of the PHASORS A, B, C at the base frequency. The phasor of the instantaneous signal x(t) = X cos(wt + phi) is the
-    // analytic signal A = x - j (dx/dt)/w (= X e^(j(wt+phi))), so with w = 2 pi f_base the output `seq` is the three real
-    // peak MAGNITUDES [|V1|, |V2|, |V0|]. A balanced positive set gives [Vpk, 0, 0]. dx/dt is the solver's dAcross.
-    const abc = vectorInput(args, 'abc', 3);
-    const dabc = vectorInput({ across: args.dAcross, ports: args.ports }, 'abc', 3);
-    const w = 2 * Math.PI * numericParam(args.params, 'freq', 50);
-    const seq = fortescueMagnitudes(abc as [number, number, number], dabc as [number, number, number], w);
-    return [args.branch[0] - seq[0], args.branch[1] - seq[1], args.branch[2] - seq[2]];
+    // abc -> +/-/0 sequence magnitudes, Simscape Sequence Analyzer method (Fortescue 1918 + a running one-cycle Fourier analysis,
+    // F-063). With the operator a = e^(j 2pi/3) the sequence phasors of the fundamental (f0 = `freq`, w = 2 pi f0, T = 1/f0) are
+    //   V1 = (A + a B + a^2 C)/3,  V2 = (A + a^2 B + a C)/3,  V0 = (A + B + C)/3,   A = (2/T) int_{t-T}^{t} x_a(tau) e^(-j w tau) dtau
+    // (the Fourier fundamental of a phase signal x = X cos(w t + phi) is A = X e^(j phi)); the Fourier integral is linear, so
+    //   V_k(t) = (2/T) [Z_k(t) - Z_k(t - T)],   dZ_k/dt = s_k(t) e^(-j w t),   s1 = (x_a + a x_b + a^2 x_c)/3, s2 = conj-pair, s0 = (x_a + x_b + x_c)/3.
+    // The six running integrals (re, im of Z_1, Z_2, Z_0) are states; Z(t - T) is the committed history (vlabHistory.ts). The output
+    // `seq` is the three peak MAGNITUDES [|V1|, |V2|, |V0|] (no ripple at any instant of the cycle once the window is full). Warm-up:
+    // the signal before t = 0 counts as 0 (Simscape Fourier "Initial input [0 0]"), so the output is exact one period after the start.
+    const x = vectorInput(args, 'abc', 3);
+    const f0 = numericParam(args.params, 'freq', 50);
+    if (!(f0 > 0)) tableError('freq', 'must be greater than 0');
+    const w = 2 * Math.PI * f0;
+    const c = Math.cos(w * args.ctx.time); const s = Math.sin(w * args.ctx.time);
+    const ca = -0.5; const sa = SQRT3 / 2;
+    const s1re = (x[0] + ca * x[1] + ca * x[2]) / 3; const s1im = (sa * x[1] - sa * x[2]) / 3;
+    const s0re = (x[0] + x[1] + x[2]) / 3;
+    // z = s e^(-j w t) = (s_re cos + s_im sin) + j (s_im cos - s_re sin);  s2 = (s1_re, -s1_im), s0 imaginary part 0
+    const dz = [
+      s1re * c + s1im * s, s1im * c - s1re * s,
+      s1re * c - s1im * s, -s1im * c - s1re * s,
+      s0re * c, -s0re * s,
+    ];
+    const lag = historyAt(args.ctx, args.nodeId, args.ctx.time - 1 / f0, args.state.slice(0, 6), [0, 0, 0, 0, 0, 0]);
+    const mag = (k: number) => (2 * f0) * Math.hypot(args.state[2 * k] - lag[2 * k], args.state[2 * k + 1] - lag[2 * k + 1]);
+    return [
+      args.branch[0] - mag(0), args.branch[1] - mag(1), args.branch[2] - mag(2),
+      ...dz.map((d, i) => args.dState[i] - d),
+    ];
   },
 
   inv_sym_comp_transform: (args) => {

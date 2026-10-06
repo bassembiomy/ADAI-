@@ -12,8 +12,9 @@ import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagno
 import { readSolvedVariable } from './vlabScopeRead';
 import { scopeTraceKey } from './vlabVectorPorts';
 import { numericParam, stringParam } from './vlabParams';
-import { twoLevelReferences, triangularCarrier, beltEndStiffness } from './vlabEquations';
+import { twoLevelReferences, triangularCarrier, beltEndStiffness, SIGNAL_TIME_QUANTUM, SIGNAL_LOGIC_THRESHOLD } from './vlabEquations';
 import { ddtVector } from './vlabDiscretization';
+import { cloneHistory, recordHistory } from './vlabHistory';
 import { RHO_WATER_LIQUID, STANDARD_ATMOSPHERE, moistAirState } from './vlabFluidProperties';
 
 // SDIRK-3 Butcher tableau constants
@@ -216,6 +217,19 @@ export class VLabPhysicsEngine {
     }
   }
 
+  /**
+   * Physical-signal initial conditions (WP-20a): Integrator y(0) = `initial` (Simscape Integrator "Initial condition"). The first
+   * step differentiates against it, so the integral starts from y(0) rather than from 0.
+   */
+  private seedSignalStates(system: AssembledSystem, nodes: Node[], x: number[]): void {
+    for (const c of system.components) {
+      if (c.blockType !== 'ps_integrator' && c.blockType !== 'ps_integrator_gen') continue;
+      const node = nodes.find(n => n.id === c.blockId);
+      const i = system.variableNames.indexOf(`${c.blockId}_state_y`);
+      if (node && i >= 0) x[i] = numericParam((node.data as any)?.params, 'initial', 0, node.id);
+    }
+  }
+
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {
     const topoHash = this.getTopologyHash(nodes, edges);
     
@@ -321,6 +335,7 @@ export class VLabPhysicsEngine {
       this.seedCapacitorVoltages(system, nodes, x);
       this.seedThermalMassTemperatures(system, nodes, x);
       this.seedFluidStates(system, nodes, x);
+      this.seedSignalStates(system, nodes, x);
     }
 
     const config = this.solverConfiguration;
@@ -329,7 +344,10 @@ export class VLabPhysicsEngine {
     const sameMethod = !prevState?.solverMethod || prevState.solverMethod === method;
     let t = prevState?.time ?? config?.startTime ?? 0;
     const tTarget = t + dt;
-    
+    // WP-20a: committed signal history of the blocks that look back in time (delay, sliding window, moving average).
+    // A new run (no prevState) starts empty; the memory travels in the returned state.
+    const history = cloneHistory(prevState?.history);
+
     let xCurrent = [...x];
     let prevX = sameMethod && prevState?.prevX && prevState.prevX.length === system.systemSize ? [...prevState.prevX] : undefined;
     let lastDt = sameMethod ? prevState?.prevDt : undefined;
@@ -388,6 +406,7 @@ export class VLabPhysicsEngine {
           const ctx: EquationContext = {
             dt: h,
             time: t + h,
+            history,
             parameters: {},
             prevStates: [...xCurrent],
             states: [...xCurrent],
@@ -416,6 +435,7 @@ export class VLabPhysicsEngine {
             const ctx1 = {
               dt: h * GAMMA,
               time: t + h * GAMMA,
+              history,
               parameters: {},
               prevStates: [...xCurrent],
               states: [...xCurrent],
@@ -434,6 +454,7 @@ export class VLabPhysicsEngine {
             const ctx2 = {
               dt: h * GAMMA,
               time: t + h * (GAMMA + A21),
+              history,
               parameters: {},
               prevStates: [...z2],
               states: [...z2],
@@ -452,6 +473,7 @@ export class VLabPhysicsEngine {
             const ctx3 = {
               dt: h * GAMMA,
               time: t + h,
+              history,
               parameters: {},
               prevStates: [...z3],
               states: [...z3],
@@ -542,6 +564,7 @@ export class VLabPhysicsEngine {
           lastDt = h;
           xCurrent = [...nextX];
           t += h;
+          recordHistory(system, history, prevX ?? xCurrent, xCurrent, t - h, t);
           h = nextH;
           bdfOrder = 2;
           
@@ -558,9 +581,11 @@ export class VLabPhysicsEngine {
               bdfOrder = 1; // resolve the crossing before switching algebraic modes
             } else {
               stepAccepted = true;
+              const xBefore = xCurrent;
               xCurrent = [...nextX];
               prevX = [...xCurrent];
               t += h;
+              recordHistory(system, history, xBefore, xCurrent, t - h, t);
               acceptedSteps++;
               eventsLocated++;
               // resume at the step size in force before the event cut, with a fresh BDF1 start in the new mode
@@ -592,9 +617,11 @@ export class VLabPhysicsEngine {
               // minimum step: accept the best state rather than retrying
               // forever. Explicit-state incompatibilities are still errors.
               stepAccepted = true;
+              const xBefore = xCurrent;
               if (nextX.length > 0) xCurrent = [...nextX];
               bdfOrder = 1; // best-effort state: no valid BDF2 history for the next step
               t += h;
+              recordHistory(system, history, xBefore, xCurrent, t - h, t);
               acceptedSteps++;
             } else {
               rejectedSteps++;
@@ -849,6 +876,7 @@ export class VLabPhysicsEngine {
       // After an event/reset step the BDF2 history is not valid: the next call restarts with BDF1.
       prevX: bdfOrder === 2 ? prevX : undefined,
       prevDt: lastDt,
+      history,
       time: tTarget,
       systemSize: system.systemSize,
       variableNames: system.variableNames,
@@ -906,9 +934,30 @@ export class VLabPhysicsEngine {
           indicators.push(ctrl - threshold);
         }
         else if (type === 'ps_switch') {
-          const ctrl = acrossVals[1] !== undefined ? acrossVals[1] : 0;
-          const threshold = numericParam(params, 'threshold', 0.5);
-          indicators.push(ctrl - threshold);
+          // WP-20a (F-077): the control port is read by id and the threshold default is the library default (0), the same
+          // value the equation uses (they used to disagree: port position 1 vs 2, default 0.5 vs 0)
+          indicators.push(getPortVal('ctrl') - numericParam(params, 'threshold', 0));
+        }
+        else if (type === 'ps_step') {
+          // WP-20a: the step is a time event; the step is cut so that it ends just before the jump (the equation switches at
+          // time >= step time - SIGNAL_TIME_QUANTUM / 2, so the cut step still integrates the pre-jump value)
+          indicators.push(time - (numericParam(params, 'time', 1) - SIGNAL_TIME_QUANTUM));
+        }
+        else if (type === 'ps_stair_gen') {
+          // WP-20a: the stair changes level at every k * ts; sin(pi t / ts) crosses zero exactly there
+          indicators.push(Math.sin(Math.PI * (time + SIGNAL_TIME_QUANTUM) / numericParam(params, 'ts', 0.1)));
+        }
+        else if (type === 'ps_integrator_gen') {
+          // WP-20a: external reset is level-sensitive: the integrator holds y = initial while reset > 0.5
+          indicators.push(getPortVal('reset') - SIGNAL_LOGIC_THRESHOLD);
+        }
+        else if (type === 'ps_sample_hold') {
+          // WP-20a: tracks u while S > 0.5, holds while S <= 0.5
+          indicators.push(getPortVal('s') - SIGNAL_LOGIC_THRESHOLD);
+        }
+        else if (type === 'ps_sr_flipflop') {
+          indicators.push(getPortVal('s') - SIGNAL_LOGIC_THRESHOLD);
+          indicators.push(getPortVal('r') - SIGNAL_LOGIC_THRESHOLD);
         }
         else if (type === 'trans_hard_stop' || type === 'rot_hard_stop') {
           // WP-13 (F-075): contact entry / exit is a zero crossing of the relative position (state x / theta) against the bounds
@@ -925,16 +974,17 @@ export class VLabPhysicsEngine {
           indicators.push(beltEndStiffness(params) * x + numericParam(params, 'damping', 0) * v);
         }
         else if (type === 'ps_saturation') {
-          const lower = numericParam(params, 'lower', -10);
-          const upper = numericParam(params, 'upper', 10);
-          const val = acrossVals[0] || 0;
+          // the library defaults (WP-20a: they used to be +-10 here and +-1 in the equation)
+          const lower = numericParam(params, 'lower', -1);
+          const upper = numericParam(params, 'upper', 1);
+          const val = getPortVal('u');
           indicators.push(val - lower);
           indicators.push(val - upper);
         }
         else if (type === 'ps_dead_zone') {
           const upper = numericParam(params, 'upper', 0.5);
           const lower = numericParam(params, 'lower', -0.5);
-          const val = acrossVals[0] || 0;
+          const val = getPortVal('u');
           indicators.push(val - upper);
           indicators.push(val - lower);
         }

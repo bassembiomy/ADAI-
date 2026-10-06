@@ -3,7 +3,8 @@ import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { interfaceBranchSpecs, jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation, ScopeChannelBinding } from './types';
-import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches } from './vlabEquations';
+import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches, type BlockEquationArgs } from './vlabEquations';
+import { blockHistory } from './vlabHistory';
 import { numericParam, stringParam, VLabParamError } from './vlabParams';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -371,6 +372,7 @@ export class DAEAssembler {
 
     // 4. Allocate branch variables and state variables for components
     const componentsList: ComponentEquation[] = [];
+    const historyRecorders: NonNullable<AssembledSystem['historyRecorders']> = [];
     const componentBranchVarIndices = new Map<string, number[]>(); // blockId -> indices in x[]
     const componentStateVarIndices = new Map<string, number[]>(); // blockId -> indices in x[]
 
@@ -836,7 +838,6 @@ export class DAEAssembler {
           break;
         case 'ps_integrator':
         case 'ps_integrator_gen':
-        case 'ps_moving_avg':
         case 'ps_smith_predictor':
         case 'ps_transfer_fcn':
         case 'ps_lpf':
@@ -844,6 +845,14 @@ export class DAEAssembler {
         case 'ps_sample_hold':
         case 'ps_sr_flipflop':
           states.push('y');
+          break;
+        case 'ps_rms':
+          // running integral Q = int u^2 dt of the sliding-window RMS (y^2 = (Q(t) - Q(t - W)) / W, WP-20a)
+          states.push('Q');
+          break;
+        case 'sym_comp_transform':
+          // running Fourier integrals at f0 of the +, -, 0 sequence signals (re, im each; Sequence Analyzer, WP-20a)
+          states.push('re1', 'im1', 're2', 'im2', 're0', 'im0');
           break;
         case 'ps_simulink_conv':
         case 'simulink_ps_conv':
@@ -1059,12 +1068,8 @@ export class DAEAssembler {
       
       // Evaluate the block's equation factory. `guard` (structural probe only) records branch/state reads outside the
       // allocation instead of letting them silently read `undefined`.
-      const evaluate = (x: number[], dx: number[], ctx: EquationContext, guard?: Set<string>): number[] => {
-        if (!equationFactory) {
-          // If no equation is defined for this block, return 0 residuals for its variables
-          return new Array(equationCount).fill(0);
-        }
-        
+      // The equation arguments of this block at the unknown vector `x` (WP-20a: shared by the residual and by the history recorder).
+      const buildArgs = (x: number[], dx: number[], ctx: EquationContext, guard?: Set<string>): BlockEquationArgs => {
         // Map block ports to global across variable values and their derivatives
         const acrossVals = ports.map(portId => {
           const key = `${node.id}_${portId}`;
@@ -1162,20 +1167,29 @@ export class DAEAssembler {
           if (bad.length) throw new NonFiniteResidualError(bad);
         }
 
+        return {
+          across: acrossVals,
+          dAcross: acrossDervs,
+          branch: branchVals,
+          dBranch: branchDervs,
+          state: stateVals,
+          dState: stateDervs,
+          ctx,
+          params,
+          ports,
+          nodeId: node.id,
+          connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
+        };
+      };
+
+      const evaluate = (x: number[], dx: number[], ctx: EquationContext, guard?: Set<string>): number[] => {
+        if (!equationFactory) {
+          // If no equation is defined for this block, return 0 residuals for its variables
+          return new Array(equationCount).fill(0);
+        }
+        const args = buildArgs(x, dx, ctx, guard);
         try {
-          return equationFactory({
-            across: acrossVals,
-            dAcross: acrossDervs,
-            branch: branchVals,
-            dBranch: branchDervs,
-            state: stateVals,
-            dState: stateDervs,
-            ctx,
-            params,
-            ports,
-            nodeId: node.id,
-            connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
-          });
+          return equationFactory(args);
         } catch (e) {
           // A malformed user parameter is never turned into a default or a silent zero residual.
           if (e instanceof VLabParamError) {
@@ -1237,6 +1251,32 @@ export class DAEAssembler {
         equationCount,
         connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
       });
+
+      // WP-20a: a block that looks back in time declares what it records after every accepted step (vlabEquations.blockHistory).
+      const historySpec = blockHistory[type];
+      if (historySpec && !isUnsupported) {
+        let span: number;
+        try {
+          span = historySpec.span(params);
+        } catch (e) {
+          // a malformed parameter is reported against this block, like the equation's own reads
+          if (e instanceof VLabParamError) {
+            throw new VLabParamError(e.diagnostics.map(d => d.blockId ? d : {
+              ...d, blockId: node.id, reason: d.reason.replace(/^Parameter "([^"]+)"/, `Parameter "$1" of block "${node.id}" (${type})`),
+            }));
+          }
+          throw e;
+        }
+        historyRecorders.push({
+          nodeId: node.id,
+          span,
+          first: historySpec.first,
+          record: (xv, time) => {
+            const zeros = new Array(xv.length).fill(0);
+            return historySpec.record(buildArgs(xv, zeros, { dt: 0, time, parameters: {}, prevStates: xv, states: xv, stateDerivatives: zeros, order: 1 }));
+          },
+        });
+      }
     });
 
     // Structural check of every block equation against its allocation (rows == unknowns, no unallocated reads).
@@ -1937,6 +1977,7 @@ export class DAEAssembler {
       isPurelyAlgebraic: !isDifferentialState.some(Boolean) && componentsList.every(c =>
         !DERIVATIVE_DEPENDENT_BLOCK_TYPES.has(c.blockType)
         && (c.equationCount === 0 || Boolean(blockEquations[c.blockType]))),
+      historyRecorders: historyRecorders.length ? historyRecorders : undefined,
       residuals,
       kirchhoffNodes,
       components: componentsList,

@@ -548,41 +548,49 @@ describe('symmetrical components (Fortescue) through VLabPhysicsEngine.simulateS
     return [third(cadd(P[0], cmul(op, P[1]), cmul(op2, P[2]))), third(cadd(P[0], cmul(op2, P[1]), cmul(op, P[2]))), third(cadd(P[0], P[1], P[2]))].map(mag);
   };
 
-  it('closed form on an unbalanced set with exact derivatives (equation level)', () => {
+  // WP-20a (F-063): the dx/dt phasor estimate is gone. The block integrates s_k(t) e^(-j w t) (six states) and reads the window
+  // Z(t) - Z(t - T) from the committed history; the closed-form magnitudes through the solver are in signal_blocks.test.ts.
+  it('the Fourier integrand of the three sequences is s_k(t) e^(-j w t) with s1 = (A + aB + a^2 C)/3, s2 = (A + a^2 B + aC)/3, s0 = (A + B + C)/3 (equation level)', () => {
     const t0 = 0.0071; const amp = [100, 60, 80]; const phi = [0.3, -2.0, 2.2];
     const x = amp.map((a, k) => a * Math.cos(W * t0 + phi[k]));
-    const dx = amp.map((a, k) => -a * W * Math.sin(W * t0 + phi[k]));
-    const out = outputsOf('sym_comp_transform', { abc: x }, { d: { abc: dx } });
-    const want = fortescue(amp, phi);
-    want.forEach((w, k) => near(out[k], w, `seq[${k}]`, 1e-9));
-  });
-
-  it('balanced positive set -> [V, 0, 0]; balanced negative set -> [0, V, 0]; common mode -> [0, 0, V] (equation level, exact derivatives)', () => {
-    const t0 = 0.0033; const V = 120;
-    const sets: [number[], number[]][] = [
-      [[V, V, V], [0, -TWO_PI / 3, TWO_PI / 3]], // positive sequence a, b lagging 120
-      [[V, V, V], [0, TWO_PI / 3, -TWO_PI / 3]], // negative sequence
-      [[V, V, V], [0.4, 0.4, 0.4]],              // zero sequence
-    ];
-    const wants = [[V, 0, 0], [0, V, 0], [0, 0, V]];
-    sets.forEach(([amp, phi], i) => {
-      const x = amp.map((a, k) => a * Math.cos(W * t0 + phi[k]));
-      const dx = amp.map((a, k) => -a * W * Math.sin(W * t0 + phi[k]));
-      const out = outputsOf('sym_comp_transform', { abc: x }, { d: { abc: dx } });
-      wants[i].forEach((w, k) => near(out[k], w, `set ${i} seq[${k}]`, 1e-9));
+    const b = libraryBlock('sym_comp_transform')!;
+    const ports = b.ports.map(p => p.id);
+    const ctx: any = { dt: 1e-3, time: t0, parameters: {}, prevStates: [], states: [], stateDerivatives: [], order: 1 };
+    const rows = blockEquations.sym_comp_transform({
+      across: ports.map(id => (id === 'abc' ? x : [0, 0, 0])), dAcross: ports.map(() => [0, 0, 0]), branch: [0, 0, 0], dBranch: [0, 0, 0],
+      state: [0, 0, 0, 0, 0, 0], dState: [0, 0, 0, 0, 0, 0], ctx, params: { freq: 50 }, ports, nodeId: 'dut',
+    });
+    // rows 3..8 are dState - integrand, so with dState = 0 they are -(integrand): [Re z1, Im z1, Re z2, Im z2, Re z0, Im z0]
+    const e = { re: Math.cos(-W * t0), im: Math.sin(-W * t0) }; // e^(-j w t)
+    const s1 = { re: (x[0] + op.re * x[1] + op2.re * x[2]) / 3, im: (op.im * x[1] + op2.im * x[2]) / 3 };
+    const s2 = { re: (x[0] + op2.re * x[1] + op.re * x[2]) / 3, im: (op2.im * x[1] + op.im * x[2]) / 3 };
+    const s0 = { re: (x[0] + x[1] + x[2]) / 3, im: 0 };
+    [s1, s2, s0].forEach((s, k) => {
+      const z = cmul(s, e);
+      near(-rows[3 + 2 * k], z.re, `Re z${k}`, 1e-9);
+      near(-rows[4 + 2 * k], z.im, `Im z${k}`, 1e-9);
     });
   });
 
-  it('through the solver: a balanced positive set from the 3-phase generator reads [Vpk, 0, 0] (backward-Euler derivative)', () => {
+  it('closed form (Fourier fundamental of an unbalanced set): the magnitudes of the phasors of the analytic set (reference of the through-solver tests)', () => {
+    const amp = [100, 60, 80]; const phi = [0.3, -2.0, 2.2];
+    const want = fortescue(amp, phi);
+    // V0 = (A + B + C)/3 by hand: |(100 e^(j0.3) + 60 e^(-j2.0) + 80 e^(j2.2))/3|
+    const re = (100 * Math.cos(0.3) + 60 * Math.cos(-2.0) + 80 * Math.cos(2.2)) / 3;
+    const im = (100 * Math.sin(0.3) + 60 * Math.sin(-2.0) + 80 * Math.sin(2.2)) / 3;
+    near(want[2], Math.hypot(re, im), 'V0', 1e-12);
+    // |V1|^2 + |V2|^2 + |V0|^2 = (|A|^2 + |B|^2 + |C|^2)/3 (Parseval of the Fortescue transform)
+    near(want[0] ** 2 + want[1] ** 2 + want[2] ** 2, (100 ** 2 + 60 ** 2 + 80 ** 2) / 3, 'Parseval', 1e-9);
+  });
+
+  it('through the solver: a balanced positive set from the 3-phase generator reads [Vpk, 0, 0] from one period on, without ripple (running Fourier)', () => {
     const m: Model = {
       nodes: [node('sine', 'ps_sine_3phase', { Vpk: 100, f: 50 }), node('seq', 'sym_comp_transform', { freq: 50 }), scopeNode('scope')],
       edges: [wire('sine.abc', 'seq.abc'), wire('seq.seq', 'scope.in1')],
     };
-    const states = run(m, 40, 2e-5);
-    // the first steps carry the start-up transient of dx/dt (no history); afterwards the discrete derivative is accurate
-    // to O(w dt) = 6e-3, so the magnitudes agree with the phasor values within 1 % of Vpk (derivation: the backward
-    // difference of V cos(wt) has gain sinc(w dt / 2) and a half-step lag, a ripple of at most w dt / 2 = 3e-3).
-    for (const s of states.slice(10)) {
+    const states = run(m, 160, 0.02 / 80);
+    // the window is one fundamental period (20 ms); the signal before t = 0 counts as 0, so the output is exact from t = T on
+    for (const s of states.filter(x => (x.time as number) >= 0.02 + 1e-9)) {
       const [pos, neg, zero] = trace(s, 'scope', 1, ['pos', 'neg', 'zero']);
       expect(Math.abs(pos - 100), `pos ${pos}`).toBeLessThan(1);
       expect(Math.abs(neg), `neg ${neg}`).toBeLessThan(1);
@@ -590,20 +598,14 @@ describe('symmetrical components (Fortescue) through VLabPhysicsEngine.simulateS
     }
   });
 
-  it('inverse synthesis: seq magnitudes -> abc at the base frequency (phase a = cos(wt) reference), and forward(inverse(seq)) = seq', () => {
+  it('inverse synthesis: seq magnitudes -> abc at the base frequency (phase a = cos(wt) reference)', () => {
     const t0 = 0.0042; const seq = [90, 30, 20]; // |V1|, |V2|, |V0|
     const abc = outputsOf('inv_sym_comp_transform', { seq }, { time: t0 });
     const th = W * t0; const sh = TWO_PI / 3;
     near(abc[0], (90 + 30 + 20) * Math.cos(th), 'a');
     near(abc[1], 90 * Math.cos(th - sh) + 30 * Math.cos(th + sh) + 20 * Math.cos(th), 'b');
     near(abc[2], 90 * Math.cos(th + sh) + 30 * Math.cos(th - sh) + 20 * Math.cos(th), 'c');
-    // forward on the synthesised set with its exact derivative recovers the magnitudes
-    const dabc = [0, 1, 2].map(k => {
-      const ph = [0, -sh, sh][k]; const ph2 = [0, sh, -sh][k];
-      return -W * (seq[0] * Math.sin(th + ph) + seq[1] * Math.sin(th + ph2) + seq[2] * Math.sin(th));
-    });
-    const back = outputsOf('sym_comp_transform', { abc }, { d: { abc: dabc } });
-    seq.forEach((v, k) => near(back[k], v, `seq[${k}]`, 1e-9));
+    // the round trip forward(inverse(seq)) = seq runs through the solver in signal_blocks.test.ts (the analyzer needs one period of history)
   });
 
   it('through the solver: the inverse block evaluates its synthesis at the solver time', () => {

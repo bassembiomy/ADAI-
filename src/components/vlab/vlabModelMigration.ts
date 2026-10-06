@@ -95,6 +95,8 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
   upper_heater: ['efficiency'], mag_controlled_mmf: ['MMF'], washing_basket: ['damping'], doe_custom: ['deploymentModel'],
   ps_dead_zone: ['upper', 'lower'], ps_sine_3phase: ['Vpk', 'f'],
+  // WP-20a: Delay "Initial output", Moving Average sample time, 2-D lookup table
+  ps_delay: ['initial'], ps_moving_avg: ['ts'], ps_lookup_2d: ['table_x', 'table_y', 'table_z'],
   // WP-15: Thermal Mass Initial Temperature T0 (the old model always started at 293.15 K = the default); Variable Reluctance R
   // for the unwired control port (the old equation hard-coded 1e6 = the default); Fundamental Reluctance geometry
   thermal_mass: ['T0'], variable_reluctance: ['R'], fundamental_reluctance: ['A', 'mu_r', 'l'],
@@ -290,10 +292,43 @@ export const fundamentalReluctanceNotice = (type: string, params: Record<string,
     'with the default A and mu_r.';
 };
 
+/**
+ * WP-20a: physical-signal blocks whose behaviour changed because the old equation was a placeholder or disagreed with its own
+ * printed equation. No saved value is rewritten (the saved parameters keep their meaning); a model that depended on the old output
+ * is told what the block computes now. A saved node cannot be told apart from a new one, so the text names the condition.
+ */
+export const SIGNAL_BLOCK_NOTICES: Record<string, string> = {
+  ps_dead_zone: 'ps_dead_zone: outside the zone the output is now u - upper (u > upper) or u - lower (u < lower), as in the Simulink Dead Zone, so ' +
+    'it is continuous. The old block returned u itself outside the zone (a jump of the zone edge at each limit); a model saved with it now sees ' +
+    'outputs smaller by the zone edge.',
+  ps_switch: 'ps_switch: the ports are now read by id (u1, ctrl, u2) and the threshold default is 0 as in the library. The old equation took the ' +
+    'control from the u2 position and the false branch from the ctrl position, and the switching event used a different threshold (0.5).',
+  ps_delay: 'ps_delay: the block now delays its input by the Delay time (y(t) = u(t - delay), the new Initial output before that). It used to pass the ' +
+    'input through unchanged.',
+  ps_max: 'ps_max: the output is now max(u1, u2, limit); the Saturation parameter is the lower bound. The old block returned u1 only.',
+  ps_min: 'ps_min: the output is now min(u1, u2, limit); the Saturation parameter is the upper bound. The old block returned u1 only.',
+  ps_rms: 'ps_rms: the output is now the true sliding-window RMS of the last Window seconds. The old block returned |u|.',
+  ps_moving_avg: 'ps_moving_avg: the output is now the mean of the last Window samples taken every Sample time (new parameter ts, default 0.01 s). ' +
+    'The old block was a first-order lag with a fixed 0.1 s time constant that ignored the window.',
+  ps_stair_gen: 'ps_stair_gen: the output is now Steps[floor(t / ts) mod N], the list you set. The old block counted floor(t / ts) and ignored the list.',
+  ps_lookup_2d: 'ps_lookup_2d: the output is now the bilinear lookup of table_z over table_x and table_y (the default table equals u1*u2 on [0 1] x [0 1] ' +
+    'and is clamped outside). The old block returned u1*u2 everywhere.',
+  ps_sr_flipflop: 'ps_sr_flipflop: Q is now a true latch (set dominant, inputs high above 0.5). The old block relaxed towards 0 / 1 with a 1 s time constant.',
+  ps_sample_hold: 'ps_sample_hold: the output now tracks u exactly while S > 0.5 and holds the value at the falling edge of S. The old block tracked with a 1 ms lag.',
+  ps_integrator: 'ps_integrator: the Initial State is now the output at t = 0. It used to be ignored (the integral started at 0).',
+  ps_integrator_gen: 'ps_integrator_gen: the Initial parameter is now the output at t = 0 and the reset input holds the output at it while the input is above 0.5. ' +
+    'Both used to be ignored.',
+  ps_sine_3phase: 'ps_sine_3phase: the inputs m (amplitude, default 1) and ang (phase offset in rad, default 0) are now read when wired. They used to be ignored.',
+  sym_comp_transform: 'sym_comp_transform: the sequence magnitudes now come from a running one-period Fourier analysis at the base frequency (Simscape ' +
+    'Sequence Analyzer) instead of a dx/dt phasor estimate: no ripple, exact one period after the start (the signal before t = 0 counts as 0).',
+};
+
+export const signalBlockNotice = (type: string): string | undefined => SIGNAL_BLOCK_NOTICES[type];
+
 const canonicalizeNodeParams = (node: VLabNode): VLabNode => {
   const params = node.data?.params;
   const type = effectiveBlockType(node);
-  const refNotice = thermalReferenceNotice(type);
+  const refNotice = thermalReferenceNotice(type) ?? signalBlockNotice(type);
   if (!params || typeof params !== 'object') {
     if (!refNotice) return node;
     const existing = Array.isArray(node.data?.migrationNotices) ? node.data.migrationNotices : [];

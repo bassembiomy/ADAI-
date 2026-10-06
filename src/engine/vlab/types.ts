@@ -15,9 +15,25 @@ export const PHYSICAL_DOMAINS = [
 
 export type PhysicalDomain = (typeof PHYSICAL_DOMAINS)[number];
 
+/**
+ * WP-20a: committed (accepted-step) samples of one block, for the blocks whose output depends on the signal a fixed time ago
+ * (constant delay, sliding-window RMS / Fourier, N-sample moving average). `t` ascends; `v[k]` is the vector the block's recorder
+ * returned at `t[k]`. Only ACCEPTED steps are ever recorded, so a rejected or event-cut attempt never leaves a stale sample.
+ * The memory is plain data carried in the state object `simulateStep` returns (never a module-level cache), so a new run
+ * (`prevState = null`) starts with an empty history.
+ */
+export interface BlockHistory {
+  t: number[]; v: number[][];
+  /** the first sample was only extended backwards (constant over the first step); the second accepted step replaces it by a linear extrapolation */
+  extended?: boolean;
+}
+export type HistoryMemory = Record<string, BlockHistory>;
+
 export interface EquationContext {
   dt: number;
   time: number;
+  /** committed history of the blocks that declare a recorder (vlabEquations.blockHistory); absent in direct unit-test calls */
+  history?: HistoryMemory;
   parameters: Record<string, any>;
   prevStates: number[];
   prevPrevStates?: number[]; // State vector from k-1 for BDF-2
@@ -80,6 +96,11 @@ export interface AssembledSystem {
   isPurelyAlgebraic?: boolean;
   // The global residual function
   residuals: (x: number[], dx: number[], ctx: EquationContext) => number[];
+  /**
+   * WP-20a: blocks that need committed history. After every accepted step the engine calls `record(x)` of each entry and
+   * appends the vector at that time (see BlockHistory). `span` [s] is how far back the block ever looks (older samples are pruned).
+   */
+  historyRecorders?: { nodeId: string; span: number; first: 'extend' | 'state'; record: (x: number[], time: number) => number[] }[];
   // Node-level Kirchhoff equations (through-variable sum = 0). A vector net (width-N signal, composite three-phase electrical
   // port) has one entry per channel: `channel` is the 0-based channel (absent on scalar nets).
   kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[]; channel?: number }[];

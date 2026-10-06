@@ -488,18 +488,37 @@
       "findings": []
     },
     {
-      "id": "WP-20",
-      "title": "Physical signal & control (98 blocks): split into WP-20a (sources/math/logic/routing) and WP-20b (control/estimators/motor controllers) at dispatch",
+      "id": "WP-20a",
+      "title": "Physical signal: sources, math, nonlinear, logic, routing (40 blocks)",
       "phase": "P2",
       "deps": [
         "WP-31a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "40 blocks vs Simulink/Simscape docs: dead zone, max/min, switch threshold, sequence analyzer (one-period Fourier), delay/RMS/moving average (new vlabHistory), flip-flop, sample-hold, integrator reset, stair, 2-D lookup, sine 3-phase m/ang; 49 tests",
+        "planner FULL suite: 5134 pass / 83 expected-fail / 1 fail = steam_generator boundary NaN (WP-17 regression, rework sent)"
+      ],
       "findings": []
+    },
+    {
+      "id": "WP-20b",
+      "title": "Control, estimators, motor/converter controllers, learning blocks (+ remaining vector-port backlog, 13 unsupported)",
+      "phase": "R2",
+      "deps": [
+        "WP-20a"
+      ],
+      "blocks": [],
+      "status": "todo",
+      "attempts": 0,
+      "acceptance": "controllers.test.ts",
+      "evidence": [],
+      "findings": [
+        "F-073"
+      ]
     },
     {
       "id": "WP-21",
@@ -530,7 +549,7 @@
         "WP-17",
         "WP-18",
         "WP-19",
-        "WP-20",
+        "WP-20b",
         "WP-21"
       ],
       "blocks": [],
@@ -652,7 +671,7 @@
         "WP-17",
         "WP-18",
         "WP-19",
-        "WP-20",
+        "WP-20b",
         "WP-21",
         "WP-30",
         "WP-41",
@@ -1000,7 +1019,8 @@
       "block": "ps_step + ps_pid_ctrl + ps_saturation",
       "layer": "solver",
       "summary": "A step input into a PID with an active saturation clamp collapses the step to 1e-6 and exhausts the budget. Needs discontinuity/event handling.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-039",
@@ -1032,7 +1052,8 @@
       "block": "ps_dead_zone",
       "layer": "eq",
       "summary": "Outside the band it outputs u unchanged. Simulink Dead Zone gives y = u - upper (u > upper) and y = u - lower (u < lower), so the output is continuous.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-043",
@@ -1117,7 +1138,8 @@
       "block": "ps_lpf",
       "layer": "eq",
       "summary": "prevY is found by ctx.states.indexOf(value), a value lookup, so the index is wrong when values coincide.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-053",
@@ -1209,7 +1231,8 @@
       "block": "sym_comp_transform, inv_sym_comp_transform",
       "layer": "eq",
       "summary": "WP-09c used the phasor magnitude via dx/dt (ripple, first step wrong). Planner did NOT sign off: implement the Simscape Sequence Analyzer method (running one-fundamental-period Fourier at f0), output magnitude and phase per the library.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-064",
@@ -1226,7 +1249,8 @@
       "block": "ps_sine_3phase",
       "layer": "eq",
       "summary": "Inputs m and ang are unread.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-066",
@@ -1327,7 +1351,8 @@
       "block": "ps_switch",
       "layer": "eq",
       "summary": "detectZeroCrossings defaults the threshold to 0.5 while the library default is 0.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-078",
@@ -1392,7 +1417,8 @@
       "block": "thyristor_6pulse/12pulse",
       "layer": "port",
       "summary": "theta semantics differ (absolute deg vs rad offset + ramp).",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "documented WP-20a (conventions locked by tests)"
     },
     {
       "id": "F-086",
@@ -1400,7 +1426,8 @@
       "block": "ps_max",
       "layer": "eq",
       "summary": "Placeholder: returns u1 only.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
     },
     {
       "id": "F-087",
@@ -1506,6 +1533,30 @@
       "layer": "ui",
       "summary": "The other session is adding data-help-feature attributes to V-Lab UI files (uncommitted, not ours). WP-40 must coordinate to avoid conflicts.",
       "wp": "WP-40"
+    },
+    {
+      "id": "F-100",
+      "severity": "high",
+      "block": "steam_generator",
+      "layer": "eq",
+      "summary": "WP-17 regression: vlab_full_certification boundary case 2 returns a non-finite residual.",
+      "wp": "WP-17 rework"
+    },
+    {
+      "id": "F-101",
+      "severity": "low",
+      "block": "events",
+      "layer": "solver",
+      "summary": "Threshold events end a cut step just after the jump, so backward Euler integrates the post-jump value over that sub-step (~1e-4 error). Land just before the root.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-102",
+      "severity": "med",
+      "block": "library",
+      "layer": "port",
+      "summary": "Missing Simulink/Simscape signal blocks: derivative, relay, quantizer, rate limiter, compare, counter, ZOH, clock, chirp, pulse, mux, scalar-to-vector; ps_sum has a scalar port only.",
+      "wp": "USER"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

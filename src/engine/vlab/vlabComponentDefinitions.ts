@@ -724,10 +724,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Divides one physical signal by another.'
   },
   ps_delay: {
-    equations: ['y(t) = u(t - delay)'],
+    equations: ['y(t) = u(t - delay) for t >= delay', 'y(t) = initial for t < delay'],
     latex: ['y(t) = u(t - \\tau)'],
     across: 'None', through: 'None',
-    description: 'Implements a time-shift or transport delay in a physical signal path.'
+    description: 'Implements a constant time-shift (transport delay) in a physical signal path: the output is the input delay seconds ago, and the Initial output before the delay has elapsed.'
   },
   ps_math: {
     equations: ['y = f(u)'],
@@ -766,10 +766,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Limits the signal between a configurable upper and lower bound.'
   },
   ps_dead_zone: {
-    equations: ['y = 0 if lower < u < upper else u'],
-    latex: ['y = \\text{deadzone}(u)'],
+    equations: ['y = u - upper if u > upper', 'y = 0 if lower <= u <= upper', 'y = u - lower if u < lower'],
+    latex: ['y = \\begin{cases} u - u_{up} & u > u_{up} \\\\ 0 & u_{low} \\le u \\le u_{up} \\\\ u - u_{low} & u < u_{low} \\end{cases}'],
     across: 'None', through: 'None',
-    description: 'Models a region where the signal has no effect (outputs zero).'
+    description: 'Models a region where the signal has no effect (outputs zero). Outside the zone the output is the input measured from the zone edge, so it is continuous (Simulink Dead Zone).'
   },
   ps_switch: {
     equations: ['y = u1 if ctrl > threshold else u2'],
@@ -790,10 +790,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates a sinusoidal physical signal.'
   },
   ps_rms: {
-    equations: ['y = sqrt(avg(u^2))'],
-    latex: ['y = \\sqrt{\\frac{1}{T} \\int u^2 dt}'],
+    equations: ['y = sqrt((1/W) * integral_{t-W}^{t} u(tau)^2 dtau), W = window'],
+    latex: ['y = \\sqrt{\\frac{1}{W} \\int_{t-W}^{t} u^2 d\\tau}'],
     across: 'None', through: 'None',
-    description: 'Estimates the Root Mean Square of a signal over a sliding window.'
+    description: 'Computes the Root Mean Square of a signal over the sliding window of the last W seconds. The signal before t = 0 counts as 0, so a periodic signal reads exactly after one window.'
   },
   bldc_commutation: {
     equations: ['Logic based on Hall [H1 H2 H3]', 'Step 1: A+, B-', 'Step 2: A+, C-', '...'],
@@ -838,28 +838,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A discrete-time Proportional-Integral controller with anti-windup. Essential for closed-loop regulation of physical systems.'
   },
   ps_lpf: {
-    equations: ['y(k) = alpha*u(k) + (1-alpha)*y(k-1)'],
+    equations: ['T*dy/dt + y = u, T = 1/(2*pi*f_cut)', 'y(k) = alpha*u(k) + (1-alpha)*y(k-1)  (backward Euler)'],
     latex: ['Y(s) = \\frac{1}{Ts+1} U(s)'],
     across: 'None', through: 'None',
     description: 'A first-order low-pass filter. Attenuates high-frequency noise from sensors and control signals.'
   },
   ps_integrator_gen: {
-    equations: ['y(k) = y(k-1) + Ts*u(k)'],
-    latex: ['y = \\int u dt'],
+    equations: ['dy/dt = u, y(0) = initial', 'y = initial while reset > 0.5 (level reset)'],
+    latex: ['y = y_0 + \\int u dt'],
     across: 'None', through: 'None',
-    description: 'A generalized integrator with reset capability. Computes the accumulation of a signal over time.'
+    description: 'A generalized integrator with level reset (Simulink Integrator, external reset): while the reset input is above 0.5 the output is held at the initial condition; otherwise it accumulates the input over time.'
   },
   ps_moving_avg: {
-    equations: ['y(k) = sum(u(k-N+1:k)) / N'],
+    equations: ['y(k) = sum(u(k-N+1:k)) / N, u(k) = u(k*ts), N = window'],
     latex: ['y = \\frac{1}{N} \\sum_{i=0}^{N-1} u_{k-i}'],
     across: 'None', through: 'None',
-    description: 'Computes the arithmetic mean of the input signal over a sliding window of N samples.'
+    description: 'Computes the arithmetic mean of the input signal over a sliding window of N samples taken every ts seconds (held between samples; samples before t = 0 are 0).'
   },
   ps_sr_flipflop: {
-    equations: ['Q = (S or Q) and (not R)'],
+    equations: ['Q = S or (Q and not R)  (set dominant)', 'nQ = 1 - Q', 'S, R high when > 0.5'],
     latex: ['Q_{next} = S \\lor (Q \\land \\neg R)'],
     across: 'None', through: 'None',
-    description: 'A standard Set-Reset latch. Sets output high on S signal and resets on R signal.'
+    description: 'A standard Set-Reset latch. Sets output high on S signal and resets on R signal; when neither is high the output keeps its value, and S wins when both are high.'
   },
   ps_sample_hold: {
     equations: ['y = u if S > 0.5 else y_prev'],
@@ -874,7 +874,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An advanced dead-time compensation controller. Predicts the plant output to eliminate the instability caused by transport delays.'
   },
   ps_sine_3phase: {
-    equations: ['Va = Vpk * sin(wt)', 'Vb = Vpk * sin(wt - 120 deg)', 'Vc = Vpk * sin(wt + 120 deg)', 'wt = 2*pi*f*t'],
+    equations: ['Va = m*Vpk * sin(wt)', 'Vb = m*Vpk * sin(wt - 120 deg)', 'Vc = m*Vpk * sin(wt + 120 deg)', 'wt = 2*pi*f*t + ang  (m = 1, ang = 0 when unwired)'],
     latex: ['V_{abc} = M \\begin{bmatrix} \\sin(\\omega t) \\\\ \\sin(\\omega t - 120^\\circ) \\\\ \\sin(\\omega t + 120^\\circ) \\end{bmatrix}'],
     across: 'None', through: 'None',
     description: 'Generates a balanced positive-sequence three-phase sinusoidal signal vector (width-3 output abc) with configurable peak amplitude and frequency, plus the instantaneous angle wt.'
@@ -976,10 +976,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Transforms rotating dq0 coordinates back to the stationary abc vector (inverse of the Park transform with the same Alignment).'
   },
   sym_comp_transform: {
-    equations: ['V1 = 1/3 * (A + a*B + a^2*C)', 'V2 = 1/3 * (A + a^2*B + a*C)', 'V0 = 1/3 * (A + B + C)', 'a = exp(j*2*pi/3), A = x - j*(dx/dt)/(2*pi*freq)', 'seq = [|V1|, |V2|, |V0|]'],
+    equations: ['V1 = 1/3 * (A + a*B + a^2*C)', 'V2 = 1/3 * (A + a^2*B + a*C)', 'V0 = 1/3 * (A + B + C)', 'a = exp(j*2*pi/3), A = (2/T) * integral_{t-T}^{t} x_a(tau)*exp(-j*w*tau) dtau, w = 2*pi*freq, T = 1/freq', 'seq = [|V1|, |V2|, |V0|]'],
     latex: ['\mathbf{x}_{+-0} = \mathbf{T}_{sym} \mathbf{x}_{abc}'],
     across: 'None', through: 'None',
-    description: 'Decomposes an unbalanced three-phase system into positive, negative and zero sequence components (Fortescue). The width-3 output carries the real peak magnitudes of the three sequence phasors at the base frequency.'
+    description: 'Decomposes an unbalanced three-phase system into positive, negative and zero sequence components (Fortescue) with the Simscape Sequence Analyzer method: a running one-cycle Fourier analysis of the fundamental at the base frequency. The width-3 output carries the real peak magnitudes of the three sequence phasors. The signal before t = 0 counts as 0, so the output is exact one period after the start.'
   },
   inv_sym_comp_transform: {
     equations: ['a = (V1 + V2 + V0)*cos(wt)', 'b = V1*cos(wt - 2*pi/3) + V2*cos(wt + 2*pi/3) + V0*cos(wt)', 'c = V1*cos(wt + 2*pi/3) + V2*cos(wt - 2*pi/3) + V0*cos(wt)'],
@@ -1096,7 +1096,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates a constant physical signal. Use to set fixed setpoints or parameters in control loops.'
   },
   ps_step: {
-    equations: ['y = t > step_time ? final : initial'],
+    equations: ['y = t >= step_time ? final : initial'],
     latex: ['y(t) = y_0 + (y_f - y_0) u(t - t_s)'],
     across: 'None', through: 'Signal',
     description: 'Generates a step change in a physical signal at a specified time. Useful for analyzing system step response.'
@@ -1142,7 +1142,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['g_k = 1 if wrap(theta - (alpha + 60k)) < pulse_width else 0', 'k = 0..5'],
     latex: ['g_k = \\mathbf{1}_{[0, w_p)}(\\mathrm{wrap}(\\theta - (\\alpha + 60k)))'],
     across: 'Physical Inputs', through: 'Physical Outputs',
-    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port, counted from the natural commutation point of thyristor 1, and the absolute synchronisation angle theta (deg) from the theta port (own ramp 360*freq*t when unwired); each pulse has a defined width (pulse_width_deg) and fires 60° apart. A bridge fired at alpha has the mean DC voltage (3*sqrt(2)/pi)*V_LL*cos(alpha). Signal generator only (no thyristor device in the library).'
+    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port, counted from the natural commutation point of thyristor 1, and the absolute synchronisation angle theta (deg) from the theta port (own ramp 360*freq*t when unwired; the 12-pulse block differs on purpose: its theta is a radian offset added to its own ramp); each pulse has a defined width (pulse_width_deg) and fires 60° apart. A bridge fired at alpha has the mean DC voltage (3*sqrt(2)/pi)*V_LL*cos(alpha). Signal generator only (no thyristor device in the library).'
   },
   thyristor_12pulse: {
     equations: [

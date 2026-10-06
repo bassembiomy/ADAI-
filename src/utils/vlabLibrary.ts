@@ -4426,7 +4426,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "delay": {
             "value": 1,
             "unit": "s",
-            "label": "Delay"
+            "label": "Delay",
+            "min": 0
+          },
+          "initial": {
+            "value": 0,
+            "unit": "",
+            "label": "Initial output"
           }
         },
         "ports": [
@@ -4447,8 +4453,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Constant Delay governing physical equation",
-        "description": "Physical component model for PS Constant Delay."
+        "equation": "y(t) = u(t - delay) for t >= delay\ny(t) = initial for t < delay",
+        "description": "Constant (transport) delay of a physical signal: the output is the input delay seconds ago and `initial` before the delay has elapsed. The input history of the accepted solver steps is interpolated linearly."
       },
       {
         "id": "ps_add",
@@ -4482,8 +4488,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Add governing physical equation",
-        "description": "Physical component model for PS Add."
+        "equation": "y = u1 + u2",
+        "description": "Adds the two input signals: y = u1 + u2."
       },
       {
         "id": "ps_subtract",
@@ -4655,8 +4661,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Math Function governing physical equation",
-        "description": "Physical component model for PS Math Function."
+        "equation": "y = f(u),  f = sin | cos | tan | exp | log | sqrt | square (parameter func)\nlog(max(u, 1e-15)) and sqrt(max(u, 0)) are domain-guarded",
+        "description": "Applies the elementary function selected by func (sin, cos, tan, exp, log, sqrt, square) to the input signal. log and sqrt are guarded against a non-positive argument."
       },
       {
         "id": "ps_sum",
@@ -4683,8 +4689,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "y = u1 + u2",
-        "description": "Adds two physical signals together to produce their algebraic sum."
+        "equation": "y = sum_k u_k   (Sum of Elements; the port is scalar, so y = u)",
+        "description": "Sum of the elements of the input signal (Simulink Sum of Elements). The input port has width 1, so the sum over its single element equals the input."
       },
       {
         "id": "ps_integrator",
@@ -4753,8 +4759,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Transfer Function governing physical equation",
-        "description": "Physical component model for PS Transfer Function."
+        "equation": "T*dy/dt + y = u\nG(s) = 1/(T*s + 1)",
+        "description": "First-order lag G(s) = 1/(T s + 1) with time constant T: T dy/dt + y = u (unit DC gain)."
       },
       {
         "id": "ps_lookup_1d",
@@ -4792,8 +4798,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Lookup Table (1D) governing physical equation",
-        "description": "Physical component model for PS Lookup Table (1D)."
+        "equation": "y = interp1(table_x, table_y, u)\npiecewise linear, nearest (clamped) extrapolation, table_x strictly increasing",
+        "description": "One-dimensional lookup table: piecewise-linear interpolation of (table_x, table_y) with nearest (clamped) extrapolation beyond the end breakpoints."
       },
       {
         "id": "ps_lookup_2d",
@@ -4801,7 +4807,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#92400e",
         "icon": "ps_lookup_2d",
         "category": "Lookup Tables",
-        "params": {},
+        "params": {
+          "table_x": {
+            "value": "[0 1]",
+            "unit": "",
+            "label": "Breakpoints of u1 (rows)"
+          },
+          "table_y": {
+            "value": "[0 1]",
+            "unit": "",
+            "label": "Breakpoints of u2 (columns)"
+          },
+          "table_z": {
+            "value": "[0 0; 0 1]",
+            "unit": "",
+            "label": "Table values (rows follow u1)"
+          }
+        },
         "ports": [
           {
             "id": "u1",
@@ -4827,8 +4849,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Lookup Table (2D) governing physical equation",
-        "description": "Physical component model for PS Lookup Table (2D)."
+        "equation": "y = interp2(table_x, table_y, table_z, u1, u2)\nbilinear, nearest (clamped) extrapolation; the rows of table_z follow table_x, its columns follow table_y",
+        "description": "Two-dimensional lookup table with bilinear interpolation. The default table [0 0; 0 1] on [0 1] x [0 1] is y = u1*u2 there; edit table_x, table_y and table_z for your own data."
       },
       {
         "id": "ps_abs",
@@ -4933,8 +4955,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Dead Zone governing physical equation",
-        "description": "Physical component model for PS Dead Zone."
+        "equation": "y = u - upper   (u > upper)\ny = 0   (lower <= u <= upper)\ny = u - lower   (u < lower)",
+        "description": "Dead zone (Simulink Dead Zone): zero output while lower <= u <= upper, and the input measured from the nearest zone edge outside it (u - upper above, u - lower below), so the output is continuous."
       },
       {
         "id": "ps_switch",
@@ -4981,8 +5003,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Switch governing physical equation",
-        "description": "Physical component model for PS Switch."
+        "equation": "y = u1 if ctrl > threshold, else u2",
+        "description": "Passes u1 while the control input ctrl is above the threshold, otherwise u2. The switching instant is located by the solver (zero-crossing event of ctrl - threshold)."
       },
       {
         "id": "ps_min",
@@ -5022,8 +5044,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "y = min(u1, u2)",
-        "description": "Selects the minimum value among the input physical signals."
+        "equation": "y = min(u1, u2, limit)",
+        "description": "Selects the minimum of the two input signals and of the saturation value limit (Simulink MinMax, min): the output never exceeds limit."
       },
       {
         "id": "ps_max",
@@ -5063,8 +5085,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "y = max(u1, u2)",
-        "description": "Selects the maximum value among the input physical signals."
+        "equation": "y = max(u1, u2, limit)",
+        "description": "Selects the maximum of the two input signals and of the saturation value limit (Simulink MinMax, max): the output never falls below limit."
       },
       {
         "id": "ps_rms",
@@ -5076,7 +5098,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "window": {
             "value": 0.02,
             "unit": "s",
-            "label": "Window"
+            "label": "Window",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5097,8 +5121,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS RMS Estimator governing physical equation",
-        "description": "Physical component model for PS RMS Estimator."
+        "equation": "y = sqrt( (1/W) * integral from t-W to t of u(tau)^2 dtau ),  W = window\nthe signal before t = 0 counts as 0",
+        "description": "Sliding-window RMS: the square root of the mean of u^2 over the last window seconds. The signal before t = 0 counts as 0, so a periodic signal reads exactly after one window."
       },
       {
         "id": "bldc_commutation",
@@ -5627,8 +5651,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Low-Pass Filter governing physical equation",
-        "description": "Physical component model for Low-Pass Filter."
+        "equation": "T*dy/dt + y = u,  T = 1/(2*pi*f_cut)\ny(k) = alpha*u(k) + (1 - alpha)*y(k-1),  alpha = dt/(T + dt)  (backward Euler)",
+        "description": "First-order low-pass filter with cutoff frequency f_cut (T = 1/(2 pi f_cut)): -3 dB at f_cut, unit DC gain. Attenuates high-frequency noise from sensors and control signals."
       },
       {
         "id": "ps_integrator_gen",
@@ -5668,8 +5692,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Integrator governing physical equation",
-        "description": "Physical component model for Integrator."
+        "equation": "dy/dt = u,  y(0) = initial\nwhile reset > 0.5: y = initial (level reset)",
+        "description": "Integrator with an initial condition and a level reset: dy/dt = u with y(0) = initial; while the reset input is above 0.5 the output is held at the initial condition."
       },
       {
         "id": "ps_moving_avg",
@@ -5681,7 +5705,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "window": {
             "value": 10,
             "unit": "samples",
-            "label": "Window"
+            "label": "Window",
+            "min": 1
+          },
+          "ts": {
+            "value": 0.01,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5702,8 +5734,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Moving Average governing physical equation",
-        "description": "Physical component model for Moving Average."
+        "equation": "y(k) = (1/N) * sum_{i=0..N-1} u(k-i),  N = window samples,  u(k) = u(k*ts)\ny is held between samples; samples before t = 0 are 0",
+        "description": "Mean of the last window samples of the input, sampled every ts seconds and held between samples. Samples before t = 0 are 0."
       },
       {
         "id": "ps_sr_flipflop",
@@ -5746,8 +5778,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "SR Flip-Flop governing physical equation",
-        "description": "Physical component model for SR Flip-Flop."
+        "equation": "Q = S or (Q and not R)   (set dominant)\nnQ = 1 - Q\nS, R are high when > 0.5",
+        "description": "Set-reset latch, set dominant: S above 0.5 sets Q to 1, R above 0.5 resets it to 0, otherwise Q keeps its value; the second output is not-Q = 1 - Q."
       },
       {
         "id": "ps_sample_hold",
@@ -5781,8 +5813,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Sample and Hold governing physical equation",
-        "description": "Physical component model for Sample and Hold."
+        "equation": "y = u if S > 0.5 else y_prev\n(tracks u while S is high, holds the last value while S is low)",
+        "description": "Tracks the input u while the sample input S is above 0.5 and holds the last value while S is at or below 0.5; the falling edge of S is located by the solver."
       },
       {
         "id": "ps_smith_predictor",
@@ -5881,8 +5913,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "rad"
           }
         ],
-        "equation": "a = Vpk*sin(wt)\nb = Vpk*sin(wt - 2*pi/3)\nc = Vpk*sin(wt + 2*pi/3)\nwt = 2*pi*f*t",
-        "description": "Balanced positive-sequence three-phase sine set on the width-3 output abc, plus the instantaneous angle wt."
+        "equation": "a = m*Vpk*sin(wt)\nb = m*Vpk*sin(wt - 2*pi/3)\nc = m*Vpk*sin(wt + 2*pi/3)\nwt = 2*pi*f*t + ang   (m = 1 and ang = 0 when unwired)",
+        "description": "Balanced positive-sequence three-phase sine set on the width-3 output abc, plus the instantaneous angle wt of phase a. Input m scales the amplitude (1 when unwired), input ang adds a phase offset in radians to every phase and to wt (0 when unwired)."
       },
       {
         "id": "ps_second_order_filter",
@@ -6058,8 +6090,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Stair Generator governing physical equation",
-        "description": "Physical component model for Stair Generator."
+        "equation": "y = steps[floor(t/ts) mod N]",
+        "description": "Periodic staircase: the output is the level list steps indexed by floor(t/ts) mod N, so it changes level every ts seconds."
       },
       {
         "id": "ps_washout",
@@ -6094,8 +6126,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Washout Filter governing physical equation",
-        "description": "Physical component model for Washout Filter."
+        "equation": "Y(s) = T*s/(T*s + 1) * U(s)\nT*ds/dt + s = u,  y = u - s",
+        "description": "Washout (high-pass) filter T s/(T s + 1): passes transients and removes the steady-state component; T is the time constant."
       },
       {
         "id": "dc_current_ctrl",
@@ -6770,8 +6802,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "V1 = (A + a*B + a^2*C)/3\nV2 = (A + a^2*B + a*C)/3\nV0 = (A + B + C)/3\na = exp(j*2*pi/3), A = x - j*(dx/dt)/w, w = 2*pi*freq\nseq = [|V1|, |V2|, |V0|]",
-        "description": "Fortescue symmetrical components of the abc phasors at the base frequency: the width-3 output seq carries the peak magnitudes of the positive, negative and zero sequence."
+        "equation": "V1 = (A + a*B + a^2*C)/3\nV2 = (A + a^2*B + a*C)/3\nV0 = (A + B + C)/3,   a = exp(j*2*pi/3)\nA = (2/T) * integral from t-T to t of x_a(tau)*exp(-j*w*tau) dtau,   w = 2*pi*freq, T = 1/freq\nseq = [|V1|, |V2|, |V0|]",
+        "description": "Simscape Sequence Analyzer method: Fortescue symmetrical components of the fundamental of the abc signals, computed with a running one-cycle Fourier analysis at the base frequency (no derivative estimate, no ripple). The width-3 output seq carries the peak magnitudes of the positive, negative and zero sequence. The signal before t = 0 counts as 0, so the output is exact one period after the start."
       },
       {
         "id": "inv_sym_comp_transform",
@@ -7803,7 +7835,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           }
         ],
         "equation": "g_k = 1 if wrap360(θ − (α + 60·(k − 1))) < pulse_width,  else 0   [θ, α in deg],  k = 1…6\nθ = 360·freq·t when the θ port is unwired\nDiode / thyristor bridge: Vdc,avg = (3√2/π)·V_LL·cos α  (ripple at 6·f)",
-        "description": "Six-pulse firing generator for a thyristor (Graetz) bridge (Simscape Synchronized 6-Pulse Generator). Gate k = 1…6 is high for pulse_width degrees starting at the firing angle α + 60·(k − 1), α counted from the natural commutation point of thyristor 1 (with v_a = V·sin ωt and positive a-b-c sequence that is θ = ωt − 30°). θ is the synchronisation angle in degrees (absolute); unwired, the block uses its own ramp 360·freq·t. A six-pulse bridge with firing angle α has the mean DC voltage (3√2/π)·V_LL·cos α. Signal generator only; the library has no thyristor device, so the gates drive controlled switches."
+        "description": "Six-pulse firing generator for a thyristor (Graetz) bridge (Simscape Synchronized 6-Pulse Generator). Gate k = 1…6 is high for pulse_width degrees starting at the firing angle α + 60·(k − 1), α counted from the natural commutation point of thyristor 1 (with v_a = V·sin ωt and positive a-b-c sequence that is θ = ωt − 30°). θ is the synchronisation angle in degrees (absolute: wired, it replaces the internal ramp); unwired, the block uses its own ramp 360·freq·t. (thyristor_12pulse differs on purpose: its θ is a phase offset in radians added to its own ramp 2π·freq·t.) A six-pulse bridge with firing angle α has the mean DC voltage (3√2/π)·V_LL·cos α. Signal generator only; the library has no thyristor device, so the gates drive controlled switches."
       },
       {
         "id": "thyristor_12pulse",
@@ -9454,8 +9486,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PS Sine Wave governing physical equation",
-        "description": "Physical component model for PS Sine Wave."
+        "equation": "y = amp * sin(2*pi*freq*t)",
+        "description": "Sinusoidal source y = amp sin(2 pi freq t)."
       },
       {
         "id": "ps_step",
@@ -9491,7 +9523,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "y(t) = (t >= StepTime) ? (InitialValue + StepSize) : InitialValue",
+        "equation": "y(t) = initial for t < time\ny(t) = final for t >= time",
         "description": "Heaviside step input transitioning abruptly at the specified step time."
       },
       {
@@ -9523,7 +9555,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "y(t) = (t >= StartTime) ? Slope * (t - StartTime) + Offset : Offset",
+        "equation": "y(t) = 0 for t < start\ny(t) = slope * (t - start) for t >= start",
         "description": "Linear ramp generator increasing signal value at constant slope rate."
       },
       {
@@ -10825,8 +10857,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Any"
           }
         ],
-        "equation": "PS-Simulink Converter governing physical equation",
-        "description": "Physical component model for PS-Simulink Converter."
+        "equation": "y = u   (physical-signal to Simulink boundary, value unchanged)",
+        "description": "Boundary between the physical-signal network and Simulink: the value is passed on unchanged."
       },
       {
         "id": "simulink_ps_conv",
@@ -10849,8 +10881,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Any"
           }
         ],
-        "equation": "Simulink-PS Converter governing physical equation",
-        "description": "Physical component model for Simulink-PS Converter."
+        "equation": "y = u   (Simulink to physical-signal boundary, value unchanged)",
+        "description": "Boundary between Simulink and the physical-signal network: the value is passed on unchanged."
       },
       {
         "id": "vlab_probe",
