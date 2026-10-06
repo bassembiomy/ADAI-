@@ -1190,7 +1190,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Pel = V * i;
     const Tw = state[0];
     const mw = state[1];
-    const hfg = waterLatentHeat(Math.max(Tb, 274));
+    // saturation exists between the triple point and the critical point (647 K); outside it the nearest limit is used (the library bound rejects it)
+    const hfg = waterLatentHeat(Math.min(Math.max(Tb, 274), 640));
     const net = Math.max(0, eta * Pel - kLoss * (Tw - Tamb));
     const boiling = 0.5 * (1 + Math.tanh((Tw - Tb) / 0.05));
     const wet = 0.5 * (1 + Math.tanh((mw - 3e-3) / 1e-3));

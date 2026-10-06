@@ -512,7 +512,7 @@
         "WP-20a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "controllers.test.ts",
       "evidence": [],
@@ -1540,7 +1540,8 @@
       "block": "steam_generator",
       "layer": "eq",
       "summary": "WP-17 regression: vlab_full_certification boundary case 2 returns a non-finite residual.",
-      "wp": "WP-17 rework"
+      "wp": "WP-17 rework",
+      "status": "resolved (boil_temp bounded 0..370 degC, h_fg clamp)"
     },
     {
       "id": "F-101",

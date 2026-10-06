@@ -10538,8 +10538,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 100,
             "unit": "C",
             "label": "Boiling Temp",
-            "min": -273.15,
-            "exclusiveMin": true
+            "min": 0,
+            "max": 370
           },
           "v_rated": {
             "value": 230,
