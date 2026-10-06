@@ -86,7 +86,8 @@ describe('V-Lab connected reference models', () => {
         edge('sensor-scope', 'sensor', 't_s', 'scope', 'in1_t'),
       ],
     });
-    expect(result.readings.at(-1)).toBeCloseTo(350 - 293.15, 6);
+    // WP-15 (F-011): the Thermal Reference is 0 K, so the sensor reads the absolute 350 K (it read T - 293.15 K before)
+    expect(result.readings.at(-1)).toBeCloseTo(350, 6);
   });
 
   it('propagates a physical signal through a gain block to the scope', () => {

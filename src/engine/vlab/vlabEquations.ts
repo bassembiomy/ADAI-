@@ -28,7 +28,7 @@ export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
   'spring_damper_force', 'fluid_capacitance', 'fluid_inertance',
   'steam_accumulator', 'belt_spool', 'pulley', 'ps_lpf',
   'memristor', 'rot_spring', 'rot_hard_stop', 'rot_motion_sensor',
-  'trans_motion_sensor', 'trans_spring', 'microwave_cavity',
+  'trans_motion_sensor', 'trans_spring', 'microwave_cavity', 'reluctance_force',
   'ps_integrator', 'ps_transfer_fcn', 'ps_pi_ctrl', 'ps_pid_ctrl',
   'ac_motor', 'ma_chamber', 'lms_adaptive_filter', 'neural_neuron_learning',
   'ac_motor_pid_control', 'luenberger_observer', 'im_flux_observer', 'pmsm_foc',
@@ -889,18 +889,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── THERMAL DOMAIN ─────────────────────────────────────────────────────────
+  // Simscape Foundation Thermal Reference: absolute zero. The assembler pins the net to THERMAL_REFERENCE_TEMPERATURE = 0 K (WP-15,
+  // F-011): every thermal across variable is an ABSOLUTE temperature in K, ambient comes from a Temperature Source or a parameter.
   thermal_ref: () => [],
-  
+
   conductive_heat: ({ across, branch, params }) => {
-    // Q = k * (Ta - Tb) or (k * A / L) * (Ta - Tb)
-    // k is the thermal conductance in W/K (library unit); geometry (A, L) is not a parameter of this block.
+    // Simscape Foundation Conductive Heat Transfer: Q = k A / D (T_A - T_B), here lumped: Q = k (T_A - T_B), k [W/K] = conductivity A / D.
     const k = numericParam(params, 'k', 1.0);
     const dT = across[0] - across[1];
     return [branch[0] - k * dT];
   },
   
   convective_heat: ({ across, branch, params }) => {
-    // Q = h * A * (Ta - Tb)
+    // Simscape Foundation Convective Heat Transfer (Newton's law of cooling): Q = h A (T_A - T_B), h [W/(m^2 K)], A [m^2]
     const h = numericParam(params, 'h', 10.0);
     const A = numericParam(params, 'A', 0.1);
     const dT = across[0] - across[1];
@@ -908,10 +909,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   radiative_heat: ({ across, branch, params }) => {
-    // Q = eps * sigma * A * (Ta^4 - Tb^4)
+    // Stefan-Boltzmann law for a grey body (Incropera & DeWitt, eq. 1.7; Simscape Radiative Heat Transfer):
+    //   Q = sigma eps A (T_A^4 - T_B^4),  T in ABSOLUTE kelvin (hence the 0 K Thermal Reference)
     const eps = numericParam(params, 'eps', 0.9);
     const A = numericParam(params, 'A', 0.1);
-    const sigma = 5.67e-8; // Stefan-Boltzmann
+    const sigma = 5.670374419e-8; // Stefan-Boltzmann constant, W/(m^2 K^4) (CODATA 2018)
     const Ta = across[0];
     const Tb = across[1];
     const heat = eps * sigma * A * (Math.pow(Ta, 4) - Math.pow(Tb, 4));
@@ -919,12 +921,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   thermal_mass: ({ across, dAcross, branch, params }) => {
-    // Q = C * dT/dt
+    // Simscape Foundation Thermal Mass: Q = m c dT/dt = C dT/dt, Q = heat flow INTO the port, T = absolute temperature (K).
+    // The initial temperature T0 seeds the node history in vlabPhysics.ts (default 293.15 K).
     const C = Math.max(1e-6, numericParam(params, 'C', 100.0));
     return [branch[0] - C * dAcross[0]];
   },
   
   temp_sensor: ({ across, branch, ports }) => {
+    // Simscape Foundation Temperature Sensor: T_out = T_A - T_B (both absolute, referred to the 0 K Thermal Reference), so the
+    // output is the ABSOLUTE temperature when B is on the reference (or left open: INTERNAL_THERMAL_REFERENCE_PORTS).
     // across[0]: T_a, across[1]: T_b
     // branch[0]: heat_flow through sensor, branch[1]: output signal
     const Ta = across[0] ?? 0;
@@ -993,7 +998,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   thermal_resistor: ({ across, branch, params }) => {
-    // V = I * R => (Vp-Vn) - I*R = 0
+    // Joule heating of a resistor (Ohm + Joule, lossless electrothermal conversion, F-044 / WP-15):
+    //   V = I R,   Q = I^2 R = V I = V^2 / R    (electrical power in = heat flow out into the thermal port h)
+    // (Vp-Vn) - I*R = 0
     // Q_heat = I^2 * R (flows OUT of the component into the thermal node)
     const R = numericParam(params, 'R', 10.0);
     const V = across[0] - across[1];
@@ -1966,15 +1973,24 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [(across[0] - across[1]) - branch[0] * R];
   },
   fundamental_reluctance: ({ across, branch, params }) => {
-    const R = numericParam(params, 'R', 1e6);
+    // Hopkinson's law with the reluctance of a uniform core segment (Simscape Electrical > Magnetic > Fundamental Reluctance):
+    //   mmf = Phi * R,   R = l / (mu0 mu_r A)      l [m] length, A [m^2] cross-section, mu_r relative permeability
+    // (Hopkinson 1886; Fitzgerald, Kingsley, Umans "Electric Machinery" eq. 1.6-1.7). mu0 = 4 pi 1e-7 (1 + 5.5e-10) H/m.
+    const l = numericParam(params, 'l', 0.1);
+    const A = numericParam(params, 'A', 1e-4);
+    const mur = numericParam(params, 'mu_r', 1000);
+    const MU0 = 1.25663706212e-6;
+    const R = l / (MU0 * mur * A);
     return [(across[0] - across[1]) - branch[0] * R];
   },
   variable_reluctance: ({ across, branch, params, ports, connectedPorts }) => {
+    // Simscape Variable Reluctance: mmf = Phi * R(u), u = control signal [A-t/Wb]; bounded below by Rmin so the
+    // element never becomes a short (R > 0). `R` is the reluctance used while the control port is unwired.
     const nIdx = ports ? ports.indexOf('n') : 0;
     const sIdx = ports ? ports.indexOf('s') : 1;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
-    const ctrlVal = inputOrParam({ across, ports, connectedPorts }, 'ctrl', 1e6, 2);
+    const ctrlVal = inputOrParam({ across, ports, connectedPorts }, 'ctrl', numericParam(params, 'R', 1e6), 2);
     const Rmin = numericParam(params, 'Rmin', 1e5);
     const R_ctrl = Math.max(Rmin, Number(ctrlVal));
     return [(Vn - Vs) - branch[0] * R_ctrl];
@@ -1987,8 +2003,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Hc = numericParam(params, 'Hc', 1000);
     const Lm = numericParam(params, 'Lm', 0.05);
     const Rm = numericParam(params, 'Rm', 0);
+    // Thevenin model of a permanent magnet: mmf at the terminals = Hc Lm - Rm Phi_out, Phi_out = the flux DELIVERED into the circuit
+    // at N (Hopkinson's law with the magnet's internal reluctance Rm). branch[0] is the flux INTO the block at N, so
+    // Phi_out = -branch[0] and the residual is mmf_NS = Hc Lm + Rm branch[0] (an Rm > 0 dissipates, never creates, magnetic energy:
+    // the old sign gave a NEGATIVE internal reluctance, Phi = Hc Lm / (R_load - Rm)).
     const phi = branch[0] ?? 0;
-    const mmf_pm = Hc * Lm - phi * Rm;
+    const mmf_pm = Hc * Lm + phi * Rm;
     return [(Vn - Vs) - mmf_pm];
   },
   em_converter: ({ across, dAcross, branch, dBranch, params }) => {
@@ -2006,7 +2026,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       mmf - N * I
     ];
   },
-  reluctance_force: ({ across, branch, params, ports }) => {
+  reluctance_force: ({ across, branch, state, dState, params, ports }) => {
+    // Magnetic energy at fixed flux W = Phi^2 R(x) / 2, R(x) = R0 + K x, x = integral(v_R - v_C) dt (position of R relative to C,
+    // x = 0 at R0). Reluctance (Maxwell) force on the moving part F = -dW/dx|_Phi = -Phi^2/2 dR/dx = -Phi^2 K / 2
+    // (equal to +i^2/2 dL/dx at fixed current; Woodson & Melcher, "Electromechanical Dynamics" part I, energy method).
+    // Through variable `force` is the force INTO the block at R (the force delivered to the body at R is -force), so
+    // force = +Phi^2 K / 2: a positive K (the gap opens with x) pulls R back toward the smaller reluctance (attraction).
+    // R is floored at 1e-6 R0 (a closed gap) where dR/dx is 0.
     const nIdx = ports ? ports.indexOf('n') : 0;
     const sIdx = ports ? ports.indexOf('s') : 1;
     const rIdx = ports ? ports.indexOf('r') : 2;
@@ -2018,14 +2044,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
     const R0 = numericParam(params, 'R0', 1e6);
     const K = numericParam(params, 'K', 1e7);
-    const x = xr - xc;
-    const R = R0 + K * Math.max(0, x);
-    const dRdx = K;
+    const x = state[0] ?? 0;
+    const v = xr - xc;
+    const Rlin = R0 + K * x;
+    const Rfloor = 1e-6 * R0;
+    const closed = Rlin < Rfloor;
+    const R = closed ? Rfloor : Rlin;
+    const dRdx = closed ? 0 : K;
     const phi = branch[0] ?? 0;
     const force = branch[1] ?? 0;
     return [
       (Vn - Vs) - phi * R,
-      force - 0.5 * phi * phi * dRdx
+      force - 0.5 * phi * phi * dRdx,
+      (dState[0] ?? 0) - v
     ];
   },
   mag_flux_sensor: ({ across, branch, ports }) => {
@@ -2041,13 +2072,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   mag_mmf_sensor: ({ across, branch, ports }) => {
+    // Ideal across sensor (the magnetic analogue of a voltmeter): it draws no flux (infinite reluctance) and outputs the mmf
+    // difference mmf_N - mmf_S. The old model forced mmf_N = mmf_S, i.e. a short that read 0 and carried the whole flux.
     const nIdx = ports ? ports.indexOf('n') : 0;
     const sIdx = ports ? ports.indexOf('s') : 1;
     const Vn = (nIdx !== -1 && across[nIdx] !== undefined) ? across[nIdx] : (across[0] ?? 0);
     const Vs = (sIdx !== -1 && across[sIdx] !== undefined) ? across[sIdx] : (across[1] ?? 0);
     const sigF = branch[1] !== undefined ? branch[1] : (Vn - Vs);
     return [
-      Vn - Vs,
+      branch[0] ?? 0,
       sigF - (Vn - Vs)
     ];
   },

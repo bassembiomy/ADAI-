@@ -17,6 +17,7 @@ import type { AssembledSystem, EquationContext } from './types';
 import { withStatefulEquationCaches } from './vlabEquations';
 import { floatingNetworkReason } from './vlabElectricalReference';
 import { floatingMechanicalReason, openSourcePortReason } from './vlabMechanicalReference';
+import { floatingMagneticReason, floatingThermalReason } from './vlabThermalMagneticReference';
 
 export type StructuralCode =
   | 'row-count-mismatch'
@@ -284,6 +285,21 @@ export function assertStructurallyWellPosed(system: AssembledSystem): void {
         code: 'floating-network' as const, blockId: net.blocks[0].blockId, blockType: net.blocks[0].blockType,
         expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId),
         reason: floatingMechanicalReason(net),
+      })),
+    ]);
+  }
+  // WP-15 (F-011, F-064): the same for Thermal and Magnetic networks.
+  const floatingThermal = system.structure?.floatingThermalNetworks ?? [];
+  const floatingMagnetic = system.structure?.floatingMagneticNetworks ?? [];
+  if (floatingThermal.length || floatingMagnetic.length) {
+    throw new DAEStructureError([
+      ...floatingThermal.map(net => ({
+        code: 'floating-network' as const, blockId: net.blocks[0].blockId, blockType: net.blocks[0].blockType,
+        expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId), reason: floatingThermalReason(net),
+      })),
+      ...floatingMagnetic.map(net => ({
+        code: 'floating-network' as const, blockId: net.blocks[0].blockId, blockType: net.blocks[0].blockType,
+        expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId), reason: floatingMagneticReason(net),
       })),
     ]);
   }

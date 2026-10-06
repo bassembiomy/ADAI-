@@ -427,7 +427,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['mmf = 0'],
     latex: ['\\mathcal{F} = 0'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'The magnetic ground. Represents zero magneto-motive force in the magnetic circuit.'
+    description: 'The magnetic ground (Simscape Magnetic Reference). Defines zero magneto-motive force; every connected magnetic circuit needs one, and an unconnected magnetic port is open (zero flux), not grounded.'
   },
   reluctance: {
     equations: ['mmf = R * phi'],
@@ -436,10 +436,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models resistance to magnetic flux, similar to electrical resistance. Depends on geometry and permeability.'
   },
   variable_reluctance: {
-    equations: ['mmf = R(ctrl) * phi'],
-    latex: ['\\mathcal{F} = \\mathcal{R}(u) \\phi'],
+    equations: ['mmf = max(Rmin, ctrl) * phi'],
+    latex: ['\\mathcal{F} = \\max(\\mathcal{R}_{min}, u)\\, \\phi'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'A magnetic reluctance whose value is modulated by an external physical signal (PS).'
+    description: 'A magnetic reluctance whose value is the external physical signal (PS) on port C, bounded below by Rmin; the parameter R is used while C is unwired.'
   },
   permanent_magnet: {
     equations: ['mmf = Hc * Lm - phi * Rm'],
@@ -454,10 +454,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Magnetic domains. Models a coil with N turns.'
   },
   reluctance_force: {
-    equations: ['F = 0.5 * phi^2 * K', 'R = R0 + K * x'],
-    latex: ['f = \\frac{1}{2} \\phi^2 K', '\\mathcal{R} = \\mathcal{R}_0 + K x'],
+    equations: ['R = R0 + K * x,  x = integral(v_R - v_C) dt', 'mmf = R * phi', 'F_R = -0.5 * phi^2 * K'],
+    latex: ['\\mathcal{R} = \\mathcal{R}_0 + K x', '\\mathcal{F} = \\mathcal{R} \\phi', 'F_R = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
     across: 'A-t, m/s', through: 'Wb, N',
-    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays with initial reluctance R0 and reluctance gradient K.'
+    description: 'Bridges Magnetic and Translational domains. Maxwell reluctance force at fixed flux (F = -dW/dx, W = phi^2 R / 2) with initial reluctance R0 and reluctance gradient K; the air-gap position x is integrated from the relative velocity. The force on the body at R points toward lower reluctance.'
   },
   mag_flux_sensor: {
     equations: ['phi_out = phi'],
@@ -472,10 +472,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Measures the MMF difference between two magnetic nodes.'
   },
   mag_mmf_source: {
-    equations: ['mmf_n - mmf_s = MMF_src'],
-    latex: ['\\mathcal{F} = \\mathcal{F}_{src}'],
+    equations: ['mmf_n - mmf_s = MMF'],
+    latex: ['\\mathcal{F}_n - \\mathcal{F}_s = \\mathcal{F}_{src}'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'An ideal magneto-motive force source, representing a constant current winding.'
+    description: 'An ideal magneto-motive force source (the MMF rise from S to N), representing a constant current winding.'
   },
   mag_flux_source: {
     equations: ['phi = phi_src'],
@@ -487,7 +487,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['mmf_n - mmf_s = S'],
     latex: ['\\mathcal{F} = S(t)'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'A magnetic source whose MMF is driven by an external physical signal (PS).'
+    description: 'A magnetic source whose MMF rise from S to N is driven by the external physical signal (PS) on port S; the parameter MMF is used while that port is unwired.'
   },
   force_sensor: {
     equations: ['F_out = F'],
@@ -1284,65 +1284,71 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Frame', through: 'None',
     description: 'Mechanism Configuration. Its single port C is a Frame connection attaching the uniform gravity vector (m/s2) to the mechanism it is wired to; it adds no wrench and no constraint. A malformed gravity vector is rejected.'
   },
+  thermal_ref: {
+    equations: ['T = 0 K'],
+    latex: ['T = 0\\,\\mathrm{K}'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Simscape Thermal Reference: absolute zero, the datum of the thermal network. All thermal temperatures are absolute (K).'
+  },
   conductive_heat: {
     equations: ['Q = k * (Ta - Tb)'],
-    latex: ['Q = G \Delta T'],
-    across: 'T', through: 'Q',
-    description: 'Models heat conduction through a material (Fourier\'s Law).'
+    latex: ['Q = k\\,(T_a - T_b)'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Models heat conduction through a material (Fourier\'s law), lumped as a thermal conductance k = kappa A / D [W/K].'
   },
   convective_heat: {
     equations: ['Q = h * A * (Ta - Tb)'],
-    latex: ['Q = h A \Delta T'],
-    across: 'T', through: 'Q',
-    description: 'Models heat transfer between a surface and a fluid (Newton\'s Law of Cooling).'
+    latex: ['Q = h A\\,(T_a - T_b)'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Models heat transfer between a surface and a fluid (Newton\'s Law of Cooling), h in W/(m^2 K), A in m^2.'
   },
   radiative_heat: {
     equations: ['Q = eps * sigma * A * (Ta^4 - Tb^4)'],
-    latex: ['Q = \epsilon \sigma A (T_a^4 - T_b^4)'],
-    across: 'T', through: 'Q',
-    description: 'Models thermal radiation between surfaces (Stefan-Boltzmann Law).'
+    latex: ['Q = \\epsilon \\sigma A\\,(T_a^4 - T_b^4)'],
+    across: 'T (K, absolute)', through: 'Q (W)',
+    description: 'Models grey-body thermal radiation between surfaces (Stefan-Boltzmann law). Temperatures are absolute kelvin (referred to the 0 K Thermal Reference), sigma = 5.670374e-8 W/(m^2 K^4).'
   },
   thermal_mass: {
-    equations: ['Q = C * dTa/dt'],
-    latex: ['Q = C \frac{dT}{dt}'],
-    across: 'T', through: 'Q',
-    description: 'Models energy storage in a material based on its specific heat capacity.'
+    equations: ['Q = C * dTa/dt', 'Ta(0) = T0'],
+    latex: ['Q = C \\frac{dT}{dt}', 'T(0) = T_0'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Models energy storage in a material, C = m c_p [J/K]. Q is the heat flow into the port; the temperature starts at T0 (default 293.15 K).'
   },
   temp_sensor: {
     equations: ['T_out = Ta - Tb'],
-    latex: ['T_{out} = \Delta T'],
-    across: 'T', through: 'None',
-    description: 'Measures the temperature difference between two nodes.'
+    latex: ['T_{out} = T_a - T_b'],
+    across: 'T (K)', through: 'None',
+    description: 'Measures T_A - T_B in kelvin. With B on the (0 K) Thermal Reference, or left open, it reads the absolute temperature.'
   },
   heat_sensor: {
     equations: ['Q_out = Q'],
     latex: ['Q_{out} = Q'],
-    across: 'None', through: 'Q',
-    description: 'Measures the heat flow rate through a thermal branch.'
+    across: 'None', through: 'Q (W)',
+    description: 'Measures the heat flow rate through a thermal branch (from A to B).'
   },
   heat_src: {
-    equations: ['Q = S_q'],
+    equations: ['Q = Q_src'],
     latex: ['Q = Q_{src}'],
-    across: 'T', through: 'Q',
-    description: 'An ideal heat flow source that injects a fixed power into the network.'
+    across: 'T (K)', through: 'Q (W)',
+    description: 'An ideal heat flow source forcing the heat flow rate Q [W] from port A to port B whatever the temperature difference.'
   },
   temp_src: {
-    equations: ['T = S_t'],
-    latex: ['T = T_{src}'],
-    across: 'T', through: 'Q',
-    description: 'An ideal temperature source that maintains a fixed potential node.'
+    equations: ['Ta = T'],
+    latex: ['T_a = T'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'An ideal temperature source holding its port at the absolute temperature T [K]; it supplies whatever heat flow is demanded.'
   },
   ctrl_heat_src: {
-    equations: ['Q = S_input'],
-    latex: ['Q = f(S_{ctrl})'],
-    across: 'T', through: 'Q',
-    description: 'A heat flow source driven by an external physical signal (PS).'
+    equations: ['Q = S'],
+    latex: ['Q = S'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'A heat flow source: Q [W] from port A to port B equals the physical signal S wired to port S.'
   },
   ctrl_temp_src: {
-    equations: ['Ta - Tb = S_input'],
-    latex: ['T_a - T_b = S_{ctrl}'],
-    across: 'T', through: 'Q',
-    description: 'A temperature source maintaining difference Ta - Tb driven by an external physical signal (PS).'
+    equations: ['Ta - Tb = S'],
+    latex: ['T_a - T_b = S'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'A temperature source maintaining T_A - T_B (K) equal to the physical signal S wired to port S.'
   },
   solver_config: {
     equations: ['f(x) = 0'],

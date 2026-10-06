@@ -34,33 +34,48 @@ const run = ({ nodes, edges, dt, steps }: Model) => {
 };
 
 describe('VLab MMF Sensor, Angular Velocity Source, and Gear Box Port Alignment', () => {
-  describe('Issue 1: mag_mmf_sensor does not kill flux in series path', () => {
-    it('allows flux to flow when mag_mmf_sensor and mag_flux_sensor are in the same linear path', () => {
-      // MMF Source (100 A-t) -> MMF Sensor -> Flux Sensor -> Reluctance (1e6 A-t/Wb) -> Return
-      // Expected flux = 100 / 1e6 = 1e-4 Wb (0.0001 Wb)
-      const { readings } = run({
-        dt: 0.01,
-        steps: 3,
-        nodes: [
-          node('src', 'mag_mmf_source', { MMF: 100 }),
-          node('mmf_sensor', 'mag_mmf_sensor'),
-          node('flux_sensor', 'mag_flux_sensor'),
-          node('rel', 'reluctance', { R: 1e6 }),
-          node('ref', 'mag_ref'),
-          node('scope', 'scope'),
-        ],
-        edges: [
-          edge('e1', 'src', 'n_s', 'mmf_sensor', 'n_t'),
-          edge('e2', 'mmf_sensor', 's_s', 'flux_sensor', 'n_t'),
-          edge('e3', 'flux_sensor', 's_s', 'rel', 'n_t'),
-          edge('e4', 'rel', 's_s', 'src', 's_t'),
-          edge('e5', 'src', 's_s', 'ref', 'n_t'),
-          edge('e6', 'flux_sensor', 'phi_s', 'scope', 'in1_t'),
-        ]
-      });
+  describe('Issue 1: mag_mmf_sensor is an across sensor (parallel); the flux sensor is the series one', () => {
+    const base = (mmfParallel: boolean) => ({
+      dt: 0.01,
+      steps: 3,
+      nodes: [
+        node('src', 'mag_mmf_source', { MMF: 100 }),
+        node('mmf_sensor', 'mag_mmf_sensor'),
+        node('flux_sensor', 'mag_flux_sensor'),
+        node('rel', 'reluctance', { R: 1e6 }),
+        node('ref', 'mag_ref'),
+        node('scope', 'scope'),
+        node('mscope', 'scope'),
+      ],
+      edges: mmfParallel ? [
+        edge('e1', 'src', 'n_s', 'flux_sensor', 'n_t'),
+        edge('e3', 'flux_sensor', 's_s', 'rel', 'n_t'),
+        edge('e4', 'rel', 's_s', 'src', 's_t'),
+        edge('e5', 'src', 's_s', 'ref', 'n_t'),
+        edge('e6', 'flux_sensor', 'phi_s', 'scope', 'in1_t'),
+        edge('e7', 'mmf_sensor', 'n_s', 'rel', 'n_t'),
+        edge('e8', 'mmf_sensor', 's_s', 'rel', 's_t'),
+        edge('e9', 'mmf_sensor', 'f_s', 'mscope', 'in1_t'),
+      ] : [
+        edge('e1', 'src', 'n_s', 'mmf_sensor', 'n_t'),
+        edge('e2', 'mmf_sensor', 's_s', 'flux_sensor', 'n_t'),
+        edge('e3', 'flux_sensor', 's_s', 'rel', 'n_t'),
+        edge('e4', 'rel', 's_s', 'src', 's_t'),
+        edge('e5', 'src', 's_s', 'ref', 'n_t'),
+        edge('e6', 'flux_sensor', 'phi_s', 'scope', 'in1_t'),
+      ],
+    });
 
-      const finalReading = readings[readings.length - 1];
-      expect(Math.abs(finalReading)).toBeCloseTo(0.0001, 5);
+    it('parallel MMF sensor reads mmf = R * phi and the series flux sensor reads phi = mmf / R', () => {
+      const { state } = run(base(true));
+      const at = (name: string) => state.x[state.variableNames.indexOf(name)];
+      expect(at('flux_sensor_branch_signal_phi')).toBeCloseTo(100 / 1e6, 9);
+      expect(at('mmf_sensor_branch_signal_f')).toBeCloseTo(1e6 * (100 / 1e6), 6);
+    });
+
+    it('an MMF sensor wired in series is rejected before the solve (it would cut the flux path)', () => {
+      const m = base(false);
+      expect(() => new VLabPhysicsEngine().simulateStep(m.nodes, m.edges, null, 0.01)).toThrow(/MMF Sensor.*in series.*Connect it in parallel.*Flux Sensor in series/);
     });
   });
 

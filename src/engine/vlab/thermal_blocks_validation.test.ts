@@ -229,9 +229,9 @@ describe('Thermal Blocks Standardization & Verification', () => {
 
   describe('Part 3: Network Simulation Verification', () => {
     it('simulates temperature source, conductive link, and differential temperature sensor', () => {
-      // temp_src (350K) -> conductive_heat (k=2) -> thermal_ref (293.15K)
+      // temp_src (350K) -> conductive_heat (k=2) -> thermal_ref (0 K, absolute zero: WP-15 / F-011)
       // temp_sensor a -> temp_src, b -> thermal_ref
-      // Scope reads 350 - 293.15 = 56.85 K
+      // Scope reads the ABSOLUTE temperature 350 - 0 = 350 K (the old 293.15 K reference gave 56.85 K)
       const nodes: Node[] = [
         node('src', 'temp_src', { T: 350 }),
         node('cond', 'conductive_heat', { k: 2 }),
@@ -253,11 +253,11 @@ describe('Thermal Blocks Standardization & Verification', () => {
       }
       expect(state).toBeDefined();
       const val = typeof state.scopeValues === 'object' ? state.scopeValues.value : state.scopeValues;
-      expect(val).toBeCloseTo(350 - 293.15, 2);
+      expect(val).toBeCloseTo(350, 2);
     });
 
     it('simulates heat flow source into conductive path and measures heat with heat_flow_sensor', () => {
-      // heat_src (Q=50W) -> heat_flow_sensor -> conductive_heat (k=1) -> thermal_ref (293.15K)
+      // heat_src (Q=50W) -> heat_flow_sensor -> conductive_heat (k=1) -> thermal_ref (0 K)
       const nodes: Node[] = [
         node('q_src', 'heat_src', { Q: 50 }),
         node('q_sensor', 'heat_flow_sensor', {}),
@@ -284,7 +284,7 @@ describe('Thermal Blocks Standardization & Verification', () => {
 
     it('simulates controlled temperature source driven by ps_constant', () => {
       // ps_constant (val = 30) -> ctrl_temp_src port s
-      // ctrl_temp_src port b -> thermal_ref (293.15K)
+      // ctrl_temp_src port b -> thermal_ref (0 K)
       // temp_sensor measures port a relative to port b
       const nodes: Node[] = [
         node('ps', 'ps_constant', { value: 30 }),

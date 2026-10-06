@@ -102,5 +102,8 @@ export interface AssembledSystem {
     floatingMechanicalNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
     /** ports of an ideal torque / force source that are open (WP-13); reported before the solve */
     openSourcePorts?: { blockId: string; blockType: string; portId: string }[];
-  };
+    /** connected Thermal networks without a Thermal Reference, Thermal Mass or Temperature Source (WP-15, F-011/F-064) */
+    floatingThermalNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
+    /** connected Magnetic networks without a Magnetic Reference (WP-15, F-064) */
+    floatingMagneticNetworks?: { blocks: { blockId: string; blockType: string }[] }[];  };
 }

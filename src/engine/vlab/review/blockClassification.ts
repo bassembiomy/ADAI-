@@ -158,6 +158,8 @@ export const ENGINE_CONSUMED_PARAMS: Record<string, { file: string; params: stri
   // WP-10: initial conditions seed the solution vector (the capacitor voltage state, the inductor branch current)
   capacitor: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['v0'] }],
   inductor: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['i0'] }],
+  // WP-15: Simscape Thermal Mass "Initial temperature" seeds the node temperature of the solution vector
+  thermal_mass: [{ file: 'src/engine/vlab/vlabPhysics.ts', params: ['T0'] }],
   hydraulic_reference_il: [
     { file: 'src/engine/vlab/DAEAssembler.ts', params: ['referencePressure', 'pressureType', 'atmosphericPressure', 'elevationCorrection', 'referenceElevation'] },
     { file: 'src/components/vlab/VLabWorkspace.tsx', params: ['initializationPriority'] },

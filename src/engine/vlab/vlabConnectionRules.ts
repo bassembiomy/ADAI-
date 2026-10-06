@@ -86,7 +86,9 @@ export type ConnectionCode =
   // WP-09a: block listed in vlabStructure.UNSUPPORTED_BLOCKS (the diagnostic names the missing specification)
   | 'unsupported-block'
   // WP-09c: signal widths differ / composite three-phase port wired to a scalar port
-  | 'width-mismatch' | 'composite-mismatch';
+  | 'width-mismatch' | 'composite-mismatch'
+  // WP-15: an ideal across sensor (MMF / temperature / voltage) wired in series between two blocks
+  | 'sensor-in-series';
 
 export interface ConnectionDiagnostic {
   blockId: string;

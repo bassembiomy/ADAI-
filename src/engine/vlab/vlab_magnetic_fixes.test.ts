@@ -64,8 +64,10 @@ describe('VLab Magnetic Circuit & Control Port Fixes', () => {
       expect(finalReading).toBeCloseTo(0.001, 5);
     });
 
-    it('allows mag_mmf_sensor and mag_flux_sensor in linear path without killing flux', () => {
-      // MMF Source (100 A-t) -> MMF Sensor -> Flux Sensor -> Reluctance (1e5 A-t/Wb) -> Return
+    it('wires mag_mmf_sensor ACROSS the reluctance (draws no flux) and mag_flux_sensor in series: flux is not killed', () => {
+      // WP-15: the MMF sensor is an ideal across sensor (a voltmeter analogue): it carries zero flux, so it is wired in
+      // parallel with the element it measures; the old model was a short and was (mis)used in series.
+      // MMF Source (100 A-t) -> Flux Sensor -> Reluctance (1e5 A-t/Wb) -> Return, MMF Sensor across the reluctance
       // Expected flux = 100 / 1e5 = 0.001 Wb
       const { readings } = run({
         dt: 0.01,
@@ -79,12 +81,13 @@ describe('VLab Magnetic Circuit & Control Port Fixes', () => {
           node('scope', 'scope'),
         ],
         edges: [
-          edge('e1', 'src', 'n_s', 'mmf_sensor', 'n_t'),
-          edge('e2', 'mmf_sensor', 's_s', 'flux_sensor', 'n_t'),
+          edge('e1', 'src', 'n_s', 'flux_sensor', 'n_t'),
           edge('e3', 'flux_sensor', 's_s', 'rel', 'n_t'),
           edge('e4', 'rel', 's_s', 'src', 's_t'),
           edge('e5', 'src', 's_s', 'ref', 'n_t'),
           edge('e6', 'flux_sensor', 'phi_s', 'scope', 'in1_t'),
+          edge('e7', 'mmf_sensor', 'n_s', 'rel', 'n_t'),
+          edge('e8', 'mmf_sensor', 's_s', 'rel', 's_t'),
         ]
       });
 
@@ -185,12 +188,13 @@ describe('VLab Magnetic Circuit & Control Port Fixes', () => {
       });
       expect(res1[0]).toBeCloseTo(0, 5);
 
-      // Case 2: Magnet with internal reluctance Rm = 1e5 and flux phi = 0.0005
-      // MMF_internal = Hc * Lm - phi * Rm = 1000 * 0.1 - 0.0005 * 1e5 = 100 - 50 = 50 A-t
+      // Case 2: Magnet with internal reluctance Rm = 1e5 delivering flux phi = 0.0005 into the circuit at N
+      // MMF_terminal = Hc * Lm - phi_out * Rm = 1000 * 0.1 - 0.0005 * 1e5 = 100 - 50 = 50 A-t
+      // (branch[0] is the flux INTO the block at N = -phi_out, WP-15 sign fix: Rm is a positive internal reluctance)
       const res2 = factory({
         across: [50, 0],
         dAcross: [0, 0],
-        branch: [0.0005],
+        branch: [-0.0005],
         dBranch: [0],
         state: [],
         dState: [],
@@ -217,18 +221,18 @@ describe('VLab Magnetic Circuit & Control Port Fixes', () => {
       const factory = blockEquations['reluctance_force'];
       expect(factory).toBeDefined();
 
-      // phi = 0.02 Wb, x = 0.001 m, R0 = 1e6, K = 1e7
+      // phi = 0.02 Wb, position state x = 0.001 m (WP-15: x is the integral of the relative velocity, not the velocity), R0 = 1e6, K = 1e7
       // R = R0 + K * x = 1e6 + 1e7 * 0.001 = 1.01e6
       // dR/dx = K = 1e7
-      // F = 0.5 * phi^2 * dR/dx = 0.5 * (0.02)^2 * 1e7 = 0.5 * 0.0004 * 1e7 = 2000 N
+      // force INTO the block = 0.5 * phi^2 * dR/dx = 0.5 * (0.02)^2 * 1e7 = 0.5 * 0.0004 * 1e7 = 2000 N (the body at R receives -2000 N)
       // MMF drop = phi * R = 0.02 * 1.01e6 = 20200 A-t
       const res = factory({
-        across: [20200, 0, 0.001, 0],
+        across: [20200, 0, 5, 5],
         dAcross: [0, 0, 0, 0],
         branch: [0.02, 2000],
         dBranch: [0, 0],
-        state: [],
-        dState: [],
+        state: [0.001],
+        dState: [0],
         ctx: dummyCtx,
         params: { R0: 1e6, K: 1e7 },
         ports: ['n', 's', 'r', 'c'],
@@ -245,12 +249,12 @@ describe('VLab Magnetic Circuit & Control Port Fixes', () => {
       const factory = blockEquations['reluctance_force'];
       // R0 = 1e6, k = 10 => K = R0 * k = 1e7
       const res = factory({
-        across: [20200, 0, 0.001, 0],
+        across: [20200, 0, 5, 5],
         dAcross: [0, 0, 0, 0],
         branch: [0.02, 2000],
         dBranch: [0, 0],
-        state: [],
-        dState: [],
+        state: [0.001],
+        dState: [0],
         ctx: dummyCtx,
         params: { R0: 1e6, k: 10 },
         ports: ['n', 's', 'r', 'c'],

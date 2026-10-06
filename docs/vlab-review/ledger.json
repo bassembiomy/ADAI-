@@ -415,10 +415,14 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 2,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "thermal_ref 0 K (Simscape), sensors absolute K, whitebox T-01/T-02 probe sensors again; thermal/magnetic name grounding removed + floating diagnostics; heater energy conserved (F-044)",
+        "physics bugs fixed: permanent magnet negative reluctance, reluctance_force used velocity as position, mmf sensor shorted the path, fundamental_reluctance ignored l/(mu A); sigma CODATA",
+        "rework: 2 full-suite failures fixed; new sensor-in-series diagnostic for the MMF sensor; planner full suite before rework 4944 pass; after rework targeted 4375 pass / 126 expected-fail / 1 known"
+      ],
       "findings": []
     },
     {
@@ -443,7 +447,7 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
       "evidence": [],
@@ -755,7 +759,8 @@
       "block": "thermal_ref/temp_sensor",
       "wp": "WP-15",
       "summary": "thermal_ref is pinned at 293.15 K (DAEAssembler ~L1034). Simscape thermal reference = 0 K, so temp_sensor reads T-293.15. WP-04 made the whitebox T-01/T-02 probes read the absolute node instead; WP-15 must fix the reference and RESTORE the sensor probes.",
-      "severity": "med"
+      "severity": "med",
+      "status": "resolved-WP-15"
     },
     {
       "layer": "integration",
@@ -1035,7 +1040,8 @@
       "block": "thermal_resistor (air-fryer lab)",
       "layer": "integration",
       "summary": "The lab used the dead param Rth=35, so the heater ran on the default R (about 5.3 kW). Now R=35, about 1.5 kW (realistic). Behaviour change in the shipped lab.",
-      "wp": "WP-21"
+      "wp": "WP-21",
+      "status": "resolved-WP-15"
     },
     {
       "id": "F-045",
@@ -1203,7 +1209,7 @@
       "layer": "solver",
       "summary": "Unconnected electrical ports named b/c/n/ref/gnd are pinned to ground by NAME (only phase_splitter is exempt). Replace with explicit reference semantics. Check three_phase_source, machines and inverters.",
       "wp": "WP-10/WP-12",
-      "status": "resolved-WP-13"
+      "status": "resolved (electrical WP-10, mechanical WP-13, thermal/magnetic WP-15; fluid/gas WP-17)"
     },
     {
       "id": "F-065",
@@ -1418,6 +1424,38 @@
       "layer": "eq",
       "summary": "belt_damping from belt_properties is not applied (belt_end has a local damping param). The whitebox MechanicalFixtures torque source wiring inverts the sign.",
       "wp": "WP-30"
+    },
+    {
+      "id": "F-091",
+      "severity": "med",
+      "block": "magnetron, upper_heater (appliances)",
+      "layer": "port",
+      "summary": "An open thermal h port is now a topology error (was silently pinned to 293.15 K). Saved appliance models may need a thermal_ref or ambient.",
+      "wp": "WP-21"
+    },
+    {
+      "id": "F-092",
+      "severity": "low",
+      "block": "steam_generator, microwave_cavity, ma_chamber",
+      "layer": "eq",
+      "summary": "Internal ambient params; microwave_cavity uses the old 5.67e-8.",
+      "wp": "WP-17/WP-21"
+    },
+    {
+      "id": "F-093",
+      "severity": "low",
+      "block": "src/help/blockGuidance.ts (untracked, other session)",
+      "layer": "ui",
+      "summary": "Says fundamental_reluctance ignores l/A/mu, which is now wrong.",
+      "wp": "WP-40"
+    },
+    {
+      "id": "F-094",
+      "severity": "low",
+      "block": "thermal migration",
+      "layer": "ui",
+      "summary": "Old models: scope temperature readings shift +293.15 K (correct physics); a migration notice is stored but not shown in the UI.",
+      "wp": "WP-40"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

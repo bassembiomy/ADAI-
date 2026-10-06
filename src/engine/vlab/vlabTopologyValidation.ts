@@ -135,7 +135,60 @@ export function validateTopology(nodes: Node[], edges: Edge[]): TopologyReport {
     req.conserving.forEach(p => check(p, 'leaving this conserving port open makes the block structurally singular'));
   }
 
+  diagnostics.push(...seriesAcrossSensorDiagnostics(ruleNodes, ruleEdges));
   return { valid: diagnostics.length === 0, diagnostics };
+}
+
+/**
+ * WP-15: ideal ACROSS sensors measure the difference between two nodes and carry (almost) no through variable, so they belong
+ * in parallel with the element they measure (like a voltmeter). Wired in series they silently cut the path (zero flux, zero heat
+ * flow, 100 Mohm). A sensor is in series when both its measuring ports sit on a plain wire to ONE other block port each (two
+ * different blocks) and neither wire touches a reference: nothing else is attached to those nodes, so the sensor is the only
+ * path between the two blocks. Only the MMF sensor is checked: the voltage / temperature sensors are legitimately wired between two\n * sources in the fixtures and a structural check cannot tell that from a series cut (they carry 1e8 ohm / zero heat flow, not a hard open). Reference nets (ground, thermal_ref, mag_ref) and open ports are never flagged.
+ */
+const ACROSS_SENSORS: Readonly<Record<string, { ports: [string, string]; name: string; series: string }>> = {
+  mag_mmf_sensor: { ports: ['n', 's'], name: 'MMF Sensor', series: 'Use the Flux Sensor in series.' },
+};
+const REFERENCE_TYPES: ReadonlySet<string> = new Set(['ground', 'delta_ref', 'thermal_ref', 'mag_ref']);
+
+function seriesAcrossSensorDiagnostics(nodes: RuleNode[], edges: RuleEdge[]): TopologyDiagnostic[] {
+  if (!nodes.some(n => ACROSS_SENSORS[blockTypeOf(n)])) return [];
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const parent = new Map<string, string>();
+  const find = (a: string): string => {
+    if (!parent.has(a)) parent.set(a, a);
+    let r = a;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    return r;
+  };
+  const key = (id: string, port: string) => `${id}\u0000${port}`;
+  for (const e of edges) {
+    const sn = byId.get(e.source); const tn = byId.get(e.target);
+    if (!sn || !tn) continue;
+    const sp = portIdFromHandle(sn, e.sourceHandle); const tp = portIdFromHandle(tn, e.targetHandle);
+    if (sp && tp) parent.set(find(key(sn.id, sp)), find(key(tn.id, tp)));
+  }
+  const members = new Map<string, string[]>();
+  for (const k of [...parent.keys()]) { const r = find(k); (members.get(r) ?? members.set(r, []).get(r)!).push(k); }
+  const out: TopologyDiagnostic[] = [];
+  for (const n of nodes) {
+    const spec = ACROSS_SENSORS[blockTypeOf(n)];
+    if (!spec) continue;
+    const others = spec.ports.map(p => {
+      const net = members.get(find(key(n.id, p))) ?? [];
+      const rest = net.filter(k => k !== key(n.id, p));
+      const reference = rest.some(k => REFERENCE_TYPES.has(blockTypeOf(byId.get(k.split('\u0000')[0])!)));
+      return !reference && rest.length === 1 ? rest[0].split('\u0000')[0] : undefined;
+    });
+    if (others[0] && others[1] && others[0] !== others[1] && others[0] !== n.id && others[1] !== n.id) {
+      out.push({
+        blockId: n.id, portId: '', expectedDomain: 'parallel', actualDomain: 'series', code: 'sensor-in-series',
+        reason: `${spec.name} "${n.id}" is wired in series between "${others[0]}" and "${others[1]}": it measures across two nodes and carries no ` +
+          `through variable, so it cuts the path. Connect it in parallel with the element to measure. ${spec.series}`,
+      });
+    }
+  }
+  return out;
 }
 
 /** Throws TopologyValidationError (fail fast, before any assembly/solve) when the model is invalid. */

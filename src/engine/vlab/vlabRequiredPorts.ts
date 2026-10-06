@@ -74,16 +74,23 @@ export const DERIVED_REQUIRED_SIGNAL_INPUTS: Readonly<Record<string, readonly st
 
 export const DERIVED_REQUIRED_CONSERVING_PORTS: Readonly<Record<string, readonly string[]>> = {
   cccs: ['p', 'n'],
+  ctrl_heat_src: ['a', 'b'],
   dc_current: ['p', 'n'],
   gas_rotational_conv: ['r', 'c'],
   gas_translational_conv: ['r', 'c'],
+  heat_src: ['a', 'b'],
   infinite_resistance: ['p', 'n'],
-  mag_flux_source: ['s'],
+  mag_flux_source: ['n', 's'],
+  mag_mmf_sensor: ['n', 's'],
+  magnetron: ['h'],
   pwm_3ph_2level: ['p'],
   rot_motion_sensor: ['r', 'c'],
+  temp_sensor: ['a'],
+  thermal_resistor: ['h'],
   trans_motion_sensor: ['r', 'c'],
+  upper_heater: ['h'],
   vccs: ['p', 'n'],
 };
 
 /** Blocks already singular with every conserving port tied to a reference: not judged per port. */
-export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'ctrl_temp_src', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'heat_flow_sensor', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'microwave_cavity', 'pressure_source', 'steam_accumulator', 'temp_src'];
+export const ILL_POSED_CONSERVING_BLOCKS: readonly string[] = ['ctrl_pressure_source', 'flow_sensor', 'gas_chamber', 'gas_fixed_res', 'gas_flow_sensor', 'gas_pressure_source', 'gas_reservoir', 'ma_flow_sensor', 'ma_pipe', 'ma_pressure_source', 'ma_pt_sensor', 'ma_rot_conv', 'ma_separator', 'ma_trans_conv', 'pressure_source', 'steam_accumulator'];

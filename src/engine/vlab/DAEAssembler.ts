@@ -22,6 +22,10 @@ import { findFloatingElectricalNetworks, isInternalReferencePort } from './vlabE
 import {
   findFloatingMechanicalNetworks, findOpenSourcePorts, isInternalMechanicalReferencePort, isMechanicalDomain,
 } from './vlabMechanicalReference';
+import {
+  THERMAL_REFERENCE_TEMPERATURE, findFloatingMagneticNetworks, findFloatingThermalNetworks,
+  isInternalThermalReferencePort, isMagneticDomain, isThermalDomain,
+} from './vlabThermalMagneticReference';
 import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
@@ -474,6 +478,8 @@ export class DAEAssembler {
       case 'reluctance_force':
         branches.push({ name: 'flux', ports: [{ id: 'n', sign: -1 }, { id: 's', sign: 1 }] });
         branches.push({ name: 'force', ports: [{ id: 'r', sign: -1 }, { id: 'c', sign: 1 }] });
+        // WP-15: the air-gap position x = integral(v_R - v_C) dt is a state (R = R0 + K x); the old model used the VELOCITY as x
+        states.push('x');
         break;
       case 'mag_flux_sensor':
         branches.push({ name: 'flux', ports: [{ id: 'n', sign: -1 }, { id: 's', sign: 1 }] });
@@ -1250,7 +1256,8 @@ export class DAEAssembler {
         } else if (type === 'fluid_ref') {
           targetVal = 101325;
         } else if (type === 'thermal_ref') {
-          targetVal = 293.15;
+          // Simscape Thermal Reference: absolute zero. Temperatures are absolute (K); ambient comes from a source or a parameter.
+          targetVal = THERMAL_REFERENCE_TEMPERATURE;
         }
         ports.forEach(portId => {
           const key = `${node.id}_${portId}`;
@@ -1282,14 +1289,21 @@ export class DAEAssembler {
           // F-064 (WP-13): the same for the Rotational / Translational domains (vlabMechanicalReference.ts): an unconnected
           // mechanical port is open; only rot_ref / trans_ref (scan above) and a declared INTERNAL_MECHANICAL_REFERENCE_PORTS
           // port define the inertial frame.
+          // F-064 (WP-15): the same for the Thermal and Magnetic domains (vlabThermalMagneticReference.ts): an unconnected thermal
+          // port is open (adiabatic), an unconnected magnetic port is open (zero flux). Only thermal_ref (0 K) / mag_ref (mmf = 0)
+          // define the datum; INTERNAL_THERMAL_REFERENCE_PORTS lists the measurement ports that read against it when left open.
           const nameRule = ['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical'
             && nodeTypeOf(nodeById.get(node.id)!) !== 'phase_splitter';
           const groundedByDesign = domain === 'electrical'
             ? isInternalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
             : isMechanicalDomain(domain)
               ? isInternalMechanicalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
-              : nameRule;
-          if (!nodePortShapes.has(key) && (groundedByDesign || domain === 'fluid' || domain === 'gas' || domain === 'thermal')) {
+              : isThermalDomain(domain)
+                ? isInternalThermalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
+                : isMagneticDomain(domain)
+                  ? false
+                  : nameRule;
+          if (!nodePortShapes.has(key) && (groundedByDesign || domain === 'fluid' || domain === 'gas')) {
             referenceNodeIds.add(root);
           }
         }
@@ -1710,7 +1724,7 @@ export class DAEAssembler {
           } else if (pn.domain === 'fluid' || pn.domain === 'gas' || pn.domain === 'isothermal_liquid') {
             res[acrossVarIdx] = x[acrossVarIdx] - 101325;
           } else if (pn.domain === 'thermal') {
-            res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
+            res[acrossVarIdx] = x[acrossVarIdx] - THERMAL_REFERENCE_TEMPERATURE;
           } else {
             res[acrossVarIdx] = x[acrossVarIdx];
           }
@@ -1785,7 +1799,7 @@ export class DAEAssembler {
           } else {
             // Unconnected isolated node has reference across potential
             if (pn.domain === 'thermal') {
-              res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
+              res[acrossVarIdx] = x[acrossVarIdx] - THERMAL_REFERENCE_TEMPERATURE;
             } else if (pn.domain === 'fluid' || pn.domain === 'gas' || pn.domain === 'isothermal_liquid') {
               res[acrossVarIdx] = x[acrossVarIdx] - 101325;
             } else {
@@ -1866,8 +1880,23 @@ export class DAEAssembler {
         })),
     );
 
+    // F-011 / F-064 (WP-15): Thermal / Magnetic networks that nothing defines a datum for.
+    const domainBlockNets = (isDomain: (d: string | undefined) => boolean) => nodes.map(node => ({
+      blockId: node.id,
+      blockType: nodeTypeOf(node),
+      roots: (nodePorts.get(node.id) || [])
+        .filter(portId => isDomain(nodePortDomains.get(`${node.id}_${portId}`)))
+        .map(portId => uf.find(`${node.id}_${portId}`)),
+    }));
+    const floatingThermalNetworks = findFloatingThermalNetworks(domainBlockNets(isThermalDomain), referenceNodeIds);
+    const floatingMagneticNetworks = findFloatingMagneticNetworks(domainBlockNets(isMagneticDomain), referenceNodeIds);
+
     return {
-      structure: { variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices, floatingElectricalNetworks, floatingMechanicalNetworks, openSourcePorts },
+      structure: {
+        variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices,
+        floatingElectricalNetworks, floatingMechanicalNetworks, openSourcePorts,
+        floatingThermalNetworks, floatingMagneticNetworks,
+      },
       systemSize: varCount,
       variableNames,
       isDifferentialState,

@@ -152,6 +152,22 @@ export class VLabPhysicsEngine {
     potential.forEach((v, root) => { const i = indexOfRoot.get(root); if (i !== undefined) x[i] = v; });
   }
 
+  /**
+   * Simscape Thermal Mass "Initial temperature" T0 (WP-15, default 293.15 K): seed the (absolute) node temperature of every
+   * thermal mass so that the first step differentiates against T0, not against a generic 293.15 K seed.
+   */
+  private seedThermalMassTemperatures(system: AssembledSystem, nodes: Node[], x: number[]): void {
+    for (const c of system.components) {
+      if (c.blockType !== 'thermal_mass') continue;
+      const node = nodes.find(n => n.id === c.blockId);
+      const root = c.portNodeMap.get('a');
+      if (!node || !root) continue;
+      const i = system.variableNames.indexOf(`Across_${root}_(thermal)`);
+      if (i < 0) continue;
+      x[i] = numericParam((node.data as any)?.params, 'T0', 293.15, node.id);
+    }
+  }
+
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {
     const topoHash = this.getTopologyHash(nodes, edges);
     
@@ -255,6 +271,7 @@ export class VLabPhysicsEngine {
       });
       if (joints.length > 0) initializeJointFrames(system, x);
       this.seedCapacitorVoltages(system, nodes, x);
+      this.seedThermalMassTemperatures(system, nodes, x);
     }
 
     const config = this.solverConfiguration;
@@ -634,13 +651,9 @@ export class VLabPhysicsEngine {
         .map(scopeId => system.scopeOutputs.get(scopeId) || [])
         .find(scopeIndices => scopeIndices.length > 0) || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
-      // A temp_sensor outputs Ta-Tb (a temperature difference), while a
-      // direct chamber connection outputs absolute Kelvin. Do not subtract
-      // 273.15 from the former or a normal room-temperature reading gets
-      // clamped to zero.
-      const signalName = indices.length > 0 ? system.variableNames[indices[0]] ?? '' : '';
-      const isDifferentialSensor = signalName.includes('temp_sensor_branch_signal_t');
-      const cel = isDifferentialSensor ? tempK : tempK - 273.15;
+      // WP-15 (F-011): thermal temperatures are absolute (the Thermal Reference is 0 K), so a temp_sensor wired against the
+      // reference (or with B open) outputs absolute kelvin exactly like a direct chamber connection: always K -> degC.
+      const cel = tempK - 273.15;
       perScopeValues['thermal_scope'] = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {

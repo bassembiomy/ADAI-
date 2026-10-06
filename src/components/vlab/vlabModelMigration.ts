@@ -94,6 +94,9 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
   upper_heater: ['efficiency'], mag_controlled_mmf: ['MMF'], washing_basket: ['damping'], doe_custom: ['deploymentModel'],
   ps_dead_zone: ['upper', 'lower'], ps_sine_3phase: ['Vpk', 'f'],
+  // WP-15: Thermal Mass Initial Temperature T0 (the old model always started at 293.15 K = the default); Variable Reluctance R
+  // for the unwired control port (the old equation hard-coded 1e6 = the default); Fundamental Reluctance geometry
+  thermal_mass: ['T0'], variable_reluctance: ['R'], fundamental_reluctance: ['A', 'mu_r', 'l'],
   // WP-12a: machine leakage inductances (the old induction model hard-coded Lr = 0.06 H), PMSM zero-sequence inductance,
   // three-phase source phase angle of phase A (the old source had a hidden +45 deg shift; Simscape default is 0)
   ac_motor: ['Lls', 'Llr'], pmsm: ['L0'], three_phase_source: ['phase'],
@@ -190,6 +193,19 @@ export const canonicalizeLegacyParams = (
     delete out.N;
   }
 
+  // WP-15: Fundamental Reluctance ran on a hidden R; the printed equation R = l / (mu0 mu_r A) is implemented now. A saved R is kept
+  // exactly by solving for l with the library A and mu_r (fundamentalReluctanceNotice reports it).
+  if (type === 'fundamental_reluctance' && 'R' in params) {
+    const out = edit();
+    const R = asNumber(out.R);
+    if (Number.isFinite(R) && R > 0 && out.l === undefined) {
+      const A = Number(block.params.A.value);
+      const mur = Number(block.params.mu_r.value);
+      out.l = isWrapper(out.R) ? { ...out.R, value: R * MU0 * mur * A, unit: block.params.l.unit, label: block.params.l.label } : R * MU0 * mur * A;
+    }
+    delete out.R;
+  }
+
   for (const [legacy, canonical] of Object.entries(LEGACY_PARAM_RENAMES[type] ?? {})) {
     if (!(legacy in (next ?? params))) continue;
     const out = edit();
@@ -242,14 +258,50 @@ export const machineConstantNotice = (type: string, params: Record<string, any>)
     `(otherwise energy is created or destroyed), so k = Ke = ${ke} is used and Kt was removed.`;
 };
 
+/**
+ * WP-15 (F-011): the Thermal Reference used to be pinned at 293.15 K, so a Temperature Sensor wired against it read T - 293.15 K.
+ * Simscape's Thermal Reference is absolute zero: the same sensor now reads the absolute temperature, i.e. +293.15 K compared with
+ * a reading saved before the correction. That is the correct physics, so no value is rewritten; the change is reported here
+ * (a saved node cannot be told apart from a new one, so the text names the condition).
+ */
+export const THERMAL_REFERENCE_NOTICE =
+  'Thermal temperatures are now absolute: the Thermal Reference is 0 K (Simscape), not 293.15 K. In a model saved with the old ' +
+  'reference a Temperature Sensor read T - 293.15 K; it now reads the absolute temperature T, so old scope readings are shifted by ' +
+  '+293.15 K. Use a Temperature Source (for example 293.15 K) for an ambient boundary; Thermal Mass starts at its Initial Temperature T0.';
+
+export const thermalReferenceNotice = (type: string): string | undefined =>
+  type === 'thermal_ref' || type === 'temp_sensor' ? THERMAL_REFERENCE_NOTICE : undefined;
+
+/**
+ * WP-15: the Fundamental Reluctance equation printed in the UI (R = l / (mu0 mu_r A)) is now implemented; the old block ran on a
+ * hidden R parameter. A saved R keeps its value by solving for the core length l with the library A and mu_r.
+ */
+const MU0 = 1.25663706212e-6;
+export const fundamentalReluctanceNotice = (type: string, params: Record<string, any>): string | undefined => {
+  if (type !== 'fundamental_reluctance' || !('R' in params)) return undefined;
+  const R = asNumber(params.R);
+  if (!Number.isFinite(R) || R <= 0) return `fundamental_reluctance: the saved reluctance R = ${String(rawOf(params.R))} is not a positive number and was removed; set l, A and mu_r.`;
+  return `fundamental_reluctance: the reluctance is now R = l / (mu0 mu_r A). The saved R = ${R} A-t/Wb was kept by setting the core length l ` +
+    'with the default A and mu_r.';
+};
+
 const canonicalizeNodeParams = (node: VLabNode): VLabNode => {
   const params = node.data?.params;
-  if (!params || typeof params !== 'object') return node;
   const type = effectiveBlockType(node);
-  const notice = machineConstantNotice(type, params);
+  const refNotice = thermalReferenceNotice(type);
+  if (!params || typeof params !== 'object') {
+    if (!refNotice) return node;
+    const existing = Array.isArray(node.data?.migrationNotices) ? node.data.migrationNotices : [];
+    if (existing.includes(refNotice)) return node;
+    return { ...node, data: { ...node.data, migrationNotices: [...existing, refNotice] } };
+  }
+  const found = [machineConstantNotice(type, params), fundamentalReluctanceNotice(type, params), refNotice]
+    .filter((n): n is string => !!n);
   const next = canonicalizeLegacyParams(type, params);
-  if (next === params && !notice) return node;
-  const notices = notice ? [...new Set([...(Array.isArray(node.data.migrationNotices) ? node.data.migrationNotices : []), notice])] : undefined;
+  const existing: string[] = Array.isArray(node.data.migrationNotices) ? node.data.migrationNotices : [];
+  const fresh = found.filter((n) => !existing.includes(n));
+  if (next === params && fresh.length === 0) return node;
+  const notices = fresh.length ? [...new Set([...existing, ...found])] : undefined;
   return { ...node, data: { ...node.data, params: next, ...(notices ? { migrationNotices: notices } : {}) } };
 };
 
