@@ -8,10 +8,10 @@ export interface BlockDefinition {
 
 export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   resistor: {
-    equations: ['I = (Vp - Vn)/R'],
-    latex: ['V = I \\cdot R'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Implements a linear resistor following Ohm\'s law. Connect to model energy dissipation in electrical networks.'
+    equations: ["I = (Vp - Vn)/R   [A = V/ohm]"],
+    latex: ["v = i \\cdot R \\quad [\\mathrm{V}]"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Linear resistor (Simscape Foundation Resistor): v = i R, with R > 0. Models energy dissipation P = i^2 R in electrical networks."
   },
   diode: {
     equations: ['Forward: V = Vf + I*Ron', 'Reverse: V = I*Roff'],
@@ -116,52 +116,52 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Ideal flow meter with zero pressure drop that measures mass flow rate.'
   },
   variable_resistor: {
-    equations: ['I = (Vp - Vn)/R_ctrl'],
-    latex: ['V = I \\cdot R(r)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A resistor whose resistance is modulated by a physical signal (PS). Used for modeling potentiometers or temperature-dependent loads.'
+    equations: ["I = (Vp - Vn)/max(R_ctrl, R_min)   [A]", "R_ctrl = signal at port r [ohm]"],
+    latex: ["v = i \\cdot \\max(R(r), R_{min}) \\quad [\\mathrm{V}]"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "A resistor whose resistance is the physical signal at port r [ohm], limited below by the minimum resistance R_min (Simscape Variable Resistor). An unwired r reads 100 ohm."
   },
   infinite_resistance: {
-    equations: ['I = 0'],
-    latex: ['I = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models an ideal open circuit. Prevents current flow while maintaining voltage potential between terminals.'
+    equations: ["I = 0   [A]"],
+    latex: ["i = 0 \\quad (R \\to \\infty)"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Ideal open branch: no current flows (R -> infinity), the terminal voltage is set by the rest of the network."
   },
   capacitor: {
-    equations: ['I = C * d(Vp-Vn)/dt'],
-    latex: ['I = C \\frac{dV}{dt}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models energy storage in an electric field. The current is proportional to the rate of change of voltage.'
+    equations: ["I = C * d(Vp-Vn)/dt   [A = F*V/s]", "v(0) = v0   [V]"],
+    latex: ["i = C \\frac{dv}{dt}, \\quad v(0) = v_0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Electric-field energy storage (Simscape Foundation Capacitor): the current is C times the rate of change of the voltage. The initial voltage v0 is honoured at t = 0."
   },
   inductor: {
-    equations: ['(Vp-Vn) = L * dI/dt'],
-    latex: ['V = L \\frac{dI}{dt}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models energy storage in a magnetic field. The voltage drop is proportional to the rate of change of current.'
+    equations: ["(Vp-Vn) = L * dI/dt   [V = H*A/s]", "i(0) = i0   [A]"],
+    latex: ["v = L \\frac{di}{dt}, \\quad i(0) = i_0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Magnetic-field energy storage (Simscape Foundation Inductor): the voltage is L times the rate of change of the current. The initial current i0 is honoured at t = 0."
   },
   memristor: {
-    equations: ['V = M(w) * I', 'dw/dt = f(V, I)'],
-    latex: ['V = M(w) I', '\\frac{dw}{dt} = v(t)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A non-linear resistive element with memory. Its resistance depends on the history of charge or flux.'
+    equations: ["V = M(w) * I,  M = M0 + 10*w   [V, ohm]", "dw/dt = I   [A]"],
+    latex: ["v = (M_0 + 10\\,w)\\, i", "\\frac{dw}{dt} = i"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Simplified linear-drift memristor (no Simscape analog): resistance M = M0 + 10 w, where w is the charge that has flowed through the device."
   },
   gyrator: {
-    equations: ['I1 = g * V2', 'I2 = -g * V1'],
-    latex: ['i_1 = G v_2', 'i_2 = -G v_1'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A two-port element that couples the current of one port to the voltage of the other. Used for dual-network modeling.'
+    equations: ["I1 = g * V2   [A = S*V]", "I2 = -g * V1   [A = S*V]"],
+    latex: ["i_1 = G v_2", "i_2 = -G v_1"],
+    across: "Voltage v1, v2 [V]", through: "Current i1, i2 into p1, p2 [A]",
+    description: "Lossless two-port (Simscape Gyrator): the current of one port is proportional to the voltage of the other, v1 i1 + v2 i2 = 0. Used for dual-network modeling."
   },
   transformer: {
-    equations: ['V2 = N * V1', 'I1 = -N * I2'],
-    latex: ['v_2 = N v_1', 'i_1 = -N i_2'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Ideal electromagnetic coupling between two electrical circuits. Scales voltage and current based on turns ratio.'
+    equations: ["V1 = N12 * V2   [V]", "I2 = -N12 * I1   [A],  N12 = N1/N2"],
+    latex: ["v_1 = N v_2", "i_2 = -N i_1"],
+    across: "Voltage v1, v2 [V]", through: "Current i1, i2 into p1, p2 [A]",
+    description: "Ideal lossless transformer (Simscape Ideal Transformer): voltage scales with the winding ratio N12 = N1/N2 and current inversely, v1 i1 + v2 i2 = 0."
   },
   opamp: {
-    equations: ['Vout = Gain * (Vp - Vn)'],
-    latex: ['V_{out} = A (V_+ - V_-)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models an ideal operational amplifier with high open-loop gain. Use for analog signal processing and active filters.'
+    equations: ["Vout = clamp(Gain * (V+ - V-), -Vsat, +Vsat)   [V]"],
+    latex: ["V_{out} = \\mathrm{clamp}\\left(A (V_+ - V_-), -V_{sat}, V_{sat}\\right)"],
+    across: "Potential V+, V-, Vout vs ground [V]", through: "Output current [A]",
+    description: "Operational amplifier with open-loop gain A and symmetric output saturation +/-Vsat. The inputs draw no current. With negative feedback it drives V+ - V- to about 0."
   },
   switch: {
     equations: ['V = I * (S ? Ron : Roff)'],
@@ -188,28 +188,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Thermal domains by modeling heat generation from electrical resistance ($P = I^2 R$).'
   },
   v_sensor: {
-    equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
-    latex: ['V_{out} = V_p - V_n', 'I_{leak} = \\frac{V_{sens}}{R_{int}}'],
-    across: 'Voltage (V)', through: 'Current (A)',
-    description: 'Measures voltage between two points. Includes a high internal resistance (R_int) to model a non-ideal voltmeter.'
+    equations: ["V_sens = Vp - Vn   [V]", "I_leak = V_sens / R_int   [A]"],
+    latex: ["V_{out} = V_p - V_n", "I_{leak} = \\frac{V_{sens}}{R_{int}}"],
+    across: "Voltage (V)", through: "Current (A)",
+    description: "Measures the voltage between two nodes and outputs it as a physical signal (Simscape Voltage Sensor). A finite input resistance R_int models a real meter."
   },
   i_sensor: {
-    equations: ['I_sens = I_p', 'V_sens = I_sens * R_int'],
-    latex: ['I_{out} = I_p', 'V_{drop} = I \cdot R_{int}'],
-    across: 'Voltage (V)', through: 'Current (A)',
-    description: 'Measures current flowing through the branch. Includes a low internal resistance (R_int) to model voltage drop across a shunt.'
+    equations: ["I_sens = I_p->n   [A]", "Vp - Vn = I_sens * R_int   [V]"],
+    latex: ["I_{out} = i_{p \\to n}", "V_{drop} = i \\cdot R_{int}"],
+    across: "Voltage (V)", through: "Current (A)",
+    description: "Measures the current through the branch (Simscape Current Sensor) and outputs it as a physical signal. A small series resistance R_int models the shunt drop; R_int = 0 is ideal."
   },
   dc_voltage: {
-    equations: ['Vp - Vn = V_const'],
-    latex: ['v = V_{dc}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal constant voltage source. Maintains a fixed potential regardless of the load current.'
+    equations: ["Vp - Vn = V + I * R_int   [V]"],
+    latex: ["v = V_{dc} + i R_{int}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Constant voltage source (Simscape DC Voltage Source) with optional series resistance R_int. Current is positive p -> n, so a delivering source has i < 0."
   },
   ac_voltage: {
-    equations: ['Vp - Vn = Vpk * sin(2*pi*f*t + phase) + I * R_int'],
-    latex: ['v = V_{pk} \sin(\omega t + \phi) + i R_{int}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal sinusoidal voltage source. Used for modeling mains power or signal generators.'
+    equations: ["Vp - Vn = Vpk * sin(2*pi*f*t + phase) + I * R_int   [V]"],
+    latex: ["v = V_{pk} \\sin(2\\pi f t + \\phi) + i R_{int}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Sinusoidal voltage source (Simscape AC Voltage Source): amplitude Vpk [V], frequency f [Hz], phase [rad], with optional series resistance R_int."
   },
   three_phase_source: {
     equations: [
@@ -254,46 +254,46 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a Brushless DC Motor with trapezoidal back-EMF. Requires a 6-step commutation inverter for operation.'
   },
   controlled_voltage: {
-    equations: ['Vp - Vn = S'],
-    latex: ['v = S(t)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A voltage source whose output is driven by an external physical signal (PS).'
+    equations: ["Vp - Vn = S + I * R_int   [V]"],
+    latex: ["v = S(t) + i R_{int}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Voltage source whose value is the physical signal S [V] at port s (Simscape Controlled Voltage Source), with optional series resistance R_int."
   },
   dc_current: {
-    equations: ['I = I_const'],
-    latex: ['i = I_{dc}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal constant current source. Maintains a fixed current flow regardless of the load voltage.'
+    equations: ["I (p -> n) = I_src   [A]"],
+    latex: ["i = I_{dc}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Constant current source (Simscape DC Current Source): the current from p to n through the source is fixed regardless of the voltage across it."
   },
   vcvs: {
-    equations: ['Vp - Vn = gain * (Vcp - Vcn)'],
-    latex: ['v_{out} = A \cdot v_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Voltage-Controlled Voltage Source. A dependent source where output voltage is proportional to an input voltage.'
+    equations: ["Vp - Vn = gain * (Vcp - Vcn)   [V]", "I_ctrl = 0"],
+    latex: ["v_{out} = A \\cdot v_{in}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Voltage-controlled voltage source: the output voltage is gain times the control voltage Vcp - Vcn; the control port draws no current."
   },
   vccs: {
-    equations: ['I = gain * (Vcp - Vcn)'],
-    latex: ['i_{out} = G \cdot v_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Voltage-Controlled Current Source. A dependent source where output current is proportional to an input voltage.'
+    equations: ["I (p -> n) = gain * (Vcp - Vcn)   [A = S*V]", "I_ctrl = 0"],
+    latex: ["i_{out} = G \\cdot v_{in}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Voltage-controlled current source: the output current is the transconductance (gain, [S]) times the control voltage Vcp - Vcn; the control port draws no current."
   },
   cccs: {
-    equations: ['I_out = gain * I_in', 'Vcp - Vcn = 0'],
-    latex: ['i_{out} = \beta \cdot i_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Current-Controlled Current Source. A dependent source where output current is proportional to an input current.'
+    equations: ["I_out (p -> n) = gain * I_ctrl   [A]", "Vcp - Vcn = R_in * I_ctrl   [V]"],
+    latex: ["i_{out} = \\beta \\cdot i_{in}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Current-controlled current source: the output current is gain times the current I_ctrl flowing cp -> cn through the control port (an ammeter with series resistance R_in, default 0)."
   },
   ccvs: {
-    equations: ['Vp - Vn = gain * I_in', 'Vcp - Vcn = 0'],
-    latex: ['v_{out} = r \cdot i_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Current-Controlled Voltage Source. A dependent source where output voltage is proportional to an input current.'
+    equations: ["Vp - Vn = gain * I_ctrl + R_out * I_out   [V = ohm*A]", "Vcp - Vcn = R_in * I_ctrl   [V]"],
+    latex: ["v_{out} = r \\cdot i_{in} + R_{out} i_{out}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Current-controlled voltage source: the output voltage is the transresistance (gain, [ohm]) times the current I_ctrl through the control port, plus an optional output resistance R_out."
   },
   ground: {
-    equations: ['V = 0'],
-    latex: ['V = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'The zero-potential reference point for the electrical network. Every circuit must have at least one ground.'
+    equations: ["V = 0   [V]"],
+    latex: ["V = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Electrical reference (Simscape Electrical Reference): defines 0 V for the network it is wired to. Every connected electrical network needs one; an unconnected electrical port is open, not grounded."
   },
   doe_custom: {
     equations: ['y = evaluate_doe(u1, u2, ..., un)'],
@@ -302,28 +302,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A custom block generated from the DOE module. Implements a trained regression or neural model.'
   },
   busbar: {
-    equations: ['V1 = V2 = ... = Vn', 'Sum(I) = 0'],
-    latex: ['V_i = V_j', '\sum I_k = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A low-impedance electrical conductor used to connect multiple branches. Models a common node with Kirchhoff\'s Current Law.'
+    equations: ["V1 = V2 = ... = Vn   [V]", "Sum(I_k) = 0   [A]"],
+    latex: ["V_i = V_j", "\\sum I_k = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Ideal zero-impedance conductor joining all its terminals: equal potentials and a zero sum of the currents entering the bar (Kirchhoff's current law)."
   },
   phase_splitter: {
     equations: ['Va = Vabc[a]', 'Vb = Vabc[b]', 'Vc = Vabc[c]', 'I_abc,k = I_k (KCL per phase)'],
-    latex: ['\mathbf{V}_{abc} \\to V_a, V_b, V_c'],
+    latex: ['\\mathbf{V}_{abc} \\to V_a, V_b, V_c'],
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'Splits the composite three-phase port abc (three nodes a, b, c, one KCL each) into three scalar electrical phase ports. The phases stay independent; a composite port connects only to another composite port.'
   },
   delta_ref: {
-    equations: ['V_delta = V_ref'],
-    latex: ['V_{\Delta} = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Provides a reference potential specifically for Delta-connected three-phase loads.'
+    equations: ["V_a = 0   [V]"],
+    latex: ["V_{a} = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Reference node for delta-connected three-phase networks: its terminal is held at 0 V, like an Electrical Reference."
   },
   open_circuit: {
-    equations: ['I = 0'],
-    latex: ['I = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models a floating terminal with no connected path. Essential for modeling unconnected three-phase ports.'
+    equations: ["I = 0   [A]"],
+    latex: ["i = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Open terminal: no current flows at the connected port (the port is left floating, never grounded)."
   },
   ps_demux_3: {
     equations: ['y1 = u[0]', 'y2 = u[1]', 'y3 = u[2]'],

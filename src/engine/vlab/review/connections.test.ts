@@ -416,7 +416,8 @@ describe('pre-simulation topology validation (before the engine assembles or sol
     expect(requiredPortsOf('ps_gain').signal).toEqual(['u']);
     expect(requiredPortsOf('ps_add').signal).toEqual(['u1', 'u2']);
     expect(requiredPortsOf('nmos').signal).toEqual(['g']);
-    expect(requiredPortsOf('dc_current').conserving).toEqual(['p']);     // open ideal current source is singular
+    // F-064: an open terminal is open (never grounded by its name), so BOTH terminals of an ideal current source are required
+    expect(requiredPortsOf('dc_current').conserving).toEqual(['p', 'n']);
     expect(requiredPortsOf('resistor')).toEqual({ signal: [], conserving: [] });
   });
 

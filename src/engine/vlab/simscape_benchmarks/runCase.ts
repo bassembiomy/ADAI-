@@ -17,7 +17,21 @@ export interface CaseSpec {
   class: ToleranceClass;
   stopTime: number;
   signals: CaseSignal[];
-  analytic?: { type: 'first_order_step'; final: number; tau: number };
+  /** V-Lab step (s) and golden/analytic grid spacing; default 0.001 */
+  dt?: number;
+  analytic?:
+    | { type: 'first_order_step'; final: number; tau: number }
+    /** series RLC driven by a DC step V through R, L into C (underdamped): the closed form of the capacitor voltage */
+    | { type: 'rlc_series_underdamped'; V: number; R: number; L: number; C: number };
+}
+
+/** Closed-form reference of `spec.analytic` at time t. */
+export function analyticValue(a: NonNullable<CaseSpec['analytic']>, t: number): number {
+  if (a.type === 'first_order_step') return a.final * (1 - Math.exp(-t / a.tau));
+  // vC(t) = V [1 - e^(-alpha t) (cos wd t + (alpha/wd) sin wd t)], alpha = R/2L, wd = sqrt(1/LC - alpha^2)
+  const alpha = a.R / (2 * a.L);
+  const wd = Math.sqrt(1 / (a.L * a.C) - alpha * alpha);
+  return a.V * (1 - Math.exp(-alpha * t) * (Math.cos(wd * t) + (alpha / wd) * Math.sin(wd * t)));
 }
 export interface Golden {
   time: number[];
@@ -50,8 +64,9 @@ export function loadGolden(id: string): Golden | null {
 }
 
 /** Simulates vlab_model.json with the worker's engine path and resamples onto `grid` (linear). */
-export function runCase(id: string, grid: number[], dt = 0.001): Record<string, number[]> {
+export function runCase(id: string, grid: number[], dtOverride?: number): Record<string, number[]> {
   const spec = loadCase(id);
+  const dt = dtOverride ?? spec.dt ?? 0.001;
   const model = JSON.parse(fs.readFileSync(path.join(BENCH_ROOT, 'cases', id, 'vlab_model.json'), 'utf8'));
   const boundary: VLabTestBoundary = {
     id,

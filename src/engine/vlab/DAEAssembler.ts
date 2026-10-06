@@ -17,6 +17,7 @@ import {
 } from './vlabVectorPorts';
 import { BlockEquationError, NonFiniteResidualError, type ResidualDiagnostic } from './vlabResidualDiagnostics';
 import { ScopeReadError } from './vlabScopeRead';
+import { findFloatingElectricalNetworks, isInternalReferencePort } from './vlabElectricalReference';
 import { DAEStructureError, UNSUPPORTED_BLOCKS, rowCountDiagnostic, type StructuralDiagnostic } from './vlabStructure';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
@@ -1261,8 +1262,16 @@ export class DAEAssembler {
           // Signal ports are never references by name: an unconnected output called `b` / `c` is driven by its own branch.
           // A vector / composite net is never a scalar reference (WP-09c).
           // The phase ports a, b, c of a Phase Splitter are phase nodes, not case / reference terminals: an open phase stays open.
-          if (!nodePortShapes.has(key) && ((['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical' && nodeTypeOf(nodeById.get(node.id)!) !== 'phase_splitter') ||
-              domain === 'fluid' || domain === 'gas' || domain === 'thermal')) {
+          // F-064 (WP-10): an unconnected ELECTRICAL port is open (Simscape), never grounded by its name. Only reference blocks
+          // define ground (scan above); a block that needs an internal reference declares the port in
+          // INTERNAL_REFERENCE_PORTS (vlabElectricalReference.ts). The name rule below only remains for the non-electrical
+          // case / return terminals owned by the other domain packages.
+          const nameRule = ['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) && !isFrameDomain && domain !== 'physical'
+            && nodeTypeOf(nodeById.get(node.id)!) !== 'phase_splitter';
+          const groundedByDesign = domain === 'electrical'
+            ? isInternalReferencePort(nodeTypeOf(nodeById.get(node.id)!), portId)
+            : nameRule;
+          if (!nodePortShapes.has(key) && (groundedByDesign || domain === 'fluid' || domain === 'gas' || domain === 'thermal')) {
             referenceNodeIds.add(root);
           }
         }
@@ -1803,8 +1812,20 @@ export class DAEAssembler {
       (componentStateVarIndices.get(c.blockId) || []).forEach(i => { variableOwners[i] = owner; });
     });
 
+    // F-064: electrical networks that nothing defines a reference for (reported by assertStructurallyWellPosed).
+    const floatingElectricalNetworks = findFloatingElectricalNetworks(
+      nodes.map(node => ({
+        blockId: node.id,
+        blockType: nodeTypeOf(node),
+        roots: (nodePorts.get(node.id) || [])
+          .filter(portId => nodePortDomains.get(`${node.id}_${portId}`) === 'electrical')
+          .map(portId => uf.find(`${node.id}_${portId}`)),
+      })),
+      referenceNodeIds,
+    );
+
     return {
-      structure: { variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices },
+      structure: { variableOwners, rowOwners: variableOwners, exemptVariables: exemptVariableIndices, floatingElectricalNetworks },
       systemSize: varCount,
       variableNames,
       isDifferentialState,

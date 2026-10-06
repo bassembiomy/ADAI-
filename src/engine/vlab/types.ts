@@ -92,5 +92,7 @@ export interface AssembledSystem {
     rowOwners: { blockId: string; blockType: string }[];
     /** unknowns that are indeterminate by design (e.g. reaction of a constraint wired to one frame twice) */
     exemptVariables?: number[];
+    /** connected Electrical networks without any reference (F-064); reported before the solve */
+    floatingElectricalNetworks?: { blocks: { blockId: string; blockType: string }[] }[];
   };
 }

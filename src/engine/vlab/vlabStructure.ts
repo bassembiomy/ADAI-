@@ -15,12 +15,14 @@
  */
 import type { AssembledSystem, EquationContext } from './types';
 import { withStatefulEquationCaches } from './vlabEquations';
+import { floatingNetworkReason } from './vlabElectricalReference';
 
 export type StructuralCode =
   | 'row-count-mismatch'
   | 'unallocated-index-read'
   | 'free-unknown'
-  | 'structural-rank-deficient';
+  | 'structural-rank-deficient'
+  | 'floating-network';
 
 export interface StructuralDiagnostic {
   code: StructuralCode;
@@ -259,6 +261,15 @@ const ownerOf = (system: AssembledSystem, kind: 'variable' | 'row', idx: number)
 export function assertStructurallyWellPosed(system: AssembledSystem): void {
   const n = system.systemSize;
   if (n === 0) return;
+  // F-064: an electrical network with no reference is reported by name, before the (otherwise opaque) rank analysis.
+  const floating = system.structure?.floatingElectricalNetworks ?? [];
+  if (floating.length) {
+    throw new DAEStructureError(floating.map(net => ({
+      code: 'floating-network' as const, blockId: net.blocks[0].blockId, blockType: net.blocks[0].blockType,
+      expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId),
+      reason: floatingNetworkReason(net),
+    })));
+  }
   const full = withStatefulEquationCaches(() => detectJacobianPattern(system));
   if (!full) return;
   const diagnostics: StructuralDiagnostic[] = [];

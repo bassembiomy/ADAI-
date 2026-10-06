@@ -99,6 +99,50 @@ export class VLabPhysicsEngine {
     return `${nodeIds}|${edgeIds}|${parameterHash}`;
   }
 
+  /**
+   * Simscape Capacitor "Initial voltage" v0 (WP-10): seed the node potentials of the solution vector so that
+   * v_p - v_n = v0 for every capacitor, which is the history the first step differentiates against. Capacitor
+   * edges are propagated from the Electrical Reference nodes (0 V); a component without a reference starts at 0 V on one
+   * node. Nothing is changed when every v0 is 0 (the zero vector already is the consistent history).
+   */
+  private seedCapacitorVoltages(system: AssembledSystem, nodes: Node[], x: number[]): void {
+    const caps = system.components.filter(c => c.blockType === 'capacitor');
+    if (caps.length === 0) return;
+    const indexOfRoot = new Map<string, number>();
+    system.variableNames.forEach((name, i) => {
+      const m = /^Across_(.+)_\(electrical\)$/.exec(name);
+      if (m) indexOfRoot.set(m[1], i);
+    });
+    const edges: { p: string; n: string; v0: number }[] = [];
+    for (const c of caps) {
+      const node = nodes.find(n => n.id === c.blockId);
+      const p = c.portNodeMap.get('p'); const n = c.portNodeMap.get('n');
+      if (!node || !p || !n || !indexOfRoot.has(p) || !indexOfRoot.has(n)) continue;
+      edges.push({ p, n, v0: numericParam((node.data as any)?.params, 'v0', 0, node.id) });
+    }
+    if (edges.every(e => e.v0 === 0)) return;
+    const potential = new Map<string, number>();
+    for (const c of system.components) {
+      if (c.blockType === 'ground' || c.blockType === 'delta_ref') c.portNodeMap.forEach(root => potential.set(root, 0));
+    }
+    const propagate = () => {
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const e of edges) {
+          const hasP = potential.has(e.p); const hasN = potential.has(e.n);
+          if (hasP && !hasN) { potential.set(e.n, potential.get(e.p)! - e.v0); grew = true; }
+          else if (hasN && !hasP) { potential.set(e.p, potential.get(e.n)! + e.v0); grew = true; }
+        }
+      }
+    };
+    propagate();
+    for (const e of edges) {
+      if (!potential.has(e.p) && !potential.has(e.n)) { potential.set(e.n, 0); propagate(); }
+    }
+    potential.forEach((v, root) => { const i = indexOfRoot.get(root); if (i !== undefined) x[i] = v; });
+  }
+
   simulateStep(nodes: Node[], edges: Edge[], prevState: any, dt: number) {
     const topoHash = this.getTopologyHash(nodes, edges);
     
@@ -175,6 +219,10 @@ export class VLabPhysicsEngine {
           // initial constraint Jacobian. Seed it once, then let Newton find
           // the actual reaction (including exactly zero for unloaded models).
           x[idx] = 0.01 * (idx + 1);
+        } else if (name.endsWith('_branch_current') && nodes.some(n => name === `${n.id}_branch_current` && ((n.data as any)?.type ?? n.type) === 'inductor')) {
+          // Simscape Inductor "Initial current" i0: the branch current starts at i0 (its history for di/dt)
+          const node = nodes.find(n => name === `${n.id}_branch_current`)!;
+          x[idx] = numericParam((node.data as any)?.params, 'i0', 0, node.id);
         } else if (name.includes('_state_')) {
           const parts = name.split('_state_');
           if (parts.length === 2) {
@@ -197,6 +245,7 @@ export class VLabPhysicsEngine {
         }
       });
       if (joints.length > 0) initializeJointFrames(system, x);
+      this.seedCapacitorVoltages(system, nodes, x);
     }
 
     const config = this.solverConfiguration;

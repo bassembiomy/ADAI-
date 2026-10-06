@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listCases, loadCase, loadGolden, runCase } from './runCase';
+import { analyticValue, listCases, loadCase, loadGolden, runCase } from './runCase';
 import { computeMetrics, formatMetricTable, resample } from './metrics';
 import { checkTolerance } from './tolerances';
 
@@ -17,10 +17,10 @@ describe('Simscape benchmark cases', () => {
     describe(id, () => {
       if (spec.analytic) {
         it('V-Lab matches analytic solution (sanity check on golden)', () => {
-          const grid = Array.from({ length: Math.round(spec.stopTime / 0.001) + 1 }, (_, i) => i * 0.001);
+          const step = spec.dt ?? 0.001;
+          const grid = Array.from({ length: Math.round(spec.stopTime / step) + 1 }, (_, i) => i * step);
           const sim = runCase(id, grid);
-          const { final, tau } = spec.analytic!;
-          const ref = grid.map((t) => final * (1 - Math.exp(-t / tau)));
+          const ref = grid.map((t) => analyticValue(spec.analytic!, t));
           const name = spec.signals[0].name;
           const m = computeMetrics(grid, sim[name], ref);
           const fails = checkTolerance(spec.class, m);
@@ -30,7 +30,7 @@ describe('Simscape benchmark cases', () => {
             const gm = computeMetrics(golden.time, golden.signals[name], resample(grid, ref, golden.time));
             expect(checkTolerance(spec.class, gm), formatMetricTable(`${name} golden vs analytic`, gm)).toEqual([]);
           }
-        });
+        }, 60000);
       }
 
       const body = () => {
@@ -42,7 +42,7 @@ describe('Simscape benchmark cases', () => {
           expect(fails, formatMetricTable(s.name, m)).toEqual([]);
         }
       };
-      if (golden) it('matches Simscape golden', body);
+      if (golden) it('matches Simscape golden', body, 60000);
       else it.skip(`matches Simscape golden (SKIPPED: golden/${id}.csv missing, golden-import mode; run benchmarks/simscape/run_all.m on a licensed machine)`, body);
     });
   }

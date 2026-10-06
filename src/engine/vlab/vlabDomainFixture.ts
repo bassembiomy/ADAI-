@@ -294,6 +294,11 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
     if (s) {
       addNode(s.id, s.type, 300, 150);
       wire('e_sensor_to_dut', 'dut', `${first.id}_s`, s.id, `${s.sensorPort}_t`);
+      if (domain === 'electrical') {
+        // F-064: the sensor's reference terminal is open unless it is wired; return it to the electrical reference
+        addNode('gnd', 'ground', 50, 400);
+        wire('e_sensor_ref', s.id, 'n_s', 'gnd', 'a_t');
+      }
       wire('e_sensor_to_scope', s.id, `${s.out}_s`, 'diag_scope', 'in1_t');
       scopeConnected = true;
     }

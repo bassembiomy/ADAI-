@@ -140,6 +140,19 @@ export const canonicalizeLegacyParams = (
     for (const k of ['T', 'time_constant']) if (k in (next ?? params)) delete edit()[k];
   }
 
+  // transformer: the legacy key N meant v2 = N * v1 (N2/N1); the canonical N12 = N1/N2 = 1 / N (value-transforming, not a rename).
+  // N = 0 (was never legal) becomes N12 = 0 so the parameter bounds report it; non-numeric text is carried over unchanged.
+  if (type === 'transformer' && 'N' in params) {
+    const out = edit();
+    if (out.N12 === undefined || out.N12 === null) {
+      const n = asNumber(out.N);
+      const lib = block.params.N12;
+      const value = Number.isFinite(n) ? (n === 0 ? 0 : 1 / n) : rawOf(out.N);
+      out.N12 = { value, unit: lib.unit, label: lib.label };
+    }
+    delete out.N;
+  }
+
   for (const [legacy, canonical] of Object.entries(LEGACY_PARAM_RENAMES[type] ?? {})) {
     if (!(legacy in (next ?? params))) continue;
     const out = edit();

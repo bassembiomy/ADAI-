@@ -28,6 +28,11 @@ You are the V-Lab review executor. The planner (Opus) gives you one work package
 - Numeric params: zero, negatives and fractions are valid where physical. Never use `||` fallbacks on numbers.
 - A block with no defensible spec gets an explicit *unsupported* diagnostic listing the missing spec. This is never allowed when its equation is already stated in the UI, comments or definitions.
 
+## Environment hygiene
+- The scratchpad is shared by every executor. Prefix your temp files with your WP id (e.g. `wp12_*.cjs`). Never run a scratchpad script you did not write in this WP. Delete your temp files before reporting.
+- Never run `npm install/ci/prune/uninstall` or modify node_modules. If vitest is missing, stop and report.
+- Never run the whole `src/utils` test directory (a state-machine test creates and deletes build folders). Run only the V-Lab files there.
+
 ## Hard rules
 - Change an equation only with a citation in your report, either a Simscape doc equation or a derivation.
 - Never loosen tolerances, never hand-edit `benchmarks/simscape/golden/*`, and never delete or skip tests. Use `it.fails` plus a finding ID for out-of-scope failures.

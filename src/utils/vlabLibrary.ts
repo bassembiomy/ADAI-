@@ -102,7 +102,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V = I * R",
+        "equation": "v = i * R   [V = A·Ω], v = v_p − v_n, i: p → n",
         "description": "Linear resistor obeying Ohm's law relating terminal voltage drop to electric current."
       },
       {
@@ -113,7 +113,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "category": "Passive",
         "params": {
           "R_min": {
-            "value": 0,
+            "value": 0.001,
             "unit": "Ω",
             "label": "Min Resistance",
             "min": 0
@@ -140,7 +140,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "V = I * R(t)",
+        "equation": "v = i * max(R(t), R_min)   [V = A·Ω], R(t) = signal r [Ω]",
         "description": "A resistor whose value is controlled by an external physical signal. Useful for modeling sensors or variable loads."
       },
       {
@@ -164,7 +164,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "I = 0 (R -> ∞)",
+        "equation": "i = 0 A   (R → ∞, v free)",
         "description": "Models an ideal open branch with zero electrical conductance (infinite resistance)."
       },
       {
@@ -180,6 +180,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Capacitance",
             "min": 0,
             "exclusiveMin": true
+          },
+          "v0": {
+            "value": 0,
+            "unit": "V",
+            "label": "Initial Voltage"
           }
         },
         "ports": [
@@ -196,7 +201,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "I = C * dV/dt",
+        "equation": "i = C * dv/dt   [A = F·V/s], v(0) = v0",
         "description": "Electrostatic charge storage element with through current proportional to voltage derivative."
       },
       {
@@ -212,6 +217,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Inductance",
             "min": 0,
             "exclusiveMin": true
+          },
+          "i0": {
+            "value": 0,
+            "unit": "A",
+            "label": "Initial Current"
           }
         },
         "ports": [
@@ -228,7 +238,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V = L * dI/dt",
+        "equation": "v = L * di/dt   [V = H·A/s], i(0) = i0",
         "description": "Magnetic energy storage inductor with branch voltage proportional to current rate of change."
       },
       {
@@ -260,7 +270,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V(t) = M(q) * I(t)\ndM/dt = f(I, M)",
+        "equation": "v = M(w) * i   [V], M = M0 + 10·w [Ω]\ndw/dt = i   [A]",
         "description": "Two-terminal non-volatile memory resistor whose resistance varies with past charge flow."
       },
       {
@@ -303,7 +313,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "i1 = g * v2\ni2 = -g * v1",
+        "equation": "i1 = g * v2   [A = S·V]\ni2 = -g * v1   [A = S·V]",
         "description": "Ideal non-reciprocal two-port network that inverts voltage and current characteristics."
       },
       {
@@ -313,10 +323,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "transformer",
         "category": "Passive",
         "params": {
-          "N": {
-            "value": 10,
+          "N12": {
+            "value": 0.1,
             "unit": "1",
-            "label": "Turns Ratio",
+            "label": "Winding ratio N1/N2",
             "nonZero": true
           }
         },
@@ -346,7 +356,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V2 = N * V1\\nI1 = N * I2",
+        "equation": "v1 = N12 * v2   [V]\ni2 = -N12 * i1   [A],  N12 = N1/N2",
         "description": "An ideal transformer that scales voltage and current according to the turns ratio N. It preserves power (V1*I1 = V2*I2)."
       },
       {
@@ -360,6 +370,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 100000,
             "unit": "1",
             "label": "Open-Loop Gain",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Vsat": {
+            "value": 15,
+            "unit": "V",
+            "label": "Output Saturation",
             "min": 0,
             "exclusiveMin": true
           }
@@ -384,7 +401,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "Vout = A * (V+ - V-)\\n(Ideal: V+ = V-)",
+        "equation": "Vout = clamp(A * (V+ − V−), ±Vsat)   [V]\n(linear region: V+ ≈ V− for large A)",
         "description": "High-gain differential operational amplifier with negative feedback virtual short behavior."
       },
       {
@@ -1142,7 +1159,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "V"
           }
         ],
-        "equation": "V_out = V_p - V_n",
+        "equation": "V_out = V_p − V_n   [V]  (i_leak = V/R_int, R_int → ∞ ideal)",
         "description": "Measures the potential difference between two electrical nodes and outputs it as a physical signal."
       },
       {
@@ -1182,7 +1199,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "A"
           }
         ],
-        "equation": "I_out = I_branch\n(V_p - V_n = 0)",
+        "equation": "I_out = i_p→n   [A]\nV_p − V_n = R_int * i  (R_int = 0 ideal)",
         "description": "Measures through electric current with zero insertion impedance and outputs a physical signal."
       },
       {
@@ -1218,7 +1235,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V = V_source - I * R_int",
+        "equation": "V_p − V_n = V + I * R_int   [V]  (I: p → n, R_int = 0 ideal)",
         "description": "Constant DC voltage source with series internal source resistance."
       },
       {
@@ -1346,7 +1363,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "V_p - V_n = s(t)",
+        "equation": "V_p − V_n = s(t) + I * R_int   [V]",
         "description": "Voltage source whose output terminal potential is commanded by a physical signal s(t)."
       },
       {
@@ -1376,7 +1393,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "I = I_source",
+        "equation": "I (p → n) = I_src   [A]",
         "description": "Ideal DC current source delivering constant through current independent of voltage."
       },
       {
@@ -1418,7 +1435,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V_out = Gain * (V_cp - V_cn)",
+        "equation": "V_p − V_n = Gain * (V_cp − V_cn)   [V], i_ctrl = 0",
         "description": "Voltage-Controlled Voltage Source producing an output voltage proportional to control voltage."
       },
       {
@@ -1460,7 +1477,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "I_out = Gm * (V_cp - V_cn)",
+        "equation": "I (p → n) = Gm * (V_cp − V_cn)   [A = S·V], i_ctrl = 0",
         "description": "Voltage-Controlled Current Source producing an output current proportional to control voltage."
       },
       {
@@ -1508,7 +1525,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "I_out = Gain * I_control",
+        "equation": "I_out (p → n) = Gain * I_ctrl   [A]\nV_cp − V_cn = R_in * I_ctrl",
         "description": "Current-Controlled Current Source producing an output current proportional to input current."
       },
       {
@@ -1562,7 +1579,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V_out = Rm * I_control",
+        "equation": "V_p − V_n = Rm * I_ctrl + R_out * I_out   [V = Ω·A]\nV_cp − V_cn = R_in * I_ctrl",
         "description": "Current-Controlled Voltage Source producing an output voltage proportional to input current."
       },
       {
@@ -1580,7 +1597,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V = 0",
+        "equation": "V = 0 V   (electrical reference)",
         "description": "The zero-potential reference for the electrical circuit. All voltage measurements are relative to this node."
       },
       {
@@ -1604,7 +1621,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V_1 = V_2 = ... = V_n\nΣ I_k = 0",
+        "equation": "V_1 = V_2 = … = V_n   [V]\nΣ I_k = 0   [A]",
         "description": "Ideal electrical distribution busbar maintaining equipotential connection across all attached nodes."
       },
       {
@@ -1659,7 +1676,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "Va + Vb + Vc = 0",
+        "equation": "V_a = 0 V   (reference node of the delta network)",
         "description": "Reference node for balanced delta-connected electrical topologies."
       },
       {
@@ -1677,7 +1694,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "I = 0 A",
+        "equation": "I = 0 A   (open terminal)",
         "description": "Maintains open-circuit condition with zero current flow at the connected port."
       },
       {

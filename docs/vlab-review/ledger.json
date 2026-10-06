@@ -288,10 +288,14 @@
         "WP-09c"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 2,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "24 electrical blocks certified vs Simscape Foundation/Electrical equations, 51 analytic tests; 22 equation texts with units; capacitor v0 and inductor i0; opamp Vsat param; transformer fixed to N12 = N1/N2 with a value migration of legacy N (rework)",
+        "F-064 electrical: name-based grounding removed; floating-network diagnostic; rlc_series Simscape case (golden pending)",
+        "planner re-run: 4326 pass / 154 expected-fail / 1 known; test:vlab 20/20"
+      ],
       "findings": []
     },
     {
@@ -302,7 +306,7 @@
         "WP-09c"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
       "evidence": [],
@@ -1140,7 +1144,8 @@
       "block": "DAEAssembler",
       "layer": "solver",
       "summary": "Unconnected electrical ports named b/c/n/ref/gnd are pinned to ground by NAME (only phase_splitter is exempt). Replace with explicit reference semantics. Check three_phase_source, machines and inverters.",
-      "wp": "WP-10/WP-12"
+      "wp": "WP-10/WP-12",
+      "status": "electrical resolved WP-10; non-electrical name rule remains -> WP-13..18"
     },
     {
       "id": "F-065",
@@ -1157,6 +1162,46 @@
       "layer": "integration",
       "summary": "node_modules lost the same 92 packages twice (incl. @babel/runtime, @alloc/quick-lru, the .bin shims), the second time during a full src/utils test run at 00:34. Find which test/script prunes it.",
       "wp": "WP-31"
+    },
+    {
+      "id": "F-067",
+      "severity": "high",
+      "block": "capacitor/inductor (all dAcross/dBranch derivatives)",
+      "layer": "solver",
+      "summary": "Backward Euler is used even with BDF2 on (only isDifferentialState vars get the BDF2 stencil, vlabPhysics ~l.376), so RC/RLC are first order (err ~ h/(2tau)). Hurts every Simscape comparison.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-068",
+      "severity": "med",
+      "block": "three_phase_source",
+      "layer": "eq",
+      "summary": "Hard-coded +pi/4 phase shift, absolute potentials to ground with no return; listed in IMPLICIT_ABSOLUTE_POTENTIAL_BLOCKS. Decide on a composite port.",
+      "wp": "WP-12"
+    },
+    {
+      "id": "F-069",
+      "severity": "low",
+      "block": "ac_voltage",
+      "layer": "params",
+      "summary": "Default phase pi/4 (Simscape 0) is locked by ac_voltage_parameters.test.ts. Sources also have a non-ideal R_int (dev).",
+      "wp": "WP-10 dev"
+    },
+    {
+      "id": "F-070",
+      "severity": "low",
+      "block": "kernel PhysicalSystemCompiler",
+      "layer": "integration",
+      "summary": "Does not honour capacitor v0 / inductor i0.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-071",
+      "severity": "low",
+      "block": "memristor, opamp",
+      "layer": "eq",
+      "summary": "Memristor uses a simplified unvalidated drift model; the opamp clamp is C0 (consider smooth).",
+      "wp": "WP-10 dev"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

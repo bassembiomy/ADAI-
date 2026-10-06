@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { DAEAssembler } from '../../engine/vlab/DAEAssembler';
+import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
 import { numericParam } from '../../engine/vlab/vlabParams';
 import type { VLabNode } from './VLabWorkspaceTypes';
 import {
@@ -88,6 +89,26 @@ describe('WP-08 migration: legacy parameter keys -> the one canonical library ke
     const out = canonicalizeLegacyParams('conductive_heat', { k: wrapped(2), A: wrapped(0.5), L: wrapped(0.25) });
     expect(out.k.value).toBe(4);
     expect('A' in out || 'L' in out).toBe(false);
+  });
+
+  it('transformer: legacy N (v2 = N v1) becomes N12 = 1/N, and the simulated secondary voltage is identical (v2 = 10 v1)', () => {
+    const out = canonicalizeLegacyParams('transformer', { N: wrapped(10) });
+    expect(out.N12.value).toBeCloseTo(0.1, 12);
+    expect('N' in out).toBe(false);
+    expect(canonicalizeLegacyParams('transformer', { N: wrapped(0.5) }).N12.value).toBe(2);
+    expect(canonicalizeLegacyParams('transformer', { N: wrapped(0) }).N12.value).toBe(0); // rejected later by the nonZero bound
+    expect(canonicalizeLegacyParams('transformer', { N: wrapped(4), N12: wrapped(9) }).N12.value).toBe(9);
+    expect(lib('transformer').params.N12.value).toBeCloseTo(0.1, 12); // default model behaves as the old N = 10
+    // simulate the migrated model: 2 V on winding 1, 1 kOhm on winding 2 -> v2 = N_old * v1 = 20 V
+    const mk = (id: string, type: string, params: Record<string, any>): any => ({ id, type: 'default', position: { x: 0, y: 0 }, data: { type, params } });
+    const e = (a: string, ap: string, b: string, bp: string): any => ({ id: `${a}${ap}${b}${bp}`, source: a, sourceHandle: ap, target: b, targetHandle: bp });
+    const { nodes } = normalizeLegacyVLabGraph([mk('t', 'transformer', { N: wrapped(10) }), mk('vs', 'dc_voltage', { V: 2, R_int: 0 }), mk('rl', 'resistor', { R: 1000 }), mk('g', 'ground', {})], []);
+    const edges = [e('vs', 'p', 't', 'p1'), e('t', 'n1', 'g', 'a'), e('vs', 'n', 'g', 'a'), e('t', 'p2', 'rl', 'p'), e('rl', 'n', 'g', 'a'), e('t', 'n2', 'g', 'a')];
+    const sys = new DAEAssembler().assemble(nodes as any, edges);
+    const st = new VLabPhysicsEngine().simulateStep(nodes as any, edges, null, 0.01);
+    const root = sys.components.find(c => c.blockId === 'rl')!.portNodeMap.get('p')!;
+    const v2 = st.x[st.variableNames.findIndex((n: string) => n.startsWith(`Across_${root}_(`))];
+    expect(v2).toBeCloseTo(20, 6);
   });
 
   it('end to end: a legacy-keyed model loads, validates and runs with the migrated value (never the default)', () => {

@@ -237,38 +237,46 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   Outport: () => [],
   
   resistor: ({ across, branch, params }) => {
-    // Vp - Vn - I*R = 0
+    // Simscape Foundation Electrical > Resistor: v = i * R, v = v_p - v_n, i positive p -> n through the block (R > 0, WP-08).
+    // Residual: (Vp - Vn) - I*R = 0   [V]
     const R = numericParam(params, 'R', 100);
     return [(across[0] - across[1]) - branch[0] * R];
   },
   
   variable_resistor: ({ across, branch, params, ports, connectedPorts }) => {
-    // Vp - Vn - I*R_ctrl = 0 (R_ctrl is the control signal at port 'r'; 100 ohm when unwired)
-    const R_min = numericParam(params, 'R_min', 0.1);
+    // Simscape Foundation Electrical > Variable Resistor: v = i * R, R = max(R_signal, R_min) (parameter "Minimum resistance",
+    // default 1e-3 ohm). The control signal is the physical signal at port 'r' [ohm]; an unwired 'r' reads 100 ohm (documented).
+    // Residual: (Vp - Vn) - I*max(R_ctrl, R_min) = 0   [V]
+    const R_min = numericParam(params, 'R_min', 1e-3);
     const R_ctrl = Math.max(R_min, inputOrParam({ across, ports, connectedPorts }, 'r', 100, 2));
     return [(across[0] - across[1]) - branch[0] * R_ctrl];
   },
   
   infinite_resistance: ({ branch }) => {
-    // I = 0
+    // Open branch (R -> infinity): i = 0, v is free. Residual: I = 0   [A]
     return [branch[0]];
   },
-  
-  capacitor: ({ across, dAcross, branch, params }) => {
-    // I - C * d(Vp-Vn)/dt = 0
+
+  capacitor: ({ dAcross, branch, params }) => {
+    // Simscape Foundation Electrical > Capacitor: i = C * dv/dt, v = v_p - v_n, with parameter "Initial voltage" v0 (v(0) = v0).
+    // v0 is honoured by seeding the node potentials of the solution vector so that v_p - v_n = v0 in the history of the first
+    // step (vlabPhysics.seedCapacitorVoltages); the equation itself is the published relation.
+    // Residual: I - C * d(Vp - Vn)/dt = 0   [A]
     const C = numericParam(params, 'C', 1e-6);
     return [branch[0] - C * (dAcross[0] - dAcross[1])];
   },
-  
+
   inductor: ({ across, branch, dBranch, params }) => {
-    // Vp - Vn - L * dI/dt = 0
+    // Simscape Foundation Electrical > Inductor: v = L * di/dt, v = v_p - v_n, i positive p -> n, with parameter
+    // "Initial current" i0 (the branch current is seeded with i0, vlabPhysics). Residual: (Vp - Vn) - L*dI/dt = 0   [V]
     const L = numericParam(params, 'L', 1e-3);
     return [(across[0] - across[1]) - L * dBranch[0]];
   },
   
   memristor: ({ across, branch, state, dState, params }) => {
-    // V = M(w) * I
-    // dw/dt = f(I) => dw/dt - I = 0 (simplified)
+    // No Simscape Foundation / ee_lib analog (documented, simplified linear-drift memristor, not a published block):
+    //   v = M(w) * i  with M(w) = M0 + 10 * w  [ohm], dw/dt = i  [C]  (w is the transported charge, 10 ohm/C drift gain).
+    // Residuals: (Vp - Vn) - I*M = 0 [V],  dw/dt - I = 0 [A]
     const M0 = numericParam(params, 'M0', 100);
     const w = state[0];
     const M = M0 + 10 * w;
@@ -351,8 +359,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   v_sensor: ({ across, branch, params }) => {
-    // branch[0] is leakage current: I_leak - V/R_int = 0
-    // branch[1] is output signal: signal_out - V = 0
+    // Simscape Foundation Electrical > Voltage Sensor: V = v_p - v_n, ideal (no current). Deviation: a finite input
+    // resistance R_int (default 1e8 ohm) models a real meter; R_int -> infinity recovers the ideal sensor.
+    // branch[0] is leakage current p -> n: I_leak - V/R_int = 0   [A]
+    // branch[1] is output signal: signal_out - V = 0   [V]
     const R_int = numericParam(params, 'R_int', 1e8);
     const V = across[0] - across[1];
     return [
@@ -362,8 +372,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   i_sensor: ({ across, branch, params }) => {
-    // branch[0] is current, causing tiny voltage drop: V_drop - I*R_int = 0
-    // branch[1] is output signal: signal_out - I = 0
+    // Simscape Foundation Electrical > Current Sensor: v_p - v_n = 0 (ideal short), I = i (p -> n). Deviation: a small series
+    // resistance R_int (default 1e-6 ohm); R_int = 0 recovers the ideal sensor.
+    // branch[0] is the through current p -> n: (Vp - Vn) - I*R_int = 0   [V]
+    // branch[1] is output signal: signal_out - I = 0   [A]
     const R_int = numericParam(params, 'R_int', 1e-6);
     const V = across[0] - across[1];
     return [
@@ -373,14 +385,19 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   dc_voltage: ({ across, branch, params }) => {
-    // Vp - Vn - V_const = 0
+    // Simscape Foundation Electrical > DC Voltage Source: v = V (v = v_p - v_n; i positive p -> n through the source, so a
+    // source that delivers power has i < 0). Deviation: series resistance R_int (default 1e-3 ohm; Simscape's source is ideal,
+    // R_int = 0 recovers it). Residual: (Vp - Vn) - V - I*R_int = 0   [V]
     const V = numericParam(params, 'V', 12);
     const R_int = numericParam(params, 'R_int', 1e-3);
     return [(across[0] - across[1]) - V - branch[0] * R_int];
   },
   
   ac_voltage: ({ across, branch, params, ctx }) => {
-    // Vp - Vn - Vpk * sin(2*pi*f*t + phase) - I*R_int = 0
+    // Simscape Foundation Electrical > AC Voltage Source: v = A*sin(2*pi*f*t + phi) (Vpk = A [V], f [Hz], phase = phi [rad]).
+    // Deviations: default phase pi/4 (Simscape 0; chosen against zero-sampling aliasing at the lab step, locked by
+    // ac_voltage_parameters.test.ts) and series resistance R_int (default 1e-3 ohm; 0 recovers the ideal source).
+    // Residual: (Vp - Vn) - Vpk*sin(2*pi*f*t + phase) - I*R_int = 0   [V]
     const Vpk = numericParam(params, 'Vpk', 230);
     const f = numericParam(params, 'f', 50);
     const phase = numericParam(params, 'phase', Math.PI / 4);
@@ -390,33 +407,39 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   controlled_voltage: ({ across, branch, params, ports, connectedPorts }) => {
-    // Vp - Vn - S = 0 (S is the signal at port 's'; 0 V when unwired)
+    // Simscape Foundation Electrical > Controlled Voltage Source: v = S (physical signal at port 's' [V]; 0 V when unwired).
+    // Deviation: series resistance R_int (default 1e-3 ohm; 0 recovers the ideal source).
+    // Residual: (Vp - Vn) - S - I*R_int = 0   [V]
     const S = inputOrParam({ across, ports, connectedPorts }, 's', 0, 2);
     const R_int = numericParam(params, 'R_int', 1e-3);
     return [(across[0] - across[1]) - S - branch[0] * R_int];
   },
   
   dc_current: ({ branch, params }) => {
-    // I - I_const = 0
+    // Simscape Foundation Electrical > DC Current Source: i = I, positive from p to n through the source. Residual: I_branch - I = 0   [A]
     const I = numericParam(params, 'I', 1);
     return [branch[0] - I];
   },
   
   transformer: ({ across, branch, params }) => {
-    // V2 = N * V1 => across[2]-across[3] - N*(across[0]-across[1]) = 0
-    // I1 = -N * I2 => branch[0] + N*branch[1] = 0
-    const N = numericParam(params, 'N', 10);
+    // Simscape Electrical > Passive > Ideal Transformer, turns ratio N = N1/N2 (winding 1 = p1/n1, winding 2 = p2/n2):
+    //   v1 = N * v2,   i2 = -N * i1   (i1, i2 positive INTO p1 / p2). Power: v1*i1 + v2*i2 = N*v2*i1 - N*v2*i1 = 0 (lossless).
+    // (Until WP-10 the block used the key N with v2 = N*v1, i.e. N_old = N2/N1; the canonical key is now N12 = N1/N2 = 1/N_old,
+    // and vlabModelMigration maps a saved N to N12 = 1/N.) Default N12 = 0.1 reproduces the old default v2 = 10*v1.
+    // Residuals: V1 - N12*V2 = 0 [V],  I2 + N12*I1 = 0 [A]
+    const N = numericParam(params, 'N12', 0.1);
     const V1 = across[0] - across[1];
     const V2 = across[2] - across[3];
     return [
-      V2 - N * V1,
-      branch[0] + N * branch[1]
+      V1 - N * V2,
+      branch[1] + N * branch[0]
     ];
   },
   
   gyrator: ({ across, branch, params }) => {
-    // I1 = g * V2 => branch[0] - g * V2 = 0
-    // I2 = -g * V1 => branch[1] + g * V1 = 0
+    // Simscape Electrical > Passive > Gyrator: i1 = G * v2, i2 = -G * v1 (G = gyration conductance [S]; i1, i2 INTO p1 / p2).
+    // Power: v1*i1 + v2*i2 = G*v1*v2 - G*v1*v2 = 0 (lossless).
+    // Residuals: I1 - G*V2 = 0 [A],  I2 + G*V1 = 0 [A]
     const g = numericParam(params, 'g', 0.01);
     const V1 = across[0] - across[1];
     const V2 = across[2] - across[3];
@@ -427,12 +450,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   opamp: ({ across, branch, params }) => {
-    // Vout = Gain * (V+ - V-) => clamped to +/- 15V
+    // Simscape Electrical > Integrated Circuits > Op-Amp (behavioural, ground-referenced output, ideal inputs draw no current):
+    //   V_out = clamp(A * (V+ - V-), -Vsat, +Vsat),  A = open-loop gain [1], Vsat = supply-rail limit [V] (default 15 V).
+    // The output current is the free branch variable (supplied by the rails). Residual: V_out - clamp(...) = 0   [V]
     const Gain = numericParam(params, 'Gain', 1e5);
+    const Vsat = numericParam(params, 'Vsat', 15);
     const Vplus = across[0];
     const Vminus = across[1];
     const Vout = across[2];
-    const targetV = Math.max(-15, Math.min(15, Gain * (Vplus - Vminus)));
+    const targetV = Math.max(-Vsat, Math.min(Vsat, Gain * (Vplus - Vminus)));
     return [Vout - targetV];
   },
 
@@ -478,6 +504,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   vcvs: ({ across, branch, params }) => {
+    // Simscape Electrical > Additional Components > Voltage-Controlled Voltage Source: v_out = K * v_in, v_in = v_cp - v_cn,
+    // the control port draws no current. gain K [1] (0 is legal: the output is a short). Residual: (Vp - Vn) - K*(Vcp - Vcn) = 0   [V]
     const gain = numericParam(params, 'gain', 1);
     const Vin = across[2] - across[3];
     const Vout = across[0] - across[1];
@@ -485,15 +513,18 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   vccs: ({ across, branch, params }) => {
+    // Simscape Electrical > Additional Components > Voltage-Controlled Current Source: i_out = G * v_in, v_in = v_cp - v_cn,
+    // i_out positive p -> n through the source, no control current. gain G [S]. Residual: I - G*(Vcp - Vcn) = 0   [A]
     const gain = numericParam(params, 'gain', 1);
     const Vin = across[2] - across[3];
     return [branch[0] - gain * Vin];
   },
 
   cccs: ({ across, branch, params }) => {
-
-
+    // Simscape Electrical > Additional Components > Current-Controlled Current Source: i_out = K * i_in, the control port is an
+    // ideal ammeter (v_cp - v_cn = i_in * R_in, R_in default 0 = short). K [1].
     // branch[0]: output current (p -> n), branch[1]: control current (cp -> cn)
+    // Residuals: I_out - K*I_ctrl = 0 [A],  (Vcp - Vcn) - R_in*I_ctrl = 0 [V]
     const gain = numericParam(params, 'gain', 1);
     const Rin = numericParam(params, 'R_in', 0);
     const Vctrl = (across[2] ?? 0) - (across[3] ?? 0);
@@ -504,9 +535,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   ccvs: ({ across, branch, params }) => {
-
-
+    // Simscape Electrical > Additional Components > Current-Controlled Voltage Source: v_out = R_m * i_in (+ R_out * i_out for
+    // a non-ideal output), control port is an ideal ammeter (v_cp - v_cn = i_in * R_in, default 0). R_m = gain [ohm].
     // branch[0]: output voltage source current (p -> n), branch[1]: control current (cp -> cn)
+    // Residuals: (Vp - Vn) - R_m*I_ctrl - R_out*I_out = 0 [V],  (Vcp - Vcn) - R_in*I_ctrl = 0 [V]
     const gain = numericParam(params, 'gain', 1);
     const Rin = numericParam(params, 'R_in', 0);
     const Rout = numericParam(params, 'R_out', 0);
