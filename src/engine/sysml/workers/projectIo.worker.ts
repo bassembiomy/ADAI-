@@ -1,5 +1,6 @@
 import { loadCanonicalSysmlProject } from '../../../services/sysmlCommandGateway';
 import { serializeSysmlProjectState } from '../persistence';
+import { createProjectSnapshot } from '../../../utils/adiaProjectPersistence';
 import {
   isChunkedProjectContainer,
   decodeChunkedManifest,
@@ -9,26 +10,46 @@ import {
   type DiagramChunk,
 } from '../persistence/chunkedProjectFormat';
 import { type SysmlRepository, createEmptyRepository } from '../model';
+import {
+  createRepositoryStreamBase,
+  STREAMED_REPOSITORY_COLLECTIONS,
+  streamEntriesInChunks,
+  stripCanonicalPayloadForHydration,
+  projectStateEndpoints,
+  projectStateEndpointSignature,
+} from './projectIoPayload';
 
 export type ProgressPhase = 'read' | 'parse' | 'migrate' | 'normalize' | 'validate' | 'serialize';
 
 export type ProjectWorkerRequest =
   | { id: string; type: 'load'; buffer: ArrayBuffer }
-  | { id: string; type: 'serialize'; payload: any }
+  | { id: string; type: 'serialize'; payload: any; includeSnapshot?: boolean }
+  | { id: string; type: 'loadChunkAck'; sequence: number }
   | { id: string; type: 'cancel' };
 
 export type ProjectWorkerResponse =
   | { id: string; type: 'progress'; phase: ProgressPhase }
+  | { id: string; type: 'loadRepositoryStart'; repository: SysmlRepository }
+  | { id: string; type: 'loadRepositoryChunk'; sequence: number; collection: string; entries: [string, any][] }
+  | { id: string; type: 'loadCoordinateChunk'; sequence: number; entries: [string, any][] }
   | { id: string; type: 'loadSuccess'; result: any }
-  | { id: string; type: 'serializeSuccess'; buffer: ArrayBuffer }
+  | { id: string; type: 'serializeSuccess'; buffer: ArrayBuffer; snapshot?: string }
   | { id: string; type: 'error'; message: string };
 
 const cancelledIds = new Set<string>();
+const pendingChunkAcks = new Map<string, () => void>();
 
 if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
-  self.addEventListener('message', (event: MessageEvent<ProjectWorkerRequest>) => {
+  self.addEventListener('message', async (event: MessageEvent<ProjectWorkerRequest>) => {
     const data = event.data;
     if (!data) return;
+
+    if (data.type === 'loadChunkAck') {
+      const key = `${data.id}:${data.sequence}`;
+      pendingChunkAcks.get(key)?.();
+      pendingChunkAcks.delete(key);
+      return;
+    }
 
     if (data.type === 'cancel') {
       cancelledIds.add(data.id);
@@ -112,23 +133,51 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
 
         if (cancelledIds.has(data.id)) return;
         self.postMessage({ id: data.id, type: 'progress', phase: 'normalize' });
-        const loaded = loadCanonicalSysmlProject(parsed);
+        const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectStateEndpoints(parsed.states) });
+        const stateEndpointSignature = projectStateEndpointSignature(parsed.states);
 
         if (cancelledIds.has(data.id)) return;
         self.postMessage({ id: data.id, type: 'progress', phase: 'validate' });
 
         self.postMessage({
           id: data.id,
+          type: 'loadRepositoryStart',
+          repository: createRepositoryStreamBase(loaded.repository),
+        });
+        const streamChunkSize = 250;
+        const yieldBetweenChunks = () => new Promise<void>(resolve => setTimeout(resolve, 1));
+        let chunkSequence = 0;
+        const postChunkWithBackpressure = (message: Record<string, any>) => new Promise<void>(resolve => {
+          const sequence = chunkSequence++;
+          pendingChunkAcks.set(`${data.id}:${sequence}`, resolve);
+          self.postMessage({ ...message, id: data.id, sequence });
+        });
+        for (const collection of STREAMED_REPOSITORY_COLLECTIONS) {
+          const entries = Object.entries(loaded.repository[collection]);
+          await streamEntriesInChunks(entries, streamChunkSize, chunk => postChunkWithBackpressure({
+            type: 'loadRepositoryChunk', collection, entries: chunk,
+          }), yieldBetweenChunks);
+          if (cancelledIds.has(data.id)) return;
+        }
+
+        const coordinateEntries = Object.entries(loaded.coordinates);
+        const coordinateChunkSize = 100;
+        await streamEntriesInChunks(coordinateEntries, coordinateChunkSize, chunk => postChunkWithBackpressure({
+          type: 'loadCoordinateChunk', entries: chunk,
+        }), yieldBetweenChunks);
+        if (cancelledIds.has(data.id)) return;
+
+        self.postMessage({
+          id: data.id,
           type: 'loadSuccess',
           result: {
-            repository: loaded.repository,
-            coordinates: loaded.coordinates,
             diagramPresentations: loaded.diagramPresentations,
+            stateEndpointSignature,
             valid: loaded.valid,
             diagnostics: loaded.diagnostics,
             upgradeReport: loaded.upgradeReport,
             interchangeReport: loaded.interchangeReport,
-            rawPayload: parsed,
+            rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, stateEndpointSignature),
           },
         });
       } catch (err: any) {
@@ -189,6 +238,7 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
         }
 
         const jsonText = JSON.stringify(payloadToSerialize);
+        const snapshot = data.includeSnapshot ? createProjectSnapshot(payloadToSerialize) : undefined;
         const encoder = new TextEncoder();
         const encoded = encoder.encode(jsonText);
         const buffer = encoded.buffer;
@@ -198,6 +248,7 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
             id: data.id,
             type: 'serializeSuccess',
             buffer,
+            snapshot,
           },
           [buffer],
         );

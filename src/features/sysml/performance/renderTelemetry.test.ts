@@ -5,6 +5,7 @@ import {
   clearRenderTelemetry,
   isRenderTelemetryEnabled,
   setRenderTelemetryEnabledForTesting,
+  resetProjectLoadTelemetry,
   type RenderCommitEntry,
 } from './renderTelemetry';
 
@@ -66,5 +67,20 @@ describe('renderTelemetry', () => {
     const telemetry = getRenderTelemetry();
     expect(telemetry.entries).toHaveLength(0);
     expect(telemetry.renderCountsByArea.inspector).toBe(0);
+  });
+
+  it('starts load timing at the application file handler boundary', () => {
+    const target: any = {
+      __ADIA_PERF_ENABLED__: true,
+      __profileTicks: [10, 20],
+      __profileLongTasks: [900],
+      __profileLoadStart: 10,
+    };
+
+    resetProjectLoadTelemetry(target, 250);
+
+    expect(target.__profileTicks).toEqual([250]);
+    expect(target.__profileLongTasks).toEqual([]);
+    expect(target.__profileLoadStart).toBe(250);
   });
 });

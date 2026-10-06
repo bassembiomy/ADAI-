@@ -781,3 +781,15 @@ header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover svg 
   box-shadow: 0 0 10px var(--pc, #3b82f6) !important;
   border-color: var(--pc, #3b82f6) !important;
 }
+
+/* Large-model performance mode keeps semantic colors and labels while
+   avoiding decorative work during model publication and panel resizing. */
+[data-sysml-performance-mode="true"],
+[data-sysml-performance-mode="true"] *,
+[data-sysml-performance-mode="true"] *::before,
+[data-sysml-performance-mode="true"] *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}

@@ -65,6 +65,7 @@ describe('Massive Model Chunked Capacity (250k - 1M Elements)', () => {
       definitions[id] = {
         id,
         name: `Block_${i}`,
+        namespace: ['model'],
         kind: 'block',
         isAbstract: false,
         isLeaf: false,

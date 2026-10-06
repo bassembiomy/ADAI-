@@ -16,7 +16,8 @@ export interface BrowserProfile {
   workflows: WorkflowsMap;
   load?: {
     durationMs: number;
-    maxHeartbeatGapMs: number;
+    heartbeatGapMs?: number;
+    maxHeartbeatGapMs?: number;
     longTasksMs: number[];
     activeDiagramId?: string;
     presented?: number;
@@ -121,16 +122,26 @@ export function evaluateBrowserProfile(
     }
   }
 
-  // Load check if load limits specified
-  if (limits.maxLoadLongTaskMs !== undefined && profile.load?.longTasksMs) {
+  if (profile.load) {
+    const heartbeatGap = profile.load.heartbeatGapMs ?? profile.load.maxHeartbeatGapMs;
+    if (!Number.isFinite(heartbeatGap) || heartbeatGap! >= limits.maxP95HeartbeatGapMs) {
+      failures.push({
+        workflow: 'load',
+        metric: 'heartbeatGap',
+        observedValue: heartbeatGap ?? Number.NaN,
+        limit: limits.maxP95HeartbeatGapMs,
+        message: `Load heartbeat delay ${heartbeatGap}ms is missing, nonfinite, or at or above limit of ${limits.maxP95HeartbeatGapMs}ms`,
+      });
+    }
+    const loadLongTaskLimit = limits.maxLoadLongTaskMs ?? limits.maxInteractionLongTaskMs;
     for (const lt of profile.load.longTasksMs) {
-      if (lt > limits.maxLoadLongTaskMs) {
+      if (lt > loadLongTaskLimit) {
         failures.push({
           workflow: 'load',
-          metric: 'loadLongTask',
+          metric: 'longTask',
           observedValue: lt,
-          limit: limits.maxLoadLongTaskMs,
-          message: `Load triggered Long Task of ${lt}ms, exceeding limit of ${limits.maxLoadLongTaskMs}ms`,
+          limit: loadLongTaskLimit,
+          message: `Load triggered Long Task of ${lt}ms, exceeding limit of ${loadLongTaskLimit}ms`,
         });
       }
     }

@@ -16,6 +16,41 @@ import type { SysmlElement } from './sysmlCommandGateway';
 import { buildCreateOwnedPortCommand } from './sysmlOwnedFeatureCommands';
 
 describe('sysmlCommandGateway', () => {
+  it('persists governance commands through the store, later edits, and undo/redo', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.master = { id: 'master', kind: 'requirement', name: 'Master', requirementId: 'M', namespace: ['model'], ownerId: 'model', text: 'New text', status: 'approved', version: '1.0' };
+    repo.requirements.copy = { id: 'copy', kind: 'requirement', name: 'Local copy', requirementId: 'C', namespace: ['model'], ownerId: 'model', text: 'Old text', status: 'draft', copiedFromId: 'master', version: '1.0' };
+    repo.relationships.link = { id: 'link', kind: 'deriveReqt', sourceId: 'master', targetId: 'copy', suspect: true };
+    let state = createSysmlGatewayState(repo);
+    const run = (command: any) => {
+      const result = executeSysmlCommand(state, command);
+      expect(result.committed).toBe(true);
+      state = { ...state, ...result };
+      return result;
+    };
+    run({ type: 'createModelBaseline', name: 'Approved baseline' });
+    const baselineId = Object.keys(state.repository.baselines)[0];
+    run({ type: 'cloneBaselineAsWorkingCopy', baselineId, name: 'Working copy' });
+    expect(Object.keys(state.repository.baselines)).toHaveLength(2);
+    run({ type: 'clearSuspectLink', relationshipId: 'link' });
+    expect(state.store?.relationships.get('link')?.suspect).toBe(false);
+    run({ type: 'synchronizeRequirementCopy', requirementId: 'copy' });
+    expect(state.repository.requirements.copy).toMatchObject({ name: 'Local copy', text: 'New text', status: 'draft' });
+    run({ type: 'undo' });
+    expect(state.repository.requirements.copy.text).toBe('Old text');
+    run({ type: 'redo' });
+    const loaded = loadCanonicalSysmlProject(buildCanonicalSysmlProjectPayload(state, { version: '1.0', projectName: 'Governance regression' }));
+    expect(loaded.repository.requirements.copy).toMatchObject({ name: 'Local copy', text: 'New text', status: 'draft' });
+    expect(loaded.repository.relationships.link.suspect).toBe(false);
+    expect(Object.keys(loaded.repository.baselines)).toHaveLength(2);
+    run({ type: 'undo' });
+    run({ type: 'undo' });
+    expect(state.repository.relationships.link.suspect).toBe(true);
+    run({ type: 'undo' });
+    expect(Object.keys(state.repository.baselines)).toHaveLength(1);
+    run({ type: 'undo' });
+    expect(Object.keys(state.repository.baselines)).toHaveLength(0);
+  });
   it('always writes the current schema version even when metadata contains a stale version', () => {
     const state = createSysmlGatewayState(createEmptyRepository());
     const payload = buildCanonicalSysmlProjectPayload(state, {

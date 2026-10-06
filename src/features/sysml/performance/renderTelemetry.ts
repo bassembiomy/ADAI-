@@ -79,6 +79,13 @@ export function clearRenderTelemetry(): void {
   renderCounts.inspector = 0;
 }
 
+export function resetProjectLoadTelemetry(target: any, startTime: number): void {
+  if (!target || target.__ADIA_PERF_ENABLED__ !== true) return;
+  target.__profileTicks = [startTime];
+  target.__profileLongTasks = [];
+  target.__profileLoadStart = startTime;
+}
+
 // Expose on window for test hooks and automated runners
 if (typeof window !== 'undefined') {
   (window as any).__ADIA_PERF__ = {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createEmptyNormalizedStore,
+  createStreamedNormalizedStore,
   fromRepository,
   toRepository,
   getById,
@@ -31,6 +32,20 @@ import {
 import { generate1kModel, generate10kModel } from './largeModelGenerator';
 import { projectLegacyDiagram } from '../../services/sysmlCommandGateway';
 import { createEmptyRepository, type BlockDefinition, type PartUsage, type SysmlRelationship, type RequirementDefinition } from './model';
+import { createRepositoryStreamBase, STREAMED_REPOSITORY_COLLECTIONS } from './workers/projectIoPayload';
+
+it('builds streamed indexes and presentations identically to a complete repository load', () => {
+  const model = generate1kModel();
+  const builder = createStreamedNormalizedStore(createRepositoryStreamBase(model.repository));
+  for (const collection of STREAMED_REPOSITORY_COLLECTIONS) {
+    const entries = Object.entries(model.repository[collection]);
+    for (let i = 0; i < entries.length; i += 37) builder.appendEntities(collection, entries.slice(i, i + 37));
+  }
+  builder.appendCoordinates(Object.entries(model.coordinates));
+  const { entities: _streamAccessors, ...streamed } = builder.finish(model.diagramPresentations);
+  const { entities: _syncAccessors, ...synchronous } = fromRepository(model.repository, model.coordinates, model.diagramPresentations);
+  expect(streamed).toEqual(synchronous);
+});
 
 /**
  * The generated model has no usage records (parts are Block properties). The store still indexes
@@ -44,6 +59,19 @@ function withLegacyUsages(model: ReturnType<typeof generate1kModel>) {
 }
 
 describe('NormalizedSysmlStore', () => {
+  it('preserves deterministic Map insertion order when projecting a repository', () => {
+    const store = createEmptyNormalizedStore();
+    store.definitions.set('z-block', {
+      id: 'z-block', name: 'Z', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    });
+    store.definitions.set('a-block', {
+      id: 'a-block', name: 'A', namespace: ['model'], ownerId: 'model', kind: 'block',
+      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+    });
+
+    expect(Object.keys(toRepository(store, { preserveInsertionOrder: true }).definitions)).toEqual(['z-block', 'a-block']);
+  });
   it('creates an empty normalized store with initialized indexes', () => {
     const store = createEmptyNormalizedStore();
     expect(store.schemaVersion).toBe(2);

@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler } from 'react';
-import { recordRenderCommit } from './features/sysml/performance/renderTelemetry';
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
+import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
+import { projectStateEndpoints, hasMatchingProjectStateContext } from './engine/sysml/workers/projectIoPayload';
+import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
 import * as math from 'mathjs';
 import Plot from './components/doe/PlotlyRenderer';
 import { PlotlyPlots } from './components/doe/PlotlyPlots';
@@ -143,10 +145,9 @@ import { StateMachineCanvasContextMenu } from './components/statemachine/StateMa
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
-import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy, cloneProtectedBaselineAsWorkingCopy } from './engine/sysml/requirements';
 import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
 import { resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from './engine/sysml/requirementsDiagramScope';
-import { analyzeMutation, createHistory } from './engine/sysml/mutations';
+import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository, serializeSysmlProjectState, type V5UpgradeReport } from './engine/sysml/persistence';
 import { SysmlUpgradeReportDialog } from './components/sysml/SysmlUpgradeReportDialog';
 import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
@@ -6356,6 +6357,12 @@ const ADIA = () => {
   const [sysmlUpgrade, setSysmlUpgrade] = useState<{ report: V5UpgradeReport; backupPath: string | null; backupError: string | null } | null>(null);
   const pendingUpgradeBackupRef = useRef<{ path: string | null; error: string | null }>({ path: null, error: null });
   const sysmlGatewayStateRef = useRef(createSysmlGatewayState(ensureDefaultSysmlDiagrams(createEmptyRepository()).repository));
+  const pendingHydrationSequenceRef = useRef(0);
+  const committedHydrationSequenceRef = useRef(0);
+  const [hydrationCommitSequence, setHydrationCommitSequence] = useState(0);
+  useEffect(() => {
+    committedHydrationSequenceRef.current = hydrationCommitSequence;
+  }, [hydrationCommitSequence]);
   const sysmlCoordinates = useMemo(
     () => Object.fromEntries(sysmlStore.coordinates.entries()),
     [sysmlStore],
@@ -6401,7 +6408,7 @@ const ADIA = () => {
   // Single exact-ID open path (Task 4) for creation, tree double-click, mode
   // switching, and tabs. Rejected/unknown IDs return false and mutate
   // nothing: no tab is synthesized for a failed command.
-  const openExactDiagramById = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean; workspaceAlreadyUpdated?: boolean }) => {
+  const openExactDiagramByIdImmediate = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean; workspaceAlreadyUpdated?: boolean }) => {
     const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
     const context = resolveExactDiagramCanvasContext(diagramId, currentRepo, {
       states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams,
@@ -6467,6 +6474,12 @@ const ADIA = () => {
     }
     return true;
   }, [seededStateMachineDiagrams, canonicalSysmlRepository, states, layers, transitions, junctions, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
+
+  const openExactDiagramById = useCallback((...args: Parameters<typeof openExactDiagramByIdImmediate>) => {
+    let opened = false;
+    startTransition(() => { opened = openExactDiagramByIdImmediate(...args); });
+    return opened;
+  }, [openExactDiagramByIdImmediate]);
 
   const openCanvasSymbolDiagram = useCallback((semanticId: string): boolean => {
     const diagramIds = resolveCanvasSymbolDiagramTargets(semanticId, canonicalSysmlRepository, {
@@ -6595,14 +6608,7 @@ const ADIA = () => {
   // SysML Application Delegate connected to the canonical command gateway
   const sysmlApplicationDelegate = useMemo<SysmlApplicationDelegate>(() => {
     return createSysmlDelegate({
-      getState: () => ({
-        repository: canonicalSysmlRepository,
-        history: createHistory(canonicalSysmlRepository),
-        store: sysmlStore,
-        patchHistory: sysmlGatewayStateRef.current.patchHistory,
-        coordinates: Object.fromEntries(sysmlStore.coordinates.entries()),
-        diagramPresentations: Object.fromEntries(sysmlStore.diagramPresentations.entries()),
-      }),
+      getState: () => ({ ...sysmlGatewayStateRef.current }),
       setState: (nextState) => {
         sysmlGatewayStateRef.current = { ...sysmlGatewayStateRef.current, ...nextState };
         setCanonicalSysmlRepository(nextState.repository);
@@ -6635,14 +6641,16 @@ const ADIA = () => {
       diagramPresentations: currentDiagPres,
       context: externalEndpointContext,
     };
-    const result = executeSysmlCommand(currentState, cmd, undefined, externalEndpointContext);
+    const result = executeSysmlCommand(currentState, cmd, activeSysmlDiagramId, externalEndpointContext);
     if (result.committed) {
       sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
-      setCanonicalSysmlRepository(result.repository);
-      setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
+      startTransition(() => {
+        setCanonicalSysmlRepository(result.repository);
+        setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
+      });
     }
     return result;
-  }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext]);
+  }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext, activeSysmlDiagramId]);
 
   // The gateway deletes in two phases: an unconfirmed deleteElements returns
   // only an impact preview (committed: false, no diagnostics), and commits
@@ -6694,7 +6702,7 @@ const ADIA = () => {
       (window as any).__sysmlExecuteCommand = handleExecuteSysmlCommand;
       (window as any).__sysmlExecuteConfirmedDeletion = executeConfirmedDeletion;
       (window as any).__setActivePackageDiagramId = setActivePackageDiagramId;
-      (window as any).__setActiveSysmlDiagramId = setActiveSysmlDiagramIdState;
+      (window as any).__setActiveSysmlDiagramId = openExactDiagramById;
       try {
         Object.defineProperty(window, '__sysmlRepository', {
           get: () => sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository,
@@ -6704,7 +6712,7 @@ const ADIA = () => {
         (window as any).__sysmlRepository = canonicalSysmlRepository;
       }
     }
-  }, [handleExecuteSysmlCommand, canonicalSysmlRepository, setActiveSysmlDiagramIdState]);
+  }, [handleExecuteSysmlCommand, canonicalSysmlRepository, openExactDiagramById]);
 
   // Task 7 browser-gate read access (spec 6, 8.3): stable test selectors for
   // the real save/reload path. These hooks expose production state only —
@@ -6714,6 +6722,10 @@ const ADIA = () => {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__adiaTestHooks = {
+        getRenderedSysmlRevision: () => canonicalSysmlRepository.revision,
+        getRenderedHydrationSequence: () => hydrationCommitSequence,
+        getPendingHydrationSequence: () => pendingHydrationSequenceRef.current,
+        getRenderedDefinitionCount: () => Object.keys(canonicalSysmlRepository.definitions).length,
         semanticToken: (role: string) => semanticPresentationToken(role),
         getDiagramPresentations: () => sysmlDiagramPresentations,
         getActiveDiagramId: () => activeSysmlDiagramId,
@@ -6722,7 +6734,7 @@ const ADIA = () => {
         getDiagramWorkspace: () => diagramWorkspace,
       };
     }
-  }, [sysmlDiagramPresentations, activeSysmlDiagramId, diagramMode, diagramNavigationStack, diagramWorkspace]);
+  }, [canonicalSysmlRepository, hydrationCommitSequence, sysmlDiagramPresentations, activeSysmlDiagramId, diagramMode, diagramNavigationStack, diagramWorkspace]);
 
   // Report Application Delegate connected to the real report export pipeline
   const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
@@ -6800,21 +6812,6 @@ const ADIA = () => {
     ),
     [blocks, relationships, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations],
   );
-
-  // Schedule large validation asynchronously after edits with revision-based cancellation
-  useEffect(() => {
-    if (blocks.length === 0 && parts.length === 0) return;
-    const cancel = getDefaultSysmlWorkerClient().scheduleValidation(
-      sysmlStore,
-      sysmlStore.revision,
-      () => {
-        // Validation completed in worker thread without blocking UI
-      },
-      undefined,
-      externalEndpointContext,
-    );
-    return cancel;
-  }, [sysmlStore.revision, externalEndpointContext]);
 
   const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
@@ -8192,7 +8189,8 @@ const ADIA = () => {
   }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
 
 
-  const hydrateProject = useCallback((importedData: any, preloadedResult?: any) => {
+  const hydrateProjectImmediate = useCallback((importedData: any, preloadedResult?: any) => {
+    const hydrationSequence = ++pendingHydrationSequenceRef.current;
     try {
       // Canonical repositories are preferred; legacy imports are migrated by
       // the same loader, then all canvas views are refreshed from that model.
@@ -8202,23 +8200,15 @@ const ADIA = () => {
       // remains valid after hydration instead of being quarantined as an
       // unresolved endpoint. No stale State copies are persisted: only live
       // endpoint identities from the incoming model are supplied.
-      const incomingStates = Array.isArray(importedData.states) ? importedData.states : [];
-      const hydrationEndpoints = new Map<string, ExternalSemanticEndpoint>();
-      for (const state of incomingStates) {
-        if (state && typeof state.id === 'string' && state.id.length > 0) {
-          hydrationEndpoints.set(state.id, {
-            id: state.id,
-            name: typeof state.name === 'string' && state.name.length > 0 ? state.name : state.id,
-            family: 'state',
-          });
-        }
-      }
+      const hydrationEndpoints = projectStateEndpoints(importedData.states);
       const hydratedRepository = applyCanonicalProjectLoad(
-        preloadedResult && preloadedResult.valid && hydrationEndpoints.size === 0
+        preloadedResult && preloadedResult.valid && hasMatchingProjectStateContext(preloadedResult.stateEndpointSignature, importedData.states)
           ? preloadedResult
           : loadCanonicalSysmlProject({
               ...importedData,
-              sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository,
+              sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository ?? preloadedResult?.repository,
+              sysmlCoordinates: importedData.sysmlCoordinates ?? importedData.coordinates ?? preloadedResult?.coordinates,
+              diagramPresentations: importedData.diagramPresentations ?? preloadedResult?.diagramPresentations,
             }, hydrationEndpoints.size > 0 ? { externalEndpoints: hydrationEndpoints } : undefined)
       );
       // Logic & Simulation
@@ -8500,8 +8490,10 @@ const ADIA = () => {
       setHistory([]);
       setHistoryIndex(-1);
 
+      setHydrationCommitSequence(hydrationSequence);
       addError('info', 'Unified ADIA Project imported successfully');
     } catch (error) {
+      setHydrationCommitSequence(hydrationSequence);
       addError('error', 'Failed to hydrate project state. File might be corrupted.');
     }
   }, [
@@ -8515,9 +8507,16 @@ const ADIA = () => {
     setCurrentProjectName, setOpenTabs, setWorkspaceFiles, setOpenTabIds, setActiveFileId, setDiagramModeState
   ]);
 
-  const buildUnifiedProjectPayload = useCallback(() => {
+  const hydrateProject = useCallback((importedData: any, preloadedResult?: any) => {
+    startTransition(() => hydrateProjectImmediate(importedData, preloadedResult));
+  }, [hydrateProjectImmediate]);
+
+  const buildUnifiedProjectPayload = useCallback((options?: { deferSysmlPreparation?: boolean }) => {
     // Format 5 file: part usage records are folded into Block properties and the presentations follow.
-    const savedSysml = serializeSysmlProjectState(canonicalSysmlRepository, sysmlDiagramPresentations);
+    const committedState = sysmlGatewayStateRef.current;
+    const savedSysml = options?.deferSysmlPreparation
+      ? { sysmlRepository: committedState.repository, diagramPresentations: committedState.diagramPresentations, sysmlCoordinates: committedState.coordinates }
+      : serializeSysmlProjectState(committedState.repository, committedState.diagramPresentations, committedState.coordinates);
     return createUnifiedProjectPayload({
       version: VERSION,
       projectName: currentProjectName,
@@ -8538,10 +8537,7 @@ const ADIA = () => {
       parts,
       connectors,
       sysmlRepository: savedSysml.sysmlRepository,
-      sysmlCoordinates: Object.fromEntries([
-        ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
-        ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
-      ]),
+      sysmlCoordinates: savedSysml.sysmlCoordinates,
       diagramPresentations: savedSysml.diagramPresentations,
       interfaceRealizations,
       customStereotypes,
@@ -8609,10 +8605,18 @@ const ADIA = () => {
   ]);
 
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
+    if (pendingHydrationSequenceRef.current !== committedHydrationSequenceRef.current) {
+      addError('info', 'Project is still loading. Save when loading completes.');
+      return;
+    }
     try {
-      const payload = buildUnifiedProjectPayload();
+      // Both desktop and browser saves prepare format 5 in the Worker.
+      const rawPayload = buildUnifiedProjectPayload({ deferSysmlPreparation: true });
+      let savedSnapshot: string | null = null;
+      const buffer = await serializeProjectInWorker(rawPayload, { onSnapshot: value => { savedSnapshot = value; } });
       const electron = (window as any).electronAPI;
       if (electron) {
+        const payload = await parseProjectJsonBuffer(buffer);
         let result: any;
         if (saveAs) {
           result = typeof electron.projectSaveAs === 'function'
@@ -8626,7 +8630,7 @@ const ADIA = () => {
 
         if (result && (result.status === 'saved' || result.success) && result.filePath) {
           setActiveProjectPath(result.filePath);
-          lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+          lastSavedSnapshotRef.current = savedSnapshot;
 
           const fileName = result.filePath.split(/[/\\]/).pop() || '';
           const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
@@ -8641,7 +8645,6 @@ const ADIA = () => {
         }
       } else {
         // Web / Browser Fallback: serialize in worker so UI thread does not freeze
-        const buffer = await serializeProjectInWorker(payload);
         const blob = new Blob([buffer], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -8651,7 +8654,7 @@ const ADIA = () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+        lastSavedSnapshotRef.current = savedSnapshot;
         addError('info', 'Project downloaded as .adia file.');
       }
     } catch (err: any) {
@@ -8791,8 +8794,11 @@ const ADIA = () => {
       (window as any).__buildUnifiedProjectPayload = buildUnifiedProjectPayload;
       (window as any).__serializeProjectInWorker = serializeProjectInWorker;
       (window as any).__loadProjectInWorker = loadProjectInWorker;
+      if ((window as any).__ADIA_PERF_ENABLED__ === true) {
+        (window as any).__saveUnifiedProject = saveUnifiedProject;
+      }
     }
-  }, [hydrateProject, buildUnifiedProjectPayload]);
+  }, [hydrateProject, buildUnifiedProjectPayload, saveUnifiedProject]);
 
   useEffect(() => {
     const electron = (window as any).electronAPI;
@@ -12747,6 +12753,8 @@ const ADIA = () => {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
+        resetProjectLoadTelemetry(window, performance.now());
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-handler-start');
         const buffer = event.target?.result as ArrayBuffer;
         if (!buffer || buffer.byteLength === 0) {
           setImportValidationError({
@@ -12757,8 +12765,10 @@ const ADIA = () => {
           return;
         }
         const loaded = await loadProjectInWorker(buffer);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-worker-complete');
         const importedData = loaded.rawPayload;
         const validation = validateImportedJson(importedData);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-validation-complete');
         if (!validation.isValid) {
           setImportValidationError(validation);
           return;
@@ -12778,7 +12788,9 @@ const ADIA = () => {
             saveStoredPerformanceLimits({ ...limits, forcePerformanceMode: true });
           }
         }
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-hydration-start');
         hydrateProject(dataToHydrate, loaded);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-hydration-dispatched');
         addError('info', `Imported project: ${file.name}`);
       } catch (error) {
         setImportValidationError({
@@ -17657,6 +17669,7 @@ const ADIA = () => {
       <Profiler id="workspace" onRender={(_, phase, actualDuration) => recordRenderCommit('workspace', phase, actualDuration)}>
         <div
           className="flex flex-col ui-surface font-sans overflow-hidden"
+          data-sysml-performance-mode={loadStoredPerformanceLimits().forcePerformanceMode ? 'true' : undefined}
         style={{
           zoom: uiZoom,
           width: `${100 / uiZoom}vw`,
@@ -17846,6 +17859,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
+              disabled={pendingHydrationSequenceRef.current !== hydrationCommitSequence}
               className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project (.adia)"
             >
@@ -17857,6 +17871,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
+              disabled={pendingHydrationSequenceRef.current !== hydrationCommitSequence}
               className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project as new file (.adia)"
             >
@@ -20218,13 +20233,13 @@ const ADIA = () => {
                             invalidatedEvidenceIds={deletionPreview.invalidatedEvidenceIds}
                             blockedBaselineIds={deletionPreview.affectedBaselineIds.filter(id => !authorizedBaselineIds.includes(id))}
                             onCreateBaseline={(name) => {
-                              const res = createModelBaseline(canonicalSysmlRepository, name);
-                              setCanonicalSysmlRepository(res.repository);
+                              const res = handleExecuteSysmlCommand({ type: 'createModelBaseline', name });
+                              if (!res.committed) return;
                               addError('info', `Created baseline: ${name}`);
                             }}
                             onCloneBaseline={(baselineId) => {
-                              const res = cloneProtectedBaselineAsWorkingCopy(canonicalSysmlRepository, baselineId, `Working copy of ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}`);
-                              setCanonicalSysmlRepository(res.repository);
+                              const res = handleExecuteSysmlCommand({ type: 'cloneBaselineAsWorkingCopy', baselineId, name: `Working copy of ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}` });
+                              if (!res.committed) return;
                               addError('info', `Cloned protected baseline ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')} into unprotected working copy ${sysmlObjectLabel(res.baseline, 'Baseline')}`);
                             }}
                             onAuthorizeBaseline={(baselineId) => {
@@ -20232,23 +20247,13 @@ const ADIA = () => {
                               addError('info', `Recorded explicit deletion authorization for protected baseline ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}`);
                             }}
                             onClearSuspect={(relId) => {
-                              const updated = clearSuspectLink(canonicalSysmlRepository, relId);
-                              setCanonicalSysmlRepository(updated);
+                              const res = handleExecuteSysmlCommand({ type: 'clearSuspectLink', relationshipId: relId });
+                              if (!res.committed) return;
                               addError('info', `Cleared suspect flag on link: ${resolveSysmlReferenceLabel(canonicalSysmlRepository, relId, 'Relationship')}`);
                             }}
                             onSyncFromMaster={() => {
-                              const res = synchronizeRequirementCopy(canonicalSysmlRepository, selectedBlock.id);
-                              setCanonicalSysmlRepository(res.repository);
-                              if (masterReq) {
-                                updateBlock(selectedBlock.id, {
-                                  name: masterReq.name,
-                                  description: masterReq.text,
-                                  status: masterReq.status,
-                                  version: masterReq.version,
-                                  priority: masterReq.priority,
-                                  risk: masterReq.risk,
-                                });
-                              }
+                              const res = handleExecuteSysmlCommand({ type: 'synchronizeRequirementCopy', requirementId: selectedBlock.id });
+                              if (!res.committed) return;
                               addError('info', 'Synchronized copy requirement from master');
                             }}
                           />

@@ -167,9 +167,12 @@ export const VirtualTree: React.FC<VirtualTreeProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const scrollTopRef = useRef(0);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(e.currentTarget.scrollTop);
+    const next = e.currentTarget.scrollTop;
+    scrollTopRef.current = next;
+    setScrollTop(next);
   }, []);
 
   const windowSlice = computeVirtualTreeWindow({
@@ -222,8 +225,13 @@ export const VirtualTree: React.FC<VirtualTreeProps> = ({
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-    const next = clampVirtualTreeScrollTop(element.scrollTop, rows.length, rowHeight, height);
-    if (next !== element.scrollTop) element.scrollTop = next;
+    // Reading scrollTop here forces layout of the newly published workspace.
+    // Scroll events and our own writes keep this offset current without a read.
+    const next = clampVirtualTreeScrollTop(scrollTopRef.current, rows.length, rowHeight, height);
+    if (next !== scrollTopRef.current) {
+      scrollTopRef.current = next;
+      element.scrollTop = next;
+    }
     setScrollTop(current => (current === next ? current : next));
   }, [rows.length, rowHeight, height]);
 
@@ -232,15 +240,18 @@ export const VirtualTree: React.FC<VirtualTreeProps> = ({
     if (!containerRef.current) return;
     const targetTop = focusedIndex * rowHeight;
     const targetBottom = targetTop + rowHeight;
-    const currentScroll = containerRef.current.scrollTop;
+    const currentScroll = scrollTopRef.current;
     const viewportHeight = height;
 
-    if (targetTop < currentScroll) {
-      containerRef.current.scrollTop = targetTop;
-    } else if (targetBottom > currentScroll + viewportHeight) {
-      containerRef.current.scrollTop = targetBottom - viewportHeight;
+    const target = targetTop < currentScroll ? targetTop
+      : targetBottom > currentScroll + viewportHeight ? targetBottom - viewportHeight : currentScroll;
+    const next = clampVirtualTreeScrollTop(target, rows.length, rowHeight, height);
+    if (next !== currentScroll) {
+      scrollTopRef.current = next;
+      containerRef.current.scrollTop = next;
+      setScrollTop(next);
     }
-  }, [focusedIndex, rowHeight, height]);
+  }, [focusedIndex, rowHeight, height, rows.length]);
 
   return (
     <div

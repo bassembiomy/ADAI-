@@ -6,6 +6,17 @@ import {
 } from './assertBrowserProfile';
 
 describe('assertBrowserProfile evaluator', () => {
+  it('rejects blocked load heartbeat from the standalone browser profiler', () => {
+    const result = evaluateBrowserProfile({ size: 10000, timestamp: '', samplesCount: 5, workflows: {},
+      load: { durationMs: 1000, maxHeartbeatGapMs: 800, longTasksMs: [] } });
+    expect(result.passed).toBe(false);
+  });
+
+  it('rejects a load record without a finite heartbeat measurement', () => {
+    const result = evaluateBrowserProfile({ size: 10000, timestamp: '', samplesCount: 5, workflows: {},
+      load: { durationMs: 1000, longTasksMs: [] } });
+    expect(result.passed).toBe(false);
+  });
   const defaultLimits: ProfileLimits = {
     maxP95HeartbeatGapMs: 100,
     maxInteractionLongTaskMs: 100,
@@ -115,6 +126,28 @@ describe('assertBrowserProfile evaluator', () => {
     const result = evaluateBrowserProfile(profile, defaultLimits);
     expect(result.passed).toBe(false);
     expect(result.failures.some(f => f.workflow === 'property-edit' && f.metric === 'longTask' && f.observedValue === 125)).toBe(true);
+  });
+
+  it('fails when initial load blocks the heartbeat or creates a long task', () => {
+    const profile: BrowserProfile = {
+      size: 10000,
+      timestamp: new Date().toISOString(),
+      samplesCount: 5,
+      workflows: {},
+      load: {
+        durationMs: 2000,
+        heartbeatGapMs: 956,
+        longTasksMs: [951],
+      },
+    };
+
+    const result = evaluateBrowserProfile(profile, defaultLimits);
+
+    expect(result.passed).toBe(false);
+    expect(result.failures).toEqual(expect.arrayContaining([
+      expect.objectContaining({ workflow: 'load', metric: 'heartbeatGap', observedValue: 956 }),
+      expect.objectContaining({ workflow: 'load', metric: 'longTask', observedValue: 951 }),
+    ]));
   });
 
   it('computes 5-sample p95 correctly using standard percentile logic', () => {

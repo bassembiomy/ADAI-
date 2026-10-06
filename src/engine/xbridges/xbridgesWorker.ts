@@ -168,7 +168,7 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
 }
 
 // Attach listener in Web Worker environment
-if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
+if (typeof window === 'undefined' && typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
   self.onmessage = (event: MessageEvent<XbridgesWorkerRequest>) => {
     const response = handleXbridgesWorkerMessage(event.data);
     (self as any).postMessage(response);

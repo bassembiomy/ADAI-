@@ -57,6 +57,12 @@ try {
   });
   const expectedDefinitions = Object.keys(fixture.repository.definitions).length;
   await page.waitForFunction(expected => Object.keys((window as any).__sysmlRepository?.definitions ?? {}).length === expected, expectedDefinitions);
+  await page.waitForFunction(expected => {
+    const w = window as any;
+    return w.__adiaTestHooks?.getRenderedDefinitionCount() === expected
+      && w.__adiaTestHooks?.getRenderedSysmlRevision() === w.__sysmlRepository?.revision
+      && w.__adiaTestHooks?.getActiveDiagramId() === 'diagram-ordinary';
+  }, expectedDefinitions);
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   const load = await page.evaluate(() => {
     const w = window as any;
@@ -100,6 +106,9 @@ try {
       const start = performance.now();
       const result = w.__sysmlExecuteCommand({ type: 'updateElement', elementId: 'blk_1', patch: { name } });
       const handlerMs = performance.now() - start;
+      while (w.__adiaTestHooks?.getRenderedSysmlRevision() !== w.__sysmlRepository?.revision) {
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       performance.mark('command-paint-end');
       const paintDelayMs = performance.now() - start;
@@ -132,6 +141,9 @@ try {
       const start = performance.now();
       const result = w.__sysmlExecuteCommand({ type: 'undo' });
       const handlerMs = performance.now() - start;
+      while (w.__adiaTestHooks?.getRenderedSysmlRevision() !== w.__sysmlRepository?.revision) {
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       performance.mark('command-paint-end');
       const paintDelayMs = performance.now() - start;
@@ -164,6 +176,9 @@ try {
       const start = performance.now();
       const result = w.__sysmlExecuteCommand({ type: 'redo' });
       const handlerMs = performance.now() - start;
+      while (w.__adiaTestHooks?.getRenderedSysmlRevision() !== w.__sysmlRepository?.revision) {
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       performance.mark('command-paint-end');
       const paintDelayMs = performance.now() - start;

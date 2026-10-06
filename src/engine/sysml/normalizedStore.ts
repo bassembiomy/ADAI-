@@ -310,6 +310,31 @@ function indexEntity(
 /**
  * Initialize a NormalizedSysmlStore from a SysmlRepository and optional presentations.
  */
+/** Incremental construction only: do not publish the store until finish(). */
+export function createStreamedNormalizedStore(metadata: SysmlRepository) {
+  const store = fromRepository(metadata);
+  return {
+    appendEntities(collection: SysmlEntityCollection, entries: [string, SysmlEntity][]) {
+      const target = store[collection] as Map<string, SysmlEntity>;
+      for (const [id, entity] of entries) {
+        target.set(id, entity);
+        indexEntity(store, collection, id, entity);
+      }
+    },
+    appendCoordinates(entries: [string, PresentationCoordinates][]) {
+      for (const [id, coordinates] of entries) store.coordinates.set(id, coordinates);
+    },
+    finish(diagramPresentations?: Record<string, DiagramPresentationInput>) {
+      const migrated = normalizeDiagramPresentations(diagramPresentations ?? {}, Object.fromEntries(store.coordinates));
+      for (const [diagramId, presentation] of Object.entries(migrated)) {
+        store.diagramPresentations.set(diagramId, presentation);
+        for (const id of presentation.elementIds) addToIndex(store.indexes.diagramId, diagramId, id);
+      }
+      return store;
+    },
+  };
+}
+
 export function fromRepository(
   repo: SysmlRepository,
   coordinates?: Record<string, PresentationCoordinates>,
@@ -374,17 +399,15 @@ export function fromRepository(
 const deterministicIdCollator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
 const byCode = (a: string, b: string): number => deterministicIdCollator.compare(a, b);
 
-export function toRepository(store: NormalizedSysmlStore): SysmlRepository {
+export function toRepository(store: NormalizedSysmlStore, options?: { preserveInsertionOrder?: boolean }): SysmlRepository {
   const toRecord = <T>(map: Map<string, T>): Record<string, T> => {
     const record: Record<string, T> = {};
-    if (map.size <= 1) {
-      map.forEach((val, key) => { record[key] = val; });
-      return record;
-    }
-    const keys = Array.from(map.keys()).sort(byCode);
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      record[key] = map.get(key)!;
+    if (options?.preserveInsertionOrder) {
+      map.forEach((value, key) => { record[key] = value; });
+    } else {
+      for (const key of [...map.keys()].sort(byCode)) {
+        record[key] = map.get(key)!;
+      }
     }
     return record;
   };

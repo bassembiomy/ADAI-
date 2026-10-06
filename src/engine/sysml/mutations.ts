@@ -672,8 +672,8 @@ export function applyCommand(
   };
 }
 
-export function createHistory(repository: SysmlRepository): MutationHistory {
-  return { past: [], present: cloneRepository(repository), future: [] };
+export function createHistory(repository: SysmlRepository, options?: { sharePresent?: boolean }): MutationHistory {
+  return { past: [], present: options?.sharePresent ? repository : cloneRepository(repository), future: [] };
 }
 
 export function undo(history: MutationHistory): MutationHistory {

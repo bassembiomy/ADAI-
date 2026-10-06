@@ -489,16 +489,22 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     return repository;
   }, [canonicalSysmlRepository, blocks, parts]);
 
+  const normalizedPresentations = useMemo(
+    () => normalizeDiagramPresentations(diagramPresentations ?? {}),
+    [diagramPresentations],
+  );
+
   // SysML adapter
   const sysmlAdapter = useMemo(() => {
     const repo = sysmlRepository;
 
     const state: SysmlGatewayState = {
       repository: repo,
-      history: createHistory(repo),
+      // The application gateway owns history; this adapter only reads its snapshot.
+      history: createHistory(repo, { sharePresent: Boolean(onExecuteSysmlCommand) }),
       store: sysmlStore ?? fromRepository(repo, {}, diagramPresentations),
       coordinates: {},
-      diagramPresentations: normalizeDiagramPresentations(diagramPresentations ?? {}),
+      diagramPresentations: normalizedPresentations,
     };
     // Mutable local snapshot: refreshed after each committed command so the
     // pending type-selection resume sees the just-created type. Reassignment
@@ -525,7 +531,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         return result;
       },
     });
-  }, [sysmlRepository, sysmlStore, diagramPresentations, onExecuteSysmlCommand]);
+  }, [sysmlRepository, sysmlStore, diagramPresentations, normalizedPresentations, onExecuteSysmlCommand]);
 
   const activeAdapter = isStateMachine ? smAdapter : sysmlAdapter;
 

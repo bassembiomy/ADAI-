@@ -79,6 +79,12 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
       expectedDefinitions,
       { timeout: 60000 },
     );
+    await page.waitForFunction(expected => {
+      const w = window as any;
+      return w.__adiaTestHooks?.getRenderedDefinitionCount() === expected
+        && w.__adiaTestHooks?.getRenderedSysmlRevision() === w.__sysmlRepository?.revision
+        && w.__adiaTestHooks?.getActiveDiagramId() === 'diagram-ordinary';
+    }, expectedDefinitions);
     await page.evaluate(() => new Promise<void>(res => requestAnimationFrame(() => requestAnimationFrame(() => res()))));
 
     const loadMetrics = await page.evaluate(() => {
@@ -94,6 +100,42 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
     });
 
     expect(loadMetrics.activeDiagramId).toBe('diagram-ordinary');
+
+    // Saving in the same input task must include a committed command even
+    // while React is still rendering its new snapshot.
+    const immediateSavedName = await page.evaluate(() => {
+      const w = window as any;
+      const updated = w.__sysmlExecuteCommand({ type: 'updateElement', elementId: 'blk_1', patch: { name: 'Immediate save regression' } });
+      if (!updated.committed) throw new Error('Immediate save setup command failed');
+      const payload = w.__buildUnifiedProjectPayload();
+      const envelope = typeof payload.sysmlRepository === 'string' ? JSON.parse(payload.sysmlRepository) : payload.sysmlRepository;
+      const name = (envelope.repository ?? envelope).definitions.blk_1.name;
+      w.__sysmlExecuteCommand({ type: 'undo' });
+      return name;
+    });
+    expect(immediateSavedName).toBe('Immediate save regression');
+    const immediateSavedX = await page.evaluate(() => {
+      const w = window as any;
+      const result = w.__sysmlExecuteCommand({ type: 'updatePresentation', diagramId: 'diagram-ordinary', elementId: 'blk_1', presentation: { x: 123, y: 456, width: 180, height: 120 } });
+      if (!result.committed) throw new Error('Immediate position setup failed');
+      const x = w.__buildUnifiedProjectPayload().diagramPresentations?.['diagram-ordinary']?.presentations?.blk_1?.bounds?.x;
+      w.__sysmlExecuteCommand({ type: 'undo' });
+      return x;
+    });
+    const savedDuringHydration = await page.evaluate(async () => {
+      const w = window as any;
+      const snapshot = w.__buildUnifiedProjectPayload();
+      const previousElectron = w.electronAPI;
+      let saved = false;
+      w.electronAPI = { projectSave: async () => { saved = true; return { status: 'cancelled' }; } };
+      try {
+        w.__hydrateProject({ ...snapshot, projectName: 'Pending hydration regression' });
+        await w.__saveUnifiedProject(false);
+        w.__hydrateProject(snapshot);
+        return saved;
+      } finally { w.electronAPI = previousElectron; }
+    });
+    expect({ x: immediateSavedX, savedDuringHydration }).toEqual({ x: 123, savedDuringHydration: false });
 
     const workflows: WorkflowsMap = {};
 
@@ -116,6 +158,13 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
           const start = performance.now();
           const actionResult = await fn(arg, sampleIdx);
           const handlerMs = performance.now() - start;
+
+          // Semantic refs advance synchronously; React may commit later.
+          while (w.__adiaTestHooks?.getRenderedSysmlRevision() !== w.__sysmlRepository?.revision
+            || w.__adiaTestHooks?.getRenderedHydrationSequence() !== w.__adiaTestHooks?.getPendingHydrationSequence()
+            || (actionResult?.expectedDiagramId && w.__adiaTestHooks?.getActiveDiagramId() !== actionResult.expectedDiagramId)) {
+            await new Promise<void>(res => requestAnimationFrame(() => res()));
+          }
 
           await new Promise<void>(res => requestAnimationFrame(() => requestAnimationFrame(() => res())));
           const paintDelayMs = performance.now() - start;
@@ -303,6 +352,7 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
       } else if (typeof window.__setActivePackageDiagramId === 'function') {
         window.__setActivePackageDiagramId(targetDiagramId);
       }
+      return { expectedDiagramId: targetDiagramId };
     `);
     workflows['diagram-switch'] = { samples: diagramSwitchSamples };
 
@@ -312,6 +362,7 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
       if (typeof window.__setActiveSysmlDiagramId === 'function') {
         window.__setActiveSysmlDiagramId('diagram-stress');
       }
+      return { expectedDiagramId: 'diagram-stress' };
     `);
     workflows['stress-diagram'] = { samples: stressDiagramSamples };
 
@@ -344,14 +395,19 @@ test.describe('SysML Scalability & Production Responsiveness Gate', () => {
     // 12. Save & Reopen Workflow (offloaded to worker)
     console.log(`[Scalability Gate] Running workflow: save-reopen...`);
     const saveReopenSamples = await measureBrowserOperation(`
-      const payload = {
-        projectName: 'Saved Scalability Project',
-        sysmlRepository: window.__sysmlRepository,
-        workspaceFiles: [],
-        diagramPresentations: typeof window.__adiaTestHooks?.getDiagramPresentations === 'function'
-          ? window.__adiaTestHooks.getDiagramPresentations()
-          : {},
-      };
+        let payload;
+        const originalElectron = window.electronAPI;
+        const captureSave = async (prepared) => {
+          payload = prepared;
+          return { status: 'saved', filePath: 'scalability-test.adia' };
+        };
+        try {
+          window.electronAPI = { projectSave: captureSave, projectSaveAs: captureSave };
+          await window.__saveUnifiedProject(false);
+        } finally {
+          window.electronAPI = originalElectron;
+        }
+        if (!payload) throw new Error('Production save did not produce a payload');
       if (typeof window.__serializeProjectInWorker === 'function' && typeof window.__loadProjectInWorker === 'function') {
         const buffer = await window.__serializeProjectInWorker(payload);
         const loaded = await window.__loadProjectInWorker(buffer);

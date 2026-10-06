@@ -49,6 +49,7 @@ import {
   type MutationHistory,
 } from '../engine/sysml/mutations';
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
+import { createModelBaseline, cloneProtectedBaselineAsWorkingCopy, clearSuspectLink, synchronizeRequirementCopy } from '../engine/sysml/requirements';
 import { validateScopedSysmlRepository } from '../engine/sysml/validation/dependencyScope';
 import { activityNestedIds, findInActivity } from '../engine/sysml/activity';
 import { interactionNestedIds, planOperationRenames } from '../engine/sysml/interaction';
@@ -245,6 +246,10 @@ export interface PresentationSnapshot {
 }
 
 export type SysmlMutationCommand =
+  | { type: 'createModelBaseline'; name: string }
+  | { type: 'cloneBaselineAsWorkingCopy'; baselineId: string; name: string }
+  | { type: 'clearSuspectLink'; relationshipId: string }
+  | { type: 'synchronizeRequirementCopy'; requirementId: string }
   | { type: 'createElement'; element: SysmlElement; presentation?: PresentationCoordinates; coalesceKey?: string }
   | { type: 'createAndPresent'; element: SysmlElement; diagramId: string; presentation: PresentationCoordinates }
   | { type: 'createOwnedFeature'; intent: OwnedFeatureIntent; diagramId?: string; presentation?: PresentationCoordinates; coalesceKey?: string }
@@ -285,6 +290,7 @@ export interface SysmlGatewayState {
 }
 
 export interface SysmlCommandResult {
+  baseline?: ModelBaseline;
   repository: SysmlRepository;
   view: LegacySysmlView;
   diagnostics: SysmlDiagnostic[];
@@ -319,7 +325,7 @@ export function createSysmlGatewayState(
 
   return {
     repository: repo,
-    history: createHistory(repo),
+    history: createHistory(repo, { sharePresent: true }),
     store,
     patchHistory,
     coordinates: coords,
@@ -1459,6 +1465,53 @@ function executeSysmlCommandCore(
     redoStack: state.redoStack,
   });
 
+  if (command.type === 'createModelBaseline' || command.type === 'cloneBaselineAsWorkingCopy'
+    || command.type === 'clearSuspectLink' || command.type === 'synchronizeRequirementCopy') {
+    let generated: SysmlRepository;
+    let collection: 'baselines' | 'relationships' | 'requirements';
+    let id: string;
+    if (command.type === 'createModelBaseline') {
+      const result = createModelBaseline(state.repository, command.name);
+      generated = result.repository; collection = 'baselines'; id = result.baseline.id;
+    } else if (command.type === 'cloneBaselineAsWorkingCopy') {
+      const result = cloneProtectedBaselineAsWorkingCopy(state.repository, command.baselineId, command.name);
+      if (result.diagnostics.length) return reject(result.diagnostics[0].code, result.diagnostics[0].message, command.baselineId);
+      generated = result.repository; collection = 'baselines'; id = result.baseline.id;
+    } else if (command.type === 'clearSuspectLink') {
+      if (!state.repository.relationships[command.relationshipId]) return reject('ELEMENT_NOT_FOUND', 'Relationship does not exist', command.relationshipId);
+      generated = clearSuspectLink(state.repository, command.relationshipId); collection = 'relationships'; id = command.relationshipId;
+    } else {
+      if (!state.repository.requirements[command.requirementId]) return reject('ELEMENT_NOT_FOUND', 'Requirement does not exist', command.requirementId);
+      generated = synchronizeRequirementCopy(state.repository, command.requirementId).repository; collection = 'requirements'; id = command.requirementId;
+    }
+    const oldValue = state.repository[collection][id];
+    const value = generated[collection][id];
+    if (generated.revision === state.repository.revision && JSON.stringify(value) === JSON.stringify(oldValue)) {
+      return { ...reject('NO_CHANGE', 'Governance operation did not change the model', id), diagnostics: [] };
+    }
+    const nextRepo = { ...state.repository, [collection]: { ...state.repository[collection], [id]: value }, revision: generated.revision, auditTrail: generated.auditTrail };
+    const validation = validateSysmlRepository(nextRepo, endpointContext);
+    const errors = introducedErrors(state.repository, validation.diagnostics, endpointContext);
+    if (errors.length) return reject(errors[0].code, errors[0].message, errors[0].elementId);
+    upsertEntity(store, collection, value);
+    store.revision = nextRepo.revision;
+    store.auditTrail = [...nextRepo.auditTrail];
+    const patch = createSysmlPatch({
+      revision: nextRepo.revision, description: command.type,
+      forward: oldValue ? [{ op: 'replace', collection, id, oldValue, value }] : [{ op: 'add', collection, id, value }],
+      inverse: oldValue ? [{ op: 'replace', collection, id, oldValue: value, value: oldValue }] : [{ op: 'remove', collection, id, oldValue: value }],
+    });
+    pushPatch(patchHistory, patch, store);
+    seedBaselineErrors(nextRepo, validation.diagnostics);
+    return {
+      repository: nextRepo, store, patchHistory, committed: true, diagnostics: validation.diagnostics,
+      ...(collection === 'baselines' ? { baseline: value as ModelBaseline } : {}),
+      view: getView(nextRepo, coordinates, diagramPresentations), coordinates, diagramPresentations,
+      history: { past: state.history.past, present: nextRepo, future: [] },
+      presentationHistory: state.presentationHistory, actionStack: [...(state.actionStack ?? []), 'semantic'], redoStack: [],
+    };
+  }
+
   if (command.type === 'undo') {
     const actionStack = [...(state.actionStack ?? [])];
     const lastAction = actionStack.pop();
@@ -1467,7 +1520,7 @@ function executeSysmlCommandCore(
       const undoRes = undoPatch(patchHistory, store);
       if (undoRes) {
         store.revision = Math.max(0, undoRes.appliedPatch.revision - 1);
-        const repo = toRepository(store);
+        const repo = toRepository(store, { preserveInsertionOrder: true });
         const touchesCoords = undoRes.appliedPatch.forward.some(op => (op as any).collection === 'coordinates');
         const nextCoords = touchesCoords ? Object.fromEntries(store.coordinates) : coordinates;
         const touchesDiagrams = undoRes.appliedPatch.forward.some(op => (op as any).collection === 'diagramPresentations');
@@ -1588,7 +1641,7 @@ function executeSysmlCommandCore(
       const redoRes = redoPatch(patchHistory, store);
       if (redoRes) {
         store.revision = redoRes.appliedPatch.revision;
-        const repo = toRepository(store);
+        const repo = toRepository(store, { preserveInsertionOrder: true });
         const touchesCoords = redoRes.appliedPatch.forward.some(op => (op as any).collection === 'coordinates');
         const nextCoords = touchesCoords ? Object.fromEntries(store.coordinates) : coordinates;
         const touchesDiagrams = redoRes.appliedPatch.forward.some(op => (op as any).collection === 'diagramPresentations');

@@ -203,7 +203,7 @@ export class XbridgesAnalysisClient {
 }
 
 // Web Worker message dispatcher
-if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
+if (typeof window === 'undefined' && typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
   self.onmessage = (event: MessageEvent) => {
     const { requestId, params } = event.data;
     try {

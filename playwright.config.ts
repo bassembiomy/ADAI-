@@ -41,7 +41,9 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  // External production profiling already supplies its server. Starting a
+  // second dev build here adds unrelated compilation load to the measurements.
+  webServer: process.env.ADIA_PROFILE_URL ? undefined : {
     command: 'npm run dev',
     url: 'http://127.0.0.1:3000',
     reuseExistingServer: true,
