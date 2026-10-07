@@ -725,10 +725,14 @@
         "WP-43"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npm run test:vlab:certify",
-      "evidence": [],
+      "evidence": [
+        "certify.ts PASS (planner re-run): 116 files, 5467 pass / 14 expected-fail / 0 fail; tsc 0; inventory 248 blocks",
+        "npm run build exit 0 (renderer + Electron); e2e vlab-smoke 2/2 passed",
+        "report docs/vlab-review/certification-report.md; CI .github/workflows/vlab-certification.yml; proposed npm script test:vlab:certify (package.json holds the other session's changes)"
+      ],
       "findings": []
     }
   ],
@@ -748,7 +752,8 @@
       "block": "pid_ac_motor lab",
       "layer": "solver",
       "summary": "pid_ac_motor lab: repeated ImplicitSolver convergence failures and timeout (5 s) in labs_sim.test.ts.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved (induction labs converge: WP-12a/12b, WP-31c)"
     },
     {
       "id": "F-003",
@@ -1702,5 +1707,19 @@
     "full_suite": "planner runs the full V-Lab suite every ~3 WPs; executors run targeted tests only",
     "priority": "WP-12b > WP-13 > WP-15 > WP-17 > WP-20 > WP-21 > WP-30 > WP-31 > WP-50 > WP-40",
     "executor_model_change": "2026-10-07: Sonnet weekly limit hit (resets Oct 10 21:00). WP-21, WP-30, WP-31b ran on Opus executors. USER DECISION (2026-10-07 ~11:00): Sonnet executes, Opus only reviews. Remaining WP-31c, WP-50, WP-40 MUST use Sonnet: wait for the reset, then resume with /vlab-review-loop."
-  }
+  },
+  "stats_after": {
+    "date": "2026-10-07",
+    "live_blocks": 248,
+    "ports": 782,
+    "missing_domain_ports": 0,
+    "affected_blocks": 0,
+    "generic_equation_labels": 9,
+    "unsafe_numeric_fallbacks": 0,
+    "fully_certified": 237,
+    "unsupported": 2,
+    "expected_failures": 12,
+    "dae_allocation_mismatch_blocks": 0
+  },
+  "status": "COMPLETE 2026-10-07 (WP-19b deferred by user decision)"
 }

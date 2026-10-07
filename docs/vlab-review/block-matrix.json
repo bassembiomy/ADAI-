@@ -1,1 +1,2497 @@
-{}
+{
+  "generated_by": "scripts/vlab_review/genBlockMatrix.ts",
+  "note": "simscape=pending: no Simscape golden exists (F-021, partial MATLAB install). Reference is published governing equations (plan section 0).",
+  "summary": {
+    "blocks": 248,
+    "ports": 782,
+    "noDomainPorts": 0,
+    "noDomainBlocks": 0,
+    "genericLabels": 9,
+    "noEquationText": 0,
+    "unsafeFallbacks": 0,
+    "fully_certified": 237,
+    "blocks_with_expected_failures": 11
+  },
+  "blocks": {
+    "resistor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "variable_resistor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "infinite_resistance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "capacitor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "inductor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "memristor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gyrator": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "transformer": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "opamp": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "switch": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "diode": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "nmos": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "igbt": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rotational_electromechanical_converter": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "translational_electromechanical_converter": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pmsm": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "dc_motor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ac_motor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "bldc_motor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "thermal_resistor": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "scope": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "v_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "i_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "dc_voltage": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ac_voltage": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "three_phase_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "controlled_voltage": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "dc_current": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "vcvs": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "vccs": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "cccs": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ccvs": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ground": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "busbar": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "phase_splitter": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "delta_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "open_circuit": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_demux_3": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_cap": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_chamber": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_reservoir": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_resistance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_inf_resistance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_restriction": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_pipe": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_fixed_res": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_rotational_conv": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_translational_conv": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_pressure_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_flow_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_flow_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gas_pressure_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mag_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "reluctance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "fundamental_reluctance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "variable_reluctance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "permanent_magnet": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "em_converter": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "reluctance_force": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mag_flux_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mag_mmf_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mag_mmf_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mag_flux_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mag_controlled_mmf": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "force_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_motion_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "torque_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_motion_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "force_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "torque_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ang_vel_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "gear_box": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "lever": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "wheel_axle": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_multibody_interface": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_multibody_interface": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "inertia": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_spring": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_damper": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_friction": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rot_hard_stop": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mass": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_spring": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_damper": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_friction": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "trans_hard_stop": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_chamber": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_pipe": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_separator": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "expected-failure",
+      "equation": "expected-failure",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_rot_conv": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_trans_conv": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_flow_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_selector": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "expected-failure",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_moisture_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_pt_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_thermo_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_moisture_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_flow_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_pressure_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ma_properties": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_delay": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_add": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_subtract": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_gain": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_product": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_divide": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_math": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_sum": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_integrator": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_transfer_fcn": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_lookup_1d": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_lookup_2d": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_abs": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_saturation": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_dead_zone": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_switch": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_min": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_max": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_rms": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "bldc_commutation": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "bldc_current_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "bldc_pwm_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "dcdc_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pfc_rectifier_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "cycloconverter_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_pi_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_pid_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_lpf": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_integrator_gen": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_moving_avg": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_sr_flipflop": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_sample_hold": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_smith_predictor": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_sine_3phase": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_second_order_filter": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_state_feedback": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_sliding_mode": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_stair_gen": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_washout": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "dc_current_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "dc_voltage_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "hysteresis_ctrl_3ph": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "velocity_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "im_scalar_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "im_foc_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "im_dtc_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "im_curr_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "clarke_transform": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "inv_clarke_transform": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "park_transform": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "inv_park_transform": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "sym_comp_transform": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "inv_sym_comp_transform": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "im_flux_observer": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "luenberger_observer": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "quad_decoder": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "resolver_to_digital": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pmsm_curr_ctrl": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pmsm_ref_gen": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pmsm_foc": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pmsm_field_weakening": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pmsm_tq_est": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pwm_3ph_2level": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pwm_3ph_3level": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pwm_vienna": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "thyristor_6pulse": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "thyristor_12pulse": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "belt_properties": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "belt_end": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "belt_spool": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pulley": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "world_frame": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "ref_frame": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "rigid_transform": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "transform_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "dist_constraint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "angle_constraint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "grav_field": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "spring_damper_force": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "external_force": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "expected-failure"
+    },
+    "revolute_joint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "prismatic_joint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "spherical_joint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "universal_joint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "weld_joint": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "common_gear": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rack_pinion": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mech_config": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_terminator": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "constant": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_constant": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_sine": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_step": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_ramp": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "lms_adaptive_filter": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "neural_neuron_learning": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "rl_q_learning_controller": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ac_motor_pid_control": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "conductive_heat": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "convective_heat": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "radiative_heat": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "thermal_mass": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "thermal_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "heat_flow_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "temp_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "heat_src": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "temp_src": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ctrl_heat_src": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ctrl_temp_src": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "washing_basket": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "washing_fluid": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "magnetron": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "upper_heater": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "steam_generator": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "microwave_inverter": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "microwave_cavity": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "solver_config": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ps_simulink_conv": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "simulink_ps_conv": {
+      "class": "signal",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "vlab_probe": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "conn_label": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "subsystem": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "inport": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "outport": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "fluid_ref": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "fluid_resistance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "orifice": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "fluid_capacitance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "fluid_inertance": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pressure_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "ctrl_pressure_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "mass_flow_source": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "check_valve": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "relief_valve": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "steam_generator_fluid": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "steam_accumulator": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "steam_nozzle": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pressure_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "flow_sensor": {
+      "class": "measurement",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "doe_custom": {
+      "class": "utility",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "n/a",
+      "simscape": "n/a",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "hydraulic_reference_il": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pump_il": {
+      "class": "source",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "pipe_il": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    },
+    "restriction_il": {
+      "class": "physical",
+      "ports": "pass",
+      "params": "pass",
+      "equation": "pass",
+      "conservation": "tested-by-domain-suite",
+      "simscape": "pending",
+      "ui": "pass",
+      "help": "pass"
+    }
+  }
+}
