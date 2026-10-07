@@ -200,19 +200,13 @@ export function resolvePort(node: RuleNode, handle?: string | null): PortLookup 
     return { ok: false, unverifiable: true };
   }
 
-  let domain = libPort?.domain ?? dataPort?.domain ?? (synthScope ? 'Physical' : undefined) ?? node.data?.domain;
+  const domain = libPort?.domain ?? dataPort?.domain ?? (synthScope ? 'Physical' : undefined) ?? node.data?.domain;
   // width / composite metadata comes from the LIBRARY; an instance copy only fills in for a block the library does not know
   let shape: PortShape;
   try { shape = portShape(libPort ?? dataPort, `Port "${portId}" of "${label}" (${type})`); }
   catch (e) { return fail('unknown-domain', e instanceof Error ? e.message : String(e)); }
   let direction: PortDirection | undefined = libPort?.direction ?? dataPort?.direction;
   if (synthScope) direction = 'in';
-  if (type === 'doe_custom' && !libPort && dataPort) {
-    // DOE deployment nodes (engine/doe/integration.ts) declare per-instance scalar ports with the legacy domain
-    // `General` and an explicit `type: input|output`. They are physical-signal ports; the explicit type is the direction.
-    if (canonicalDomain(domain) === 'general') domain = 'Physical';
-    if (!direction) direction = dataPort.type === 'input' ? 'in' : dataPort.type === 'output' ? 'out' : undefined;
-  }
   return makeResolved(node, type, label, portId!, domain, direction, fail, shape);
 }
 

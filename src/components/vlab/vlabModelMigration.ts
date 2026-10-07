@@ -8,6 +8,54 @@ const effectiveBlockType = (node: VLabNode): string =>
   String(node.data?.type ?? node.type ?? '').toLowerCase();
 
 /**
+ * WP-21 (F-019): legacy block type ids that old saved models can contain -> the canonical library block. The capitalised
+ * container spellings came from the Simulink-style editor; heat_sensor was the old id of the Heat Flow Rate Sensor (same ports
+ * a, b, h and the same equation); reservoir_il was the removed Reservoir (IL) block (port a, referencePressure), replaced by
+ * the Hydraulic Reference (IL). Ports and parameters are identical, so only the type id is rewritten.
+ */
+export const LEGACY_TYPE_ALIASES: Record<string, string> = {
+  Subsystem: 'subsystem',
+  Inport: 'inport',
+  Outport: 'outport',
+  heat_sensor: 'heat_flow_sensor',
+  reservoir_il: 'hydraulic_reference_il',
+};
+
+const aliasLegacyType = (node: VLabNode): VLabNode => {
+  const dataType = node.data?.type;
+  const canonical = typeof dataType === 'string' ? LEGACY_TYPE_ALIASES[dataType] : undefined;
+  const nodeCanonical = typeof node.type === 'string' ? LEGACY_TYPE_ALIASES[node.type] : undefined;
+  if (!canonical && !nodeCanonical) return node;
+  return {
+    ...node,
+    ...(nodeCanonical ? { type: nodeCanonical } : {}),
+    data: { ...node.data, ...(canonical ? { type: canonical } : {}), ...(node.data?.blockId && LEGACY_TYPE_ALIASES[node.data.blockId] ? { blockId: LEGACY_TYPE_ALIASES[node.data.blockId] } : {}) },
+  } as VLabNode;
+};
+
+/**
+ * WP-21 (F-040): DOE deployment nodes saved before the port contract declared their scalar ports with the domain `General`
+ * and only `type: input|output`. They are physical-signal ports; the saved type becomes the explicit direction.
+ */
+const migrateDoePorts = (node: VLabNode): VLabNode => {
+  if (effectiveBlockType(node) !== 'doe_custom' || !Array.isArray(node.data?.ports)) return node;
+  const ports = node.data.ports as any[];
+  if (!ports.some((p) => String(p?.domain ?? '').toLowerCase() === 'general')) return node;
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      ports: ports.map((p) => String(p?.domain ?? '').toLowerCase() !== 'general' ? p : {
+        ...p,
+        domain: 'Physical',
+        direction: p.direction ?? (p.type === 'input' ? 'in' : p.type === 'output' ? 'out' : undefined),
+        ...(p.quantity === undefined && typeof p.label === 'string' ? { quantity: p.label } : {}),
+      }),
+    },
+  };
+};
+
+/**
  * WP-08: one canonical parameter key per block (the key in vlabLibrary.ts). Equations read only canonical keys, so
  * every legacy synonym an old equation used to accept (`params.R || params.resistance`, `params.torque`, ...) or an
  * old library key is mapped to the canonical key here, when a model is loaded.
@@ -466,7 +514,7 @@ export const normalizeLegacyVLabGraph = (
   inputNodes: VLabNode[],
   inputEdges: VLabEdge[],
 ): { nodes: VLabNode[]; edges: VLabEdge[] } => {
-  const sources = migrateThreePhaseSources(inputNodes, inputEdges);
+  const sources = migrateThreePhaseSources(inputNodes.map(aliasLegacyType).map(migrateDoePorts), inputEdges);
   const { nodes, edges } = migrateScalarPhasePorts(sources.nodes, sources.edges);
   const removedNodeIds = new Set(
     nodes

@@ -183,6 +183,9 @@ export interface VLabDOENode {
       pos: string;
       position: string;
       domain: string;
+      direction?: 'in' | 'out';
+      quantity?: string;
+      unit?: string;
     }>;
   };
 }

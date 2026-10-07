@@ -304,10 +304,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: "Electrical reference (Simscape Electrical Reference): defines 0 V for the network it is wired to. Every connected electrical network needs one; an unconnected electrical port is open, not grounded."
   },
   doe_custom: {
-    equations: ['y = evaluate_doe(u1, u2, ..., un)'],
+    equations: ['out = f_DOE(in1, in2, ..., inN)'],
     latex: ['y = f_{DOE}(\\mathbf{u})'],
     across: 'None', through: 'None',
-    description: 'A custom block generated from the DOE module. Implements a trained regression or neural model.'
+    description: 'A custom block generated from the DOE module. Implements a trained regression or neural model; each factor (in1..inN) and the response (out) is a scalar physical signal.'
   },
   busbar: {
     equations: ["V1 = V2 = ... = Vn   [V]", "Sum(I_k) = 0   [A]"],
@@ -1070,18 +1070,19 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   washing_basket: {
     equations: [
-      'J_total = J_basket + (load_mass + unbalance) * radius^2',
-      'T_load = J_total * d(omega)/dt + 0.02 * omega'
+      'J_total = J_basket + (load_mass + unbalance) * radius^2   [kg*m^2]',
+      'tau = J_total * d(omega)/dt + damping * omega   [N*m]',
+      'vis = tau   [N*m]'
     ],
-    latex: ['J_{total} \\ddot{\\theta} + B \\dot{\\theta} = T_e'],
-    across: 'Angular Velocity', through: 'Load Torque',
-    description: 'Models the mechanical dynamics of a washing machine drum, including load inertia and dynamic unbalance forces.'
+    latex: ['\\tau = \\left(J_b + (m_l + m_u) r^2\\right) \\dot{\\omega} + b\\,\\omega'],
+    across: 'Angular velocity omega [rad/s]', through: 'Load torque tau [N*m]',
+    description: 'Washing-machine drum on a vertical axis: basket inertia plus laundry and unbalance mass at the drum radius, viscous bearing damping. Vis outputs the load torque.'
   },
   washing_fluid: {
-    equations: ['T_slosh = drag_coeff * (water_level/10) * omega^2'],
-    latex: ['T_{slosh} = C_d \\cdot V_{water} \\cdot \\omega^2'],
-    across: 'Angular Velocity', through: 'Slosh Torque',
-    description: 'Simulates the non-linear fluid drag and sloshing effects of water and detergent during the wash cycle.'
+    equations: ['tau = (drag_coeff + 0.02*detergent + 0.005*water_level) * omega + 0.01 * omega * |omega|   [N*m]'],
+    latex: ['\\tau = (b_d + 0.02\\,c_{det} + 0.005\\,V_w)\\,\\omega + 0.01\\,\\omega|\\omega|'],
+    across: 'Angular velocity omega [rad/s]', through: 'Drag torque tau [N*m]',
+    description: 'Viscous plus quadratic slosh drag of the wash liquor on the drum (purely dissipative).'
   },
   constant: {
     equations: ['y = value'],
@@ -1320,12 +1321,6 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'T (K)', through: 'None',
     description: 'Measures T_A - T_B in kelvin. With B on the (0 K) Thermal Reference, or left open, it reads the absolute temperature.'
   },
-  heat_sensor: {
-    equations: ['Q_out = Q'],
-    latex: ['Q_{out} = Q'],
-    across: 'None', through: 'Q (W)',
-    description: 'Measures the heat flow rate through a thermal branch (from A to B).'
-  },
   heat_src: {
     equations: ['Q = Q_src'],
     latex: ['Q = Q_{src}'],
@@ -1375,16 +1370,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Visualizes signal time-histories in a dedicated window.'
   },
   magnetron: {
-    equations: ['P_elec = power_rating * ((Vp - Vn)/4000)^2', 'I = P_elec / (Vp - Vn)', 'Qh = -power_rating * (efficiency/100) * ((Vp - Vn)/4000)^2'],
-    latex: ['P_{elec} = P_{rated} \left(\frac{V}{4000}\right)^2', 'I = \frac{P_{elec}}{V}', 'Q = -P_{rated} \eta \left(\frac{V}{4000}\right)^2'],
-    across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Converts high-voltage electrical energy into microwave thermal power. At the nominal 4000 V anode voltage it consumes the rated power and outputs rated_power * efficiency as heat. Negative through-value at port indicates heat injection into the connected node.'
+    equations: ['i = power_rating * (Vp - Vn) / v_nominal^2   [A]', 'P_elec = (Vp - Vn) * i   [W]', 'Q_H = (efficiency/100) * P_elec   [W] (into H)', 'P_loss = (1 - efficiency/100) * P_elec   [W] (to ambient)'],
+    latex: ['i = \\frac{P_{rated}}{V_{nom}^2} v', 'Q_H = \\eta\\, v\\, i'],
+    across: 'Voltage v = Vp - Vn [V]', through: 'Current i [A]; heat Q_H into H [W]',
+    description: 'Lumped magnetron: square-law anode characteristic (rated power at the nominal anode voltage); RF power eta*P_elec is delivered as heat through H, the anode loss is rejected to ambient.'
   },
   upper_heater: {
-    equations: ['Qh = -((Vp - Vn)^2) / resistance'],
-    latex: ['Q = -\frac{(V_p-V_n)^2}{R}'],
-    across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Model for a radiant/resistive heating element. Injects thermal energy (negative through-flow) based on dissipated electrical power.'
+    equations: ['i = (Vp - Vn) / resistance   [A]', 'Q_H = efficiency * (Vp - Vn)^2 / resistance   [W] (into H)'],
+    latex: ['Q_H = \\eta \\frac{(V_p-V_n)^2}{R}'],
+    across: 'Voltage v = Vp - Vn [V]', through: 'Current i [A]; heat Q_H into H [W]',
+    description: 'Radiant resistive heating element: Joule heat, the fraction efficiency radiated into the cavity through H (negligible element heat capacity), the rest lost to the housing.'
   },
   steam_generator: {
     equations: ['m_w*c_w*dT_w/dt = eta*P_el - k_loss*(T_w - T_amb) - Q_s', 'T_w >= T_boil: Q_s = max(0, eta*P_el - k_loss*(T_w - T_amb)), mdot_steam = Q_s/h_fg'],
@@ -1409,13 +1404,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       'C = C_air + m_wall*Cp_wall + m_food*Cp_food',
       'A = 6 * (V/1000)^(2/3)',
       'Q_conv = h_conv * A * (Th1 - T_amb)',
-      'Q_rad = eps * sigma * A * (Th1^4 - T_amb^4)',
-      'cutout = 0.5 * (1 + tanh((T_max - Th1)/3))',
-      'dTh1/dt = (cutout*(Q1+Q2+Q3) - Q_conv - Q_rad) / C'
+      'Q_rad = eps * sigma * A * (Th1^4 - T_amb^4),  sigma = 5.670374419e-8 W/(m^2 K^4)',
+      'cutout = 0.5 * (1 + tanh((T_max - Th1)/3)),  Q_vent = (1 - cutout)*(Q1+Q2+Q3)',
+      'C dTh1/dt = (Q1+Q2+Q3) - Q_vent - Q_conv - Q_rad   [W]'
     ],
-    latex: ['T = T_0 + \\int \\frac{cutout \\cdot \\Sigma Q - Q_{conv} - Q_{rad}}{C} dt'],
+    latex: ['C \\dot{T} = \\Sigma Q - Q_{vent} - Q_{conv} - Q_{rad}'],
     across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Thermal mass model for the microwave cavity (25L/55L). Includes air, wall, and optional food/water thermal mass, convective and Stefan-Boltzmann radiative cooling scaled by cavity surface area, and a smooth thermal cutout that gradually reduces heat input near the safety limit.'
+    description: 'Lumped thermal model of the microwave cavity: air, wall and food heat capacity, convective and Stefan-Boltzmann radiative loss to the ambient (cube surface area), and a smooth thermal cutout that vents the heat input to ambient near the safety limit. T_amb and T_max are degC parameters; the cavity starts at T_amb.'
   },
   lms_adaptive_filter: {
     equations: [
@@ -1503,12 +1498,6 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     latex: ['p_A = p_{absolute} + \\rho g (z_{ref} - z_A)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Establishes the absolute pressure reference datum for an isothermal liquid hydraulic network.'
-  },
-  reservoir_il: {
-    equations: ['p_A = p_absolute + rho*g*(z_ref - z_A)'],
-    latex: ['p_A = p_{absolute} + \\rho g (z_{ref} - z_A)'],
-    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Reservoir maintaining a specified reference pressure in an isothermal liquid network.'
   },
   pump_il: {
     equations: ['p_B - p_A = delta_p'],

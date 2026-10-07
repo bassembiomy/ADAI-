@@ -10905,8 +10905,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N*m"
           }
         ],
-        "equation": "τ = J_drum * dω/dt + b_visc * ω + τ_unbalance",
-        "description": "Rotational inertia and eccentric mass dynamics of washing machine drum during spin cycles."
+        "equation": "J_total = J_basket + (load_mass + unbalance)·radius²  [kg·m²]\nτ = J_total·dω/dt + b·ω  [N·m]  (torque drawn from R)\nvis = τ  [N·m]",
+        "description": "Washing-machine drum on a vertical axis: the basket inertia plus the laundry and the eccentric (unbalance) mass as point masses on the drum wall, with viscous bearing damping b. The Vis output is the load torque. Energy: τ·ω = d/dt(½·J_total·ω²) + b·ω². The eccentric mass adds inertia only; its centrifugal force m_u·r·ω² is radial (bearing load) and does no work about the axis."
       },
       {
         "id": "washing_fluid",
@@ -10942,8 +10942,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "dT_water/dt = (Q_heater - Q_loss) / (m_water * Cp_water)",
-        "description": "Thermal and fluid load dynamics representing wash tub water volume, detergent mixing, and heating."
+        "equation": "τ = (drag_coeff + 0.02·detergent + 0.005·water_level)·ω + 0.01·ω·|ω|  [N·m]\n(0.02 N·m·s/rad per %, 0.005 N·m·s/rad per L, 0.01 N·m·s²/rad²)",
+        "description": "Drag load of the wash liquor on the drum: a viscous term that grows with the water level and the detergent concentration plus a quadratic slosh (turbulent) term. Purely dissipative: the absorbed power τ·ω ≥ 0 is turned into heat in the water."
       }
     ]
   },
@@ -10998,8 +10998,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "P_out = P_elec * η\\nλ = c / f",
-        "description": "Converts high-voltage electrical energy into microwave radiation (thermal energy). Typical efficiency is around 65%."
+        "equation": "i = P_rated·v/V_nom²,  P_elec = v·i = P_rated·(v/V_nom)²  [W]\nQ_H = η·P_elec,  η = efficiency/100  [W]  (RF power absorbed by the load, into H)\nP_loss = (1 − η)·P_elec  [W]  (anode loss, to ambient)",
+        "description": "Lumped magnetron: a square-law anode characteristic (equivalent anode resistance V_nom²/P_rated) draws the rated power at the nominal anode voltage. The RF output η·P_elec is absorbed by the load in the cavity and delivered as heat through H; the anode loss (1 − η)·P_elec is rejected to ambient by the magnetron's own cooling. Energy: v·i = Q_H + P_loss. Typical efficiency is around 65%."
       },
       {
         "id": "upper_heater",
@@ -11043,8 +11043,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "Q = V²/R\\nQ_rad = ε*σ*A*(T⁴ - T_amb⁴)",
-        "description": "A resistive heating element that provides radiant heat to the cavity. It models both Joule heating and Stefan-Boltzmann radiation."
+        "equation": "i = v/R,  P_el = v²/R  [W]\nQ_H = efficiency·P_el  [W]  (radiant heat into H)\nQ_loss = (1 − efficiency)·P_el  [W]  (to the housing)",
+        "description": "A resistive (Joule) heating element that radiates into the cavity. The element has negligible heat capacity, so its Stefan-Boltzmann radiant output equals the absorbed Joule power at every instant (quasi-static); the fraction 'efficiency' reaches the cavity through H and the rest is lost to the housing. Energy: v·i = Q_H + Q_loss."
       },
       {
         "id": "steam_generator",
@@ -11265,8 +11265,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "K"
           }
         ],
-        "equation": "dQ/dt = P_in - Q_loss\\nm*Cp*dT/dt = Σ(dQ/dt)",
-        "description": "A thermal model of a microwave oven cavity. It tracks temperature based on microwave energy input and heat losses to the environment."
+        "equation": "C·dT/dt = Q_in − h·A·(T − T_amb) − ε·σ·A·(T⁴ − T_amb⁴) − Q_vent  [W]\nC = ρ_air·V·c_air + m_wall·c_wall + m_food·c_food  [J/K],  A = 6·V^(2/3)  [m²]\nQ_in = Q_M + Q_U + Q_S,  Q_vent = (1 − cutout)·Q_in,  cutout = ½·(1 + tanh((T_max − T)/3 K))\nT_M = T_U = T_S = T,  t = T  [K]",
+        "description": "Lumped thermal model of a microwave-oven cavity: air, walls and food share one temperature T (initially the ambient temperature). Heat entering through M, U and S is stored in the heat capacity C and lost to the ambient by natural convection and grey-body radiation (σ = 5.670374419e-8 W/(m²·K⁴), cube surface A). Near the thermal cutout limit T_max the input is vented to ambient (Q_vent), so the cavity cannot exceed it. The T output is the cavity temperature in kelvin."
       }
     ]
   },
@@ -11441,8 +11441,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Probe governing physical equation",
-        "description": "Physical component model for Probe."
+        "equation": "x = u   (tap: the probed physical signal is repeated unchanged, same unit)",
+        "description": "Probe point: taps the scalar physical signal wired to In and repeats it unchanged on x, so it can be routed to a scope or logged. It draws nothing from the network and adds no dynamics."
       },
       {
         "id": "conn_label",
@@ -11465,8 +11465,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical"
           }
         ],
-        "equation": "Connection Label governing physical equation",
-        "description": "Physical component model for Connection Label."
+        "equation": "no equation: names the net wired to A (no through variable, no unknown)",
+        "description": "Net label (annotation): gives the net its port is wired to a readable name. It takes the domain and direction of whatever it is wired to and has no physical effect."
       },
       {
         "id": "subsystem",
@@ -12101,7 +12101,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           }
         },
         "ports": [],
-        "equation": "Y = f(X1, X2, ...)",
+        "equation": "out = f_DOE(in1, …, inN)  (deployed RSM / GMDH / Taguchi response; each factor and the response is a scalar physical signal)",
         "description": "A data-driven model generated from experimental results (Design of Experiments). It allows high-fidelity behavioral simulation without complex physical equations."
       }
     ]

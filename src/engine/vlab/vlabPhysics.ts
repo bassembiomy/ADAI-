@@ -177,6 +177,7 @@ export class VLabPhysicsEngine {
    *  - gas_chamber, ma_chamber: chamber pressure P0 (default 1 atm); the piston chambers start at T_g = T with the gas mass m = P0 V0 / (R T)
    *  - fluid_capacitance: the pressure of its node starts at P0 (default 1 atm)
    *  - steam_generator: water at the ambient temperature, tank full: m_w = rho_w * tank_vol (L -> m^3)
+   *  - microwave_cavity: lumped cavity temperature at the ambient temperature
    */
   private seedFluidStates(system: AssembledSystem, nodes: Node[], x: number[]): void {
     const set = (name: string, value: number) => {
@@ -211,6 +212,10 @@ export class VLabPhysicsEngine {
         case 'steam_generator':
           set(`${id}_state_T_w`, numericParam(params, 'ambient_temp', 25, id) + 273.15);
           set(`${id}_state_m_w`, (RHO_WATER_LIQUID * numericParam(params, 'tank_vol', 0.5, id)) / 1000);
+          break;
+        case 'microwave_cavity':
+          // WP-21: the cavity starts at its ambient temperature; the library unit of ambient_temp is degC (no unit guessing)
+          set(`${id}_state_temp`, numericParam(params, 'ambient_temp', 25, id) + 273.15);
           break;
         default:
           break;

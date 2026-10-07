@@ -605,7 +605,6 @@ export class DAEAssembler {
         break;
       }
       case 'heat_flow_sensor':
-      case 'heat_sensor':
         branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
         branches.push({ name: 'signal_h', ports: [{ id: 'h', sign: 1 }] });
         break;

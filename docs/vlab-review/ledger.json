@@ -531,10 +531,14 @@
         "WP-31a"
       ],
       "blocks": [],
-      "status": "todo",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
-      "evidence": [],
+      "evidence": [
+        "appliances energy-consistent: magnetron (current sign/Joule law), microwave_cavity (CODATA sigma, degC params, ambient seed), washing_basket (torque, not speed); lab energy within 1 % over 5 mains cycles",
+        "orphan types aliased via LEGACY_TYPE_ALIASES; doe_custom emits Physical + direction (special case removed); conn_label/vlab_probe documented; remaining expected failures are only WP-19 (deferred) labels",
+        "planner re-run green apart from the known load timeout"
+      ],
       "findings": []
     },
     {
@@ -556,7 +560,7 @@
         "WP-21"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npm run test:vlab:simscape",
       "evidence": [],
@@ -855,7 +859,8 @@
       "wp": "WP-21",
       "severity": "low",
       "block": "Inport,Outport,Subsystem,heat_sensor,reservoir_il,vfd_controller",
-      "summary": "Orphan equation keys (aliases or legacy). Confirm whether old models need them, else remove."
+      "summary": "Orphan equation keys (aliases or legacy). Confirm whether old models need them, else remove.",
+      "status": "resolved-WP-21"
     },
     {
       "layer": "ui",
@@ -1039,7 +1044,8 @@
       "block": "doe_custom (engine/doe/integration.ts)",
       "layer": "port",
       "summary": "Emits the domain General. The producer should emit Physical + direction.",
-      "wp": "WP-21"
+      "wp": "WP-21",
+      "status": "resolved-WP-21"
     },
     {
       "id": "F-041",
@@ -1463,7 +1469,8 @@
       "block": "belt_properties / whitebox MechanicalFixtures",
       "layer": "eq",
       "summary": "belt_damping from belt_properties is not applied (belt_end has a local damping param). The whitebox MechanicalFixtures torque source wiring inverts the sign.",
-      "wp": "WP-30"
+      "wp": "WP-30",
+      "status": "resolved-WP-21"
     },
     {
       "id": "F-091",
@@ -1471,7 +1478,8 @@
       "block": "magnetron, upper_heater (appliances)",
       "layer": "port",
       "summary": "An open thermal h port is now a topology error (was silently pinned to 293.15 K). Saved appliance models may need a thermal_ref or ambient.",
-      "wp": "WP-21"
+      "wp": "WP-21",
+      "status": "resolved-WP-21"
     },
     {
       "id": "F-092",
@@ -1480,7 +1488,7 @@
       "layer": "eq",
       "summary": "Internal ambient params; microwave_cavity uses the old 5.67e-8.",
       "wp": "WP-17/WP-21",
-      "status": "resolved/decided-WP-17"
+      "status": "resolved-WP-21"
     },
     {
       "id": "F-093",
@@ -1586,6 +1594,7 @@
     "merges": "13+14, 15+16, 17+18, 32->31, 41/42/43->40",
     "deferred": "WP-19b rigid-body dynamics",
     "full_suite": "planner runs the full V-Lab suite every ~3 WPs; executors run targeted tests only",
-    "priority": "WP-12b > WP-13 > WP-15 > WP-17 > WP-20 > WP-21 > WP-30 > WP-31 > WP-50 > WP-40"
+    "priority": "WP-12b > WP-13 > WP-15 > WP-17 > WP-20 > WP-21 > WP-30 > WP-31 > WP-50 > WP-40",
+    "executor_model_change": "2026-10-07: Sonnet weekly limit hit (resets Oct 10 21:00). To honour the user goal of finishing while asleep, the remaining WPs run on Opus executors with tight briefs (waiting 3.5 days of wake-ups would cost more)."
   }
 }

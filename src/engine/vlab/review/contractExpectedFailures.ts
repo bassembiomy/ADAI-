@@ -7,7 +7,6 @@ import type { ExpectedFailures } from './contractChecks';
 
 export const CONTRACT_EXPECTED_FAILURES: ExpectedFailures = {
   angle_constraint: { 'equation-doc': 'WP-19' },
-  conn_label: { 'equation-doc': 'WP-21' },
   dist_constraint: { 'equation-doc': 'WP-19' },
   external_force: { 'equation-doc': 'WP-19' },
   grav_field: { 'equation-doc': 'WP-19' },
@@ -17,6 +16,5 @@ export const CONTRACT_EXPECTED_FAILURES: ExpectedFailures = {
   rigid_transform: { 'equation-doc': 'WP-19' },
   spring_damper_force: { 'equation-doc': 'WP-19' },
   transform_sensor: { 'equation-doc': 'WP-19' },
-  vlab_probe: { 'equation-doc': 'WP-21' },
   world_frame: { 'equation-doc': 'WP-19' },
 };

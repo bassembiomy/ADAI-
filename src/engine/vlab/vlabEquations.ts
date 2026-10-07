@@ -53,6 +53,8 @@ export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
 export const SIGNAL_TIME_QUANTUM = CONTROLLER_TIME_QUANTUM;
 /** Logic threshold of the physical-signal logic inputs (SR flip-flop S / R, sample-and-hold S, integrator reset): high when > 0.5. */
 export const SIGNAL_LOGIC_THRESHOLD = 0.5;
+/** Stefan-Boltzmann constant sigma [W/(m^2 K^4)], CODATA 2018 exact value (shared by every radiation term). */
+export const STEFAN_BOLTZMANN = 5.670374419e-8;
 
 export interface BlockEquationArgs {
   across: any[];        // values of across variables at the ports (scalars, 6-DOF frame arrays, or N-element arrays for width-N / composite ports: read them by port id with vectorInput)
@@ -416,11 +418,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   delta_ref: () => [],
   open_circuit: () => [],
   subsystem: () => [],
-  Subsystem: () => [],
   inport: () => [],
-  Inport: () => [],
   outport: () => [],
-  Outport: () => [],
   
   resistor: ({ across, branch, params }) => {
     // Simscape Foundation Electrical > Resistor: v = i * R, v = v_p - v_n, i positive p -> n through the block (R > 0, WP-08).
@@ -1018,7 +1017,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     //   Q = sigma eps A (T_A^4 - T_B^4),  T in ABSOLUTE kelvin (hence the 0 K Thermal Reference)
     const eps = numericParam(params, 'eps', 0.9);
     const A = numericParam(params, 'A', 0.1);
-    const sigma = 5.670374419e-8; // Stefan-Boltzmann constant, W/(m^2 K^4) (CODATA 2018)
+    const sigma = STEFAN_BOLTZMANN; // W/(m^2 K^4) (CODATA 2018)
     const Ta = across[0];
     const Tb = across[1];
     const heat = eps * sigma * A * (Math.pow(Ta, 4) - Math.pow(Tb, 4));
@@ -1044,9 +1043,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       branch[1] - (Ta - Tb)  // output signal = Ta - Tb
     ];
   },
-  
-  heat_sensor: (args) => blockEquations.heat_flow_sensor(args),
-  
   heat_src: ({ branch, params }) => {
     const Q = numericParam(params, 'Q', 100);
     return [branch[0] - Q];
@@ -1141,25 +1137,30 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   magnetron: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
+    // Lumped magnetron (WP-21). The anode circuit is the documented square-law characteristic P_elec = P_rated (V/V_nom)^2,
+    // i.e. an equivalent anode resistance R_a = V_nom^2 / P_rated, so i = V P_rated / V_nom^2 and P_elec = v i >= 0 for either
+    // polarity (the old i = P/|V| drew a positive current at negative V: v i < 0 while heat was still produced).
+    // RF output (absorbed by the load, delivered through H): P_RF = eta P_elec, eta = efficiency/100.
+    // Anode loss (1 - eta) P_elec is rejected to ambient by the magnetron's own cooling (not through H).
+    // Energy: v i = P_RF + P_loss exactly. Thermal port H: the branch is the heat INTO the node wired to H [W].
     const V = across[0] - across[1];
     const P_rated = numericParam(params, 'power_rating', 900);
     const eff = (numericParam(params, 'efficiency', 65)) / 100;
     const V_nom = numericParam(params, 'v_nominal', 4000);
-    // Electrical power follows the documented P = P_rated * (V/V_nom)^2
-    // characteristic, so at the nominal 4000 V the magnetron draws its
-    // rated power and outputs P_rated * efficiency as heat (≈585 W for 900 W, 65%).
-    const power_factor = Math.pow(V / Math.max(1, V_nom), 2);
-    const P_elec = P_rated * power_factor;
-    const I = P_elec / Math.max(1, Math.abs(V));
-    const Q = P_rated * eff * power_factor;
+    const G_a = P_rated / (V_nom * V_nom);
+    const I = G_a * V;
+    const P_elec = V * I;
     return [
       branch[0] - I,
-      branch[1] - Q
+      branch[1] - eff * P_elec
     ];
   },
 
   upper_heater: ({ across, branch, params }) => {
-    // branch[0] is current, branch[1] is heat_flow
+    // Radiant resistive element (WP-21): Joule heating P_el = V^2/R (Ohm, i = V/R). The element has negligible heat capacity,
+    // so its grey-body radiant output eps sigma A (T_e^4 - T_load^4) equals the absorbed Joule power at every instant
+    // (quasi-static); the fraction `efficiency` reaches the cavity through H, (1 - efficiency) P_el is lost to the housing.
+    // Energy: v i = Q_H + Q_loss. branch[0] = current p -> n, branch[1] = heat INTO the node wired to H [W].
     const V = across[0] - across[1];
     const R = numericParam(params, 'resistance', 35.0);
     const eff = numericParam(params, 'efficiency', 0.9);
@@ -1213,11 +1214,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // state[0] is temp
     const getVal = (key: string, fallback: number): number => numericParam(params, key, fallback);
 
+    // Lumped cavity energy balance (first law; Incropera & DeWitt eq. 1.12c with convection eq. 1.3a and grey-body radiation
+    // eq. 1.7, sigma = CODATA STEFAN_BOLTZMANN):
+    //   C dT/dt = Q_in - Q_conv - Q_rad - Q_vent,  Q_in = Q1 + Q2 + Q3 (heat INTO the cavity through M, U, S)
+    //   Q_conv = h A (T - T_amb),  Q_rad = eps sigma A (T^4 - T_amb^4),  A = 6 (V/1000)^(2/3) (cube)
+    //   Q_vent = (1 - cutout) Q_in, cutout = (1 + tanh((T_max - T)/3 K))/2: above the cutout limit the input is vented to ambient.
+    // Temperatures in K; ambient_temp and max_temp are degC parameters (library unit), converted with +273.15.
     const vol = getVal('volume', 25);
-    const maxTempC = getVal('max_temp', 250);
-    const maxTempK = maxTempC > 350 ? maxTempC : maxTempC + 273.15;
-    const T_amb_C = getVal('ambient_temp', 25);
-    const T_amb = T_amb_C > 200 ? T_amb_C : T_amb_C + 273.15;
+    const maxTempK = getVal('max_temp', 250) + 273.15;
+    const T_amb = getVal('ambient_temp', 25) + 273.15;
 
     // Thermal mass: air + cavity walls + optional food/water load.
     // Without a food load the cavity has very little thermal capacitance,
@@ -1236,10 +1241,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const A = 6 * side * side;
     const h_conv = getVal('h_conv', 10); // W/(m^2*K) natural convection
     const eps = getVal('eps', 0.85);     // emissivity
-    const sigma = 5.67e-8;
+    const sigma = STEFAN_BOLTZMANN;
     const U_A = h_conv * A;
 
-    const temp = state[0] > 1.0 ? state[0] : T_amb;
+    const temp = state[0];
 
     // Convective loss + Stefan-Boltzmann radiation loss
     const Q_conv = U_A * (temp - T_amb);
@@ -1407,24 +1412,29 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── DOMAIN APPLIANCES & CUSTOM ─────────────────────────────────────────────
   washing_basket: ({ across, dAcross, branch, params }) => {
-    // across[0] is omega (angular velocity)
-    // J_total = J_basket + (load_mass + unbalance) * radius^2
+    // Drum load (WP-21; rigid-body rotation about the drum axis, Meriam & Kraige, Dynamics, ch. 6):
+    //   J_total = J_basket + (load_mass + unbalance) radius^2   (laundry and eccentric mass as point masses on the drum wall)
+    //   tau = J_total domega/dt + b omega                        [N*m], tau = torque drawn from the shaft node R
+    // vis = tau (load torque signal, N*m). Energy: tau omega = d/dt(J_total omega^2 / 2) + b omega^2.
+    // The eccentric mass is on a vertical axis (top loader): its gravity torque about the axis is zero, its centrifugal force
+    // m_u r omega^2 is radial (bearing load) and does no work about the axis.
     const J_basket = numericParam(params, 'J_basket', 0.1);
     const M_clothes = numericParam(params, 'load_mass', 5.0);
     const M_unbal = numericParam(params, 'unbalance', 0.5);
     const R = numericParam(params, 'radius', 0.25);
     const J_total = J_basket + (M_clothes + M_unbal) * R * R;
     const B = numericParam(params, 'damping', 0.02);
-    
-    // Dynamic torque load and physical output vis signal
+    const tau = J_total * dAcross[0] + B * across[0];
     return [
-      branch[0] - (J_total * dAcross[0] + B * across[0]),
-      branch[1] - across[0]
+      branch[0] - tau,
+      branch[1] - tau
     ];
   },
   
   washing_fluid: ({ across, branch, params }) => {
-    // across[0] is omega
+    // Wash-liquor drag load (WP-21): linear viscous drag plus quadratic (turbulent) slosh drag,
+    //   tau = (drag_coeff + 0.02*detergent[%] + 0.005*water_level[L]) omega + 0.01 omega |omega|   [N*m]
+    // (coefficients 0.02 N*m*s/rad per %, 0.005 N*m*s/rad per L, 0.01 N*m*s^2/rad^2). Purely dissipative: tau omega >= 0.
     const Det = numericParam(params, 'detergent', 1);
     const Water = numericParam(params, 'water_level', 10);
     const drag = numericParam(params, 'drag_coeff', 0.05); // base viscous drag coefficient (N-m-s/rad)
@@ -1651,27 +1661,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       (abc[1] - vn) - duties[1] * Vdc - Ib * Rout,
       (abc[2] - vn) - duties[2] * Vdc - Ic * Rout
     ];
-  },
-
-  vfd_controller: ({ across, branch, params, ctx, ports, connectedPorts }) => {
-    const wRefId = ports.find(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref')) ?? 'w_ref';
-    const w_ref = inputOrParam({ across, ports, connectedPorts }, wRefId, 1500);
-    const w_rad = w_ref * (2 * Math.PI / 60);
-    ctx.parameters['grid_freq'] = w_rad;
-    const V_mag = Math.max(0.1, Math.min(1.0, Math.abs(w_ref) / 1500));
-
-    const isPhysicalOutput = (pId: string) => {
-      const id = pId.toLowerCase();
-      return ['g', 'vabc', 'vis', 'y', 'out'].includes(id) || id.startsWith('out') || id.startsWith('signal');
-    };
-    const outputs = ports.filter(isPhysicalOutput);
-    const residuals = outputs.map((outPort, idx) => {
-      const id = outPort.toLowerCase();
-      if (id === 'vabc') return branch[idx] - V_mag;
-      if (id === 'g') return branch[idx] - 1.0;
-      return branch[idx] - 0.0;
-    });
-    return residuals;
   },
 
   // ── GAS AND MOIST AIR DOMAINS ──────────────────────────────────────────────
@@ -2422,7 +2411,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   // ── ISOTHERMAL LIQUID DOMAIN ───────────────────────────────────────────────
   hydraulic_reference_il: () => [],
-  reservoir_il: () => [],
 
   pump_il: ({ across, branch, params }) => {
     const dp = numericParam(params, 'pressure_rise', 200000);

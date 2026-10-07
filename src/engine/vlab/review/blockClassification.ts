@@ -74,7 +74,7 @@ export const UTILITY_REASONS: Record<string, string> = {
   inport: 'Subsystem boundary marker: flattened away with its subsystem; owns no unknowns.',
   outport: 'Subsystem boundary marker: flattened away with its subsystem; owns no unknowns.',
   solver_config: 'Configuration: solver tolerances/step settings consumed by the engine; no network equation.',
-  doe_custom: 'Statistical design-of-experiments model with no ports; not part of any physical network.',
+  doe_custom: 'Statistical design-of-experiments response y = f_DOE(u): the bare block has no ports, a deployed instance declares scalar physical-signal ports (in1..inN -> out); never part of a conserving network.',
   ma_properties: 'Parameter provider: moist-air property constants; no ports, no network equation.',
   belt_properties: 'Parameter provider: belt density/Young modulus injected into belt consumers by DAEAssembler.injectBeltMaterial; non-conserving property link only.',
 };
@@ -111,27 +111,18 @@ export { ANY_DOMAIN_BLOCKS } from '../vlabConnectionRules';
  * The orphan test fails when a key is missing here (new orphan) AND when an entry here is no longer an orphan
  * or no longer exists (stale allowance), so the list can only shrink.
  */
-export const ORPHAN_EQUATION_KEYS: Record<string, string> = {
-  Inport: 'Capitalised alias of `inport`; DAEAssembler lists both spellings for old saved models.',
-  Outport: 'Capitalised alias of `outport`; DAEAssembler lists both spellings for old saved models.',
-  Subsystem: 'Capitalised alias of `subsystem`; DAEAssembler lists both spellings for old saved models.',
-  heat_sensor: 'Legacy id replaced by heat_flow_sensor/temp_sensor; kept so old saved models still resolve (F: orphan).',
-  reservoir_il: 'Removed from the catalog (replaced by hydraulic_reference_il); equation left behind (F: orphan).',
-  vfd_controller: 'Legacy id with no library block, symbol or definition (F: orphan).',
-};
+// WP-21 (F-019): Inport / Outport / Subsystem / heat_sensor / reservoir_il are aliased to their canonical block at model load
+// (vlabModelMigration LEGACY_TYPE_ALIASES); vfd_controller was never a block type (only a lab node id) and was removed.
+export const ORPHAN_EQUATION_KEYS: Record<string, string> = {};
 
 /** `case` labels of the DAEAssembler allocation switch that are not live library ids. */
-export const ORPHAN_DAE_CASES: Record<string, string> = {
-  heat_sensor: 'Legacy id, same as ORPHAN_EQUATION_KEYS.heat_sensor.',
-};
+export const ORPHAN_DAE_CASES: Record<string, string> = {};
 
 /** VLAB_COMPONENT_DEFINITIONS keys that are not live library ids (legacy short names). */
 export const ORPHAN_DEFINITION_KEYS: Record<string, string> = {
   ma_flow_src: 'Legacy short name of ma_flow_source.',
   ma_pres_src: 'Legacy short name of ma_pressure_source.',
   ma_props: 'Legacy short name of ma_properties.',
-  heat_sensor: 'Legacy id, same as ORPHAN_EQUATION_KEYS.heat_sensor.',
-  reservoir_il: 'Removed block, same as ORPHAN_EQUATION_KEYS.reservoir_il.',
 };
 
 /**

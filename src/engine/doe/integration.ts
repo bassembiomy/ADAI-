@@ -446,6 +446,8 @@ export function createVLabDOEBlock(
   const modelType = deployment.modelType;
   const equation = ('equation' in result && result.equation) ? result.equation : `${responseName} = f_${modelType}(${factorOrder.join(', ')})`;
 
+  // V-Lab port contract (F-040): every factor/response is a scalar physical signal with an explicit direction. The
+  // quantity is the factor/response name; the deployment model carries no units, so no unit is claimed.
   const ports = [
     ...factorOrder.map((name, i) => ({
       id: `in${i + 1}`,
@@ -453,7 +455,9 @@ export function createVLabDOEBlock(
       type: 'input' as const,
       pos: 'left',
       position: 'left',
-      domain: 'General'
+      domain: 'Physical',
+      direction: 'in' as const,
+      quantity: name
     })),
     {
       id: 'out',
@@ -461,7 +465,9 @@ export function createVLabDOEBlock(
       type: 'output' as const,
       pos: 'right',
       position: 'right',
-      domain: 'General'
+      domain: 'Physical',
+      direction: 'out' as const,
+      quantity: responseName
     }
   ];
 
